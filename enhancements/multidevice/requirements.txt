@@ -1,0 +1,38 @@
+# UFO Galaxy v5.0 - Multi-Device Coordination System Dependencies
+# Python 3.11+
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# WebSocket Support
+websockets>=12.0
+
+# MQTT Support (optional, for device messaging)
+paho-mqtt>=1.6.1
+
+# Protocol Buffers
+protobuf>=4.24.0
+
+# Data Validation
+pydantic>=2.5.0
+
+# Async Support
+asyncio-mqtt>=0.16.0
+
+# HTTP Client (for device communication)
+aiohttp>=3.9.0
+httpx>=0.25.0
+
+# Utilities
+python-multipart>=0.0.6
+
+# Type Hints
+typing-extensions>=4.8.0
+
+# Development Dependencies (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+black>=23.0.0
+mypy>=1.6.0

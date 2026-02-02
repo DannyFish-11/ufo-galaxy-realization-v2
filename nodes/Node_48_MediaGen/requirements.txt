@@ -1,0 +1,2 @@
+websockets
+requests # 模拟 PixVerse API 调用

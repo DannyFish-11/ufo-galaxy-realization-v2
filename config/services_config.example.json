@@ -1,0 +1,53 @@
+{
+  "pixverse": {
+    "api_key": "YOUR_PIXVERSE_API_KEY_HERE",
+    "api_base": "https://app-api.pixverse.ai",
+    "download_dir": "./downloads/pixverse",
+    "notes": [
+      "获取 API Key: https://platform.pixverse.ai/",
+      "需要注册账号并申请 API 访问权限"
+    ]
+  },
+  "bambu_lab": {
+    "printer_ip": "192.168.1.100",
+    "access_code": "12345678",
+    "serial_number": "01P00A123456789",
+    "use_cloud": false,
+    "notes": [
+      "printer_ip: 打印机的局域网 IP 地址",
+      "access_code: 打印机的访问码（在打印机屏幕上查看）",
+      "serial_number: 打印机序列号（仅云端连接需要）",
+      "use_cloud: 是否使用云端 MQTT（推荐使用本地连接）"
+    ]
+  },
+  "51world": {
+    "mode": "demo",
+    "nodejs_bridge_url": "http://localhost:3000",
+    "scene_id": "YOUR_SCENE_ID",
+    "notes": [
+      "mode: 运行模式 (demo, nodejs, browser)",
+      "demo: 使用本地算法模拟（适用于演示）",
+      "nodejs: 通过 Node.js 桥接服务调用 51World JavaScript SDK",
+      "browser: 使用浏览器自动化控制 51World",
+      "获取 Scene ID: https://www.51aes.com/"
+    ]
+  },
+  "drone": {
+    "type": "mavlink",
+    "connection_string": "udp:127.0.0.1:14550",
+    "notes": [
+      "type: 无人机类型 (mavlink, dji_tello)",
+      "connection_string: MAVLink 连接字符串",
+      "DJI Tello 无需配置，自动连接"
+    ]
+  },
+  "oneapi": {
+    "base_url": "http://localhost:3000/v1",
+    "api_key": "YOUR_ONEAPI_KEY",
+    "model": "gpt-4",
+    "notes": [
+      "OneAPI 用于 NLU 引擎的 AI 模型调用",
+      "支持 OpenAI、Claude、Gemini 等多种模型"
+    ]
+  }
+}

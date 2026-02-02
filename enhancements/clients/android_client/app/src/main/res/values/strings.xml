@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">UFO³ Galaxy Agent</string>
+    <string name="mic_button_desc">Start Voice Command</string>
+    <string name="accessibility_service_description">UFO³ Galaxy 自动化服务，用于控制应用和执行自动化任务。</string>
+</resources>

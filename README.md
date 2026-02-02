@@ -1,6 +1,24 @@
-# UFO Galaxy - 跨平台分布式 Agent 系统
+# UFO Galaxy Realization
 
-UFO Galaxy 是一个跨设备分布式多 Agent 系统，核心目标是通过统一协议，让 AI Agent 能够操控任意平台的任意设备，实现"一个指令，多设备协同执行"。
+**完整集成版本** - 整合了 Fusion、V5、Fixed 三个仓库的全部代码
+
+---
+
+## 项目概述
+
+UFO Galaxy Realization 是一个分布式 AI 节点操作系统，支持 105+ 功能节点、自主学习、多设备协同。
+
+### 集成来源
+
+| 仓库 | 贡献内容 | 代码量 |
+|------|----------|--------|
+| **ufo-galaxy-fusion** | 105 个节点、Fusion 编排器、Galaxy Gateway、Windows 客户端 | ~198,000 行 |
+| **ufo-galaxy-v5** | 自主学习引擎、知识图谱、多设备协调 | ~32,000 行 |
+| **ufo-galaxy-unified-fixed** | 统一配置系统、系统管理器修复版 | ~17,000 行 |
+
+**总计**: 1,175 个 Python 文件，285,206 行代码
+
+---
 
 ## 系统架构
 
@@ -25,115 +43,191 @@ UFO Galaxy 是一个跨设备分布式多 Agent 系统，核心目标是通过�
 └───────────────┘             └───────────────┘             └───────────────┘
 ```
 
-## 快速开始
-
-### 1. 使用 Docker Compose (推荐)
-
-```bash
-# 克隆仓库
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
-
-# 复制环境变量配置
-cp .env.example .env
-
-# 启动服务
-docker-compose up -d
-```
-
-### 2. 本地开发
-
-```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动网关
-python -m galaxy_gateway.app
-```
-
-### 3. 连接设备
-
-网关启动后，设备可以通过 WebSocket 连接：
-
-```
-ws://localhost:8000/ws/{device_id}
-```
-
-## API 文档
-
-启动服务后访问：`http://localhost:8000/docs`
-
-### 主要端点
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/ws/{device_id}` | WebSocket | 设备连接 |
-| `/api/devices` | GET | 获取所有设备 |
-| `/api/tasks` | POST | 提交任务 |
-| `/api/tasks/{task_id}` | GET | 获取任务状态 |
-| `/api/commands` | POST | 发送命令 |
-
-## AIP v3.0 协议
-
-AIP (Agent Interaction Protocol) 是 UFO Galaxy 的核心通信协议。
-
-### 消息格式
-
-```json
-{
-  "version": "3.0",
-  "message_id": "uuid",
-  "type": "device_register",
-  "device_id": "android_001",
-  "device_type": "android_phone",
-  "timestamp": "2026-02-02T12:00:00Z",
-  "payload": {}
-}
-```
-
-### 消息类型
-
-- **设备管理**: `device_register`, `device_heartbeat`, `device_status`
-- **任务调度**: `task_submit`, `task_assign`, `task_result`
-- **GUI 操作**: `gui_click`, `gui_swipe`, `gui_input`, `gui_screenshot`
-- **文件操作**: `file_read`, `file_write`, `file_transfer`
+---
 
 ## 目录结构
 
 ```
 ufo-galaxy-realization/
-├── galaxy_gateway/           # 核心网关代码
-│   ├── protocol/            # AIP v3.0 协议定义
-│   ├── transport/           # WebSocket 传输层
-│   ├── handlers/            # 消息处理器
-│   ├── orchestrator/        # 任务编排器
-│   └── app.py              # FastAPI 主应用
-├── external/                # 外部集成
-│   ├── microsoft_ufo/       # Microsoft UFO 模块
-│   ├── memos/              # MemOS 记忆系统
-│   └── agentcpm/           # AgentCPM-GUI 模块
-├── agents/                  # 平台 Agent
-│   ├── windows/            # Windows Agent
-│   └── linux/              # Linux Agent
-├── config/                  # 配置文件
-├── tests/                   # 测试代码
-├── docker-compose.yml       # Docker 部署配置
-├── Dockerfile.gateway       # 网关 Dockerfile
-├── requirements.txt         # Python 依赖
-└── README.md               # 本文件
+├── nodes/                      # 105 个功能节点
+│   ├── Node_00_StateMachine/   # 状态机核心
+│   ├── Node_01_OneAPI/         # 统一 API 网关
+│   ├── Node_02_Tasker/         # 任务调度引擎
+│   ├── ...
+│   ├── Node_100_MemorySystem/  # 记忆系统
+│   ├── Node_101_CodeEngine/    # 代码引擎
+│   ├── Node_102_DebugOptimize/ # 调试优化
+│   ├── Node_103_KnowledgeGraph/# 知识图谱
+│   └── ...
+├── galaxy_gateway/             # 网关服务
+│   ├── protocol/               # AIP v3.0 协议
+│   ├── transport/              # WebSocket 传输层
+│   ├── handlers/               # 消息处理器
+│   ├── orchestrator/           # 任务编排器
+│   ├── gateway_service_v5.py   # v5 网关服务
+│   └── ...
+├── fusion/                     # Fusion 编排系统
+│   ├── topology_manager.py     # 拓扑管理器
+│   ├── node_executor.py        # 节点执行器
+│   ├── unified_orchestrator.py # 统一编排器
+│   └── ...
+├── enhancements/               # 增强模块
+│   ├── learning/               # 自主学习引擎
+│   │   ├── autonomous_learning_engine.py
+│   │   ├── knowledge_graph.py
+│   │   └── search_integrator.py
+│   ├── multidevice/            # 多设备协调
+│   ├── bridges/                # 桥接模块
+│   └── clients/                # 客户端
+├── external/                   # 外部集成
+│   ├── microsoft_ufo/          # Microsoft UFO
+│   ├── memos/                  # MemOS 记忆系统
+│   └── agentcpm/               # AgentCPM-GUI
+├── windows_client/             # Windows 客户端
+├── dashboard/                  # 监控仪表盘
+├── config/                     # 统一配置
+│   ├── unified_config.json     # 103 节点配置
+│   └── unified_ports.yaml      # 端口分配
+├── tests/                      # 测试用例
+├── scripts/                    # 脚本工具
+├── examples/                   # 示例代码
+├── galaxy_launcher.py          # 系统启动器
+├── smart_launcher.py           # 智能启动器
+├── system_manager.py           # 系统管理器
+├── system_manager_fixed.py     # 修复版系统管理器
+├── health_monitor.py           # 健康监控
+└── requirements_full.txt       # 完整依赖
 ```
+
+---
+
+## 核心功能
+
+### 1. 105 个功能节点
+
+| 分组 | 节点范围 | 功能 |
+|------|----------|------|
+| **核心** | Node_00 - Node_09 | 状态机、API、任务、路由、认证 |
+| **工具** | Node_10 - Node_32 | GitHub、数据库、OCR、邮件、搜索 |
+| **物理** | Node_33 - Node_49 | ADB、Scrcpy、AppleScript、SSH、MQTT |
+| **智能** | Node_50 - Node_64 | NLU、Vision、LLM、Agent |
+| **监控** | Node_65 - Node_69 | 日志、健康检查、指标 |
+| **高级** | Node_70 - Node_89 | 学术、知识库、GitHub Flow |
+| **编排** | Node_90 - Node_99 | 跨设备、任务分解、协调 |
+| **学习** | Node_100 - Node_118 | 记忆、代码、调试、知识图谱 |
+
+### 2. Fusion 编排系统
+
+- **TopologyManager**: 三层球形拓扑管理
+- **NodeExecutor**: 节点执行池
+- **UnifiedOrchestrator**: 统一任务编排
+
+### 3. 自主学习引擎
+
+- **5 阶段学习循环**: 观察 → 分析 → 实验 → 验证 → 部署
+- **模式识别**: 行为、时间、语义、因果、异常
+- **知识图谱**: 实体关系存储和推理
+
+### 4. 多设备协同
+
+- **设备类型**: Android、iOS、Windows、macOS、Linux、云端、IoT
+- **协议**: AIP v3.0 统一协议
+- **传输**: WebSocket、WebRTC、P2P
+
+---
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+pip install -r requirements_full.txt
+```
+
+### 2. 启动系统
+
+```bash
+# 方式 1: 使用智能启动器
+python smart_launcher.py
+
+# 方式 2: 使用系统管理器
+python system_manager.py start all
+
+# 方式 3: 使用 Galaxy 启动器
+python galaxy_launcher.py
+```
+
+### 3. 启动网关
+
+```bash
+cd galaxy_gateway
+uvicorn gateway_service_v5:app --host 0.0.0.0 --port 8000
+```
+
+### 4. 查看状态
+
+```bash
+python system_manager.py status
+```
+
+---
+
+## API 端点
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/ws/{device_id}` | WebSocket | 设备连接 |
+| `/learn_from_experience` | POST | 从经验学习 |
+| `/generate_code` | POST | 生成代码 |
+| `/debug_code` | POST | 调试代码 |
+| `/optimize_code` | POST | 优化代码 |
+| `/reason` | POST | 知识推理 |
+| `/autonomous_programming` | POST | 自主编程 |
+
+---
+
+## 配置说明
+
+### unified_config.json
+
+```json
+{
+  "metadata": {
+    "version": "2.0",
+    "total_nodes": 103
+  },
+  "groups": {
+    "core": { "priority": 1 },
+    "tools": { "priority": 2 },
+    "physical": { "priority": 3 },
+    ...
+  },
+  "nodes": {
+    "Node_00_StateMachine": {
+      "port": 8000,
+      "group": "core",
+      "critical": true
+    },
+    ...
+  }
+}
+```
+
+---
 
 ## 支持的平台
 
 | 平台 | 状态 | 说明 |
 |------|------|------|
 | Android | ✅ 已实现 | 完整的无障碍服务实现 |
-| Windows | 🚧 开发中 | 基于 Microsoft UFO |
-| Linux | 🚧 开发中 | 支持 X11/Wayland |
+| Windows | ✅ 已实现 | 基于 Microsoft UFO |
+| Linux | ✅ 已实现 | 支持 X11/Wayland |
 | iOS | 📋 计划中 | 受限于苹果政策 |
 | macOS | 📋 计划中 | 基于 Accessibility API |
 | 云端 | 📋 计划中 | 华为云/阿里云/AWS |
+
+---
 
 ## 外部依赖
 
@@ -141,45 +235,25 @@ ufo-galaxy-realization/
 - **MemOS**: 记忆系统，支持图数据库和向量数据库
 - **AgentCPM-GUI**: GUI 理解模型
 
-## 配置说明
+---
 
-主要环境变量：
+## 版本历史
 
-```bash
-# AI API Keys
-OPENAI_API_KEY=your-key
-GEMINI_API_KEY=your-key
+- **v3.0** (2026-02-02): 完整集成 Fusion + V5 + Fixed
+- **v2.0** (2026-01-23): 统一配置系统
+- **v1.0** (2026-01-22): 初始版本
 
-# 数据库
-NEO4J_URI=bolt://localhost:7687
-QDRANT_URL=http://localhost:6333
-
-# 服务配置
-HOST=0.0.0.0
-PORT=8000
-```
-
-## 开发指南
-
-### 添加新的消息类型
-
-1. 在 `galaxy_gateway/protocol/aip_v3.py` 中添加消息类型
-2. 在 `galaxy_gateway/handlers/message_handler.py` 中添加处理器
-3. 更新客户端协议定义
-
-### 添加新的平台支持
-
-1. 在 `agents/` 目录下创建新平台目录
-2. 实现 `PlatformAgent` 接口
-3. 实现平台特定的 GUI 控制逻辑
-
-## License
-
-MIT License
+---
 
 ## 相关项目
 
 - [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) - Android 客户端
-- [Microsoft UFO](https://github.com/microsoft/UFO) - Windows Agent 框架
-- [MemOS](https://github.com/MemTensor/MemOS) - 记忆系统
-- [AgentCPM-GUI](https://github.com/OpenBMB/AgentCPM-GUI) - GUI 理解模型
+- [ufo-galaxy-fusion](https://github.com/DannyFish-11/ufo-galaxy-fusion) - Fusion 编排系统
+- [ufo-galaxy-v5](https://github.com/DannyFish-11/ufo-galaxy-v5) - V5 自主学习版
+- [ufo-galaxy-unified-fixed](https://github.com/DannyFish-11/ufo-galaxy-unified-fixed) - 修复版
+
+---
+
+## License
+
+MIT License

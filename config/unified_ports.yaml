@@ -1,0 +1,949 @@
+# =============================================================================
+# UFO³ Galaxy - Unified Port Allocation Configuration
+# 统一端口分配配置文件
+# =============================================================================
+# 版本: 2.0
+# 最后更新: 2026-01-23
+# 总节点数: 103
+# =============================================================================
+
+# 端口分配规则:
+# - 8000-8099: 核心节点 (Core Layer)
+# - 8100-8199: 学术节点 (Academic Layer)
+# - 8200-8299: 开发节点 (Development Layer)
+# - 8300-8399: 扩展节点 (Extended Layer)
+# - 8400-8499: 物理设备节点 (Physical Layer)
+# - 8500-8599: 智能推理节点 (Intelligence Layer)
+# - 3000-3999: 网关和基础设施服务
+# - 5000-5999: 特殊服务 (OCR, etc.)
+# - 6333: Qdrant Vector DB
+
+metadata:
+  version: "2.0"
+  total_nodes: 103
+  last_updated: "2026-01-23"
+  description: "UFO Galaxy Unified Port Configuration"
+
+# =============================================================================
+# LAYER 0: KERNEL - 核心基础设施 (8000-8069)
+# =============================================================================
+layer_kernel:
+  description: "核心基础设施层 - 必须启动"
+  priority: 1
+  nodes:
+    Node_00_StateMachine:
+      port: 8000
+      name: "StateMachine"
+      group: "core"
+      critical: true
+      description: "状态机核心 - 系统状态管理"
+      
+    Node_01_OneAPI:
+      port: 8001
+      name: "OneAPI"
+      group: "core"
+      critical: true
+      description: "统一API网关"
+      
+    Node_02_Tasker:
+      port: 8002
+      name: "Tasker"
+      group: "core"
+      critical: true
+      dependencies: ["Node_01_OneAPI"]
+      description: "任务调度引擎"
+      
+    Node_03_SecretVault:
+      port: 8003
+      name: "SecretVault"
+      group: "core"
+      critical: true
+      dependencies: ["Node_01_OneAPI"]
+      description: "密钥保险箱"
+      
+    Node_04_Router:
+      port: 8004
+      name: "Router"
+      group: "core"
+      critical: true
+      dependencies: ["Node_01_OneAPI"]
+      description: "全局路由器"
+      
+    Node_05_Auth:
+      port: 8005
+      name: "Auth"
+      group: "core"
+      critical: true
+      dependencies: ["Node_01_OneAPI"]
+      description: "认证授权中心"
+      
+    Node_06_Filesystem:
+      port: 8006
+      name: "Filesystem"
+      group: "core"
+      critical: true
+      dependencies: ["Node_01_OneAPI"]
+      description: "文件系统管理"
+      
+    Node_07_Git:
+      port: 8007
+      name: "Git"
+      group: "core"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Git版本控制"
+      
+    Node_08_Fetch:
+      port: 8008
+      name: "Fetch"
+      group: "core"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "网络请求服务"
+      
+    Node_09_Sandbox:
+      port: 8009
+      name: "Sandbox"
+      group: "core"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "沙箱执行环境"
+
+# =============================================================================
+# LAYER 1: TOOLS - 第三方服务 (8010-8049)
+# =============================================================================
+layer_tools:
+  description: "第三方工具集成层"
+  priority: 2
+  nodes:
+    Node_10_Slack:
+      port: 8010
+      name: "Slack"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Slack集成"
+      
+    Node_11_GitHub:
+      port: 8011
+      name: "GitHub"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "GitHub集成"
+      
+    Node_12_Postgres:
+      port: 8012
+      name: "Postgres"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "PostgreSQL数据库"
+      
+    Node_13_SQLite:
+      port: 8013
+      name: "SQLite"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "SQLite数据库"
+      
+    Node_14_FFmpeg:
+      port: 8014
+      name: "FFmpeg"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "音视频处理"
+      
+    Node_15_OCR:
+      port: 8015
+      name: "OCR"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "光学字符识别"
+      
+    Node_16_Email:
+      port: 8016
+      name: "Email"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "邮件服务"
+      
+    Node_17_EdgeTTS:
+      port: 8017
+      name: "EdgeTTS"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "文本转语音"
+      
+    Node_18_DeepL:
+      port: 8018
+      name: "DeepL"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "翻译服务"
+      
+    Node_19_Crypto:
+      port: 8019
+      name: "Crypto"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "加密服务"
+      
+    Node_20_Qdrant:
+      port: 8020
+      name: "Qdrant"
+      group: "tools"
+      critical: false
+      description: "向量数据库"
+      
+    Node_21_Notion:
+      port: 8021
+      name: "Notion"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Notion集成"
+      
+    Node_22_BraveSearch:
+      port: 8022
+      name: "BraveSearch"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Brave搜索"
+      
+    Node_23_Calendar:
+      port: 8023
+      name: "Calendar"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "日历服务"
+      
+    Node_23_Time:
+      port: 8024
+      name: "Time"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "时间服务"
+      
+    Node_24_Weather:
+      port: 8025
+      name: "Weather"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "天气服务"
+      
+    Node_25_GoogleSearch:
+      port: 8026
+      name: "GoogleSearch"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Google搜索"
+      
+    Node_28_Reserved:
+      port: 8028
+      name: "Reserved28"
+      group: "tools"
+      critical: false
+      description: "保留节点28"
+      
+    Node_29_Reserved:
+      port: 8029
+      name: "Reserved29"
+      group: "tools"
+      critical: false
+      description: "保留节点29"
+      
+    Node_30_Reserved:
+      port: 8030
+      name: "Reserved30"
+      group: "tools"
+      critical: false
+      description: "保留节点30"
+      
+    Node_31_Reserved:
+      port: 8031
+      name: "Reserved31"
+      group: "tools"
+      critical: false
+      description: "保留节点31"
+      
+    Node_32_Reserved:
+      port: 8032
+      name: "Reserved32"
+      group: "tools"
+      critical: false
+      description: "保留节点32"
+
+# =============================================================================
+# LAYER 2: PHYSICAL - 物理设备控制 (8033-8049)
+# =============================================================================
+layer_physical:
+  description: "物理设备控制层"
+  priority: 3
+  nodes:
+    Node_33_ADB:
+      port: 8033
+      name: "ADB"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Android调试桥"
+      
+    Node_34_Scrcpy:
+      port: 8034
+      name: "Scrcpy"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "屏幕镜像控制"
+      
+    Node_35_AppleScript:
+      port: 8035
+      name: "AppleScript"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "AppleScript自动化"
+      
+    Node_36_UIAWindows:
+      port: 8036
+      name: "UIAWindows"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Windows UI自动化"
+      
+    Node_37_LinuxDBus:
+      port: 8037
+      name: "LinuxDBus"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Linux D-Bus控制"
+      
+    Node_38_BLE:
+      port: 8038
+      name: "BLE"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "蓝牙低功耗"
+      
+    Node_39_SSH:
+      port: 8039
+      name: "SSH"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "SSH远程控制"
+      
+    Node_40_SFTP:
+      port: 8040
+      name: "SFTP"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "SFTP文件传输"
+      
+    Node_41_MQTT:
+      port: 8041
+      name: "MQTT"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "MQTT消息队列"
+      
+    Node_42_CANbus:
+      port: 8042
+      name: "CANbus"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "CAN总线控制"
+      
+    Node_43_MAVLink:
+      port: 8043
+      name: "MAVLink"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "无人机通信协议"
+      
+    Node_44_NFC:
+      port: 8044
+      name: "NFC"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "NFC近场通信"
+      
+    Node_45_DesktopAuto:
+      port: 8045
+      name: "DesktopAuto"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "桌面自动化"
+      
+    Node_46_Camera:
+      port: 8046
+      name: "Camera"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "摄像头控制"
+      
+    Node_47_Audio:
+      port: 8047
+      name: "Audio"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "音频控制"
+      
+    Node_48_MediaGen:
+      port: 8048
+      name: "MediaGen"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "媒体生成"
+      
+    Node_48_Serial:
+      port: 8049
+      name: "Serial"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "串口通信"
+      
+    Node_49_OctoPrint:
+      port: 8050
+      name: "OctoPrint"
+      group: "physical"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "3D打印控制"
+
+# =============================================================================
+# LAYER 3: INTELLIGENCE - 智能推理层 (8050-8069)
+# =============================================================================
+layer_intelligence:
+  description: "智能推理与AI层"
+  priority: 4
+  nodes:
+    Node_50_Transformer:
+      port: 8050
+      name: "Transformer"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Transformer推理引擎"
+      
+    Node_51_QuantumDispatcher:
+      port: 8051
+      name: "QuantumDispatcher"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "量子计算调度器"
+      
+    Node_52_QiskitSimulator:
+      port: 8052
+      name: "QiskitSimulator"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Qiskit量子模拟器"
+      
+    Node_53_GraphLogic:
+      port: 8053
+      name: "GraphLogic"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "图逻辑推理"
+      
+    Node_54_SymbolicMath:
+      port: 8054
+      name: "SymbolicMath"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "符号数学计算"
+      
+    Node_56_AgentSwarm:
+      port: 8056
+      name: "AgentSwarm"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "智能体集群"
+      
+    Node_56_Planning:
+      port: 8057
+      name: "Planning"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "规划引擎"
+      
+    Node_57_QuantumCloud:
+      port: 8058
+      name: "QuantumCloud"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "量子云服务"
+      
+    Node_58_ModelRouter:
+      port: 8059
+      name: "ModelRouter"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "模型路由器"
+      
+    Node_59_CausalInference:
+      port: 8060
+      name: "CausalInference"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "因果推理"
+      
+    Node_61_GeometricReasoning:
+      port: 8061
+      name: "GeometricReasoning"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "几何推理"
+      
+    Node_62_ProbabilisticProgramming:
+      port: 8062
+      name: "ProbabilisticProgramming"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "概率编程"
+
+# =============================================================================
+# LAYER 4: MONITORING - 监控与日志 (8063-8069)
+# =============================================================================
+layer_monitoring:
+  description: "系统监控与日志层"
+  priority: 5
+  nodes:
+    Node_64_Telemetry:
+      port: 8063
+      name: "Telemetry"
+      group: "monitoring"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "遥测数据收集"
+      
+    Node_65_LoggerCentral:
+      port: 8064
+      name: "LoggerCentral"
+      group: "monitoring"
+      critical: true
+      dependencies: []
+      description: "中央日志系统"
+      
+    Node_66_ConfigManager:
+      port: 8065
+      name: "ConfigManager"
+      group: "monitoring"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "配置管理器"
+      
+    Node_67_HealthMonitor:
+      port: 8066
+      name: "HealthMonitor"
+      group: "monitoring"
+      critical: true
+      dependencies: ["Node_65_LoggerCentral"]
+      description: "健康监控"
+      
+    Node_68_Security:
+      port: 8067
+      name: "Security"
+      group: "monitoring"
+      critical: true
+      dependencies: ["Node_65_LoggerCentral"]
+      description: "安全监控"
+      
+    Node_69_BackupRestore:
+      port: 8068
+      name: "BackupRestore"
+      group: "monitoring"
+      critical: false
+      dependencies: []
+      description: "备份恢复"
+
+# =============================================================================
+# LAYER 5: ADVANCED - 高级功能 (8070-8099)
+# =============================================================================
+layer_advanced:
+  description: "高级功能层"
+  priority: 6
+  nodes:
+    Node_70_BambuLab:
+      port: 8070
+      name: "BambuLab"
+      group: "advanced"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "BambuLab 3D打印"
+      
+    Node_71_MediaGen:
+      port: 8071
+      name: "MediaGen"
+      group: "advanced"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "媒体生成"
+      
+    Node_72_KnowledgeBase:
+      port: 8072
+      name: "KnowledgeBase"
+      group: "advanced"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "知识库系统"
+      
+    Node_73_Learning:
+      port: 8073
+      name: "Learning"
+      group: "advanced"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "自学习系统"
+      
+    Node_74_DigitalTwin:
+      port: 8074
+      name: "DigitalTwin"
+      group: "advanced"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "数字孪生"
+      
+    Node_79_LocalLLM:
+      port: 8079
+      name: "LocalLLM"
+      group: "advanced"
+      critical: true
+      dependencies: []
+      description: "本地大语言模型"
+      
+    Node_80_MemorySystem:
+      port: 8080
+      name: "MemorySystem"
+      group: "advanced"
+      critical: true
+      dependencies: []
+      description: "记忆系统"
+
+# =============================================================================
+# LAYER 6: ORCHESTRATION - 编排与控制 (8081-8099)
+# =============================================================================
+layer_orchestration:
+  description: "编排与控制层"
+  priority: 7
+  nodes:
+    Node_81_Orchestrator:
+      port: 8081
+      name: "Orchestrator"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "任务编排器"
+      
+    Node_82_NetworkGuard:
+      port: 8082
+      name: "NetworkGuard"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "网络守卫"
+      
+    Node_83_NewsAggregator:
+      port: 8083
+      name: "NewsAggregator"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "新闻聚合器"
+      
+    Node_84_StockTracker:
+      port: 8084
+      name: "StockTracker"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "股票追踪"
+      
+    Node_85_PromptLibrary:
+      port: 8085
+      name: "PromptLibrary"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "提示词库"
+
+# =============================================================================
+# LAYER 7: MULTIMODAL - 多模态处理 (8090-8099)
+# =============================================================================
+layer_multimodal:
+  description: "多模态处理层"
+  priority: 8
+  nodes:
+    Node_90_MultimodalVision:
+      port: 8090
+      name: "MultimodalVision"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "多模态视觉"
+      
+    Node_91_MultimodalAgent:
+      port: 8091
+      name: "MultimodalAgent"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "多模态智能体"
+      
+    Node_92_AutoControl:
+      port: 8092
+      name: "AutoControl"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "自动控制"
+      
+    Node_95_WebRTC_Receiver:
+      port: 8095
+      name: "WebRTC_Receiver"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "WebRTC接收器"
+      
+    Node_96_SmartTransportRouter:
+      port: 8096
+      name: "SmartTransportRouter"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "智能传输路由"
+      
+    Node_97_AcademicSearch:
+      port: 8097
+      name: "AcademicSearch"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "学术搜索"
+
+# =============================================================================
+# LAYER 8: ACADEMIC - 学术研究 (8100-8119)
+# =============================================================================
+layer_academic:
+  description: "学术研究层"
+  priority: 9
+  nodes:
+    Node_100_MemorySystem:
+      port: 8100
+      name: "MemorySystemV2"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "记忆系统V2"
+      
+    Node_101_CodeEngine:
+      port: 8101
+      name: "CodeEngine"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "代码引擎"
+      
+    Node_102_DebugOptimize:
+      port: 8102
+      name: "DebugOptimize"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "调试优化"
+      
+    Node_103_KnowledgeGraph:
+      port: 8103
+      name: "KnowledgeGraph"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "知识图谱"
+      
+    Node_104_AgentCPM:
+      port: 8104
+      name: "AgentCPM"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "智能体CPM"
+      
+    Node_105_UnifiedKnowledgeBase:
+      port: 8105
+      name: "UnifiedKnowledgeBase"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "统一知识库"
+      
+    Node_106_GitHubFlow:
+      port: 8106
+      name: "GitHubFlow"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "GitHub工作流"
+      
+    Node_108_MetaCognition:
+      port: 8108
+      name: "MetaCognition"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "元认知系统"
+      
+    Node_109_ProactiveSensing:
+      port: 8109
+      name: "ProactiveSensing"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "主动感知"
+      
+    Node_110_SmartOrchestrator:
+      port: 8110
+      name: "SmartOrchestrator"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI", "Node_02_Tasker"]
+      description: "智能编排器"
+      
+    Node_111_ContextManager:
+      port: 8111
+      name: "ContextManager"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_13_SQLite", "Node_20_Qdrant"]
+      description: "上下文管理器"
+      
+    Node_112_SelfHealing:
+      port: 8112
+      name: "SelfHealing"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_65_LoggerCentral", "Node_67_HealthMonitor"]
+      description: "自愈系统"
+      
+    Node_113_AndroidVLM:
+      port: 8113
+      name: "AndroidVLM"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_90_MultimodalVision"]
+      description: "Android视觉语言模型"
+      
+    Node_116_ExternalToolWrapper:
+      port: 8116
+      name: "ExternalToolWrapper"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "外部工具包装器"
+      
+    Node_117_OpenCode:
+      port: 8117
+      name: "OpenCode"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "开放代码"
+      
+    Node_118_NodeFactory:
+      port: 8118
+      name: "NodeFactory"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "节点工厂"
+
+# =============================================================================
+# INFRASTRUCTURE - 基础设施服务
+# =============================================================================
+infrastructure:
+  description: "基础设施服务"
+  services:
+    redis:
+      port: 6379
+      name: "Redis"
+      description: "Redis缓存服务"
+      
+    qdrant:
+      port: 6333
+      name: "Qdrant"
+      description: "Qdrant向量数据库"
+      
+    dashboard:
+      port: 3000
+      name: "Dashboard"
+      description: "可视化监控面板"
+      
+    gateway:
+      port: 8088
+      name: "Gateway"
+      description: "API网关服务"
+      
+    oneapi_web:
+      port: 3001
+      name: "OneAPI_Web"
+      description: "OneAPI Web界面"
+
+# =============================================================================
+# 端口冲突解决记录
+# =============================================================================
+port_conflicts_resolved:
+  - old: "Node_00_StateMachine: 8003 (conflict with SecretVault)"
+    new: "Node_00_StateMachine: 8000"
+    
+  - old: "Node_03_SecretVault: 8003 (conflict with StateMachine)"
+    new: "Node_03_SecretVault: 8003"
+    
+  - old: "Node_23_Time: 9000 (inconsistent)"
+    new: "Node_23_Time: 8024"
+    
+  - old: "Node_48_Serial: 9001 (inconsistent)"
+    new: "Node_48_Serial: 8049"
+    
+  - old: "Node_56_Planning: 9002 (inconsistent)"
+    new: "Node_56_Planning: 8057"
+    
+  - old: "Node_64_Telemetry: 19999 (inconsistent)"
+    new: "Node_64_Telemetry: 8063"

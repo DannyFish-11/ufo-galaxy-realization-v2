@@ -1,0 +1,8 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+pydantic>=2.5.3
+
+# 可选依赖（真实模式）
+# chromadb>=0.4.0
+# sentence-transformers>=2.2.0

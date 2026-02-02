@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UFO³ Galaxy Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100">
+    <div id="app" class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-gray-800 border-b border-gray-700">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <h1 class="text-2xl font-bold text-blue-400">UFO³ Galaxy</h1>
+                        <span class="text-sm text-gray-400">Dashboard v1.0</span>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full" :class="systemStatus === 'healthy' ? 'bg-green-500' : 'bg-red-500'"></div>
+                            <span class="text-sm">{{ systemStatus }}</span>
+                        </div>
+                        <span class="text-sm text-gray-400">{{ currentTime }}</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-6">
+            <!-- System Overview -->
+            <section class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">系统概览</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-1">总节点数</div>
+                        <div class="text-3xl font-bold">{{ overview.total_nodes || 0 }}</div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-1">运行中</div>
+                        <div class="text-3xl font-bold text-green-400">{{ overview.running || 0 }}</div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-1">已停止</div>
+                        <div class="text-3xl font-bold text-yellow-400">{{ overview.stopped || 0 }}</div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-1">健康率</div>
+                        <div class="text-3xl font-bold text-blue-400">{{ overview.health_rate || '0%' }}</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Nodes Status -->
+            <section class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">节点状态</h2>
+                    <button @click="refreshNodes" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">
+                        刷新
+                    </button>
+                </div>
+                <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-750">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">节点 ID</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">名称</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">状态</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">URL</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">最后检查</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+                            <tr v-for="node in nodes" :key="node.node_id" class="hover:bg-gray-750">
+                                <td class="px-4 py-3 text-sm">{{ node.node_id }}</td>
+                                <td class="px-4 py-3 text-sm">{{ node.name }}</td>
+                                <td class="px-4 py-3">
+                                    <span class="px-2 py-1 rounded text-xs" :class="getStatusClass(node.status)">
+                                        {{ node.status }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-400">{{ node.url }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-400">{{ formatTime(node.last_check) }}</td>
+                                <td class="px-4 py-3">
+                                    <button @click="restartNode(node.node_id)" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs">
+                                        重启
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Recent Logs -->
+            <section>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">最近日志</h2>
+                    <button @click="refreshLogs" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">
+                        刷新
+                    </button>
+                </div>
+                <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-96 overflow-y-auto">
+                    <div v-if="logs.length === 0" class="text-gray-400 text-center py-8">
+                        暂无日志
+                    </div>
+                    <div v-for="log in logs" :key="log.id" class="mb-2 text-sm font-mono">
+                        <span class="text-gray-500">{{ formatTime(log.timestamp) }}</span>
+                        <span :class="getLogLevelClass(log.level)" class="ml-2">{{ log.level }}</span>
+                        <span class="ml-2 text-gray-300">{{ log.message }}</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    overview: {},
+                    nodes: [],
+                    logs: [],
+                    currentTime: '',
+                    systemStatus: 'unknown',
+                    ws: null
+                };
+            },
+            mounted() {
+                this.loadData();
+                this.connectWebSocket();
+                this.updateTime();
+                setInterval(() => this.updateTime(), 1000);
+                setInterval(() => this.loadData(), 30000); // 每 30 秒刷新
+            },
+            methods: {
+                async loadData() {
+                    await Promise.all([
+                        this.loadOverview(),
+                        this.loadNodes(),
+                        this.loadLogs()
+                    ]);
+                },
+                async loadOverview() {
+                    try {
+                        const response = await axios.get('http://localhost:3000/api/overview');
+                        this.overview = response.data;
+                        this.systemStatus = parseFloat(this.overview.health_rate) > 80 ? 'healthy' : 'degraded';
+                    } catch (error) {
+                        console.error('Failed to load overview:', error);
+                    }
+                },
+                async loadNodes() {
+                    try {
+                        const response = await axios.get('http://localhost:3000/api/nodes');
+                        this.nodes = response.data.nodes;
+                    } catch (error) {
+                        console.error('Failed to load nodes:', error);
+                    }
+                },
+                async loadLogs() {
+                    try {
+                        const response = await axios.get('http://localhost:3000/api/logs?limit=50');
+                        this.logs = response.data.logs;
+                    } catch (error) {
+                        console.error('Failed to load logs:', error);
+                    }
+                },
+                async refreshNodes() {
+                    await this.loadNodes();
+                },
+                async refreshLogs() {
+                    await this.loadLogs();
+                },
+                async restartNode(nodeId) {
+                    if (!confirm(`确定要重启节点 ${nodeId} 吗？`)) return;
+                    
+                    try {
+                        await axios.post(`http://localhost:3000/api/nodes/${nodeId}/restart`);
+                        alert('重启命令已发送');
+                        setTimeout(() => this.loadNodes(), 2000);
+                    } catch (error) {
+                        alert('重启失败: ' + error.message);
+                    }
+                },
+                connectWebSocket() {
+                    this.ws = new WebSocket('ws://localhost:3000/ws');
+                    
+                    this.ws.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        if (message.type === 'system_overview') {
+                            this.overview = message.data;
+                        }
+                    };
+                    
+                    this.ws.onclose = () => {
+                        console.log('WebSocket closed, reconnecting...');
+                        setTimeout(() => this.connectWebSocket(), 5000);
+                    };
+                },
+                updateTime() {
+                    this.currentTime = new Date().toLocaleString('zh-CN');
+                },
+                formatTime(timestamp) {
+                    if (!timestamp) return '-';
+                    return new Date(timestamp).toLocaleTimeString('zh-CN');
+                },
+                getStatusClass(status) {
+                    const classes = {
+                        running: 'bg-green-900 text-green-300',
+                        stopped: 'bg-yellow-900 text-yellow-300',
+                        error: 'bg-red-900 text-red-300',
+                        unknown: 'bg-gray-700 text-gray-300'
+                    };
+                    return classes[status] || classes.unknown;
+                },
+                getLogLevelClass(level) {
+                    const classes = {
+                        INFO: 'text-blue-400',
+                        WARNING: 'text-yellow-400',
+                        ERROR: 'text-red-400',
+                        DEBUG: 'text-gray-400'
+                    };
+                    return classes[level] || 'text-gray-300';
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

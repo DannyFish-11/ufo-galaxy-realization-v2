@@ -1,0 +1,1333 @@
+{
+  "metadata": {
+    "version": "2.0",
+    "total_nodes": 103,
+    "last_updated": "2026-01-23",
+    "description": "UFO Galaxy Unified Configuration"
+  },
+  "groups": {
+    "core": {
+      "name": "核心节点",
+      "description": "系统核心基础设施和服务",
+      "startup_delay": 2,
+      "priority": 1
+    },
+    "tools": {
+      "name": "第三方工具",
+      "description": "第三方服务集成",
+      "startup_delay": 1,
+      "priority": 2
+    },
+    "physical": {
+      "name": "物理设备",
+      "description": "物理设备控制层",
+      "startup_delay": 1,
+      "priority": 3
+    },
+    "intelligence": {
+      "name": "智能推理",
+      "description": "AI和智能推理层",
+      "startup_delay": 1,
+      "priority": 4
+    },
+    "monitoring": {
+      "name": "监控日志",
+      "description": "系统监控和日志层",
+      "startup_delay": 1,
+      "priority": 5
+    },
+    "advanced": {
+      "name": "高级功能",
+      "description": "高级功能层",
+      "startup_delay": 1,
+      "priority": 6
+    },
+    "orchestration": {
+      "name": "编排控制",
+      "description": "任务编排和控制层",
+      "startup_delay": 1,
+      "priority": 7
+    },
+    "multimodal": {
+      "name": "多模态",
+      "description": "多模态处理层",
+      "startup_delay": 1,
+      "priority": 8
+    },
+    "academic": {
+      "name": "学术研究",
+      "description": "学术研究功能层",
+      "startup_delay": 1,
+      "priority": 9
+    }
+  },
+  "nodes": {
+    "Node_00_StateMachine": {
+      "port": 8000,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "状态机核心",
+      "health_endpoint": "/health"
+    },
+    "Node_01_OneAPI": {
+      "port": 8001,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "统一API网关",
+      "health_endpoint": "/health"
+    },
+    "Node_02_Tasker": {
+      "port": 8002,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "任务调度引擎",
+      "health_endpoint": "/health"
+    },
+    "Node_03_SecretVault": {
+      "port": 8003,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "密钥保险箱",
+      "health_endpoint": "/health"
+    },
+    "Node_04_Router": {
+      "port": 8004,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "全局路由器",
+      "health_endpoint": "/health"
+    },
+    "Node_05_Auth": {
+      "port": 8005,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "认证授权中心",
+      "health_endpoint": "/health"
+    },
+    "Node_06_Filesystem": {
+      "port": 8006,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "文件系统管理",
+      "health_endpoint": "/health"
+    },
+    "Node_07_Git": {
+      "port": 8007,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Git版本控制",
+      "health_endpoint": "/health"
+    },
+    "Node_08_Fetch": {
+      "port": 8008,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "网络请求服务",
+      "health_endpoint": "/health"
+    },
+    "Node_09_Sandbox": {
+      "port": 8009,
+      "group": "core",
+      "priority": 1,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "沙箱执行环境",
+      "health_endpoint": "/health"
+    },
+    "Node_10_Slack": {
+      "port": 8010,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Slack集成",
+      "health_endpoint": "/health"
+    },
+    "Node_11_GitHub": {
+      "port": 8011,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "GitHub集成",
+      "health_endpoint": "/health"
+    },
+    "Node_12_Postgres": {
+      "port": 8012,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "PostgreSQL数据库",
+      "health_endpoint": "/health"
+    },
+    "Node_13_SQLite": {
+      "port": 8013,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "SQLite数据库",
+      "health_endpoint": "/health"
+    },
+    "Node_14_FFmpeg": {
+      "port": 8014,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "音视频处理",
+      "health_endpoint": "/health"
+    },
+    "Node_15_OCR": {
+      "port": 8015,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "光学字符识别",
+      "health_endpoint": "/health"
+    },
+    "Node_16_Email": {
+      "port": 8016,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "邮件服务",
+      "health_endpoint": "/health"
+    },
+    "Node_17_EdgeTTS": {
+      "port": 8017,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "文本转语音",
+      "health_endpoint": "/health"
+    },
+    "Node_18_DeepL": {
+      "port": 8018,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "翻译服务",
+      "health_endpoint": "/health"
+    },
+    "Node_19_Crypto": {
+      "port": 8019,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "加密服务",
+      "health_endpoint": "/health"
+    },
+    "Node_20_Qdrant": {
+      "port": 8020,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "向量数据库",
+      "health_endpoint": "/health"
+    },
+    "Node_21_Notion": {
+      "port": 8021,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Notion集成",
+      "health_endpoint": "/health"
+    },
+    "Node_22_BraveSearch": {
+      "port": 8022,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Brave搜索",
+      "health_endpoint": "/health"
+    },
+    "Node_23_Calendar": {
+      "port": 8023,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "日历服务",
+      "health_endpoint": "/health"
+    },
+    "Node_23_Time_Time": {
+      "port": 8024,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "时间服务",
+      "health_endpoint": "/health"
+    },
+    "Node_24_Weather": {
+      "port": 8025,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "天气服务",
+      "health_endpoint": "/health"
+    },
+    "Node_25_GoogleSearch": {
+      "port": 8026,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Google搜索",
+      "health_endpoint": "/health"
+    },
+    "Node_28_Reserved28": {
+      "port": 8028,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "保留节点28",
+      "health_endpoint": "/health"
+    },
+    "Node_29_Reserved29": {
+      "port": 8029,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "保留节点29",
+      "health_endpoint": "/health"
+    },
+    "Node_30_Reserved30": {
+      "port": 8030,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "保留节点30",
+      "health_endpoint": "/health"
+    },
+    "Node_31_Reserved31": {
+      "port": 8031,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "保留节点31",
+      "health_endpoint": "/health"
+    },
+    "Node_32_Reserved32": {
+      "port": 8032,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "保留节点32",
+      "health_endpoint": "/health"
+    },
+    "Node_33_ADB": {
+      "port": 8033,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Android调试桥",
+      "health_endpoint": "/health"
+    },
+    "Node_34_Scrcpy": {
+      "port": 8034,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "屏幕镜像控制",
+      "health_endpoint": "/health"
+    },
+    "Node_35_AppleScript": {
+      "port": 8035,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "AppleScript自动化",
+      "health_endpoint": "/health"
+    },
+    "Node_36_UIAWindows": {
+      "port": 8036,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Windows UI自动化",
+      "health_endpoint": "/health"
+    },
+    "Node_37_LinuxDBus": {
+      "port": 8037,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Linux D-Bus控制",
+      "health_endpoint": "/health"
+    },
+    "Node_38_BLE": {
+      "port": 8038,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "蓝牙低功耗",
+      "health_endpoint": "/health"
+    },
+    "Node_39_SSH": {
+      "port": 8039,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "SSH远程控制",
+      "health_endpoint": "/health"
+    },
+    "Node_40_SFTP": {
+      "port": 8040,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "SFTP文件传输",
+      "health_endpoint": "/health"
+    },
+    "Node_41_MQTT": {
+      "port": 8041,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "MQTT消息队列",
+      "health_endpoint": "/health"
+    },
+    "Node_42_CANbus": {
+      "port": 8042,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "CAN总线控制",
+      "health_endpoint": "/health"
+    },
+    "Node_43_MAVLink": {
+      "port": 8043,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "无人机通信协议",
+      "health_endpoint": "/health"
+    },
+    "Node_44_NFC": {
+      "port": 8044,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "NFC近场通信",
+      "health_endpoint": "/health"
+    },
+    "Node_45_DesktopAuto": {
+      "port": 8045,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "桌面自动化",
+      "health_endpoint": "/health"
+    },
+    "Node_46_Camera": {
+      "port": 8046,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "摄像头控制",
+      "health_endpoint": "/health"
+    },
+    "Node_47_Audio": {
+      "port": 8047,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "音频控制",
+      "health_endpoint": "/health"
+    },
+    "Node_48_MediaGen_MediaGen": {
+      "port": 8048,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "媒体生成",
+      "health_endpoint": "/health"
+    },
+    "Node_48_Serial_Serial": {
+      "port": 8049,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "串口通信",
+      "health_endpoint": "/health"
+    },
+    "Node_49_OctoPrint": {
+      "port": 8050,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "3D打印控制",
+      "health_endpoint": "/health"
+    },
+    "Node_50_Transformer": {
+      "port": 8051,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Transformer推理引擎",
+      "health_endpoint": "/health"
+    },
+    "Node_51_QuantumDispatcher": {
+      "port": 8052,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "量子计算调度器",
+      "health_endpoint": "/health"
+    },
+    "Node_52_QiskitSimulator": {
+      "port": 8053,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Qiskit量子模拟器",
+      "health_endpoint": "/health"
+    },
+    "Node_53_GraphLogic": {
+      "port": 8054,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "图逻辑推理",
+      "health_endpoint": "/health"
+    },
+    "Node_54_SymbolicMath": {
+      "port": 8055,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "符号数学计算",
+      "health_endpoint": "/health"
+    },
+    "Node_56_AgentSwarm": {
+      "port": 8056,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "智能体集群",
+      "health_endpoint": "/health"
+    },
+    "Node_56_Planning_Planning": {
+      "port": 8057,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "规划引擎",
+      "health_endpoint": "/health"
+    },
+    "Node_57_QuantumCloud": {
+      "port": 8058,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "量子云服务",
+      "health_endpoint": "/health"
+    },
+    "Node_58_ModelRouter": {
+      "port": 8059,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "模型路由器",
+      "health_endpoint": "/health"
+    },
+    "Node_59_CausalInference": {
+      "port": 8060,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "因果推理",
+      "health_endpoint": "/health"
+    },
+    "Node_61_GeometricReasoning": {
+      "port": 8061,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "几何推理",
+      "health_endpoint": "/health"
+    },
+    "Node_62_ProbabilisticProgramming": {
+      "port": 8062,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "概率编程",
+      "health_endpoint": "/health"
+    },
+    "Node_64_Telemetry": {
+      "port": 8063,
+      "group": "monitoring",
+      "priority": 5,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "遥测数据收集",
+      "health_endpoint": "/health"
+    },
+    "Node_65_LoggerCentral": {
+      "port": 8064,
+      "group": "monitoring",
+      "priority": 5,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "中央日志系统",
+      "health_endpoint": "/health"
+    },
+    "Node_66_ConfigManager": {
+      "port": 8065,
+      "group": "monitoring",
+      "priority": 5,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "配置管理器",
+      "health_endpoint": "/health"
+    },
+    "Node_67_HealthMonitor": {
+      "port": 8066,
+      "group": "monitoring",
+      "priority": 5,
+      "dependencies": [
+        "Node_65_LoggerCentral"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "健康监控",
+      "health_endpoint": "/health"
+    },
+    "Node_68_Security": {
+      "port": 8067,
+      "group": "monitoring",
+      "priority": 5,
+      "dependencies": [
+        "Node_65_LoggerCentral"
+      ],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "安全监控",
+      "health_endpoint": "/health"
+    },
+    "Node_69_BackupRestore": {
+      "port": 8068,
+      "group": "monitoring",
+      "priority": 5,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "备份恢复",
+      "health_endpoint": "/health"
+    },
+    "Node_70_BambuLab": {
+      "port": 8070,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "BambuLab 3D打印",
+      "health_endpoint": "/health"
+    },
+    "Node_71_MediaGen": {
+      "port": 8071,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "媒体生成",
+      "health_endpoint": "/health"
+    },
+    "Node_72_KnowledgeBase": {
+      "port": 8072,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "知识库系统",
+      "health_endpoint": "/health"
+    },
+    "Node_73_Learning": {
+      "port": 8073,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "自学习系统",
+      "health_endpoint": "/health"
+    },
+    "Node_74_DigitalTwin": {
+      "port": 8074,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "数字孪生",
+      "health_endpoint": "/health"
+    },
+    "Node_79_LocalLLM": {
+      "port": 8079,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "本地大语言模型",
+      "health_endpoint": "/health"
+    },
+    "Node_80_MemorySystem": {
+      "port": 8080,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "critical": true,
+      "description": "记忆系统",
+      "health_endpoint": "/health"
+    },
+    "Node_81_Orchestrator": {
+      "port": 8081,
+      "group": "orchestration",
+      "priority": 7,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "任务编排器",
+      "health_endpoint": "/health"
+    },
+    "Node_82_NetworkGuard": {
+      "port": 8082,
+      "group": "orchestration",
+      "priority": 7,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "网络守卫",
+      "health_endpoint": "/health"
+    },
+    "Node_83_NewsAggregator": {
+      "port": 8083,
+      "group": "orchestration",
+      "priority": 7,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "新闻聚合器",
+      "health_endpoint": "/health"
+    },
+    "Node_84_StockTracker": {
+      "port": 8084,
+      "group": "orchestration",
+      "priority": 7,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "股票追踪",
+      "health_endpoint": "/health"
+    },
+    "Node_85_PromptLibrary": {
+      "port": 8085,
+      "group": "orchestration",
+      "priority": 7,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "提示词库",
+      "health_endpoint": "/health"
+    },
+    "Node_90_MultimodalVision": {
+      "port": 8090,
+      "group": "multimodal",
+      "priority": 8,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "多模态视觉",
+      "health_endpoint": "/health"
+    },
+    "Node_91_MultimodalAgent": {
+      "port": 8091,
+      "group": "multimodal",
+      "priority": 8,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "多模态智能体",
+      "health_endpoint": "/health"
+    },
+    "Node_92_AutoControl": {
+      "port": 8092,
+      "group": "multimodal",
+      "priority": 8,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "自动控制",
+      "health_endpoint": "/health"
+    },
+    "Node_95_WebRTC_Receiver": {
+      "port": 8095,
+      "group": "multimodal",
+      "priority": 8,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "WebRTC接收器",
+      "health_endpoint": "/health"
+    },
+    "Node_96_SmartTransportRouter": {
+      "port": 8096,
+      "group": "multimodal",
+      "priority": 8,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "智能传输路由",
+      "health_endpoint": "/health"
+    },
+    "Node_97_AcademicSearch": {
+      "port": 8097,
+      "group": "multimodal",
+      "priority": 8,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "学术搜索",
+      "health_endpoint": "/health"
+    },
+    "Node_100_MemorySystemV2": {
+      "port": 8100,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "记忆系统V2",
+      "health_endpoint": "/health"
+    },
+    "Node_101_CodeEngine": {
+      "port": 8101,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "代码引擎",
+      "health_endpoint": "/health"
+    },
+    "Node_102_DebugOptimize": {
+      "port": 8102,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "调试优化",
+      "health_endpoint": "/health"
+    },
+    "Node_103_KnowledgeGraph": {
+      "port": 8103,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "知识图谱",
+      "health_endpoint": "/health"
+    },
+    "Node_104_AgentCPM": {
+      "port": 8104,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "智能体CPM",
+      "health_endpoint": "/health"
+    },
+    "Node_105_UnifiedKnowledgeBase": {
+      "port": 8105,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "统一知识库",
+      "health_endpoint": "/health"
+    },
+    "Node_106_GitHubFlow": {
+      "port": 8106,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "GitHub工作流",
+      "health_endpoint": "/health"
+    },
+    "Node_108_MetaCognition": {
+      "port": 8108,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "元认知系统",
+      "health_endpoint": "/health"
+    },
+    "Node_109_ProactiveSensing": {
+      "port": 8109,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "主动感知",
+      "health_endpoint": "/health"
+    },
+    "Node_110_SmartOrchestrator": {
+      "port": 8110,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI",
+        "Node_02_Tasker"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "智能编排器",
+      "health_endpoint": "/health"
+    },
+    "Node_111_ContextManager": {
+      "port": 8111,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_13_SQLite",
+        "Node_20_Qdrant"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "上下文管理器",
+      "health_endpoint": "/health"
+    },
+    "Node_112_SelfHealing": {
+      "port": 8112,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_65_LoggerCentral",
+        "Node_67_HealthMonitor"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "自愈系统",
+      "health_endpoint": "/health"
+    },
+    "Node_113_AndroidVLM": {
+      "port": 8113,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_90_MultimodalVision"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Android视觉语言模型",
+      "health_endpoint": "/health"
+    },
+    "Node_116_ExternalToolWrapper": {
+      "port": 8116,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "外部工具包装器",
+      "health_endpoint": "/health"
+    },
+    "Node_117_OpenCode": {
+      "port": 8117,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "开放代码",
+      "health_endpoint": "/health"
+    },
+    "Node_118_NodeFactory": {
+      "port": 8118,
+      "group": "academic",
+      "priority": 9,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "节点工厂",
+      "health_endpoint": "/health"
+    }
+  },
+  "infrastructure": {
+    "redis": {
+      "port": 6379,
+      "name": "Redis",
+      "description": "Redis缓存服务"
+    },
+    "qdrant": {
+      "port": 6333,
+      "name": "Qdrant",
+      "description": "Qdrant向量数据库"
+    },
+    "dashboard": {
+      "port": 3000,
+      "name": "Dashboard",
+      "description": "可视化监控面板"
+    }
+  },
+  "port_ranges": {
+    "kernel": {
+      "start": 8000,
+      "end": 8009,
+      "description": "核心节点"
+    },
+    "tools": {
+      "start": 8010,
+      "end": 8032,
+      "description": "第三方工具"
+    },
+    "physical": {
+      "start": 8033,
+      "end": 8050,
+      "description": "物理设备"
+    },
+    "intelligence": {
+      "start": 8051,
+      "end": 8062,
+      "description": "智能推理"
+    },
+    "monitoring": {
+      "start": 8063,
+      "end": 8068,
+      "description": "监控日志"
+    },
+    "advanced": {
+      "start": 8070,
+      "end": 8080,
+      "description": "高级功能"
+    },
+    "orchestration": {
+      "start": 8081,
+      "end": 8085,
+      "description": "编排控制"
+    },
+    "multimodal": {
+      "start": 8090,
+      "end": 8097,
+      "description": "多模态"
+    },
+    "academic": {
+      "start": 8100,
+      "end": 8118,
+      "description": "学术研究"
+    }
+  }
+}
