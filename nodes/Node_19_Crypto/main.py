@@ -1,33 +1,174 @@
 """
-Node 19: Crypto - 加密和哈希工具
+Node 19: Crypto - 加密服务节点
+================================
+提供加密解密、哈希计算、数字签名功能
 """
-import os, hashlib, hmac, base64, secrets
-from typing import Optional
+import os
+import base64
+import hashlib
+import hmac
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
 
-app = FastAPI(title="Node 19 - Crypto", version="3.0.0", description="Cryptography and Hashing Utilities")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# 尝试导入cryptography
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+
+app = FastAPI(title="Node 19 - Crypto", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]))
 
 class HashRequest(BaseModel):
     data: str
-    algorithm: str = "sha256"
-
-class EncryptRequest(BaseModel):
-    data: str
-    key: Optional[str] = None
-    algorithm: str = "fernet"
+    algorithm: str = "sha256"  # md5, sha1, sha256, sha512
 
 class HMACRequest(BaseModel):
     data: str
     key: str
     algorithm: str = "sha256"
 
-HASH_ALGORITHMS = ["md5", "sha1", "sha256", "sha384", "sha512", "blake2b", "blake2s"]
+class EncryptRequest(BaseModel):
+    data: str
+    key: Optional[str] = None
+
+class SignRequest(BaseModel):
+    data: str
+    private_key: Optional[str] = None
+
+class VerifyRequest(BaseModel):
+    data: str
+    signature: str
+    public_key: Optional[str] = None
+
+class CryptoManager:
+    def __init__(self):
+        self._keys = {}
+
+    def hash(self, data: str, algorithm: str = "sha256") -> str:
+        """计算哈希"""
+        algorithms = {
+            "md5": hashlib.md5,
+            "sha1": hashlib.sha1,
+            "sha256": hashlib.sha256,
+            "sha512": hashlib.sha512,
+            "sha3_256": hashlib.sha3_256,
+            "blake2b": hashlib.blake2b
+        }
+
+        if algorithm not in algorithms:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+        return algorithms[algorithm](data.encode()).hexdigest()
+
+    def hmac_sign(self, data: str, key: str, algorithm: str = "sha256") -> str:
+        """HMAC签名"""
+        algorithms = {
+            "sha256": hashes.SHA256(),
+            "sha512": hashes.SHA512(),
+            "sha1": hashes.SHA1()
+        }
+
+        if algorithm not in algorithms:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+        h = hmac.new(key.encode(), data.encode(), getattr(hashlib, algorithm))
+        return h.hexdigest()
+
+    def hmac_verify(self, data: str, signature: str, key: str, algorithm: str = "sha256") -> bool:
+        """验证HMAC签名"""
+        expected = self.hmac_sign(data, key, algorithm)
+        return hmac.compare_digest(expected, signature)
+
+    def generate_key(self) -> str:
+        """生成Fernet密钥"""
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("cryptography not installed")
+        return Fernet.generate_key().decode()
+
+    def encrypt(self, data: str, key: Optional[str] = None) -> str:
+        """加密数据"""
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("cryptography not installed")
+
+        key = key or self.generate_key()
+        f = Fernet(key.encode())
+        encrypted = f.encrypt(data.encode())
+        return base64.b64encode(encrypted).decode()
+
+    def decrypt(self, encrypted_data: str, key: str) -> str:
+        """解密数据"""
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("cryptography not installed")
+
+        f = Fernet(key.encode())
+        decrypted = f.decrypt(base64.b64decode(encrypted_data))
+        return decrypted.decode()
+
+    def generate_rsa_keypair(self) -> Dict[str, str]:
+        """生成RSA密钥对"""
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("cryptography not installed")
+
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = private_key.public_key()
+
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+
+        return {
+            "private_key": private_pem.decode(),
+            "public_key": public_pem.decode()
+        }
+
+    def rsa_sign(self, data: str, private_key_pem: str) -> str:
+        """RSA签名"""
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("cryptography not installed")
+
+        private_key = serialization.load_pem_private_key(private_key_pem.encode(), password=None)
+        signature = private_key.sign(
+            data.encode(),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256()
+        )
+        return base64.b64encode(signature).decode()
+
+    def rsa_verify(self, data: str, signature: str, public_key_pem: str) -> bool:
+        """验证RSA签名"""
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("cryptography not installed")
+
+        try:
+            public_key = serialization.load_pem_public_key(public_key_pem.encode())
+            public_key.verify(
+                base64.b64decode(signature),
+                data.encode(),
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                hashes.SHA256()
+            )
+            return True
+        except Exception:
+            return False
+
+# 全局加密管理器
+crypto_manager = CryptoManager()
+
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
@@ -35,117 +176,81 @@ async def health():
         "status": "healthy",
         "node_id": "19",
         "name": "Crypto",
-        "supported_hash_algorithms": len(HASH_ALGORITHMS),
-        "supported_encryption": ["fernet", "aes256"]
+        "cryptography_available": CRYPTO_AVAILABLE,
+        "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/hash")
-async def compute_hash(request: HashRequest):
-    """计算哈希值"""
-    if request.algorithm not in HASH_ALGORITHMS:
-        raise HTTPException(status_code=400, detail=f"Unsupported algorithm: {request.algorithm}")
-    
+async def hash_data(request: HashRequest):
+    """计算哈希"""
     try:
-        hash_func = hashlib.new(request.algorithm)
-        hash_func.update(request.data.encode())
-        return {
-            "success": True,
-            "algorithm": request.algorithm,
-            "hash": hash_func.hexdigest()
-        }
+        result = crypto_manager.hash(request.data, request.algorithm)
+        return {"hash": result, "algorithm": request.algorithm}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/hmac")
-async def compute_hmac(request: HMACRequest):
-    """计算 HMAC"""
+@app.post("/hmac/sign")
+async def hmac_sign(request: HMACRequest):
+    """HMAC签名"""
     try:
-        h = hmac.new(request.key.encode(), request.data.encode(), request.algorithm)
-        return {
-            "success": True,
-            "algorithm": request.algorithm,
-            "hmac": h.hexdigest()
-        }
+        result = crypto_manager.hmac_sign(request.data, request.key, request.algorithm)
+        return {"signature": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/hmac/verify")
+async def hmac_verify(request: VerifyRequest, key: str, algorithm: str = "sha256"):
+    """验证HMAC签名"""
+    try:
+        valid = crypto_manager.hmac_verify(request.data, request.signature, key, algorithm)
+        return {"valid": valid}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/encrypt")
-async def encrypt_data(request: EncryptRequest):
+async def encrypt(request: EncryptRequest):
     """加密数据"""
     try:
-        if request.algorithm == "fernet":
-            key = request.key.encode() if request.key else Fernet.generate_key()
-            f = Fernet(key)
-            encrypted = f.encrypt(request.data.encode())
-            return {
-                "success": True,
-                "algorithm": "fernet",
-                "encrypted": encrypted.decode(),
-                "key": key.decode() if not request.key else None
-            }
-        elif request.algorithm == "aes256":
-            key = request.key.encode()[:32] if request.key else secrets.token_bytes(32)
-            iv = secrets.token_bytes(16)
-            cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
-            encryptor = cipher.encryptor()
-            encrypted = encryptor.update(request.data.encode()) + encryptor.finalize()
-            return {
-                "success": True,
-                "algorithm": "aes256",
-                "encrypted": base64.b64encode(encrypted).decode(),
-                "iv": base64.b64encode(iv).decode(),
-                "key": base64.b64encode(key).decode() if not request.key else None
-            }
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported algorithm: {request.algorithm}")
+        encrypted = crypto_manager.encrypt(request.data, request.key)
+        return {"encrypted": encrypted}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/decrypt")
-async def decrypt_data(encrypted: str, key: str, algorithm: str = "fernet", iv: Optional[str] = None):
+async def decrypt(encrypted_data: str, key: str):
     """解密数据"""
     try:
-        if algorithm == "fernet":
-            f = Fernet(key.encode())
-            decrypted = f.decrypt(encrypted.encode())
-            return {"success": True, "decrypted": decrypted.decode()}
-        elif algorithm == "aes256":
-            if not iv:
-                raise HTTPException(status_code=400, detail="IV required for AES256")
-            key_bytes = base64.b64decode(key)
-            iv_bytes = base64.b64decode(iv)
-            encrypted_bytes = base64.b64decode(encrypted)
-            cipher = Cipher(algorithms.AES(key_bytes), modes.CFB(iv_bytes), backend=default_backend())
-            decryptor = cipher.decryptor()
-            decrypted = decryptor.update(encrypted_bytes) + decryptor.finalize()
-            return {"success": True, "decrypted": decrypted.decode()}
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported algorithm: {algorithm}")
+        decrypted = crypto_manager.decrypt(encrypted_data, key)
+        return {"decrypted": decrypted}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/generate_key")
-async def generate_key(algorithm: str = "fernet"):
-    """生成加密密钥"""
-    if algorithm == "fernet":
-        key = Fernet.generate_key()
-        return {"success": True, "algorithm": "fernet", "key": key.decode()}
-    elif algorithm == "aes256":
-        key = secrets.token_bytes(32)
-        return {"success": True, "algorithm": "aes256", "key": base64.b64encode(key).decode()}
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported algorithm: {algorithm}")
+@app.post("/rsa/generate")
+async def generate_rsa_keypair():
+    """生成RSA密钥对"""
+    try:
+        keys = crypto_manager.generate_rsa_keypair()
+        return keys
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/mcp/call")
-async def mcp_call(request: dict):
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    if tool == "hash": return await compute_hash(HashRequest(**params))
-    elif tool == "hmac": return await compute_hmac(HMACRequest(**params))
-    elif tool == "encrypt": return await encrypt_data(EncryptRequest(**params))
-    elif tool == "decrypt": return await decrypt_data(**params)
-    elif tool == "generate_key": return await generate_key(params.get("algorithm", "fernet"))
-    raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+@app.post("/rsa/sign")
+async def rsa_sign(request: SignRequest):
+    """RSA签名"""
+    try:
+        signature = crypto_manager.rsa_sign(request.data, request.private_key)
+        return {"signature": signature}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rsa/verify")
+async def rsa_verify(request: VerifyRequest):
+    """验证RSA签名"""
+    try:
+        valid = crypto_manager.rsa_verify(request.data, request.signature, request.public_key)
+        return {"valid": valid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
