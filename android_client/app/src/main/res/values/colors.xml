@@ -30,6 +30,9 @@
     <color name="warning">#FF9800</color>
     <color name="info">#2196F3</color>
     
+    <!-- 图标背景 -->
+    <color name="ic_launcher_background">#1A1A1A</color>
+    
     <!-- 灵动岛 -->
     <color name="island_background">#000000</color>
     <color name="island_content">#FFFFFF</color>
