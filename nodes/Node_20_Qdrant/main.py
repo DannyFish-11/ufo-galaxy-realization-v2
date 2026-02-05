@@ -1,147 +1,260 @@
 """
-Node 20: Qdrant - 向量数据库
+Node 20: Qdrant - 向量数据库节点
+==================================
+提供向量存储、相似度搜索、向量索引功能
 """
-import os, uuid
+import os
+import json
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Node 20 - Qdrant", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-qdrant = None
+# 尝试导入qdrant_client
 try:
     from qdrant_client import QdrantClient
     from qdrant_client.models import Distance, VectorParams, PointStruct
-    qdrant = True
+    QDRANT_AVAILABLE = True
 except ImportError:
-    pass
+    QDRANT_AVAILABLE = False
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-client = None
+app = FastAPI(title="Node 20 - Qdrant", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-collections = {}
+# Qdrant配置
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 
-class CreateCollectionRequest(BaseModel):
+class CollectionRequest(BaseModel):
     name: str
-    vector_size: int = 384
-    distance: str = "cosine"
+    vector_size: int = 1536
+    distance: str = "Cosine"  # Cosine, Euclid, Dot
 
-class UpsertRequest(BaseModel):
+class PointRequest(BaseModel):
     collection: str
-    vectors: List[List[float]]
-    payloads: Optional[List[Dict[str, Any]]] = None
-    ids: Optional[List[str]] = None
+    id: Optional[str] = None
+    vector: List[float]
+    payload: Dict[str, Any] = {}
 
 class SearchRequest(BaseModel):
     collection: str
     vector: List[float]
     limit: int = 10
+    score_threshold: Optional[float] = None
 
-def get_client():
-    global client
-    if qdrant and client is None:
-        try:
-            client = QdrantClient(url=QDRANT_URL)
-        except:
-            pass
-    return client
+class QdrantManager:
+    def __init__(self):
+        self.client = None
+        self._connected = False
+
+    def connect(self):
+        """连接Qdrant"""
+        if not QDRANT_AVAILABLE:
+            raise RuntimeError("qdrant-client not installed. Install with: pip install qdrant-client")
+
+        if not self.client:
+            kwargs = {"host": QDRANT_HOST, "port": QDRANT_PORT}
+            if QDRANT_API_KEY:
+                kwargs["api_key"] = QDRANT_API_KEY
+            self.client = QdrantClient(**kwargs)
+            self._connected = True
+
+    def create_collection(self, name: str, vector_size: int = 1536, distance: str = "Cosine") -> bool:
+        """创建集合"""
+        if not self._connected:
+            self.connect()
+
+        distance_map = {
+            "Cosine": Distance.COSINE,
+            "Euclid": Distance.EUCLID,
+            "Dot": Distance.DOT
+        }
+
+        self.client.create_collection(
+            collection_name=name,
+            vectors_config=VectorParams(size=vector_size, distance=distance_map.get(distance, Distance.COSINE))
+        )
+        return True
+
+    def delete_collection(self, name: str) -> bool:
+        """删除集合"""
+        if not self._connected:
+            self.connect()
+
+        self.client.delete_collection(collection_name=name)
+        return True
+
+    def list_collections(self) -> List[str]:
+        """列出所有集合"""
+        if not self._connected:
+            self.connect()
+
+        collections = self.client.get_collections()
+        return [c.name for c in collections.collections]
+
+    def upsert_point(self, collection: str, vector: List[float], 
+                     point_id: Optional[str] = None, payload: Dict = None) -> str:
+        """插入/更新向量点"""
+        if not self._connected:
+            self.connect()
+
+        point_id = point_id or str(uuid.uuid4())
+        point = PointStruct(id=point_id, vector=vector, payload=payload or {})
+
+        self.client.upsert(collection_name=collection, points=[point])
+        return point_id
+
+    def search(self, collection: str, vector: List[float], 
+               limit: int = 10, score_threshold: Optional[float] = None) -> List[Dict]:
+        """向量搜索"""
+        if not self._connected:
+            self.connect()
+
+        results = self.client.search(
+            collection_name=collection,
+            query_vector=vector,
+            limit=limit,
+            score_threshold=score_threshold
+        )
+
+        return [{
+            "id": r.id,
+            "score": r.score,
+            "payload": r.payload
+        } for r in results]
+
+    def delete_point(self, collection: str, point_id: str) -> bool:
+        """删除向量点"""
+        if not self._connected:
+            self.connect()
+
+        self.client.delete(collection_name=collection, points_selector=[point_id])
+        return True
+
+    def get_point(self, collection: str, point_id: str) -> Optional[Dict]:
+        """获取向量点"""
+        if not self._connected:
+            self.connect()
+
+        points = self.client.retrieve(collection_name=collection, ids=[point_id], with_vectors=True)
+        if points:
+            return {
+                "id": points[0].id,
+                "vector": points[0].vector,
+                "payload": points[0].payload
+            }
+        return None
+
+# 全局Qdrant管理器
+qdrant_manager = QdrantManager()
+
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy" if qdrant else "degraded", "node_id": "20", "name": "Qdrant", "qdrant_available": qdrant is not None, "timestamp": datetime.now().isoformat()}
+    status = "healthy" if qdrant_manager._connected else "standby"
+    return {
+        "status": status,
+        "node_id": "20",
+        "name": "Qdrant",
+        "host": QDRANT_HOST,
+        "port": QDRANT_PORT,
+        "qdrant_available": QDRANT_AVAILABLE,
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.post("/collections")
-async def create_collection(request: CreateCollectionRequest):
-    c = get_client()
-    if c:
-        try:
-            from qdrant_client.models import Distance, VectorParams
-            dist = Distance.COSINE if request.distance == "cosine" else Distance.EUCLID
-            c.create_collection(collection_name=request.name, vectors_config=VectorParams(size=request.vector_size, distance=dist))
-            return {"success": True, "collection": request.name}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    collections[request.name] = {"vectors": [], "payloads": [], "ids": [], "vector_size": request.vector_size}
-    return {"success": True, "collection": request.name, "mode": "in-memory"}
+async def create_collection(request: CollectionRequest):
+    """创建集合"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
+
+    try:
+        success = qdrant_manager.create_collection(request.name, request.vector_size, request.distance)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/collections/{name}")
+async def delete_collection(name: str):
+    """删除集合"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
+
+    try:
+        success = qdrant_manager.delete_collection(name)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/collections")
 async def list_collections():
-    c = get_client()
-    if c:
-        try:
-            cols = c.get_collections()
-            return {"success": True, "collections": [col.name for col in cols.collections]}
-        except:
-            pass
-    return {"success": True, "collections": list(collections.keys()), "mode": "in-memory"}
+    """列出所有集合"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
 
-@app.post("/upsert")
-async def upsert(request: UpsertRequest):
-    c = get_client()
-    ids = request.ids or [str(uuid.uuid4()) for _ in request.vectors]
-    payloads = request.payloads or [{} for _ in request.vectors]
-    
-    if c:
-        try:
-            from qdrant_client.models import PointStruct
-            points = [PointStruct(id=i, vector=v, payload=p) for i, v, p in zip(range(len(ids)), request.vectors, payloads)]
-            c.upsert(collection_name=request.collection, points=points)
-            return {"success": True, "upserted": len(points)}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    if request.collection not in collections:
-        collections[request.collection] = {"vectors": [], "payloads": [], "ids": [], "vector_size": len(request.vectors[0])}
-    
-    col = collections[request.collection]
-    for i, (v, p, id_) in enumerate(zip(request.vectors, payloads, ids)):
-        col["vectors"].append(v)
-        col["payloads"].append(p)
-        col["ids"].append(id_)
-    
-    return {"success": True, "upserted": len(request.vectors), "mode": "in-memory"}
+    try:
+        collections = qdrant_manager.list_collections()
+        return {"collections": collections}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/points")
+async def upsert_point(request: PointRequest):
+    """插入/更新向量点"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
+
+    try:
+        point_id = qdrant_manager.upsert_point(
+            request.collection, request.vector, request.id, request.payload
+        )
+        return {"id": point_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/search")
-async def search(request: SearchRequest):
-    c = get_client()
-    
-    if c:
-        try:
-            results = c.search(collection_name=request.collection, query_vector=request.vector, limit=request.limit)
-            return {"success": True, "results": [{"id": r.id, "score": r.score, "payload": r.payload} for r in results]}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    if request.collection not in collections:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    
-    col = collections[request.collection]
-    
-    def cosine_sim(a, b):
-        dot = sum(x * y for x, y in zip(a, b))
-        norm_a = sum(x ** 2 for x in a) ** 0.5
-        norm_b = sum(x ** 2 for x in b) ** 0.5
-        return dot / (norm_a * norm_b) if norm_a and norm_b else 0
-    
-    scores = [(i, cosine_sim(request.vector, v)) for i, v in enumerate(col["vectors"])]
-    scores.sort(key=lambda x: -x[1])
-    
-    results = [{"id": col["ids"][i], "score": s, "payload": col["payloads"][i]} for i, s in scores[:request.limit]]
-    return {"success": True, "results": results, "mode": "in-memory"}
+async def search_vectors(request: SearchRequest):
+    """向量搜索"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
 
-@app.post("/mcp/call")
-async def mcp_call(request: dict):
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    if tool == "create_collection": return await create_collection(CreateCollectionRequest(**params))
-    elif tool == "list_collections": return await list_collections()
-    elif tool == "upsert": return await upsert(UpsertRequest(**params))
-    elif tool == "search": return await search(SearchRequest(**params))
-    raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+    try:
+        results = qdrant_manager.search(
+            request.collection, request.vector, request.limit, request.score_threshold
+        )
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/points/{collection}/{point_id}")
+async def delete_point(collection: str, point_id: str):
+    """删除向量点"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
+
+    try:
+        success = qdrant_manager.delete_point(collection, point_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/points/{collection}/{point_id}")
+async def get_point(collection: str, point_id: str):
+    """获取向量点"""
+    if not QDRANT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="qdrant-client not installed")
+
+    try:
+        point = qdrant_manager.get_point(collection, point_id)
+        if not point:
+            raise HTTPException(status_code=404, detail="Point not found")
+        return point
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

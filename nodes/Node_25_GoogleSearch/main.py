@@ -1,82 +1,120 @@
 """
-Node 25: GoogleSearch - Google 搜索 API
+Node 25: GoogleSearch - Google搜索节点
+========================================
+提供Google搜索、自定义搜索功能
 """
-import os, requests
-from typing import Optional, List
+import os
+import requests
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Node 25 - GoogleSearch", version="3.0.0", description="Google Custom Search API")
+app = FastAPI(title="Node 25 - GoogleSearch", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+# Google配置
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
-GOOGLE_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")  # Custom Search Engine ID
+GOOGLE_API_URL = "https://www.googleapis.com/customsearch/v1"
 
 class SearchRequest(BaseModel):
     query: str
     num: int = 10
     start: int = 1
-    lang: str = "zh-CN"
-    safe: str = "off"
+    search_type: Optional[str] = None  # image
+
+class GoogleSearchManager:
+    def __init__(self):
+        self.api_key = GOOGLE_API_KEY
+        self.cse_id = GOOGLE_CSE_ID
+        self.api_url = GOOGLE_API_URL
+
+    def search(self, query: str, num: int = 10, start: int = 1,
+               search_type: Optional[str] = None) -> Dict:
+        """执行搜索"""
+        if not self.api_key or not self.cse_id:
+            raise RuntimeError("Google API key or CSE ID not configured")
+
+        params = {
+            "key": self.api_key,
+            "cx": self.cse_id,
+            "q": query,
+            "num": min(num, 10),
+            "start": start
+        }
+
+        if search_type:
+            params["searchType"] = search_type
+
+        response = requests.get(self.api_url, params=params, timeout=10)
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Google API error: {response.text}")
+
+        data = response.json()
+
+        results = []
+        for item in data.get("items", []):
+            results.append({
+                "title": item.get("title"),
+                "url": item.get("link"),
+                "description": item.get("snippet"),
+                "display_url": item.get("displayLink")
+            })
+
+        return {
+            "query": query,
+            "results": results,
+            "total": data.get("searchInformation", {}).get("totalResults", "0"),
+            "time": data.get("searchInformation", {}).get("searchTime", 0)
+        }
+
+    def search_images(self, query: str, num: int = 10) -> Dict:
+        """搜索图片"""
+        return self.search(query, num, search_type="image")
+
+# 全局Google搜索管理器
+google_manager = GoogleSearchManager()
+
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
     return {
-        "status": "healthy" if (GOOGLE_API_KEY and GOOGLE_CSE_ID) else "degraded",
+        "status": "healthy",
         "node_id": "25",
         "name": "GoogleSearch",
-        "api_key_configured": bool(GOOGLE_API_KEY),
-        "cse_id_configured": bool(GOOGLE_CSE_ID)
+        "api_configured": bool(GOOGLE_API_KEY and GOOGLE_CSE_ID),
+        "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/search")
 async def search(request: SearchRequest):
-    """执行 Google 搜索"""
-    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        raise HTTPException(status_code=503, detail="GOOGLE_API_KEY or GOOGLE_CSE_ID not configured")
-    
-    params = {
-        "key": GOOGLE_API_KEY,
-        "cx": GOOGLE_CSE_ID,
-        "q": request.query,
-        "num": min(request.num, 10),
-        "start": request.start,
-        "lr": f"lang_{request.lang}",
-        "safe": request.safe
-    }
-    
+    """执行搜索"""
     try:
-        response = requests.get(GOOGLE_SEARCH_URL, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        results = []
-        for item in data.get("items", []):
-            results.append({
-                "title": item.get("title", ""),
-                "link": item.get("link", ""),
-                "snippet": item.get("snippet", ""),
-                "displayLink": item.get("displayLink", "")
-            })
-        
-        return {
-            "success": True,
-            "query": request.query,
-            "total_results": int(data.get("searchInformation", {}).get("totalResults", 0)),
-            "results": results,
-            "count": len(results)
-        }
-    except requests.exceptions.RequestException as e:
+        result = google_manager.search(
+            query=request.query,
+            num=request.num,
+            start=request.start,
+            search_type=request.search_type
+        )
+        return result
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/mcp/call")
-async def mcp_call(request: dict):
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    if tool == "search": return await search(SearchRequest(**params))
-    raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+@app.post("/search/images")
+async def search_images(request: SearchRequest):
+    """搜索图片"""
+    try:
+        result = google_manager.search_images(
+            query=request.query,
+            num=request.num
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

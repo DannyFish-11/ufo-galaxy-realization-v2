@@ -1,0 +1,36 @@
+# UFO Galaxy Nodes - Dependencies
+# =================================
+
+# 基础依赖
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# Node 03: SecretVault, Node 19: Crypto
+cryptography>=41.0.0
+
+# Node 12: PostgreSQL
+asyncpg>=0.29.0
+
+# Node 17: EdgeTTS
+edge-tts>=6.1.0
+
+# Node 18: DeepL
+requests>=2.31.0
+
+# Node 23: Time
+pytz>=2023.3
+
+# Node 39: SSH
+asyncssh>=2.14.0
+
+# Node 41: MQTT
+paho-mqtt>=1.6.0
+
+# Node 20: Qdrant
+qdrant-client>=1.6.0
+
+# 其他常用依赖
+aiohttp>=3.9.0
+httpx>=0.25.0

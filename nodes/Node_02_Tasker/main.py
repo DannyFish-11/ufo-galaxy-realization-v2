@@ -1,509 +1,300 @@
 """
-Node 02: Tasker Engine
-======================
-任务串行/并行编排引擎。
-支持复杂任务的 DAG 编排、依赖管理、失败重试。
-
-功能：
-- 任务 DAG 定义与执行
-- 串行/并行任务编排
-- 任务依赖管理
-- 失败重试与回滚
-- 任务状态追踪
+Node 02: Tasker - 任务调度器
+=============================
+提供任务队列管理、定时任务、任务状态跟踪功能
 """
-
 import os
 import json
 import asyncio
 import uuid
-import time
-from datetime import datetime
-from typing import Optional, Dict, Any, List, Callable, Set
-from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
-from collections import defaultdict
-
-import httpx
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import heapq
 
-app = FastAPI(title="Node 02 - Tasker Engine", version="1.0.0")
+app = FastAPI(title="Node 02 - Tasker", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# =============================================================================
-# Task Models
-# =============================================================================
-
-class TaskStatus(Enum):
+class TaskStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
-    SUCCESS = "success"
+    COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-    SKIPPED = "skipped"
 
-class ExecutionMode(Enum):
-    SEQUENTIAL = "sequential"
-    PARALLEL = "parallel"
-    DAG = "dag"
+class TaskPriority(int, Enum):
+    LOW = 3
+    NORMAL = 2
+    HIGH = 1
+    CRITICAL = 0
 
-@dataclass
-class TaskStep:
-    """单个任务步骤"""
+class Task(BaseModel):
     id: str
     name: str
-    node_id: str  # 目标节点 (e.g., "Node_33_ADB")
-    action: str   # 动作名称
-    params: Dict[str, Any] = field(default_factory=dict)
-    depends_on: List[str] = field(default_factory=list)  # 依赖的步骤 ID
-    retry_count: int = 3
-    timeout: int = 60
-    on_failure: str = "abort"  # abort, skip, continue
-    
-@dataclass
-class TaskResult:
-    """任务结果"""
-    step_id: str
-    status: TaskStatus
-    output: Any = None
-    error: str = None
-    started_at: datetime = None
-    completed_at: datetime = None
-    duration_ms: int = 0
-
-@dataclass
-class TaskPlan:
-    """任务计划"""
-    id: str
-    name: str
-    steps: List[TaskStep]
-    mode: ExecutionMode = ExecutionMode.SEQUENTIAL
-    created_at: datetime = field(default_factory=datetime.now)
+    command: str
+    params: Dict[str, Any] = {}
     status: TaskStatus = TaskStatus.PENDING
-    results: Dict[str, TaskResult] = field(default_factory=dict)
-    context: Dict[str, Any] = field(default_factory=dict)  # 共享上下文
+    priority: TaskPriority = TaskPriority.NORMAL
+    created_at: datetime
+    scheduled_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    result: Optional[Any] = None
+    error: Optional[str] = None
+    retry_count: int = 0
+    max_retries: int = 3
 
-# =============================================================================
-# Task Engine
-# =============================================================================
-
-class TaskEngine:
-    """任务编排引擎"""
-    
+class TaskManager:
     def __init__(self):
-        self.plans: Dict[str, TaskPlan] = {}
-        self.node_endpoints: Dict[str, str] = self._load_node_endpoints()
-        self.running_tasks: Set[str] = set()
-        
-    def _load_node_endpoints(self) -> Dict[str, str]:
-        """加载节点端点配置"""
-        # 从环境变量或配置文件加载
-        base_ip = os.getenv("GALAXY_NET_BASE", "10.88.0")
-        return {
-            "Node_00": f"http://{base_ip}.0:8000",
-            "Node_01": f"http://{base_ip}.1:8001",
-            "Node_33": f"http://{base_ip}.33:8033",
-            "Node_34": f"http://{base_ip}.34:8034",
-            "Node_49": f"http://{base_ip}.49:8049",
-            "Node_50": f"http://{base_ip}.50:8050",
-            "Node_58": f"http://{base_ip}.58:8058",
-            # ... 其他节点
-        }
-        
-    def create_plan(
-        self,
-        name: str,
-        steps: List[Dict[str, Any]],
-        mode: str = "sequential"
-    ) -> TaskPlan:
-        """创建任务计划"""
-        plan_id = str(uuid.uuid4())[:8]
-        
-        task_steps = []
-        for i, step in enumerate(steps):
-            task_steps.append(TaskStep(
-                id=step.get("id", f"step_{i}"),
-                name=step.get("name", f"Step {i}"),
-                node_id=step.get("node_id", ""),
-                action=step.get("action", ""),
-                params=step.get("params", {}),
-                depends_on=step.get("depends_on", []),
-                retry_count=step.get("retry_count", 3),
-                timeout=step.get("timeout", 60),
-                on_failure=step.get("on_failure", "abort")
-            ))
-            
-        plan = TaskPlan(
-            id=plan_id,
-            name=name,
-            steps=task_steps,
-            mode=ExecutionMode(mode)
-        )
-        
-        self.plans[plan_id] = plan
-        return plan
-        
-    async def execute_plan(self, plan_id: str) -> TaskPlan:
-        """执行任务计划"""
-        plan = self.plans.get(plan_id)
-        if not plan:
-            raise ValueError(f"Plan not found: {plan_id}")
-            
-        if plan_id in self.running_tasks:
-            raise ValueError(f"Plan already running: {plan_id}")
-            
-        self.running_tasks.add(plan_id)
-        plan.status = TaskStatus.RUNNING
-        
-        try:
-            if plan.mode == ExecutionMode.SEQUENTIAL:
-                await self._execute_sequential(plan)
-            elif plan.mode == ExecutionMode.PARALLEL:
-                await self._execute_parallel(plan)
-            elif plan.mode == ExecutionMode.DAG:
-                await self._execute_dag(plan)
-                
-            # 检查最终状态
-            failed = any(r.status == TaskStatus.FAILED for r in plan.results.values())
-            plan.status = TaskStatus.FAILED if failed else TaskStatus.SUCCESS
-            
-        except Exception as e:
-            plan.status = TaskStatus.FAILED
-            raise
-        finally:
-            self.running_tasks.discard(plan_id)
-            
-        return plan
-        
-    async def _execute_sequential(self, plan: TaskPlan):
-        """串行执行"""
-        for step in plan.steps:
-            result = await self._execute_step(step, plan.context)
-            plan.results[step.id] = result
-            
-            if result.status == TaskStatus.FAILED:
-                if step.on_failure == "abort":
-                    break
-                elif step.on_failure == "skip":
-                    continue
-                    
-    async def _execute_parallel(self, plan: TaskPlan):
-        """并行执行"""
-        tasks = [
-            self._execute_step(step, plan.context)
-            for step in plan.steps
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for step, result in zip(plan.steps, results):
-            if isinstance(result, Exception):
-                plan.results[step.id] = TaskResult(
-                    step_id=step.id,
-                    status=TaskStatus.FAILED,
-                    error=str(result)
-                )
-            else:
-                plan.results[step.id] = result
-                
-    async def _execute_dag(self, plan: TaskPlan):
-        """DAG 执行 (拓扑排序)"""
-        # 构建依赖图
-        in_degree = defaultdict(int)
-        dependents = defaultdict(list)
-        step_map = {s.id: s for s in plan.steps}
-        
-        for step in plan.steps:
-            for dep in step.depends_on:
-                dependents[dep].append(step.id)
-                in_degree[step.id] += 1
-                
-        # 找到入度为 0 的节点
-        ready = [s.id for s in plan.steps if in_degree[s.id] == 0]
-        
-        while ready:
-            # 并行执行所有就绪的步骤
-            current_batch = ready[:]
-            ready = []
-            
-            tasks = [
-                self._execute_step(step_map[sid], plan.context)
-                for sid in current_batch
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            for sid, result in zip(current_batch, results):
-                if isinstance(result, Exception):
-                    plan.results[sid] = TaskResult(
-                        step_id=sid,
-                        status=TaskStatus.FAILED,
-                        error=str(result)
-                    )
-                    # 检查失败策略
-                    if step_map[sid].on_failure == "abort":
-                        return
-                else:
-                    plan.results[sid] = result
-                    
-                # 更新依赖
-                for dependent in dependents[sid]:
-                    in_degree[dependent] -= 1
-                    if in_degree[dependent] == 0:
-                        # 检查所有依赖是否成功
-                        deps_ok = all(
-                            plan.results.get(d, TaskResult(d, TaskStatus.PENDING)).status == TaskStatus.SUCCESS
-                            for d in step_map[dependent].depends_on
-                        )
-                        if deps_ok:
-                            ready.append(dependent)
-                        else:
-                            plan.results[dependent] = TaskResult(
-                                step_id=dependent,
-                                status=TaskStatus.SKIPPED,
-                                error="Dependency failed"
-                            )
-                            
-    async def _execute_step(
-        self, 
-        step: TaskStep, 
-        context: Dict[str, Any]
-    ) -> TaskResult:
-        """执行单个步骤"""
-        result = TaskResult(
-            step_id=step.id,
-            status=TaskStatus.RUNNING,
-            started_at=datetime.now()
-        )
-        
-        # 变量替换
-        params = self._substitute_variables(step.params, context)
-        
-        # 重试循环
-        last_error = None
-        for attempt in range(step.retry_count):
+        self.tasks: Dict[str, Task] = {}
+        self.task_queue: List[tuple] = []  # (priority, created_at, task_id)
+        self.running_tasks: Dict[str, asyncio.Task] = {}
+        self.scheduled_tasks: Dict[str, asyncio.Task] = {}
+        self.task_handlers: Dict[str, Callable] = {}
+        self._lock = asyncio.Lock()
+        self._load_persisted_tasks()
+
+    def _load_persisted_tasks(self):
+        """加载持久化的任务"""
+        persist_file = os.getenv("TASKER_PERSIST_FILE", "/tmp/tasker_tasks.json")
+        if os.path.exists(persist_file):
             try:
-                output = await self._call_node(
-                    step.node_id,
-                    step.action,
-                    params,
-                    step.timeout
-                )
-                
-                result.status = TaskStatus.SUCCESS
-                result.output = output
-                result.completed_at = datetime.now()
-                result.duration_ms = int(
-                    (result.completed_at - result.started_at).total_seconds() * 1000
-                )
-                
-                # 保存输出到上下文
-                context[f"{step.id}_output"] = output
-                
-                return result
-                
+                with open(persist_file, 'r') as f:
+                    data = json.load(f)
+                    for task_data in data.get("tasks", []):
+                        task = Task(**task_data)
+                        self.tasks[task.id] = task
+                        if task.status == TaskStatus.PENDING:
+                            heapq.heappush(self.task_queue, (task.priority, task.created_at, task.id))
             except Exception as e:
-                last_error = str(e)
-                if attempt < step.retry_count - 1:
-                    await asyncio.sleep(2 ** attempt)  # 指数退避
-                    
-        result.status = TaskStatus.FAILED
-        result.error = last_error
-        result.completed_at = datetime.now()
-        result.duration_ms = int(
-            (result.completed_at - result.started_at).total_seconds() * 1000
-        )
-        
-        return result
-        
-    def _substitute_variables(
-        self, 
-        params: Dict[str, Any], 
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """变量替换 (支持 {{variable}} 语法)"""
-        result = {}
-        for key, value in params.items():
-            if isinstance(value, str) and "{{" in value:
-                for ctx_key, ctx_value in context.items():
-                    value = value.replace(f"{{{{{ctx_key}}}}}", str(ctx_value))
-            result[key] = value
-        return result
-        
-    async def _call_node(
-        self,
-        node_id: str,
-        action: str,
-        params: Dict[str, Any],
-        timeout: int
-    ) -> Any:
-        """调用节点"""
-        # 获取节点端点
-        endpoint = self.node_endpoints.get(node_id)
-        if not endpoint:
-            # 尝试从 Node 00 状态机获取
-            endpoint = f"http://localhost:80{node_id.split('_')[1]}"
-            
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                f"{endpoint}/mcp/call",
-                json={"tool": action, "params": params}
+                print(f"Failed to load persisted tasks: {e}")
+
+    async def _persist_tasks(self):
+        """持久化任务"""
+        persist_file = os.getenv("TASKER_PERSIST_FILE", "/tmp/tasker_tasks.json")
+        try:
+            with open(persist_file, 'w') as f:
+                json.dump({"tasks": [t.dict() for t in self.tasks.values()]}, f, default=str)
+        except Exception as e:
+            print(f"Failed to persist tasks: {e}")
+
+    def register_handler(self, command: str, handler: Callable):
+        """注册任务处理器"""
+        self.task_handlers[command] = handler
+
+    async def create_task(self, name: str, command: str, params: Dict = None, 
+                         priority: TaskPriority = TaskPriority.NORMAL,
+                         scheduled_at: Optional[datetime] = None) -> Task:
+        """创建新任务"""
+        async with self._lock:
+            task = Task(
+                id=str(uuid.uuid4()),
+                name=name,
+                command=command,
+                params=params or {},
+                priority=priority,
+                created_at=datetime.now(),
+                scheduled_at=scheduled_at
             )
-            response.raise_for_status()
-            return response.json()
-            
-    def get_plan(self, plan_id: str) -> Optional[TaskPlan]:
-        """获取任务计划"""
-        return self.plans.get(plan_id)
-        
-    def cancel_plan(self, plan_id: str) -> bool:
-        """取消任务计划"""
-        plan = self.plans.get(plan_id)
-        if plan and plan.status == TaskStatus.RUNNING:
-            plan.status = TaskStatus.CANCELLED
-            return True
+            self.tasks[task.id] = task
+
+            if scheduled_at and scheduled_at > datetime.now():
+                # 定时任务
+                delay = (scheduled_at - datetime.now()).total_seconds()
+                self.scheduled_tasks[task.id] = asyncio.create_task(self._run_scheduled(task.id, delay))
+            else:
+                # 立即执行
+                heapq.heappush(self.task_queue, (priority, task.created_at, task.id))
+
+            await self._persist_tasks()
+            return task
+
+    async def _run_scheduled(self, task_id: str, delay: float):
+        """运行定时任务"""
+        await asyncio.sleep(delay)
+        async with self._lock:
+            if task_id in self.tasks:
+                task = self.tasks[task_id]
+                heapq.heappush(self.task_queue, (task.priority, task.created_at, task.id))
+                del self.scheduled_tasks[task_id]
+
+    async def execute_task(self, task_id: str) -> Any:
+        """执行任务"""
+        task = self.tasks.get(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        task.status = TaskStatus.RUNNING
+        task.started_at = datetime.now()
+
+        handler = self.task_handlers.get(task.command)
+        if not handler:
+            task.status = TaskStatus.FAILED
+            task.error = f"No handler registered for command: {task.command}"
+            task.completed_at = datetime.now()
+            return task
+
+        try:
+            if asyncio.iscoroutinefunction(handler):
+                result = await handler(**task.params)
+            else:
+                result = handler(**task.params)
+            task.result = result
+            task.status = TaskStatus.COMPLETED
+        except Exception as e:
+            task.retry_count += 1
+            if task.retry_count < task.max_retries:
+                task.status = TaskStatus.PENDING
+                heapq.heappush(self.task_queue, (task.priority, datetime.now(), task.id))
+            else:
+                task.status = TaskStatus.FAILED
+                task.error = str(e)
+
+        task.completed_at = datetime.now()
+        await self._persist_tasks()
+        return task
+
+    async def process_queue(self):
+        """处理任务队列"""
+        while True:
+            async with self._lock:
+                if self.task_queue:
+                    _, _, task_id = heapq.heappop(self.task_queue)
+                    if task_id in self.tasks and self.tasks[task_id].status == TaskStatus.PENDING:
+                        asyncio.create_task(self.execute_task(task_id))
+            await asyncio.sleep(0.1)
+
+    def get_task(self, task_id: str) -> Optional[Task]:
+        return self.tasks.get(task_id)
+
+    def list_tasks(self, status: Optional[TaskStatus] = None, limit: int = 100) -> List[Task]:
+        tasks = list(self.tasks.values())
+        if status:
+            tasks = [t for t in tasks if t.status == status]
+        tasks.sort(key=lambda x: x.created_at, reverse=True)
+        return tasks[:limit]
+
+    async def cancel_task(self, task_id: str) -> bool:
+        async with self._lock:
+            if task_id in self.tasks:
+                task = self.tasks[task_id]
+                if task.status in [TaskStatus.PENDING, TaskStatus.RUNNING]:
+                    task.status = TaskStatus.CANCELLED
+                    task.completed_at = datetime.now()
+                    if task_id in self.scheduled_tasks:
+                        self.scheduled_tasks[task_id].cancel()
+                        del self.scheduled_tasks[task_id]
+                    await self._persist_tasks()
+                    return True
         return False
 
-# =============================================================================
-# Global Instance
-# =============================================================================
+    async def retry_task(self, task_id: str) -> Optional[Task]:
+        async with self._lock:
+            if task_id in self.tasks:
+                task = self.tasks[task_id]
+                if task.status == TaskStatus.FAILED:
+                    task.status = TaskStatus.PENDING
+                    task.retry_count = 0
+                    task.error = None
+                    heapq.heappush(self.task_queue, (task.priority, datetime.now(), task.id))
+                    await self._persist_tasks()
+                    return task
+        return None
 
-engine = TaskEngine()
+# 全局任务管理器
+task_manager = TaskManager()
 
-# =============================================================================
-# API Endpoints
-# =============================================================================
+# 注册示例处理器
+async def example_handler(message: str = "Hello"):
+    await asyncio.sleep(2)
+    return {"message": message, "processed_at": datetime.now().isoformat()}
 
-class CreatePlanRequest(BaseModel):
-    name: str
-    steps: List[Dict[str, Any]]
-    mode: str = "sequential"
+task_manager.register_handler("example", example_handler)
+
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
-    """健康检查"""
     return {
         "status": "healthy",
         "node_id": "02",
-        "name": "Tasker Engine",
-        "active_plans": len(engine.running_tasks),
-        "total_plans": len(engine.plans),
+        "name": "Tasker",
+        "pending_tasks": len([t for t in task_manager.tasks.values() if t.status == TaskStatus.PENDING]),
+        "running_tasks": len([t for t in task_manager.tasks.values() if t.status == TaskStatus.RUNNING]),
+        "total_tasks": len(task_manager.tasks),
         "timestamp": datetime.now().isoformat()
     }
 
-@app.post("/plans")
-async def create_plan(request: CreatePlanRequest):
-    """创建任务计划"""
-    plan = engine.create_plan(
+class CreateTaskRequest(BaseModel):
+    name: str
+    command: str
+    params: Dict[str, Any] = {}
+    priority: TaskPriority = TaskPriority.NORMAL
+    scheduled_at: Optional[datetime] = None
+
+@app.post("/tasks")
+async def create_task(request: CreateTaskRequest):
+    """创建新任务"""
+    task = await task_manager.create_task(
         name=request.name,
-        steps=request.steps,
-        mode=request.mode
+        command=request.command,
+        params=request.params,
+        priority=request.priority,
+        scheduled_at=request.scheduled_at
     )
-    return {
-        "plan_id": plan.id,
-        "name": plan.name,
-        "steps": len(plan.steps),
-        "mode": plan.mode.value,
-        "status": plan.status.value
-    }
+    return task
 
-@app.post("/plans/{plan_id}/execute")
-async def execute_plan(plan_id: str, background_tasks: BackgroundTasks):
-    """执行任务计划"""
-    plan = engine.get_plan(plan_id)
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
-        
-    # 异步执行
-    background_tasks.add_task(engine.execute_plan, plan_id)
-    
-    return {
-        "plan_id": plan_id,
-        "status": "started",
-        "message": "Plan execution started in background"
-    }
+@app.get("/tasks")
+async def list_tasks(status: Optional[TaskStatus] = None, limit: int = 100):
+    """列出任务"""
+    return task_manager.list_tasks(status=status, limit=limit)
 
-@app.get("/plans/{plan_id}")
-async def get_plan(plan_id: str):
-    """获取任务计划状态"""
-    plan = engine.get_plan(plan_id)
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
-        
-    return {
-        "plan_id": plan.id,
-        "name": plan.name,
-        "status": plan.status.value,
-        "mode": plan.mode.value,
-        "steps": [
-            {
-                "id": s.id,
-                "name": s.name,
-                "node_id": s.node_id,
-                "action": s.action,
-                "status": plan.results.get(s.id, TaskResult(s.id, TaskStatus.PENDING)).status.value,
-                "output": plan.results.get(s.id, TaskResult(s.id, TaskStatus.PENDING)).output,
-                "error": plan.results.get(s.id, TaskResult(s.id, TaskStatus.PENDING)).error
-            }
-            for s in plan.steps
-        ],
-        "created_at": plan.created_at.isoformat()
-    }
+@app.get("/tasks/{task_id}")
+async def get_task(task_id: str):
+    """获取任务详情"""
+    task = task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
-@app.post("/plans/{plan_id}/cancel")
-async def cancel_plan(plan_id: str):
-    """取消任务计划"""
-    if engine.cancel_plan(plan_id):
-        return {"status": "cancelled"}
-    raise HTTPException(status_code=400, detail="Cannot cancel plan")
+@app.post("/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    """取消任务"""
+    success = await task_manager.cancel_task(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot cancel task")
+    return {"success": True}
 
-@app.get("/plans")
-async def list_plans():
-    """列出所有任务计划"""
-    return {
-        "plans": [
-            {
-                "plan_id": p.id,
-                "name": p.name,
-                "status": p.status.value,
-                "steps": len(p.steps),
-                "created_at": p.created_at.isoformat()
-            }
-            for p in engine.plans.values()
-        ]
-    }
+@app.post("/tasks/{task_id}/retry")
+async def retry_task(task_id: str):
+    """重试失败任务"""
+    task = await task_manager.retry_task(task_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="Cannot retry task")
+    return task
 
-# =============================================================================
-# MCP Tool Interface
-# =============================================================================
+@app.delete("/tasks/{task_id}")
+async def delete_task(task_id: str):
+    """删除任务"""
+    if task_id in task_manager.tasks:
+        await task_manager.cancel_task(task_id)
+        del task_manager.tasks[task_id]
+        await task_manager._persist_tasks()
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="Task not found")
 
-@app.post("/mcp/call")
-async def mcp_call(request: Dict[str, Any]):
-    """MCP 工具调用接口"""
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    
-    if tool == "create_plan":
-        plan = engine.create_plan(**params)
-        return {"plan_id": plan.id}
-    elif tool == "execute_plan":
-        plan = await engine.execute_plan(params.get("plan_id"))
-        return {"status": plan.status.value}
-    elif tool == "get_plan":
-        plan = engine.get_plan(params.get("plan_id"))
-        return {"plan": plan.__dict__ if plan else None}
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+@app.get("/handlers")
+async def list_handlers():
+    """列出已注册的处理器"""
+    return {"handlers": list(task_manager.task_handlers.keys())}
 
-# =============================================================================
-# Main
-# =============================================================================
+@app.on_event("startup")
+async def startup():
+    """启动后台任务处理"""
+    asyncio.create_task(task_manager.process_queue())
 
 if __name__ == "__main__":
     import uvicorn

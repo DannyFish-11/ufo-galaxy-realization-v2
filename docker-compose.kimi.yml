@@ -1,0 +1,271 @@
+# ============================================================
+# UFO Galaxy System - Docker Compose Configuration
+# 数据库和中间件服务部署配置
+# ============================================================
+
+version: '3.8'
+
+services:
+  # ============================================================
+  # 1. Neo4j 图数据库
+  # ============================================================
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: ufo-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP端口 (Web界面)
+      - "7687:7687"  # Bolt端口 (驱动连接)
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j123}
+      - NEO4J_PLUGINS=["apoc", "gds"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_pagecache_size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    networks:
+      - ufo-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================
+  # 2. Qdrant 向量数据库
+  # ============================================================
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: ufo-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # REST API端口
+      - "6334:6334"  # gRPC端口
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT__LOG_LEVEL=INFO
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - ufo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================
+  # 3. MinIO 对象存储
+  # ============================================================
+  minio:
+    image: minio/minio:RELEASE.2024-01-13T07-53-03Z
+    container_name: ufo-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # API端口
+      - "9001:9001"   # Console端口
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - ufo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MinIO初始化 - 创建默认bucket
+  minio-init:
+    image: minio/mc:RELEASE.2024-01-13T08-44-48Z
+    container_name: ufo-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin123};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET:-ufo-galaxy} --ignore-existing;
+      /usr/bin/mc policy set public myminio/${MINIO_BUCKET:-ufo-galaxy};
+      exit 0;
+      "
+    networks:
+      - ufo-network
+
+  # ============================================================
+  # 4. Redis 缓存和消息队列
+  # ============================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: ufo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ufo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================
+  # 5. Ollama 本地模型服务 (可选)
+  # ============================================================
+  ollama:
+    image: ollama/ollama:0.1.20
+    container_name: ufo-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ufo-network
+    # GPU支持 (需要nvidia-docker)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================
+  # 6. 监控和可观测性
+  # ============================================================
+
+  # Prometheus - 指标收集
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: ufo-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - ufo-network
+
+  # Grafana - 可视化仪表板
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: ufo-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - ufo-network
+    depends_on:
+      - prometheus
+
+  # Jaeger - 分布式链路追踪
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: ufo-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # UI端口
+      - "14268:14268"  # Collector HTTP端口
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - ufo-network
+
+  # ============================================================
+  # 7. WebRTC TURN服务器 (可选 - coturn)
+  # ============================================================
+  turn:
+    image: coturn/coturn:4.6.2
+    container_name: ufo-turn
+    restart: unless-stopped
+    ports:
+      - "3478:3478"   # TURN/STUN端口
+      - "3478:3478/udp"
+      - "5349:5349"   # TURNS端口
+      - "5349:5349/udp"
+      - "49152-65535:49152-65535/udp"  # 中继端口范围
+    environment:
+      - TURN_USERNAME=${TURN_USERNAME:-turnuser}
+      - TURN_PASSWORD=${TURN_CREDENTIAL:-turnpass123}
+    command: >
+      -n
+      --log-file=stdout
+      --external-ip=${EXTERNAL_IP:-$(curl -s ifconfig.me)}
+      --listening-port=3478
+      --tls-listening-port=5349
+      --min-port=49152
+      --max-port=65535
+      --fingerprint
+      --lt-cred-mech
+      --user=${TURN_USERNAME:-turnuser}:${TURN_CREDENTIAL:-turnpass123}
+      --realm=ufo-galaxy
+      --cert=/etc/coturn/cert.pem
+      --pkey=/etc/coturn/pkey.pem
+    networks:
+      - ufo-network
+
+# ============================================================
+# 数据卷定义
+# ============================================================
+volumes:
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
+  neo4j_plugins:
+    driver: local
+  qdrant_storage:
+    driver: local
+  minio_data:
+    driver: local
+  redis_data:
+    driver: local
+  ollama_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ============================================================
+# 网络定义
+# ============================================================
+networks:
+  ufo-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

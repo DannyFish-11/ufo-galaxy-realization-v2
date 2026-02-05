@@ -1,554 +1,324 @@
 """
-Node 05: Auth Guardian
-======================
-访问权限与身份校验服务。
-支持 JWT、API Key、RBAC 等多种认证方式。
-
-功能：
-- JWT 令牌签发与验证
-- API Key 管理
-- 角色权限控制 (RBAC)
-- 访问日志审计
+Node 05: Auth - 认证服务
+=========================
+提供用户认证、JWT令牌管理、权限控制功能
 """
-
 import os
+import jwt
 import json
-import time
 import hashlib
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Set
-from dataclasses import dataclass, field
-from enum import Enum
-
-import jwt
-from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from typing import Dict, Any, Optional, List
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-app = FastAPI(title="Node 05 - Auth Guardian", version="1.0.0")
+app = FastAPI(title="Node 05 - Auth", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-security = HTTPBearer(auto_error=False)
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
-JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_hex(32))
+# JWT配置
+JWT_SECRET = os.getenv("AUTH_JWT_SECRET", secrets.token_urlsafe(32))
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
+JWT_EXPIRE_DAYS = int(os.getenv("AUTH_JWT_EXPIRE_DAYS", "7"))
 
-# =============================================================================
-# Models
-# =============================================================================
+security = HTTPBearer()
 
-class Role(Enum):
-    ADMIN = "admin"
-    OPERATOR = "operator"
-    VIEWER = "viewer"
-    SERVICE = "service"
-
-class Permission(Enum):
-    READ = "read"
-    WRITE = "write"
-    EXECUTE = "execute"
-    ADMIN = "admin"
-
-@dataclass
-class User:
-    """用户信息"""
-    id: str
+class User(BaseModel):
     username: str
-    roles: Set[Role] = field(default_factory=set)
-    api_keys: List[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.now)
-    last_login: datetime = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    password_hash: str
+    email: Optional[str] = None
+    role: str = "user"
+    created_at: datetime
+    last_login: Optional[datetime] = None
+    is_active: bool = True
+    permissions: List[str] = []
 
-@dataclass
-class APIKey:
-    """API Key"""
-    key: str
-    user_id: str
-    name: str
-    permissions: Set[Permission] = field(default_factory=set)
-    created_at: datetime = field(default_factory=datetime.now)
-    expires_at: datetime = None
-    last_used: datetime = None
-    rate_limit: int = 1000  # requests per hour
+class TokenData(BaseModel):
+    username: str
+    role: str
+    permissions: List[str]
+    exp: datetime
 
-@dataclass
-class AccessLog:
-    """访问日志"""
-    timestamp: datetime
-    user_id: str
-    action: str
-    resource: str
-    result: str
-    ip_address: str = None
-    details: Dict[str, Any] = None
-
-# =============================================================================
-# RBAC Configuration
-# =============================================================================
-
-ROLE_PERMISSIONS = {
-    Role.ADMIN: {Permission.READ, Permission.WRITE, Permission.EXECUTE, Permission.ADMIN},
-    Role.OPERATOR: {Permission.READ, Permission.WRITE, Permission.EXECUTE},
-    Role.VIEWER: {Permission.READ},
-    Role.SERVICE: {Permission.READ, Permission.EXECUTE},
-}
-
-# 节点访问控制
-NODE_ACCESS = {
-    # Layer 0 节点需要 ADMIN 或 SERVICE 角色
-    "00": {Role.ADMIN, Role.SERVICE},
-    "01": {Role.ADMIN, Role.SERVICE, Role.OPERATOR},
-    "02": {Role.ADMIN, Role.SERVICE, Role.OPERATOR},
-    "03": {Role.ADMIN},  # 密钥库只有管理员可访问
-    "04": {Role.ADMIN, Role.SERVICE},
-    "05": {Role.ADMIN},
-    
-    # Layer 1 节点
-    "50": {Role.ADMIN, Role.SERVICE, Role.OPERATOR},
-    "58": {Role.ADMIN, Role.SERVICE, Role.OPERATOR},
-    
-    # Layer 2 工具节点 - 所有角色可访问
-    "06": {Role.ADMIN, Role.SERVICE, Role.OPERATOR, Role.VIEWER},
-    "07": {Role.ADMIN, Role.SERVICE, Role.OPERATOR, Role.VIEWER},
-    
-    # Layer 3 物理节点需要 OPERATOR 以上
-    "33": {Role.ADMIN, Role.SERVICE, Role.OPERATOR},
-    "49": {Role.ADMIN, Role.SERVICE, Role.OPERATOR},
-}
-
-# =============================================================================
-# Auth Guardian Core
-# =============================================================================
-
-class AuthGuardian:
-    """认证守卫"""
-    
+class AuthManager:
     def __init__(self):
-        self.users: Dict[str, User] = {}
-        self.api_keys: Dict[str, APIKey] = {}
-        self.access_logs: List[AccessLog] = []
-        self._init_default_users()
-        
-    def _init_default_users(self):
-        """初始化默认用户"""
-        # 系统管理员
-        admin = User(
-            id="admin",
-            username="admin",
-            roles={Role.ADMIN}
-        )
-        self.users["admin"] = admin
-        
-        # 服务账户
-        service = User(
-            id="service",
-            username="service",
-            roles={Role.SERVICE}
-        )
-        self.users["service"] = service
-        
-        # 创建默认 API Key
-        default_key = os.getenv("DEFAULT_API_KEY", "ufo-galaxy-default-key")
-        self.api_keys[default_key] = APIKey(
-            key=default_key,
-            user_id="service",
-            name="Default Service Key",
-            permissions={Permission.READ, Permission.EXECUTE}
-        )
-        
-    def create_user(
-        self,
-        username: str,
-        roles: List[str] = None,
-        metadata: Dict[str, Any] = None
-    ) -> User:
+        self._users: Dict[str, User] = {}
+        self._refresh_tokens: Dict[str, str] = {}  # token -> username
+        self._failed_attempts: Dict[str, List[datetime]] = {}
+        self._load_users()
+
+    def _load_users(self):
+        """加载用户数据"""
+        users_file = os.getenv("AUTH_USERS_FILE", "/tmp/auth_users.json")
+        if os.path.exists(users_file):
+            try:
+                with open(users_file, 'r') as f:
+                    data = json.load(f)
+                    for username, user_data in data.get("users", {}).items():
+                        self._users[username] = User(**user_data)
+            except Exception as e:
+                print(f"Failed to load users: {e}")
+        # 创建默认管理员
+        if "admin" not in self._users:
+            self.create_user("admin", "admin123", email="admin@localhost", role="admin", permissions=["*"])
+
+    def _save_users(self):
+        """保存用户数据"""
+        users_file = os.getenv("AUTH_USERS_FILE", "/tmp/auth_users.json")
+        try:
+            with open(users_file, 'w') as f:
+                json.dump({"users": {k: v.dict() for k, v in self._users.items()}}, f, default=str)
+        except Exception as e:
+            print(f"Failed to save users: {e}")
+
+    def _hash_password(self, password: str) -> str:
+        """哈希密码"""
+        salt = secrets.token_hex(16)
+        pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+        return salt + pwdhash.hex()
+
+    def _verify_password(self, password: str, password_hash: str) -> bool:
+        """验证密码"""
+        salt = password_hash[:32]
+        pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+        return password_hash == salt + pwdhash.hex()
+
+    def _check_rate_limit(self, username: str) -> bool:
+        """检查登录频率限制"""
+        now = datetime.now()
+        attempts = self._failed_attempts.get(username, [])
+        # 保留最近5分钟内的失败记录
+        attempts = [a for a in attempts if now - a < timedelta(minutes=5)]
+        self._failed_attempts[username] = attempts
+        # 5分钟内超过5次失败则锁定
+        return len(attempts) < 5
+
+    def _record_failed_attempt(self, username: str):
+        """记录失败登录"""
+        if username not in self._failed_attempts:
+            self._failed_attempts[username] = []
+        self._failed_attempts[username].append(datetime.now())
+
+    def create_user(self, username: str, password: str, email: Optional[str] = None,
+                   role: str = "user", permissions: List[str] = None) -> User:
         """创建用户"""
-        user_id = hashlib.sha256(username.encode()).hexdigest()[:16]
-        
+        if username in self._users:
+            raise ValueError(f"User {username} already exists")
+
         user = User(
-            id=user_id,
             username=username,
-            roles={Role(r) for r in (roles or ["viewer"])},
-            metadata=metadata or {}
+            password_hash=self._hash_password(password),
+            email=email,
+            role=role,
+            created_at=datetime.now(),
+            permissions=permissions or []
         )
-        
-        self.users[user_id] = user
+        self._users[username] = user
+        self._save_users()
         return user
-        
-    def create_api_key(
-        self,
-        user_id: str,
-        name: str,
-        permissions: List[str] = None,
-        expires_days: int = None
-    ) -> APIKey:
-        """创建 API Key"""
-        if user_id not in self.users:
-            raise ValueError(f"User not found: {user_id}")
-            
-        key = f"ufo_{secrets.token_urlsafe(32)}"
-        
-        api_key = APIKey(
-            key=key,
-            user_id=user_id,
-            name=name,
-            permissions={Permission(p) for p in (permissions or ["read"])},
-            expires_at=datetime.now() + timedelta(days=expires_days) if expires_days else None
-        )
-        
-        self.api_keys[key] = api_key
-        self.users[user_id].api_keys.append(key)
-        
-        return api_key
-        
-    def generate_jwt(self, user_id: str) -> str:
-        """生成 JWT 令牌"""
-        user = self.users.get(user_id)
-        if not user:
-            raise ValueError(f"User not found: {user_id}")
-            
-        payload = {
-            "sub": user_id,
-            "username": user.username,
-            "roles": [r.value for r in user.roles],
-            "iat": datetime.utcnow(),
-            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
-        }
-        
-        token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-        
-        # 更新最后登录时间
+
+    def authenticate(self, username: str, password: str) -> Optional[User]:
+        """认证用户"""
+        if not self._check_rate_limit(username):
+            raise HTTPException(status_code=429, detail="Too many failed attempts, please try again later")
+
+        user = self._users.get(username)
+        if not user or not user.is_active:
+            self._record_failed_attempt(username)
+            return None
+
+        if not self._verify_password(password, user.password_hash):
+            self._record_failed_attempt(username)
+            return None
+
         user.last_login = datetime.now()
-        
-        return token
-        
-    def verify_jwt(self, token: str) -> Dict[str, Any]:
-        """验证 JWT 令牌"""
+        self._save_users()
+        return user
+
+    def create_token(self, user: User) -> Dict[str, str]:
+        """创建JWT令牌"""
+        exp = datetime.utcnow() + timedelta(days=JWT_EXPIRE_DAYS)
+        payload = {
+            "username": user.username,
+            "role": user.role,
+            "permissions": user.permissions,
+            "exp": exp
+        }
+        access_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+        # 创建刷新令牌
+        refresh_token = secrets.token_urlsafe(32)
+        self._refresh_tokens[refresh_token] = user.username
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": JWT_EXPIRE_DAYS * 86400
+        }
+
+    def verify_token(self, token: str) -> Optional[TokenData]:
+        """验证JWT令牌"""
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            return {
-                "valid": True,
-                "user_id": payload["sub"],
-                "username": payload["username"],
-                "roles": payload["roles"],
-                "expires_at": datetime.fromtimestamp(payload["exp"]).isoformat()
-            }
+            return TokenData(
+                username=payload["username"],
+                role=payload["role"],
+                permissions=payload.get("permissions", []),
+                exp=datetime.fromtimestamp(payload["exp"])
+            )
         except jwt.ExpiredSignatureError:
-            return {"valid": False, "error": "Token expired"}
-        except jwt.InvalidTokenError as e:
-            return {"valid": False, "error": str(e)}
-            
-    def verify_api_key(self, key: str) -> Dict[str, Any]:
-        """验证 API Key"""
-        api_key = self.api_keys.get(key)
-        if not api_key:
-            return {"valid": False, "error": "Invalid API key"}
-            
-        # 检查过期
-        if api_key.expires_at and datetime.now() > api_key.expires_at:
-            return {"valid": False, "error": "API key expired"}
-            
-        # 更新最后使用时间
-        api_key.last_used = datetime.now()
-        
-        return {
-            "valid": True,
-            "user_id": api_key.user_id,
-            "name": api_key.name,
-            "permissions": [p.value for p in api_key.permissions]
-        }
-        
-    def check_permission(
-        self,
-        user_id: str,
-        permission: Permission,
-        resource: str = None
-    ) -> bool:
-        """检查权限"""
-        user = self.users.get(user_id)
-        if not user:
-            return False
-            
-        # 检查角色权限
-        for role in user.roles:
-            if permission in ROLE_PERMISSIONS.get(role, set()):
-                return True
-                
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+    def refresh_access_token(self, refresh_token: str) -> Optional[Dict[str, str]]:
+        """刷新访问令牌"""
+        username = self._refresh_tokens.get(refresh_token)
+        if not username:
+            return None
+
+        user = self._users.get(username)
+        if not user or not user.is_active:
+            return None
+
+        # 删除旧刷新令牌
+        del self._refresh_tokens[refresh_token]
+
+        return self.create_token(user)
+
+    def revoke_token(self, refresh_token: str) -> bool:
+        """撤销令牌"""
+        if refresh_token in self._refresh_tokens:
+            del self._refresh_tokens[refresh_token]
+            return True
         return False
-        
-    def check_node_access(self, user_id: str, node_id: str) -> bool:
-        """检查节点访问权限"""
-        user = self.users.get(user_id)
+
+    def has_permission(self, token_data: TokenData, permission: str) -> bool:
+        """检查权限"""
+        if "*" in token_data.permissions:
+            return True
+        return permission in token_data.permissions
+
+    def change_password(self, username: str, old_password: str, new_password: str) -> bool:
+        """修改密码"""
+        user = self._users.get(username)
         if not user:
             return False
-            
-        allowed_roles = NODE_ACCESS.get(node_id, {Role.ADMIN, Role.SERVICE, Role.OPERATOR, Role.VIEWER})
-        
-        return bool(user.roles & allowed_roles)
-        
-    def log_access(
-        self,
-        user_id: str,
-        action: str,
-        resource: str,
-        result: str,
-        ip_address: str = None,
-        details: Dict[str, Any] = None
-    ):
-        """记录访问日志"""
-        log = AccessLog(
-            timestamp=datetime.now(),
-            user_id=user_id,
-            action=action,
-            resource=resource,
-            result=result,
-            ip_address=ip_address,
-            details=details
-        )
-        self.access_logs.append(log)
-        
-        # 保留最近 10000 条
-        if len(self.access_logs) > 10000:
-            self.access_logs = self.access_logs[-10000:]
-            
-    def get_access_logs(
-        self,
-        user_id: str = None,
-        action: str = None,
-        limit: int = 100
-    ) -> List[Dict[str, Any]]:
-        """获取访问日志"""
-        logs = self.access_logs
-        
-        if user_id:
-            logs = [l for l in logs if l.user_id == user_id]
-        if action:
-            logs = [l for l in logs if l.action == action]
-            
-        return [
-            {
-                "timestamp": l.timestamp.isoformat(),
-                "user_id": l.user_id,
-                "action": l.action,
-                "resource": l.resource,
-                "result": l.result,
-                "ip_address": l.ip_address
-            }
-            for l in logs[-limit:]
-        ]
 
-# =============================================================================
-# Global Instance
-# =============================================================================
+        if not self._verify_password(old_password, user.password_hash):
+            return False
 
-guardian = AuthGuardian()
+        user.password_hash = self._hash_password(new_password)
+        self._save_users()
+        return True
 
-# =============================================================================
-# API Endpoints
-# =============================================================================
+    def delete_user(self, username: str) -> bool:
+        """删除用户"""
+        if username in self._users:
+            del self._users[username]
+            self._save_users()
+            return True
+        return False
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str = None  # 简化版，实际应该验证密码
+# 全局认证管理器
+auth_manager = AuthManager()
 
-class CreateUserRequest(BaseModel):
-    username: str
-    roles: List[str] = ["viewer"]
-    metadata: Dict[str, Any] = None
+# 依赖：获取当前用户
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
+    return auth_manager.verify_token(credentials.credentials)
 
-class CreateAPIKeyRequest(BaseModel):
-    user_id: str
-    name: str
-    permissions: List[str] = ["read"]
-    expires_days: int = None
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
-    """健康检查"""
     return {
         "status": "healthy",
         "node_id": "05",
-        "name": "Auth Guardian",
-        "users": len(guardian.users),
-        "api_keys": len(guardian.api_keys),
+        "name": "Auth",
+        "users_count": len(auth_manager._users),
         "timestamp": datetime.now().isoformat()
     }
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 @app.post("/login")
 async def login(request: LoginRequest):
-    """登录获取 JWT"""
-    # 简化版：只检查用户是否存在
-    user = None
-    for u in guardian.users.values():
-        if u.username == request.username:
-            user = u
-            break
-            
+    """用户登录"""
+    user = auth_manager.authenticate(request.username, request.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-    token = guardian.generate_jwt(user.id)
-    
-    guardian.log_access(user.id, "login", "/login", "success")
-    
+    return auth_manager.create_token(user)
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+@app.post("/refresh")
+async def refresh(request: RefreshRequest):
+    """刷新令牌"""
+    tokens = auth_manager.refresh_access_token(request.refresh_token)
+    if not tokens:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    return tokens
+
+@app.post("/logout")
+async def logout(request: RefreshRequest):
+    """用户登出"""
+    success = auth_manager.revoke_token(request.refresh_token)
+    return {"success": success}
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+
+@app.post("/register")
+async def register(request: RegisterRequest):
+    """用户注册"""
+    try:
+        user = auth_manager.create_user(
+            username=request.username,
+            password=request.password,
+            email=request.email
+        )
+        return {"username": user.username, "created_at": user.created_at}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/me")
+async def get_me(current_user: TokenData = Depends(get_current_user)):
+    """获取当前用户信息"""
+    user = auth_manager._users.get(current_user.username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": JWT_EXPIRE_HOURS * 3600
-    }
-
-@app.post("/verify/jwt")
-async def verify_jwt(authorization: str = Header(None)):
-    """验证 JWT"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing token")
-        
-    token = authorization[7:]
-    result = guardian.verify_jwt(token)
-    
-    if not result["valid"]:
-        raise HTTPException(status_code=401, detail=result["error"])
-        
-    return result
-
-@app.post("/verify/apikey")
-async def verify_apikey(x_api_key: str = Header(None)):
-    """验证 API Key"""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing API key")
-        
-    result = guardian.verify_api_key(x_api_key)
-    
-    if not result["valid"]:
-        raise HTTPException(status_code=401, detail=result["error"])
-        
-    return result
-
-@app.post("/users")
-async def create_user(request: CreateUserRequest):
-    """创建用户"""
-    user = guardian.create_user(
-        username=request.username,
-        roles=request.roles,
-        metadata=request.metadata
-    )
-    return {
-        "user_id": user.id,
         "username": user.username,
-        "roles": [r.value for r in user.roles]
+        "email": user.email,
+        "role": user.role,
+        "permissions": user.permissions,
+        "created_at": user.created_at,
+        "last_login": user.last_login
     }
 
-@app.get("/users")
-async def list_users():
-    """列出用户"""
-    return {
-        "users": [
-            {
-                "id": u.id,
-                "username": u.username,
-                "roles": [r.value for r in u.roles],
-                "created_at": u.created_at.isoformat()
-            }
-            for u in guardian.users.values()
-        ]
-    }
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
-@app.post("/apikeys")
-async def create_api_key(request: CreateAPIKeyRequest):
-    """创建 API Key"""
-    api_key = guardian.create_api_key(
-        user_id=request.user_id,
-        name=request.name,
-        permissions=request.permissions,
-        expires_days=request.expires_days
-    )
-    return {
-        "key": api_key.key,
-        "name": api_key.name,
-        "permissions": [p.value for p in api_key.permissions],
-        "expires_at": api_key.expires_at.isoformat() if api_key.expires_at else None
-    }
+@app.post("/change-password")
+async def change_password(request: ChangePasswordRequest, current_user: TokenData = Depends(get_current_user)):
+    """修改密码"""
+    success = auth_manager.change_password(current_user.username, request.old_password, request.new_password)
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to change password")
+    return {"success": True}
 
-@app.get("/check/permission")
-async def check_permission(
-    user_id: str,
-    permission: str,
-    resource: str = None
-):
-    """检查权限"""
-    allowed = guardian.check_permission(
-        user_id=user_id,
-        permission=Permission(permission),
-        resource=resource
-    )
-    return {"allowed": allowed}
-
-@app.get("/check/node/{node_id}")
-async def check_node_access(node_id: str, user_id: str):
-    """检查节点访问权限"""
-    allowed = guardian.check_node_access(user_id, node_id)
-    return {"allowed": allowed, "node_id": node_id}
-
-@app.get("/logs")
-async def get_logs(
-    user_id: str = None,
-    action: str = None,
-    limit: int = 100
-):
-    """获取访问日志"""
-    return {
-        "logs": guardian.get_access_logs(user_id, action, limit)
-    }
-
-# =============================================================================
-# MCP Tool Interface
-# =============================================================================
-
-@app.post("/mcp/call")
-async def mcp_call(request: Dict[str, Any]):
-    """MCP 工具调用接口"""
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    
-    if tool == "verify_jwt":
-        return guardian.verify_jwt(params.get("token", ""))
-    elif tool == "verify_apikey":
-        return guardian.verify_api_key(params.get("key", ""))
-    elif tool == "check_permission":
-        return {
-            "allowed": guardian.check_permission(
-                params.get("user_id", ""),
-                Permission(params.get("permission", "read"))
-            )
-        }
-    elif tool == "check_node_access":
-        return {
-            "allowed": guardian.check_node_access(
-                params.get("user_id", ""),
-                params.get("node_id", "")
-            )
-        }
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
-
-# =============================================================================
-# Main
-# =============================================================================
+@app.get("/verify")
+async def verify_token_endpoint(current_user: TokenData = Depends(get_current_user)):
+    """验证令牌"""
+    return {"valid": True, "username": current_user.username, "role": current_user.role}
 
 if __name__ == "__main__":
     import uvicorn

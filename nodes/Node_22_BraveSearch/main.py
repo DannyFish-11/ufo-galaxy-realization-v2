@@ -1,197 +1,157 @@
 """
-Node 22: BraveSearch
-========================
-Brave 搜索
-
-依赖库: requests
-工具: search, news_search
+Node 22: BraveSearch - Brave搜索节点
+======================================
+提供网页搜索、图片搜索、新闻搜索功能
 """
-
 import os
+import requests
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-app = FastAPI(title="Node 22 - BraveSearch", version="1.0.0")
+app = FastAPI(title="Node 22 - BraveSearch", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
+# Brave配置
 BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
-BRAVE_BASE_URL = "https://api.search.brave.com/res/v1"
+BRAVE_API_URL = "https://api.search.brave.com/res/v1"
 
-# =============================================================================
-# Tool Implementation
-# =============================================================================
+class SearchRequest(BaseModel):
+    query: str
+    count: int = 10
+    offset: int = 0
+    search_type: str = "web"  # web, images, news
 
-class BraveSearchTools:
-    """
-    BraveSearch 工具实现
-    """
-    
+class BraveSearchManager:
     def __init__(self):
         self.api_key = BRAVE_API_KEY
-        self.base_url = BRAVE_BASE_URL
-        self.initialized = bool(self.api_key)
-        
-        if not self.initialized:
-            print("Warning: BRAVE_API_KEY not set")
-            
-    def get_tools(self) -> List[Dict[str, Any]]:
-        """获取可用工具列表"""
-        return [
-            {
-                "name": "web_search",
-                "description": "使用 Brave 搜索引擎进行网页搜索",
-                "parameters": {
-                    "query": "搜索关键词",
-                    "count": "返回结果数量 (1-20, 默认: 10)",
-                    "country": "国家代码 (例如: US, CN, 默认: US)",
-                    "search_lang": "搜索语言 (例如: en, zh, 默认: en)"
-                }
-            }
-        ]
-        
-    async def call_tool(self, tool: str, params: Dict[str, Any]) -> Any:
-        """调用工具"""
-        if not self.initialized:
-            raise RuntimeError("BraveSearch API not initialized (missing API key)")
-            
-        handler = getattr(self, f"_tool_{tool}", None)
-        if not handler:
-            raise ValueError(f"Unknown tool: {tool}")
-            
-        return await handler(params)
-        
-    async def _tool_web_search(self, params: dict) -> dict:
-        """网页搜索"""
-        import requests
-        
-        query = params.get("query", "")
-        count = min(int(params.get("count", 10)), 20)
-        country = params.get("country", "US")
-        search_lang = params.get("search_lang", "en")
-        
-        if not query:
-            return {"error": "搜索关键词不能为空"}
-        
-        try:
-            url = f"{self.base_url}/web/search"
-            headers = {
-                "Accept": "application/json",
-                "Accept-Encoding": "gzip",
-                "X-Subscription-Token": self.api_key
-            }
-            
-            response = requests.get(url, headers=headers, params={
-                "q": query,
-                "count": count,
-                "country": country,
-                "search_lang": search_lang,
-                "safesearch": "moderate",
-                "text_decorations": False,
-                "spellcheck": True
-            }, timeout=15)
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            # 解析搜索结果
+        self.api_url = BRAVE_API_URL
+
+    def search(self, query: str, count: int = 10, offset: int = 0, 
+               search_type: str = "web") -> Dict:
+        """执行搜索"""
+        if not self.api_key:
+            raise RuntimeError("Brave API key not configured")
+
+        endpoint = f"/{search_type}/search"
+        headers = {
+            "X-Subscription-Token": self.api_key,
+            "Accept": "application/json"
+        }
+        params = {
+            "q": query,
+            "count": min(count, 20),
+            "offset": offset
+        }
+
+        response = requests.get(
+            f"{self.api_url}{endpoint}",
+            headers=headers,
+            params=params,
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Brave API error: {response.text}")
+
+        data = response.json()
+
+        if search_type == "web":
             results = []
-            
-            # Web 结果
-            if "web" in data and "results" in data["web"]:
-                for item in data["web"]["results"]:
-                    results.append({
-                        "type": "web",
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "description": item.get("description", ""),
-                        "age": item.get("age", ""),
-                        "language": item.get("language", "")
-                    })
-            
-            # 新闻结果
-            if "news" in data and "results" in data["news"]:
-                for item in data["news"]["results"]:
-                    results.append({
-                        "type": "news",
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "description": item.get("description", ""),
-                        "age": item.get("age", ""),
-                        "source": item.get("meta_url", {}).get("hostname", "")
-                    })
-            
-            result = {
-                "query": data.get("query", {}).get("original", query),
-                "results_count": len(results),
-                "results": results[:count]
+            for item in data.get("web", {}).get("results", []):
+                results.append({
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "description": item.get("description"),
+                    "age": item.get("age")
+                })
+            return {
+                "query": query,
+                "results": results,
+                "total": data.get("web", {}).get("total", 0)
             }
-            
-            # 添加拼写建议
-            if "query" in data and "altered" in data["query"]:
-                result["spell_suggestion"] = data["query"]["altered"]
-            
-            return result
-            
-        except requests.exceptions.HTTPError as e:
-            return {"error": f"API 错误: {e.response.status_code} - {e.response.text}"}
-        except Exception as e:
-            return {"error": f"搜索失败: {str(e)}"}
+        elif search_type == "images":
+            results = []
+            for item in data.get("results", []):
+                results.append({
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "thumbnail": item.get("thumbnail", {}).get("src"),
+                    "source": item.get("page", {}).get("url")
+                })
+            return {"query": query, "results": results}
+        elif search_type == "news":
+            results = []
+            for item in data.get("results", []):
+                results.append({
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "description": item.get("description"),
+                    "published": item.get("age")
+                })
+            return {"query": query, "results": results}
 
+        return data
 
-# =============================================================================
-# Global Instance
-# =============================================================================
+    def suggest(self, query: str) -> List[str]:
+        """搜索建议"""
+        if not self.api_key:
+            raise RuntimeError("Brave API key not configured")
 
-tools = BraveSearchTools()
+        headers = {"X-Subscription-Token": self.api_key}
+        params = {"q": query}
 
-# =============================================================================
-# API Endpoints
-# =============================================================================
+        response = requests.get(
+            f"{self.api_url}/suggest",
+            headers=headers,
+            params=params,
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return [s.get("query") for s in data.get("results", [])]
+        return []
+
+# 全局Brave搜索管理器
+brave_manager = BraveSearchManager()
+
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
-    """健康检查"""
     return {
-        "status": "healthy" if tools.initialized else "degraded",
+        "status": "healthy",
         "node_id": "22",
         "name": "BraveSearch",
-        "initialized": tools.initialized,
+        "api_configured": bool(BRAVE_API_KEY),
         "timestamp": datetime.now().isoformat()
     }
 
-@app.get("/tools")
-async def list_tools():
-    """列出可用工具"""
-    return {"tools": tools.get_tools()}
-
-@app.post("/mcp/call")
-async def mcp_call(request: Dict[str, Any]):
-    """MCP 工具调用接口"""
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    
+@app.post("/search")
+async def search(request: SearchRequest):
+    """执行搜索"""
     try:
-        result = await tools.call_tool(tool, params)
-        return {"success": True, "result": result}
+        result = brave_manager.search(
+            query=request.query,
+            count=request.count,
+            offset=request.offset,
+            search_type=request.search_type
+        )
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# =============================================================================
-# Main
-# =============================================================================
+@app.get("/suggest")
+async def suggest(query: str):
+    """搜索建议"""
+    try:
+        suggestions = brave_manager.suggest(query)
+        return {"suggestions": suggestions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

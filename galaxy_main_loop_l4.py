@@ -24,6 +24,10 @@ from enhancements.reasoning.world_model import WorldModel, Entity, EntityType, E
 from enhancements.reasoning.metacognition_service import MetaCognitionService
 from enhancements.reasoning.autonomous_coder import AutonomousCoder
 from enhancements.learning.autonomous_learning_engine import AutonomousLearningEngine
+from enhancements.learning.learning_optimizer import LearningOptimizer
+from enhancements.execution.action_executor import ActionExecutor, ExecutionStatus
+from enhancements.monitoring.status_monitor import StatusMonitor, FeedbackCollector, MonitorLevel
+from enhancements.safety.safety_manager import SafetyManager, ErrorHandler
 
 
 class CycleState(Enum):
@@ -72,6 +76,14 @@ class GalaxyMainLoopL4:
         self.metacog = MetaCognitionService()
         self.auto_coder = AutonomousCoder(llm_available=False)
         self.learning_engine = AutonomousLearningEngine()
+        self.learning_optimizer = LearningOptimizer()
+        
+        # 执行和监控组件
+        self.action_executor = ActionExecutor()
+        self.status_monitor = StatusMonitor()
+        self.feedback_collector = FeedbackCollector(self.status_monitor)
+        self.safety_manager = SafetyManager()
+        self.error_handler = ErrorHandler(self.safety_manager)
         
         # 状态
         self.running = False
@@ -277,59 +289,105 @@ class GalaxyMainLoopL4:
         """执行计划"""
         self.logger.info(f"执行计划: {plan.goal_description}")
         
-        start_time = time.time()
-        results = []
-        
-        for action_id in plan.execution_order:
-            action = next((a for a in plan.actions if a.id == action_id), None)
-            if not action:
-                continue
-            
-            self.logger.info(f"执行动作: {action.command}")
-            
-            # 模拟执行
-            # 实际实现中应该调用对应的节点
-            result = {
-                'action_id': action.id,
-                'success': True,
-                'duration': action.expected_duration,
-                'output': f"模拟执行 {action.command}"
-            }
-            
-            results.append(result)
-            await asyncio.sleep(0.1)
-        
-        duration = time.time() - start_time
-        
-        execution_result = {
-            'goal': plan.goal_description,
-            'success': all(r['success'] for r in results),
-            'duration': duration,
-            'actions': results,
-            'timestamp': time.time(),
-            'resource_utilization': 0.7,
-            'user_satisfaction': 0.8
+        # 执行前安全检查
+        safety_context = {
+            "plan": plan,
+            "min_battery": 20.0,
+            "max_altitude": 120.0
         }
         
-        # 记录到历史
-        self.task_history.append(execution_result)
+        is_safe, violations = await self.safety_manager.check_safety(safety_context)
         
-        self.logger.info(f"计划执行完成，耗时 {duration:.1f} 秒")
-        return execution_result
+        if not is_safe:
+            self.logger.error(f"安全检查失败: {len(violations)} 个违规")
+            for violation in violations:
+                self.logger.error(f"  - {violation.rule_name}: {violation.message}")
+            
+            return {
+                'success': False,
+                'reason': 'safety_check_failed',
+                'violations': violations,
+                'results': []
+            }
+        
+        # 启动状态监控
+        await self.status_monitor.start_monitoring()
+        
+        try:
+            # 使用 ActionExecutor 执行计划
+            execution_context = await self.action_executor.execute_plan(plan, self.world_model)
+            
+            # 收集反馈
+            for result in execution_context.results:
+                self.feedback_collector.collect_action_feedback(
+                    action_id=result.action_id,
+                    success=(result.status == ExecutionStatus.SUCCESS),
+                    duration=result.duration,
+                    output=result.output,
+                    error=result.error
+                )
+            
+            # 获取执行摘要
+            summary = self.action_executor.get_execution_summary(execution_context)
+            
+            self.logger.info(f"计划执行完成: 成功率 {summary['success_rate']:.1%}")
+            
+            return {
+                'success': summary['success_rate'] > 0.5,
+                'execution_context': execution_context,
+                'summary': summary,
+                'results': execution_context.results
+            }
+        
+        except Exception as e:
+            self.logger.error(f"执行计划失败: {e}")
+            
+            # 错误处理
+            error_result = await self.error_handler.handle_execution_error(
+                action_id="plan_execution",
+                error=e,
+                context={'plan': plan}
+            )
+            
+            return {
+                'success': False,
+                'reason': 'execution_error',
+                'error': str(e),
+                'error_result': error_result,
+                'results': []
+            }
+        
+        finally:
+            # 停止状态监控
+            await self.status_monitor.stop_monitoring()
     
     async def _learn_from_execution(self, execution_result: Dict):
         """从执行中学习"""
         self.logger.info("从执行中学习")
         
+        # 记录执行结果
+        self.learning_optimizer.record_execution(execution_result)
+        
         # 提取观察
+        summary = execution_result.get('summary', {})
+        
         observation = {
-            'goal': execution_result['goal'],
-            'success': execution_result['success'],
-            'duration': execution_result['duration'],
-            'actions_count': len(execution_result['actions'])
+            'goal': summary.get('goal', 'unknown'),
+            'success': execution_result.get('success', False),
+            'duration': summary.get('total_duration', 0),
+            'actions_count': summary.get('total_actions', 0),
+            'success_rate': summary.get('success_rate', 0)
         }
         
-        self.logger.info(f"学习完成: 成功={observation['success']}, 时长={observation['duration']:.1f}s")
+        # 记录到历史
+        self.task_history.append(observation)
+        
+        # 检查是否需要优化
+        if self.learning_optimizer.should_optimize():
+            self.logger.info("检测到需要优化")
+            await self._perform_optimization()
+        
+        self.logger.info(f"学习完成: 成功={observation['success']}, 时长={observation['duration']:.1f}s, 成功率={observation['success_rate']:.1%}")
     
     async def _reflect_on_performance(self) -> List:
         """反思性能"""
@@ -361,6 +419,32 @@ class GalaxyMainLoopL4:
             
             for suggestion in latest.improvement_suggestions:
                 self.logger.info(f"应用建议: {suggestion}")
+    
+    async def _perform_optimization(self):
+        """执行优化"""
+        self.logger.info("执行优化...")
+        
+        # 分析性能
+        insights = self.learning_optimizer.analyze_performance()
+        
+        if not insights:
+            self.logger.info("没有发现优化机会")
+            return
+        
+        self.logger.info(f"发现 {len(insights)} 个优化洞察")
+        
+        # 生成优化计划
+        optimization_plan = self.learning_optimizer.generate_optimization_plan(insights)
+        
+        # 应用优化
+        for action in optimization_plan:
+            success = self.learning_optimizer.apply_optimization(action)
+            if success:
+                self.logger.info(f"优化应用成功: {action['description']}")
+            else:
+                self.logger.warning(f"优化应用失败: {action['description']}")
+        
+        self.logger.info("优化完成")
     
     async def submit_goal(self, goal_description: str, goal_type: GoalType = GoalType.TASK_EXECUTION):
         """提交外部目标"""

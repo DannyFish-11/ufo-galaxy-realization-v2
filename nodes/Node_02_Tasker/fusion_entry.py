@@ -9,11 +9,11 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
-logger = logging.getLogger("Node_02")
+logger = logging.getLogger("02")
 
 class FusionNode:
     def __init__(self):
-        self.node_id = "Node_02"
+        self.node_id = "02"
         self.instance = None
         self._load_original_logic()
 

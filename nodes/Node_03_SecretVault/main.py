@@ -1,235 +1,279 @@
-import os, json, hashlib, secrets as py_secrets
+"""
+Node 03: SecretVault - 密钥管理
+=================================
+提供安全的密钥存储、加密解密、密钥轮换功能
+"""
+import os
+import json
+import base64
+import hashlib
+import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException, Depends, Header
+from typing import Dict, Any, Optional, List
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
-from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-app = FastAPI(title='Node 03 - SecretVault', version='3.0.0', description='Enterprise-grade secret management with encryption, rotation, and audit')
-app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
+app = FastAPI(title="Node 03 - SecretVault", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-VAULT_FILE = os.getenv('VAULT_FILE', '/tmp/vault.enc')
-VAULT_KEY = os.getenv('VAULT_KEY', 'default_key_change_me_immediately')
-AUDIT_FILE = os.getenv('AUDIT_FILE', '/tmp/vault_audit.log')
-MAX_SECRET_AGE_DAYS = int(os.getenv('MAX_SECRET_AGE_DAYS', '90'))
+# 主密钥（从环境变量读取）
+MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", Fernet.generate_key().decode())
 
-secrets_db: Dict[str, Dict[str, Any]] = {}
-audit_log: List[Dict[str, Any]] = []
+class Secret(BaseModel):
+    key: str
+    value: str
+    encrypted: bool = True
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = {}
 
-def derive_key(password: str, salt: bytes) -> bytes:
-    """使用 PBKDF2 从密码派生加密密钥"""
-    kdf = PBKDF2(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100000,
-        backend=default_backend()
-    )
-    return kdf.derive(password.encode())
+class SecretVault:
+    def __init__(self):
+        self._master_key = MASTER_KEY.encode() if isinstance(MASTER_KEY, str) else MASTER_KEY
+        self._fernet = Fernet(self._master_key)
+        self._secrets: Dict[str, Secret] = {}
+        self._access_log: List[Dict] = []
+        self._load_secrets()
 
-def get_cipher():
-    """获取 Fernet 加密器"""
-    salt = b'ufo_galaxy_salt_v1'  # 生产环境应使用随机 salt 并保存
-    key = derive_key(VAULT_KEY, salt)
-    fernet_key = Fernet.generate_key()  # 简化版，实际应从 key 派生
-    return Fernet(fernet_key)
+    def _load_secrets(self):
+        """加载持久化的密钥"""
+        vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
+        if os.path.exists(vault_file):
+            try:
+                with open(vault_file, 'r') as f:
+                    data = json.load(f)
+                    for key, secret_data in data.get("secrets", {}).items():
+                        self._secrets[key] = Secret(**secret_data)
+            except Exception as e:
+                print(f"Failed to load secrets: {e}")
 
-cipher = get_cipher()
-
-def encrypt(data: str) -> str:
-    """加密数据"""
-    return cipher.encrypt(data.encode()).decode()
-
-def decrypt(data: str) -> str:
-    """解密数据"""
-    try:
-        return cipher.decrypt(data.encode()).decode()
-    except Exception:
-        return "[DECRYPTION_FAILED]"
-
-def load_vault():
-    """从文件加载密钥库"""
-    global secrets_db
-    if os.path.exists(VAULT_FILE):
+    def _save_secrets(self):
+        """保存密钥到文件"""
+        vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
         try:
-            with open(VAULT_FILE, 'r') as f:
-                secrets_db = json.load(f)
+            with open(vault_file, 'w') as f:
+                json.dump({"secrets": {k: v.dict() for k, v in self._secrets.items()}}, f, default=str)
         except Exception as e:
-            log_audit('system', 'load_vault_failed', {'error': str(e)})
+            print(f"Failed to save secrets: {e}")
 
-def save_vault():
-    """保存密钥库到文件"""
-    try:
-        with open(VAULT_FILE, 'w') as f:
-            json.dump(secrets_db, f, indent=2)
-    except Exception as e:
-        log_audit('system', 'save_vault_failed', {'error': str(e)})
-
-def log_audit(user: str, action: str, details: Dict[str, Any]):
-    """记录审计日志"""
-    entry = {
-        'timestamp': datetime.utcnow().isoformat(),
-        'user': user,
-        'action': action,
-        'details': details
-    }
-    audit_log.append(entry)
-    try:
-        with open(AUDIT_FILE, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
-    except Exception:
-        pass
-
-load_vault()
-
-class SecretRequest(BaseModel):
-    key: str
-    value: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-class SecretRotateRequest(BaseModel):
-    key: str
-    new_value: str
-
-async def verify_token(x_api_token: Optional[str] = Header(None)):
-    """验证 API Token (简化版)"""
-    expected_token = os.getenv('VAULT_API_TOKEN', 'dev_token')
-    if x_api_token != expected_token:
-        log_audit('anonymous', 'auth_failed', {'token': x_api_token[:10] if x_api_token else None})
-        raise HTTPException(status_code=401, detail='Invalid API token')
-    return x_api_token
-
-@app.get('/health')
-async def health():
-    """健康检查"""
-    expired_count = sum(1 for s in secrets_db.values() if is_expired(s))
-    return {
-        'status': 'healthy',
-        'node_id': '03',
-        'name': 'SecretVault',
-        'secret_count': len(secrets_db),
-        'expired_count': expired_count,
-        'audit_entries': len(audit_log)
-    }
-
-def is_expired(secret: Dict[str, Any]) -> bool:
-    """检查密钥是否过期"""
-    if 'created_at' not in secret:
-        return False
-    created = datetime.fromisoformat(secret['created_at'])
-    return datetime.utcnow() - created > timedelta(days=MAX_SECRET_AGE_DAYS)
-
-@app.post('/set')
-async def set_secret(request: SecretRequest, token: str = Depends(verify_token)):
-    """设置密钥"""
-    if not request.value:
-        raise HTTPException(status_code=400, detail='value required')
-    
-    encrypted_value = encrypt(request.value)
-    secrets_db[request.key] = {
-        'value': encrypted_value,
-        'created_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat(),
-        'metadata': request.metadata or {},
-        'version': secrets_db.get(request.key, {}).get('version', 0) + 1
-    }
-    save_vault()
-    log_audit('api_user', 'set_secret', {'key': request.key, 'version': secrets_db[request.key]['version']})
-    return {'success': True, 'key': request.key, 'version': secrets_db[request.key]['version']}
-
-@app.get('/get/{key}')
-async def get_secret(key: str, token: str = Depends(verify_token)):
-    """获取密钥"""
-    if key not in secrets_db:
-        log_audit('api_user', 'get_secret_not_found', {'key': key})
-        raise HTTPException(status_code=404, detail='Secret not found')
-    
-    secret = secrets_db[key]
-    if is_expired(secret):
-        log_audit('api_user', 'get_expired_secret', {'key': key})
-        raise HTTPException(status_code=410, detail='Secret expired, rotation required')
-    
-    decrypted_value = decrypt(secret['value'])
-    log_audit('api_user', 'get_secret', {'key': key})
-    return {
-        'success': True,
-        'key': key,
-        'value': decrypted_value,
-        'metadata': secret.get('metadata', {}),
-        'version': secret.get('version', 1),
-        'created_at': secret.get('created_at')
-    }
-
-@app.post('/rotate')
-async def rotate_secret(request: SecretRotateRequest, token: str = Depends(verify_token)):
-    """轮换密钥"""
-    if request.key not in secrets_db:
-        raise HTTPException(status_code=404, detail='Secret not found')
-    
-    old_version = secrets_db[request.key].get('version', 1)
-    encrypted_value = encrypt(request.new_value)
-    secrets_db[request.key]['value'] = encrypted_value
-    secrets_db[request.key]['updated_at'] = datetime.utcnow().isoformat()
-    secrets_db[request.key]['version'] = old_version + 1
-    save_vault()
-    log_audit('api_user', 'rotate_secret', {'key': request.key, 'old_version': old_version, 'new_version': old_version + 1})
-    return {'success': True, 'key': request.key, 'version': old_version + 1}
-
-@app.delete('/delete/{key}')
-async def delete_secret(key: str, token: str = Depends(verify_token)):
-    """删除密钥"""
-    if key not in secrets_db:
-        raise HTTPException(status_code=404, detail='Secret not found')
-    del secrets_db[key]
-    save_vault()
-    log_audit('api_user', 'delete_secret', {'key': key})
-    return {'success': True, 'key': key}
-
-@app.get('/list')
-async def list_secrets(token: str = Depends(verify_token)):
-    """列出所有密钥"""
-    keys_info = []
-    for key, secret in secrets_db.items():
-        keys_info.append({
-            'key': key,
-            'version': secret.get('version', 1),
-            'created_at': secret.get('created_at'),
-            'updated_at': secret.get('updated_at'),
-            'expired': is_expired(secret)
+    def _log_access(self, action: str, key: str, success: bool):
+        """记录访问日志"""
+        self._access_log.append({
+            "action": action,
+            "key": key,
+            "success": success,
+            "timestamp": datetime.now().isoformat(),
+            "ip": "internal"
         })
-    log_audit('api_user', 'list_secrets', {'count': len(keys_info)})
-    return {'success': True, 'secrets': keys_info}
+        # 只保留最近1000条日志
+        self._access_log = self._access_log[-1000:]
 
-@app.get('/audit')
-async def get_audit_log(limit: int = 100, token: str = Depends(verify_token)):
-    """获取审计日志"""
-    return {'success': True, 'entries': audit_log[-limit:]}
+    def encrypt(self, value: str) -> str:
+        """加密值"""
+        return self._fernet.encrypt(value.encode()).decode()
 
-@app.post('/mcp/call')
-async def mcp_call(request: dict):
-    """MCP 工具调用接口"""
-    tool = request.get('tool', '')
-    params = request.get('params', {})
-    token = request.get('token', os.getenv('VAULT_API_TOKEN', 'dev_token'))
-    
-    if tool == 'set':
-        return await set_secret(SecretRequest(**params), token)
-    elif tool == 'get':
-        return await get_secret(params.get('key'), token)
-    elif tool == 'rotate':
-        return await rotate_secret(SecretRotateRequest(**params), token)
-    elif tool == 'delete':
-        return await delete_secret(params.get('key'), token)
-    elif tool == 'list':
-        return await list_secrets(token)
-    elif tool == 'audit':
-        return await get_audit_log(params.get('limit', 100), token)
-    raise HTTPException(status_code=400, detail=f'Unknown tool: {tool}')
+    def decrypt(self, encrypted_value: str) -> str:
+        """解密值"""
+        return self._fernet.decrypt(encrypted_value.encode()).decode()
 
-if __name__ == '__main__':
+    def set_secret(self, key: str, value: str, encrypted: bool = True, 
+                   expires_in_days: Optional[int] = None,
+                   metadata: Dict[str, Any] = None) -> Secret:
+        """设置密钥"""
+        if encrypted:
+            value = self.encrypt(value)
+
+        expires_at = None
+        if expires_in_days:
+            expires_at = datetime.now() + timedelta(days=expires_in_days)
+
+        secret = Secret(
+            key=key,
+            value=value,
+            encrypted=encrypted,
+            created_at=datetime.now(),
+            expires_at=expires_at,
+            metadata=metadata or {}
+        )
+        self._secrets[key] = secret
+        self._save_secrets()
+        self._log_access("set", key, True)
+        return secret
+
+    def get_secret(self, key: str, decrypt: bool = True) -> Optional[str]:
+        """获取密钥"""
+        secret = self._secrets.get(key)
+        if not secret:
+            self._log_access("get", key, False)
+            return None
+
+        # 检查是否过期
+        if secret.expires_at and datetime.now() > secret.expires_at:
+            self._log_access("get", key, False)
+            return None
+
+        self._log_access("get", key, True)
+
+        if secret.encrypted and decrypt:
+            return self.decrypt(secret.value)
+        return secret.value
+
+    def delete_secret(self, key: str) -> bool:
+        """删除密钥"""
+        if key in self._secrets:
+            del self._secrets[key]
+            self._save_secrets()
+            self._log_access("delete", key, True)
+            return True
+        self._log_access("delete", key, False)
+        return False
+
+    def list_secrets(self) -> List[str]:
+        """列出所有密钥名称"""
+        return list(self._secrets.keys())
+
+    def rotate_key(self, key: str) -> bool:
+        """轮换密钥（重新加密）"""
+        secret = self._secrets.get(key)
+        if not secret or not secret.encrypted:
+            return False
+
+        try:
+            decrypted = self.decrypt(secret.value)
+            secret.value = self.encrypt(decrypted)
+            secret.created_at = datetime.now()
+            self._save_secrets()
+            self._log_access("rotate", key, True)
+            return True
+        except Exception:
+            self._log_access("rotate", key, False)
+            return False
+
+    def generate_password(self, length: int = 32) -> str:
+        """生成随机密码"""
+        return secrets.token_urlsafe(length)
+
+    def hash_value(self, value: str, algorithm: str = "sha256") -> str:
+        """哈希值"""
+        if algorithm == "sha256":
+            return hashlib.sha256(value.encode()).hexdigest()
+        elif algorithm == "sha512":
+            return hashlib.sha512(value.encode()).hexdigest()
+        elif algorithm == "md5":
+            return hashlib.md5(value.encode()).hexdigest()
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+    def verify_hash(self, value: str, hash_value: str, algorithm: str = "sha256") -> bool:
+        """验证哈希"""
+        return self.hash_value(value, algorithm) == hash_value
+
+# 全局密钥库
+vault = SecretVault()
+
+# ============ API 端点 ============
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "node_id": "03",
+        "name": "SecretVault",
+        "secrets_count": len(vault._secrets),
+        "timestamp": datetime.now().isoformat()
+    }
+
+class SetSecretRequest(BaseModel):
+    key: str
+    value: str
+    encrypted: bool = True
+    expires_in_days: Optional[int] = None
+    metadata: Dict[str, Any] = {}
+
+@app.post("/secrets")
+async def set_secret(request: SetSecretRequest):
+    """设置密钥"""
+    secret = vault.set_secret(
+        key=request.key,
+        value=request.value,
+        encrypted=request.encrypted,
+        expires_in_days=request.expires_in_days,
+        metadata=request.metadata
+    )
+    return {"key": secret.key, "created_at": secret.created_at, "expires_at": secret.expires_at}
+
+@app.get("/secrets/{key}")
+async def get_secret(key: str, decrypt: bool = True):
+    """获取密钥"""
+    value = vault.get_secret(key, decrypt=decrypt)
+    if value is None:
+        raise HTTPException(status_code=404, detail="Secret not found or expired")
+    return {"key": key, "value": value if decrypt else "***encrypted***"}
+
+@app.delete("/secrets/{key}")
+async def delete_secret(key: str):
+    """删除密钥"""
+    success = vault.delete_secret(key)
+    if not success:
+        raise HTTPException(status_code=404, detail="Secret not found")
+    return {"success": True}
+
+@app.get("/secrets")
+async def list_secrets():
+    """列出所有密钥"""
+    return {"secrets": vault.list_secrets()}
+
+@app.post("/secrets/{key}/rotate")
+async def rotate_secret(key: str):
+    """轮换密钥"""
+    success = vault.rotate_key(key)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot rotate secret")
+    return {"success": True}
+
+class GeneratePasswordRequest(BaseModel):
+    length: int = 32
+
+@app.post("/generate-password")
+async def generate_password(request: GeneratePasswordRequest):
+    """生成随机密码"""
+    return {"password": vault.generate_password(request.length)}
+
+class HashRequest(BaseModel):
+    value: str
+    algorithm: str = "sha256"
+
+@app.post("/hash")
+async def hash_value(request: HashRequest):
+    """哈希值"""
+    return {"hash": vault.hash_value(request.value, request.algorithm)}
+
+class VerifyHashRequest(BaseModel):
+    value: str
+    hash: str
+    algorithm: str = "sha256"
+
+@app.post("/verify-hash")
+async def verify_hash(request: VerifyHashRequest):
+    """验证哈希"""
+    return {"valid": vault.verify_hash(request.value, request.hash, request.algorithm)}
+
+@app.post("/encrypt")
+async def encrypt_value(data: Dict[str, str]):
+    """加密任意值"""
+    value = data.get("value", "")
+    return {"encrypted": vault.encrypt(value)}
+
+@app.post("/decrypt")
+async def decrypt_value(data: Dict[str, str]):
+    """解密值"""
+    encrypted = data.get("encrypted", "")
+    return {"value": vault.decrypt(encrypted)}
+
+if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8003)
+    uvicorn.run(app, host="0.0.0.0", port=8003)

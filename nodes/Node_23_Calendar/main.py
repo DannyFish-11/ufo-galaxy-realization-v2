@@ -1,9 +1,13 @@
 """
-Node 23: Calendar - 日历和日程管理
+Node 23: Calendar - 日历服务节点
+==================================
+提供日历管理、事件创建、提醒功能
 """
-import os, json
+import os
+import json
+import uuid
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,91 +15,207 @@ from pydantic import BaseModel
 app = FastAPI(title="Node 23 - Calendar", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-events = {}
+# 配置
+CALENDAR_FILE = os.getenv("CALENDAR_FILE", "/tmp/calendar.json")
 
 class Event(BaseModel):
+    id: str
     title: str
-    start: str  # ISO format
-    end: Optional[str] = None
-    description: Optional[str] = None
-    location: Optional[str] = None
-    reminder: Optional[int] = None  # minutes before
+    description: str = ""
+    start_time: datetime
+    end_time: datetime
+    location: str = ""
+    attendees: List[str] = []
+    reminder_minutes: int = 15
+    recurrence: Optional[str] = None  # daily, weekly, monthly
+    color: str = "#3498db"
+    created_at: datetime
+    updated_at: datetime
 
-class EventQuery(BaseModel):
-    start_date: str
-    end_date: Optional[str] = None
+class CreateEventRequest(BaseModel):
+    title: str
+    description: str = ""
+    start_time: datetime
+    end_time: datetime
+    location: str = ""
+    attendees: List[str] = []
+    reminder_minutes: int = 15
+    recurrence: Optional[str] = None
+    color: str = "#3498db"
+
+class CalendarManager:
+    def __init__(self):
+        self.events: Dict[str, Event] = {}
+        self._load_events()
+
+    def _load_events(self):
+        """加载事件"""
+        if os.path.exists(CALENDAR_FILE):
+            try:
+                with open(CALENDAR_FILE, 'r') as f:
+                    data = json.load(f)
+                    for event_data in data.get("events", []):
+                        event = Event(**event_data)
+                        self.events[event.id] = event
+            except Exception as e:
+                print(f"Failed to load events: {e}")
+
+    def _save_events(self):
+        """保存事件"""
+        try:
+            with open(CALENDAR_FILE, 'w') as f:
+                json.dump({"events": [e.dict() for e in self.events.values()]}, f, default=str)
+        except Exception as e:
+            print(f"Failed to save events: {e}")
+
+    def create_event(self, **kwargs) -> Event:
+        """创建事件"""
+        now = datetime.now()
+        event = Event(
+            id=str(uuid.uuid4()),
+            created_at=now,
+            updated_at=now,
+            **kwargs
+        )
+        self.events[event.id] = event
+        self._save_events()
+        return event
+
+    def update_event(self, event_id: str, **kwargs) -> Optional[Event]:
+        """更新事件"""
+        if event_id not in self.events:
+            return None
+
+        event = self.events[event_id]
+        for key, value in kwargs.items():
+            if hasattr(event, key):
+                setattr(event, key, value)
+        event.updated_at = datetime.now()
+        self._save_events()
+        return event
+
+    def delete_event(self, event_id: str) -> bool:
+        """删除事件"""
+        if event_id in self.events:
+            del self.events[event_id]
+            self._save_events()
+            return True
+        return False
+
+    def get_event(self, event_id: str) -> Optional[Event]:
+        """获取事件"""
+        return self.events.get(event_id)
+
+    def list_events(self, start: Optional[datetime] = None, 
+                   end: Optional[datetime] = None) -> List[Event]:
+        """列出事件"""
+        events = list(self.events.values())
+
+        if start:
+            events = [e for e in events if e.end_time >= start]
+        if end:
+            events = [e for e in events if e.start_time <= end]
+
+        return sorted(events, key=lambda x: x.start_time)
+
+    def get_upcoming_events(self, days: int = 7) -> List[Event]:
+        """获取即将发生的事件"""
+        now = datetime.now()
+        end = now + timedelta(days=days)
+        return self.list_events(start=now, end=end)
+
+    def get_events_for_day(self, date: datetime) -> List[Event]:
+        """获取某天的事件"""
+        start = date.replace(hour=0, minute=0, second=0)
+        end = start + timedelta(days=1)
+        return self.list_events(start=start, end=end)
+
+    def check_conflicts(self, start: datetime, end: datetime, 
+                       exclude_id: Optional[str] = None) -> List[Event]:
+        """检查时间冲突"""
+        conflicts = []
+        for event in self.events.values():
+            if exclude_id and event.id == exclude_id:
+                continue
+            # 检查是否有重叠
+            if start < event.end_time and end > event.start_time:
+                conflicts.append(event)
+        return conflicts
+
+# 全局日历管理器
+calendar_manager = CalendarManager()
+
+# ============ API 端点 ============
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "node_id": "23", "name": "Calendar", "events_count": len(events), "timestamp": datetime.now().isoformat()}
+    return {
+        "status": "healthy",
+        "node_id": "23",
+        "name": "Calendar",
+        "events_count": len(calendar_manager.events),
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.post("/events")
-async def create_event(event: Event):
-    event_id = f"evt_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-    events[event_id] = event.dict()
-    events[event_id]["id"] = event_id
-    events[event_id]["created_at"] = datetime.now().isoformat()
-    return {"success": True, "event_id": event_id, "event": events[event_id]}
+async def create_event(request: CreateEventRequest):
+    """创建事件"""
+    try:
+        event = calendar_manager.create_event(**request.dict())
+        return event
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/events")
-async def list_events(start_date: Optional[str] = None, end_date: Optional[str] = None):
-    result = []
-    for eid, evt in events.items():
-        if start_date and evt["start"] < start_date:
-            continue
-        if end_date and evt["start"] > end_date:
-            continue
-        result.append(evt)
-    result.sort(key=lambda x: x["start"])
-    return {"success": True, "events": result, "count": len(result)}
+async def list_events(start: Optional[datetime] = None, end: Optional[datetime] = None):
+    """列出事件"""
+    try:
+        events = calendar_manager.list_events(start=start, end=end)
+        return {"events": events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/events/{event_id}")
 async def get_event(event_id: str):
-    if event_id not in events:
+    """获取事件详情"""
+    event = calendar_manager.get_event(event_id)
+    if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return {"success": True, "event": events[event_id]}
+    return event
 
 @app.put("/events/{event_id}")
-async def update_event(event_id: str, event: Event):
-    if event_id not in events:
+async def update_event(event_id: str, request: CreateEventRequest):
+    """更新事件"""
+    event = calendar_manager.update_event(event_id, **request.dict())
+    if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    events[event_id].update(event.dict())
-    events[event_id]["updated_at"] = datetime.now().isoformat()
-    return {"success": True, "event": events[event_id]}
+    return event
 
 @app.delete("/events/{event_id}")
 async def delete_event(event_id: str):
-    if event_id not in events:
+    """删除事件"""
+    success = calendar_manager.delete_event(event_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Event not found")
-    del events[event_id]
-    return {"success": True, "deleted": event_id}
+    return {"success": True}
 
-@app.get("/today")
-async def today_events():
-    today = datetime.now().strftime("%Y-%m-%d")
-    result = [evt for evt in events.values() if evt["start"].startswith(today)]
-    return {"success": True, "date": today, "events": result, "count": len(result)}
+@app.get("/events/upcoming")
+async def get_upcoming_events(days: int = 7):
+    """获取即将发生的事件"""
+    try:
+        events = calendar_manager.get_upcoming_events(days)
+        return {"events": events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/upcoming")
-async def upcoming_events(days: int = 7):
-    now = datetime.now()
-    end = now + timedelta(days=days)
-    result = [evt for evt in events.values() if now.isoformat() <= evt["start"] <= end.isoformat()]
-    result.sort(key=lambda x: x["start"])
-    return {"success": True, "events": result, "count": len(result)}
-
-@app.post("/mcp/call")
-async def mcp_call(request: dict):
-    tool = request.get("tool", "")
-    params = request.get("params", {})
-    if tool == "create": return await create_event(Event(**params))
-    elif tool == "list": return await list_events(params.get("start_date"), params.get("end_date"))
-    elif tool == "get": return await get_event(params.get("event_id", ""))
-    elif tool == "update": return await update_event(params.get("event_id", ""), Event(**params.get("event", {})))
-    elif tool == "delete": return await delete_event(params.get("event_id", ""))
-    elif tool == "today": return await today_events()
-    elif tool == "upcoming": return await upcoming_events(params.get("days", 7))
-    raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+@app.get("/conflicts")
+async def check_conflicts(start: datetime, end: datetime, exclude_id: Optional[str] = None):
+    """检查时间冲突"""
+    try:
+        conflicts = calendar_manager.check_conflicts(start, end, exclude_id)
+        return {"conflicts": conflicts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
