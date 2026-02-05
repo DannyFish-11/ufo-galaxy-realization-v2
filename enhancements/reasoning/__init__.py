@@ -1,32 +1,7 @@
 """
-Reasoning Module for UFO Galaxy Realization.
-
-This module provides autonomous reasoning capabilities including
-code generation, execution, and self-correction.
+推理增强模块
 """
 
-from .autonomous_coder import (
-    AutonomousCoder,
-    CodeGenerationResult,
-    SandboxExecutionResult,
-    CodingPlan,
-    CodingStep,
-    CodeLanguage,
-    ExecutionStatus,
-    LLMInterface,
-    MockLLMInterface,
-    Node14Shell
-)
+from .autonomous_coder import AutonomousCoder, CodingTask, CodingResult
 
-__all__ = [
-    "AutonomousCoder",
-    "CodeGenerationResult",
-    "SandboxExecutionResult",
-    "CodingPlan",
-    "CodingStep",
-    "CodeLanguage",
-    "ExecutionStatus",
-    "LLMInterface",
-    "MockLLMInterface",
-    "Node14Shell"
-]
+__all__ = ['AutonomousCoder', 'CodingTask', 'CodingResult']

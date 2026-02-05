@@ -1,0 +1,81 @@
+{
+  "system": {
+    "name": "UFO Galaxy L4",
+    "version": "4.0.0",
+    "mode": "autonomous",
+    "enable_l4": true
+  },
+  "main_loop": {
+    "cycle_interval": 5.0,
+    "auto_scan_interval": 300.0,
+    "max_concurrent_tasks": 10
+  },
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "websocket_path": "/ws",
+    "android_path": "/android",
+    "enable_cors": true
+  },
+  "perception": {
+    "environment_scan_on_startup": true,
+    "auto_discover_devices": true,
+    "scan_paths": [
+      "/usr/bin",
+      "/usr/local/bin",
+      "~/.local/bin"
+    ]
+  },
+  "reasoning": {
+    "enable_goal_decomposition": true,
+    "enable_autonomous_planning": true,
+    "enable_world_model": true,
+    "world_model_max_entities": 10000
+  },
+  "learning": {
+    "enable_autonomous_learning": true,
+    "learning_rate": 0.01,
+    "experience_buffer_size": 1000
+  },
+  "metacognition": {
+    "enable_self_reflection": true,
+    "performance_assessment_interval": 10,
+    "strategy_adjustment_threshold": 0.6
+  },
+  "coding": {
+    "enable_autonomous_coding": true,
+    "llm_provider": "openai",
+    "sandbox_type": "docker",
+    "max_retry_attempts": 3
+  },
+  "devices": {
+    "android": {
+      "enabled": true,
+      "auto_register": true
+    },
+    "drone": {
+      "enabled": true,
+      "protocol": "mavlink"
+    },
+    "printer_3d": {
+      "enabled": true,
+      "protocol": "octoprint"
+    },
+    "quantum": {
+      "enabled": true,
+      "provider": "ibm"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "logs/galaxy_l4.log",
+    "max_bytes": 10485760,
+    "backup_count": 5
+  },
+  "health": {
+    "enable_monitoring": true,
+    "check_interval": 30.0,
+    "alert_on_critical": true
+  }
+}
