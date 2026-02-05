@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 基础色 -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    
+    <!-- 墨色系 - 主色调 -->
+    <color name="ink_black">#2C2C2C</color>
+    <color name="ink_gray">#49454F</color>
+    <color name="ink_light">#79747E</color>
+    
+    <!-- 宣纸色系 - 背景 -->
+    <color name="paper_cream">#F5F0E6</color>
+    <color name="paper_light">#FAF8F3</color>
+    <color name="rice_white">#FFFBF8</color>
+    
+    <!-- 朱砂色系 - 次要色 -->
+    <color name="cinnabar_red">#8B4513</color>
+    <color name="cinnabar_light">#FAE6D5</color>
+    <color name="cinnabar_dark">#5D2E0A</color>
+    
+    <!-- 青绿色系 - 第三色 -->
+    <color name="jade_green">#4A6741</color>
+    <color name="jade_light">#CCE8C5</color>
+    <color name="jade_dark">#0F2D0A</color>
+    
+    <!-- 功能色 -->
+    <color name="error">#BA1A1A</color>
+    <color name="success">#4CAF50</color>
+    <color name="warning">#FF9800</color>
+    <color name="info">#2196F3</color>
+    
+    <!-- 灵动岛 -->
+    <color name="island_background">#000000</color>
+    <color name="island_content">#FFFFFF</color>
+</resources>

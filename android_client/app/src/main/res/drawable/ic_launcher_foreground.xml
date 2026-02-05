@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- 背景圆 -->
+    <path
+        android:fillColor="#2C2C2C"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
+    
+    <!-- 外圈 -->
+    <path
+        android:fillColor="#F5F0E6"
+        android:pathData="M54,54m-32,0a32,32 0,1 1,64 0a32,32 0,1 1,-64 0"
+        android:strokeWidth="2"
+        android:strokeColor="#8B4513"/>
+    
+    <!-- 中圈 -->
+    <path
+        android:fillColor="#FAF8F3"
+        android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"/>
+    
+    <!-- 内圈 - 核心 -->
+    <path
+        android:fillColor="#4A6741"
+        android:pathData="M54,54m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0"/>
+    
+    <!-- 中心点 -->
+    <path
+        android:fillColor="#8B4513"
+        android:pathData="M54,54m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"/>
+    
+    <!-- 轨道线 -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M54,26 A28,28 0,0 1,82 54"
+        android:strokeWidth="1.5"
+        android:strokeColor="#2C2C2C"
+        android:strokeAlpha="0.3"/>
+    
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M26,54 A28,28 0,0 1,54 82"
+        android:strokeWidth="1.5"
+        android:strokeColor="#2C2C2C"
+        android:strokeAlpha="0.3"/>
+    
+</vector>

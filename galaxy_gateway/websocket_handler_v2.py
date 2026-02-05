@@ -1,7 +1,7 @@
-\"\"\"
+"""
 WebSocket Handler v2 - 协议兼容版
 支持 AIP v1.0 和 AIP v2.0 (Android Agent) 的颗粒级对接
-\"\"\"
+"""
 import asyncio
 import json
 import logging
@@ -11,10 +11,10 @@ from fastapi import WebSocket
 logger = logging.getLogger("GatewayV2")
 
 def validate_aip_message(message: Dict) -> str:
-    \"\"\"
+    """
     智能识别并验证协议版本
     返回: "v1", "v2" 或 "invalid"
-    \"\"\"
+    """
     # 检查 AIP v2.0 (Android 端格式)
     if all(k in message for k in ["version", "type", "device_id"]):
         if message.get("version") == "2.0":
@@ -27,7 +27,7 @@ def validate_aip_message(message: Dict) -> str:
     return "invalid"
 
 async def handle_v2_message(connection_id: str, message: Dict, websocket: WebSocket):
-    \"\"\"处理 Android 端的 AIP v2.0 消息\"\"\"
+    """处理 Android 端的 AIP v2.0 消息"""
     msg_type = message.get("type")
     device_id = message.get("device_id")
     payload = message.get("payload", {})

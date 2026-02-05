@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- UFO Galaxy 主题 - 书法卷轴风格 -->
+    <style name="Theme.UFOGalaxy" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 主色调 - 墨色 -->
+        <item name="colorPrimary">@color/ink_black</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/paper_cream</item>
+        <item name="colorOnPrimaryContainer">@color/ink_black</item>
+        
+        <!-- 次要色 - 朱砂色 -->
+        <item name="colorSecondary">@color/cinnabar_red</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSecondaryContainer">@color/cinnabar_light</item>
+        <item name="colorOnSecondaryContainer">@color/cinnabar_dark</item>
+        
+        <!-- 第三色 - 青绿色 -->
+        <item name="colorTertiary">@color/jade_green</item>
+        <item name="colorOnTertiary">@color/white</item>
+        <item name="colorTertiaryContainer">@color/jade_light</item>
+        <item name="colorOnTertiaryContainer">@color/jade_dark</item>
+        
+        <!-- 背景 - 宣纸色 -->
+        <item name="android:colorBackground">@color/rice_white</item>
+        <item name="colorOnBackground">@color/ink_black</item>
+        <item name="colorSurface">@color/rice_white</item>
+        <item name="colorOnSurface">@color/ink_black</item>
+        <item name="colorSurfaceVariant">@color/paper_cream</item>
+        <item name="colorOnSurfaceVariant">@color/ink_gray</item>
+        
+        <!-- 状态栏 -->
+        <item name="android:statusBarColor">@color/rice_white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        
+        <!-- 导航栏 -->
+        <item name="android:navigationBarColor">@color/rice_white</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    
+    <!-- 透明主题 - 用于悬浮窗 -->
+    <style name="Theme.UFOGalaxy.Transparent">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>
