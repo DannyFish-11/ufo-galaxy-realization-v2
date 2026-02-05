@@ -13,7 +13,7 @@ from pydantic import BaseModel
 import pytz
 
 app = FastAPI(title="Node 23 - Time", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]))
 
 # 常用时区
 COMMON_TIMEZONES = [

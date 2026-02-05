@@ -1,259 +1,143 @@
-# UFO Galaxy Realization
+# UFO Galaxy 节点实现
 
-**完整集成版本** - 整合了 Fusion、V5、Fixed 三个仓库的全部代码
+本目录包含UFO Galaxy系统的P0级优先节点实现。
 
----
+## 已实现的节点列表
 
-## 项目概述
+### 第一优先级 - 基础服务节点
 
-UFO Galaxy Realization 是一个分布式 AI 节点操作系统，支持 105+ 功能节点、自主学习、多设备协同。
+| 节点 | 名称 | 端口 | 功能 |
+|------|------|------|------|
+| Node_02_Tasker | 任务调度器 | 8002 | 任务队列、定时任务、状态跟踪 |
+| Node_03_SecretVault | 密钥管理 | 8003 | 密钥存储、加密解密、密钥轮换 |
+| Node_05_Auth | 认证服务 | 8005 | 用户认证、JWT令牌、权限控制 |
+| Node_06_Filesystem | 文件系统 | 8006 | 文件读写、目录管理、压缩解压 |
 
-### 集成来源
+### 第二优先级 - 数据库节点
 
-| 仓库 | 贡献内容 | 代码量 |
-|------|----------|--------|
-| **ufo-galaxy-fusion** | 105 个节点、Fusion 编排器、Galaxy Gateway、Windows 客户端 | ~198,000 行 |
-| **ufo-galaxy-v5** | 自主学习引擎、知识图谱、多设备协调 | ~32,000 行 |
-| **ufo-galaxy-unified-fixed** | 统一配置系统、系统管理器修复版 | ~17,000 行 |
+| 节点 | 名称 | 端口 | 功能 |
+|------|------|------|------|
+| Node_12_Postgres | PostgreSQL | 8012 | PostgreSQL连接、查询、事务 |
+| Node_13_SQLite | SQLite | 8013 | SQLite数据库操作 |
+| Node_20_Qdrant | 向量数据库 | 8020 | 向量存储、相似度搜索 |
 
-**总计**: 1,175 个 Python 文件，285,206 行代码
+### 第三优先级 - 工具节点
 
----
+| 节点 | 名称 | 端口 | 功能 |
+|------|------|------|------|
+| Node_14_FFmpeg | 视频处理 | 8014 | 视频转码、剪辑、截图 |
+| Node_16_Email | 邮件服务 | 8016 | SMTP邮件发送、模板 |
+| Node_17_EdgeTTS | 语音合成 | 8017 | 文本转语音 |
+| Node_18_DeepL | 翻译服务 | 8018 | 文本翻译 |
+| Node_19_Crypto | 加密服务 | 8019 | 加密解密、哈希、签名 |
 
-## 系统架构
+### 第四优先级 - 搜索节点
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              UFO Galaxy 网关                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ WebSocket   │  │ 任务编排器   │  │ 设备管理器   │  │ 消息处理器   │        │
-│  │ Server      │  │(Orchestrator)│  │(DeviceMgr)  │  │(MsgHandler) │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘        │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                              AIP v3.0 统一协议
-                                      │
-        ┌─────────────────────────────┼─────────────────────────────┐
-        │                             │                             │
-        ▼                             ▼                             ▼
-┌───────────────┐             ┌───────────────┐             ┌───────────────┐
-│  Android      │             │  Windows      │             │  Linux        │
-│  Agent        │             │  Agent        │             │  Agent        │
-│  (APK)        │             │  (Python)     │             │  (Python)     │
-└───────────────┘             └───────────────┘             └───────────────┘
-```
+| 节点 | 名称 | 端口 | 功能 |
+|------|------|------|------|
+| Node_22_BraveSearch | Brave搜索 | 8022 | 网页搜索、图片搜索 |
+| Node_25_GoogleSearch | Google搜索 | 8025 | Google搜索 |
 
----
+### 第五优先级 - 时间和天气节点
 
-## 目录结构
+| 节点 | 名称 | 端口 | 功能 |
+|------|------|------|------|
+| Node_23_Calendar | 日历服务 | 8023 | 日历管理、事件创建 |
+| Node_23_Time | 时间服务 | 8023 | 时间查询、时区转换 |
+| Node_24_Weather | 天气查询 | 8024 | 天气查询、预报 |
 
-```
-ufo-galaxy-realization/
-├── nodes/                      # 105 个功能节点
-│   ├── Node_00_StateMachine/   # 状态机核心
-│   ├── Node_01_OneAPI/         # 统一 API 网关
-│   ├── Node_02_Tasker/         # 任务调度引擎
-│   ├── ...
-│   ├── Node_100_MemorySystem/  # 记忆系统
-│   ├── Node_101_CodeEngine/    # 代码引擎
-│   ├── Node_102_DebugOptimize/ # 调试优化
-│   ├── Node_103_KnowledgeGraph/# 知识图谱
-│   └── ...
-├── galaxy_gateway/             # 网关服务
-│   ├── protocol/               # AIP v3.0 协议
-│   ├── transport/              # WebSocket 传输层
-│   ├── handlers/               # 消息处理器
-│   ├── orchestrator/           # 任务编排器
-│   ├── gateway_service_v5.py   # v5 网关服务
-│   └── ...
-├── fusion/                     # Fusion 编排系统
-│   ├── topology_manager.py     # 拓扑管理器
-│   ├── node_executor.py        # 节点执行器
-│   ├── unified_orchestrator.py # 统一编排器
-│   └── ...
-├── enhancements/               # 增强模块
-│   ├── learning/               # 自主学习引擎
-│   │   ├── autonomous_learning_engine.py
-│   │   ├── knowledge_graph.py
-│   │   └── search_integrator.py
-│   ├── multidevice/            # 多设备协调
-│   ├── bridges/                # 桥接模块
-│   └── clients/                # 客户端
-├── external/                   # 外部集成
-│   ├── microsoft_ufo/          # Microsoft UFO
-│   ├── memos/                  # MemOS 记忆系统
-│   └── agentcpm/               # AgentCPM-GUI
-├── windows_client/             # Windows 客户端
-├── dashboard/                  # 监控仪表盘
-├── config/                     # 统一配置
-│   ├── unified_config.json     # 103 节点配置
-│   └── unified_ports.yaml      # 端口分配
-├── tests/                      # 测试用例
-├── scripts/                    # 脚本工具
-├── examples/                   # 示例代码
-├── galaxy_launcher.py          # 系统启动器
-├── smart_launcher.py           # 智能启动器
-├── system_manager.py           # 系统管理器
-├── system_manager_fixed.py     # 修复版系统管理器
-├── health_monitor.py           # 健康监控
-└── requirements_full.txt       # 完整依赖
-```
+### 第六优先级 - 设备控制节点
 
----
-
-## 核心功能
-
-### 1. 105 个功能节点
-
-| 分组 | 节点范围 | 功能 |
-|------|----------|------|
-| **核心** | Node_00 - Node_09 | 状态机、API、任务、路由、认证 |
-| **工具** | Node_10 - Node_32 | GitHub、数据库、OCR、邮件、搜索 |
-| **物理** | Node_33 - Node_49 | ADB、Scrcpy、AppleScript、SSH、MQTT |
-| **智能** | Node_50 - Node_64 | NLU、Vision、LLM、Agent |
-| **监控** | Node_65 - Node_69 | 日志、健康检查、指标 |
-| **高级** | Node_70 - Node_89 | 学术、知识库、GitHub Flow |
-| **编排** | Node_90 - Node_99 | 跨设备、任务分解、协调 |
-| **学习** | Node_100 - Node_118 | 记忆、代码、调试、知识图谱 |
-
-### 2. Fusion 编排系统
-
-- **TopologyManager**: 三层球形拓扑管理
-- **NodeExecutor**: 节点执行池
-- **UnifiedOrchestrator**: 统一任务编排
-
-### 3. 自主学习引擎
-
-- **5 阶段学习循环**: 观察 → 分析 → 实验 → 验证 → 部署
-- **模式识别**: 行为、时间、语义、因果、异常
-- **知识图谱**: 实体关系存储和推理
-
-### 4. 多设备协同
-
-- **设备类型**: Android、iOS、Windows、macOS、Linux、云端、IoT
-- **协议**: AIP v3.0 统一协议
-- **传输**: WebSocket、WebRTC、P2P
-
----
+| 节点 | 名称 | 端口 | 功能 |
+|------|------|------|------|
+| Node_39_SSH | SSH连接 | 8039 | SSH连接、命令执行 |
+| Node_41_MQTT | MQTT消息队列 | 8041 | MQTT发布订阅 |
 
 ## 快速开始
 
-### 1. 安装依赖
+### 安装依赖
 
 ```bash
-pip install -r requirements_full.txt
+pip install -r requirements.txt
 ```
 
-### 2. 启动系统
+### 运行节点
 
 ```bash
-# 方式 1: 使用智能启动器
-python smart_launcher.py
+# 进入节点目录
+cd nodes/Node_02_Tasker
 
-# 方式 2: 使用系统管理器
-python system_manager.py start all
-
-# 方式 3: 使用 Galaxy 启动器
-python galaxy_launcher.py
+# 运行节点
+python main.py
 ```
 
-### 3. 启动网关
+### 环境变量配置
 
 ```bash
-cd galaxy_gateway
-uvicorn gateway_service_v5:app --host 0.0.0.0 --port 8000
+# Node 03: SecretVault
+export SECRETVAULT_MASTER_KEY="your-master-key"
+
+# Node 05: Auth
+export AUTH_JWT_SECRET="your-jwt-secret"
+
+# Node 12: PostgreSQL
+export POSTGRES_HOST="localhost"
+export POSTGRES_USER="postgres"
+export POSTGRES_PASSWORD="your-password"
+export POSTGRES_DATABASE="postgres"
+
+# Node 16: Email
+export SMTP_HOST="smtp.gmail.com"
+export SMTP_USER="your-email@gmail.com"
+export SMTP_PASSWORD="your-password"
+
+# Node 18: DeepL
+export DEEPL_API_KEY="your-api-key"
+
+# Node 22: BraveSearch
+export BRAVE_API_KEY="your-api-key"
+
+# Node 24: Weather
+export OPENWEATHER_API_KEY="your-api-key"
+
+# Node 25: GoogleSearch
+export GOOGLE_API_KEY="your-api-key"
+export GOOGLE_CSE_ID="your-cse-id"
+
+# Node 41: MQTT
+export MQTT_BROKER="localhost"
+export MQTT_PORT="1883"
 ```
 
-### 4. 查看状态
+## API文档
 
-```bash
-python system_manager.py status
+每个节点都提供以下标准端点：
+
+- `GET /health` - 健康检查
+- 各节点特有的功能端点
+
+启动节点后，访问 `http://localhost:{port}/docs` 查看完整的API文档（Swagger UI）。
+
+## 节点结构
+
+每个节点包含以下文件：
+
+```
+Node_XX_Name/
+├── main.py          # 主要业务逻辑
+├── fusion_entry.py  # 融合入口文件
+└── README.md        # 节点说明（可选）
 ```
 
----
+## 依赖说明
 
-## API 端点
+- **必需依赖**: fastapi, uvicorn, pydantic
+- **数据库节点**: asyncpg (PostgreSQL), qdrant-client (Qdrant)
+- **加密节点**: cryptography
+- **语音节点**: edge-tts
+- **SSH节点**: asyncssh
+- **MQTT节点**: paho-mqtt
 
-| 端点 | 方法 | 功能 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/ws/{device_id}` | WebSocket | 设备连接 |
-| `/learn_from_experience` | POST | 从经验学习 |
-| `/generate_code` | POST | 生成代码 |
-| `/debug_code` | POST | 调试代码 |
-| `/optimize_code` | POST | 优化代码 |
-| `/reason` | POST | 知识推理 |
-| `/autonomous_programming` | POST | 自主编程 |
-
----
-
-## 配置说明
-
-### unified_config.json
-
-```json
-{
-  "metadata": {
-    "version": "2.0",
-    "total_nodes": 103
-  },
-  "groups": {
-    "core": { "priority": 1 },
-    "tools": { "priority": 2 },
-    "physical": { "priority": 3 },
-    ...
-  },
-  "nodes": {
-    "Node_00_StateMachine": {
-      "port": 8000,
-      "group": "core",
-      "critical": true
-    },
-    ...
-  }
-}
-```
-
----
-
-## 支持的平台
-
-| 平台 | 状态 | 说明 |
-|------|------|------|
-| Android | ✅ 已实现 | 完整的无障碍服务实现 |
-| Windows | ✅ 已实现 | 基于 Microsoft UFO |
-| Linux | ✅ 已实现 | 支持 X11/Wayland |
-| iOS | 📋 计划中 | 受限于苹果政策 |
-| macOS | 📋 计划中 | 基于 Accessibility API |
-| 云端 | 📋 计划中 | 华为云/阿里云/AWS |
-
----
-
-## 外部依赖
-
-- **Microsoft UFO**: Windows UI Automation 和 Agent 框架
-- **MemOS**: 记忆系统，支持图数据库和向量数据库
-- **AgentCPM-GUI**: GUI 理解模型
-
----
-
-## 版本历史
-
-- **v3.0** (2026-02-02): 完整集成 Fusion + V5 + Fixed
-- **v2.0** (2026-01-23): 统一配置系统
-- **v1.0** (2026-01-22): 初始版本
-
----
-
-## 相关项目
-
-- [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) - Android 客户端
-- [ufo-galaxy-fusion](https://github.com/DannyFish-11/ufo-galaxy-fusion) - Fusion 编排系统
-- [ufo-galaxy-v5](https://github.com/DannyFish-11/ufo-galaxy-v5) - V5 自主学习版
-- [ufo-galaxy-unified-fixed](https://github.com/DannyFish-11/ufo-galaxy-unified-fixed) - 修复版
-
----
-
-## License
+## 许可证
 
 MIT License
