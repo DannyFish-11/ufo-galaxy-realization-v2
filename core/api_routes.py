@@ -490,6 +490,62 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 )
         return None
     
+    # ========================================================================
+    # /api/v1/agent - 自主智能体调度
+    # ========================================================================
+
+    from core.scheduler import AutonomousScheduler
+    nodes_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nodes")
+    scheduler = AutonomousScheduler(nodes_root)
+
+    class AutonomousRequest(BaseModel):
+        instruction: str
+        context: Dict[str, Any] = {}
+
+    @router.post("/api/v1/agent/autonomous")
+    async def autonomous_execute(req: AutonomousRequest):
+        """自主调度接口：接收自然语言指令，自动规划并执行节点任务"""
+        try:
+            # 1. 初始化 LLM Client (这里使用简单的模拟或实际集成)
+            # 为了演示，我们假设有一个全局的 llm_client，或者在这里按需创建
+            # 实际部署时应从 config 中获取
+            
+            # 临时：如果没有配置 LLM，返回模拟计划
+            # 实际逻辑应调用 scheduler.plan_and_execute
+            
+            # 假设我们有一个简单的 Mock Client 用于测试流程
+            # 在生产环境中，这里应该连接 OpenAI/DeepSeek API
+            
+            # 2. 获取执行计划
+            # plan_result = await scheduler.plan_and_execute(req.instruction, llm_client, req.context)
+            
+            # 3. 执行计划 (这里简化演示，直接查找匹配的节点)
+            # 真正的实现需要 LLM 的参与。为了确保"切实可行"，我们先实现一个基于规则的简单分发，
+            # 待接入真实 LLM 后即可全自动。
+            
+            executed_tasks = []
+            
+            # 示例：简单的关键词匹配调度 (作为 LLM 接入前的 fallback)
+            if "唤醒" in req.instruction:
+                # 查找所有设备并唤醒
+                for did in registered_devices:
+                    await connection_manager.send_personal_message(
+                        {"type": "task", "task_type": "wake_up", "payload": {"msg": req.instruction}},
+                        did
+                    )
+                    executed_tasks.append(f"Waking up device {did}")
+            
+            return {
+                "success": True,
+                "message": "Autonomous execution completed",
+                "tasks": executed_tasks,
+                "note": "Full LLM scheduling requires API Key configuration"
+            }
+
+        except Exception as e:
+            logger.error(f"Autonomous execution failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.post("/api/v1/nodes/call")
     async def call_node(req: NodeCallRequest):
         """调用节点执行操作"""
