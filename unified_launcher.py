@@ -641,6 +641,36 @@ class UnifiedWebUI:
             except Exception as e:
                 logger.warning(f"缓存初始化失败: {e}")
             
+            # === 静态文件挂载 (API Manager) ===
+            from fastapi.staticfiles import StaticFiles
+            from fastapi.responses import FileResponse
+            
+            # 尝试查找正确的静态文件目录
+            base_static_dir = PROJECT_ROOT / "static" / "api-manager"
+            static_dir = base_static_dir
+            
+            # 检查是否在 public 子目录下 (适配当前目录结构)
+            if (base_static_dir / "public").exists():
+                static_dir = base_static_dir / "public"
+            
+            if static_dir.exists() and (static_dir / "assets").exists():
+                # 挂载静态资源
+                self.app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+                
+                # API Manager 入口
+                @self.app.get("/api-manager", response_class=HTMLResponse)
+                async def api_manager_index():
+                    index_path = static_dir / "index.html"
+                    if index_path.exists():
+                        return FileResponse(str(index_path))
+                    return JSONResponse({"error": "index.html not found"}, status_code=404)
+                
+                logger.info(f"API Manager 已挂载: {static_dir}")
+                
+                logger.info(f"API Manager 已挂载: {static_dir}")
+            else:
+                logger.warning(f"API Manager 静态文件未找到: {static_dir}")
+
             # === 基础路由（始终可用）===
             @self.app.get("/", response_class=HTMLResponse)
             async def index():

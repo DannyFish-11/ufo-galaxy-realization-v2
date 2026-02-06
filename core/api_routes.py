@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -286,36 +286,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # ========================================================================
     # API Manager 静态文件路由
     # ========================================================================
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
-
-    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "api-manager")
-    if os.path.exists(static_dir):
-        # 挂载静态文件目录
-        # 注意：FastAPI 的 mount 需要在 app 实例上调用，这里我们在 router 中无法直接 mount
-        # 所以我们使用一个特殊的处理方式，或者建议在 main app 中 mount
-        # 这里我们提供一个重定向和 index.html 服务
-        pass
-    
-    @router.get("/api-manager")
-    async def api_manager_root():
-        """API Manager 入口"""
-        index_path = os.path.join(static_dir, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return JSONResponse({"error": "API Manager not installed"}, status_code=404)
-
-    @router.get("/api-manager/{rest_of_path:path}")
-    async def api_manager_static(rest_of_path: str):
-        """API Manager 静态资源服务"""
-        file_path = os.path.join(static_dir, rest_of_path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        # 如果是前端路由（如 /api-manager/keys），返回 index.html
-        index_path = os.path.join(static_dir, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return JSONResponse({"error": "File not found"}, status_code=404)
+    # 注意：静态文件挂载已移至 unified_launcher.py 中处理，
+    # 以便正确使用 app.mount() 并避免路由冲突。
+    pass
     
     # ========================================================================
     # /api/v1/devices - 设备注册和管理
