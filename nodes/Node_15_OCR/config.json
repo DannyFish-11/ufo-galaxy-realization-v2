@@ -1,0 +1,25 @@
+{
+    "node_name": "Node_15_OCR",
+    "host": "0.0.0.0",
+    "port": 8015,
+
+    "deepseek_ocr2_api_key": "",
+    "deepseek_ocr2_api_base": "https://api.novita.ai/openai",
+    "deepseek_ocr2_model": "deepseek/deepseek-ocr-2",
+
+    "deepseek_ocr2_local_url": "",
+    "deepseek_ocr2_local_model": "deepseek-ai/DeepSeek-OCR-2",
+
+    "tesseract_cmd_path": null,
+    "default_language": "eng+chi_sim",
+    "supported_languages": ["eng", "chi_sim", "chi_tra", "jpn", "kor", "fra", "deu"],
+
+    "primary_engine": "deepseek_ocr2",
+    "fallback_engine": "tesseract",
+    "default_mode": "free_ocr",
+
+    "max_image_size": 4096,
+    "jpeg_quality": 85,
+    "request_timeout": 60,
+    "max_concurrent_requests": 10
+}
