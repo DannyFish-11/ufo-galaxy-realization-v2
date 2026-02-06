@@ -1,12 +1,15 @@
 package com.ufo.galaxy.ui.viewmodel
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ufo.galaxy.UFOGalaxyApplication
 import com.ufo.galaxy.data.ChatMessage
 import com.ufo.galaxy.data.MessageRole
 import com.ufo.galaxy.network.GalaxyWebSocketClient
+import com.ufo.galaxy.speech.SpeechInputManager
+import com.ufo.galaxy.speech.SpeechState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,14 +26,16 @@ data class MainUiState(
     val isLoading: Boolean = false,
     val isScrollExpanded: Boolean = true,
     val isConnected: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isListening: Boolean = false,
+    val partialSpeechResult: String = ""
 )
 
 /**
  * 主界面 ViewModel
- * 管理聊天状态和与 Galaxy 服务器的通信
+ * 管理聊天状态、与 Galaxy 服务器的通信和语音输入
  */
-class MainViewModel : ViewModel() {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     companion object {
         private const val TAG = "MainViewModel"
@@ -42,9 +47,15 @@ class MainViewModel : ViewModel() {
     private val webSocketClient: GalaxyWebSocketClient
         get() = UFOGalaxyApplication.webSocketClient
     
+    // 语音输入管理器
+    private val speechManager: SpeechInputManager by lazy {
+        SpeechInputManager(getApplication<Application>().applicationContext)
+    }
+    
     init {
         Log.d(TAG, "MainViewModel 初始化")
         setupWebSocketListener()
+        setupSpeechListener()
         addWelcomeMessage()
     }
     
@@ -76,6 +87,41 @@ class MainViewModel : ViewModel() {
     }
     
     /**
+     * 设置语音识别监听器
+     */
+    private fun setupSpeechListener() {
+        speechManager.onResult = { result ->
+            Log.d(TAG, "语音识别结果: $result")
+            _uiState.update { 
+                it.copy(
+                    inputText = result,
+                    isListening = false,
+                    partialSpeechResult = ""
+                ) 
+            }
+            // 自动发送
+            if (result.isNotBlank()) {
+                sendMessage(result)
+            }
+        }
+        
+        speechManager.onPartialResult = { partial ->
+            _uiState.update { it.copy(partialSpeechResult = partial) }
+        }
+        
+        speechManager.onError = { error ->
+            Log.e(TAG, "语音识别错误: $error")
+            _uiState.update { 
+                it.copy(
+                    isListening = false,
+                    partialSpeechResult = "",
+                    error = error
+                ) 
+            }
+        }
+    }
+    
+    /**
      * 添加欢迎消息
      */
     private fun addWelcomeMessage() {
@@ -94,7 +140,6 @@ class MainViewModel : ViewModel() {
     private fun handleServerMessage(message: String) {
         viewModelScope.launch {
             try {
-                // 解析服务器响应
                 val assistantMessage = ChatMessage(
                     id = UUID.randomUUID().toString(),
                     role = MessageRole.ASSISTANT,
@@ -125,17 +170,17 @@ class MainViewModel : ViewModel() {
     /**
      * 发送消息
      */
-    fun sendMessage() {
-        val text = _uiState.value.inputText.trim()
-        if (text.isEmpty()) return
+    fun sendMessage(text: String? = null) {
+        val messageText = text ?: _uiState.value.inputText.trim()
+        if (messageText.isEmpty()) return
         
-        Log.d(TAG, "发送消息: $text")
+        Log.d(TAG, "发送消息: $messageText")
         
         // 添加用户消息
         val userMessage = ChatMessage(
             id = UUID.randomUUID().toString(),
             role = MessageRole.USER,
-            content = text,
+            content = messageText,
             timestamp = System.currentTimeMillis()
         )
         
@@ -150,7 +195,7 @@ class MainViewModel : ViewModel() {
         // 发送到服务器
         viewModelScope.launch {
             try {
-                webSocketClient.send(text)
+                webSocketClient.send(messageText)
             } catch (e: Exception) {
                 Log.e(TAG, "发送消息失败", e)
                 _uiState.update { it.copy(error = e.message, isLoading = false) }
@@ -163,7 +208,32 @@ class MainViewModel : ViewModel() {
      */
     fun startVoiceInput() {
         Log.d(TAG, "开始语音输入")
-        // TODO: 实现语音识别
+        
+        if (!speechManager.isAvailable()) {
+            _uiState.update { it.copy(error = "语音识别不可用") }
+            return
+        }
+        
+        _uiState.update { it.copy(isListening = true, partialSpeechResult = "") }
+        speechManager.startListening("zh-CN")
+    }
+    
+    /**
+     * 停止语音输入
+     */
+    fun stopVoiceInput() {
+        Log.d(TAG, "停止语音输入")
+        speechManager.stopListening()
+        _uiState.update { it.copy(isListening = false) }
+    }
+    
+    /**
+     * 取消语音输入
+     */
+    fun cancelVoiceInput() {
+        Log.d(TAG, "取消语音输入")
+        speechManager.cancel()
+        _uiState.update { it.copy(isListening = false, partialSpeechResult = "") }
     }
     
     /**
@@ -171,6 +241,27 @@ class MainViewModel : ViewModel() {
      */
     fun toggleScroll() {
         _uiState.update { it.copy(isScrollExpanded = !it.isScrollExpanded) }
+    }
+    
+    /**
+     * 展开卷轴
+     */
+    fun expandScroll() {
+        _uiState.update { it.copy(isScrollExpanded = true) }
+    }
+    
+    /**
+     * 收起卷轴
+     */
+    fun collapseScroll() {
+        _uiState.update { it.copy(isScrollExpanded = false) }
+    }
+    
+    /**
+     * 清除错误
+     */
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
     
     /**
@@ -194,5 +285,6 @@ class MainViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         Log.d(TAG, "MainViewModel 销毁")
+        speechManager.release()
     }
 }

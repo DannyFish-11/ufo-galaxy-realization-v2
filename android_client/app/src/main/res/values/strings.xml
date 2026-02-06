@@ -38,4 +38,18 @@
     <string name="error_connection_failed">连接失败</string>
     <string name="error_send_failed">发送失败</string>
     <string name="error_unknown">未知错误</string>
+    
+    <!-- 无障碍服务 -->
+    <string name="accessibility_service_description">UFO Galaxy 使用此服务监听音量键以实现快速唤醒功能。\n\n双击音量下键可快速唤醒智能助手。\n\n此服务不会收集任何个人数据。</string>
+    <string name="accessibility_service_title">UFO Galaxy 快捷唤醒</string>
+    
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_server_url">服务器地址</string>
+    <string name="settings_trigger_mode">唤醒方式</string>
+    <string name="settings_trigger_double_volume_down">双击音量下键</string>
+    <string name="settings_trigger_triple_volume_down">三击音量下键</string>
+    <string name="settings_trigger_edge_swipe">右侧边缘滑动</string>
+    <string name="settings_auto_start">开机自动启动</string>
+    <string name="settings_floating_island">启用灵动岛</string>
 </resources>

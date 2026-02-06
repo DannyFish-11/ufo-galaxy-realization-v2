@@ -109,6 +109,31 @@
             </intent-filter>
         </receiver>
         
+        <!-- 增强版悬浮窗服务 -->
+        <service
+            android:name=".service.EnhancedFloatingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_ai_assistant" />
+        </service>
+        
+        <!-- 硬件按键监听服务 (无障碍服务) -->
+        <service
+            android:name=".service.HardwareKeyListener"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+        
     </application>
 
 </manifest>
