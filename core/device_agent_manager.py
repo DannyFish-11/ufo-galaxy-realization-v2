@@ -511,6 +511,28 @@ class DeviceAgentManager:
         
         logger.info("DeviceAgentManager initialized")
     
+    async def initialize(self) -> bool:
+        """初始化设备管理器"""
+        try:
+            # 启动心跳检测
+            await self.start_heartbeat(interval=30)
+            logger.info("DeviceAgentManager fully initialized")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize DeviceAgentManager: {e}")
+            return False
+    
+    async def shutdown(self) -> bool:
+        """关闭设备管理器"""
+        try:
+            await self.stop_heartbeat()
+            await self.disconnect_all()
+            logger.info("DeviceAgentManager shutdown complete")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to shutdown DeviceAgentManager: {e}")
+            return False
+    
     def register_agent_type(self, device_type: DeviceType, agent_class: Type[BaseDeviceAgent]):
         """注册新的设备 Agent 类型"""
         self._agent_types[device_type] = agent_class

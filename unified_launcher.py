@@ -371,9 +371,11 @@ class CoreServiceLauncher:
         )
         
         try:
-            from core.microsoft_ufo_integration import MicrosoftUFOIntegration
-            integration = MicrosoftUFOIntegration()
+            from core.microsoft_ufo_integration import UFOIntegrationService
+            integration = UFOIntegrationService()
             result = await integration.initialize()
+            # initialize 返回 bool，转换为 dict
+            result = {"success": result, "message": "UFO Integration initialized" if result else "UFO Integration failed"}
             
             if result.get("success"):
                 logger.info("微软 UFO 集成已初始化")

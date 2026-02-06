@@ -55,8 +55,8 @@ def get_device_status_api():
     return device_status_app
 
 def get_microsoft_ufo_integration():
-    from .microsoft_ufo_integration import MicrosoftUFOIntegration
-    return MicrosoftUFOIntegration()
+    from .microsoft_ufo_integration import UFOIntegrationService
+    return UFOIntegrationService()
 
 def get_system_load_monitor():
     from .system_load_monitor import SystemLoadMonitor
