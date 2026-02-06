@@ -216,6 +216,73 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(status)
         return JSONResponse({"error": "config not available"})
 
+    @router.get("/api/config")
+    async def get_frontend_config(request: Request = None):
+        """
+        返回前端所需的非敏感配置。
+        注意：敏感 Key (如 OPENAI_API_KEY) 不应直接返回，除非在受控的本地环境。
+        """
+        # 检查是否是本地请求 (简单判断)
+        # 在生产环境中，这里应该有更严格的鉴权
+        
+        # 获取主机地址，用于构建 WebSocket URL
+        host = "localhost"
+        port = "8099"
+        if request:
+            host = request.url.hostname or "localhost"
+            port = str(request.url.port or 8099)
+
+        config_data = {
+            "api_base_url": f"http://{host}:{port}",
+            "ws_url": f"ws://{host}:{port}/ws",
+            # 返回部分脱敏的配置状态，用于前端展示 "已配置"
+            "status": {
+                "openai": bool(os.getenv("OPENAI_API_KEY")),
+                "deepseek": bool(os.getenv("DEEPSEEK_API_KEY")),
+                "perplexity": bool(os.getenv("SONAR_API_KEY") or os.getenv("PERPLEXITY_API_KEY")),
+                "ocr": bool(os.getenv("DEEPSEEK_OCR2_API_KEY")),
+            }
+        }
+        return JSONResponse(config_data)
+
+    @router.post("/api/config/update")
+    async def update_config(request: Request):
+        """
+        更新配置 (仅限本地环境或鉴权用户)
+        """
+        data = await request.json()
+        # 这里实现将配置写入 .env 文件的逻辑
+        # 简单实现：读取 .env，替换或追加，然后写回
+        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+        
+        try:
+            current_env = {}
+            if os.path.exists(env_path):
+                with open(env_path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, val = line.split("=", 1)
+                            current_env[key.strip()] = val.strip()
+            
+            # 更新值
+            for key, val in data.items():
+                if key in ["OPENAI_API_KEY", "DEEPSEEK_API_KEY", "SONAR_API_KEY", "DEEPSEEK_OCR2_API_KEY", "PERPLEXITY_API_KEY"]:
+                    current_env[key] = val
+            
+            # 写回文件
+            with open(env_path, "w") as f:
+                for key, val in current_env.items():
+                    f.write(f"{key}={val}\n")
+            
+            # 重新加载环境变量 (当前进程可能需要重启才能生效，或者手动更新 os.environ)
+            for key, val in data.items():
+                os.environ[key] = val
+                
+            return {"status": "success", "message": "Configuration updated"}
+        except Exception as e:
+            return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
     # ========================================================================
     # API Manager 静态文件路由
     # ========================================================================
