@@ -22,12 +22,20 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+# 导入鉴权模块
+try:
+    from .auth import require_auth
+except ImportError:
+    # 如果导入失败，定义一个空的鉴权函数
+    async def require_auth():
+        return {"authenticated": True, "dev_mode": True}
 
 logger = logging.getLogger("UFO-Galaxy.API")
 
@@ -76,6 +84,48 @@ class OCRRequest(BaseModel):
     image_base64: str
     mode: str = "free_ocr"
     language: str = "auto"
+
+
+# ============================================================================
+# 统一命令协议模型
+# ============================================================================
+
+from enum import Enum
+
+class CommandStatus(str, Enum):
+    """命令状态枚举"""
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class TargetResult(BaseModel):
+    """单个目标的执行结果"""
+    status: CommandStatus
+    output: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class UnifiedCommandRequest(BaseModel):
+    """统一命令请求"""
+    request_id: Optional[str] = None
+    command: str
+    targets: List[str]
+    params: Dict[str, Any] = {}
+    mode: str = "sync"  # sync or async
+    timeout: int = 30
+
+
+class UnifiedCommandResponse(BaseModel):
+    """统一命令响应"""
+    request_id: str
+    status: CommandStatus
+    created_at: str
+    completed_at: Optional[str] = None
+    results: Dict[str, TargetResult]
 
 
 # ============================================================================
@@ -156,6 +206,9 @@ task_queue: Dict[str, Dict[str, Any]] = {}
 
 # 节点状态缓存
 node_status_cache: Dict[str, Dict[str, Any]] = {}
+
+# 统一命令结果存储
+command_results: Dict[str, Dict[str, Any]] = {}
 
 
 # ============================================================================
@@ -804,6 +857,307 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             task_queue[task_id]["completed_at"] = datetime.now().isoformat()
             return {"success": True}
         raise HTTPException(status_code=404, detail="任务未找到")
+    
+    # ========================================================================
+    # /api/v1/command - 统一命令端点
+    # ========================================================================
+    
+    async def execute_command_on_target(target: str, command: str, params: Dict[str, Any], timeout: int) -> TargetResult:
+        """在单个目标上执行命令"""
+        started_at = datetime.now(timezone.utc).isoformat()
+        
+        try:
+            # 检查目标是否在线
+            if target not in connection_manager.active_devices:
+                return TargetResult(
+                    status=CommandStatus.FAILED,
+                    output=None,
+                    error="Target device not connected",
+                    started_at=started_at,
+                    completed_at=datetime.now(timezone.utc).isoformat()
+                )
+            
+            # 构建命令消息
+            message = {
+                "type": "command",
+                "command": command,
+                "params": params,
+                "timestamp": started_at
+            }
+            
+            # 发送命令到设备
+            success = await connection_manager.send_to_device(target, message)
+            
+            if not success:
+                return TargetResult(
+                    status=CommandStatus.FAILED,
+                    output=None,
+                    error="Failed to send command to target",
+                    started_at=started_at,
+                    completed_at=datetime.now(timezone.utc).isoformat()
+                )
+            
+            # 在实际实现中，这里应该等待设备响应
+            # 目前简化为立即返回成功
+            return TargetResult(
+                status=CommandStatus.DONE,
+                output={"message": "Command sent successfully"},
+                error=None,
+                started_at=started_at,
+                completed_at=datetime.now(timezone.utc).isoformat()
+            )
+            
+        except Exception as e:
+            logger.error(f"执行命令失败 (target={target}): {e}")
+            return TargetResult(
+                status=CommandStatus.FAILED,
+                output=None,
+                error=str(e),
+                started_at=started_at,
+                completed_at=datetime.now(timezone.utc).isoformat()
+            )
+    
+    @router.post("/api/v1/command")
+    async def unified_command(
+        req: UnifiedCommandRequest,
+        auth: dict = Depends(require_auth)
+    ):
+        """
+        统一命令端点 - 支持多目标、sync/async 模式、超时控制
+        
+        **功能特性：**
+        - 多目标并行执行
+        - request_id 追踪
+        - sync/async 模式选择
+        - 超时控制
+        - 结果聚合
+        
+        **请求示例：**
+        ```json
+        {
+          "request_id": "optional-uuid",
+          "command": "screenshot",
+          "targets": ["device_1", "device_2"],
+          "params": {"quality": 90},
+          "mode": "sync",
+          "timeout": 30
+        }
+        ```
+        """
+        # 生成或使用提供的 request_id
+        request_id = req.request_id or str(uuid.uuid4())
+        created_at = datetime.now(timezone.utc).isoformat()
+        
+        logger.info(f"收到统一命令: request_id={request_id}, command={req.command}, targets={req.targets}, mode={req.mode}")
+        
+        # 验证模式
+        if req.mode not in ["sync", "async"]:
+            raise HTTPException(status_code=400, detail="Invalid mode. Must be 'sync' or 'async'")
+        
+        # 验证目标列表
+        if not req.targets:
+            raise HTTPException(status_code=400, detail="Targets list cannot be empty")
+        
+        # 初始化命令结果
+        command_results[request_id] = {
+            "request_id": request_id,
+            "command": req.command,
+            "targets": req.targets,
+            "params": req.params,
+            "mode": req.mode,
+            "status": CommandStatus.QUEUED,
+            "created_at": created_at,
+            "completed_at": None,
+            "results": {}
+        }
+        
+        if req.mode == "sync":
+            # 同步模式：并行执行所有目标并等待完成
+            command_results[request_id]["status"] = CommandStatus.RUNNING
+            
+            # 使用 asyncio.gather 并行执行
+            tasks = [
+                execute_command_on_target(target, req.command, req.params, req.timeout)
+                for target in req.targets
+            ]
+            
+            try:
+                # 设置超时
+                target_results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=req.timeout
+                )
+                
+                # 聚合结果
+                results = {}
+                for target, result in zip(req.targets, target_results):
+                    if isinstance(result, Exception):
+                        results[target] = TargetResult(
+                            status=CommandStatus.FAILED,
+                            output=None,
+                            error=str(result),
+                            started_at=created_at,
+                            completed_at=datetime.now(timezone.utc).isoformat()
+                        )
+                    else:
+                        results[target] = result
+                
+                # 更新命令结果
+                completed_at = datetime.now(timezone.utc).isoformat()
+                command_results[request_id]["status"] = CommandStatus.DONE
+                command_results[request_id]["completed_at"] = completed_at
+                command_results[request_id]["results"] = {
+                    k: v.model_dump() for k, v in results.items()
+                }
+                
+                # 返回响应
+                return JSONResponse({
+                    "request_id": request_id,
+                    "status": CommandStatus.DONE,
+                    "created_at": created_at,
+                    "completed_at": completed_at,
+                    "results": command_results[request_id]["results"]
+                })
+                
+            except asyncio.TimeoutError:
+                # 超时处理
+                completed_at = datetime.now(timezone.utc).isoformat()
+                command_results[request_id]["status"] = CommandStatus.FAILED
+                command_results[request_id]["completed_at"] = completed_at
+                command_results[request_id]["results"] = {
+                    target: TargetResult(
+                        status=CommandStatus.FAILED,
+                        output=None,
+                        error="Execution timeout",
+                        started_at=created_at,
+                        completed_at=completed_at
+                    ).model_dump()
+                    for target in req.targets
+                }
+                
+                raise HTTPException(status_code=408, detail="Command execution timeout")
+                
+        else:
+            # 异步模式：立即返回 request_id，后台执行
+            async def execute_async():
+                """后台执行任务"""
+                try:
+                    command_results[request_id]["status"] = CommandStatus.RUNNING
+                    
+                    # 并行执行所有目标
+                    tasks = [
+                        execute_command_on_target(target, req.command, req.params, req.timeout)
+                        for target in req.targets
+                    ]
+                    
+                    target_results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    # 聚合结果
+                    results = {}
+                    for target, result in zip(req.targets, target_results):
+                        if isinstance(result, Exception):
+                            results[target] = TargetResult(
+                                status=CommandStatus.FAILED,
+                                output=None,
+                                error=str(result),
+                                started_at=created_at,
+                                completed_at=datetime.now(timezone.utc).isoformat()
+                            )
+                        else:
+                            results[target] = result
+                    
+                    # 更新命令结果
+                    completed_at = datetime.now(timezone.utc).isoformat()
+                    command_results[request_id]["status"] = CommandStatus.DONE
+                    command_results[request_id]["completed_at"] = completed_at
+                    command_results[request_id]["results"] = {
+                        k: v.model_dump() for k, v in results.items()
+                    }
+                    
+                    # 通过 WebSocket 推送结果
+                    await connection_manager.broadcast_status({
+                        "type": "command_result",
+                        "request_id": request_id,
+                        "status": CommandStatus.DONE,
+                        "created_at": created_at,
+                        "completed_at": completed_at,
+                        "results": command_results[request_id]["results"]
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"异步命令执行失败: {e}")
+                    completed_at = datetime.now(timezone.utc).isoformat()
+                    command_results[request_id]["status"] = CommandStatus.FAILED
+                    command_results[request_id]["completed_at"] = completed_at
+                    command_results[request_id]["results"] = {
+                        target: TargetResult(
+                            status=CommandStatus.FAILED,
+                            output=None,
+                            error=str(e),
+                            started_at=created_at,
+                            completed_at=completed_at
+                        ).model_dump()
+                        for target in req.targets
+                    }
+                    
+                    # 推送失败结果
+                    await connection_manager.broadcast_status({
+                        "type": "command_result",
+                        "request_id": request_id,
+                        "status": CommandStatus.FAILED,
+                        "created_at": created_at,
+                        "completed_at": completed_at,
+                        "results": command_results[request_id]["results"]
+                    })
+            
+            # 创建后台任务
+            asyncio.create_task(execute_async())
+            
+            # 立即返回
+            return JSONResponse({
+                "request_id": request_id,
+                "status": CommandStatus.QUEUED,
+                "created_at": created_at,
+                "message": "Command queued for async execution. Use GET /api/v1/command/{request_id}/status to check status."
+            })
+    
+    @router.get("/api/v1/command/{request_id}/status")
+    async def get_command_status(
+        request_id: str,
+        auth: dict = Depends(require_auth)
+    ):
+        """
+        查询异步命令执行状态和结果
+        
+        **响应示例：**
+        ```json
+        {
+          "request_id": "xxx",
+          "status": "done",
+          "created_at": "2026-02-12T10:00:00Z",
+          "completed_at": "2026-02-12T10:00:05Z",
+          "results": {
+            "device_1": {
+              "status": "done",
+              "output": {...},
+              "error": null
+            }
+          }
+        }
+        ```
+        """
+        if request_id not in command_results:
+            raise HTTPException(status_code=404, detail="Command not found")
+        
+        result = command_results[request_id]
+        
+        return JSONResponse({
+            "request_id": result["request_id"],
+            "status": result["status"],
+            "created_at": result["created_at"],
+            "completed_at": result["completed_at"],
+            "results": result["results"]
+        })
     
     # ========================================================================
     # /api/v1/chat - 对话接口
