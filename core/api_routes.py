@@ -857,35 +857,56 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
-        """对话接口 - 调用 LLM 处理用户消息"""
+        """
+        对话接口 - 调用 LLM 处理用户消息
+
+        融合对话记忆：自动保存上下文，支持连续对话
+        """
         try:
+            # === 融合对话记忆 ===
+            session_id = req.device_id or "default"
+            try:
+                from core.ai_intent import get_conversation_memory
+                memory = get_conversation_memory()
+                # 记录用户消息
+                await memory.add_turn(session_id, "user", req.message)
+                # 获取历史上下文（如果请求中没有）
+                if not req.context:
+                    req.context = await memory.get_context(session_id, max_turns=10)
+            except Exception:
+                pass
+
             # 尝试使用 OpenAI API
             api_key = os.environ.get("OPENAI_API_KEY", "")
             api_base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
-            
+
             if not api_key:
                 # 尝试 Gemini
                 gemini_key = os.environ.get("GEMINI_API_KEY", "")
                 if gemini_key:
-                    return await _chat_with_gemini(req, gemini_key)
-                
+                    result = await _chat_with_gemini(req, gemini_key)
+                    await _save_reply(session_id, result)
+                    return result
+
                 # 尝试 OpenRouter
                 or_key = os.environ.get("OPENROUTER_API_KEY", "")
                 if or_key:
-                    return await _chat_with_openrouter(req, or_key)
-                
+                    result = await _chat_with_openrouter(req, or_key)
+                    await _save_reply(session_id, result)
+                    return result
+
                 return JSONResponse({
                     "success": False,
                     "error": "未配置 LLM API Key",
                     "reply": "抱歉，LLM 服务未配置。请在 .env 文件中设置 API Key。"
                 })
-            
+
             import httpx
             messages = [{"role": "system", "content": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
             for ctx in req.context[-10:]:
                 messages.append(ctx)
             messages.append({"role": "user", "content": req.message})
-            
+
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(
                     f"{api_base}/chat/completions",
@@ -899,14 +920,23 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 resp.raise_for_status()
                 data = resp.json()
                 reply = data["choices"][0]["message"]["content"]
-                
+
+                # 记录助手回复到记忆
+                try:
+                    from core.ai_intent import get_conversation_memory
+                    memory = get_conversation_memory()
+                    await memory.add_turn(session_id, "assistant", reply)
+                except Exception:
+                    pass
+
                 return JSONResponse({
                     "success": True,
                     "reply": reply,
                     "model": data.get("model", ""),
-                    "usage": data.get("usage", {})
+                    "usage": data.get("usage", {}),
+                    "session_id": session_id,
                 })
-                
+
         except Exception as e:
             logger.error(f"对话失败: {e}")
             return JSONResponse({
@@ -914,6 +944,21 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 "error": str(e),
                 "reply": f"处理消息时出错: {str(e)}"
             })
+
+    async def _save_reply(session_id: str, response: JSONResponse):
+        """保存 LLM 回复到对话记忆"""
+        try:
+            from core.ai_intent import get_conversation_memory
+            memory = get_conversation_memory()
+            # 从 JSONResponse 提取 reply
+            import json as _json
+            body = response.body.decode() if hasattr(response, 'body') else ""
+            if body:
+                data = _json.loads(body)
+                if data.get("reply"):
+                    await memory.add_turn(session_id, "assistant", data["reply"])
+        except Exception:
+            pass
     
     # ========================================================================
     # /api/v1/command - 命令路由引擎

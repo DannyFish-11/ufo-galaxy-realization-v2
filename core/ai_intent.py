@@ -541,17 +541,54 @@ class SmartRecommender:
 
 class SemanticSearch:
     """
-    轻量语义搜索
+    语义搜索引擎
 
-    - 基于 TF-IDF 的简单语义匹配
-    - 如果有 Qdrant 则自动升级为向量搜索
+    双模式：
+      - 本地模式：Jaccard 相似度（无外部依赖）
+      - Qdrant 模式：向量数据库语义搜索（高精度）
+
+    自动检测 Qdrant 可用性并升级。
     """
 
-    def __init__(self):
+    def __init__(self, qdrant_url: str = ""):
         self._index: Dict[str, Dict[str, Any]] = {}
+        self._qdrant_client = None
+        self._collection_name = "ufo_galaxy_docs"
+        self._qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "")
+        self._qdrant_ready = False
+
+    async def initialize_qdrant(self):
+        """尝试连接 Qdrant 向量数据库"""
+        if not self._qdrant_url:
+            return False
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import Distance, VectorParams
+
+            self._qdrant_client = QdrantClient(url=self._qdrant_url, timeout=5)
+            # 检查连接
+            self._qdrant_client.get_collections()
+
+            # 确保 collection 存在
+            collections = [c.name for c in self._qdrant_client.get_collections().collections]
+            if self._collection_name not in collections:
+                self._qdrant_client.create_collection(
+                    collection_name=self._collection_name,
+                    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+                )
+
+            self._qdrant_ready = True
+            logger.info(f"Qdrant 已连接: {self._qdrant_url}")
+            return True
+        except ImportError:
+            logger.info("qdrant-client 未安装，使用本地搜索模式")
+            return False
+        except Exception as e:
+            logger.info(f"Qdrant 不可用: {e}，使用本地搜索模式")
+            return False
 
     def index_document(self, doc_id: str, content: str, metadata: Optional[Dict] = None):
-        """索引文档"""
+        """索引文档（本地模式）"""
         words = set(content.lower().split())
         self._index[doc_id] = {
             "content": content,
@@ -560,15 +597,59 @@ class SemanticSearch:
             "indexed_at": time.time(),
         }
 
+    async def index_document_vector(self, doc_id: str, content: str, vector: List[float], metadata: Optional[Dict] = None):
+        """索引文档到 Qdrant（向量模式）"""
+        if not self._qdrant_ready or not self._qdrant_client:
+            self.index_document(doc_id, content, metadata)
+            return
+
+        try:
+            from qdrant_client.models import PointStruct
+            self._qdrant_client.upsert(
+                collection_name=self._collection_name,
+                points=[PointStruct(
+                    id=hash(doc_id) & 0x7FFFFFFFFFFFFFFF,  # 正整数
+                    vector=vector,
+                    payload={"doc_id": doc_id, "content": content, **(metadata or {})},
+                )],
+            )
+        except Exception as e:
+            logger.warning(f"Qdrant 索引失败: {e}")
+            self.index_document(doc_id, content, metadata)
+
+    async def search_vector(self, query_vector: List[float], top_k: int = 5) -> List[Dict]:
+        """向量搜索（Qdrant 模式）"""
+        if not self._qdrant_ready or not self._qdrant_client:
+            return []
+
+        try:
+            results = self._qdrant_client.search(
+                collection_name=self._collection_name,
+                query_vector=query_vector,
+                limit=top_k,
+            )
+            return [
+                {
+                    "doc_id": r.payload.get("doc_id", ""),
+                    "content": r.payload.get("content", "")[:200],
+                    "score": round(r.score, 4),
+                    "metadata": {k: v for k, v in r.payload.items() if k not in ("doc_id", "content")},
+                }
+                for r in results
+            ]
+        except Exception as e:
+            logger.warning(f"Qdrant 搜索失败: {e}")
+            return []
+
     def search(self, query: str, top_k: int = 5) -> List[Dict]:
-        """搜索"""
+        """本地搜索（Jaccard 相似度）"""
         query_words = set(query.lower().split())
         scores = []
 
         for doc_id, doc in self._index.items():
             intersection = query_words & doc["words"]
             union = query_words | doc["words"]
-            score = len(intersection) / max(len(union), 1)  # Jaccard similarity
+            score = len(intersection) / max(len(union), 1)
             if score > 0:
                 scores.append({
                     "doc_id": doc_id,
@@ -583,6 +664,10 @@ class SemanticSearch:
     @property
     def document_count(self) -> int:
         return len(self._index)
+
+    @property
+    def is_vector_mode(self) -> bool:
+        return self._qdrant_ready
 
 
 # ============================================================================

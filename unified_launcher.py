@@ -621,10 +621,24 @@ class UnifiedWebUI:
                 allow_headers=["*"]
             )
             
+            # === 引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
+            try:
+                from core.startup import bootstrap_subsystems
+                bootstrap_results = await bootstrap_subsystems(self.app, self.config)
+
+                ok = sum(1 for v in bootstrap_results.values() if v.get("status") == "ok")
+                total = len(bootstrap_results)
+                logger.info(f"核心子系统: {ok}/{total} 正常")
+                for name, info in bootstrap_results.items():
+                    status_icon = "OK" if info.get("status") == "ok" else "DEGRADED"
+                    logger.info(f"  [{status_icon}] {name}: {info}")
+            except Exception as e:
+                logger.warning(f"核心子系统引导失败（系统仍可运行）: {e}")
+
             # === 集成完整 API 路由 ===
             try:
                 from core.api_routes import create_api_routes, create_websocket_routes
-                
+
                 # 注册 REST API 路由
                 api_router = create_api_routes(
                     service_manager=self.service_manager,
@@ -632,17 +646,17 @@ class UnifiedWebUI:
                 )
                 self.app.include_router(api_router)
                 logger.info("完整 API 路由已加载")
-                
+
                 # 注册 WebSocket 端点
                 create_websocket_routes(
                     self.app,
                     service_manager=self.service_manager
                 )
                 logger.info("WebSocket 端点已加载")
-                
+
             except ImportError as e:
                 logger.warning(f"API 路由模块加载失败，使用基础路由: {e}")
-            
+
             # === 健康检查路由 ===
             try:
                 from core.health_check import create_health_routes
@@ -654,15 +668,6 @@ class UnifiedWebUI:
                 logger.info("健康检查路由已加载")
             except ImportError as e:
                 logger.warning(f"健康检查模块加载失败: {e}")
-            
-            # === 初始化缓存 ===
-            try:
-                from core.cache import get_cache
-                redis_url = self.config.redis_url if hasattr(self.config, 'redis_url') else ""
-                cache = asyncio.get_event_loop().run_until_complete(get_cache(redis_url))
-                logger.info(f"缓存已初始化: {cache.backend_type}")
-            except Exception as e:
-                logger.warning(f"缓存初始化失败: {e}")
             
             # === 静态文件挂载 (API Manager) ===
             from fastapi.staticfiles import StaticFiles
@@ -916,7 +921,7 @@ class UnifiedWebUI:
             <div class="system-section">
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">⚡ 系统负载</div>
+                        <div class="card-title">Performance</div>
                     </div>
                     <div class="stat-row">
                         <span>核心服务</span>
@@ -928,18 +933,57 @@ class UnifiedWebUI:
                     </div>
                     <div class="stat-row">
                         <span>API 延迟</span>
-                        <span id="api-latency">12ms</span>
+                        <span id="api-latency" style="font-family:monospace">--</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>QPS</span>
+                        <span id="api-qps" style="font-family:monospace">--</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>错误率</span>
+                        <span id="api-errors" style="font-family:monospace">--</span>
                     </div>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">📜 实时日志</div>
+                        <div class="card-title">Health</div>
+                        <span id="health-status" style="font-weight:bold">--</span>
                     </div>
-                    <div class="log-panel" id="log-panel">
-                        <div class="log-entry"><span class="log-info">[INFO]</span> 系统初始化完成</div>
-                        <div class="log-entry"><span class="log-info">[INFO]</span> 等待 WebSocket 连接...</div>
+                    <div id="health-components"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Command Router</div>
                     </div>
+                    <div class="stat-row"><span>已分发</span><span id="cmd-dispatched" style="font-family:monospace">0</span></div>
+                    <div class="stat-row"><span>成功</span><span id="cmd-success" style="font-family:monospace;color:#00ff88">0</span></div>
+                    <div class="stat-row"><span>缓存命中</span><span id="cmd-cache-hits" style="font-family:monospace;color:#00d4ff">0</span></div>
+                    <div class="stat-row"><span>平均延迟</span><span id="cmd-avg-latency" style="font-family:monospace">--</span></div>
+                </div>
+            </div>
+
+            <!-- AI 意图 + 日志（全宽） -->
+            <div class="card" style="grid-column: span 5;">
+                <div class="card-header">
+                    <div class="card-title">AI Intent</div>
+                </div>
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <input id="ai-input" type="text" placeholder="输入自然语言指令..." onkeydown="if(event.key==='Enter')sendAIIntent()"
+                        style="flex:1; padding:10px 14px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#e0e0e0; font-size:0.95rem; outline:none;" />
+                    <button onclick="sendAIIntent()" class="wake-btn" style="width:auto; margin-top:0; padding:10px 20px;">解析</button>
+                </div>
+                <div id="ai-result" style="font-size:0.85rem;"></div>
+            </div>
+
+            <div class="card" style="grid-column: span 7;">
+                <div class="card-header">
+                    <div class="card-title">Real-time Log</div>
+                </div>
+                <div class="log-panel" id="log-panel">
+                    <div class="log-entry"><span class="log-info">[INFO]</span> 系统初始化完成</div>
+                    <div class="log-entry"><span class="log-info">[INFO]</span> 等待 WebSocket 连接...</div>
                 </div>
             </div>
         </div>
@@ -953,25 +997,26 @@ class UnifiedWebUI:
 
         function connect() {
             ws = new WebSocket(wsUrl);
-            
+
             ws.onopen = () => {
                 log('系统连接成功', 'info');
-                // 请求初始状态
-                fetch('/api/v1/system/status')
-                    .then(r => r.json())
-                    .then(updateDashboard);
+                ws.send(JSON.stringify({type: 'subscribe_commands'}));
+                fetch('/api/v1/system/status').then(r => r.json()).then(updateDashboard);
+                refreshPerformance();
+                refreshMonitoring();
             };
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'device_connected' || data.type === 'device_disconnected' || data.type === 'device_status_update') {
-                    // 刷新设备列表
-                    fetch('/api/v1/system/status')
-                        .then(r => r.json())
-                        .then(updateDashboard);
-                    
+                    fetch('/api/v1/system/status').then(r => r.json()).then(updateDashboard);
                     if (data.type === 'device_connected') log(`设备接入: ${data.device_id}`, 'info');
                     if (data.type === 'device_disconnected') log(`设备断开: ${data.device_id}`, 'warn');
+                }
+                if (data.type === 'command_result') {
+                    const d = data.data || {};
+                    log(`命令完成: ${d.request_id} [${d.status}] ${d.total_latency_ms?.toFixed(0) || '?'}ms`, 'info');
+                    refreshCmdStats();
                 }
             };
 
@@ -982,15 +1027,13 @@ class UnifiedWebUI:
         }
 
         function updateDashboard(data) {
-            // 更新 Tailscale IP
             if (data.network && data.network.tailscale_ip) {
                 document.getElementById('tailscale-ip').textContent = `Tailscale: ${data.network.tailscale_ip}`;
             }
 
-            // 更新设备列表
             const list = document.getElementById('device-list');
-            const devices = data.devices.list || [];
-            document.getElementById('device-count').textContent = `${data.devices.online} 在线`;
+            const devices = data.devices?.list || [];
+            document.getElementById('device-count').textContent = `${data.devices?.online || 0} 在线`;
 
             if (devices.length === 0) {
                 list.innerHTML = '<div style="text-align:center; color:#666; grid-column:span 3; padding:20px;">暂无设备接入</div>';
@@ -1006,13 +1049,78 @@ class UnifiedWebUI:
                             <p>Type: ${d.device_type}</p>
                             <p>Last Seen: ${new Date(d.last_seen).toLocaleTimeString()}</p>
                         </div>
-                        ${d.online ? `<button class="wake-btn" onclick="wakeDevice('${d.device_id}')">⚡ 唤醒 / 交互</button>` : ''}
+                        ${d.online ? `<button class="wake-btn" onclick="wakeDevice('${d.device_id}')">唤醒 / 交互</button>` : ''}
                     </div>
                 `).join('');
             }
 
-            // 更新节点计数
-            document.getElementById('node-count').textContent = `${data.nodes.active}/${data.nodes.total} 激活`;
+            document.getElementById('node-count').textContent = `${data.nodes?.active || 0}/${data.nodes?.total || 0} 激活`;
+        }
+
+        async function refreshPerformance() {
+            try {
+                const resp = await fetch('/api/v1/monitoring/performance');
+                const data = await resp.json();
+                const g = data.global || {};
+                document.getElementById('api-latency').textContent = `P50: ${(g.p50_latency_ms || 0).toFixed(0)}ms / P99: ${(g.p99_latency_ms || 0).toFixed(0)}ms`;
+                document.getElementById('api-qps').textContent = `${(g.qps || 0).toFixed(1)} req/s`;
+                document.getElementById('api-errors').textContent = `${((g.error_rate || 0) * 100).toFixed(1)}%`;
+            } catch(e) {}
+        }
+
+        async function refreshMonitoring() {
+            try {
+                const resp = await fetch('/api/v1/monitoring/health');
+                const data = await resp.json();
+                const el = document.getElementById('health-status');
+                const overall = data.overall || 'unknown';
+                el.textContent = overall.toUpperCase();
+                el.style.color = overall === 'healthy' ? '#00ff88' : overall === 'degraded' ? '#ffaa00' : '#ff4444';
+
+                const comps = data.components || {};
+                const compEl = document.getElementById('health-components');
+                compEl.innerHTML = Object.entries(comps).map(([name, info]) => {
+                    const color = info.status === 'healthy' ? '#00ff88' : info.status === 'degraded' ? '#ffaa00' : '#ff4444';
+                    return `<div class="stat-row"><span>${name}</span><span style="color:${color}">${info.status} (${(info.latency_ms||0).toFixed(0)}ms)</span></div>`;
+                }).join('');
+            } catch(e) {}
+        }
+
+        async function refreshCmdStats() {
+            try {
+                const resp = await fetch('/api/v1/command');
+                const data = await resp.json();
+                document.getElementById('cmd-dispatched').textContent = data.total_dispatched || 0;
+                document.getElementById('cmd-success').textContent = data.total_success || 0;
+                document.getElementById('cmd-cache-hits').textContent = data.cache_hits || 0;
+                document.getElementById('cmd-avg-latency').textContent = `${(data.avg_latency_ms || 0).toFixed(0)}ms`;
+            } catch(e) {}
+        }
+
+        async function sendAIIntent() {
+            const input = document.getElementById('ai-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            log(`AI 意图: "${text}"`, 'info');
+
+            try {
+                const resp = await fetch('/api/v1/ai/intent', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ text, session_id: 'dashboard' })
+                });
+                const data = await resp.json();
+                log(`解析结果: ${data.intent} (${(data.confidence*100).toFixed(0)}%) -> ${data.command}`, 'info');
+                document.getElementById('ai-result').innerHTML =
+                    `<div class="stat-row"><span>意图</span><span style="color:#00d4ff">${data.intent}</span></div>` +
+                    `<div class="stat-row"><span>命令</span><span>${data.command}</span></div>` +
+                    `<div class="stat-row"><span>置信度</span><span>${(data.confidence*100).toFixed(0)}%</span></div>` +
+                    `<div class="stat-row"><span>目标</span><span>${(data.targets||[]).join(', ')}</span></div>` +
+                    (data.suggestions||[]).map(s => `<div class="stat-row"><span style="color:#888">建议</span><span>${s}</span></div>`).join('');
+            } catch(e) {
+                log(`AI 解析失败: ${e}`, 'error');
+            }
         }
 
         function log(msg, type='info') {
@@ -1020,30 +1128,39 @@ class UnifiedWebUI:
             const entry = document.createElement('div');
             entry.className = 'log-entry';
             const colorClass = type === 'error' ? 'log-error' : type === 'warn' ? 'log-warn' : 'log-info';
-            entry.innerHTML = `<span class="${colorClass}">[${type.toUpperCase()}]</span> ${msg}`;
+            const ts = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span style="color:#555">${ts}</span> <span class="${colorClass}">[${type.toUpperCase()}]</span> ${msg}`;
             panel.prepend(entry);
+            if (panel.children.length > 200) panel.removeChild(panel.lastChild);
         }
 
         async function wakeDevice(deviceId) {
             log(`正在唤醒设备 ${deviceId}...`, 'info');
             try {
-                const resp = await fetch('/api/v1/tasks', {
+                const resp = await fetch('/api/v1/command', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        task_type: 'wake_up',
-                        device_id: deviceId,
-                        payload: { message: "System Wake Up Call" }
+                        source: 'dashboard',
+                        targets: [deviceId],
+                        command: 'wake_up',
+                        params: { message: 'Dashboard Wake Up' },
+                        mode: 'async',
+                        notify_ws: true
                     })
                 });
-                if (resp.ok) log('唤醒指令已发送', 'info');
+                const data = await resp.json();
+                if (data.request_id) log(`唤醒命令已发送: ${data.request_id}`, 'info');
                 else log('唤醒失败', 'error');
             } catch (e) {
                 log(`发送失败: ${e}`, 'error');
             }
         }
 
-        // 启动
+        // 定时刷新
+        setInterval(refreshPerformance, 10000);
+        setInterval(refreshMonitoring, 30000);
+        setInterval(refreshCmdStats, 5000);
         connect();
     </script>
 </body>
