@@ -1,4 +1,4 @@
-# UFO Galaxy 多仓库同步与合并报告
+# Galaxy 多仓库同步与合并报告
 
 **执行时间**: 2026-02-15 03:35 UTC
 **执行者**: Qingyan Agent

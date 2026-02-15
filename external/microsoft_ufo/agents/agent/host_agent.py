@@ -381,7 +381,7 @@ class HostAgent(BasicAgent):
         comment_text = Text()
 
         # Add agent identifier
-        comment_text.append("🤖 UFO Agent", style="bold blue")
+        comment_text.append("🤖 Galaxy Agent", style="bold blue")
         comment_text.append(" says:\n\n", style="dim blue")
 
         # Add the actual comment with proper formatting

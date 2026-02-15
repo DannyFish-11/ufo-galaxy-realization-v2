@@ -88,7 +88,7 @@ class AutonomousScheduler:
                 ])
                 device_context = f"Connected Devices (Treat these as available hardware nodes):\n{device_list_str}"
 
-        system_prompt = f"""You are the central scheduler of the UFO Galaxy system. 
+        system_prompt = f"""You are the central scheduler of the Galaxy system. 
 Your goal is to satisfy the user's request by autonomously calling the available node tools.
 You operate in a ReAct (Reasoning + Acting) loop. You can call tools, observe their output, and then decide the next step.
 

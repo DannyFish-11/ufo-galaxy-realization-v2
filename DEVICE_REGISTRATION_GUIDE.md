@@ -1,4 +1,4 @@
-# UFO Galaxy V2 - 设备注册指南
+# Galaxy V2 - 设备注册指南
 
 **版本**: v2.0.5
 **更新时间**: 2026-02-15
@@ -7,7 +7,7 @@
 
 ## 📋 概述
 
-UFO Galaxy V2 支持多种设备的注册和连接，包括：
+Galaxy V2 支持多种设备的注册和连接，包括：
 - Android 设备 (手机/平板)
 - Windows 电脑
 - Linux 服务器
@@ -57,7 +57,7 @@ UFO Galaxy V2 支持多种设备的注册和连接，包括：
    ```
 
 3. **配置连接**
-   - 打开 UFO Galaxy 应用
+   - 打开 Galaxy 应用
    - 进入设置页面
    - 输入服务器地址：
      - 本地：`ws://192.168.x.x:8765`
@@ -214,8 +214,8 @@ git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
 cd ufo-galaxy-realization-v2
 
 # 2. 配置连接主节点
-export UFO_NODE_ID="cloud-worker-001"
-export UFO_NODE_ROLE="worker"
+export Galaxy_NODE_ID="cloud-worker-001"
+export Galaxy_NODE_ROLE="worker"
 export MASTER_URL="ws://main-server:8765"
 
 # 3. 启动

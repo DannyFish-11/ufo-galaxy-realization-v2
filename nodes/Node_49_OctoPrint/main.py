@@ -1,6 +1,6 @@
 """
 Node 49: OctoPrint 3D Printer Wrapper
-UFO Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
+Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
 
 SECURITY: This node is in Layer 3 (Physical) and can ONLY be accessed by Node 50.
 """
@@ -345,7 +345,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="OctoPrint 3D Printer Wrapper - Physical Layer Node (ISOLATED)",
     version="1.0.0",
     lifespan=lifespan

@@ -1,14 +1,14 @@
-# UFO³ Galaxy Android Agent - 部署和配置指南
+# Galaxy Android Agent - 部署和配置指南
 
 **版本:** 2.2
-**作者:** UFO³ Galaxy Enhancement Team
+**作者:** Galaxy Enhancement Team
 **日期:** 2026-01-22
 
 ---
 
 ## 1. 概述
 
-本文档将指导您如何部署和配置 UFO³ Galaxy Android Agent，使其成为您 Galaxy 系统的一个强大移动端节点。
+本文档将指导您如何部署和配置 Galaxy Android Agent，使其成为您 Galaxy 系统的一个强大移动端节点。
 
 ## 2. 准备工作
 

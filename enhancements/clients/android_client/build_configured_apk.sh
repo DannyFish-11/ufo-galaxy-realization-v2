@@ -1,10 +1,10 @@
 #!/bin/bash
-# UFO³ Galaxy Android 客户端自动配置构建脚本
+# Galaxy Android 客户端自动配置构建脚本
 
 set -e
 
 echo "========================================"
-echo "   UFO³ Galaxy Android 自动构建"
+echo "   Galaxy Android 自动构建"
 echo "========================================"
 echo ""
 
@@ -67,7 +67,7 @@ echo "这可能需要几分钟，请耐心等待..."
 APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 if [ -f "$APK_PATH" ]; then
     # 重命名 APK
-    NEW_APK_NAME="UFO3_Galaxy_${DEVICE_ID}_$(date +%Y%m%d).apk"
+    NEW_APK_NAME="Galaxy3_Galaxy_${DEVICE_ID}_$(date +%Y%m%d).apk"
     cp "$APK_PATH" "$NEW_APK_NAME"
     
     echo ""

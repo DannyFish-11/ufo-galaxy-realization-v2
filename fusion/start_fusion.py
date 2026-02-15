@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Unified Startup Script (Reinforced)
+Galaxy Fusion - Unified Startup Script (Reinforced)
 
 统一启动脚本（加固版）
 
@@ -168,7 +168,7 @@ async def run_demo():
 def main():
     """主入口"""
     import argparse
-    parser = argparse.ArgumentParser(description="UFO Galaxy Fusion System")
+    parser = argparse.ArgumentParser(description="Galaxy Fusion System")
     parser.add_argument("--mode", choices=["demo", "interactive"], default="demo")
     args = parser.parse_args()
     

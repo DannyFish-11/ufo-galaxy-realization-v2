@@ -154,7 +154,7 @@ class NLUTools:
     
     def dialog(self, user_input: str, history: Optional[List[Dict]] = None, system_prompt: Optional[str] = None) -> Dict:
         """对话管理"""
-        default_system = "你是 UFO³ Galaxy 智能助手，可以控制电脑手机、搜索信息、生成内容、执行自动化任务。简洁友好地回复。"
+        default_system = "你是 Galaxy 智能助手，可以控制电脑手机、搜索信息、生成内容、执行自动化任务。简洁友好地回复。"
         
         messages = [{"role": "system", "content": system_prompt or default_system}]
         if history: messages.extend(history)

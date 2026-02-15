@@ -115,7 +115,7 @@ class GalaxyMainLoopL4:
     async def start(self):
         """启动主循环"""
         self.logger.info("=" * 60)
-        self.logger.info("启动 UFO Galaxy L4 级自主性智能系统")
+        self.logger.info("启动 Galaxy L4 级自主性智能系统")
         self.logger.info("=" * 60)
         
         # 初始化

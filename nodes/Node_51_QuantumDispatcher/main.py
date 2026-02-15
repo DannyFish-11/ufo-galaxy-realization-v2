@@ -1,6 +1,6 @@
 """
 Node 51: Quantum Task Dispatcher
-UFO Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
+Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
 
 Natural Language to Quantum Circuit (NL2QC) translation and dispatch.
 """
@@ -544,7 +544,7 @@ async def lifespan(app: FastAPI):
         await dispatcher.http_client.aclose()
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Quantum Task Dispatcher - NL2QC Translation",
     version="1.0.0",
     lifespan=lifespan

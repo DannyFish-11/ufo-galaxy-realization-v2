@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 设备管理服务
+Galaxy - 设备管理服务
 提供设备管理的 HTTP API 和 Web 界面
 """
 
@@ -113,7 +113,7 @@ registry = DeviceRegistry()
 # FastAPI 应用
 # ============================================================================
 
-app = FastAPI(title="UFO Galaxy Device Manager", version="1.0.0")
+app = FastAPI(title="Galaxy Device Manager", version="1.0.0")
 
 # CORS
 app.add_middleware(
@@ -134,7 +134,7 @@ async def root():
     static_path = Path(__file__).parent / "static" / "device_manager.html"
     if static_path.exists():
         return HTMLResponse(content=static_path.read_text())
-    return {"service": "UFO Galaxy Device Manager", "version": "1.0.0"}
+    return {"service": "Galaxy Device Manager", "version": "1.0.0"}
 
 @app.get("/api/status")
 async def get_status():

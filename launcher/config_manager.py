@@ -1,5 +1,5 @@
 """
-Configuration Manager for UFO Galaxy Launcher
+Configuration Manager for Galaxy Launcher
 
 Manages unified configuration from multiple sources:
 - node_dependencies.json
@@ -340,12 +340,12 @@ class ConfigManager:
     def load_from_env(self):
         """Load configuration from environment variables"""
         env_mappings = {
-            "UFO_GALAXY_LOG_DIR": "log_dir",
-            "UFO_GALAXY_NODES_DIR": "nodes_dir",
-            "UFO_GALAXY_HEALTH_INTERVAL": ("health_check_interval", int),
-            "UFO_GALAXY_STARTUP_TIMEOUT": ("startup_timeout", int),
-            "UFO_GALAXY_MAX_PARALLEL": ("max_parallel_starts", int),
-            "UFO_GALAXY_AUTO_RESTART": ("restart_on_failure", lambda x: x.lower() == "true")
+            "Galaxy_GALAXY_LOG_DIR": "log_dir",
+            "Galaxy_GALAXY_NODES_DIR": "nodes_dir",
+            "Galaxy_GALAXY_HEALTH_INTERVAL": ("health_check_interval", int),
+            "Galaxy_GALAXY_STARTUP_TIMEOUT": ("startup_timeout", int),
+            "Galaxy_GALAXY_MAX_PARALLEL": ("max_parallel_starts", int),
+            "Galaxy_GALAXY_AUTO_RESTART": ("restart_on_failure", lambda x: x.lower() == "true")
         }
         
         for env_var, config_key in env_mappings.items():

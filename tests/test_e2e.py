@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 端到端测试脚本
+Galaxy - 端到端测试脚本
 
 测试内容：
 1. 核心模块导入测试
@@ -8,7 +8,7 @@ UFO Galaxy - 端到端测试脚本
 4. 协议消息构建测试
 5. 工具节点功能测试
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -440,7 +440,7 @@ async def test_async_functions():
 def main():
     """运行所有测试"""
     print("\n" + "=" * 60)
-    print("UFO Galaxy - 端到端测试")
+    print("Galaxy - 端到端测试")
     print("=" * 60)
     print(f"项目根目录: {PROJECT_ROOT}")
     print(f"测试时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")

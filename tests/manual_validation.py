@@ -99,11 +99,11 @@ def test_auth_module():
     from core.auth import verify_api_token, verify_device_id
     
     # Save original token
-    original_token = os.environ.get("UFO_API_TOKEN")
+    original_token = os.environ.get("Galaxy_API_TOKEN")
     
     # Test dev mode (no token)
-    if "UFO_API_TOKEN" in os.environ:
-        del os.environ["UFO_API_TOKEN"]
+    if "Galaxy_API_TOKEN" in os.environ:
+        del os.environ["Galaxy_API_TOKEN"]
     
     print("\nDev mode (no token set):")
     result = verify_api_token("any-token")
@@ -112,7 +112,7 @@ def test_auth_module():
     print("  ✅ Dev mode works correctly")
     
     # Test with token
-    os.environ["UFO_API_TOKEN"] = "test-token-123"
+    os.environ["Galaxy_API_TOKEN"] = "test-token-123"
     print("\nWith token set:")
     result = verify_api_token("test-token-123")
     print(f"  verify_api_token('test-token-123'): {result}")
@@ -134,9 +134,9 @@ def test_auth_module():
     
     # Restore original token
     if original_token is not None:
-        os.environ["UFO_API_TOKEN"] = original_token
-    elif "UFO_API_TOKEN" in os.environ:
-        del os.environ["UFO_API_TOKEN"]
+        os.environ["Galaxy_API_TOKEN"] = original_token
+    elif "Galaxy_API_TOKEN" in os.environ:
+        del os.environ["Galaxy_API_TOKEN"]
     
     return True
 

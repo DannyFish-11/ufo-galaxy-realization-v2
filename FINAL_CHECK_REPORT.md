@@ -1,4 +1,4 @@
-# UFO Galaxy 双仓库最终检查报告
+# Galaxy 双仓库最终检查报告
 
 **检查时间**: 2026-02-15 03:05 UTC
 **检查范围**: ufo-galaxy-realization-v2 + ufo-galaxy-android

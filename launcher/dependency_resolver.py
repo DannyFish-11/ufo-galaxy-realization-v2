@@ -1,5 +1,5 @@
 """
-Dependency Resolver for UFO Galaxy Launcher
+Dependency Resolver for Galaxy Launcher
 
 Resolves node dependencies and calculates optimal startup order.
 Uses topological sorting with priority consideration.

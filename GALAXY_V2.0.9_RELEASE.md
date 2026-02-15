@@ -10,7 +10,7 @@
 ### 1. 系统重命名
 
 ```
-UFO Galaxy V2 -> Galaxy
+Galaxy V2 -> Galaxy
 ```
 
 所有命名已统一为 **Galaxy**。

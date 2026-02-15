@@ -7,7 +7,7 @@ class Sidebar(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("UFO³ Galaxy")
+        self.title("Galaxy")
         self.geometry("300x600")
         self.overrideredirect(True)  # 隐藏标题栏
 
@@ -21,7 +21,7 @@ class Sidebar(tk.Tk):
         self.main_frame = tk.Frame(self, bg="#2E2E2E")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.title_label = tk.Label(self.main_frame, text="UFO³ Galaxy", fg="white", bg="#2E2E2E", font=("Segoe UI", 12, "bold"))
+        self.title_label = tk.Label(self.main_frame, text="Galaxy", fg="white", bg="#2E2E2E", font=("Segoe UI", 12, "bold"))
         self.title_label.pack(pady=10)
 
         self.log_area = scrolledtext.ScrolledText(self.main_frame, wrap=tk.WORD, bg="#1E1E1E", fg="#D4D4D4", insertbackground="white")

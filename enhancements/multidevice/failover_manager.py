@@ -1,5 +1,5 @@
 """
-UFO Galaxy v5.0 - Failover Manager Module
+Galaxy v5.0 - Failover Manager Module
 
 This module provides recovery mechanisms and circuit breaker pattern
 for multi-device system resilience.
@@ -10,7 +10,7 @@ Features:
 - Health checking
 - Recovery mechanisms
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 

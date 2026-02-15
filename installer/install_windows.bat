@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title UFO Galaxy - Windows 安装程序
+title Galaxy - Windows 安装程序
 color 0A
 
 echo ╔══════════════════════════════════════════════════════════════╗
 echo ║                                                              ║
-echo ║              UFO Galaxy L4 - Windows 安装程序                ║
+echo ║              Galaxy L4 - Windows 安装程序                ║
 echo ║                                                              ║
 echo ║                    版本: 1.0.0                               ║
 echo ║                                                              ║
@@ -80,11 +80,11 @@ set DESKTOP=%USERPROFILE%\Desktop
 
 :: 创建 VBS 脚本来生成快捷方式
 echo Set oWS = WScript.CreateObject("WScript.Shell") > CreateShortcut.vbs
-echo sLinkFile = "%DESKTOP%\UFO Galaxy.lnk" >> CreateShortcut.vbs
+echo sLinkFile = "%DESKTOP%\Galaxy.lnk" >> CreateShortcut.vbs
 echo Set oLink = oWS.CreateShortcut(sLinkFile) >> CreateShortcut.vbs
 echo oLink.TargetPath = "%SCRIPT_DIR%start_ufo_galaxy.bat" >> CreateShortcut.vbs
 echo oLink.WorkingDirectory = "%SCRIPT_DIR%" >> CreateShortcut.vbs
-echo oLink.Description = "UFO Galaxy L4 自主智能系统" >> CreateShortcut.vbs
+echo oLink.Description = "Galaxy L4 自主智能系统" >> CreateShortcut.vbs
 echo oLink.Save >> CreateShortcut.vbs
 cscript //nologo CreateShortcut.vbs
 del CreateShortcut.vbs
@@ -97,7 +97,7 @@ echo ║                    安装完成！                                ║
 echo ║                                                              ║
 echo ║  下一步:                                                     ║
 echo ║  1. 编辑 .env 文件，填写必要的 API 密钥                      ║
-echo ║  2. 双击桌面的 "UFO Galaxy" 快捷方式启动系统                 ║
+echo ║  2. 双击桌面的 "Galaxy" 快捷方式启动系统                 ║
 echo ║  3. 或运行 start_ufo_galaxy.bat 启动                         ║
 echo ║                                                              ║
 echo ╚══════════════════════════════════════════════════════════════╝

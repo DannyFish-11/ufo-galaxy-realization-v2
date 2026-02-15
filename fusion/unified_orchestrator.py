@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
+Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 
 统一编排引擎 - 系统级涌现的核心（加固版）
 

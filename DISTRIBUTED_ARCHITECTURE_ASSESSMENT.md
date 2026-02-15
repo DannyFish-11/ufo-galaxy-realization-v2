@@ -1,4 +1,4 @@
-# UFO Galaxy V2 - 分布式节点架构评估报告
+# Galaxy V2 - 分布式节点架构评估报告
 
 **评估时间**: 2026-02-15
 **评估目标**: 任意节点设为主节点的分布式能力
@@ -109,10 +109,10 @@ StateSynchronizer:
 
 ```bash
 # 设置节点 ID
-export UFO_NODE_ID="master"  # 或 "node-1", "node-2" 等
+export Galaxy_NODE_ID="master"  # 或 "node-1", "node-2" 等
 
 # 设置节点角色
-export UFO_NODE_ROLE="coordinator"  # 或 "worker"
+export Galaxy_NODE_ROLE="coordinator"  # 或 "worker"
 
 # 设置发现配置
 export NODE71_MDNS_ENABLED=true
@@ -150,7 +150,7 @@ export NODE71_BROADCAST_PORT=37021
 ┌─────────────────────────────────────────────────────────────┐
 │                      云服务器 (主节点)                       │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  UFO Galaxy V2 (Master)                              │   │
+│  │  Galaxy V2 (Master)                              │   │
 │  │  - Node_71 Coordinator                               │   │
 │  │  - Node_04 Router                                    │   │
 │  │  - Node_01 OneAPI                                    │   │
@@ -174,13 +174,13 @@ export NODE71_BROADCAST_PORT=37021
 
 ```bash
 # 云服务器 (主节点)
-export UFO_NODE_ID="master"
-export UFO_NODE_ROLE="coordinator"
+export Galaxy_NODE_ID="master"
+export Galaxy_NODE_ROLE="coordinator"
 python main.py
 
 # 本地电脑 (工作节点)
-export UFO_NODE_ID="worker-pc"
-export UFO_NODE_ROLE="worker"
+export Galaxy_NODE_ID="worker-pc"
+export Galaxy_NODE_ROLE="worker"
 export MASTER_URL="ws://cloud-server:8765"
 python main.py --worker
 
@@ -194,7 +194,7 @@ python main.py --worker
 ┌─────────────────────────────────────────────────────────────┐
 │                      本地电脑 (主节点)                       │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  UFO Galaxy V2 (Master)                              │   │
+│  │  Galaxy V2 (Master)                              │   │
 │  │  - 直接控制本地设备                                   │   │
 │  │  - 低延迟响应                                         │   │
 │  └─────────────────────────────────────────────────────┘   │
@@ -207,7 +207,7 @@ python main.py --worker
    ┌──────────────────────────────────────────────────────┐
    │               云服务器 (备用节点)                      │
    │  ┌────────────────────────────────────────────────┐  │
-   │  │  UFO Galaxy V2 (Standby)                        │  │
+   │  │  Galaxy V2 (Standby)                        │  │
    │  │  - 主节点故障时接管                              │  │
    │  │  - 状态同步保持                                  │  │
    │  └────────────────────────────────────────────────┘  │
@@ -218,14 +218,14 @@ python main.py --worker
 
 ```bash
 # 本地电脑 (主节点)
-export UFO_NODE_ID="master-local"
-export UFO_NODE_ROLE="coordinator"
+export Galaxy_NODE_ID="master-local"
+export Galaxy_NODE_ROLE="coordinator"
 export FAILOVER_MODE="active-passive"
 python main.py
 
 # 云服务器 (备用节点)
-export UFO_NODE_ID="standby-cloud"
-export UFO_NODE_ROLE="standby"
+export Galaxy_NODE_ID="standby-cloud"
+export Galaxy_NODE_ROLE="standby"
 export PRIMARY_URL="ws://local-pc:8765"
 python main.py --standby
 ```
@@ -260,10 +260,10 @@ python main.py --standby
 
 ```bash
 # 1. 设置节点 ID
-export UFO_NODE_ID="master-$(hostname)"
+export Galaxy_NODE_ID="master-$(hostname)"
 
 # 2. 设置角色
-export UFO_NODE_ROLE="coordinator"
+export Galaxy_NODE_ROLE="coordinator"
 
 # 3. 配置发现
 export NODE71_MDNS_ENABLED=true
@@ -283,10 +283,10 @@ python main.py
 
 ```bash
 # 1. 设置节点 ID
-export UFO_NODE_ID="worker-$(hostname)"
+export Galaxy_NODE_ID="worker-$(hostname)"
 
 # 2. 设置角色
-export UFO_NODE_ROLE="worker"
+export Galaxy_NODE_ROLE="worker"
 
 # 3. 连接主节点
 export MASTER_URL="ws://master-host:8765"
@@ -313,7 +313,7 @@ python main.py --worker
 ### 需要注意的事项
 
 1. **网络配置**: 确保防火墙允许相关端口
-2. **环境变量**: 正确设置 UFO_NODE_ID 和 UFO_NODE_ROLE
+2. **环境变量**: 正确设置 Galaxy_NODE_ID 和 Galaxy_NODE_ROLE
 3. **API Key**: 所有节点需要配置相同的 API Key
 4. **时间同步**: 确保所有节点时间同步 (NTP)
 
@@ -329,8 +329,8 @@ git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
 cd ufo-galaxy-realization-v2
 
 # 配置
-export UFO_NODE_ID="master"
-export UFO_NODE_ROLE="coordinator"
+export Galaxy_NODE_ID="master"
+export Galaxy_NODE_ROLE="coordinator"
 cp .env.example .env
 nano .env  # 配置 API Key
 
@@ -349,8 +349,8 @@ git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
 cd ufo-galaxy-realization-v2
 
 # 配置
-export UFO_NODE_ID="worker-$(hostname)"
-export UFO_NODE_ROLE="worker"
+export Galaxy_NODE_ID="worker-$(hostname)"
+export Galaxy_NODE_ROLE="worker"
 export MASTER_URL="ws://master-host:8765"
 
 # 部署

@@ -1,8 +1,8 @@
-# UFO Galaxy - 快速上手指南
+# Galaxy - 快速上手指南
 
 ## 🎯 系统概览 (Round 2 - R-4)
 
-UFO Galaxy 是一个 **L4 级自主性智能系统**，集成了：
+Galaxy 是一个 **L4 级自主性智能系统**，集成了：
 
 - ✨ **能力注册与发现** (OpenClaw 风格) - 统一能力索引和调度
 - 🔗 **稳定连接管理** (向日葵风格) - 心跳保活、自动重连
@@ -172,15 +172,15 @@ curl http://localhost:8080/health
 
 ```bash
 # 设置 API Key
-export UFO_API_KEY="your-secret-key"
+export Galaxy_API_KEY="your-secret-key"
 
 # 配置 JWT Secret
 export JWT_SECRET="your-jwt-secret"
 
 # 启用 HTTPS
-export UFO_HTTPS_ENABLED=true
-export UFO_SSL_CERT=/path/to/cert.pem
-export UFO_SSL_KEY=/path/to/key.pem
+export Galaxy_HTTPS_ENABLED=true
+export Galaxy_SSL_CERT=/path/to/cert.pem
+export Galaxy_SSL_KEY=/path/to/key.pem
 ```
 
 ## 🐛 故障排查

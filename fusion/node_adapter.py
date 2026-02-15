@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Node Adapter Base Class (Reinforced)
+Galaxy Fusion - Node Adapter Base Class (Reinforced)
 
 节点适配器基类（加固版）
 
-将你的 FastAPI 节点适配为微软 UFO 的 Device Agent，
+将你的 FastAPI 节点适配为微软 Galaxy 的 Device Agent，
 实现 AIP 协议接口，并提供稳健的底层通信逻辑。
 
 作者: Manus AI
@@ -21,10 +21,10 @@ from typing import Dict, Any, Optional, List
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-# 添加微软 UFO 到 Python 路径
-MICROSOFT_UFO_PATH = Path(__file__).parent.parent / "microsoft-ufo"
-if str(MICROSOFT_UFO_PATH) not in sys.path:
-    sys.path.insert(0, str(MICROSOFT_UFO_PATH))
+# 添加微软 Galaxy 到 Python 路径
+MICROSOFT_Galaxy_PATH = Path(__file__).parent.parent / "microsoft-ufo"
+if str(MICROSOFT_Galaxy_PATH) not in sys.path:
+    sys.path.insert(0, str(MICROSOFT_Galaxy_PATH))
 
 try:
     from aip.endpoints.client_endpoint import DeviceClientEndpoint
@@ -34,7 +34,7 @@ try:
     )
     AIP_AVAILABLE = True
 except ImportError as e:
-    logging.warning(f"⚠️  Microsoft UFO AIP not available: {e}")
+    logging.warning(f"⚠️  Microsoft Galaxy AIP not available: {e}")
     AIP_AVAILABLE = False
     # 创建模拟类
     class DeviceClientEndpoint:
@@ -54,11 +54,11 @@ except ImportError as e:
 logger = logging.getLogger("NodeAdapter")
 
 
-class UFONodeAdapter(DeviceClientEndpoint if AIP_AVAILABLE else object, ABC):
+class GalaxyNodeAdapter(DeviceClientEndpoint if AIP_AVAILABLE else object, ABC):
     """
-    UFO 节点适配器基类
+    Galaxy 节点适配器基类
     
-    将你的 FastAPI 节点适配为微软 UFO 的 Device Agent
+    将你的 FastAPI 节点适配为微软 Galaxy 的 Device Agent
     """
     
     def __init__(
@@ -206,7 +206,7 @@ class UFONodeAdapter(DeviceClientEndpoint if AIP_AVAILABLE else object, ABC):
         }
 
 
-class SimpleNodeAdapter(UFONodeAdapter):
+class SimpleNodeAdapter(GalaxyNodeAdapter):
     """简单节点适配器实现 (真实逻辑)"""
     
     def __init__(self, node_id, node_name, layer, domain, server_url, node_api_url, capabilities, command_handler=None):

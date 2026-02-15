@@ -367,7 +367,7 @@ if __name__ == "__main__":
         "payload": {
             "action": "generate_video",
             "parameters": {
-                "prompt": "A beautiful animation of the UFO³ Galaxy system: quantum computers, 3D printers, and AI agents working together in harmony",
+                "prompt": "A beautiful animation of the Galaxy system: quantum computers, 3D printers, and AI agents working together in harmony",
                 "style": "cinematic",
                 "duration": 5,
                 "aspect_ratio": "16:9"

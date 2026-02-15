@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented a unified command endpoint `/api/v1/command` for the UFO Galaxy system, replacing scattered command endpoints with a consistent, feature-rich API.
+Successfully implemented a unified command endpoint `/api/v1/command` for the Galaxy system, replacing scattered command endpoints with a consistent, feature-rich API.
 
 ## Problem Statement
 
@@ -28,7 +28,7 @@ Authentication module with:
 - `verify_api_token()` - Token validation from environment
 - `verify_device_id()` - Device ID validation
 - `require_auth()` - FastAPI dependency for endpoints
-- Development mode support (auto-disables when `UFO_API_TOKEN` not set)
+- Development mode support (auto-disables when `Galaxy_API_TOKEN` not set)
 
 #### `docs/COMMAND_PROTOCOL.md` (408 lines)
 Comprehensive documentation including:
@@ -135,7 +135,7 @@ Authorization: Bearer <API_TOKEN>
 X-Device-ID: <device_id>
 ```
 
-Development mode when `UFO_API_TOKEN` not set.
+Development mode when `Galaxy_API_TOKEN` not set.
 
 ### 7. WebSocket Push
 Async results pushed via WebSocket:
@@ -313,7 +313,7 @@ Recommended improvements for production:
 - Development mode for testing
 
 ⚠️ **Production Recommendations**:
-1. Always set `UFO_API_TOKEN` in production
+1. Always set `Galaxy_API_TOKEN` in production
 2. Use HTTPS for all API calls
 3. Rotate tokens regularly
 4. Limit API access by IP range

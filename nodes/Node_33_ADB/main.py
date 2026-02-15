@@ -1,6 +1,6 @@
 """
 Node 33: Android ADB Wrapper
-UFO Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
+Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
 
 SECURITY: This node is in Layer 3 (Physical) and can ONLY be accessed by Node 50.
 It cannot communicate with other L3 nodes or the internet.
@@ -394,7 +394,7 @@ async def lifespan(app: FastAPI):
     await adb_controller.stop()
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Android ADB Wrapper - Physical Layer Node (ISOLATED)",
     version="1.0.0",
     lifespan=lifespan

@@ -1,4 +1,4 @@
-# UFO Galaxy V2 - 微信机器人能力评估报告
+# Galaxy V2 - 微信机器人能力评估报告
 
 **评估时间**: 2026-02-15
 **评估目标**: 微信群游戏主持能力
@@ -88,7 +88,7 @@ manager.register_capability(
 
 ## 🆚 与 OpenClaw 对比
 
-| 功能 | OpenClaw | UFO Galaxy V2 |
+| 功能 | OpenClaw | Galaxy V2 |
 |------|----------|---------------|
 | 微信机器人 | ✅ 支持 | ❌ 不支持 |
 | 群游戏主持 | ✅ 支持 | ❌ 不支持 |
@@ -163,7 +163,7 @@ class WeChatGameBot(Wechaty):
                 await self.start_game(msg.room())
 ```
 
-### 步骤 3: 集成到 UFO Galaxy
+### 步骤 3: 集成到 Galaxy
 
 ```python
 # 在 Node_04_Router 中注册
@@ -195,8 +195,8 @@ router.register_node("Node_WeChat", WeChatGameBot)
 ### 建议
 
 1. **如果需要微信机器人**: 建议使用 OpenClaw 或添加微信节点
-2. **如果需要 AI 能力**: UFO Galaxy V2 已经具备
-3. **如果需要多设备协调**: UFO Galaxy V2 已经具备
+2. **如果需要 AI 能力**: Galaxy V2 已经具备
+3. **如果需要多设备协调**: Galaxy V2 已经具备
 
 ---
 
@@ -213,4 +213,4 @@ router.register_node("Node_WeChat", WeChatGameBot)
 
 ---
 
-**总结**: UFO Galaxy V2 是一个强大的 AI 系统，但目前不支持微信机器人功能。如果需要此功能，建议添加微信节点或集成 OpenClaw。
+**总结**: Galaxy V2 是一个强大的 AI 系统，但目前不支持微信机器人功能。如果需要此功能，建议添加微信节点或集成 OpenClaw。

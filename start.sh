@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# UFO Galaxy V2 - 快速启动脚本
+# Galaxy V2 - 快速启动脚本
 #
 
 set -e
@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo -e "${CYAN}"
-echo "  UFO Galaxy V2 - 启动中..."
+echo "  Galaxy V2 - 启动中..."
 echo -e "${NC}"
 
 # 获取脚本所在目录
@@ -37,7 +37,7 @@ fi
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 # 启动系统
-echo -e "${GREEN}启动 UFO Galaxy V2...${NC}"
+echo -e "${GREEN}启动 Galaxy V2...${NC}"
 echo ""
 echo "控制面板: http://localhost:8080"
 echo "API 文档: http://localhost:8080/docs"

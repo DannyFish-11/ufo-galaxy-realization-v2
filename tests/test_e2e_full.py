@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 端到端功能测试
+Galaxy - 端到端功能测试
 测试从自然语言输入到节点执行的完整链路
 """
 
@@ -195,7 +195,7 @@ def test_6_physical_device_nodes():
 async def run_all_tests():
     """运行所有测试"""
     print("=" * 60)
-    print("UFO Galaxy - 端到端功能测试")
+    print("Galaxy - 端到端功能测试")
     print("=" * 60)
     
     results = {}

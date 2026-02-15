@@ -1,5 +1,5 @@
 """
-Unified Launcher for UFO Galaxy
+Unified Launcher for Galaxy
 
 Optimized startup with:
 - Parallel node startup
@@ -92,7 +92,7 @@ class LaunchConfig:
 
 class UnifiedLauncher:
     """
-    Unified Launcher for UFO Galaxy
+    Unified Launcher for Galaxy
     
     Features:
     - Parallel node startup for faster initialization
@@ -344,7 +344,7 @@ class UnifiedLauncher:
             env["NODE_ID"] = node_id
             env["NODE_NAME"] = node_config.name
             env["NODE_PORT"] = str(node_config.port)
-            env["UFO_GALAXY_MODE"] = "production"
+            env["Galaxy_GALAXY_MODE"] = "production"
             
             # Add custom env vars
             env.update(node_config.env_vars)
@@ -609,7 +609,7 @@ async def main():
     """CLI entry point"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO Galaxy Unified Launcher")
+    parser = argparse.ArgumentParser(description="Galaxy Unified Launcher")
     parser.add_argument("command", choices=["start", "stop", "restart", "status"])
     parser.add_argument("--groups", nargs="+", default=["core"],
                        help="Node groups to start")
@@ -676,7 +676,7 @@ async def main():
 if __name__ == "__main__":
     print("""
 ╔═══════════════════════════════════════════════════════════════╗
-║           UFO Galaxy Unified Launcher v2.0                    ║
+║           Galaxy Unified Launcher v2.0                    ║
 ║           Parallel | Smart Dependencies | Auto-Recovery       ║
 ╚═══════════════════════════════════════════════════════════════╝
 """)

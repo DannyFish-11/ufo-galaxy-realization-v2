@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from dataclasses import dataclass, field
 
-logger = logging.getLogger("UFO-Galaxy.SecurityMiddleware")
+logger = logging.getLogger("Galaxy.SecurityMiddleware")
 
 
 # ───────────────────── 审计日志 ─────────────────────

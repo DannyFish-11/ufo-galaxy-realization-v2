@@ -110,7 +110,7 @@ curl -X POST http://localhost:8080/memory \
 curl -X POST http://localhost:8080/memory \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "UFO³ Galaxy 是一个分布式 AI 代理系统",
+    "content": "Galaxy 是一个分布式 AI 代理系统",
     "memory_type": "long_term",
     "tags": ["ufo", "galaxy", "ai"],
     "metadata": {"source": "documentation"}
@@ -123,7 +123,7 @@ curl -X POST http://localhost:8080/memory \
 curl -X POST http://localhost:8080/memory/recall \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "UFO Galaxy",
+    "query": "Galaxy",
     "limit": 5
   }'
 ```

@@ -1,5 +1,5 @@
 """
-UFO Galaxy Gateway - 主应用入口
+Galaxy Gateway - 主应用入口
 
 FastAPI 应用，提供:
 1. WebSocket 端点供设备连接
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     global device_manager, message_handler, websocket_manager, task_orchestrator
     
     # 启动时初始化
-    logger.info("Initializing UFO Galaxy Gateway...")
+    logger.info("Initializing Galaxy Gateway...")
     
     device_manager = DeviceManager()
     message_handler = MessageHandler(device_manager)
@@ -79,20 +79,20 @@ async def lifespan(app: FastAPI):
     await websocket_manager.start()
     await task_orchestrator.start()
     
-    logger.info("UFO Galaxy Gateway initialized successfully")
+    logger.info("Galaxy Gateway initialized successfully")
     
     yield
     
     # 关闭时清理
-    logger.info("Shutting down UFO Galaxy Gateway...")
+    logger.info("Shutting down Galaxy Gateway...")
     await task_orchestrator.stop()
     await websocket_manager.stop()
-    logger.info("UFO Galaxy Gateway shut down")
+    logger.info("Galaxy Gateway shut down")
 
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="UFO Galaxy Gateway",
+    title="Galaxy Gateway",
     description="跨平台分布式 Agent 网关",
     version="3.0.0",
     lifespan=lifespan
@@ -323,7 +323,7 @@ def main():
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
     
-    logger.info(f"Starting UFO Galaxy Gateway on {host}:{port}")
+    logger.info(f"Starting Galaxy Gateway on {host}:{port}")
     uvicorn.run(app, host=host, port=port)
 
 

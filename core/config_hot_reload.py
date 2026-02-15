@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass, field
 from collections import deque
 
-logger = logging.getLogger("UFO-Galaxy.ConfigHotReload")
+logger = logging.getLogger("Galaxy.ConfigHotReload")
 
 
 # ───────────────────── 配置版本记录 ─────────────────────

@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from core.safe_eval import safe_eval
 """
 Node 54: Symbolic Math & Formal Verification
-UFO Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
+Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
 
 Three-layer verification pipeline for mathematical formulas.
 """
@@ -515,7 +515,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Symbolic Math & Formal Verification",
     version="1.0.0",
     lifespan=lifespan

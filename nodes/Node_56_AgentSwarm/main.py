@@ -1,6 +1,6 @@
 """
 Node 56: Multi-Agent Debate System (Agent Swarm)
-UFO Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
+Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
 
 Population-based debate with tournament-style reasoning.
 """
@@ -864,7 +864,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Multi-Agent Debate System with Tournament-Style Reasoning",
     version="1.0.0",
     lifespan=lifespan

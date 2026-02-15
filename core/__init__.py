@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy Core 模块
+Galaxy Core 模块
 ====================
 
 核心模块导出，提供统一的导入接口。

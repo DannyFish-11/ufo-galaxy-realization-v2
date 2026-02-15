@@ -176,7 +176,7 @@ class SidebarUI(QWidget):
         layout.setContentsMargins(15, 0, 15, 0)
         
         # 标题
-        title_label = QLabel("UFO³ Galaxy")
+        title_label = QLabel("Galaxy")
         title_font = QFont("Consolas", 14, QFont.Bold)
         title_label.setFont(title_font)
         layout.addWidget(title_label)

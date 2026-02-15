@@ -1,6 +1,6 @@
 """
 Node 52: Qiskit Quantum Simulator
-UFO Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
+Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
 
 Tiered quantum simulation with result interpretation.
 """
@@ -501,7 +501,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Qiskit Quantum Simulator with Tiered Backends",
     version="1.0.0",
     lifespan=lifespan

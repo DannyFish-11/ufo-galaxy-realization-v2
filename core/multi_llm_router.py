@@ -18,7 +18,7 @@ from enum import Enum
 
 import httpx
 
-logger = logging.getLogger("UFO-Galaxy.LLMRouter")
+logger = logging.getLogger("Galaxy.LLMRouter")
 
 
 # ───────────────────── 数据模型 ─────────────────────

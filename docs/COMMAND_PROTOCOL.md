@@ -2,7 +2,7 @@
 
 ## 概述
 
-UFO Galaxy 统一命令协议提供了一个标准化的接口，用于向多个设备/节点并行下发命令，支持同步和异步执行模式，并提供统一的结果聚合和追踪机制。
+Galaxy 统一命令协议提供了一个标准化的接口，用于向多个设备/节点并行下发命令，支持同步和异步执行模式，并提供统一的结果聚合和追踪机制。
 
 ## 核心特性
 
@@ -200,7 +200,7 @@ UFO Galaxy 统一命令协议提供了一个标准化的接口，用于向多个
 Authorization: Bearer <API_TOKEN>
 ```
 
-Token 从环境变量 `UFO_API_TOKEN` 读取。若环境变量未设置，系统进入开发模式，跳过鉴权。
+Token 从环境变量 `Galaxy_API_TOKEN` 读取。若环境变量未设置，系统进入开发模式，跳过鉴权。
 
 ### 2. Device ID 标识
 
@@ -492,7 +492,7 @@ for target, result in response["results"].items():
 
 ### Q4: 如何确保安全？
 
-1. 设置 `UFO_API_TOKEN` 环境变量启用鉴权
+1. 设置 `Galaxy_API_TOKEN` 环境变量启用鉴权
 2. 使用 HTTPS 加密传输
 3. 限制 API 访问 IP 范围
 4. 定期轮换 Token

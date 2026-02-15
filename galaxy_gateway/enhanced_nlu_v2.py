@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - 增强版 NLU 引擎 v2.0
+Galaxy - 增强版 NLU 引擎 v2.0
 
 功能：
 1. 多设备精确识别（手机 A、手机 B、平板、电脑）
@@ -682,7 +682,7 @@ class EnhancedNLUEngineV2:
         }
         
         # 构建 Prompt
-        system_prompt = """你是 UFO³ Galaxy 的自然语言理解引擎。你的任务是理解用户的指令，并将其转换为结构化的任务列表。
+        system_prompt = """你是 Galaxy 的自然语言理解引擎。你的任务是理解用户的指令，并将其转换为结构化的任务列表。
 
 **特别注意：**
 如果用户指令中包含“分析屏幕”、“看一眼”、“这个图表”、“这张图片”等明显的视觉分析意图，并且目标设备是“电脑”或“平板”等可以进行截图的设备，请将意图类型设置为 `visual_analysis`，动作设置为 `vlm_analyze`，目标设置为 `screenshot`，并在 `parameters` 中包含 `image_path`（一个占位符，例如 `/home/ubuntu/Downloads/temp_screenshot.png`）和 `prompt`（用户对图像的提问）。
@@ -797,7 +797,7 @@ async def main():
     ]
     
     print("="*80)
-    print("UFO³ Galaxy - 增强版 NLU 引擎 v2.0 测试")
+    print("Galaxy - 增强版 NLU 引擎 v2.0 测试")
     print("="*80)
     
     for user_input in test_inputs:

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 事件桥接层
+Galaxy - 事件桥接层
 ========================
 
 将独立的核心子系统通过事件总线连接成一个有机整体。
@@ -18,7 +18,7 @@ import asyncio
 import logging
 from typing import Optional
 
-logger = logging.getLogger("UFO-Galaxy.EventBridge")
+logger = logging.getLogger("Galaxy.EventBridge")
 
 
 class EventBridge:

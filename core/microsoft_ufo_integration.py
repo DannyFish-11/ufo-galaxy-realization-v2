@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 微软 UFO 深度集成模块
+Galaxy - 微软 Galaxy 深度集成模块
 ===================================
 
 功能：
-1. 深度集成微软 UFO 的 UI 自动化能力
+1. 深度集成微软 Galaxy 的 UI 自动化能力
 2. 统一的 UI 控制接口
 3. 支持 Windows、macOS 的 UI 自动化
-4. 与 UFO Galaxy 节点系统无缝对接
+4. 与 Galaxy 节点系统无缝对接
 
 作者：Manus AI
 日期：2026-02-06
@@ -28,10 +28,10 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 添加微软 UFO 路径
-UFO_PATH = Path(__file__).parent.parent / "external" / "microsoft_ufo"
-if UFO_PATH.exists():
-    sys.path.insert(0, str(UFO_PATH))
+# 添加微软 Galaxy 路径
+Galaxy_PATH = Path(__file__).parent.parent / "external" / "microsoft_ufo"
+if Galaxy_PATH.exists():
+    sys.path.insert(0, str(Galaxy_PATH))
 
 
 # ============================================================================
@@ -188,14 +188,14 @@ class BaseUIAutomator(ABC):
 
 
 # ============================================================================
-# 微软 UFO 集成
+# 微软 Galaxy 集成
 # ============================================================================
 
-class MicrosoftUFOAutomator(BaseUIAutomator):
+class MicrosoftGalaxyAutomator(BaseUIAutomator):
     """
-    微软 UFO UI 自动化器
+    微软 Galaxy UI 自动化器
     
-    深度集成微软 UFO 的 UI 控制能力
+    深度集成微软 Galaxy 的 UI 控制能力
     """
     
     def __init__(self):
@@ -205,9 +205,9 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
         self.ufo_available = False
     
     async def initialize(self) -> bool:
-        """初始化微软 UFO"""
+        """初始化微软 Galaxy"""
         try:
-            # 尝试导入微软 UFO 模块
+            # 尝试导入微软 Galaxy 模块
             from external.microsoft_ufo.automator.puppeteer import Puppeteer
             from external.microsoft_ufo.automator.ui_control.controller import UIController
             
@@ -216,15 +216,15 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             self.ufo_available = True
             self.is_initialized = True
             
-            logger.info("Microsoft UFO initialized successfully")
+            logger.info("Microsoft Galaxy initialized successfully")
             return True
             
         except ImportError as e:
-            logger.warning(f"Microsoft UFO not available: {e}")
+            logger.warning(f"Microsoft Galaxy not available: {e}")
             # 降级到 pyautogui
             return await self._initialize_fallback()
         except Exception as e:
-            logger.error(f"Failed to initialize Microsoft UFO: {e}")
+            logger.error(f"Failed to initialize Microsoft Galaxy: {e}")
             return False
     
     async def _initialize_fallback(self) -> bool:
@@ -278,7 +278,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
         """查找 UI 元素"""
         if self.ufo_available and self.controller:
             try:
-                # 使用微软 UFO 的元素查找
+                # 使用微软 Galaxy 的元素查找
                 element = self.controller.find_element(
                     name=selector.get("name"),
                     automation_id=selector.get("automation_id"),
@@ -288,7 +288,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
                 if element:
                     return self._convert_ufo_element(element)
             except Exception as e:
-                logger.error(f"UFO find_element failed: {e}")
+                logger.error(f"Galaxy find_element failed: {e}")
         
         return None
     
@@ -304,12 +304,12 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
                 )
                 return [self._convert_ufo_element(e) for e in elements]
             except Exception as e:
-                logger.error(f"UFO find_elements failed: {e}")
+                logger.error(f"Galaxy find_elements failed: {e}")
         
         return []
     
     def _convert_ufo_element(self, ufo_element) -> UIElement:
-        """转换微软 UFO 元素为统一格式"""
+        """转换微软 Galaxy 元素为统一格式"""
         try:
             rect = ufo_element.rectangle() if hasattr(ufo_element, 'rectangle') else None
             bounds = (rect.left, rect.top, rect.width(), rect.height()) if rect else (0, 0, 0, 0)
@@ -324,7 +324,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
                 is_visible=ufo_element.is_visible() if hasattr(ufo_element, 'is_visible') else True
             )
         except Exception as e:
-            logger.error(f"Failed to convert UFO element: {e}")
+            logger.error(f"Failed to convert Galaxy element: {e}")
             return UIElement(
                 element_id="unknown",
                 element_type=UIElementType.CUSTOM,
@@ -356,7 +356,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             )
     
     async def _execute_with_ufo(self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]) -> UIActionResult:
-        """使用微软 UFO 执行动作"""
+        """使用微软 Galaxy 执行动作"""
         try:
             if action == UIAction.CLICK:
                 x, y = params.get("x"), params.get("y")
@@ -456,12 +456,12 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
 
 
 # ============================================================================
-# UFO Galaxy 集成服务
+# Galaxy 集成服务
 # ============================================================================
 
-class UFOIntegrationService:
+class GalaxyIntegrationService:
     """
-    UFO Galaxy 与微软 UFO 的集成服务
+    Galaxy 与微软 Galaxy 的集成服务
     
     提供统一的 UI 自动化接口，供节点系统调用
     """
@@ -478,12 +478,12 @@ class UFOIntegrationService:
         if self._initialized:
             return
         
-        self.automator: Optional[MicrosoftUFOAutomator] = None
+        self.automator: Optional[MicrosoftGalaxyAutomator] = None
         self._initialized = True
     
     async def initialize(self) -> bool:
         """初始化集成服务"""
-        self.automator = MicrosoftUFOAutomator()
+        self.automator = MicrosoftGalaxyAutomator()
         return await self.automator.initialize()
     
     async def click(self, x: int, y: int) -> Dict[str, Any]:
@@ -560,13 +560,13 @@ class UFOIntegrationService:
         """
         执行自然语言描述的任务
         
-        这是与微软 UFO 最深度的集成点，利用 UFO 的 Agent 能力
+        这是与微软 Galaxy 最深度的集成点，利用 Galaxy 的 Agent 能力
         """
         if not self.automator or not self.automator.ufo_available:
-            return {"error": "Microsoft UFO not available for task execution"}
+            return {"error": "Microsoft Galaxy not available for task execution"}
         
         try:
-            # 使用微软 UFO 的 Agent 执行任务
+            # 使用微软 Galaxy 的 Agent 执行任务
             from external.microsoft_ufo.agents.agent.app_agent import AppAgent
             
             agent = AppAgent(
@@ -596,7 +596,7 @@ class UFOIntegrationService:
 # 全局实例
 # ============================================================================
 
-ufo_integration = UFOIntegrationService()
+ufo_integration = GalaxyIntegrationService()
 
 
 # ============================================================================
@@ -604,11 +604,11 @@ ufo_integration = UFOIntegrationService()
 # ============================================================================
 
 def create_ufo_api():
-    """创建 UFO 集成 API"""
+    """创建 Galaxy 集成 API"""
     from fastapi import FastAPI
     from pydantic import BaseModel
     
-    app = FastAPI(title="UFO Galaxy - Microsoft UFO Integration", version="2.0")
+    app = FastAPI(title="Galaxy - Microsoft Galaxy Integration", version="2.0")
     
     class ClickRequest(BaseModel):
         x: int
@@ -668,7 +668,7 @@ def create_ufo_api():
 # ============================================================================
 
 async def main():
-    """示例：如何使用 UFO 集成服务"""
+    """示例：如何使用 Galaxy 集成服务"""
     
     # 初始化
     success = await ufo_integration.initialize()
@@ -678,7 +678,7 @@ async def main():
         # 获取屏幕信息
         screen_info = await ufo_integration.get_screen_info()
         print(f"Active window: {screen_info.get('active_window', {}).get('name', 'Unknown')}")
-        print(f"UFO available: {screen_info.get('ufo_available', False)}")
+        print(f"Galaxy available: {screen_info.get('ufo_available', False)}")
         
         # 执行点击
         result = await ufo_integration.click(100, 100)

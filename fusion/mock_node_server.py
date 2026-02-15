@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Mock Node Server
+Galaxy Fusion - Mock Node Server
 
 模拟节点服务器
 
@@ -210,7 +210,7 @@ def main():
     """主函数"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Mock Node Server for UFO Galaxy Fusion")
+    parser = argparse.ArgumentParser(description="Mock Node Server for Galaxy Fusion")
     parser.add_argument(
         "--config",
         default=str(PROJECT_ROOT / "config" / "topology.json"),

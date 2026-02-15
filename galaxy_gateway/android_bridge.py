@@ -1,6 +1,6 @@
 """
 Android Bridge Service
-UFO Galaxy - 服务端与安卓端对接桥接层
+Galaxy - 服务端与安卓端对接桥接层
 
 此模块负责：
 1. 处理安卓设备的注册和管理
@@ -10,7 +10,7 @@ UFO Galaxy - 服务端与安卓端对接桥接层
 
 与安卓端 AIPMessageV3.kt 完全对齐
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 3.0.0
 """
 

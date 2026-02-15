@@ -1,5 +1,5 @@
 """
-End-to-End Controller for UFO Galaxy Realization.
+End-to-End Controller for Galaxy Realization.
 
 This module provides the complete integration layer that connects:
 1. Android voice input

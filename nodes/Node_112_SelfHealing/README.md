@@ -2,7 +2,7 @@
 
 ## 📋 概述
 
-Node_112_SelfHealing 是 UFO³ Galaxy 系统的节点自愈引擎，提供异常检测、自动诊断和自动修复功能。
+Node_112_SelfHealing 是 Galaxy 系统的节点自愈引擎，提供异常检测、自动诊断和自动修复功能。
 
 ### 核心功能
 

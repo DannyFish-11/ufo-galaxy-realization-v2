@@ -1,5 +1,5 @@
 """
-UFO Galaxy WebSocket服务器
+Galaxy WebSocket服务器
 处理Android客户端和Windows客户端的连接
 实现UI与L4主循环的双向通信
 """
@@ -102,7 +102,7 @@ class ConnectionManager:
 
 class GalaxyWebSocketServer:
     """
-    UFO Galaxy WebSocket服务器
+    Galaxy WebSocket服务器
     处理客户端连接和L4主循环的集成
     """
     
@@ -218,7 +218,7 @@ class GalaxyWebSocketServer:
             # 发送欢迎消息
             await self.connection_manager.send_to_client(websocket, {
                 "type": "welcome",
-                "message": "Connected to UFO Galaxy Server",
+                "message": "Connected to Galaxy Server",
                 "server_time": datetime.now().isoformat()
             })
             

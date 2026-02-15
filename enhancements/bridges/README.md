@@ -1,10 +1,10 @@
-# UFO Galaxy Bridge - 零破坏性桥接模块
+# Galaxy Bridge - 零破坏性桥接模块
 
 ## 设计理念
 
 **核心原则：绝对不修改现有代码，只添加新的"外骨骼"模块。**
 
-这个桥接器作为独立的增强层，实现 `ufo-galaxy` 与微软 UFO 之间的双向互调，确保两个系统可以无缝协同工作。
+这个桥接器作为独立的增强层，实现 `ufo-galaxy` 与微软 Galaxy 之间的双向互调，确保两个系统可以无缝协同工作。
 
 ---
 
@@ -16,7 +16,7 @@
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌───────────────────┐         ┌───────────────────┐            │
-│  │ 微软 UFO          │         │ ufo-galaxy        │            │
+│  │ 微软 Galaxy          │         │ ufo-galaxy        │            │
 │  │ (localhost:9000)  │         │ (localhost:8000)  │            │
 │  │                   │         │                   │            │
 │  │ • galaxy/         │         │ • nodes/          │            │
@@ -24,7 +24,7 @@
 │  └─────────┬─────────┘         └─────────┬─────────┘            │
 │            │                             │                      │
 │            │    ┌─────────────────────┐  │                      │
-│            └────│ UFO Galaxy Bridge   │──┘                      │
+│            └────│ Galaxy Bridge   │──┘                      │
 │                 │ (零破坏性外骨骼)    │                         │
 │                 │                     │                         │
 │                 │ • 自动检测系统      │                         │
@@ -59,9 +59,9 @@ cd E:\ufo-galaxy\galaxy_gateway
 python gateway_service_v3.py
 ```
 
-**启动微软 UFO**（如果您有）：
+**启动微软 Galaxy**（如果您有）：
 ```bash
-cd E:\UFO
+cd E:\Galaxy
 python -m galaxy
 ```
 
@@ -75,10 +75,10 @@ python ufo_galaxy_bridge.py
 ### 3. 使用示例
 
 ```python
-from ufo_galaxy_bridge import UFOGalaxyBridge
+from ufo_galaxy_bridge import GalaxyGalaxyBridge
 
 # 初始化桥接器
-bridge = UFOGalaxyBridge()
+bridge = GalaxyGalaxyBridge()
 await bridge.initialize()
 
 # 调用 ufo-galaxy 的视觉节点
@@ -99,7 +99,7 @@ result = await bridge.unified_vision_analysis(
 
 ## API 参考
 
-### `UFOGalaxyBridge`
+### `GalaxyGalaxyBridge`
 
 #### `initialize()`
 初始化桥接器，自动检测两个系统的可用性。
@@ -116,7 +116,7 @@ result = await bridge.unified_vision_analysis(
 - `dict`: 执行结果
 
 #### `call_microsoft_ufo(agent_name, task, params)`
-调用微软 UFO 的指定 Agent。
+调用微软 Galaxy 的指定 Agent。
 
 **参数**：
 - `agent_name` (str): Agent 名称，如 `"app_agent"`

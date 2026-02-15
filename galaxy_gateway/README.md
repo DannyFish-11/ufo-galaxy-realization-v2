@@ -1,4 +1,4 @@
-# UFO³ Galaxy Gateway - 超级网关
+# Galaxy Gateway - 超级网关
 
 **统一调用 One-API、本地 LLM 和所有节点功能的超级网关**
 
@@ -6,7 +6,7 @@
 
 ## 🎯 核心功能
 
-Galaxy Gateway 是 UFO³ Galaxy 系统的**统一入口**，提供：
+Galaxy Gateway 是 Galaxy 系统的**统一入口**，提供：
 
 1. ✅ **LLM 统一调用** - 调用所有 LLM（One-API + 本地）
 2. ✅ **节点统一调用** - 调用所有 80+ 节点功能

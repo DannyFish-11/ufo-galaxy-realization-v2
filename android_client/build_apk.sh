@@ -1,10 +1,10 @@
 #!/bin/bash
-# UFO Galaxy Android - APK 打包脚本
+# Galaxy Android - APK 打包脚本
 
 set -e
 
 echo "=========================================="
-echo "  UFO Galaxy Android APK 打包"
+echo "  Galaxy Android APK 打包"
 echo "=========================================="
 echo ""
 
@@ -68,7 +68,7 @@ if [ "$BUILD_RELEASE" = "y" ] || [ "$BUILD_RELEASE" = "Y" ]; then
             -alias ufo_galaxy \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass ufogalaxy123 -keypass ufogalaxy123 \
-            -dname "CN=UFO Galaxy, OU=Development, O=UFO, L=Beijing, ST=Beijing, C=CN"
+            -dname "CN=Galaxy, OU=Development, O=Galaxy, L=Beijing, ST=Beijing, C=CN"
     fi
     
     ./gradlew assembleRelease

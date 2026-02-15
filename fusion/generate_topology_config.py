@@ -238,7 +238,7 @@ def generate_topology():
     config = {
         "version": "1.0",
         "topology_type": "three_layer_sphere",
-        "description": "UFO Galaxy - 102 Nodes Three-Layer Sphere Topology",
+        "description": "Galaxy - 102 Nodes Three-Layer Sphere Topology",
         "generated_at": "2026-01-25",
         "layers": [
             {

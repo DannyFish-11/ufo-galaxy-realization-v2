@@ -1,10 +1,10 @@
 """
 AIP v3.0 - Agent Interaction Protocol (统一版本)
 
-此文件是 UFO Galaxy 系统的协议单一事实来源。
+此文件是 Galaxy 系统的协议单一事实来源。
 所有平台（Android, Windows, Linux, iOS, 云端）必须遵循此协议定义。
 
-基于 Microsoft UFO AIP 协议扩展，增加跨平台支持。
+基于 Microsoft Galaxy AIP 协议扩展，增加跨平台支持。
 """
 
 from enum import Enum, IntEnum, Flag, auto

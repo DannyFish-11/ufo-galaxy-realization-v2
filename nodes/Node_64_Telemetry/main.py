@@ -1,6 +1,6 @@
 """
 Node 64: Predictive Telemetry & Anomaly Detection
-UFO Galaxy 64-Core MCP Matrix - Phase 6: Immune System
+Galaxy 64-Core MCP Matrix - Phase 6: Immune System
 
 Multi-resolution time series with predictive alerts.
 """
@@ -701,7 +701,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Predictive Telemetry & Anomaly Detection",
     version="1.0.0",
     lifespan=lifespan

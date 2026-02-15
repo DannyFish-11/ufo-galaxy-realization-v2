@@ -1,6 +1,6 @@
 """
 Node 14: Shell Operations
-UFO Galaxy 64-Core MCP Matrix - Core Tool Node
+Galaxy 64-Core MCP Matrix - Core Tool Node
 
 Provides comprehensive shell/command execution:
 - Command execution (sync and async)
@@ -10,7 +10,7 @@ Provides comprehensive shell/command execution:
 - Output streaming
 - Timeout handling
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -433,7 +433,7 @@ class ShellService:
 
 app = FastAPI(
     title=f"Node {NODE_ID}: {NODE_NAME}",
-    description="Shell operations service for UFO Galaxy",
+    description="Shell operations service for Galaxy",
     version="5.0.0"
 )
 

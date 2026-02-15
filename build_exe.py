@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - EXE 打包脚本
+Galaxy - EXE 打包脚本
 ==========================
-使用 PyInstaller 将 UFO Galaxy 打包成独立的 Windows 可执行文件。
+使用 PyInstaller 将 Galaxy 打包成独立的 Windows 可执行文件。
 
 功能：
 1. 自动安装 PyInstaller
@@ -27,10 +27,10 @@ from typing import List
 PROJECT_ROOT = Path(__file__).parent.absolute()
 
 # 打包配置
-APP_NAME = "UFO-Galaxy"
+APP_NAME = "Galaxy"
 APP_VERSION = "1.0.0"
 APP_DESCRIPTION = "L4 级自主性智能系统"
-APP_AUTHOR = "UFO Galaxy Team"
+APP_AUTHOR = "Galaxy Team"
 APP_ICON = PROJECT_ROOT / "assets" / "icon.ico"
 
 # 需要包含的数据文件和目录
@@ -142,7 +142,7 @@ def create_icon():
         except (IOError, OSError):
             font = ImageFont.load_default()
             
-        draw.text((size // 2, size // 2), "UFO", fill=(255, 255, 255, 255), 
+        draw.text((size // 2, size // 2), "Galaxy", fill=(255, 255, 255, 255), 
                   font=font, anchor="mm")
         
         # 保存为 ICO
@@ -158,7 +158,7 @@ def create_icon():
 def generate_spec_file(onefile: bool = False) -> Path:
     """生成 PyInstaller spec 文件"""
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
-# UFO Galaxy PyInstaller Spec File
+# Galaxy PyInstaller Spec File
 # 自动生成，请勿手动修改
 
 import os
@@ -338,7 +338,7 @@ def create_installer():
     
     # 生成 Inno Setup 脚本
     iss_content = f'''
-; UFO Galaxy Inno Setup Script
+; Galaxy Inno Setup Script
 ; 自动生成
 
 #define MyAppName "{APP_NAME}"
@@ -393,7 +393,7 @@ def main():
     """主函数"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO Galaxy EXE 打包工具")
+    parser = argparse.ArgumentParser(description="Galaxy EXE 打包工具")
     parser.add_argument("--onefile", "-o", action="store_true", help="打包成单个 exe 文件")
     parser.add_argument("--installer", "-i", action="store_true", help="创建安装程序脚本")
     parser.add_argument("--clean", "-c", action="store_true", help="清理构建文件")

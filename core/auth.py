@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 统一鉴权模块
+Galaxy - 统一鉴权模块
 ========================
 
 提供 API Token 和 Device ID 鉴权机制。
@@ -13,7 +13,7 @@ import logging
 from typing import Optional
 from fastapi import Header, HTTPException, status
 
-logger = logging.getLogger("UFO-Galaxy.Auth")
+logger = logging.getLogger("Galaxy.Auth")
 
 
 def verify_api_token(token: str) -> bool:
@@ -27,11 +27,11 @@ def verify_api_token(token: str) -> bool:
         bool: Token 是否有效
     """
     # 从环境变量读取 token
-    expected_token = os.getenv("UFO_API_TOKEN")
+    expected_token = os.getenv("Galaxy_API_TOKEN")
     
     # 如果未设置环境变量，跳过鉴权（开发模式）
     if not expected_token:
-        logger.debug("UFO_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
+        logger.debug("Galaxy_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
         return True
     
     # 验证 token
@@ -83,11 +83,11 @@ async def require_auth(
         HTTPException: 鉴权失败时抛出 401 异常
     """
     # 从环境变量读取 token
-    expected_token = os.getenv("UFO_API_TOKEN")
+    expected_token = os.getenv("Galaxy_API_TOKEN")
     
     # 如果未设置环境变量，跳过鉴权（开发模式）
     if not expected_token:
-        logger.debug("UFO_API_TOKEN 未设置，跳过鉴权（开发模式）")
+        logger.debug("Galaxy_API_TOKEN 未设置，跳过鉴权（开发模式）")
         return {
             "authenticated": True,
             "device_id": x_device_id,

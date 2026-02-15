@@ -19,7 +19,7 @@ from enum import Enum
 from collections import defaultdict, deque
 from functools import wraps
 
-logger = logging.getLogger("UFO-Galaxy.ErrorFramework")
+logger = logging.getLogger("Galaxy.ErrorFramework")
 
 
 # ───────────────────── 错误分类 ─────────────────────
@@ -62,8 +62,8 @@ class RecoveryStrategy(Enum):
 
 # ───────────────────── 错误类型层级 ─────────────────────
 
-class UFOError(Exception):
-    """UFO Galaxy 错误基类"""
+class GalaxyError(Exception):
+    """Galaxy 错误基类"""
 
     def __init__(self, message: str, category: ErrorCategory = ErrorCategory.INTERNAL,
                  severity: ErrorSeverity = ErrorSeverity.ERROR,
@@ -94,14 +94,14 @@ class UFOError(Exception):
         }
 
 
-class NetworkError(UFOError):
+class NetworkError(GalaxyError):
     """网络错误"""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, category=ErrorCategory.NETWORK,
                          recovery=RecoveryStrategy.RETRY, **kwargs)
 
 
-class DeviceError(UFOError):
+class DeviceError(GalaxyError):
     """设备错误"""
     def __init__(self, message: str, device_id: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
@@ -110,7 +110,7 @@ class DeviceError(UFOError):
                          recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
 
 
-class LLMError(UFOError):
+class LLMError(GalaxyError):
     """LLM 调用错误"""
     def __init__(self, message: str, provider: str = "", model: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
@@ -119,7 +119,7 @@ class LLMError(UFOError):
                          recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
 
 
-class AuthError(UFOError):
+class AuthError(GalaxyError):
     """认证/授权错误"""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, category=ErrorCategory.AUTH,
@@ -127,7 +127,7 @@ class AuthError(UFOError):
                          recovery=RecoveryStrategy.ABORT, **kwargs)
 
 
-class ConfigError(UFOError):
+class ConfigError(GalaxyError):
     """配置错误"""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, category=ErrorCategory.CONFIG,
@@ -135,7 +135,7 @@ class ConfigError(UFOError):
                          recovery=RecoveryStrategy.MANUAL, **kwargs)
 
 
-class ResourceError(UFOError):
+class ResourceError(GalaxyError):
     """资源错误"""
     def __init__(self, message: str, resource: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
@@ -144,7 +144,7 @@ class ResourceError(UFOError):
                          recovery=RecoveryStrategy.DEGRADE, context=ctx, **kwargs)
 
 
-class TimeoutError_(UFOError):
+class TimeoutError_(GalaxyError):
     """超时错误 (名称避免与内置 TimeoutError 冲突)"""
     def __init__(self, message: str, timeout_seconds: float = 0, **kwargs):
         ctx = kwargs.pop("context", {})
@@ -153,7 +153,7 @@ class TimeoutError_(UFOError):
                          recovery=RecoveryStrategy.RETRY, context=ctx, **kwargs)
 
 
-class NodeError(UFOError):
+class NodeError(GalaxyError):
     """节点错误"""
     def __init__(self, message: str, node_id: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
@@ -162,7 +162,7 @@ class NodeError(UFOError):
                          recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
 
 
-class DataError(UFOError):
+class DataError(GalaxyError):
     """数据错误"""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, category=ErrorCategory.DATA,
@@ -170,7 +170,7 @@ class DataError(UFOError):
                          recovery=RecoveryStrategy.SKIP, **kwargs)
 
 
-class ConcurrencyError(UFOError):
+class ConcurrencyError(GalaxyError):
     """并发错误"""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, category=ErrorCategory.CONCURRENCY,
@@ -182,7 +182,7 @@ class ConcurrencyError(UFOError):
 @dataclass
 class ErrorRecord:
     """错误记录"""
-    error: UFOError
+    error: GalaxyError
     handled: bool = False
     recovered: bool = False
     recovery_action: str = ""
@@ -202,7 +202,7 @@ class ErrorTracker:
         self._recent_errors: Dict[str, List[float]] = defaultdict(list)  # category → timestamps
         self._handlers: Dict[ErrorCategory, List[Callable]] = defaultdict(list)
 
-    def record(self, error: UFOError, handled: bool = False,
+    def record(self, error: GalaxyError, handled: bool = False,
                recovered: bool = False, recovery_action: str = ""):
         """记录错误"""
         record = ErrorRecord(
@@ -283,17 +283,17 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
     """
     错误边界装饰器
 
-    将未处理的异常包装为 UFOError 并记录。
+    将未处理的异常包装为 GalaxyError 并记录。
     """
     def decorator(func):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             try:
                 return await func(*args, **kwargs)
-            except UFOError:
-                raise  # 已经是 UFOError，直接抛出
+            except GalaxyError:
+                raise  # 已经是 GalaxyError，直接抛出
             except Exception as e:
-                ufo_err = UFOError(
+                ufo_err = GalaxyError(
                     message=f"{func.__name__} 执行失败: {e}",
                     category=category,
                     recovery=recovery,
@@ -308,10 +308,10 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
         def sync_wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except UFOError:
+            except GalaxyError:
                 raise
             except Exception as e:
-                ufo_err = UFOError(
+                ufo_err = GalaxyError(
                     message=f"{func.__name__} 执行失败: {e}",
                     category=category,
                     recovery=recovery,
@@ -343,8 +343,8 @@ def create_error_handlers(app):
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
-    @app.exception_handler(UFOError)
-    async def ufo_error_handler(request: Request, exc: UFOError):
+    @app.exception_handler(GalaxyError)
+    async def ufo_error_handler(request: Request, exc: GalaxyError):
         _global_tracker.record(exc, handled=True)
         status_code = {
             ErrorCategory.AUTH: 401,
@@ -361,7 +361,7 @@ def create_error_handlers(app):
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
-        ufo_err = UFOError(
+        ufo_err = GalaxyError(
             message=f"未处理的异常: {exc}",
             category=ErrorCategory.INTERNAL,
             severity=ErrorSeverity.ERROR,

@@ -13,7 +13,7 @@ import threading # 导入桌面自动化模块
 import argparse
 
 NODE_50_URL = os.environ.get("NODE_50_URL", "ws://localhost:8050")
-DEVICE_ID = os.environ.get("DEVICE_ID", "Windows_UFO_Client_001")
+DEVICE_ID = os.environ.get("DEVICE_ID", "Windows_Galaxy_Client_001")
 
 
 async def send_aip_message(websocket, message_type: str, payload: dict):
@@ -107,10 +107,10 @@ async def handle_aip_message(message: str):
         print(f"Error handling message: {e}")
 
 async def aip_client_logic(node50_url, client_id, ui_app):
-    """Windows UFO 客户端主函数"""
+    """Windows Galaxy 客户端主函数"""
     global websocket
     ws_url = f"{node50_url}/ws/ufo3/{client_id}"
-    print(f"Connecting to UFO³ Galaxy at {ws_url}...")
+    print(f"Connecting to Galaxy at {ws_url}...")
     
     while True:
         try:
@@ -142,7 +142,7 @@ def run_aip_client(node50_url, client_id, ui_app):
     asyncio.run(aip_client_logic(node50_url, client_id, ui_app))
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="UFO³ Galaxy Windows Client")
+    parser = argparse.ArgumentParser(description="Galaxy Windows Client")
     parser.add_argument("--node50_url", default=NODE_50_URL, help="Node 50 WebSocket URL")
     parser.add_argument("--client_id", default=DEVICE_ID, help="This client's unique ID")
     args = parser.parse_args()

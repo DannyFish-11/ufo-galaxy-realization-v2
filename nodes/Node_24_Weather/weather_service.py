@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Node_24 Weather Service
+Galaxy - Node_24 Weather Service
 =====================================
 
 真实的天气服务实现，支持多个天气 API

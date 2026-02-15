@@ -20,7 +20,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.FractalAgent")
+logger = logging.getLogger("Galaxy.FractalAgent")
 
 
 # ───────────────────── 数据模型 ─────────────────────

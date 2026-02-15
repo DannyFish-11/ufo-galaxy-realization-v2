@@ -1,5 +1,5 @@
 """
-UFO Galaxy Bridge 兼容性测试
+Galaxy Bridge 兼容性测试
 
 测试桥接器的基本功能，无需实际运行两个系统
 """
@@ -11,19 +11,19 @@ from pathlib import Path
 # 添加路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ufo_galaxy_bridge import UFOGalaxyBridge
+from ufo_galaxy_bridge import GalaxyGalaxyBridge
 
 async def test_initialization():
     """测试初始化"""
     print("测试 1: 初始化桥接器")
     print("-" * 80)
     
-    bridge = UFOGalaxyBridge()
+    bridge = GalaxyGalaxyBridge()
     await bridge.initialize()
     
     print(f"✅ 初始化完成")
     print(f"   ufo-galaxy 可用: {bridge.ufo_galaxy_available}")
-    print(f"   微软 UFO 可用: {bridge.microsoft_ufo_available}")
+    print(f"   微软 Galaxy 可用: {bridge.microsoft_ufo_available}")
     
     return bridge
 
@@ -49,7 +49,7 @@ async def test_error_handling(bridge):
 async def main():
     """运行所有测试"""
     print("=" * 80)
-    print("UFO Galaxy Bridge 兼容性测试")
+    print("Galaxy Bridge 兼容性测试")
     print("=" * 80)
     
     bridge = await test_initialization()

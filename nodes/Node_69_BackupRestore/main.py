@@ -1,6 +1,6 @@
 """
 Node 69: Backup & Disaster Recovery System
-UFO Galaxy 64-Core MCP Matrix - Phase 6: Immune System
+Galaxy 64-Core MCP Matrix - Phase 6: Immune System
 
 Automated backup with versioning and point-in-time recovery.
 """
@@ -623,7 +623,7 @@ async def lifespan(app: FastAPI):
         await service.http_client.aclose()
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Backup & Disaster Recovery System",
     version="1.0.0",
     lifespan=lifespan

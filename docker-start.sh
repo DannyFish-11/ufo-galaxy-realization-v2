@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# UFO Galaxy V2 - Docker 快速启动
+# Galaxy V2 - Docker 快速启动
 #
 
 set -e
 
 echo "========================================"
-echo "  UFO Galaxy V2 - Docker 部署"
+echo "  Galaxy V2 - Docker 部署"
 echo "========================================"
 echo ""
 

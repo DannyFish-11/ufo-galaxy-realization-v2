@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy V2 - 设备注册脚本
+Galaxy V2 - 设备注册脚本
 快速将设备注册到 Galaxy 系统
 """
 
@@ -76,7 +76,7 @@ def register_device(gateway_url, device_id, device_name, device_type, aliases, c
         return None
 
 def main():
-    parser = argparse.ArgumentParser(description="UFO Galaxy 设备注册工具")
+    parser = argparse.ArgumentParser(description="Galaxy 设备注册工具")
     
     parser.add_argument("--gateway", default="http://localhost:8080", 
                         help="Gateway 地址 (默认: http://localhost:8080)")
@@ -92,7 +92,7 @@ def main():
     args = parser.parse_args()
     
     print("=" * 50)
-    print("  UFO Galaxy 设备注册工具")
+    print("  Galaxy 设备注册工具")
     print("=" * 50)
     print()
     

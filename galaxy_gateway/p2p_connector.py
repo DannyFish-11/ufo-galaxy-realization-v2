@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - P2P 连接器
+Galaxy - P2P 连接器
 
 功能：
 1. P2P 直连建立（设备间直接通信）

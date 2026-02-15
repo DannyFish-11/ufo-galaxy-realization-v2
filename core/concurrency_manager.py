@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
 
-logger = logging.getLogger("UFO-Galaxy.Concurrency")
+logger = logging.getLogger("Galaxy.Concurrency")
 
 
 # ───────────────────── 数据模型 ─────────────────────

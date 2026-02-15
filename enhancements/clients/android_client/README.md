@@ -1,4 +1,4 @@
-# UFO³ Galaxy Android Client
+# Galaxy Android Client
 
 **版本:** v2.2 Premium  
 **更新日期:** 2026-01-22  
@@ -8,7 +8,7 @@
 
 ## 📱 项目简介
 
-UFO³ Galaxy Android Client 是 Microsoft UFO³ Galaxy 系统的移动端子代理（Sub-Agent），为用户提供了一个便携、高效、美观的方式来访问和控制整个 Galaxy 系统。
+Galaxy Android Client 是 Microsoft Galaxy 系统的移动端子代理（Sub-Agent），为用户提供了一个便携、高效、美观的方式来访问和控制整个 Galaxy 系统。
 
 本客户端采用原生 Android 开发，使用 Jetpack Compose 构建现代化的 UI，融合了"灵动岛"交互设计和"极简极客"视觉风格，为用户带来独特而精致的使用体验。
 
@@ -161,7 +161,7 @@ android_client/
 ### **前提条件**
 1.  安装最新版的 **Android Studio**。
 2.  确保 JDK 版本为 **17** 或更高。
-3.  您的 UFO³ Galaxy 后端服务正在运行。
+3.  您的 Galaxy 后端服务正在运行。
 
 ### **步骤**
 

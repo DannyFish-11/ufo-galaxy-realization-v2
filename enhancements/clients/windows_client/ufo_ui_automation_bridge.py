@@ -1,7 +1,7 @@
 """
 Windows UI 自动化桥接器
 
-功能：将我们的增强系统与微软 UFO 的 UI 自动化能力集成
+功能：将我们的增强系统与微软 Galaxy 的 UI 自动化能力集成
 
 作者：Manus AI
 日期：2025-01-20
@@ -13,11 +13,11 @@ from typing import Dict, Any, List
 import subprocess
 import json
 
-class UFOUIAutomationBridge:
+class GalaxyUIAutomationBridge:
     """
-    微软 UFO UI 自动化桥接器
+    微软 Galaxy UI 自动化桥接器
     
-    将我们的软件操作命令转换为微软 UFO 的 UI 自动化调用
+    将我们的软件操作命令转换为微软 Galaxy 的 UI 自动化调用
     """
     
     def __init__(self, ufo_path: str = None):
@@ -25,15 +25,15 @@ class UFOUIAutomationBridge:
         初始化桥接器
         
         Args:
-            ufo_path: 微软 UFO 项目的路径
+            ufo_path: 微软 Galaxy 项目的路径
         """
-        self.ufo_path = ufo_path or os.path.join(os.path.expanduser("~"), "UFO")
+        self.ufo_path = ufo_path or os.path.join(os.path.expanduser("~"), "Galaxy")
         
-        # 检查微软 UFO 是否存在
+        # 检查微软 Galaxy 是否存在
         if not os.path.exists(self.ufo_path):
-            print(f"警告: 微软 UFO 路径不存在: {self.ufo_path}")
+            print(f"警告: 微软 Galaxy 路径不存在: {self.ufo_path}")
         
-        # 添加 UFO 路径到 sys.path
+        # 添加 Galaxy 路径到 sys.path
         if self.ufo_path not in sys.path:
             sys.path.insert(0, self.ufo_path)
     
@@ -61,18 +61,18 @@ class UFOUIAutomationBridge:
         print(f"执行 UI 自动化: {software} - {action}")
         
         try:
-            # 尝试导入微软 UFO 的模块
+            # 尝试导入微软 Galaxy 的模块
             result = self._execute_with_ufo(software, action, steps)
             return result
         except Exception as e:
-            print(f"使用微软 UFO 执行失败: {e}")
+            print(f"使用微软 Galaxy 执行失败: {e}")
             # 降级到基本的 Windows 自动化
             return self._execute_with_basic_automation(software, action, steps)
     
     def _execute_with_ufo(self, software: str, action: str, steps: List[Dict]) -> Dict[str, Any]:
-        """使用微软 UFO 执行（如果可用）"""
+        """使用微软 Galaxy 执行（如果可用）"""
         try:
-            # 尝试导入 UFO 的 AppAgent
+            # 尝试导入 Galaxy 的 AppAgent
             from ufo.agents.app_agent import AppAgent
             from ufo.config.config import Config
             
@@ -95,9 +95,9 @@ class UFOUIAutomationBridge:
                 "result": result
             }
         except ImportError as e:
-            raise Exception(f"无法导入微软 UFO 模块: {e}")
+            raise Exception(f"无法导入微软 Galaxy 模块: {e}")
         except Exception as e:
-            raise Exception(f"微软 UFO 执行失败: {e}")
+            raise Exception(f"微软 Galaxy 执行失败: {e}")
     
     def _execute_with_basic_automation(self, software: str, action: str, steps: List[Dict]) -> Dict[str, Any]:
         """使用基本的 Windows 自动化（降级方案）"""
@@ -185,7 +185,7 @@ class UFOUIAutomationBridge:
 
 # 使用示例
 if __name__ == "__main__":
-    bridge = UFOUIAutomationBridge()
+    bridge = GalaxyUIAutomationBridge()
     
     # 测试命令
     test_commands = [

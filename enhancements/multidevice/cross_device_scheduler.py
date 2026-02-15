@@ -1,5 +1,5 @@
 """
-UFO Galaxy v5.0 - Cross-Device Scheduler Module
+Galaxy v5.0 - Cross-Device Scheduler Module
 Multi-Device Task Scheduling System
 
 This module provides task scheduling across multiple devices with 6 load balancing
@@ -21,7 +21,7 @@ Load Balancing Strategies:
 5. Geographic - Based on device location
 6. Adaptive - Dynamic strategy selection
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 

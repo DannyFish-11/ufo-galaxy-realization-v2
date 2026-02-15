@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 统一设备 Agent 管理器
+Galaxy - 统一设备 Agent 管理器
 ===================================
 
 功能：
 1. 统一管理所有设备 Agent（Android、Windows、macOS、IoT 等）
 2. 提供设备注册、发现、状态监控
 3. 支持动态添加新的 Device Agent
-4. 与微软 UFO 深度集成
+4. 与微软 Galaxy 深度集成
 
 作者：Manus AI
 日期：2026-02-06
@@ -286,11 +286,11 @@ class AndroidDeviceAgent(BaseDeviceAgent):
 
 
 # ============================================================================
-# Windows 设备 Agent（集成微软 UFO）
+# Windows 设备 Agent（集成微软 Galaxy）
 # ============================================================================
 
 class WindowsDeviceAgent(BaseDeviceAgent):
-    """Windows 设备 Agent - 深度集成微软 UFO"""
+    """Windows 设备 Agent - 深度集成微软 Galaxy"""
     
     def __init__(self, device_info: DeviceInfo, ufo_path: str = None):
         super().__init__(device_info)
@@ -300,7 +300,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
         
     async def connect(self) -> bool:
         try:
-            # 尝试加载微软 UFO
+            # 尝试加载微软 Galaxy
             await self._load_microsoft_ufo()
             self.is_connected = True
             self.device_info.status = DeviceStatus.ONLINE
@@ -312,19 +312,19 @@ class WindowsDeviceAgent(BaseDeviceAgent):
             return False
     
     async def _load_microsoft_ufo(self):
-        """加载微软 UFO 模块"""
+        """加载微软 Galaxy 模块"""
         try:
             import sys
             if self.ufo_path:
                 sys.path.insert(0, self.ufo_path)
             
-            # 尝试导入微软 UFO 的 Puppeteer
+            # 尝试导入微软 Galaxy 的 Puppeteer
             from external.microsoft_ufo.automator.puppeteer import Puppeteer
             self.puppeteer = Puppeteer()
             self.ufo_available = True
-            logger.info("Microsoft UFO loaded successfully")
+            logger.info("Microsoft Galaxy loaded successfully")
         except ImportError as e:
-            logger.warning(f"Microsoft UFO not available: {e}")
+            logger.warning(f"Microsoft Galaxy not available: {e}")
             self.ufo_available = False
     
     async def disconnect(self) -> bool:
@@ -336,24 +336,24 @@ class WindowsDeviceAgent(BaseDeviceAgent):
         if not self.is_connected:
             return {"error": "Device not connected"}
         
-        # 优先使用微软 UFO
+        # 优先使用微软 Galaxy
         if self.ufo_available and self.puppeteer:
             return await self._execute_with_ufo(command, params)
         else:
             return await self._execute_with_fallback(command, params)
     
     async def _execute_with_ufo(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """使用微软 UFO 执行命令"""
+        """使用微软 Galaxy 执行命令"""
         try:
             if command == "click":
-                # 使用 UFO 的点击功能
+                # 使用 Galaxy 的点击功能
                 result = self.puppeteer.click(params.get("x"), params.get("y"))
                 return {"success": True, "method": "microsoft_ufo", "result": result}
             elif command == "type":
                 result = self.puppeteer.type_text(params.get("text"))
                 return {"success": True, "method": "microsoft_ufo", "result": result}
             elif command == "find_element":
-                # 使用 UFO 的元素查找
+                # 使用 Galaxy 的元素查找
                 result = self.puppeteer.find_element(params.get("selector"))
                 return {"success": True, "method": "microsoft_ufo", "result": result}
             else:
@@ -362,7 +362,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
             return {"error": str(e), "method": "microsoft_ufo"}
     
     async def _execute_with_fallback(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """降级执行（不使用微软 UFO）"""
+        """降级执行（不使用微软 Galaxy）"""
         try:
             import pyautogui
             if command == "click":
@@ -684,7 +684,7 @@ def create_device_api():
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
     
-    app = FastAPI(title="UFO Galaxy Device Manager API", version="2.0")
+    app = FastAPI(title="Galaxy Device Manager API", version="2.0")
     
     class RegisterDeviceRequest(BaseModel):
         device_id: str

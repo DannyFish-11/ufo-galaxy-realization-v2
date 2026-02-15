@@ -4,7 +4,7 @@
 """
 Device Client Endpoint
 
-Wraps the existing UFO WebSocket client with AIP protocol abstractions.
+Wraps the existing Galaxy WebSocket client with AIP protocol abstractions.
 """
 
 import logging
@@ -20,14 +20,14 @@ class DeviceClientEndpoint(AIPEndpoint):
     """
     Device Client endpoint for AIP.
 
-    Wraps the existing UFOWebSocketClient to provide AIP protocol support
+    Wraps the existing GalaxyWebSocketClient to provide AIP protocol support
     while maintaining full backward compatibility.
     """
 
     def __init__(
         self,
         ws_url: str,
-        ufo_client: Any,  # UFOClient
+        ufo_client: Any,  # GalaxyClient
         max_retries: int = 3,
         timeout: float = 120.0,
     ):
@@ -35,12 +35,12 @@ class DeviceClientEndpoint(AIPEndpoint):
         Initialize device client endpoint.
 
         :param ws_url: WebSocket server URL
-        :param ufo_client: UFOClient instance
+        :param ufo_client: GalaxyClient instance
         :param max_retries: Maximum reconnection retries
         :param timeout: Connection timeout
         """
         # Import here to avoid circular dependency
-        from ufo.client.websocket import UFOWebSocketClient
+        from ufo.client.websocket import GalaxyWebSocketClient
 
         # Create transport and protocol
         transport = WebSocketTransport(
@@ -66,7 +66,7 @@ class DeviceClientEndpoint(AIPEndpoint):
         self.timeout = timeout
 
         # Use existing client for compatibility
-        self.client = UFOWebSocketClient(ws_url, ufo_client, max_retries, timeout)
+        self.client = GalaxyWebSocketClient(ws_url, ufo_client, max_retries, timeout)
 
         # AIP-specific components
         self.registration_protocol = registration_protocol
@@ -135,7 +135,7 @@ class DeviceClientEndpoint(AIPEndpoint):
         :param device_id: Device ID
         :param reason: Cancellation reason
         """
-        # Client-side task cancellation handled by UFOClient
+        # Client-side task cancellation handled by GalaxyClient
         self.logger.info(f"Cancelling tasks for {device_id}: {reason}")
 
     async def on_device_disconnected(self, device_id: str) -> None:

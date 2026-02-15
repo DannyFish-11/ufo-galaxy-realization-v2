@@ -275,7 +275,7 @@ async def test_world_model_integration():
 async def main():
     """主测试函数"""
     print("\n" + "=" * 60)
-    print("UFO Galaxy L4 级物理设备控制测试")
+    print("Galaxy L4 级物理设备控制测试")
     print("=" * 60)
     
     try:

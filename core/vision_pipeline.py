@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 融合视觉理解管线 (Vision Pipeline)
+Galaxy - 融合视觉理解管线 (Vision Pipeline)
 
 将 OCR 和 GUI 理解深度融合为统一的视觉理解引擎。
 核心思路：DeepSeek OCR 2 作为统一视觉前端，一次调用同时输出：

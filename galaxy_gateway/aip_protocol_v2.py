@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - AIP v2.0 协议（Agent Interaction Protocol）
+Galaxy - AIP v2.0 协议（Agent Interaction Protocol）
 
 功能：
 1. 统一的消息格式标准

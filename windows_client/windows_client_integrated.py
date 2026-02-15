@@ -1,5 +1,5 @@
 """
-UFO Galaxy Windows客户端 - UI与L4集成版
+Galaxy Windows客户端 - UI与L4集成版
 极简主义设计风格，集成L4主循环
 """
 
@@ -121,7 +121,7 @@ class L4WorkerThread(QThread):
 
 class MinimalistWindow(QMainWindow):
     """
-    UFO Galaxy Windows客户端主窗口
+    Galaxy Windows客户端主窗口
     极简主义设计风格
     """
     
@@ -132,7 +132,7 @@ class MinimalistWindow(QMainWindow):
         self.l4_thread: Optional[L4WorkerThread] = None
         
         # 设置窗口
-        self.setWindowTitle("UFO Galaxy - AI Assistant")
+        self.setWindowTitle("Galaxy - AI Assistant")
         self.setMinimumSize(900, 700)
         
         # 设置深色主题
@@ -242,7 +242,7 @@ class MinimalistWindow(QMainWindow):
         main_layout.setSpacing(20)
         
         # 标题
-        title_label = QLabel("UFO Galaxy")
+        title_label = QLabel("Galaxy")
         title_label.setObjectName("title")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title_label)

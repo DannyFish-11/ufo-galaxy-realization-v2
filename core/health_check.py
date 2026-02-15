@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 生产级健康检查模块
+Galaxy - 生产级健康检查模块
 ================================
 
 提供深度健康检查、指标收集和告警功能。
@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.Health")
+logger = logging.getLogger("Galaxy.Health")
 
 # 启动时间
 _start_time = time.time()

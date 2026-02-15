@@ -1,6 +1,6 @@
 """
 节点工厂模块 - Node Factory
-用于动态创建、注册和管理 UFO Galaxy 节点
+用于动态创建、注册和管理 Galaxy 节点
 """
 
 import os

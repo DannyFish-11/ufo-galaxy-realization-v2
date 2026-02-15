@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy V2 - 系统验证脚本
+Galaxy V2 - 系统验证脚本
 验证所有核心功能是否正常工作
 """
 
@@ -162,7 +162,7 @@ def test_config():
 def main():
     """主测试函数"""
     print("\n" + "="*50)
-    print("  UFO Galaxy V2 系统验证")
+    print("  Galaxy V2 系统验证")
     print("="*50)
     
     results = []

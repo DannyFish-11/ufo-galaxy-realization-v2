@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - 智能节点启动器
+Galaxy - 智能节点启动器
 =============================
 
 根据依赖关系智能启动节点，支持故障恢复和自动重启
@@ -268,7 +268,7 @@ def main():
     """主函数"""
     if len(sys.argv) < 2:
         print(f"""
-{BLUE}UFO³ Galaxy - 智能节点启动器{RESET}
+{BLUE}Galaxy - 智能节点启动器{RESET}
 
 用法:
   python smart_launcher.py <命令> [选项]

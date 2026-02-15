@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Node_08_Fetch: UFO Galaxy 系统中的 HTTP 请求客户端节点
+Node_08_Fetch: Galaxy 系统中的 HTTP 请求客户端节点
 
 该节点实现了一个功能齐全的异步 HTTP 客户端，支持常见的 GET, POST, PUT, DELETE 请求方法。
-它被设计为 UFO Galaxy 系统中的一个标准服务节点，包含配置加载、日志记录、状态监控和健康检查等功能。
+它被设计为 Galaxy 系统中的一个标准服务节点，包含配置加载、日志记录、状态监控和健康检查等功能。
 """
 
 import asyncio
@@ -109,7 +109,7 @@ class FetchConfig:
     timeout_seconds: int = 30
     max_connections: int = 100
     default_headers: Dict[str, str] = field(default_factory=lambda: {
-        "User-Agent": "UFO-Galaxy-Fetch-Node/1.0",
+        "User-Agent": "Galaxy-Fetch-Node/1.0",
         "Accept": "application/json, text/plain, */*"
     })
 
@@ -309,7 +309,7 @@ async def main():
     print(json.dumps(get_response, indent=2, ensure_ascii=False))
 
     print("\n--- 4. 执行 POST 请求 (模拟) ---")
-    post_data = {"name": "UFO", "type": "Galaxy"}
+    post_data = {"name": "Galaxy", "type": "Galaxy"}
     post_response = await service.fetch(HttpMethod.POST, "https://httpbin.org/post", json_data=post_data)
     print(json.dumps(post_response, indent=2, ensure_ascii=False))
 

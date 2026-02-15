@@ -40,7 +40,7 @@ class GalaxySettings:
         # 基本信息
         self.name = os.getenv("GALAXY_NAME", "Galaxy")
         self.version = "2.1.2"
-        self.node_id = os.getenv("UFO_NODE_ID", "master")
+        self.node_id = os.getenv("Galaxy_NODE_ID", "master")
         
         # 端口配置
         self.http_port = int(os.getenv("WEB_UI_PORT", "8080"))

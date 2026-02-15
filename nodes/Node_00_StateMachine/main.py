@@ -1,8 +1,8 @@
 """
 Node 00: Global State Machine
-UFO Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
+Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
 
-This is the central nervous system of UFO Galaxy.
+This is the central nervous system of Galaxy.
 All global state MUST sync through this node.
 """
 
@@ -232,8 +232,8 @@ async def lifespan(app: FastAPI):
         await redis_client.close()
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
-    description="Global State Machine - The Heart of UFO Galaxy",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
+    description="Global State Machine - The Heart of Galaxy",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -341,7 +341,7 @@ async def root():
         "node_name": NODE_NAME,
         "layer": "L0_KERNEL",
         "status": "running",
-        "role": "Global State Machine - Central nervous system of UFO Galaxy"
+        "role": "Global State Machine - Central nervous system of Galaxy"
     }
 
 # =============================================================================

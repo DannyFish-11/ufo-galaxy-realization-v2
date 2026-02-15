@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Dashboard Backend
+Galaxy Dashboard Backend
 可视化界面后端 API
 
 功能：
@@ -218,7 +218,7 @@ dashboard = DashboardService()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    logger.info("Starting UFO³ Galaxy Dashboard")
+    logger.info("Starting Galaxy Dashboard")
     
     # 启动后台状态监控
     async def status_monitor():
@@ -242,7 +242,7 @@ async def lifespan(app: FastAPI):
     logger.info("Dashboard shutdown complete")
 
 app = FastAPI(
-    title="UFO³ Galaxy Dashboard",
+    title="Galaxy Dashboard",
     description="可视化管理界面",
     version="1.0.0",
     lifespan=lifespan
@@ -263,7 +263,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {
-        "service": "UFO³ Galaxy Dashboard",
+        "service": "Galaxy Dashboard",
         "status": "running",
         "version": "1.0.0"
     }

@@ -1,5 +1,5 @@
 """
-UFO Galaxy v5.0 - Device Coordinator Module
+Galaxy v5.0 - Device Coordinator Module
 WebSocket-based Real-time Coordination System
 
 This module provides WebSocket server for real-time device coordination,
@@ -20,7 +20,7 @@ FastAPI Endpoints:
 - GET /sessions - List active sessions
 - GET /sessions/{session_id} - Get session details
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 Port: 8055
 """
@@ -462,7 +462,7 @@ class TaskHandler(ProtocolHandler):
 
 class DeviceCoordinator:
     """
-    Device Coordinator for UFO Galaxy
+    Device Coordinator for Galaxy
     
     Manages WebSocket connections, message routing, and coordination
     between devices using AIP v2.0 protocol.
@@ -673,8 +673,8 @@ def create_app(coordinator: Optional[DeviceCoordinator] = None) -> FastAPI:
     """Create FastAPI application"""
     
     app = FastAPI(
-        title="UFO Galaxy Device Coordinator",
-        description="WebSocket-based real-time coordination system for UFO Galaxy v5.0",
+        title="Galaxy Device Coordinator",
+        description="WebSocket-based real-time coordination system for Galaxy v5.0",
         version="5.0.0"
     )
     
@@ -793,7 +793,7 @@ def create_app(coordinator: Optional[DeviceCoordinator] = None) -> FastAPI:
     async def root():
         """Root endpoint"""
         return {
-            "service": "UFO Galaxy Device Coordinator",
+            "service": "Galaxy Device Coordinator",
             "version": "5.0.0",
             "port": 8055,
             "websocket_endpoint": "/ws",

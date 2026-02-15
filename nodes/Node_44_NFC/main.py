@@ -4,7 +4,7 @@
 """
 Node_44_NFC: NFC 近场通信节点
 
-本文件实现了 UFO Galaxy 系统中的 NFC（近场通信）节点。该节点负责与 NFC 读写器硬件进行交互，
+本文件实现了 Galaxy 系统中的 NFC（近场通信）节点。该节点负责与 NFC 读写器硬件进行交互，
 支持对 NFC 标签的发现、读取和写入操作。它被设计为一个独立的、可异步运行的服务，
 并通过 API 提供状态查询和健康检查功能。
 
@@ -215,7 +215,7 @@ class NFCNodeService:
             await asyncio.sleep(random.uniform(0.1, self.config.read_timeout))
             # 模拟读取成功或失败
             if random.random() > 0.15: # 85% 成功率
-                read_data = f"UFO-Galaxy-Data-{random.randint(1000, 9999)}"
+                read_data = f"Galaxy-Data-{random.randint(1000, 9999)}"
                 self.current_tag.data = read_data
                 self.current_tag.status = TagStatus.READ_SUCCESS
                 logger.info(f"成功读取标签数据: {read_data}")

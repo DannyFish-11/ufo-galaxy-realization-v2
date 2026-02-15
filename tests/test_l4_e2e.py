@@ -313,7 +313,7 @@ async def test_full_cycle():
 async def main():
     """主测试函数"""
     print("\n" + "=" * 60)
-    print("UFO Galaxy L4 级自主性智能系统 - 端到端测试")
+    print("Galaxy L4 级自主性智能系统 - 端到端测试")
     print("=" * 60)
     
     try:

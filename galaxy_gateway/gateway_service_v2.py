@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Gateway - 主服务 v2.0（集成增强 NLU）
+Galaxy Gateway - 主服务 v2.0（集成增强 NLU）
 
 功能：
 1. WebSocket 服务器 - 接收来自各节点的连接
@@ -37,7 +37,7 @@ from task_decomposer import TaskDecomposer, CrossDeviceCoordinator, IntelligentT
 # ============================================================================
 
 app = FastAPI(
-    title="UFO³ Galaxy Gateway v2.0",
+    title="Galaxy Gateway v2.0",
     description="增强版 Galaxy Gateway，支持多设备智能操控",
     version="2.0.0"
 )
@@ -142,7 +142,7 @@ class TaskExecutionRequest(BaseModel):
 async def root():
     """根端点"""
     return {
-        "service": "UFO³ Galaxy Gateway",
+        "service": "Galaxy Gateway",
         "version": "2.0.0",
         "status": "running",
         "features": [
@@ -431,7 +431,7 @@ async def test_nlu(request: CommandRequest):
 def main():
     """启动 Gateway 服务"""
     print("="*80)
-    print("UFO³ Galaxy Gateway v2.0")
+    print("Galaxy Gateway v2.0")
     print("="*80)
     print(f"启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"LLM 提供商: {os.getenv('LLM_PROVIDER', 'ollama')}")

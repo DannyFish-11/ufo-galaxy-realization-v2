@@ -195,7 +195,7 @@ This paper surveys the recent advances in quantum machine learning...
 #arXiv #cs.LG #quant-ph #量子计算 #机器学习
 
 ---
-*由 UFO³ Galaxy Node_97 自动保存于 2026-01-22 12:00:00*
+*由 Galaxy Node_97 自动保存于 2026-01-22 12:00:00*
 ```
 
 ### 配置 Memos Token
@@ -324,4 +324,4 @@ Apache-2.0
 
 ---
 
-**Node 97** | Academic Search | UFO³ Galaxy
+**Node 97** | Academic Search | Galaxy

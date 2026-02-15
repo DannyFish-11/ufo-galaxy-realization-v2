@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Autonomous Learning Engine for UFO Galaxy v5.0
+Autonomous Learning Engine for Galaxy v5.0
 
 This module implements a self-learning system with a 5-stage learning loop:
 observe → analyze → experiment → validate → deploy
@@ -8,7 +8,7 @@ observe → analyze → experiment → validate → deploy
 The system demonstrates emergent behavior through continuous pattern recognition
 from multiple data sources and knowledge accumulation.
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 

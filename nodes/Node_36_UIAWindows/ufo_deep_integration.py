@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Node 36: UIAWindows - 微软 UFO 深度集成模块
+Node 36: UIAWindows - 微软 Galaxy 深度集成模块
 ==========================================
 
 功能：
-1. 深度集成微软 UFO 的 UI 自动化能力
+1. 深度集成微软 Galaxy 的 UI 自动化能力
 2. 提供统一的 Windows UI 控制接口
 3. 支持自然语言任务执行
-4. 与 UFO Galaxy 节点系统无缝对接
+4. 与 Galaxy 节点系统无缝对接
 
 作者：Manus AI
 日期：2026-02-06
@@ -29,18 +29,18 @@ from enum import Enum
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 添加微软 UFO 路径
-UFO_ROOT = Path(__file__).parent.parent.parent / "external" / "microsoft_ufo"
-if UFO_ROOT.exists():
-    sys.path.insert(0, str(UFO_ROOT))
+# 添加微软 Galaxy 路径
+Galaxy_ROOT = Path(__file__).parent.parent.parent / "external" / "microsoft_ufo"
+if Galaxy_ROOT.exists():
+    sys.path.insert(0, str(Galaxy_ROOT))
 
 
 # ============================================================================
-# 微软 UFO 组件加载器
+# 微软 Galaxy 组件加载器
 # ============================================================================
 
-class UFOComponentLoader:
-    """微软 UFO 组件加载器"""
+class GalaxyComponentLoader:
+    """微软 Galaxy 组件加载器"""
     
     def __init__(self):
         self.puppeteer = None
@@ -51,14 +51,14 @@ class UFOComponentLoader:
         self.load_errors = []
     
     def load_all(self) -> bool:
-        """加载所有微软 UFO 组件"""
+        """加载所有微软 Galaxy 组件"""
         success = True
         
         # 加载 Puppeteer
         try:
             from automator.puppeteer import Puppeteer
             self.puppeteer = Puppeteer
-            logger.info("✅ Loaded Microsoft UFO Puppeteer")
+            logger.info("✅ Loaded Microsoft Galaxy Puppeteer")
         except ImportError as e:
             self.load_errors.append(f"Puppeteer: {e}")
             success = False
@@ -67,7 +67,7 @@ class UFOComponentLoader:
         try:
             from automator.ui_control.controller import UIController
             self.controller = UIController
-            logger.info("✅ Loaded Microsoft UFO UIController")
+            logger.info("✅ Loaded Microsoft Galaxy UIController")
         except ImportError as e:
             self.load_errors.append(f"UIController: {e}")
             success = False
@@ -76,7 +76,7 @@ class UFOComponentLoader:
         try:
             from agents.agent.app_agent import AppAgent
             self.app_agent = AppAgent
-            logger.info("✅ Loaded Microsoft UFO AppAgent")
+            logger.info("✅ Loaded Microsoft Galaxy AppAgent")
         except ImportError as e:
             self.load_errors.append(f"AppAgent: {e}")
         
@@ -84,7 +84,7 @@ class UFOComponentLoader:
         try:
             from agents.agent.host_agent import HostAgent
             self.host_agent = HostAgent
-            logger.info("✅ Loaded Microsoft UFO HostAgent")
+            logger.info("✅ Loaded Microsoft Galaxy HostAgent")
         except ImportError as e:
             self.load_errors.append(f"HostAgent: {e}")
         
@@ -104,14 +104,14 @@ class UFOComponentLoader:
 
 
 # ============================================================================
-# UFO 深度集成服务
+# Galaxy 深度集成服务
 # ============================================================================
 
-class UFODeepIntegration:
+class GalaxyDeepIntegration:
     """
-    微软 UFO 深度集成服务
+    微软 Galaxy 深度集成服务
     
-    提供与微软 UFO 的深度集成，包括：
+    提供与微软 Galaxy 的深度集成，包括：
     1. UI 元素识别和操作
     2. 应用程序控制
     3. 自然语言任务执行
@@ -119,7 +119,7 @@ class UFODeepIntegration:
     """
     
     def __init__(self):
-        self.loader = UFOComponentLoader()
+        self.loader = GalaxyComponentLoader()
         self.puppeteer_instance = None
         self.controller_instance = None
         self.is_initialized = False
@@ -137,7 +137,7 @@ class UFODeepIntegration:
             "message": ""
         }
         
-        # 尝试加载微软 UFO
+        # 尝试加载微软 Galaxy
         if self.loader.load_all():
             result["ufo_available"] = True
             
@@ -148,11 +148,11 @@ class UFODeepIntegration:
                 if self.loader.controller:
                     self.controller_instance = self.loader.controller()
                 
-                result["message"] = "Microsoft UFO initialized successfully"
+                result["message"] = "Microsoft Galaxy initialized successfully"
             except Exception as e:
-                result["message"] = f"UFO instance creation failed: {e}"
+                result["message"] = f"Galaxy instance creation failed: {e}"
         else:
-            result["message"] = f"UFO load failed: {self.loader.load_errors}"
+            result["message"] = f"Galaxy load failed: {self.loader.load_errors}"
         
         # 加载降级方案
         try:
@@ -204,7 +204,7 @@ class UFODeepIntegration:
                 if element:
                     return self._element_to_dict(element)
             except Exception as e:
-                logger.error(f"UFO find_element failed: {e}")
+                logger.error(f"Galaxy find_element failed: {e}")
         
         return None
     
@@ -220,12 +220,12 @@ class UFODeepIntegration:
                 )
                 return [self._element_to_dict(e) for e in elements]
             except Exception as e:
-                logger.error(f"UFO find_elements failed: {e}")
+                logger.error(f"Galaxy find_elements failed: {e}")
         
         return []
     
     def _element_to_dict(self, element) -> Dict[str, Any]:
-        """将 UFO 元素转换为字典"""
+        """将 Galaxy 元素转换为字典"""
         try:
             rect = element.rectangle() if hasattr(element, 'rectangle') else None
             return {
@@ -445,14 +445,14 @@ class UFODeepIntegration:
             return {"success": False, "error": str(e)}
     
     # ========================================================================
-    # 自然语言任务执行（深度集成微软 UFO Agent）
+    # 自然语言任务执行（深度集成微软 Galaxy Agent）
     # ========================================================================
     
     async def execute_task(self, task: str, app_name: Optional[str] = None) -> Dict[str, Any]:
         """
         执行自然语言描述的任务
         
-        这是与微软 UFO 最深度的集成点，利用 UFO 的 Agent 能力
+        这是与微软 Galaxy 最深度的集成点，利用 Galaxy 的 Agent 能力
         
         Args:
             task: 自然语言任务描述
@@ -464,7 +464,7 @@ class UFODeepIntegration:
         if not self.loader.app_agent:
             return {
                 "success": False,
-                "error": "Microsoft UFO AppAgent not available",
+                "error": "Microsoft Galaxy AppAgent not available",
                 "fallback": "Please use basic UI operations instead"
             }
         
@@ -534,12 +534,12 @@ class UFODeepIntegration:
 # ============================================================================
 
 def create_ufo_integration_api():
-    """创建 UFO 集成 API"""
+    """创建 Galaxy 集成 API"""
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
     
-    app = FastAPI(title="UFO Galaxy - Microsoft UFO Deep Integration", version="2.0")
-    integration = UFODeepIntegration()
+    app = FastAPI(title="Galaxy - Microsoft Galaxy Deep Integration", version="2.0")
+    integration = GalaxyDeepIntegration()
     
     class ClickRequest(BaseModel):
         x: int
@@ -670,7 +670,7 @@ def create_ufo_integration_api():
 # 全局实例
 # ============================================================================
 
-ufo_deep = UFODeepIntegration()
+ufo_deep = GalaxyDeepIntegration()
 
 
 # ============================================================================
@@ -678,7 +678,7 @@ ufo_deep = UFODeepIntegration()
 # ============================================================================
 
 async def main():
-    """示例：如何使用 UFO 深度集成"""
+    """示例：如何使用 Galaxy 深度集成"""
     
     # 初始化
     result = await ufo_deep.initialize()

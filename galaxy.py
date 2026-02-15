@@ -40,8 +40,8 @@ class GalaxySettings:
         # 基本信息
         self.name = os.getenv("GALAXY_NAME", "Galaxy")
         self.version = "2.0.9"
-        self.node_id = os.getenv("UFO_NODE_ID", "master")
-        self.node_role = os.getenv("UFO_NODE_ROLE", "coordinator")
+        self.node_id = os.getenv("Galaxy_NODE_ID", "master")
+        self.node_role = os.getenv("Galaxy_NODE_ROLE", "coordinator")
         
         # 端口配置
         self.http_port = int(os.getenv("WEB_UI_PORT", "8080"))
@@ -362,7 +362,7 @@ def main():
     if args.port:
         os.environ["WEB_UI_PORT"] = str(args.port)
     if args.node_id:
-        os.environ["UFO_NODE_ID"] = args.node_id
+        os.environ["Galaxy_NODE_ID"] = args.node_id
     
     # 启动系统
     galaxy = Galaxy()

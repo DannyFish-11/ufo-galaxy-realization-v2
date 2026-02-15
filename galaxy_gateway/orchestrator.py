@@ -1,5 +1,5 @@
 """
-GalaxyOrchestrator - UFO Galaxy 统一调度器
+GalaxyOrchestrator - Galaxy 统一调度器
 核心调度模块，串联端到端流程
 """
 
@@ -220,7 +220,7 @@ class DeviceManager:
 
 
 class GalaxyOrchestrator:
-    """UFO Galaxy 统一调度器 - 串联端到端流程"""
+    """Galaxy 统一调度器 - 串联端到端流程"""
 
     def __init__(self, config: Dict[str, Any]):
         """

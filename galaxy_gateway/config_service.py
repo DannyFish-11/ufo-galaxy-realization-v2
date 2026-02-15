@@ -155,7 +155,7 @@ class ConfigManager:
         lines.append("")
         lines.append("# ============ System ============")
         lines.append(f"GALAXY_NAME={config.system.name}")
-        lines.append(f"UFO_NODE_ID={config.system.nodeId}")
+        lines.append(f"Galaxy_NODE_ID={config.system.nodeId}")
         lines.append(f"WEB_UI_PORT={config.system.httpPort}")
         lines.append(f"WEBSOCKET_PORT={config.system.websocketPort}")
         lines.append(f"LOG_LEVEL={config.system.logLevel}")

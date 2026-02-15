@@ -1,4 +1,4 @@
-# UFO Galaxy Android 客户端
+# Galaxy Android 客户端
 
 L4 级自主性智能系统 Android 客户端，实现书法卷轴式 UI 和系统级 AI 交互。
 
@@ -71,7 +71,7 @@ android_client/
 ├── app/
 │   ├── src/main/
 │   │   ├── java/com/ufo/galaxy/
-│   │   │   ├── UFOGalaxyApplication.kt    # 应用入口
+│   │   │   ├── GalaxyGalaxyApplication.kt    # 应用入口
 │   │   │   ├── ui/
 │   │   │   │   ├── MainActivity.kt        # 主 Activity
 │   │   │   │   ├── viewmodel/
@@ -172,7 +172,7 @@ private val LightColorScheme = lightColorScheme(
 ## 常见问题
 
 ### Q: 悬浮窗不显示？
-A: 请在系统设置中授予 UFO Galaxy 悬浮窗权限。
+A: 请在系统设置中授予 Galaxy 悬浮窗权限。
 
 ### Q: 无法连接服务器？
 A: 检查服务器地址配置和网络连接，确保服务器正在运行。

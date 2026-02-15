@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy 系统最终端到端功能测试
+Galaxy 系统最终端到端功能测试
 测试所有核心模块、节点和UI的完整性
 """
 
@@ -160,7 +160,7 @@ def test_code_statistics():
 def main():
     """运行所有测试"""
     print("\n" + "=" * 60)
-    print("UFO Galaxy 系统最终端到端功能测试")
+    print("Galaxy 系统最终端到端功能测试")
     print("=" * 60 + "\n")
     
     tests = [

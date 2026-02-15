@@ -2,7 +2,7 @@
 
 ## 📋 概述
 
-Node_110_SmartOrchestrator 是 UFO³ Galaxy 系统的智能任务编排引擎，能够自动分析、匹配、编排和执行复杂任务。
+Node_110_SmartOrchestrator 是 Galaxy 系统的智能任务编排引擎，能够自动分析、匹配、编排和执行复杂任务。
 
 ### 核心功能
 
@@ -251,7 +251,7 @@ MIT License
 ## 👥 贡献者
 
 - Manus AI - 初始开发
-- UFO³ Galaxy Team - 系统集成
+- Galaxy Team - 系统集成
 
 ---
 

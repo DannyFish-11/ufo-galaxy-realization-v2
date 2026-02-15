@@ -1,8 +1,8 @@
-# UFO Galaxy 系统 - API配置报告
+# Galaxy 系统 - API配置报告
 
 ## 📋 执行摘要
 
-本报告详细记录了UFO Galaxy系统的所有外部API和服务依赖配置。配置文件已创建并保存到指定目录。
+本报告详细记录了Galaxy系统的所有外部API和服务依赖配置。配置文件已创建并保存到指定目录。
 
 ---
 
@@ -332,4 +332,4 @@ curl https://api.groq.com/openai/v1/models \
 
 **报告生成时间**: 2024年
 **配置文件版本**: v1.0.0
-**作者**: UFO Galaxy Deployment Team
+**作者**: Galaxy Deployment Team

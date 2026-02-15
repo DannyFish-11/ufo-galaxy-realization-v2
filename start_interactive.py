@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy V2 - 统一交互启动器
+Galaxy V2 - 统一交互启动器
 整合所有交互功能：按键唤醒、卷轴UI、语音输入、摄像头等
 """
 
@@ -65,7 +65,7 @@ class InteractiveSystem:
     async def start(self):
         """启动交互系统"""
         logger.info("=" * 50)
-        logger.info("  UFO Galaxy 交互系统启动")
+        logger.info("  Galaxy 交互系统启动")
         logger.info("=" * 50)
         
         # 显示配置
@@ -205,7 +205,7 @@ class InteractiveSystem:
 # ============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="UFO Galaxy 交互系统")
+    parser = argparse.ArgumentParser(description="Galaxy 交互系统")
     parser.add_argument("--hotkey", default="f12", help="唤醒热键")
     parser.add_argument("--style", default="geek_scroll", choices=["geek_scroll", "geek_sidebar"], help="UI 风格")
     parser.add_argument("--no-voice", action="store_true", help="禁用语音")

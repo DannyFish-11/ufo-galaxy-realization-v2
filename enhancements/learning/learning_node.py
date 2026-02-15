@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Learning Node Service for UFO Galaxy v5.0
+Learning Node Service for Galaxy v5.0
 
 FastAPI-based service providing:
 - REST API endpoints for learning operations
@@ -10,7 +10,7 @@ FastAPI-based service providing:
 
 Port: 8070
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -283,7 +283,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="UFO Galaxy Learning Node",
+    title="Galaxy Learning Node",
     description="Autonomous learning system with real-time WebSocket updates",
     version="5.0.0",
     lifespan=lifespan
@@ -305,7 +305,7 @@ app.add_middleware(
 async def root():
     """Root endpoint."""
     return {
-        "service": "UFO Galaxy Learning Node",
+        "service": "Galaxy Learning Node",
         "version": "5.0.0",
         "status": "running",
         "docs": "/docs"
@@ -601,7 +601,7 @@ async def websocket_endpoint(websocket: WebSocket):
         # Send initial status
         await websocket.send_json({
             'type': 'connected',
-            'message': 'Connected to UFO Galaxy Learning Node',
+            'message': 'Connected to Galaxy Learning Node',
             'timestamp': datetime.now().isoformat()
         })
         

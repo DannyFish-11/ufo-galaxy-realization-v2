@@ -1,5 +1,5 @@
 '''
-# UFO Galaxy 综合部署指南
+# Galaxy 综合部署指南
 
 **版本**: 1.0
 **最后更新**: 2026-02-06
@@ -9,7 +9,7 @@
 
 ## 1. 简介
 
-UFO Galaxy 是一个 L4 级自主AI系统，具备物理设备控制、Android 集成和系统级 AI 交互层。本指南将详细介绍如何部署和配置 UFO Galaxy 系统，确保您能够成功启动并运行所有核心功能。
+Galaxy 是一个 L4 级自主AI系统，具备物理设备控制、Android 集成和系统级 AI 交互层。本指南将详细介绍如何部署和配置 Galaxy 系统，确保您能够成功启动并运行所有核心功能。
 
 ## 2. 系统需求
 
@@ -114,7 +114,7 @@ python build_exe.py
 ## 8. Android 应用部署
 
 1.  使用 Android Studio 打开 `ufo-galaxy-android` 项目。
-2.  在 `app/src/main/java/com/ufogalaxy/Constants.kt` 文件中，将 `SERVER_URL` 修改为您的 UFO Galaxy 服务器地址。
+2.  在 `app/src/main/java/com/ufogalaxy/Constants.kt` 文件中，将 `SERVER_URL` 修改为您的 Galaxy 服务器地址。
 3.  连接您的 Android 设备（需开启开发者模式和 USB 调试）。
 4.  点击 "Run 'app'" 按钮来编译和安装应用。
 5.  启动应用后，根据提示授予无障碍服务和悬浮窗权限。

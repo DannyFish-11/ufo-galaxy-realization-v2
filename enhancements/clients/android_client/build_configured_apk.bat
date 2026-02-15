@@ -1,10 +1,10 @@
 @echo off
-REM UFO³ Galaxy Android 客户端自动配置构建脚本 (Windows 版本)
+REM Galaxy Android 客户端自动配置构建脚本 (Windows 版本)
 REM 版本: 1.0
 REM 日期: 2026-01-22
 
 echo ========================================
-echo    UFO³ Galaxy Android 自动构建
+echo    Galaxy Android 自动构建
 echo ========================================
 echo.
 
@@ -70,7 +70,7 @@ if exist "%APK_PATH%" (
     REM 重命名 APK
     for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
     set DATE_STR=%datetime:~0,8%
-    set NEW_APK_NAME=UFO3_Galaxy_%DEVICE_ID%_%DATE_STR%.apk
+    set NEW_APK_NAME=Galaxy3_Galaxy_%DEVICE_ID%_%DATE_STR%.apk
     copy "%APK_PATH%" "%NEW_APK_NAME%" >nul
     
     echo.

@@ -1,6 +1,6 @@
 """
 Node 13: Web Operations
-UFO Galaxy 64-Core MCP Matrix - Core Tool Node
+Galaxy 64-Core MCP Matrix - Core Tool Node
 
 Provides comprehensive web/HTTP operations:
 - HTTP requests (GET, POST, PUT, DELETE, etc.)
@@ -10,7 +10,7 @@ Provides comprehensive web/HTTP operations:
 - Session management
 - Proxy support
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -133,7 +133,7 @@ class WebService:
     def _get_default_headers(self) -> Dict[str, str]:
         """Get default request headers."""
         return {
-            "User-Agent": "UFO-Galaxy/5.0 (WebOperations Node)",
+            "User-Agent": "Galaxy/5.0 (WebOperations Node)",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate"
@@ -467,7 +467,7 @@ class WebService:
 
 app = FastAPI(
     title=f"Node {NODE_ID}: {NODE_NAME}",
-    description="Web operations service for UFO Galaxy",
+    description="Web operations service for Galaxy",
     version="5.0.0"
 )
 

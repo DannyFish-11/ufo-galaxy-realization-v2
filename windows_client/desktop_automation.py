@@ -95,7 +95,7 @@ def process_visual_command(prompt: str) -> Dict:
         action_data = {
             "action": "type",
             "target": "search_bar",
-            "text": "极客松 UFO³ Galaxy"
+            "text": "极客松 Galaxy"
         }
     else:
         action_data = {"action": "none", "reason": "Could not identify target with local logic."}
@@ -113,5 +113,5 @@ if __name__ == "__main__":
     
     # 示例：用户说“搜索极客松”
     print("\n--- Test: Search Geekathon ---")
-    result = process_visual_command("在搜索栏输入极客松 UFO³ Galaxy")
+    result = process_visual_command("在搜索栏输入极客松 Galaxy")
     print(f"Final Result: {result}")

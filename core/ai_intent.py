@@ -1,5 +1,5 @@
 """
-UFO Galaxy - AI 意图理解引擎
+Galaxy - AI 意图理解引擎
 =============================
 
 融合元气 AI Bot 精髓 - 智能感知：
@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("UFO-Galaxy.AIIntent")
+logger = logging.getLogger("Galaxy.AIIntent")
 
 
 # ============================================================================
@@ -202,7 +202,7 @@ class IntentParser:
         """LLM 意图解析"""
         available_intents = list(self.RULE_PATTERNS.keys()) + ["chat"]
 
-        system_prompt = f"""你是 UFO Galaxy 意图解析器。用户会输入自然语言，你需要：
+        system_prompt = f"""你是 Galaxy 意图解析器。用户会输入自然语言，你需要：
 1. 判断意图类别（可选: {', '.join(available_intents)}）
 2. 提取命令和参数
 3. 确定目标节点

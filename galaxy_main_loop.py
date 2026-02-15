@@ -1,5 +1,5 @@
 """
-UFO Galaxy 主循环入口
+Galaxy 主循环入口
 全天候运行模式 - 接收目标、规划、执行、自我反思
 """
 
@@ -212,7 +212,7 @@ class HealthMonitor:
 
 
 class GalaxyMainLoop:
-    """UFO Galaxy 主循环 - 全天候运行模式"""
+    """Galaxy 主循环 - 全天候运行模式"""
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config or {}
@@ -243,7 +243,7 @@ class GalaxyMainLoop:
 
     async def start(self):
         """启动主循环"""
-        self.logger.info("Starting UFO Galaxy Main Loop...")
+        self.logger.info("Starting Galaxy Main Loop...")
 
         # 初始化组件
         await self._initialize()

@@ -4,7 +4,7 @@
 """
 Device Server Endpoint
 
-Wraps the existing UFO server WebSocket handler with AIP protocol abstractions.
+Wraps the existing Galaxy server WebSocket handler with AIP protocol abstractions.
 This maintains backward compatibility while providing the AIP interface.
 """
 
@@ -22,7 +22,7 @@ class DeviceServerEndpoint(AIPEndpoint):
     """
     Device Server endpoint for AIP.
 
-    Wraps the existing UFOWebSocketHandler to provide AIP protocol support
+    Wraps the existing GalaxyWebSocketHandler to provide AIP protocol support
     while maintaining full backward compatibility with existing implementations.
     """
 
@@ -44,7 +44,7 @@ class DeviceServerEndpoint(AIPEndpoint):
         :param reconnection_strategy: Optional reconnection strategy
         """
         # Import here to avoid circular dependency
-        from ufo.server.ws.handler import UFOWebSocketHandler
+        from ufo.server.ws.handler import GalaxyWebSocketHandler
 
         if protocol is None:
             # Create a minimal protocol for compatibility
@@ -59,7 +59,7 @@ class DeviceServerEndpoint(AIPEndpoint):
         self.local = local
 
         # Use existing handler for actual implementation
-        self.handler = UFOWebSocketHandler(ws_manager, session_manager, local)
+        self.handler = GalaxyWebSocketHandler(ws_manager, session_manager, local)
 
         self.logger = logging.getLogger(f"{__name__}.DeviceServerEndpoint")
 
@@ -79,7 +79,7 @@ class DeviceServerEndpoint(AIPEndpoint):
         """
         Handle a WebSocket connection.
 
-        This delegates to the existing UFOWebSocketHandler for full compatibility.
+        This delegates to the existing GalaxyWebSocketHandler for full compatibility.
 
         :param websocket: WebSocket connection
         """

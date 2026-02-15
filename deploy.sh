@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# UFO Galaxy V2 - 一键部署脚本
+# Galaxy V2 - 一键部署脚本
 # ================================
 # 
 # 使用方法:
@@ -23,7 +23,7 @@ print_banner() {
     echo -e "${CYAN}"
     echo "  ╔═══════════════════════════════════════════════════════════╗"
     echo "  ║                                                           ║"
-    echo "  ║              UFO Galaxy V2 一键部署                       ║"
+    echo "  ║              Galaxy V2 一键部署                       ║"
     echo "  ║              L4 级自主性智能系统                          ║"
     echo "  ║                                                           ║"
     echo "  ╚═══════════════════════════════════════════════════════════╝"
@@ -194,7 +194,7 @@ print_status "info" "步骤 8/8: 部署完成!"
 
 echo ""
 print_status "success" "================================"
-print_status "success" "UFO Galaxy V2 部署完成!"
+print_status "success" "Galaxy V2 部署完成!"
 print_status "success" "================================"
 echo ""
 print_status "info" "下一步操作:"

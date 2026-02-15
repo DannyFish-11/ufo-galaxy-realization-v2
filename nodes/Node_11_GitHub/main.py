@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Node_11_GitHub: UFO Galaxy 系统中的 GitHub API 集成节点。
+Node_11_GitHub: Galaxy 系统中的 GitHub API 集成节点。
 
 该节点提供与 GitHub API 的交互能力，支持对仓库（Repository）和议题（Issue）的
 管理操作。它被设计为一个异步服务，能够高效地处理 API 请求。
@@ -286,7 +286,7 @@ async def main():
     # try:
     #     logger.info("\n4. 创建一个新议题:")
     #     new_issue = await service.create_issue(
-    #         title="[Test] 来自 UFO Galaxy 节点的问候",
+    #         title="[Test] 来自 Galaxy 节点的问候",
     #         body="这是一个通过 Node_11_GitHub 自动创建的测试议题。"
     #     )
     #     logger.info(f"成功创建议题 #{new_issue['number']}: {new_issue['html_url']}")

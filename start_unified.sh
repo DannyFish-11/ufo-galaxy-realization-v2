@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# UFO Galaxy - 统一启动脚本 v2.0
+# Galaxy - 统一启动脚本 v2.0
 # ================================
 # 
 # 功能：
@@ -241,7 +241,7 @@ main() {
             exit 0
             ;;
         --help|-h)
-            echo "UFO Galaxy 统一启动脚本 v2.0"
+            echo "Galaxy 统一启动脚本 v2.0"
             echo ""
             echo "用法: $0 [选项]"
             echo ""
@@ -271,7 +271,7 @@ main() {
     echo -e "\n${WHITE}=== 启动系统 ===${NC}\n"
     
     # 启动统一系统
-    log_step "启动 UFO Galaxy 统一系统..."
+    log_step "启动 Galaxy 统一系统..."
     echo ""
     
     # 传递所有参数给 Python

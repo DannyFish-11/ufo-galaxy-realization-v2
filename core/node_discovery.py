@@ -19,10 +19,10 @@ from typing import Dict, List, Optional, Callable, Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.NodeDiscovery")
+logger = logging.getLogger("Galaxy.NodeDiscovery")
 
 DISCOVERY_PORT = 19720
-DISCOVERY_MAGIC = b"UFOGLXY"  # 7 bytes 魔数
+DISCOVERY_MAGIC = b"GalaxyGLXY"  # 7 bytes 魔数
 HEARTBEAT_INTERVAL = 10       # 秒
 NODE_TIMEOUT = 35             # 3 次心跳未收到即认为下线
 

@@ -1,5 +1,5 @@
 """
-UFO Galaxy v5.0 - Device Protocol Module
+Galaxy v5.0 - Device Protocol Module
 AIP v2.0 Protocol Implementation
 
 This module defines the AIP (Advanced Inter-device Protocol) v2.0 message format,
@@ -12,7 +12,7 @@ Features:
 - Cross-platform message handling
 - Support for 500+ TPS
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -80,7 +80,7 @@ class MessageType(IntEnum):
 
 
 class DeviceType(IntEnum):
-    """Device Types supported by UFO Galaxy"""
+    """Device Types supported by Galaxy"""
     UNKNOWN = 0
     LINUX_SERVER = 1
     LINUX_DESKTOP = 2
@@ -236,7 +236,7 @@ class AIPMessage:
     
     Format:
     - Header (16 bytes):
-        - Magic (4 bytes): 0x55464F47 ('UFOG')
+        - Magic (4 bytes): 0x55464F47 ('GalaxyG')
         - Version (2 bytes): 0x0200
         - Message Type (2 bytes)
         - Payload Length (4 bytes)
@@ -255,7 +255,7 @@ class AIPMessage:
     correlation_id: Optional[str] = None
     
     # Protocol constants
-    MAGIC: int = 0x55464F47  # 'UFOG' in ASCII
+    MAGIC: int = 0x55464F47  # 'GalaxyG' in ASCII
     VERSION: int = 0x0200    # v2.0
     HEADER_SIZE: int = 16
     FOOTER_SIZE: int = 8

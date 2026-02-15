@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - NLU v2.0 测试脚本
+Galaxy - NLU v2.0 测试脚本
 
 功能：
 1. 测试各种用户输入场景
@@ -198,7 +198,7 @@ class NLUTester:
     async def run_tests(self) -> Dict[str, Any]:
         """运行所有测试"""
         print("="*80)
-        print("UFO³ Galaxy - NLU v2.0 测试")
+        print("Galaxy - NLU v2.0 测试")
         print("="*80)
         print(f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"测试用例数: {len(TEST_CASES)}")
@@ -365,7 +365,7 @@ class NLUTester:
         report = []
         
         report.append("="*80)
-        report.append("UFO³ Galaxy - NLU v2.0 测试报告")
+        report.append("Galaxy - NLU v2.0 测试报告")
         report.append("="*80)
         report.append(f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         report.append("")

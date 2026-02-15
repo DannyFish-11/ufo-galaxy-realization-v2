@@ -1,5 +1,5 @@
 """
-UFO Galaxy 集成模块
+Galaxy 集成模块
 实现UI与L4主循环的双向通信
 """
 

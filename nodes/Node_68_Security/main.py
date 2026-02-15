@@ -1,6 +1,6 @@
 """
 Node 68: Security Enforcer
-UFO Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
+Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
 
 Enforces access control rules between nodes.
 Validates that only authorized nodes can communicate with each other.
@@ -65,7 +65,7 @@ class SecurityEvent(BaseModel):
 
 class SecurityEnforcer:
     """
-    Enforces the UFO Galaxy security rules.
+    Enforces the Galaxy security rules.
     
     Core Rules (from DeepSeek Audit):
     1. Layer 3 nodes CANNOT talk to each other
@@ -335,8 +335,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
-    description="Security Enforcer - Access Control for UFO Galaxy",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
+    description="Security Enforcer - Access Control for Galaxy",
     version="1.0.0",
     lifespan=lifespan
 )

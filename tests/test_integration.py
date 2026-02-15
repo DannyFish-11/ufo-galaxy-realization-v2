@@ -1,5 +1,5 @@
 """
-UFO Galaxy UI-L4集成测试
+Galaxy UI-L4集成测试
 测试4个集成点的完整数据流
 """
 

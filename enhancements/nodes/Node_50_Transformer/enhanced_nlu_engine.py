@@ -322,7 +322,7 @@ class EnhancedNLUEngine:
             parameters: 参数
         
         Returns:
-            软件操作命令（符合微软 UFO 的格式）
+            软件操作命令（符合微软 Galaxy 的格式）
         """
         command = {
             "type": "ui_automation",

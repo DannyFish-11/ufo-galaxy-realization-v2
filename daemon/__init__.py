@@ -1,5 +1,5 @@
 """
-UFO Galaxy Daemon Module
+Galaxy Daemon Module
 
 24/7 operation support with:
 - Automatic restart
@@ -9,7 +9,7 @@ UFO Galaxy Daemon Module
 """
 
 from .ufogalaxy_daemon import (
-    UFOGalaxyDaemon,
+    GalaxyGalaxyDaemon,
     ProcessManager,
     HealthMetrics,
     ServiceStatus,
@@ -19,7 +19,7 @@ from .ufogalaxy_daemon import (
 )
 
 __all__ = [
-    "UFOGalaxyDaemon",
+    "GalaxyGalaxyDaemon",
     "ProcessManager",
     "HealthMetrics",
     "ServiceStatus",

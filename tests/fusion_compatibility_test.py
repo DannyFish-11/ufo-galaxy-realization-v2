@@ -1,7 +1,7 @@
 """
-UFO³ Galaxy 深度融合兼容性测试套件
+Galaxy 深度融合兼容性测试套件
 
-目标：彻底测试微软 UFO 和 ufo-galaxy 的融合兼容性
+目标：彻底测试微软 Galaxy 和 ufo-galaxy 的融合兼容性
 
 作者：Manus AI
 日期：2026-01-22
@@ -28,7 +28,7 @@ class FusionCompatibilityTest:
     async def run_all_tests(self):
         """运行所有测试"""
         print("=" * 80)
-        print("UFO³ Galaxy 深度融合兼容性测试")
+        print("Galaxy 深度融合兼容性测试")
         print("=" * 80)
         
         # 测试套件
@@ -103,7 +103,7 @@ class FusionCompatibilityTest:
         print("\n【测试 2.1】设备注册格式兼容性")
         print("-" * 80)
         
-        # 微软 UFO 的设备注册格式
+        # 微软 Galaxy 的设备注册格式
         ms_ufo_device = {
             "device_id": "phone_a",
             "device_type": "android",
@@ -120,11 +120,11 @@ class FusionCompatibilityTest:
             "last_heartbeat": 1234567890
         }
         
-        # 检查是否兼容（ufo-galaxy 包含微软 UFO 的所有字段）
+        # 检查是否兼容（ufo-galaxy 包含微软 Galaxy 的所有字段）
         compatible = all(k in ufo_galaxy_device for k in ms_ufo_device.keys())
         
         if compatible:
-            print("✅ PASS: ufo-galaxy 设备格式兼容微软 UFO")
+            print("✅ PASS: ufo-galaxy 设备格式兼容微软 Galaxy")
             self.passed += 1
             test_results.append(("设备管理", "设备注册格式兼容性", "PASS"))
         else:

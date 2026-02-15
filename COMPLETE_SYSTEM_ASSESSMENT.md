@@ -1,4 +1,4 @@
-# UFO Galaxy V2 - 完整系统性功能评估报告
+# Galaxy V2 - 完整系统性功能评估报告
 
 **评估时间**: 2026-02-15
 **版本**: v2.0.5
@@ -10,7 +10,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  UFO Galaxy V2 系统成熟度评估                               │
+│  Galaxy V2 系统成熟度评估                               │
 ├─────────────────────────────────────────────────────────────┤
 │  代码完整度      ████████████████████ 100%                 │
 │  安全修复        ████████████████████ 100%                 │
@@ -146,13 +146,13 @@ cd ufo-galaxy-realization-v2
 
 ```bash
 # 主节点
-export UFO_NODE_ID="master"
-export UFO_NODE_ROLE="coordinator"
+export Galaxy_NODE_ID="master"
+export Galaxy_NODE_ROLE="coordinator"
 ./start.sh
 
 # 工作节点
-export UFO_NODE_ID="worker-$(hostname)"
-export UFO_NODE_ROLE="worker"
+export Galaxy_NODE_ID="worker-$(hostname)"
+export Galaxy_NODE_ROLE="worker"
 export MASTER_URL="ws://master-host:8765"
 ./start.sh --worker
 ```
@@ -196,7 +196,7 @@ export MASTER_URL="ws://master-host:8765"
 
 ## ✅ 结论
 
-**UFO Galaxy V2 是一个高度成熟的企业级 AI 自主系统：**
+**Galaxy V2 是一个高度成熟的企业级 AI 自主系统：**
 
 1. **多设备互控**: ✅ 行业领先 (95%)
 2. **MCP Skill**: ✅ 完整支持 (85%)

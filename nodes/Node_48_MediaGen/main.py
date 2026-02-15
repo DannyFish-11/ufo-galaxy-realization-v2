@@ -265,7 +265,7 @@ async def main():
     # 提交一系列任务
     try:
         task1_id = await service.submit_task(MediaType.IMAGE, "一艘宇宙飞船飞过火星")
-        task2_id = await service.submit_task(MediaType.AUDIO, "欢迎来到UFO Galaxy系统")
+        task2_id = await service.submit_task(MediaType.AUDIO, "欢迎来到Galaxy系统")
         task3_id = await service.submit_task(MediaType.VIDEO, "一个机器人在赛博朋克风格的城市中行走")
     except RuntimeError as e:
         logger.error(f"提交任务失败: {e}")

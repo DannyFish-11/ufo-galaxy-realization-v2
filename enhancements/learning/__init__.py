@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy v5.0 - Autonomous Learning System
+Galaxy v5.0 - Autonomous Learning System
 
 This module provides a comprehensive self-learning system with:
 - Pattern recognition from multiple data sources
@@ -27,13 +27,13 @@ Example:
     >>> # Learning happens automatically
     >>> await engine.stop()
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 License: MIT
 """
 
 __version__ = "5.0.0"
-__author__ = "UFO Galaxy Team"
+__author__ = "Galaxy Team"
 
 # Core components
 from .autonomous_learning_engine import (
@@ -92,7 +92,7 @@ def get_version() -> str:
 def get_info() -> dict:
     """Get information about the learning system."""
     return {
-        "name": "UFO Galaxy Autonomous Learning System",
+        "name": "Galaxy Autonomous Learning System",
         "version": __version__,
         "author": __author__,
         "components": [

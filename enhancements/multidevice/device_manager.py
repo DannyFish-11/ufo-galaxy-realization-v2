@@ -1,9 +1,9 @@
 """
-UFO Galaxy v5.0 - Device Manager Module
+Galaxy v5.0 - Device Manager Module
 Multi-Device Coordination System
 
 This module provides device registration, discovery, heartbeat monitoring,
-and health tracking for the UFO Galaxy distributed system.
+and health tracking for the Galaxy distributed system.
 
 Features:
 - Device registration and discovery (<3s response time)
@@ -23,7 +23,7 @@ FastAPI Endpoints:
 - GET /devices/groups/{group} - Get devices by group
 - GET /devices/tags/{tag} - Get devices by tag
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 Port: 8056
 """
@@ -253,7 +253,7 @@ class DeviceHealthRecord:
 
 class DeviceManager:
     """
-    Device Manager for UFO Galaxy
+    Device Manager for Galaxy
     
     Manages device registration, discovery, heartbeat monitoring,
     and health tracking for distributed devices.
@@ -686,8 +686,8 @@ def create_app(device_manager: Optional[DeviceManager] = None) -> FastAPI:
     """Create FastAPI application"""
     
     app = FastAPI(
-        title="UFO Galaxy Device Manager",
-        description="Multi-device coordination system for UFO Galaxy v5.0",
+        title="Galaxy Device Manager",
+        description="Multi-device coordination system for Galaxy v5.0",
         version="5.0.0"
     )
     
@@ -889,7 +889,7 @@ def create_app(device_manager: Optional[DeviceManager] = None) -> FastAPI:
     async def root():
         """Root endpoint"""
         return {
-            "service": "UFO Galaxy Device Manager",
+            "service": "Galaxy Device Manager",
             "version": "5.0.0",
             "port": 8056,
             "endpoints": [

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 主启动入口
+Galaxy - 主启动入口
 ========================
-一键启动整个 UFO Galaxy 系统。
+一键启动整个 Galaxy 系统。
 
 功能：
 1. 自动检测和加载配置
@@ -43,7 +43,7 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("UFO-Galaxy")
+logger = logging.getLogger("Galaxy")
 
 
 class Colors:
@@ -307,7 +307,7 @@ from galaxy_gateway.memory_service import router as memory_router
             from fastapi.staticfiles import StaticFiles
             import uvicorn
             
-            self.app = FastAPI(title="UFO Galaxy", version="1.0")
+            self.app = FastAPI(title="Galaxy", version="1.0")
             
             @self.app.get("/", response_class=HTMLResponse)
             async def index():
@@ -368,7 +368,7 @@ from galaxy_gateway.memory_service import router as memory_router
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO Galaxy - 控制面板</title>
+    <title>Galaxy - 控制面板</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -425,7 +425,7 @@ from galaxy_gateway.memory_service import router as memory_router
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌌 UFO Galaxy</h1>
+            <h1>🌌 Galaxy</h1>
             <p style="margin-top: 10px;">
                 <a href="/devices" style="color: #00d4ff; margin-right: 20px;">📱 设备管理</a>
                 <a href="/docs" style="color: #00d4ff;">📚 API 文档</a>
@@ -469,8 +469,8 @@ from galaxy_gateway.memory_service import router as memory_router
         """
 
 
-class UFOGalaxy:
-    """UFO Galaxy 主系统"""
+class GalaxyGalaxy:
+    """Galaxy 主系统"""
     
     def __init__(self):
         self.config_manager = ConfigManager()
@@ -522,7 +522,7 @@ class UFOGalaxy:
         self.running = True
         print()
         print_status("=" * 50, "info")
-        print_status("UFO Galaxy 系统已启动！", "success")
+        print_status("Galaxy 系统已启动！", "success")
         print_status("=" * 50, "info")
         print()
         print_status("访问 http://localhost:8080 查看控制面板", "info")
@@ -571,7 +571,7 @@ class UFOGalaxy:
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="UFO Galaxy - L4 级自主性智能系统",
+        description="Galaxy - L4 级自主性智能系统",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -597,7 +597,7 @@ def main():
         return
         
     # 创建系统实例
-    galaxy = UFOGalaxy()
+    galaxy = GalaxyGalaxy()
     
     # 查看状态
     if args.status:

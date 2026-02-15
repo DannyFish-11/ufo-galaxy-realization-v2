@@ -150,7 +150,7 @@ Copy `.env.example` to `.env` and configure the following variables:
 - `MEMOS_API_KEY` - Memos API Key
 
 ### Security
-- `UFO_API_TOKEN` - UFO API authentication token
+- `Galaxy_API_TOKEN` - Galaxy API authentication token
 - `CUSTOM_LOGGER_TOKEN` - Custom logger token
 
 ---

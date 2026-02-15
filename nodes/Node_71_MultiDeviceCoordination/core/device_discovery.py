@@ -97,8 +97,8 @@ class BroadcastDiscovery:
     使用 UDP 多播进行设备发现
     """
     
-    DISCOVERY_MESSAGE = "UFO_GALAXY_DISCOVER"
-    RESPONSE_MESSAGE = "UFO_GALAXY_RESPONSE"
+    DISCOVERY_MESSAGE = "Galaxy_GALAXY_DISCOVER"
+    RESPONSE_MESSAGE = "Galaxy_GALAXY_RESPONSE"
     
     def __init__(self, config: DiscoveryConfig, node_id: str):
         self.config = config

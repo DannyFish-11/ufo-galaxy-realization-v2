@@ -1,5 +1,5 @@
 """
-Hardware Trigger Manager for UFO Galaxy
+Hardware Trigger Manager for Galaxy
 System Integration Layer - Hardware Wake & State Switching
 
 This module provides real hardware trigger detection for:
@@ -56,7 +56,7 @@ class TriggerPriority(Enum):
     LOW = 3         # Background triggers
 
 class SystemState(Enum):
-    """System states for UFO Galaxy"""
+    """System states for Galaxy"""
     DORMANT = "dormant"         # System sleeping, minimal resources
     ISLAND = "island"           # Compact UI mode (dynamic island)
     SIDESHEET = "sidesheet"     # Side panel mode
@@ -1112,8 +1112,8 @@ class ExternalDeviceListener:
         
         # Trigger devices (specific device IDs that trigger actions)
         self.trigger_devices = {
-            "bluetooth": ["UFO-Headset", "UFO-Watch", "UFO-Controller"],
-            "usb": ["UFO-Dongle", "UFO-Device"]
+            "bluetooth": ["Galaxy-Headset", "Galaxy-Watch", "Galaxy-Controller"],
+            "usb": ["Galaxy-Dongle", "Galaxy-Device"]
         }
     
     def start(self):
@@ -1487,7 +1487,7 @@ class HardwareTriggerManager:
 
 class SystemStateMachine:
     """
-    UFO Galaxy System State Machine
+    Galaxy System State Machine
     
     Manages transitions between system states:
     - DORMANT: System sleeping, minimal resources
@@ -1744,7 +1744,7 @@ class SystemStateMachine:
 
 class IntegratedSystemController:
     """
-    Integrated System Controller for UFO Galaxy
+    Integrated System Controller for Galaxy
     
     Coordinates hardware triggers with system state transitions.
     Provides unified interface for trigger-to-state mapping.
@@ -2038,7 +2038,7 @@ def quick_start() -> IntegratedSystemController:
 if __name__ == "__main__":
     # Demo mode
     print("=" * 60)
-    print("UFO Galaxy Hardware Trigger System")
+    print("Galaxy Hardware Trigger System")
     print("=" * 60)
     
     # Create and start controller

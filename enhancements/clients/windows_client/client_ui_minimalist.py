@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Windows 客户端 - 黑白渐变极简极客风格 UI
+Galaxy Windows 客户端 - 黑白渐变极简极客风格 UI
 
 设计理念：
 - 黑白渐变背景
@@ -31,7 +31,7 @@ class MinimalistSidePanel:
         
         # 创建主窗口
         self.root = tk.Tk()
-        self.root.title("UFO³ Galaxy")
+        self.root.title("Galaxy")
         self.root.overrideredirect(True)  # 无边框
         self.root.attributes('-topmost', True)  # 置顶
         self.root.attributes('-alpha', 0.95)  # 半透明
@@ -105,7 +105,7 @@ class MinimalistSidePanel:
         # 标题文字
         header_text = self.canvas.create_text(
             self.width // 2, 30,
-            text="UFO³ GALAXY",
+            text="Galaxy³ GALAXY",
             font=('Consolas', 18, 'bold'),
             fill='#ffffff'
         )

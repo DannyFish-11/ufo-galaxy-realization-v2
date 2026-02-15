@@ -24,7 +24,7 @@ def get_agent_config(agent_type: str) -> Dict[str, Any]:
     :raises ValueError: If agent type is not supported
     """
 
-    # UFO agents (from config/ufo/agents.yaml)
+    # Galaxy agents (from config/ufo/agents.yaml)
     if agent_type in [
         AgentType.HOST,
         AgentType.APP,
@@ -49,7 +49,7 @@ def get_agent_config(agent_type: str) -> Dict[str, Any]:
 
         agent_config = agent_config_map.get(agent_type)
         if agent_config is None:
-            raise ValueError(f"Agent type {agent_type} not found in UFO config")
+            raise ValueError(f"Agent type {agent_type} not found in Galaxy config")
 
         # Convert to dict for backward compatibility
         return _config_to_dict(agent_config)

@@ -64,7 +64,7 @@
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| `UFOGalaxyApplication.kt` | ✅ | 应用入口 |
+| `GalaxyGalaxyApplication.kt` | ✅ | 应用入口 |
 | `service/*.kt` | ✅ | 服务模块 (5个) |
 | `network/*.kt` | ✅ | 网络模块 |
 | `speech/*.kt` | ✅ | 语音模块 |

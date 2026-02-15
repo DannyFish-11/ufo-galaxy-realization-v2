@@ -1,5 +1,5 @@
 """
-UFO Galaxy Fusion - Topology-Aware Constellation Client
+Galaxy Fusion - Topology-Aware Constellation Client
 
 拓扑感知的 ConstellationClient
 
@@ -18,10 +18,10 @@ import sys
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-# 添加微软 UFO 到 Python 路径
-MICROSOFT_UFO_PATH = Path(__file__).parent.parent / "microsoft-ufo"
-if str(MICROSOFT_UFO_PATH) not in sys.path:
-    sys.path.insert(0, str(MICROSOFT_UFO_PATH))
+# 添加微软 Galaxy 到 Python 路径
+MICROSOFT_Galaxy_PATH = Path(__file__).parent.parent / "microsoft-ufo"
+if str(MICROSOFT_Galaxy_PATH) not in sys.path:
+    sys.path.insert(0, str(MICROSOFT_Galaxy_PATH))
 
 try:
     from galaxy.client.constellation_client import ConstellationClient
@@ -335,7 +335,7 @@ class TopologyAwareConstellationClient(ConstellationClient if CONSTELLATION_AVAI
         
         # TODO: 实现实际的任务发送逻辑
         # 这里需要使用 device_manager 发送任务
-        # 具体实现取决于微软 UFO 的 API
+        # 具体实现取决于微软 Galaxy 的 API
         
         return node_id
     

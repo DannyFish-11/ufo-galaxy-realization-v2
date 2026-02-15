@@ -1,6 +1,6 @@
 """
 Node 58: Model Router (Cost/Logic)
-UFO Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
+Galaxy 64-Core MCP Matrix - DeepSeek Audited Architecture
 
 Intelligent routing of AI requests based on:
 - Task complexity (multi-dimensional scoring)
@@ -928,7 +928,7 @@ async def lifespan(app: FastAPI):
         await router.http_client.aclose()
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Intelligent Model Router with Cost Optimization and Session Persistence",
     version="2.0.0",
     lifespan=lifespan

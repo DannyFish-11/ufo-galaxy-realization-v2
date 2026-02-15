@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Gateway v3.0 - 完整的网络通信和多模态传输系统
+Galaxy Gateway v3.0 - 完整的网络通信和多模态传输系统
 
 功能：
 1. 增强版 NLU v2.0（多设备识别、复杂任务分解）
@@ -112,7 +112,7 @@ class GalaxyGatewayV3:
         self.start_time = time.time()
         
         print("="*80)
-        print("UFO³ Galaxy Gateway v3.0")
+        print("Galaxy Gateway v3.0")
         print("="*80)
         print(f"启动时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"LLM 提供商: {self.llm_client.provider}")
@@ -502,7 +502,7 @@ class GalaxyGatewayV3:
 # FastAPI 应用
 # ============================================================================
 
-app = FastAPI(title="UFO³ Galaxy Gateway v3.0")
+app = FastAPI(title="Galaxy Gateway v3.0")
 
 # CORS
 app.add_middleware(
@@ -524,7 +524,7 @@ gateway = GalaxyGatewayV3()
 async def root():
     """根端点"""
     return {
-        "name": "UFO³ Galaxy Gateway",
+        "name": "Galaxy Gateway",
         "version": "3.0",
         "description": "完整的网络通信和多模态传输系统",
         "features": [

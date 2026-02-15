@@ -243,7 +243,7 @@ class CrossDeviceCoordinator:
                     "action": "show_notification",
                     "target": "",
                     "params": {
-                        "title": "UFO³ Galaxy",
+                        "title": "Galaxy",
                         "message": notification_text
                     }
                 }

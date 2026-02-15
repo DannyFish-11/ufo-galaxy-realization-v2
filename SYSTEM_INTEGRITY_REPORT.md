@@ -1,4 +1,4 @@
-# UFO Galaxy V2 系统完整性检查报告
+# Galaxy V2 系统完整性检查报告
 
 **检查时间**: 2026-02-14
 **检查者**: Qingyan Agent (Core Architect)

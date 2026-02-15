@@ -1,6 +1,6 @@
 """
 Node 67: Intelligent Health Monitor & Self-Healer
-UFO Galaxy 64-Core MCP Matrix - Phase 6: Immune System
+Galaxy 64-Core MCP Matrix - Phase 6: Immune System
 
 Adaptive recovery with three-strike rule and graceful degradation.
 """
@@ -517,7 +517,7 @@ async def lifespan(app: FastAPI):
         await monitor.http_client.aclose()
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Intelligent Health Monitor & Self-Healer",
     version="1.0.0",
     lifespan=lifespan

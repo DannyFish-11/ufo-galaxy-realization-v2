@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy 知识库系统 - Node 52
+Galaxy 知识库系统 - Node 52
 
 功能：
 1. 向量数据库存储（使用 ChromaDB）

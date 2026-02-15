@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 缓存层
+Galaxy - 缓存层
 ====================
 
 提供统一的缓存接口，支持 Redis 后端和内存降级。
@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("UFO-Galaxy.Cache")
+logger = logging.getLogger("Galaxy.Cache")
 
 
 class MemoryCache:

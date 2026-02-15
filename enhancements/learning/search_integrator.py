@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Search Integrator for UFO Galaxy v5.0
+Search Integrator for Galaxy v5.0
 
 Integrates multiple search sources:
 - Web search (via search engines)
@@ -13,7 +13,7 @@ Features:
 - Async operations for performance
 - Caching and rate limiting
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 

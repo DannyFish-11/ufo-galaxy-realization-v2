@@ -1,4 +1,4 @@
-# UFO Galaxy L4 级自主性智能系统 - 快速启动指南
+# Galaxy L4 级自主性智能系统 - 快速启动指南
 
 ## 🚀 5 分钟快速启动
 
@@ -60,7 +60,7 @@ nano config/l4_config.json
 ```json
 {
   "system": {
-    "name": "UFO Galaxy L4",
+    "name": "Galaxy L4",
     "version": "1.0.0",
     "log_level": "INFO"
   },
@@ -137,7 +137,7 @@ python3 tests/test_l4_e2e.py
 
 ```
 ============================================================
-UFO Galaxy L4 级自主性智能系统 - 端到端测试
+Galaxy L4 级自主性智能系统 - 端到端测试
 ============================================================
 ✓ 测试 1: 环境扫描器 - 通过
 ✓ 测试 2: 目标分解 - 通过
@@ -161,7 +161,7 @@ python3 tests/test_l4_physical_devices.py
 
 ```
 ============================================================
-UFO Galaxy L4 级物理设备控制测试
+Galaxy L4 级物理设备控制测试
 ============================================================
 ✓ 测试 1: 无人机控制 - 通过
 ✓ 测试 2: 3D 打印机控制 - 通过
@@ -199,7 +199,7 @@ python3 start_l4.py
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 
-[INFO] UFO Galaxy L4 系统启动中...
+[INFO] Galaxy L4 系统启动中...
 [INFO] 加载配置: config/l4_config.json
 [INFO] 初始化环境扫描器...
 [INFO] 初始化目标分解器...
@@ -268,7 +268,7 @@ asyncio.run(test())
 1. 在 Android Studio 中打开 `ufo-galaxy-android` 项目
 2. 配置服务器地址（`app/src/main/res/values/strings.xml`）
 3. 编译并安装到 Android 设备
-4. 启用无障碍服务（设置 → 无障碍 → UFO Galaxy）
+4. 启用无障碍服务（设置 → 无障碍 → Galaxy）
 5. 打开应用，输入自然语言指令
 
 **示例指令**:

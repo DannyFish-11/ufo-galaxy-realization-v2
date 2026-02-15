@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title UFO Galaxy L4 - 自主智能系统
+title Galaxy L4 - 自主智能系统
 color 0B
 
 echo.
@@ -123,5 +123,5 @@ echo [OK] 所有服务已停止
 
 :end
 echo.
-echo 感谢使用 UFO Galaxy！
+echo 感谢使用 Galaxy！
 pause

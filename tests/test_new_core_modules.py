@@ -504,18 +504,18 @@ class TestErrorFramework:
 
     def test_ufo_error_creation(self):
         """测试错误创建"""
-        from core.error_framework import UFOError, ErrorCategory, ErrorSeverity
+        from core.error_framework import GalaxyError, ErrorCategory, ErrorSeverity
 
-        err = UFOError("test error", category=ErrorCategory.NETWORK)
+        err = GalaxyError("test error", category=ErrorCategory.NETWORK)
         assert err.message == "test error"
         assert err.category == ErrorCategory.NETWORK
         assert err.error_id.startswith("err_")
 
     def test_error_to_dict(self):
         """测试错误序列化"""
-        from core.error_framework import UFOError, ErrorCategory
+        from core.error_framework import GalaxyError, ErrorCategory
 
-        err = UFOError("serialization test", category=ErrorCategory.DATA)
+        err = GalaxyError("serialization test", category=ErrorCategory.DATA)
         d = err.to_dict()
         assert d["message"] == "serialization test"
         assert d["category"] == "data"
@@ -523,11 +523,11 @@ class TestErrorFramework:
     def test_error_tracker_recording(self):
         """测试错误追踪记录"""
         from core.error_framework import (
-            ErrorTracker, UFOError, ErrorCategory, ErrorSeverity
+            ErrorTracker, GalaxyError, ErrorCategory, ErrorSeverity
         )
 
         tracker = ErrorTracker()
-        err = UFOError("test", category=ErrorCategory.NETWORK)
+        err = GalaxyError("test", category=ErrorCategory.NETWORK)
         tracker.record(err)
 
         summary = tracker.get_summary()
@@ -536,11 +536,11 @@ class TestErrorFramework:
 
     def test_error_rate_calculation(self):
         """测试错误率计算"""
-        from core.error_framework import ErrorTracker, UFOError, ErrorCategory
+        from core.error_framework import ErrorTracker, GalaxyError, ErrorCategory
 
         tracker = ErrorTracker()
         for _ in range(10):
-            tracker.record(UFOError("test", category=ErrorCategory.TIMEOUT))
+            tracker.record(GalaxyError("test", category=ErrorCategory.TIMEOUT))
 
         rate = tracker.get_error_rate(window_seconds=60)
         assert rate > 0

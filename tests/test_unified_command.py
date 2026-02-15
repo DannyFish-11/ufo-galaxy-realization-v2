@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 统一命令端点测试
+Galaxy - 统一命令端点测试
 ================================
 
 测试 /api/v1/command 端点的各项功能：
@@ -43,21 +43,21 @@ class TestAuthModule(unittest.TestCase):
     def setUp(self):
         """设置测试环境"""
         # 保存原始环境变量
-        self.original_token = os.environ.get("UFO_API_TOKEN")
+        self.original_token = os.environ.get("Galaxy_API_TOKEN")
     
     def tearDown(self):
         """清理测试环境"""
         # 恢复原始环境变量
         if self.original_token is not None:
-            os.environ["UFO_API_TOKEN"] = self.original_token
-        elif "UFO_API_TOKEN" in os.environ:
-            del os.environ["UFO_API_TOKEN"]
+            os.environ["Galaxy_API_TOKEN"] = self.original_token
+        elif "Galaxy_API_TOKEN" in os.environ:
+            del os.environ["Galaxy_API_TOKEN"]
     
     def test_verify_api_token_dev_mode(self):
         """测试开发模式（未设置 Token）"""
         # 移除环境变量
-        if "UFO_API_TOKEN" in os.environ:
-            del os.environ["UFO_API_TOKEN"]
+        if "Galaxy_API_TOKEN" in os.environ:
+            del os.environ["Galaxy_API_TOKEN"]
         
         # 开发模式下应该跳过鉴权
         self.assertTrue(verify_api_token("any-token"))
@@ -65,13 +65,13 @@ class TestAuthModule(unittest.TestCase):
     def test_verify_api_token_valid(self):
         """测试有效 Token"""
         test_token = "test-token-12345"
-        os.environ["UFO_API_TOKEN"] = test_token
+        os.environ["Galaxy_API_TOKEN"] = test_token
         
         self.assertTrue(verify_api_token(test_token))
     
     def test_verify_api_token_invalid(self):
         """测试无效 Token"""
-        os.environ["UFO_API_TOKEN"] = "correct-token"
+        os.environ["Galaxy_API_TOKEN"] = "correct-token"
         
         self.assertFalse(verify_api_token("wrong-token"))
     
@@ -164,15 +164,15 @@ class TestUnifiedCommandEndpoint:
     def setup_env(self):
         """设置测试环境"""
         # 清除 Token 以使用开发模式
-        original_token = os.environ.get("UFO_API_TOKEN")
-        if "UFO_API_TOKEN" in os.environ:
-            del os.environ["UFO_API_TOKEN"]
+        original_token = os.environ.get("Galaxy_API_TOKEN")
+        if "Galaxy_API_TOKEN" in os.environ:
+            del os.environ["Galaxy_API_TOKEN"]
         
         yield
         
         # 恢复环境变量
         if original_token is not None:
-            os.environ["UFO_API_TOKEN"] = original_token
+            os.environ["Galaxy_API_TOKEN"] = original_token
     
     def test_unified_command_sync_mode_basic(self, client):
         """测试同步模式基本功能"""
@@ -335,7 +335,7 @@ class TestUnifiedCommandEndpointWithAuth(unittest.TestCase):
     def setUp(self):
         """设置测试环境"""
         # 设置 Token
-        os.environ["UFO_API_TOKEN"] = "test-token-12345"
+        os.environ["Galaxy_API_TOKEN"] = "test-token-12345"
         
         # 创建测试应用
         self.app = FastAPI()
@@ -345,8 +345,8 @@ class TestUnifiedCommandEndpointWithAuth(unittest.TestCase):
     
     def tearDown(self):
         """清理测试环境"""
-        if "UFO_API_TOKEN" in os.environ:
-            del os.environ["UFO_API_TOKEN"]
+        if "Galaxy_API_TOKEN" in os.environ:
+            del os.environ["Galaxy_API_TOKEN"]
     
     def test_command_without_auth(self):
         """测试未提供鉴权信息"""

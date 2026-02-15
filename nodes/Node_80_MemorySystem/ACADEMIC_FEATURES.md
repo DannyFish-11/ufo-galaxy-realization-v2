@@ -239,7 +239,7 @@ This paper surveys the recent advances in quantum machine learning...
 
 ---
 *保存时间: 2026-01-22 12:00:00*
-*由 UFO³ Galaxy Node_80 (Academic Extension) 管理*
+*由 Galaxy Node_80 (Academic Extension) 管理*
 ```
 
 ---
@@ -297,4 +297,4 @@ This paper surveys the recent advances in quantum machine learning...
 
 ---
 
-**Node 80** | Academic Extension | UFO³ Galaxy
+**Node 80** | Academic Extension | Galaxy

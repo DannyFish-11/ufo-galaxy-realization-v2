@@ -1,5 +1,5 @@
 """
-UFO Galaxy Unified Launcher Module
+Galaxy Unified Launcher Module
 
 Provides optimized startup with:
 - Unified configuration management

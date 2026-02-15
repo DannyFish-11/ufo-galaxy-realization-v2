@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy 数字孪生推演模块 - Node 54
+Galaxy 数字孪生推演模块 - Node 54
 
 集成 51World 数字孪生平台，实现：
 1. 任务预演和仿真

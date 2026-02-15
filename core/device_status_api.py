@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 设备状态统一管理层 API
+Galaxy - 设备状态统一管理层 API
 ====================================
 
 功能：
@@ -309,7 +309,7 @@ status_manager = DeviceStatusManager()
 # ============================================================================
 
 app = FastAPI(
-    title="UFO Galaxy Device Status API",
+    title="Galaxy Device Status API",
     description="统一设备状态管理 API",
     version="2.0"
 )
@@ -346,7 +346,7 @@ class UpdateStatusRequest(BaseModel):
 # API 路由
 @app.get("/")
 async def root():
-    return {"service": "UFO Galaxy Device Status API", "version": "2.0"}
+    return {"service": "Galaxy Device Status API", "version": "2.0"}
 
 
 @app.get("/status/summary")

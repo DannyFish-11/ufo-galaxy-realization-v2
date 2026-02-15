@@ -1,6 +1,6 @@
-# UFO³ Galaxy Dashboard
+# Galaxy Dashboard
 
-可视化管理界面 - 监控、管理和控制整个 UFO³ Galaxy 系统
+可视化管理界面 - 监控、管理和控制整个 Galaxy 系统
 
 ## 功能特性
 

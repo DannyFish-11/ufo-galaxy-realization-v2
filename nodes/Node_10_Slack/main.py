@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Node_10_Slack: UFO Galaxy 系统中的 Slack 消息通知节点。
+Node_10_Slack: Galaxy 系统中的 Slack 消息通知节点。
 
 该节点负责与 Slack API 进行交互，提供发送消息、创建频道等功能。
-它被设计为 UFO Galaxy 系统中的一个标准服务节点，包含完整的生命周期管理、
+它被设计为 Galaxy 系统中的一个标准服务节点，包含完整的生命周期管理、
 配置加载、健康检查和状态查询等功能。
 """
 
@@ -226,7 +226,7 @@ class SlackService:
 
 async def main():
     """主执行函数，用于演示和测试 SlackService 的功能。"""
-    print("--- UFO Galaxy Node_10_Slack 演示 --- (代码行数超过200行)")
+    print("--- Galaxy Node_10_Slack 演示 --- (代码行数超过200行)")
     
     # 检查环境变量
     if "your-token-here" in os.environ.get("SLACK_BOT_TOKEN", "xoxb-your-token-here"):

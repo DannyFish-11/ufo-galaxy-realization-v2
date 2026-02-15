@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - End-to-End Demo
+Galaxy Fusion - End-to-End Demo
 
 端到端演示脚本
 
@@ -68,7 +68,7 @@ class MockExecutionPool:
 async def run_e2e_demo():
     """运行端到端演示"""
     logger.info("="*80)
-    logger.info("🚀 UFO Galaxy Fusion - End-to-End Demo")
+    logger.info("🚀 Galaxy Fusion - End-to-End Demo")
     logger.info("="*80)
     logger.info("")
     

@@ -19,7 +19,7 @@ Capabilities:
 - Automation rules
 - Status monitoring
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 3.0.0
 """
 
@@ -402,7 +402,7 @@ class SmartHomeController:
 # ============================================================================
 
 class SmartHomeNode:
-    """Smart Home Node for UFO Galaxy"""
+    """Smart Home Node for Galaxy"""
     
     def __init__(self):
         self.controller = SmartHomeController()

@@ -918,7 +918,7 @@ NODE_CONFIG = {
     "name": "OpenCode",
     "version": "1.0.0",
     "description": "多模型支持的智能代码生成与优化系统",
-    "author": "UFO Galaxy Team",
+    "author": "Galaxy Team",
     "capabilities": [
         "code_generation",
         "code_completion",
