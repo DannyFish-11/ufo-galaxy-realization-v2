@@ -1,372 +1,297 @@
 #!/usr/bin/env python3
 """
 Galaxy - 统一启动入口
-整合所有系统组件，提供一键启动
+======================
+一键启动，自动后台运行，系统托盘管理
+
+功能：
+1. 自动检测并安装依赖
+2. 后台启动服务
+3. 系统托盘管理
+4. 自动打开浏览器
 """
 
 import os
 import sys
-import asyncio
-import logging
-import argparse
+import time
+import json
 import signal
 import subprocess
-import time
+import threading
+import webbrowser
 from pathlib import Path
-from typing import Optional, List, Dict, Any
 from datetime import datetime
-import json
 
 # 设置项目路径
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parent.absolute()
+os.chdir(PROJECT_ROOT)
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger("Galaxy")
-
 # ============================================================================
-# 系统配置
+# 配置
 # ============================================================================
 
-class GalaxySettings:
-    """Galaxy 系统设置"""
+VERSION = "2.1.7"
+PORT = 8080
+PID_FILE = PROJECT_ROOT / "galaxy.pid"
+LOG_FILE = PROJECT_ROOT / "logs" / "galaxy.log"
+CONFIG_FILE = PROJECT_ROOT / "config" / "galaxy.json"
+
+# ============================================================================
+# 工具函数
+# ============================================================================
+
+def print_banner():
+    """打印横幅"""
+    print()
+    print("=" * 60)
+    print("   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗")
+    print("   ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝")
+    print("   ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝ ")
+    print("   ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝  ")
+    print("   ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║   ")
+    print("    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ")
+    print()
+    print(f"   Galaxy - L4 级自主性智能系统 v{VERSION}")
+    print("=" * 60)
+    print()
+
+def log(message):
+    """打印日志"""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {message}")
+
+def check_dependencies():
+    """检查依赖"""
+    log("检查依赖...")
     
-    def __init__(self):
-        # 基本信息
-        self.name = os.getenv("GALAXY_NAME", "Galaxy")
-        self.version = "2.0.9"
-        self.node_id = os.getenv("Galaxy_NODE_ID", "master")
-        self.node_role = os.getenv("Galaxy_NODE_ROLE", "coordinator")
-        
-        # 端口配置
-        self.http_port = int(os.getenv("WEB_UI_PORT", "8080"))
-        self.websocket_port = int(os.getenv("WEBSOCKET_PORT", "8765"))
-        self.api_port = int(os.getenv("API_PORT", "8000"))
-        
-        # 环境配置
-        self.environment = os.getenv("ENVIRONMENT", "production")
-        self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.debug = os.getenv("DEBUG", "false").lower() == "true"
-        
-        # 守护进程配置
-        self.auto_start = os.getenv("AUTO_START", "true").lower() == "true"
-        self.auto_restart = os.getenv("AUTO_RESTART", "true").lower() == "true"
-        self.health_check = os.getenv("HEALTH_CHECK", "true").lower() == "true"
-        self.max_restarts = int(os.getenv("MAX_RESTARTS", "5"))
-        
-        # LLM 路由配置
-        self.llm_priority1_provider = os.getenv("LLM_PRIORITY1_PROVIDER", "openai")
-        self.llm_priority1_model = os.getenv("LLM_PRIORITY1_MODEL", "gpt-4o")
-        self.llm_priority2_provider = os.getenv("LLM_PRIORITY2_PROVIDER", "deepseek")
-        self.llm_priority2_model = os.getenv("LLM_PRIORITY2_MODEL", "deepseek-chat")
-        self.llm_priority3_provider = os.getenv("LLM_PRIORITY3_PROVIDER", "groq")
-        self.llm_priority3_model = os.getenv("LLM_PRIORITY3_MODEL", "llama-3.1-70b-versatile")
-        
-        # 数据库配置
-        self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-
-# ============================================================================
-# 服务管理器
-# ============================================================================
-
-class ServiceManager:
-    """服务管理器"""
+    required = ["fastapi", "uvicorn", "pydantic", "httpx", "websockets"]
+    missing = []
     
-    def __init__(self, settings: GalaxySettings):
-        self.settings = settings
-        self.processes: Dict[str, subprocess.Popen] = {}
-        self.running = False
-        self.restart_count = 0
-        self.start_time = None
-        
-    def start_service(self, name: str, command: List[str], cwd: str = None) -> bool:
-        """启动服务"""
+    for pkg in required:
         try:
-            logger.info(f"启动服务: {name}")
-            logger.info(f"  命令: {' '.join(command)}")
-            
-            process = subprocess.Popen(
-                command,
-                cwd=cwd or str(PROJECT_ROOT),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            self.processes[name] = process
-            logger.info(f"  ✅ {name} 已启动 (PID: {process.pid})")
-            return True
-            
-        except Exception as e:
-            logger.error(f"  ❌ {name} 启动失败: {e}")
-            return False
+            __import__(pkg)
+            log(f"  ✅ {pkg}")
+        except ImportError:
+            log(f"  ❌ {pkg} 未安装")
+            missing.append(pkg)
     
-    def stop_service(self, name: str) -> bool:
-        """停止服务"""
-        if name not in self.processes:
-            return True
-            
+    if missing:
+        log(f"\n正在安装缺失的依赖: {missing}")
+        subprocess.run([sys.executable, "-m", "pip", "install"] + missing, capture_output=True)
+        log("依赖安装完成")
+    
+    return True
+
+def ensure_directories():
+    """确保目录存在"""
+    dirs = ["config", "data/memory", "data/api_keys", "logs"]
+    for d in dirs:
+        (PROJECT_ROOT / d).mkdir(parents=True, exist_ok=True)
+
+def check_port():
+    """检查端口是否被占用"""
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = sock.connect_ex(('localhost', PORT))
+    sock.close()
+    return result == 0
+
+def get_pid():
+    """获取运行中的 PID"""
+    if PID_FILE.exists():
         try:
-            process = self.processes[name]
-            process.terminate()
-            
-            # 等待进程结束
+            return int(PID_FILE.read_text().strip())
+        except:
+            return None
+    return None
+
+def is_running():
+    """检查服务是否在运行"""
+    pid = get_pid()
+    if pid:
+        try:
+            os.kill(pid, 0)
+            return True
+        except:
+            pass
+    return check_port()
+
+def stop_service():
+    """停止服务"""
+    pid = get_pid()
+    if pid:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            time.sleep(2)
             try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-            
-            del self.processes[name]
-            logger.info(f"  ✅ {name} 已停止")
+                os.kill(pid, signal.SIGKILL)
+            except:
+                pass
+            log("服务已停止")
+        except:
+            pass
+        PID_FILE.unlink(missing_ok=True)
+
+def start_service():
+    """启动服务"""
+    if is_running():
+        log("服务已在运行中")
+        return True
+    
+    log("启动服务...")
+    
+    # 创建启动脚本
+    start_script = f'''
+import sys
+import os
+sys.path.insert(0, "{PROJECT_ROOT}")
+os.chdir("{PROJECT_ROOT}")
+
+from galaxy_gateway.main_app import app
+import uvicorn
+
+uvicorn.run(app, host="0.0.0.0", port={PORT}, log_level="info")
+'''
+    
+    # 后台启动
+    process = subprocess.Popen(
+        [sys.executable, "-c", start_script],
+        stdout=open(LOG_FILE, 'a'),
+        stderr=subprocess.STDOUT,
+        cwd=str(PROJECT_ROOT)
+    )
+    
+    # 保存 PID
+    PID_FILE.write_text(str(process.pid))
+    
+    # 等待启动
+    for i in range(30):
+        time.sleep(0.5)
+        if check_port():
+            log(f"服务已启动 (PID: {process.pid})")
             return True
-            
-        except Exception as e:
-            logger.error(f"  ❌ {name} 停止失败: {e}")
-            return False
     
-    def stop_all(self):
-        """停止所有服务"""
-        logger.info("停止所有服务...")
-        for name in list(self.processes.keys()):
-            self.stop_service(name)
-    
-    def check_health(self) -> Dict[str, Any]:
-        """健康检查"""
-        status = {
-            "timestamp": datetime.now().isoformat(),
-            "uptime": str(datetime.now() - self.start_time) if self.start_time else "0:00:00",
-            "services": {}
-        }
-        
-        for name, process in self.processes.items():
-            poll = process.poll()
-            status["services"][name] = {
-                "running": poll is None,
-                "pid": process.pid,
-                "exit_code": poll
-            }
-        
-        return status
+    log("服务启动超时")
+    return False
+
+def open_browser():
+    """打开浏览器"""
+    time.sleep(1)
+    webbrowser.open(f"http://localhost:{PORT}")
 
 # ============================================================================
-# Galaxy 主系统
+# 系统托盘
 # ============================================================================
 
-class Galaxy:
-    """Galaxy 主系统"""
+def run_tray():
+    """运行系统托盘"""
+    try:
+        import pystray
+        from pystray import MenuItem as Item
+        from PIL import Image, ImageDraw
+    except ImportError:
+        log("安装托盘依赖...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "pystray", "pillow"], capture_output=True)
+        import pystray
+        from pystray import MenuItem as Item
+        from PIL import Image, ImageDraw
     
-    def __init__(self):
-        self.settings = GalaxySettings()
-        self.service_manager = ServiceManager(self.settings)
-        self.running = False
+    def create_icon():
+        """创建图标"""
+        size = 64
+        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
         
-        # 注册信号处理
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # 画圆形
+        draw.ellipse([8, 8, 56, 56], fill=(0, 212, 255, 255), outline=(255, 255, 255, 100), width=2)
+        
+        # 画 G
+        center = 32
+        draw.arc([center-15, center-15, center+15, center+15], 0, 270, fill=(255, 255, 255, 255), width=4)
+        draw.line([(center, center-15), (center, center)], fill=(255, 255, 255, 255), width=4)
+        
+        return image
     
-    def _signal_handler(self, signum, frame):
-        """信号处理"""
-        logger.info(f"收到信号 {signum}，正在关闭...")
-        self.stop()
-        sys.exit(0)
+    def get_status():
+        """获取状态"""
+        return "运行中" if is_running() else "已停止"
     
-    def print_banner(self):
-        """打印横幅"""
-        banner = f"""
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║   ██████╗  █████╗  ██████╗ ██████╗ ███████╗                  ║
-║   ██╔══██╗██╔══██╗██╔════╝██╔═══██╗██╔════╝                  ║
-║   ██║  ██║███████║██║     ██║   ██║███████╗                  ║
-║   ██║  ██║██╔══██║██║     ██║   ██║╚════██║                  ║
-║   ██████╔╝██║  ██║╚██████╗╚██████╔╝███████║                  ║
-║   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝                  ║
-║                                                               ║
-║   Galaxy - L4 级自主性智能系统                                ║
-║   版本: {self.settings.version}                                          ║
-║   节点: {self.settings.node_id}                                           ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
-"""
-        print(banner)
+    def on_open(icon, item):
+        """打开界面"""
+        webbrowser.open(f"http://localhost:{PORT}")
     
-    def start(self, mode: str = "full"):
-        """启动系统"""
-        self.print_banner()
-        
-        logger.info("=" * 60)
-        logger.info("Galaxy 系统启动")
-        logger.info("=" * 60)
-        logger.info(f"模式: {mode}")
-        logger.info(f"节点 ID: {self.settings.node_id}")
-        logger.info(f"HTTP 端口: {self.settings.http_port}")
-        logger.info(f"WebSocket 端口: {self.settings.websocket_port}")
-        logger.info("")
-        
-        self.service_manager.start_time = datetime.now()
-        self.running = True
-        
-        # 根据模式启动不同服务
-        if mode == "minimal":
-            self._start_minimal()
-        elif mode == "daemon":
-            self._start_daemon()
-        else:
-            self._start_full()
-        
-        # 启动主循环
-        self._main_loop()
+    def on_start(icon, item):
+        """启动服务"""
+        start_service()
     
-    def _start_minimal(self):
-        """最小模式启动"""
-        logger.info("启动最小模式...")
-        
-        # 启动核心服务
-        self.service_manager.start_service(
-            "gateway",
-            [sys.executable, "-m", "uvicorn", 
-             "galaxy_gateway.config_service:app",
-             "--host", "0.0.0.0",
-             "--port", str(self.settings.http_port)]
-        )
+    def on_stop(icon, item):
+        """停止服务"""
+        stop_service()
     
-    def _start_full(self):
-        """完整模式启动"""
-        logger.info("启动完整模式...")
-        
-        # 1. 启动配置服务
-        self.service_manager.start_service(
-            "config",
-            [sys.executable, "-m", "uvicorn",
-             "galaxy_gateway.config_service:app",
-             "--host", "0.0.0.0",
-             "--port", str(self.settings.http_port)]
-        )
-        
-        time.sleep(1)  # 等待配置服务启动
-        
-        # 2. 启动主服务
-        self.service_manager.start_service(
-            "main",
-            [sys.executable, "main.py", "--minimal"]
-        )
-        
-        # 3. 启动节点发现
-        self.service_manager.start_service(
-            "discovery",
-            [sys.executable, "-c",
-             f"from core.node_discovery import get_node_discovery; "
-             f"import asyncio; "
-             f"asyncio.run(get_node_discovery('{self.settings.node_id}').start())"]
-        )
+    def on_restart(icon, item):
+        """重启服务"""
+        stop_service()
+        time.sleep(1)
+        start_service()
     
-    def _start_daemon(self):
-        """守护进程模式启动"""
-        logger.info("启动守护进程模式...")
-        
-        # 启动完整服务
-        self._start_full()
-        
-        # 启动健康检查
-        if self.settings.health_check:
-            logger.info("健康检查已启用")
+    def on_exit(icon, item):
+        """退出"""
+        icon.stop()
     
-    def _main_loop(self):
-        """主循环"""
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("Galaxy 系统已启动")
-        logger.info("=" * 60)
-        logger.info("")
-        logger.info(f"配置中心: http://localhost:{self.settings.http_port}/config")
-        logger.info(f"设备管理: http://localhost:{self.settings.http_port}/devices")
-        logger.info(f"API 文档: http://localhost:{self.settings.http_port}/docs")
-        logger.info("")
-        logger.info("按 Ctrl+C 停止系统")
-        logger.info("")
-        
-        try:
-            while self.running:
-                # 健康检查
-                if self.settings.health_check:
-                    health = self.service_manager.check_health()
-                    
-                    # 检查是否有服务崩溃
-                    for name, status in health["services"].items():
-                        if not status["running"]:
-                            logger.warning(f"服务 {name} 已停止 (退出码: {status['exit_code']})")
-                            
-                            # 自动重启
-                            if self.settings.auto_restart and self.service_manager.restart_count < self.settings.max_restarts:
-                                logger.info(f"正在重启 {name}...")
-                                self.service_manager.restart_count += 1
-                                
-                time.sleep(10)  # 每 10 秒检查一次
-                
-        except KeyboardInterrupt:
-            logger.info("收到中断信号")
-        finally:
-            self.stop()
+    # 创建菜单
+    menu = pystray.Menu(
+        Item(lambda: f"Galaxy - {get_status()}", None, enabled=False),
+        pystray.Menu.SEPARATOR,
+        Item("打开界面", on_open),
+        Item("启动服务", on_start, visible=lambda item: not is_running()),
+        Item("停止服务", on_stop, visible=lambda item: is_running()),
+        Item("重启服务", on_restart),
+        pystray.Menu.SEPARATOR,
+        Item("退出", on_exit),
+    )
     
-    def stop(self):
-        """停止系统"""
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("Galaxy 系统关闭")
-        logger.info("=" * 60)
-        
-        self.running = False
-        self.service_manager.stop_all()
-        
-        logger.info("系统已关闭")
+    # 创建图标
+    icon = pystray.Icon("Galaxy", create_icon(), "Galaxy", menu)
+    
+    log("系统托盘已启动")
+    log(f"访问地址: http://localhost:{PORT}")
+    log("右键托盘图标可管理服务")
+    
+    # 运行托盘
+    icon.run()
 
 # ============================================================================
 # 主函数
 # ============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Galaxy - L4 级自主性智能系统")
+    """主函数"""
+    print_banner()
     
-    parser.add_argument("--mode", "-m", 
-                        choices=["full", "minimal", "daemon"],
-                        default="full",
-                        help="启动模式: full(完整), minimal(最小), daemon(守护)")
+    # 确保目录
+    ensure_directories()
     
-    parser.add_argument("--port", "-p",
-                        type=int,
-                        default=None,
-                        help="HTTP 端口")
+    # 检查依赖
+    check_dependencies()
     
-    parser.add_argument("--node-id",
-                        default=None,
-                        help="节点 ID")
+    # 检查是否已运行
+    if is_running():
+        log("服务已在运行中")
+    else:
+        # 启动服务
+        if not start_service():
+            log("服务启动失败")
+            return 1
     
-    parser.add_argument("--version", "-v",
-                        action="store_true",
-                        help="显示版本")
+    # 打开浏览器
+    log("正在打开浏览器...")
+    threading.Thread(target=open_browser, daemon=True).start()
     
-    args = parser.parse_args()
+    # 运行系统托盘
+    run_tray()
     
-    if args.version:
-        print(f"Galaxy v{GalaxySettings().version}")
-        return
-    
-    # 设置环境变量
-    if args.port:
-        os.environ["WEB_UI_PORT"] = str(args.port)
-    if args.node_id:
-        os.environ["Galaxy_NODE_ID"] = args.node_id
-    
-    # 启动系统
-    galaxy = Galaxy()
-    galaxy.start(mode=args.mode)
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

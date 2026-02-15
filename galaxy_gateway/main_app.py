@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Galaxy",
     description="L4 级自主性智能系统",
-    version="2.1.6"
+    version="2.1.7"
 )
 
 # CORS
@@ -35,6 +35,14 @@ app.add_middleware(
 )
 
 # ============================================================================
+# 静态文件
+# ============================================================================
+
+STATIC_DIR = Path(__file__).parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# ============================================================================
 # 导入并注册子路由
 # ============================================================================
 
@@ -42,6 +50,7 @@ app.add_middleware(
 try:
     from galaxy_gateway.config_service import app as config_app
     app.mount("/config", config_app)
+    logger.info("配置服务已加载")
 except ImportError as e:
     logger.warning(f"Config service not loaded: {e}")
 
@@ -49,6 +58,7 @@ except ImportError as e:
 try:
     from galaxy_gateway.memory_service import router as memory_router
     app.include_router(memory_router)
+    logger.info("记忆服务已加载")
 except ImportError as e:
     logger.warning(f"Memory service not loaded: {e}")
 
@@ -56,6 +66,7 @@ except ImportError as e:
 try:
     from galaxy_gateway.router_service import router as ai_router_router
     app.include_router(ai_router_router)
+    logger.info("AI 路由服务已加载")
 except ImportError as e:
     logger.warning(f"AI router service not loaded: {e}")
 
@@ -63,6 +74,7 @@ except ImportError as e:
 try:
     from galaxy_gateway.api_keys_service import router as api_keys_router
     app.include_router(api_keys_router)
+    logger.info("API Key 服务已加载")
 except ImportError as e:
     logger.warning(f"API Keys service not loaded: {e}")
 
@@ -70,16 +82,9 @@ except ImportError as e:
 try:
     from galaxy_gateway.device_manager_service import app as device_app
     app.mount("/device", device_app)
+    logger.info("设备管理服务已加载")
 except ImportError as e:
     logger.warning(f"Device manager service not loaded: {e}")
-
-# ============================================================================
-# 静态文件
-# ============================================================================
-
-STATIC_DIR = Path(__file__).parent / "static"
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ============================================================================
 # 主页面路由
@@ -91,7 +96,7 @@ async def root():
     index_path = STATIC_DIR / "dashboard.html"
     if index_path.exists():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
-    return {"message": "Galaxy L4 AI System", "version": "2.1.6"}
+    return {"message": "Galaxy L4 AI System", "version": "2.1.7"}
 
 @app.get("/config", response_class=HTMLResponse)
 async def config_page():
@@ -142,7 +147,7 @@ async def get_status():
     """获取系统状态"""
     return {
         "status": "running",
-        "version": "2.1.6",
+        "version": "2.1.7",
         "services": {
             "config": True,
             "memory": True,
@@ -160,13 +165,39 @@ async def health_check():
 @app.get("/api/nodes/status")
 async def get_nodes_status():
     """获取节点状态"""
-    # 简化版，返回基本信息
     return {
         "online": 1,
         "total": 1,
         "nodes": [
             {"id": "master", "status": "online", "role": "coordinator"}
         ]
+    }
+
+@app.get("/api/info")
+async def get_info():
+    """获取系统信息"""
+    return {
+        "name": "Galaxy",
+        "version": "2.1.7",
+        "description": "L4 级自主性智能系统",
+        "features": [
+            "智能对话",
+            "实时交互",
+            "语音输入",
+            "快捷操作",
+            "API Key 管理",
+            "设备管理",
+            "记忆系统"
+        ],
+        "endpoints": {
+            "dashboard": "/",
+            "config": "/config",
+            "devices": "/devices",
+            "memory": "/memory",
+            "router": "/router",
+            "api_keys": "/api-keys",
+            "docs": "/docs"
+        }
     }
 
 # ============================================================================

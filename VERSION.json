@@ -1,32 +1,31 @@
 {
-    "version": "2.1.6",
+    "version": "2.1.7",
     "name": "Galaxy",
     "description": "L4 级自主性智能系统",
     "release_date": "2026-02-15",
     "author": "Galaxy Team",
     "license": "MIT",
     "repository": "https://github.com/DannyFish-11/ufo-galaxy-realization-v2",
-    "android_repository": "https://github.com/DannyFish-11/ufo-galaxy-android",
     
     "components": {
         "core_modules": 39,
         "service_modules": 31,
         "ui_pages": 6,
-        "nodes": 108,
-        "android_kotlin_files": 17
+        "nodes": 108
     },
     
     "features": [
-        "一键安装",
-        "开机自启",
+        "一键启动",
+        "后台运行",
         "系统托盘",
+        "实时对话",
+        "语音输入",
+        "快捷操作",
         "配置中心",
         "设备管理",
         "记忆系统",
         "AI 智能路由",
-        "API Key 管理",
-        "远程访问",
-        "Tailscale 支持"
+        "API Key 管理"
     ],
     
     "access_urls": {
@@ -39,10 +38,9 @@
         "docs": "/docs"
     },
     
-    "requirements": {
-        "python": "3.10+",
-        "fastapi": "0.109+",
-        "uvicorn": "0.27+",
-        "pydantic": "2.6+"
+    "startup": {
+        "linux_mac": "python galaxy.py",
+        "windows": "双击 windows/start.bat",
+        "tray_mode": "python windows/galaxy_tray.py"
     }
 }
