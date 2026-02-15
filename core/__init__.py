@@ -69,8 +69,9 @@ from .command_router import (
 )
 
 from .ai_intent import (
-    AIIntentEngine,
-    IntentResult,
+    IntentParser,
+    ParsedIntent,
+    ConversationMemory,
 )
 
 from .startup import (
@@ -80,6 +81,13 @@ from .startup import (
 from .api_routes import (
     create_api_routes,
     create_websocket_routes,
+)
+
+# 安全模块
+from .safe_eval import SafeEval, SafeEvalError, safe_eval, safe_literal_eval
+from .secure_config import (
+    SecureConfig, APIKeys, DatabaseConfig, SecurityConfig,
+    get_config, get_api_key, get_database_url
 )
 
 # 版本信息
@@ -134,26 +142,25 @@ __all__ = [
     "CommandRouter",
     "CommandResult",
     # AI Intent
-    "AIIntentEngine",
-    "IntentResult",
+    "IntentParser",
+    "ParsedIntent",
+    "ConversationMemory",
     # Startup
     "bootstrap_subsystems",
     # API Routes
     "create_api_routes",
     "create_websocket_routes",
-]
-
-# 安全模块
-from .safe_eval import SafeEval, SafeEvalError, safe_eval, safe_literal_eval
-from .secure_config import (
-    SecureConfig, APIKeys, DatabaseConfig, SecurityConfig,
-    get_config, get_api_key, get_database_url
-)
-
-__all__.extend([
     # Safe Eval
-    "SafeEval", "SafeEvalError", "safe_eval", "safe_literal_eval",
+    "SafeEval",
+    "SafeEvalError",
+    "safe_eval",
+    "safe_literal_eval",
     # Secure Config
-    "SecureConfig", "APIKeys", "DatabaseConfig", "SecurityConfig",
-    "get_config", "get_api_key", "get_database_url",
-])
+    "SecureConfig",
+    "APIKeys",
+    "DatabaseConfig",
+    "SecurityConfig",
+    "get_config",
+    "get_api_key",
+    "get_database_url",
+]
