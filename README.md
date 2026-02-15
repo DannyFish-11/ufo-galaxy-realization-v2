@@ -203,3 +203,29 @@ MIT License
 ## 🙏 致谢
 
 感谢所有贡献者和开源社区的支持！
+
+---
+
+## 📱 设备注册
+
+### 快速注册设备
+
+```bash
+# 自动检测并注册当前设备
+python register_device.py --gateway http://192.168.x.x:8080
+```
+
+### 各平台注册方式
+
+| 平台 | 注册方式 |
+|------|----------|
+| **Android** | 安装 APK 客户端，输入服务器地址 |
+| **Windows** | 运行 `register_device.py` 或启动客户端 |
+| **Linux** | 运行 `register_device.py` 或 SSH 连接 |
+| **macOS** | 运行 `register_device.py` 或 AppleScript |
+| **云服务器** | 作为主节点或工作节点部署 |
+
+### 详细文档
+
+参见 [设备注册指南](DEVICE_REGISTRATION_GUIDE.md)
+
