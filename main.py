@@ -299,7 +299,9 @@ class WebUIServer:
     async def start(self):
         """启动 Web UI"""
         try:
-            from fastapi import FastAPI, HTTPException
+            from fastapi import
+from galaxy_gateway.memory_service import router as memory_router
+ FastAPI, HTTPException
             from fastapi.responses import HTMLResponse, JSONResponse
             from fastapi.staticfiles import StaticFiles
             import uvicorn
@@ -330,6 +332,15 @@ class WebUIServer:
         except ImportError:
             print_status("Web UI 依赖未安装，跳过 Web UI", "warning")
             
+    
+    @app.get("/memory")
+    async def memory_page():
+        """记忆中心页面"""
+        static_path = PROJECT_ROOT / "galaxy_gateway" / "static" / "memory.html"
+        if static_path.exists():
+            return HTMLResponse(content=static_path.read_text(encoding='utf-8'))
+        return {"error": "Memory page not found"}
+
     @app.get("/devices")
     async def device_manager():
         """设备管理界面"""
