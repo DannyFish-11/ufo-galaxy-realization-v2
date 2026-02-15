@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Galaxy - 统一启动脚本
-# 一键启动完整的 Galaxy 系统
+# Galaxy - 统一启动脚本 (完整版)
+# 支持 7×24 后台运行、开机自启动、交互界面
 #
 
 set -e
@@ -22,221 +22,236 @@ cd "$SCRIPT_DIR"
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║                                                               ║"
-    echo "║   ██████╗  █████╗  ██████╗ ██████╗ ███████╗                  ║"
-    echo "║   ██╔══██╗██╔══██╗██╔════╝██╔═══██╗██╔════╝                  ║"
-    echo "║   ██║  ██║███████║██║     ██║   ██║███████╗                  ║"
-    echo "║   ██║  ██║██╔══██║██║     ██║   ██║╚════██║                  ║"
-    echo "║   ██████╔╝██║  ██║╚██████╗╚██████╔╝███████║                  ║"
-    echo "║   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝                  ║"
-    echo "║                                                               ║"
     echo "║   Galaxy - L4 级自主性智能系统                                ║"
-    echo "║                                                               ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
-}
-
-# 检查 Python
-check_python() {
-    if ! command -v python3 &> /dev/null; then
-        echo -e "${RED}错误: Python3 未安装${NC}"
-        echo "请安装 Python 3.10 或更高版本"
-        exit 1
-    fi
-    
-    PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-    echo -e "${GREEN}✓${NC} Python 版本: $PYTHON_VERSION"
 }
 
 # 检查虚拟环境
 check_venv() {
     if [ ! -d "venv" ]; then
-        echo -e "${YELLOW}创建虚拟环境...${NC}"
-        python3 -m venv venv
+        echo -e "${YELLOW}虚拟环境不存在，请先运行 ./install.sh${NC}"
+        exit 1
     fi
+}
+
+# 启动服务
+start_service() {
+    check_venv
+    
+    # 检查是否已经运行
+    if [ -f "galaxy.pid" ]; then
+        PID=$(cat galaxy.pid)
+        if ps -p $PID > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Galaxy 已在运行 (PID: $PID)"
+            return 0
+        fi
+    fi
+    
+    echo -e "${BLUE}启动 Galaxy...${NC}"
     
     # 激活虚拟环境
     source venv/bin/activate
-    echo -e "${GREEN}✓${NC} 虚拟环境已激活"
-}
-
-# 安装依赖
-install_deps() {
-    echo -e "${YELLOW}检查依赖...${NC}"
-    
-    if [ -f "requirements.txt" ]; then
-        pip install -q -r requirements.txt 2>/dev/null || pip install -r requirements.txt
-        echo -e "${GREEN}✓${NC} 依赖已安装"
-    fi
-}
-
-# 检查配置
-check_config() {
-    if [ ! -f ".env" ]; then
-        if [ -f ".env.example" ]; then
-            echo -e "${YELLOW}创建配置文件...${NC}"
-            cp .env.example .env
-            echo -e "${GREEN}✓${NC} .env 文件已创建"
-            echo -e "${YELLOW}请编辑 .env 文件配置 API Key${NC}"
-        fi
-    else
-        echo -e "${GREEN}✓${NC} 配置文件已存在"
-    fi
-    
-    # 创建必要的目录
-    mkdir -p logs data config cache
-}
-
-# 启动系统
-start_system() {
-    local mode=${1:-"full"}
-    
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  启动 Galaxy 系统 (${mode} 模式)${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    # 设置环境变量
-    export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-    
-    # 启动
-    python3 galaxy.py --mode "$mode"
-}
-
-# 后台运行
-start_daemon() {
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  启动 Galaxy 守护进程${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    # 检查是否已在运行
-    if [ -f "galaxy.pid" ]; then
-        PID=$(cat galaxy.pid)
-        if ps -p $PID > /dev/null 2>&1; then
-            echo -e "${YELLOW}Galaxy 已在运行 (PID: $PID)${NC}"
-            return
-        fi
-    fi
     
     # 后台启动
-    nohup python3 galaxy.py --mode daemon > logs/galaxy.log 2>&1 &
+    nohup python galaxy.py --mode daemon > logs/galaxy.log 2>&1 &
     echo $! > galaxy.pid
     
-    echo -e "${GREEN}✓${NC} Galaxy 已启动 (PID: $(cat galaxy.pid))"
-    echo ""
-    echo "日志文件: logs/galaxy.log"
-    echo "停止命令: ./galaxy.sh stop"
+    sleep 2
+    
+    if ps -p $(cat galaxy.pid) > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Galaxy 已启动 (PID: $(cat galaxy.pid))"
+        echo ""
+        echo "访问地址:"
+        echo "  配置中心: http://localhost:8080/config"
+        echo "  设备管理: http://localhost:8080/devices"
+        echo "  交互界面: 按 F12 键唤醒"
+    else
+        echo -e "${RED}✗${NC} Galaxy 启动失败，请查看日志: logs/galaxy.log"
+        return 1
+    fi
 }
 
-# 停止系统
-stop_system() {
-    echo ""
-    echo -e "${YELLOW}停止 Galaxy 系统...${NC}"
+# 停止服务
+stop_service() {
+    echo -e "${YELLOW}停止 Galaxy...${NC}"
     
     if [ -f "galaxy.pid" ]; then
         PID=$(cat galaxy.pid)
         if ps -p $PID > /dev/null 2>&1; then
-            kill $PID
-            echo -e "${GREEN}✓${NC} Galaxy 已停止 (PID: $PID)"
+            kill $PID 2>/dev/null || true
+            sleep 1
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+            echo -e "${GREEN}✓${NC} Galaxy 已停止"
+        else
+            echo -e "${YELLOW}!${NC} Galaxy 未在运行"
         fi
-        rm galaxy.pid
+        rm -f galaxy.pid
     else
-        echo -e "${YELLOW}未找到运行中的 Galaxy${NC}"
+        echo -e "${YELLOW}!${NC} 未找到 PID 文件"
     fi
+    
+    # 同时停止交互界面
+    pkill -f "start_interactive.py" 2>/dev/null || true
 }
 
 # 查看状态
 show_status() {
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  Galaxy 系统状态${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    print_banner
+    
+    echo "系统状态:"
     echo ""
     
+    # 检查主服务
     if [ -f "galaxy.pid" ]; then
         PID=$(cat galaxy.pid)
         if ps -p $PID > /dev/null 2>&1; then
-            echo -e "状态: ${GREEN}运行中${NC}"
-            echo "PID: $PID"
-            echo ""
-            
-            # 显示端口
-            echo "服务地址:"
-            echo "  配置中心: http://localhost:8080/config"
-            echo "  设备管理: http://localhost:8080/devices"
-            echo "  API 文档: http://localhost:8080/docs"
+            echo -e "  主服务: ${GREEN}运行中${NC} (PID: $PID)"
         else
-            echo -e "状态: ${RED}已停止${NC}"
-            rm galaxy.pid
+            echo -e "  主服务: ${RED}已停止${NC}"
         fi
     else
-        echo -e "状态: ${YELLOW}未运行${NC}"
+        echo -e "  主服务: ${YELLOW}未运行${NC}"
+    fi
+    
+    # 检查交互界面
+    if pgrep -f "start_interactive.py" > /dev/null 2>&1; then
+        echo -e "  交互界面: ${GREEN}运行中${NC}"
+    else
+        echo -e "  交互界面: ${YELLOW}未运行${NC}"
+    fi
+    
+    echo ""
+    echo "访问地址:"
+    echo "  配置中心: http://localhost:8080/config"
+    echo "  设备管理: http://localhost:8080/devices"
+    echo "  API 文档: http://localhost:8080/docs"
+    echo ""
+    echo "交互方式:"
+    echo "  按 F12 键唤醒交互界面"
+    echo ""
+}
+
+# 启动交互界面
+start_ui() {
+    check_venv
+    
+    # 检查是否已经运行
+    if pgrep -f "start_interactive.py" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} 交互界面已在运行"
+        return 0
+    fi
+    
+    echo -e "${BLUE}启动交互界面...${NC}"
+    
+    source venv/bin/activate
+    
+    # 后台启动交互界面
+    nohup python start_interactive.py > logs/ui.log 2>&1 &
+    
+    sleep 1
+    
+    echo -e "${GREEN}✓${NC} 交互界面已启动"
+    echo ""
+    echo "按 F12 键唤醒/隐藏界面"
+}
+
+# 查看日志
+show_logs() {
+    if [ -f "logs/galaxy.log" ]; then
+        tail -f logs/galaxy.log
+    else
+        echo "日志文件不存在"
+    fi
+}
+
+# 显示帮助
+show_help() {
+    print_banner
+    echo "用法: ./galaxy.sh {命令}"
+    echo ""
+    echo "命令:"
+    echo "  start       - 启动 Galaxy (后台运行)"
+    echo "  stop        - 停止 Galaxy"
+    echo "  restart     - 重启 Galaxy"
+    echo "  status      - 查看状态"
+    echo "  ui          - 启动交互界面"
+    echo "  logs        - 查看日志"
+    echo "  config      - 打开配置界面"
+    echo "  install     - 运行安装程序"
+    echo ""
+    echo "示例:"
+    echo "  ./galaxy.sh start    # 启动服务"
+    echo "  ./galaxy.sh status   # 查看状态"
+    echo "  ./galaxy.sh ui       # 启动交互界面"
+    echo ""
+}
+
+# 打开配置界面
+open_config() {
+    echo "打开配置界面..."
+    
+    # 检查服务是否运行
+    if ! curl -s http://localhost:8080/config > /dev/null 2>&1; then
+        echo "服务未运行，正在启动..."
+        start_service
+        sleep 3
+    fi
+    
+    # 打开浏览器
+    if command -v xdg-open &> /dev/null; then
+        xdg-open http://localhost:8080/config
+    elif command -v open &> /dev/null; then
+        open http://localhost:8080/config
+    else
+        echo "请手动打开: http://localhost:8080/config"
     fi
 }
 
 # 主函数
 main() {
-    local command=${1:-"start"}
-    local mode=${2:-"full"}
+    local command=${1:-"help"}
     
     case $command in
         start)
-            print_banner
-            check_python
-            check_venv
-            install_deps
-            check_config
-            start_system "$mode"
-            ;;
-        daemon)
-            print_banner
-            check_python
-            check_venv
-            install_deps
-            check_config
-            start_daemon
+            start_service
             ;;
         stop)
-            stop_system
+            stop_service
             ;;
         restart)
-            stop_system
+            stop_service
             sleep 2
-            print_banner
-            check_python
-            check_venv
-            start_daemon
+            start_service
             ;;
         status)
             show_status
             ;;
+        ui)
+            start_ui
+            ;;
+        logs)
+            show_logs
+            ;;
         config)
-            print_banner
-            check_python
-            check_venv
-            install_deps
-            check_config
-            echo ""
-            echo "启动配置服务..."
-            python3 -c "from galaxy_gateway.config_service import run_server; run_server()"
+            open_config
+            ;;
+        install)
+            if [ -f "install.sh" ]; then
+                ./install.sh
+            else
+                echo "install.sh 不存在"
+            fi
+            ;;
+        help|--help|-h)
+            show_help
             ;;
         *)
-            echo "用法: $0 {start|daemon|stop|restart|status|config} [mode]"
-            echo ""
-            echo "命令:"
-            echo "  start     - 前台启动 (默认)"
-            echo "  daemon    - 后台启动 (7x24 运行)"
-            echo "  stop      - 停止系统"
-            echo "  restart   - 重启系统"
-            echo "  status    - 查看状态"
-            echo "  config    - 仅启动配置服务"
-            echo ""
-            echo "模式:"
-            echo "  full      - 完整模式 (默认)"
-            echo "  minimal   - 最小模式"
+            echo "未知命令: $command"
+            show_help
+            exit 1
             ;;
     esac
 }
