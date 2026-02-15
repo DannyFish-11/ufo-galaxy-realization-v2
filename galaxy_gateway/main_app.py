@@ -52,7 +52,9 @@ except ImportError as e:
 # AI 路由服务
 try:
     from galaxy_gateway.router_service import router as ai_router_router
-    app.include_router(ai_router_router)
+from galaxy_gateway.api_keys_service import router as api_keys_router
+    app.include_router(api_keys_router)
+app.include_router(ai_router_router)
 except ImportError as e:
     logger.warning(f"AI router service not loaded: {e}")
 
@@ -99,7 +101,15 @@ async def memory_page():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
     return {"error": "Memory page not found"}
 
-@app.get("/router", response_class=HTMLResponse)
+@app.get("/api-keys")
+    async def api_keys_page():
+        """API Key 管理"""
+        static_path = STATIC_DIR / "api_keys.html"
+        if static_path.exists():
+            return HTMLResponse(content=static_path.read_text(encoding='utf-8'))
+        return {"error": "API Keys page not found"}
+
+    @app.get("/router", response_class=HTMLResponse)
 async def router_page():
     """AI 路由"""
     index_path = STATIC_DIR / "router.html"
