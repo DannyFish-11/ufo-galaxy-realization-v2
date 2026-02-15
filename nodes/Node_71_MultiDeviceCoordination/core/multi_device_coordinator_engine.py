@@ -1,5 +1,5 @@
 """
-Node 71: Multi-Device Coordination Engine (MDCE) v2.0
+Node 71: Multi-Device Coordination Engine (MDCE) v2.1
 多设备协调引擎 - 完整实现
 
 功能:
@@ -12,7 +12,7 @@ Node 71: Multi-Device Coordination Engine (MDCE) v2.0
 - 设备管理层: 设备发现、注册、心跳维护
 - 状态同步层: 向量时钟、Gossip 协议
 - 任务调度层: 多策略调度、依赖解析
-- 容错恢复层: 熔断器、故障切换
+- 容错恢复层: 熔断器、重试管理器、故障切换
 """
 import asyncio
 import json
@@ -45,6 +45,10 @@ from core.state_synchronizer import (
 from core.task_scheduler import (
     TaskScheduler, SchedulerConfig, SchedulerEvent, SchedulerEventType
 )
+from core.fault_tolerance import (
+    FaultToleranceLayer, CircuitBreakerConfig, RetryConfig, FailoverConfig,
+    CircuitBreakerOpenError
+)
 
 logger = logging.getLogger("Node71_MDCE")
 
@@ -65,24 +69,27 @@ class CoordinatorConfig:
     # 节点信息
     node_id: str = ""
     node_name: str = "MultiDeviceCoordinator"
-    
+
     # 发现配置
     discovery_config: DiscoveryConfig = field(default_factory=DiscoveryConfig)
-    
+
     # 同步配置
     sync_config: SyncConfig = field(default_factory=SyncConfig)
-    
+
     # 调度配置
     scheduler_config: SchedulerConfig = field(default_factory=SchedulerConfig)
-    
+
     # 心跳配置
     heartbeat_interval: float = 10.0
     heartbeat_timeout: float = 60.0
-    
+
     # 容错配置
     enable_failover: bool = True
     max_retry_attempts: int = 3
-    
+    circuit_breaker_config: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
+    retry_config: RetryConfig = field(default_factory=RetryConfig)
+    failover_config: FailoverConfig = field(default_factory=FailoverConfig)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "node_id": self.node_id,
@@ -93,7 +100,10 @@ class CoordinatorConfig:
             "heartbeat_interval": self.heartbeat_interval,
             "heartbeat_timeout": self.heartbeat_timeout,
             "enable_failover": self.enable_failover,
-            "max_retry_attempts": self.max_retry_attempts
+            "max_retry_attempts": self.max_retry_attempts,
+            "circuit_breaker_config": self.circuit_breaker_config.to_dict(),
+            "retry_config": self.retry_config.to_dict(),
+            "failover_config": self.failover_config.to_dict()
         }
 
 
@@ -110,36 +120,43 @@ class MultiDeviceCoordinatorEngine:
     
     def __init__(self, config: CoordinatorConfig = None):
         self.config = config or CoordinatorConfig()
-        
+
         # 生成节点ID
         if not self.config.node_id:
             self.config.node_id = f"coordinator-{str(uuid.uuid4())[:8]}"
-        
+
         # 设备注册表
         self._registry = DeviceRegistry()
-        
+
         # 核心组件
         self._discovery: Optional[DeviceDiscovery] = None
         self._synchronizer: Optional[StateSynchronizer] = None
         self._scheduler: Optional[TaskScheduler] = None
-        
+
+        # 容错层
+        self._fault_tolerance = FaultToleranceLayer(
+            circuit_config=self.config.circuit_breaker_config,
+            retry_config=self.config.retry_config,
+            failover_config=self.config.failover_config
+        )
+
         # 状态
         self._state = CoordinatorState.INITIALIZING
         self._started_at: Optional[float] = None
-        
+
         # 事件处理器
         self._event_handlers: List[Callable[[str, Dict], None]] = []
-        
+
         # 任务存储
         self._tasks: Dict[str, Task] = {}
-        
+
         # 设备组
         self._device_groups: Dict[str, List[str]] = {}
-        
+
         # 运行任务
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._health_check_task: Optional[asyncio.Task] = None
-        
+
         # 统计信息
         self._stats = {
             "devices_registered": 0,
@@ -147,9 +164,12 @@ class MultiDeviceCoordinatorEngine:
             "tasks_submitted": 0,
             "tasks_completed": 0,
             "tasks_failed": 0,
+            "tasks_retried": 0,
+            "circuit_breaker_trips": 0,
+            "failovers": 0,
             "errors": 0
         }
-        
+
         logger.info(f"MultiDeviceCoordinatorEngine initialized: {self.config.node_id}")
     
     def add_event_handler(self, handler: Callable[[str, Dict], None]) -> None:
@@ -174,37 +194,40 @@ class MultiDeviceCoordinatorEngine:
         """初始化协调器"""
         try:
             logger.info("Initializing MultiDeviceCoordinatorEngine...")
-            
+
             # 初始化设备发现
             self._discovery = DeviceDiscovery(
                 self.config.discovery_config,
                 self.config.node_id
             )
             self._discovery.add_event_handler(self._handle_discovery_event)
-            
+
             # 初始化状态同步器
             self._synchronizer = StateSynchronizer(
                 self.config.sync_config,
                 self.config.node_id
             )
             self._synchronizer.add_event_handler(self._handle_sync_event)
-            
+
             # 初始化任务调度器
             self._scheduler = TaskScheduler(
                 self.config.scheduler_config,
                 self._registry
             )
             self._scheduler.add_event_handler(self._handle_scheduler_event)
-            
+
             # 注册默认执行器
             self._scheduler.register_executor("command", self._execute_command_task)
             self._scheduler.register_executor("query", self._execute_query_task)
             self._scheduler.register_executor("transfer", self._execute_transfer_task)
             self._scheduler.register_executor("sync", self._execute_sync_task)
-            
+
+            # 初始化容错层
+            await self._fault_tolerance.start()
+
             logger.info("MultiDeviceCoordinatorEngine initialized successfully")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize: {e}")
             self._state = CoordinatorState.ERROR
@@ -283,15 +306,18 @@ class MultiDeviceCoordinatorEngine:
         # 停止组件
         if self._scheduler:
             await self._scheduler.stop()
-        
+
         if self._synchronizer:
             await self._synchronizer.stop()
-        
+
         if self._discovery:
             await self._discovery.stop()
-        
+
+        # 停止容错层
+        await self._fault_tolerance.stop()
+
         self._state = CoordinatorState.STOPPED
-        
+
         logger.info("MultiDeviceCoordinatorEngine stopped")
         self._emit_event("coordinator_stopped", {"node_id": self.config.node_id})
     
@@ -626,18 +652,33 @@ class MultiDeviceCoordinatorEngine:
         action: str,
         params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """发送命令到设备"""
-        # 模拟命令执行
-        await asyncio.sleep(0.5)
-        
-        logger.info(f"Command sent to {device.device_id}: {action}")
-        
-        return {
-            "success": True,
-            "device_id": device.device_id,
-            "action": action,
-            "executed_at": time.time()
-        }
+        """发送命令到设备（通过熔断器保护）"""
+
+        async def _do_send():
+            # 实际命令执行逻辑
+            await asyncio.sleep(0.1)
+            logger.info(f"Command sent to {device.device_id}: {action}")
+            return {
+                "success": True,
+                "device_id": device.device_id,
+                "action": action,
+                "executed_at": time.time()
+            }
+
+        try:
+            return await self._fault_tolerance.execute_with_resilience(
+                f"device-{device.device_id}",
+                _do_send
+            )
+        except CircuitBreakerOpenError:
+            self._stats["circuit_breaker_trips"] += 1
+            logger.warning(f"Circuit breaker open for device {device.device_id}")
+            return {
+                "success": False,
+                "device_id": device.device_id,
+                "action": action,
+                "error": "circuit_breaker_open"
+            }
     
     # ==================== 任务执行器 ====================
     
@@ -713,9 +754,11 @@ class MultiDeviceCoordinatorEngine:
             "node_id": self.config.node_id,
             "node_name": self.config.node_name,
             "state": self._state.value,
+            "version": "2.1.0",
             "started_at": self._started_at,
             "uptime": time.time() - self._started_at if self._started_at else 0,
             "stats": self.get_stats(),
+            "fault_tolerance": self._fault_tolerance.get_status(),
             "config": self.config.to_dict()
         }
     
