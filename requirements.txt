@@ -112,3 +112,6 @@ pytest-cov==4.1.0
 # Packaging
 # ============================================================================
 pyinstaller==6.4.0
+# Windows 系统托盘支持
+pystray>=0.19.0; sys_platform == 'win32'
+Pillow>=10.0.0; sys_platform == 'win32'
