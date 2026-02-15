@@ -383,7 +383,7 @@ class SmartOrchestrator:
     def _evaluate_condition(self, condition: str, context: Dict) -> bool:
         """评估条件"""
         try:
-            return eval(condition, {"__builtins__": {}}, context)
+            return safe_eval(condition, context) or True
         except Exception:
             return True
     

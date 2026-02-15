@@ -154,7 +154,7 @@ async def main():
     json_data_path = "your/path/to/the/dataset"
     image_data_path = "your/path/to/annotated/image"
     data = read_jsonl(json_data_path)
-    client = AsyncClient(api_key="sk-123")
+    client = AsyncClient(api_key=os.getenv("OPENAI_API_KEY", ""))
     semaphore = asyncio.Semaphore(8)
     tasks = []
     for item in data:

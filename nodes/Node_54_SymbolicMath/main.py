@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from core.safe_eval import safe_eval
 """
 Node 54: Symbolic Math & Formal Verification
 UFO Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
@@ -191,7 +195,7 @@ class SymbolicEngine:
             
             # Safe evaluation (very limited)
             allowed_names = {"abs": abs, "min": min, "max": max}
-            result = eval(expr, {"__builtins__": {}}, allowed_names)
+            result = safe_eval(expr, allowed_names)
             return float(result)
         except Exception:
             return None

@@ -43,7 +43,7 @@ app.add_middleware(
 # 配置
 # ============================================================================
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-be72ac32a25e4de08ef261d50feebb60")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
 
 # ============================================================================

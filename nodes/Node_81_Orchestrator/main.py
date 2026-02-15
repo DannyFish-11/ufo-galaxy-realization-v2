@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from core.safe_eval import safe_eval
 """
 Node 81: Orchestrator - 统一编排器
 智能任务编排、工作流管理、节点协调
@@ -298,7 +302,7 @@ class OrchestratorService:
         if task.condition and context:
             try:
                 # 简单的条件评估
-                if not eval(task.condition, {"__builtins__": {}}, context):
+                if not safe_eval(task.condition, context):
                     logger.info(f"Task {task.task_id} skipped (condition not met)")
                     return TaskResult(
                         task_id=task.task_id,

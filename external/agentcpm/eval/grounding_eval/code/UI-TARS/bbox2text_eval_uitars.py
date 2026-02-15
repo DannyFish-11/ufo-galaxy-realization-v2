@@ -109,7 +109,7 @@ async def main():
     correct = 0
     json_data_path = "your/path/to/the/dataset"
     data = read_jsonl(json_data_path)
-    client = AsyncClient(api_key="sk-123", base_url='http://localhost:8000/v1')
+    client = AsyncClient(api_key=os.getenv("OPENAI_API_KEY", ""), base_url='http://localhost:8000/v1')
     semaphore = asyncio.Semaphore(16)
     tasks = []
     for item in data:
