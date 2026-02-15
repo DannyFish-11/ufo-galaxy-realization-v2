@@ -4,6 +4,7 @@ Node 71 - MultiDeviceCoordination (多设备协调节点)
 v2.0 - 重构版本，集成新的核心引擎
 """
 import os
+import sys
 import json
 import asyncio
 import logging
@@ -16,7 +17,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uuid
 
-# 导入新的核心模块
+# 添加当前目录到路径，确保导入本地 core 模块
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
+# 导入本地核心模块
 from core import (
     MultiDeviceCoordinatorEngine, CoordinatorConfig, CoordinatorState,
     Device, DeviceType, DeviceState, DeviceRegistry,
@@ -32,7 +38,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 
 # ==================== 兼容性数据类 ====================
-# 保留原有的数据类以保持向后兼容
 
 class DeviceTypeCompat(str, Enum):
     """设备类型（兼容性）"""
@@ -405,8 +410,15 @@ class MultiDeviceCoordinator:
         results = {}
         
         for device_id in group.device_ids:
-            result = await self._send_command(device_id, action, params)
-            results[device_id] = result
+            device = self.devices.get(device_id)
+            if device:
+                try:
+                    result = await self._send_command(device_id, action, params)
+                    results[device_id] = result
+                except Exception as e:
+                    results[device_id] = {"success": False, "error": str(e)}
+            else:
+                results[device_id] = {"success": False, "error": "Device not found"}
         
         return {"success": True, "results": results}
     
