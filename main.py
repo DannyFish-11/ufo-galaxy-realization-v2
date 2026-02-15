@@ -330,6 +330,15 @@ class WebUIServer:
         except ImportError:
             print_status("Web UI 依赖未安装，跳过 Web UI", "warning")
             
+    @app.get("/devices")
+    async def device_manager():
+        """设备管理界面"""
+        static_path = PROJECT_ROOT / "galaxy_gateway" / "static" / "device_manager.html"
+        if static_path.exists():
+            return HTMLResponse(content=static_path.read_text())
+        return {"error": "Device manager not found"}
+
+
     def _get_dashboard_html(self) -> str:
         """获取仪表板 HTML"""
         return """
@@ -396,6 +405,10 @@ class WebUIServer:
     <div class="container">
         <div class="header">
             <h1>🌌 UFO Galaxy</h1>
+            <p style="margin-top: 10px;">
+                <a href="/devices" style="color: #00d4ff; margin-right: 20px;">📱 设备管理</a>
+                <a href="/docs" style="color: #00d4ff;">📚 API 文档</a>
+            </p>
             <p>L4 级自主性智能系统</p>
         </div>
         <div class="status-grid">
