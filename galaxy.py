@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """
-Galaxy - 统一启动入口
-======================
+Galaxy - 群智能系统启动入口
+==========================
 一键启动，自动后台运行，系统托盘管理
 
-功能：
-1. 自动检测并安装依赖
-2. 后台启动服务
-3. 系统托盘管理
-4. 自动打开浏览器
+Galaxy 是一个有机的整体，不是一堆独立的服务
 """
 
 import os
@@ -31,11 +27,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 配置
 # ============================================================================
 
-VERSION = "2.1.7"
+VERSION = "2.1.8"
 PORT = 8080
 PID_FILE = PROJECT_ROOT / "galaxy.pid"
 LOG_FILE = PROJECT_ROOT / "logs" / "galaxy.log"
-CONFIG_FILE = PROJECT_ROOT / "config" / "galaxy.json"
 
 # ============================================================================
 # 工具函数
@@ -52,7 +47,8 @@ def print_banner():
     print("   ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║   ")
     print("    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ")
     print()
-    print(f"   Galaxy - L4 级自主性智能系统 v{VERSION}")
+    print(f"   Galaxy - L4 级群智能系统 v{VERSION}")
+    print("   一个有机的整体，不是一堆独立的服务")
     print("=" * 60)
     print()
 
@@ -65,7 +61,7 @@ def check_dependencies():
     """检查依赖"""
     log("检查依赖...")
     
-    required = ["fastapi", "uvicorn", "pydantic", "httpx", "websockets"]
+    required = ["fastapi", "uvicorn", "pydantic", "httpx"]
     missing = []
     
     for pkg in required:
@@ -139,7 +135,7 @@ def start_service():
         log("服务已在运行中")
         return True
     
-    log("启动服务...")
+    log("启动 Galaxy 群智能系统...")
     
     # 创建启动脚本
     start_script = f'''
@@ -148,10 +144,17 @@ import os
 sys.path.insert(0, "{PROJECT_ROOT}")
 os.chdir("{PROJECT_ROOT}")
 
+# 初始化群智能核心
+from core.swarm_core import get_swarm_core
+core = get_swarm_core()
+print(f"群智能核心已初始化: {{core.name}} v{{core.version}}")
+print(f"可用能力: {{len(core.capability_pool.capabilities)}} 个")
+
+# 启动服务
 from galaxy_gateway.main_app import app
 import uvicorn
 
-uvicorn.run(app, host="0.0.0.0", port={PORT}, log_level="info")
+uvicorn.run(app, host="0.0.0.0", port={PORT}, log_level="warning")
 '''
     
     # 后台启动
@@ -221,6 +224,10 @@ def run_tray():
         """打开界面"""
         webbrowser.open(f"http://localhost:{PORT}")
     
+    def on_capabilities(icon, item):
+        """打开能力中心"""
+        webbrowser.open(f"http://localhost:{PORT}/capabilities")
+    
     def on_start(icon, item):
         """启动服务"""
         start_service()
@@ -244,6 +251,8 @@ def run_tray():
         Item(lambda: f"Galaxy - {get_status()}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         Item("打开界面", on_open),
+        Item("能力中心", on_capabilities),
+        pystray.Menu.SEPARATOR,
         Item("启动服务", on_start, visible=lambda item: not is_running()),
         Item("停止服务", on_stop, visible=lambda item: is_running()),
         Item("重启服务", on_restart),

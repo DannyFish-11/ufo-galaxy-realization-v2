@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galaxy - 控制中心</title>
+    <title>Galaxy - 群智能系统</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -25,14 +25,28 @@
             50% { opacity: 0.5; }
         }
         .chat-container {
-            height: calc(100vh - 300px);
-            min-height: 300px;
+            height: calc(100vh - 350px);
+            min-height: 400px;
         }
         .message-user {
             background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
         }
         .message-assistant {
             background: rgba(255, 255, 255, 0.1);
+        }
+        .thinking {
+            animation: thinking 1.5s infinite;
+        }
+        @keyframes thinking {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        .capability-card {
+            transition: all 0.3s;
+        }
+        .capability-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 212, 255, 0.1);
         }
     </style>
 </head>
@@ -48,16 +62,19 @@
                             <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
                                 Galaxy
                             </h1>
-                            <p class="text-sm text-gray-400">L4 级自主性智能系统</p>
+                            <p class="text-sm text-gray-400">L4 级群智能系统</p>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-6">
                         <div class="flex items-center space-x-2">
-                            <span class="pulse-dot w-2 h-2 rounded-full" :class="status === 'running' ? 'bg-green-400' : 'bg-red-400'"></span>
-                            <span class="text-sm text-gray-400">{{ statusText }}</span>
+                            <span class="pulse-dot w-2 h-2 rounded-full" :class="swarmState === 'active' ? 'bg-green-400' : 'bg-yellow-400'"></span>
+                            <span class="text-sm text-gray-400">{{ swarmStateText }}</span>
                         </div>
-                        <a href="/config" class="text-gray-400 hover:text-white transition">配置</a>
-                        <a href="/api-keys" class="text-gray-400 hover:text-white transition">API Key</a>
+                        <div class="text-sm text-gray-400">
+                            能力: <span class="text-cyan-400">{{ capabilitiesCount }}</span>
+                        </div>
+                        <a href="/capabilities" class="text-gray-400 hover:text-white transition">能力中心</a>
+                        <a href="/api-keys" class="text-gray-400 hover:text-white transition">配置</a>
                         <a href="/docs" class="text-gray-400 hover:text-white transition">API</a>
                     </div>
                 </div>
@@ -65,132 +82,156 @@
         </header>
 
         <!-- Main Content -->
-        <main class="container mx-auto px-6 py-8">
+        <main class="container mx-auto px-6 py-6">
             <!-- Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">服务状态</div>
-                    <div class="text-2xl font-bold" :class="status === 'running' ? 'text-green-400' : 'text-red-400'">
-                        {{ statusText }}
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">系统状态</div>
+                    <div class="text-xl font-bold" :class="swarmState === 'active' ? 'text-green-400' : 'text-yellow-400'">
+                        {{ swarmStateText }}
                     </div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">在线节点</div>
-                    <div class="text-2xl font-bold text-cyan-400">{{ nodes.online }}/{{ nodes.total }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">可用能力</div>
+                    <div class="text-xl font-bold text-cyan-400">{{ capabilitiesCount }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">对话数量</div>
-                    <div class="text-2xl font-bold text-purple-400">{{ conversations }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">交互次数</div>
+                    <div class="text-xl font-bold text-purple-400">{{ stats.total_interactions }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">版本</div>
-                    <div class="text-2xl font-bold text-yellow-400">{{ version }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">成功率</div>
+                    <div class="text-xl font-bold text-green-400">{{ (stats.success_rate * 100).toFixed(1) }}%</div>
+                </div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">版本</div>
+                    <div class="text-xl font-bold text-yellow-400">{{ version }}</div>
                 </div>
             </div>
 
-            <!-- Chat Interface -->
-            <div class="glass-card rounded-xl overflow-hidden">
-                <!-- Chat Header -->
-                <div class="border-b border-white/10 p-4">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-3">
-                            <div class="text-xl">💬</div>
-                            <div>
-                                <h2 class="font-semibold">智能对话</h2>
-                                <p class="text-sm text-gray-400">实时交互，支持语音输入</p>
+            <!-- Main Interface -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- Chat Interface -->
+                <div class="lg:col-span-3 glass-card rounded-xl overflow-hidden">
+                    <!-- Chat Header -->
+                    <div class="border-b border-white/10 p-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="text-xl">💬</div>
+                                <div>
+                                    <h2 class="font-semibold">群智能交互</h2>
+                                    <p class="text-xs text-gray-400">统一入口，智能路由</p>
+                                </div>
                             </div>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <button @click="clearChat" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm">
-                                清空对话
-                            </button>
-                            <button @click="toggleVoice" :class="['px-3 py-1.5 rounded-lg text-sm', voiceEnabled ? 'bg-cyan-600' : 'bg-white/10 hover:bg-white/20']">
-                                {{ voiceEnabled ? '🎤 语音开' : '🎤 语音关' }}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Chat Messages -->
-                <div class="chat-container overflow-y-auto p-4 space-y-4" ref="chatContainer">
-                    <div v-if="messages.length === 0" class="text-center py-12 text-gray-400">
-                        <div class="text-4xl mb-4">🌌</div>
-                        <div>开始与 Galaxy 对话吧</div>
-                        <div class="text-sm mt-2">输入消息或点击语音按钮</div>
-                    </div>
-                    
-                    <div v-for="(msg, index) in messages" :key="index" 
-                         :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
-                        <div :class="['max-w-[80%] rounded-2xl px-4 py-3', 
-                                     msg.role === 'user' ? 'message-user text-white' : 'message-assistant text-white']">
-                            <div v-if="msg.role === 'assistant'" class="flex items-center space-x-2 mb-1">
-                                <span class="text-xs text-cyan-400">Galaxy</span>
-                                <span class="text-xs text-gray-500">{{ msg.time }}</span>
-                            </div>
-                            <div class="whitespace-pre-wrap">{{ msg.content }}</div>
-                            <div v-if="msg.role === 'user'" class="text-xs text-white/60 mt-1 text-right">
-                                {{ msg.time }}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div v-if="loading" class="flex justify-start">
-                        <div class="message-assistant rounded-2xl px-4 py-3">
                             <div class="flex items-center space-x-2">
-                                <div class="animate-spin w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full"></div>
-                                <span class="text-gray-400">思考中...</span>
+                                <button @click="clearChat" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm">
+                                    清空
+                                </button>
+                                <button @click="toggleVoice" :class="['px-3 py-1.5 rounded-lg text-sm', voiceEnabled ? 'bg-cyan-600' : 'bg-white/10 hover:bg-white/20']">
+                                    {{ voiceEnabled ? '🎤 开' : '🎤 关' }}
+                                </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div class="chat-container overflow-y-auto p-4 space-y-4" ref="chatContainer">
+                        <div v-if="messages.length === 0" class="text-center py-16 text-gray-400">
+                            <div class="text-5xl mb-4">🌌</div>
+                            <div class="text-lg mb-2">Galaxy 群智能系统</div>
+                            <div class="text-sm">一个有机的整体，不是一堆独立的服务</div>
+                            <div class="text-sm mt-4 text-gray-500">输入消息开始交互</div>
+                        </div>
+                        
+                        <div v-for="(msg, index) in messages" :key="index" 
+                             :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+                            <div :class="['max-w-[85%] rounded-2xl px-4 py-3', 
+                                         msg.role === 'user' ? 'message-user text-white' : 'message-assistant text-white']">
+                                <div v-if="msg.role === 'assistant'" class="flex items-center space-x-2 mb-1">
+                                    <span class="text-xs text-cyan-400">Galaxy</span>
+                                    <span v-if="msg.capability" class="text-xs px-1.5 py-0.5 bg-cyan-500/20 rounded">{{ msg.capability }}</span>
+                                    <span class="text-xs text-gray-500">{{ msg.time }}</span>
+                                </div>
+                                <div class="whitespace-pre-wrap">{{ msg.content }}</div>
+                                <div v-if="msg.role === 'user'" class="text-xs text-white/60 mt-1 text-right">
+                                    {{ msg.time }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div v-if="loading" class="flex justify-start">
+                            <div class="message-assistant rounded-2xl px-4 py-3">
+                                <div class="flex items-center space-x-2">
+                                    <div class="thinking flex space-x-1">
+                                        <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                                        <span class="w-2 h-2 bg-cyan-400 rounded-full" style="animation-delay: 0.2s"></span>
+                                        <span class="w-2 h-2 bg-cyan-400 rounded-full" style="animation-delay: 0.4s"></span>
+                                    </div>
+                                    <span class="text-gray-400 text-sm">{{ thinkingText }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Input -->
+                    <div class="border-t border-white/10 p-4">
+                        <div class="flex items-center space-x-4">
+                            <div class="flex-1 relative">
+                                <input v-model="inputMessage" 
+                                       @keyup.enter="sendMessage"
+                                       type="text" 
+                                       placeholder="输入消息，Galaxy 会自动理解并执行..." 
+                                       class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-cyan-500">
+                            </div>
+                            <button v-if="voiceEnabled" @click="startVoiceInput" 
+                                    :class="['p-3 rounded-xl transition', isRecording ? 'bg-red-600 animate-pulse' : 'bg-white/10 hover:bg-white/20']">
+                                🎤
+                            </button>
+                            <button @click="sendMessage" 
+                                    :disabled="!inputMessage.trim() || loading"
+                                    :class="['px-6 py-3 rounded-xl font-medium transition', 
+                                             inputMessage.trim() && !loading ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-600 cursor-not-allowed']">
+                                发送
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Chat Input -->
-                <div class="border-t border-white/10 p-4">
-                    <div class="flex items-center space-x-4">
-                        <div class="flex-1 relative">
-                            <input v-model="inputMessage" 
-                                   @keyup.enter="sendMessage"
-                                   type="text" 
-                                   placeholder="输入消息..." 
-                                   class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-cyan-500">
+                <!-- Capabilities Panel -->
+                <div class="glass-card rounded-xl overflow-hidden">
+                    <div class="border-b border-white/10 p-4">
+                        <h3 class="font-semibold">能力池</h3>
+                        <p class="text-xs text-gray-400">动态发现和调用</p>
+                    </div>
+                    <div class="p-4 space-y-2 max-h-[500px] overflow-y-auto">
+                        <div v-for="cap in capabilities" :key="cap.id" 
+                             class="capability-card p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer"
+                             @click="useCapability(cap)">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <div class="font-medium text-sm">{{ cap.name }}</div>
+                                    <div class="text-xs text-gray-400">{{ cap.description }}</div>
+                                </div>
+                                <span class="text-xs px-2 py-1 rounded" 
+                                      :class="getCategoryColor(cap.category)">
+                                    {{ cap.category }}
+                                </span>
+                            </div>
                         </div>
-                        <button v-if="voiceEnabled" @click="startVoiceInput" 
-                                :class="['p-3 rounded-xl transition', isRecording ? 'bg-red-600 animate-pulse' : 'bg-white/10 hover:bg-white/20']">
-                            🎤
-                        </button>
-                        <button @click="sendMessage" 
-                                :disabled="!inputMessage.trim() || loading"
-                                :class="['px-6 py-3 rounded-xl font-medium transition', 
-                                         inputMessage.trim() && !loading ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-600 cursor-not-allowed']">
-                            发送
-                        </button>
                     </div>
                 </div>
             </div>
 
             <!-- Quick Actions -->
-            <div class="mt-8">
+            <div class="mt-6">
                 <h3 class="text-lg font-semibold mb-4">快捷操作</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <button @click="quickAction('截图')" class="glass-card rounded-xl p-4 hover:bg-white/10 transition text-left">
-                        <div class="text-2xl mb-2">📸</div>
-                        <div class="font-medium">截图</div>
-                        <div class="text-sm text-gray-400">截取屏幕内容</div>
-                    </button>
-                    <button @click="quickAction('搜索')" class="glass-card rounded-xl p-4 hover:bg-white/10 transition text-left">
-                        <div class="text-2xl mb-2">🔍</div>
-                        <div class="font-medium">搜索</div>
-                        <div class="text-sm text-gray-400">搜索网络信息</div>
-                    </button>
-                    <button @click="quickAction('翻译')" class="glass-card rounded-xl p-4 hover:bg-white/10 transition text-left">
-                        <div class="text-2xl mb-2">🌐</div>
-                        <div class="font-medium">翻译</div>
-                        <div class="text-sm text-gray-400">翻译文本内容</div>
-                    </button>
-                    <button @click="quickAction('代码')" class="glass-card rounded-xl p-4 hover:bg-white/10 transition text-left">
-                        <div class="text-2xl mb-2">💻</div>
-                        <div class="font-medium">代码</div>
-                        <div class="text-sm text-gray-400">生成或解释代码</div>
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <button v-for="action in quickActions" :key="action.name" 
+                            @click="quickAction(action)"
+                            class="glass-card rounded-xl p-4 hover:bg-white/10 transition text-left">
+                        <div class="text-2xl mb-2">{{ action.icon }}</div>
+                        <div class="font-medium text-sm">{{ action.name }}</div>
+                        <div class="text-xs text-gray-400">{{ action.desc }}</div>
                     </button>
                 </div>
             </div>
@@ -210,51 +251,103 @@
         createApp({
             data() {
                 return {
-                    status: 'unknown',
-                    statusText: '检测中...',
-                    nodes: { online: 0, total: 0 },
-                    conversations: 0,
-                    version: '2.1.7',
+                    version: '2.1.8',
+                    swarmState: 'unknown',
+                    swarmStateText: '检测中...',
+                    capabilitiesCount: 0,
+                    stats: {
+                        total_interactions: 0,
+                        success_rate: 1
+                    },
                     
                     messages: [],
                     inputMessage: '',
                     loading: false,
+                    thinkingText: '思考中...',
                     voiceEnabled: true,
                     isRecording: false,
+                    
+                    capabilities: [],
+                    
+                    quickActions: [
+                        { name: '对话', icon: '💬', desc: '智能对话', prompt: '你好' },
+                        { name: '搜索', icon: '🔍', desc: '信息搜索', prompt: '帮我搜索' },
+                        { name: '代码', icon: '💻', desc: '代码生成', prompt: '帮我写代码' },
+                        { name: '翻译', icon: '🌐', desc: '文本翻译', prompt: '帮我翻译' },
+                        { name: '分析', icon: '📊', desc: '数据分析', prompt: '帮我分析' },
+                        { name: '总结', icon: '📝', desc: '内容总结', prompt: '帮我总结' }
+                    ],
                     
                     toast: { show: false, message: '', type: 'success' }
                 };
             },
             mounted() {
                 this.loadStatus();
-                this.loadNodes();
-                // 定时刷新状态
+                this.loadCapabilities();
+                
+                // 定时刷新
                 setInterval(() => {
                     this.loadStatus();
-                    this.loadNodes();
                 }, 10000);
             },
             methods: {
                 async loadStatus() {
                     try {
-                        const resp = await axios.get('/api/status');
-                        this.status = resp.data.status;
-                        this.statusText = this.status === 'running' ? '运行中' : '已停止';
-                        this.version = resp.data.version || this.version;
+                        const resp = await axios.get('/api/swarm/status');
+                        this.swarmState = resp.data.state;
+                        this.swarmStateText = this.getStateText(resp.data.state);
+                        this.capabilitiesCount = resp.data.capabilities;
+                        this.stats = resp.data.stats || this.stats;
                     } catch (e) {
-                        this.status = 'error';
-                        this.statusText = '连接失败';
+                        // 尝试备用接口
+                        try {
+                            const resp = await axios.get('/api/status');
+                            this.swarmState = 'active';
+                            this.swarmStateText = '运行中';
+                        } catch (e2) {
+                            this.swarmState = 'error';
+                            this.swarmStateText = '连接失败';
+                        }
                     }
                 },
                 
-                async loadNodes() {
+                async loadCapabilities() {
                     try {
-                        const resp = await axios.get('/api/nodes/status');
-                        this.nodes = {
-                            online: resp.data.online || 0,
-                            total: resp.data.total || 0
-                        };
-                    } catch (e) {}
+                        const resp = await axios.get('/api/swarm/capabilities');
+                        this.capabilities = resp.data.capabilities.slice(0, 10);
+                    } catch (e) {
+                        // 使用默认能力
+                        this.capabilities = [
+                            { id: 'chat', name: '智能对话', description: '自然语言对话', category: 'llm' },
+                            { id: 'search', name: '信息搜索', description: '搜索网络信息', category: 'search' },
+                            { id: 'code', name: '代码生成', description: '生成代码', category: 'code' },
+                            { id: 'translate', name: '文本翻译', description: '翻译文本', category: 'language' }
+                        ];
+                    }
+                },
+                
+                getStateText(state) {
+                    const states = {
+                        'dormant': '休眠',
+                        'awakening': '唤醒中',
+                        'active': '运行中',
+                        'thinking': '思考中',
+                        'executing': '执行中',
+                        'learning': '学习中'
+                    };
+                    return states[state] || state;
+                },
+                
+                getCategoryColor(category) {
+                    const colors = {
+                        'llm': 'bg-purple-500/20 text-purple-400',
+                        'search': 'bg-blue-500/20 text-blue-400',
+                        'code': 'bg-green-500/20 text-green-400',
+                        'language': 'bg-yellow-500/20 text-yellow-400',
+                        'analysis': 'bg-pink-500/20 text-pink-400',
+                        'node': 'bg-cyan-500/20 text-cyan-400'
+                    };
+                    return colors[category] || 'bg-gray-500/20 text-gray-400';
                 },
                 
                 async sendMessage() {
@@ -272,42 +365,53 @@
                     
                     this.scrollToBottom();
                     this.loading = true;
+                    this.thinkingText = '感知中...';
                     
                     try {
-                        // 调用 AI 路由
-                        const resp = await axios.post('/api/router/chat', {
-                            messages: [{ role: 'user', content: message }],
-                            optimize_for: 'balanced'
+                        // 调用群智能接口
+                        const resp = await axios.post('/api/swarm/interact', {
+                            input: message
                         });
                         
                         // 添加助手消息
                         this.messages.push({
                             role: 'assistant',
-                            content: resp.data.content || resp.data.response || '处理完成',
+                            content: resp.data.response,
+                            capability: resp.data.capability,
                             time: new Date().toLocaleTimeString()
                         });
                         
-                        this.conversations++;
                     } catch (e) {
-                        // 如果 API 不存在，模拟响应
-                        this.messages.push({
-                            role: 'assistant',
-                            content: this.mockResponse(message),
-                            time: new Date().toLocaleTimeString()
-                        });
+                        // 备用接口
+                        try {
+                            const resp = await axios.post('/api/router/chat', {
+                                messages: [{ role: 'user', content: message }]
+                            });
+                            
+                            this.messages.push({
+                                role: 'assistant',
+                                content: resp.data.content,
+                                time: new Date().toLocaleTimeString()
+                            });
+                        } catch (e2) {
+                            // 模拟响应
+                            this.messages.push({
+                                role: 'assistant',
+                                content: this.mockResponse(message),
+                                time: new Date().toLocaleTimeString()
+                            });
+                        }
                     }
                     
                     this.loading = false;
                     this.scrollToBottom();
+                    this.loadStatus();
                 },
                 
                 mockResponse(message) {
-                    // 模拟响应
                     const responses = {
-                        '截图': '好的，正在为您截图...\n\n截图功能需要连接到设备节点才能使用。请确保已配置相关设备。',
-                        '搜索': '请告诉我您想搜索什么内容？',
-                        '翻译': '请提供需要翻译的文本，我会为您翻译。',
-                        '代码': '请描述您需要的代码功能，我会帮您生成。',
+                        '你好': '你好！我是 Galaxy，一个群智能系统。\n\n我不是一堆独立的服务，而是一个有机的整体。我可以：\n- 💬 智能对话\n- 🔍 信息搜索\n- 💻 代码生成\n- 🌐 文本翻译\n- 📊 数据分析\n\n请问有什么可以帮你的？',
+                        '帮助': '📖 Galaxy 帮助\n\n我是一个群智能系统，具有以下特点：\n\n1. 统一交互 - 所有操作通过一个入口\n2. 智能路由 - 自动选择最佳能力\n3. 动态发现 - 实时发现可用能力\n4. 持续学习 - 从交互中学习\n\n直接输入你的需求，我会自动理解并执行。',
                     };
                     
                     for (const [key, value] of Object.entries(responses)) {
@@ -316,36 +420,34 @@
                         }
                     }
                     
-                    return `收到您的消息："${message}"\n\n我已理解您的需求。如需更完整的功能，请配置 API Key 后使用。`;
+                    return `收到你的消息："${message}"\n\n我已理解你的需求，正在为你处理...\n\n提示：配置 API Key 后可获得更强大的 AI 能力。`;
+                },
+                
+                useCapability(cap) {
+                    this.inputMessage = `使用 ${cap.name} 功能`;
+                    this.sendMessage();
                 },
                 
                 quickAction(action) {
-                    this.inputMessage = action;
+                    this.inputMessage = action.prompt;
                     this.sendMessage();
                 },
                 
                 clearChat() {
                     this.messages = [];
-                    this.conversations = 0;
                     this.showToast('对话已清空', 'success');
                 },
                 
                 toggleVoice() {
                     this.voiceEnabled = !this.voiceEnabled;
-                    this.showToast(this.voiceEnabled ? '语音已开启' : '语音已关闭', 'success');
                 },
                 
                 startVoiceInput() {
                     if (this.isRecording) return;
-                    
                     this.isRecording = true;
-                    this.showToast('正在录音...', 'success');
-                    
-                    // 模拟语音识别
                     setTimeout(() => {
                         this.isRecording = false;
-                        this.inputMessage = '这是语音输入的测试内容';
-                        this.showToast('语音识别完成', 'success');
+                        this.inputMessage = '这是语音输入的内容';
                     }, 2000);
                 },
                 

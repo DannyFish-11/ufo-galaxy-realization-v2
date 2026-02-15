@@ -1,6 +1,6 @@
 """
 Galaxy - 统一主应用
-整合所有服务：配置、记忆、路由、设备管理、API Key 管理
+整合群智能核心，提供统一的交互入口
 """
 
 import os
@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Galaxy",
-    description="L4 级自主性智能系统",
-    version="2.1.7"
+    description="L4 级群智能系统 - 一个有机的整体",
+    version="2.1.8"
 )
 
 # CORS
@@ -43,24 +43,16 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ============================================================================
-# 导入并注册子路由
+# 导入并注册路由
 # ============================================================================
 
-# 配置服务
+# 群智能 API (核心)
 try:
-    from galaxy_gateway.config_service import app as config_app
-    app.mount("/config", config_app)
-    logger.info("配置服务已加载")
+    from galaxy_gateway.swarm_api import router as swarm_router
+    app.include_router(swarm_router, prefix="/api/swarm")
+    logger.info("群智能 API 已加载")
 except ImportError as e:
-    logger.warning(f"Config service not loaded: {e}")
-
-# 记忆服务
-try:
-    from galaxy_gateway.memory_service import router as memory_router
-    app.include_router(memory_router)
-    logger.info("记忆服务已加载")
-except ImportError as e:
-    logger.warning(f"Memory service not loaded: {e}")
+    logger.warning(f"Swarm API not loaded: {e}")
 
 # AI 路由服务
 try:
@@ -78,6 +70,22 @@ try:
 except ImportError as e:
     logger.warning(f"API Keys service not loaded: {e}")
 
+# 记忆服务
+try:
+    from galaxy_gateway.memory_service import router as memory_router
+    app.include_router(memory_router)
+    logger.info("记忆服务已加载")
+except ImportError as e:
+    logger.warning(f"Memory service not loaded: {e}")
+
+# 配置服务
+try:
+    from galaxy_gateway.config_service import app as config_app
+    app.mount("/config", config_app)
+    logger.info("配置服务已加载")
+except ImportError as e:
+    logger.warning(f"Config service not loaded: {e}")
+
 # 设备管理服务
 try:
     from galaxy_gateway.device_manager_service import app as device_app
@@ -92,11 +100,11 @@ except ImportError as e:
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """主页面 - 控制面板"""
+    """主页面 - 群智能交互界面"""
     index_path = STATIC_DIR / "dashboard.html"
     if index_path.exists():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
-    return {"message": "Galaxy L4 AI System", "version": "2.1.7"}
+    return {"message": "Galaxy L4 群智能系统", "version": "2.1.8"}
 
 @app.get("/config", response_class=HTMLResponse)
 async def config_page():
@@ -138,6 +146,45 @@ async def api_keys_page():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
     return {"error": "API Keys page not found"}
 
+@app.get("/capabilities", response_class=HTMLResponse)
+async def capabilities_page():
+    """能力中心"""
+    index_path = STATIC_DIR / "capabilities.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
+    # 返回简单的 HTML
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Galaxy - 能力中心</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div id="app" class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-8">Galaxy 能力中心</h1>
+        <div id="capabilities" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+    </div>
+    <script>
+        fetch('/api/swarm/capabilities')
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('capabilities');
+                data.capabilities.forEach(cap => {
+                    container.innerHTML += `
+                        <div class="bg-gray-800 rounded-lg p-4">
+                            <h3 class="font-bold text-cyan-400">${cap.name}</h3>
+                            <p class="text-gray-400 text-sm">${cap.description}</p>
+                            <span class="text-xs px-2 py-1 bg-gray-700 rounded">${cap.category}</span>
+                        </div>
+                    `;
+                });
+            });
+    </script>
+</body>
+</html>
+""")
+
 # ============================================================================
 # API 端点
 # ============================================================================
@@ -145,17 +192,16 @@ async def api_keys_page():
 @app.get("/api/status")
 async def get_status():
     """获取系统状态"""
-    return {
-        "status": "running",
-        "version": "2.1.7",
-        "services": {
-            "config": True,
-            "memory": True,
-            "router": True,
-            "devices": True,
-            "api_keys": True
+    try:
+        from core.swarm_core import get_swarm_core
+        core = get_swarm_core()
+        return core.get_status()
+    except:
+        return {
+            "status": "running",
+            "version": "2.1.8",
+            "state": "active"
         }
-    }
 
 @app.get("/api/health")
 async def health_check():
@@ -178,25 +224,22 @@ async def get_info():
     """获取系统信息"""
     return {
         "name": "Galaxy",
-        "version": "2.1.7",
-        "description": "L4 级自主性智能系统",
+        "version": "2.1.8",
+        "description": "L4 级群智能系统",
+        "architecture": "Swarm Intelligence",
         "features": [
-            "智能对话",
-            "实时交互",
-            "语音输入",
-            "快捷操作",
-            "API Key 管理",
-            "设备管理",
-            "记忆系统"
+            "群智能核心",
+            "统一交互入口",
+            "能力动态发现",
+            "AI 驱动决策",
+            "实时学习"
         ],
         "endpoints": {
-            "dashboard": "/",
-            "config": "/config",
-            "devices": "/devices",
-            "memory": "/memory",
-            "router": "/router",
-            "api_keys": "/api-keys",
-            "docs": "/docs"
+            "interact": "/api/swarm/interact",
+            "chat": "/api/swarm/chat",
+            "capabilities": "/api/swarm/capabilities",
+            "mcp_tools": "/api/swarm/mcp/tools",
+            "status": "/api/swarm/status"
         }
     }
 
