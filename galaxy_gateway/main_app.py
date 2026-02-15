@@ -1,6 +1,6 @@
 """
 Galaxy - 统一主应用
-整合所有服务：配置、记忆、路由、设备管理
+整合所有服务：配置、记忆、路由、设备管理、API Key 管理
 """
 
 import os
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Galaxy",
     description="L4 级自主性智能系统",
-    version="2.1.2"
+    version="2.1.6"
 )
 
 # CORS
@@ -39,8 +39,11 @@ app.add_middleware(
 # ============================================================================
 
 # 配置服务
-from galaxy_gateway.config_service import app as config_app
-app.mount("/config", config_app)
+try:
+    from galaxy_gateway.config_service import app as config_app
+    app.mount("/config", config_app)
+except ImportError as e:
+    logger.warning(f"Config service not loaded: {e}")
 
 # 记忆服务
 try:
@@ -52,11 +55,16 @@ except ImportError as e:
 # AI 路由服务
 try:
     from galaxy_gateway.router_service import router as ai_router_router
-from galaxy_gateway.api_keys_service import router as api_keys_router
-    app.include_router(api_keys_router)
-app.include_router(ai_router_router)
+    app.include_router(ai_router_router)
 except ImportError as e:
     logger.warning(f"AI router service not loaded: {e}")
+
+# API Key 管理服务
+try:
+    from galaxy_gateway.api_keys_service import router as api_keys_router
+    app.include_router(api_keys_router)
+except ImportError as e:
+    logger.warning(f"API Keys service not loaded: {e}")
 
 # 设备管理服务
 try:
@@ -83,7 +91,7 @@ async def root():
     index_path = STATIC_DIR / "dashboard.html"
     if index_path.exists():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
-    return {"message": "Galaxy L4 AI System", "version": "2.1.2"}
+    return {"message": "Galaxy L4 AI System", "version": "2.1.6"}
 
 @app.get("/config", response_class=HTMLResponse)
 async def config_page():
@@ -101,15 +109,7 @@ async def memory_page():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
     return {"error": "Memory page not found"}
 
-@app.get("/api-keys")
-    async def api_keys_page():
-        """API Key 管理"""
-        static_path = STATIC_DIR / "api_keys.html"
-        if static_path.exists():
-            return HTMLResponse(content=static_path.read_text(encoding='utf-8'))
-        return {"error": "API Keys page not found"}
-
-    @app.get("/router", response_class=HTMLResponse)
+@app.get("/router", response_class=HTMLResponse)
 async def router_page():
     """AI 路由"""
     index_path = STATIC_DIR / "router.html"
@@ -125,6 +125,14 @@ async def devices_page():
         return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
     return {"error": "Devices page not found"}
 
+@app.get("/api-keys", response_class=HTMLResponse)
+async def api_keys_page():
+    """API Key 管理"""
+    index_path = STATIC_DIR / "api_keys.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(encoding='utf-8'))
+    return {"error": "API Keys page not found"}
+
 # ============================================================================
 # API 端点
 # ============================================================================
@@ -134,12 +142,13 @@ async def get_status():
     """获取系统状态"""
     return {
         "status": "running",
-        "version": "2.1.2",
+        "version": "2.1.6",
         "services": {
             "config": True,
             "memory": True,
             "router": True,
-            "devices": True
+            "devices": True,
+            "api_keys": True
         }
     }
 
@@ -147,6 +156,18 @@ async def get_status():
 async def health_check():
     """健康检查"""
     return {"status": "healthy"}
+
+@app.get("/api/nodes/status")
+async def get_nodes_status():
+    """获取节点状态"""
+    # 简化版，返回基本信息
+    return {
+        "online": 1,
+        "total": 1,
+        "nodes": [
+            {"id": "master", "status": "online", "role": "coordinator"}
+        ]
+    }
 
 # ============================================================================
 # 启动函数

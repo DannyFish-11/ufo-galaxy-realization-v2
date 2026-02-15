@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-**Galaxy** 是一个完整的 L4 级自主性智能系统。克隆后运行安装脚本，系统将自动配置并 7×24 小时运行，每次开机自动启动。
+**Galaxy** 是一个完整的 L4 级自主性智能系统。克隆后运行安装脚本，系统将自动配置并运行。
 
 ---
 
@@ -20,7 +20,7 @@ cd ufo-galaxy-realization-v2
 chmod +x install.sh
 ./install.sh
 
-# 完成！Galaxy 现在正在后台运行，并且已设置开机自启动
+# 完成！
 ```
 
 ### Windows
@@ -30,55 +30,33 @@ chmod +x install.sh
 git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
 cd ufo-galaxy-realization-v2
 
-# 2. 双击运行 install.bat
-# 或在命令行中运行:
-install.bat
+# 2. 双击运行 windows\install.bat
 
-# 完成！Galaxy 现在正在后台运行，并且已设置开机自启动
+# 完成！
 ```
 
 ---
 
-## ✨ 安装后自动完成
+## ✨ 功能特性
 
-运行安装脚本后，系统会自动：
+### 核心功能
 
-1. ✅ 创建虚拟环境
-2. ✅ 安装所有依赖
-3. ✅ 创建配置文件
-4. ✅ 配置 API Key (交互式)
-5. ✅ 设置开机自启动
-6. ✅ 启动后台服务
+| 功能 | 说明 |
+|------|------|
+| 🔧 **配置中心** | 可视化配置所有 API Key |
+| 📱 **设备管理** | 管理所有连接的设备 |
+| 🧠 **记忆系统** | 对话历史、长期记忆、用户偏好 |
+| 🔀 **AI 智能路由** | 自动选择最佳 LLM 模型 |
+| 🔑 **API Key 管理** | 统一管理所有 API Key |
 
-**安装完成后，Galaxy 将：**
-- 在后台 7×24 小时运行
-- 每次开机自动启动
-- 按 F12 键唤醒交互界面
+### 系统特性
 
----
-
-## 🎮 交互方式
-
-### 唤醒界面
-
-```
-按 F12 键 → 交互界面从右侧滑出
-```
-
-### 使用界面
-
-```
-┌────────────────────────────────────┐
-│  Galaxy                       ● 在线│
-│  ─────────────────────────────    │
-│                                    │
-│  用户: 帮我截图                     │
-│  系统: 正在执行...                  │
-│                                    │
-│  [输入命令...]          [发送]     │
-│  [🎤 语音]                          │
-└────────────────────────────────────┘
-```
+| 特性 | 说明 |
+|------|------|
+| ✅ 一键安装 | 自动配置环境 |
+| ✅ 开机自启 | Windows/Linux 自动启动 |
+| ✅ 系统托盘 | 右下角显示实时状态 |
+| ✅ 远程访问 | 支持 Tailscale 远程连接 |
 
 ---
 
@@ -88,256 +66,152 @@ install.bat
 
 | 界面 | 地址 |
 |------|------|
-| **配置中心** | http://localhost:8080/config |
-| **设备管理** | http://localhost:8080/devices |
-| **API 文档** | http://localhost:8080/docs |
+| 控制面板 | http://localhost:8080 |
+| 配置中心 | http://localhost:8080/config |
+| 设备管理 | http://localhost:8080/devices |
+| 记忆中心 | http://localhost:8080/memory |
+| AI 路由 | http://localhost:8080/router |
+| API Key | http://localhost:8080/api-keys |
+| API 文档 | http://localhost:8080/docs |
 
 ---
 
 ## 🔧 管理命令
 
+### Linux / macOS
+
 ```bash
-# 查看状态
-./galaxy.sh status
+./galaxy.sh start     # 启动
+./galaxy.sh stop      # 停止
+./galaxy.sh restart   # 重启
+./galaxy.sh status    # 状态
+./galaxy.sh logs      # 日志
+./galaxy.sh check     # 系统检查
+```
 
-# 启动服务
-./galaxy.sh start
+### Windows
 
-# 停止服务
-./galaxy.sh stop
+```cmd
+# 快速启动
+双击 windows\quick_start.bat
 
-# 重启服务
-./galaxy.sh restart
+# 托盘模式
+双击 windows\start_galaxy.bat
 
-# 启动交互界面
-./galaxy.sh ui
-
-# 查看日志
-./galaxy.sh logs
-
-# 打开配置
-./galaxy.sh config
+# 系统托盘
+右下角图标 → 右键菜单
 ```
 
 ---
 
 ## 🔑 API Key 配置
 
-安装时会提示配置 API Key，也可以稍后编辑 `.env` 文件：
+### 方式一：OneAPI 统一网关（推荐）
 
-```bash
-# 编辑配置文件
-nano .env   # Linux/macOS
-notepad .env  # Windows
+```
+ONEAPI_URL=http://localhost:3000
+ONEAPI_API_KEY=your-oneapi-key
 ```
 
-**至少配置一个 API Key：**
+配置 OneAPI 后，所有 LLM 请求通过统一网关，无需单独配置各 LLM API Key。
+
+### 方式二：单独配置
 
 ```bash
-# OpenAI (推荐)
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
+# 编辑 .env 文件
+OPENAI_API_KEY=sk-xxx
+DEEPSEEK_API_KEY=sk-xxx
+ANTHROPIC_API_KEY=sk-xxx
+# ...
+```
 
-# 或 DeepSeek (性价比高)
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
+### 可视化配置
+
+访问 http://localhost:8080/api-keys 在界面中配置。
+
+---
+
+## 📱 远程访问
+
+### 使用 Tailscale
+
+1. 安装 Tailscale: https://tailscale.com
+2. 登录并连接网络
+3. 获取 Tailscale IP: `tailscale ip`
+4. 手机/平板访问: `http://[Tailscale-IP]:8080`
+
+---
+
+## 🖥️ 系统托盘（Windows）
+
+启动后右下角显示图标：
+
+| 颜色 | 状态 |
+|------|------|
+| 🟢 青色 | 运行中 |
+| 🟡 黄色 | 部分异常 |
+| 🔴 红色 | 已停止 |
+| ⚪ 灰色 | 待机中 |
+
+**右键菜单：**
+- 打开控制面板
+- 打开配置
+- 重启/停止服务
+- 开机自启动开关
+- 退出
+
+---
+
+## 📁 项目结构
+
+```
+galaxy/
+├── core/                    # 核心模块
+│   ├── memory.py           # 记忆系统
+│   ├── ai_router.py        # AI 智能路由
+│   ├── llm_router.py       # LLM 路由
+│   └── api_key_manager.py  # API Key 管理
+├── galaxy_gateway/          # 服务网关
+│   ├── main_app.py         # 主应用
+│   ├── config_service.py   # 配置服务
+│   ├── memory_service.py   # 记忆服务
+│   ├── router_service.py   # 路由服务
+│   └── static/             # 界面文件
+├── windows/                 # Windows 支持
+│   ├── install.bat         # 安装脚本
+│   ├── quick_start.bat     # 快速启动
+│   └── galaxy_tray.py      # 托盘程序
+├── nodes/                   # 功能节点 (108个)
+├── install.sh              # Linux/macOS 安装
+├── galaxy.sh               # 管理脚本
+├── run_galaxy.py           # 启动入口
+└── .env.example            # 配置模板
 ```
 
 ---
 
-## 📱 Android 客户端
+## 📊 代码统计
 
-### 构建 APK
-
-```bash
-# 克隆仓库
-git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
-cd ufo-galaxy-android
-
-# 配置服务器地址 (编辑 app/build.gradle)
-# buildConfigField "String", "GALAXY_SERVER_URL", '"ws://你的服务器IP:8765"'
-
-# 构建 APK
-./gradlew assembleDebug
-
-# 安装到设备
-adb install app/build/outputs/apk/debug/app-debug.apk
-```
-
-### 使用方式
-
-1. 打开 Galaxy 应用
-2. 授予权限 (悬浮窗、麦克风、通知)
-3. 从屏幕右侧边缘滑动唤醒灵动岛
-4. 点击麦克风说话 或 打字输入
-
----
-
-## 🌐 系统架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Galaxy 系统                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  7×24 后台运行                                       │   │
-│  │  - 开机自启动                                        │   │
-│  │  - 自动重启                                          │   │
-│  │  - 健康检查                                          │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  交互界面 (F12 唤醒)                                 │   │
-│  │  - 卷轴式展开                                        │   │
-│  │  - 打字/语音交互                                     │   │
-│  │  - 摄像头/视觉理解                                   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  LLM 智能路由                                        │   │
-│  │  - 三级优先模型                                      │   │
-│  │  - 负载均衡                                          │   │
-│  │  - 故障转移                                          │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📋 快速开始清单
-
-- [ ] 克隆仓库
-- [ ] 运行 install.sh / install.bat
-- [ ] 配置 API Key
-- [ ] 按 F12 测试交互界面
-- [ ] 访问 http://localhost:8080/config
-- [ ] 完成！
+| 类型 | 数量 |
+|------|------|
+| Python 代码 | 368,000+ 行 |
+| Kotlin 代码 | 15,000+ 行 |
+| 功能节点 | 108 个 |
+| 界面文件 | 6 个 |
 
 ---
 
 ## 🔗 相关仓库
 
-- [Galaxy Android](https://github.com/DannyFish-11/ufo-galaxy-android) - Android 客户端
+- **Galaxy 主系统**: https://github.com/DannyFish-11/ufo-galaxy-realization-v2
+- **Android 客户端**: https://github.com/DannyFish-11/ufo-galaxy-android
 
 ---
 
-## 📄 许可证
+## 📄 License
 
 MIT License
 
 ---
 
-**Galaxy - 克隆、安装、使用，就这么简单！** 🌌
-
----
-
-## 🧠 记忆系统
-
-Galaxy 拥有完整的记忆系统，可以记住对话历史、用户偏好和重要信息。
-
-### 访问记忆中心
-
-```
-http://localhost:8080/memory
-```
-
-### 记忆类型
-
-| 类型 | 说明 |
-|------|------|
-| **对话历史** | 自动保存所有对话，支持上下文理解 |
-| **长期记忆** | 记住重要事实、偏好、事件、知识 |
-| **用户偏好** | 学习并记住你的偏好设置 |
-
-### 功能
-
-- 💬 **对话历史**: 自动保存，支持上下文理解
-- 🧠 **长期记忆**: 记住重要的事情
-- 🔍 **记忆搜索**: 快速查找历史信息
-- ⚙️ **用户偏好**: 自动学习你的偏好
-
-### 使用示例
-
-```
-用户: 记住我喜欢喝咖啡
-Galaxy: 好的，我已经记住了你喜欢喝咖啡。
-
-用户: 我喜欢什么？
-Galaxy: 根据我的记忆，你喜欢喝咖啡。
-
-用户: 记住我明天下午3点有会议
-Galaxy: 好的，我已经记住了你明天下午3点有会议。
-```
-
-### 数据存储
-
-所有记忆数据存储在 `data/memory/` 目录：
-
-```
-data/memory/
-├── sessions/           # 对话会话
-├── long_term_memory.json  # 长期记忆
-└── user_preferences.json  # 用户偏好
-```
-
-
----
-
-## 🔀 AI 智能路由
-
-Galaxy 拥有 AI 驱动的智能路由系统，自动选择最佳 LLM 模型。
-
-### 访问路由中心
-
-```
-http://localhost:8080/router
-```
-
-### 工作原理
-
-```
-用户输入 → AI 分析任务类型 → 评估复杂度 → 选择最佳模型 → 执行请求
-```
-
-### 任务类型识别
-
-| 类型 | 说明 | 推荐模型 |
-|------|------|----------|
-| 简单问答 | 是什么、多少 | 快速模型 |
-| 翻译 | 翻译文本 | 中等模型 |
-| 编程 | 写代码 | 编程能力强的模型 |
-| 推理分析 | 为什么、分析 | 推理能力强的模型 |
-| 创意写作 | 写故事、创作 | 创意能力强的模型 |
-| 复杂任务 | 多步骤、规划 | 大模型 |
-
-### 优化目标
-
-| 目标 | 说明 |
-|------|------|
-| **速度优先** | 选择响应最快的模型 |
-| **成本优先** | 选择成本最低的模型 |
-| **质量优先** | 选择能力最强的模型 |
-| **平衡模式** | 综合考虑各因素 |
-
-### 支持的模型
-
-- **OpenAI**: GPT-4o, GPT-4o-mini
-- **DeepSeek**: DeepSeek-Chat, DeepSeek-Reasoner
-- **Anthropic**: Claude-3.5-Sonnet
-- **Google**: Gemini-2.0-Flash
-- **Groq**: Llama-3.3-70B
-
-### 使用示例
-
-```python
-# 自动选择最佳模型
-response = await smart_chat([
-    {"role": "user", "content": "帮我写一个 Python 函数"}
-], optimize_for="quality")
-
-# 指定优化目标
-response = await smart_chat([
-    {"role": "user", "content": "翻译这段话"}
-], optimize_for="speed")  # 速度优先
-```
-
+**Galaxy v2.1.6 - 完整的 L4 级自主性智能系统** 🌌

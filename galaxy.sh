@@ -22,7 +22,14 @@ cd "$SCRIPT_DIR"
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║   Galaxy - L4 级自主性智能系统                                ║"
+    echo "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗          ║"
+    echo "║   ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝          ║"
+    echo "║   ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝           ║"
+    echo "║   ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝            ║"
+    echo "║   ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║             ║"
+    echo "║    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝             ║"
+    echo "║                                                               ║"
+    echo "║              Galaxy - L4 级自主性智能系统 v2.1.6             ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -68,6 +75,7 @@ start_service() {
         echo "  设备管理: http://localhost:8080/devices"
         echo "  记忆中心: http://localhost:8080/memory"
         echo "  AI 路由:  http://localhost:8080/router"
+        echo "  API Key:  http://localhost:8080/api-keys"
     else
         echo -e "${RED}✗${NC} Galaxy 启动失败，请查看日志: logs/galaxy.log"
         return 1
@@ -121,6 +129,7 @@ show_status() {
     echo "  设备管理: http://localhost:8080/devices"
     echo "  记忆中心: http://localhost:8080/memory"
     echo "  AI 路由:  http://localhost:8080/router"
+    echo "  API Key:  http://localhost:8080/api-keys"
     echo "  API 文档: http://localhost:8080/docs"
     echo ""
 }
@@ -145,8 +154,14 @@ show_help() {
     echo "  restart     - 重启 Galaxy"
     echo "  status      - 查看状态"
     echo "  logs        - 查看日志"
+    echo "  check       - 系统检查"
     echo "  install     - 运行安装程序"
     echo ""
+}
+
+# 系统检查
+check_system() {
+    python check_system.py
 }
 
 # 主函数
@@ -170,6 +185,9 @@ main() {
             ;;
         logs)
             show_logs
+            ;;
+        check)
+            check_system
             ;;
         install)
             if [ -f "install.sh" ]; then
