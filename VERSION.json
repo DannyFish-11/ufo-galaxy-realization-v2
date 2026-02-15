@@ -1,5 +1,5 @@
 {
-    "version": "2.0.4",
+    "version": "2.0.5",
     "codename": "Galaxy",
     "release_date": "2026-02-15",
     "python_version": "3.10+",
@@ -8,10 +8,20 @@
         "mcp_skill_support": true,
         "safe_eval": true,
         "secure_config": true,
-        "capability_manager": true
+        "capability_manager": true,
+        "distributed_architecture": true,
+        "node_discovery": true,
+        "failover": true,
+        "state_sync": true
     },
     "nodes": 108,
     "core_modules": 33,
     "api_endpoints": 158,
-    "test_coverage": "97%"
+    "test_coverage": "97%",
+    "distributed": {
+        "discovery_protocols": ["mDNS", "UPnP", "Broadcast"],
+        "sync_protocol": "Gossip + Vector Clock",
+        "failover": "Automatic",
+        "roles": ["coordinator", "worker", "standby"]
+    }
 }
