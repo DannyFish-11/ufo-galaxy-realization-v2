@@ -280,3 +280,64 @@ data/memory/
 └── user_preferences.json  # 用户偏好
 ```
 
+
+---
+
+## 🔀 AI 智能路由
+
+Galaxy 拥有 AI 驱动的智能路由系统，自动选择最佳 LLM 模型。
+
+### 访问路由中心
+
+```
+http://localhost:8080/router
+```
+
+### 工作原理
+
+```
+用户输入 → AI 分析任务类型 → 评估复杂度 → 选择最佳模型 → 执行请求
+```
+
+### 任务类型识别
+
+| 类型 | 说明 | 推荐模型 |
+|------|------|----------|
+| 简单问答 | 是什么、多少 | 快速模型 |
+| 翻译 | 翻译文本 | 中等模型 |
+| 编程 | 写代码 | 编程能力强的模型 |
+| 推理分析 | 为什么、分析 | 推理能力强的模型 |
+| 创意写作 | 写故事、创作 | 创意能力强的模型 |
+| 复杂任务 | 多步骤、规划 | 大模型 |
+
+### 优化目标
+
+| 目标 | 说明 |
+|------|------|
+| **速度优先** | 选择响应最快的模型 |
+| **成本优先** | 选择成本最低的模型 |
+| **质量优先** | 选择能力最强的模型 |
+| **平衡模式** | 综合考虑各因素 |
+
+### 支持的模型
+
+- **OpenAI**: GPT-4o, GPT-4o-mini
+- **DeepSeek**: DeepSeek-Chat, DeepSeek-Reasoner
+- **Anthropic**: Claude-3.5-Sonnet
+- **Google**: Gemini-2.0-Flash
+- **Groq**: Llama-3.3-70B
+
+### 使用示例
+
+```python
+# 自动选择最佳模型
+response = await smart_chat([
+    {"role": "user", "content": "帮我写一个 Python 函数"}
+], optimize_for="quality")
+
+# 指定优化目标
+response = await smart_chat([
+    {"role": "user", "content": "翻译这段话"}
+], optimize_for="speed")  # 速度优先
+```
+

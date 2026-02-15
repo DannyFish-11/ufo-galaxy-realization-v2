@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaxy - AI 智能路由</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .model-card {
+            transition: all 0.3s;
+        }
+        .model-card:hover {
+            transform: translateY(-2px);
+        }
+        .score-bar {
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.1);
+        }
+        .score-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <div id="app" v-cloak>
+        <!-- Header -->
+        <header class="border-b border-white/10">
+            <div class="container mx-auto px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-3xl">🔀</div>
+                        <div>
+                            <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                                AI 智能路由
+                            </h1>
+                            <p class="text-sm text-gray-400">自动选择最佳 LLM 模型</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <a href="/" class="text-gray-400 hover:text-white transition">控制面板</a>
+                        <a href="/config" class="text-gray-400 hover:text-white transition">配置</a>
+                        <a href="/memory" class="text-gray-400 hover:text-white transition">记忆</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-6 py-8">
+            <!-- 统计 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="glass-card rounded-xl p-6">
+                    <div class="text-gray-400 text-sm mb-2">可用模型</div>
+                    <div class="text-3xl font-bold text-cyan-400">{{ stats.available_models || 0 }}</div>
+                </div>
+                <div class="glass-card rounded-xl p-6">
+                    <div class="text-gray-400 text-sm mb-2">总调用次数</div>
+                    <div class="text-3xl font-bold text-green-400">{{ stats.total_routing || 0 }}</div>
+                </div>
+                <div class="glass-card rounded-xl p-6">
+                    <div class="text-gray-400 text-sm mb-2">路由策略</div>
+                    <div class="text-xl font-bold text-purple-400">AI 智能选择</div>
+                </div>
+            </div>
+
+            <!-- 测试面板 -->
+            <div class="glass-card rounded-xl p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-4">🧪 路由测试</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">输入测试消息</label>
+                        <textarea v-model="testInput" rows="3" 
+                                  class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-cyan-500"
+                                  placeholder="输入任意问题，AI 会自动选择最佳模型..."></textarea>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">优化目标</label>
+                            <select v-model="optimizeFor" class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white outline-none">
+                                <option value="balanced">平衡</option>
+                                <option value="speed">速度优先</option>
+                                <option value="cost">成本优先</option>
+                                <option value="quality">质量优先</option>
+                            </select>
+                        </div>
+                        
+                        <div class="flex-1"></div>
+                        
+                        <button @click="analyzeTask" class="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition">
+                            分析任务
+                        </button>
+                        <button @click="runTest" :disabled="testing" class="px-6 py-2 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg font-medium hover:opacity-90 disabled:opacity-50">
+                            {{ testing ? '测试中...' : '运行测试' }}
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 分析结果 -->
+                <div v-if="analysis" class="mt-6 p-4 rounded-lg bg-white/5">
+                    <h3 class="font-medium mb-3">📊 任务分析</h3>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-400">任务类型:</span>
+                            <span class="ml-2 text-cyan-400">{{ analysis.task_type }}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">复杂度:</span>
+                            <span class="ml-2" :class="analysis.complexity === 'high' ? 'text-red-400' : analysis.complexity === 'medium' ? 'text-yellow-400' : 'text-green-400'">
+                                {{ analysis.complexity }}
+                            </span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">推荐模型:</span>
+                            <span class="ml-2 text-purple-400">{{ analysis.recommended_model }}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">选择原因:</span>
+                            <span class="ml-2 text-gray-300">{{ analysis.reason }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 测试结果 -->
+                <div v-if="testResult" class="mt-6 p-4 rounded-lg bg-white/5">
+                    <h3 class="font-medium mb-3">✅ 测试结果</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-400">使用模型:</span>
+                            <span class="text-cyan-400">{{ testResult.routing?.model }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-400">提供商:</span>
+                            <span>{{ testResult.routing?.provider }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-400">延迟:</span>
+                            <span>{{ testResult.routing?.latency?.toFixed(2) }}s</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-400">Token 使用:</span>
+                            <span>{{ testResult.usage?.total_tokens }}</span>
+                        </div>
+                        <div class="mt-4 p-3 rounded bg-black/30">
+                            <div class="text-sm text-gray-400 mb-2">响应:</div>
+                            <div class="text-gray-200 whitespace-pre-wrap">{{ testResult.content }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模型列表 -->
+            <div class="glass-card rounded-xl p-6">
+                <h2 class="text-xl font-semibold mb-4">🤖 可用模型</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div v-for="(model, id) in stats.models" :key="id" 
+                         class="model-card p-4 rounded-lg bg-white/5 border border-white/10">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="font-medium">{{ id }}</div>
+                            <span class="text-xs px-2 py-1 rounded bg-white/10">{{ model.provider }}</span>
+                        </div>
+                        
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">调用次数</span>
+                                <span>{{ model.total_calls }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">成功率</span>
+                                <span :class="model.success_rate.startsWith('100') || model.success_rate.startsWith('9') ? 'text-green-400' : 'text-yellow-400'">
+                                    {{ model.success_rate }}
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">平均延迟</span>
+                                <span>{{ model.avg_latency }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 路由策略说明 -->
+            <div class="glass-card rounded-xl p-6 mt-8">
+                <h2 class="text-xl font-semibold mb-4">🧠 AI 路由策略</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-medium text-cyan-400 mb-3">任务类型识别</h3>
+                        <ul class="space-y-2 text-sm text-gray-300">
+                            <li>• <span class="text-green-400">简单问答</span> - 使用快速模型</li>
+                            <li>• <span class="text-yellow-400">推理分析</span> - 使用中等模型</li>
+                            <li>• <span class="text-red-400">复杂任务</span> - 使用大模型</li>
+                            <li>• <span class="text-purple-400">编程任务</span> - 选择编程能力强的模型</li>
+                            <li>• <span class="text-blue-400">创意写作</span> - 选择创意能力强的模型</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="font-medium text-purple-400 mb-3">优化目标</h3>
+                        <ul class="space-y-2 text-sm text-gray-300">
+                            <li>• <span class="text-cyan-400">速度优先</span> - 选择响应最快的模型</li>
+                            <li>• <span class="text-green-400">成本优先</span> - 选择成本最低的模型</li>
+                            <li>• <span class="text-yellow-400">质量优先</span> - 选择能力最强的模型</li>
+                            <li>• <span class="text-white">平衡模式</span> - 综合考虑各因素</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    stats: {},
+                    testInput: '',
+                    optimizeFor: 'balanced',
+                    testing: false,
+                    analysis: null,
+                    testResult: null
+                };
+            },
+            mounted() {
+                this.loadStats();
+            },
+            methods: {
+                async loadStats() {
+                    try {
+                        const resp = await axios.get('/api/router/stats');
+                        this.stats = resp.data;
+                    } catch (e) {
+                        console.error('Failed to load stats', e);
+                    }
+                },
+                
+                async analyzeTask() {
+                    if (!this.testInput) return;
+                    
+                    try {
+                        const resp = await axios.post('/api/router/analyze', {
+                            prompt: this.testInput,
+                            optimize_for: this.optimizeFor
+                        });
+                        this.analysis = resp.data;
+                    } catch (e) {
+                        console.error('Failed to analyze', e);
+                    }
+                },
+                
+                async runTest() {
+                    if (!this.testInput) return;
+                    
+                    this.testing = true;
+                    this.testResult = null;
+                    
+                    try {
+                        const resp = await axios.post('/api/router/chat', {
+                            messages: [{ role: 'user', content: this.testInput }],
+                            optimize_for: this.optimizeFor
+                        });
+                        this.testResult = resp.data;
+                        this.loadStats();
+                    } catch (e) {
+                        console.error('Test failed', e);
+                        alert('测试失败: ' + (e.response?.data?.detail || e.message));
+                    } finally {
+                        this.testing = false;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

@@ -300,6 +300,7 @@ class WebUIServer:
         """启动 Web UI"""
         try:
             from fastapi import
+from galaxy_gateway.router_service import router as ai_router_router
 from galaxy_gateway.memory_service import router as memory_router
  FastAPI, HTTPException
             from fastapi.responses import HTMLResponse, JSONResponse
@@ -333,6 +334,15 @@ from galaxy_gateway.memory_service import router as memory_router
             print_status("Web UI 依赖未安装，跳过 Web UI", "warning")
             
     
+    
+    @app.get("/router")
+    async def router_page():
+        """AI 智能路由页面"""
+        static_path = PROJECT_ROOT / "galaxy_gateway" / "static" / "router.html"
+        if static_path.exists():
+            return HTMLResponse(content=static_path.read_text(encoding='utf-8'))
+        return {"error": "Router page not found"}
+
     @app.get("/memory")
     async def memory_page():
         """记忆中心页面"""
