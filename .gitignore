@@ -1,30 +1,31 @@
+# Galaxy .gitignore
+
+# 环境变量和敏感配置
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
 venv/
+.venv/
 ENV/
 env/
-.venv/
+*.egg-info/
+dist/
+build/
+
+# 数据文件
+data/
+logs/
+*.log
+*.pid
 
 # IDE
 .idea/
@@ -33,45 +34,33 @@ env/
 *.swo
 *~
 
-# Environment
-.env
-.env.local
-*.local
-
-# Logs
-*.log
-logs/
-
-# Database
-*.db
-*.sqlite3
-
-# OS
+# 操作系统
 .DS_Store
 Thumbs.db
 
-# Android
-android_client/.gradle/
-android_client/build/
-android_client/app/build/
-android_client/local.properties
-android_client/.idea/
-android_client/*.iml
-android_client/captures/
-android_client/.externalNativeBuild/
-android_client/.cxx/
+# 临时文件
+*.tmp
+*.temp
+.cache/
 
-# Windows
-windows_client/__pycache__/
-*.exe
-*.dll
-
-# Test
+# 测试
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Temporary
-*.tmp
-*.temp
-.cache/
+# Node.js (如果有前端)
+node_modules/
+npm-debug.log
+
+# Android
+*.apk
+*.aab
+.gradle/
+local.properties
+
+# Docker
+.docker/
+
+# 备份文件
+*.bak
+*.backup

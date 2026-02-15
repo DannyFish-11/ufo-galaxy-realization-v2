@@ -1,0 +1,62 @@
+{
+    "name": "Galaxy",
+    "version": "2.1.6",
+    "description": "L4 级自主性智能系统",
+    
+    "node": {
+        "id": "master",
+        "role": "coordinator",
+        "environment": "production"
+    },
+    
+    "server": {
+        "http_port": 8080,
+        "websocket_port": 8765,
+        "host": "0.0.0.0",
+        "workers": 1,
+        "log_level": "info"
+    },
+    
+    "features": {
+        "enable_memory": true,
+        "enable_ai_router": true,
+        "enable_device_manager": true,
+        "enable_api_keys": true,
+        "enable_config_center": true
+    },
+    
+    "memory": {
+        "storage_path": "data/memory",
+        "max_history_per_session": 100,
+        "max_sessions": 10,
+        "enable_long_term_memory": true,
+        "context_expire_hours": 24
+    },
+    
+    "llm": {
+        "priority1_provider": "openai",
+        "priority1_model": "gpt-4o",
+        "priority2_provider": "deepseek",
+        "priority2_model": "deepseek-chat",
+        "priority3_provider": "groq",
+        "priority3_model": "llama-3.1-70b-versatile"
+    },
+    
+    "api_keys": {
+        "storage_path": "data/api_keys",
+        "encrypt_keys": true
+    },
+    
+    "tailscale": {
+        "enabled": false,
+        "domain": ""
+    },
+    
+    "daemon": {
+        "auto_start": true,
+        "auto_restart": true,
+        "health_check": true,
+        "max_restarts": 5,
+        "restart_delay": 10
+    }
+}
