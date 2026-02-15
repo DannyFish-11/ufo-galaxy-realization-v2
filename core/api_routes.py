@@ -969,7 +969,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 completed_at=datetime.now(timezone.utc).isoformat()
             )
     
-    @router.post("/api/v1/command")
+    @router.post("/api/v1/command/unified")
     async def unified_command(
         req: UnifiedCommandRequest,
         auth: dict = Depends(require_auth)
@@ -1173,13 +1173,13 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 "message": "Command queued for async execution. Use GET /api/v1/command/{request_id}/status to check status."
             })
     
-    @router.get("/api/v1/command/{request_id}/status")
-    async def get_command_status(
+    @router.get("/api/v1/command/unified/{request_id}/status")
+    async def get_unified_command_status(
         request_id: str,
         auth: dict = Depends(require_auth)
     ):
         """
-        查询异步命令执行状态和结果
+        查询异步统一命令执行状态和结果
         
         **响应示例：**
         ```json
@@ -1325,7 +1325,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # ========================================================================
 
     from core.command_router import (
-        CommandRouter, CommandRequest, CommandMode, CommandStatus, get_command_router,
+        CommandRouter, CommandRequest, CommandMode,
+        CommandStatus as RouterCommandStatus, get_command_router,
     )
 
     # 初始化命令路由器，绑定 WebSocket 推送回调

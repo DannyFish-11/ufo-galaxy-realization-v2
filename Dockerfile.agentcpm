@@ -1,0 +1,37 @@
+# AgentCPM-GUI Service Dockerfile
+# ================================
+# Builds the AgentCPM GUI inference service.
+# Requires NVIDIA GPU runtime.
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy AgentCPM source
+COPY external/agentcpm/ ./external/agentcpm/
+
+# Install Python dependencies (if requirements exist)
+RUN if [ -f external/agentcpm/requirements.txt ]; then \
+      pip install --no-cache-dir -r external/agentcpm/requirements.txt; \
+    fi
+
+# Create non-root user
+RUN useradd -m -u 1000 agentcpm && \
+    chown -R agentcpm:agentcpm /app
+USER agentcpm
+
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+CMD ["python", "-m", "external.agentcpm.serve", "--host", "0.0.0.0", "--port", "8001"]

@@ -18,7 +18,7 @@ services:
   galaxy-gateway:
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: Dockerfile
     container_name: ufo-galaxy-gateway
     restart: unless-stopped
     
@@ -39,7 +39,7 @@ services:
     
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -80,10 +80,10 @@ services:
   health-monitor:
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: Dockerfile
     container_name: ufo-galaxy-health
     restart: unless-stopped
-    command: ["python", "-m", "health_monitor", "--watchdog", "--interval", "30"]
+    command: ["python", "health_monitor.py"]
     
     deploy:
       resources:
@@ -115,10 +115,10 @@ services:
   node-registry:
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: Dockerfile
     container_name: ufo-galaxy-registry
     restart: unless-stopped
-    command: ["python", "-m", "nodes.registry_service"]
+    command: ["python", "-c", "from core.node_discovery import get_node_discovery; import asyncio; d = get_node_discovery('registry'); asyncio.run(d.start())"]
     
     deploy:
       resources:
@@ -228,7 +228,7 @@ services:
   watchdog:
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: Dockerfile
     container_name: ufo-galaxy-watchdog
     restart: unless-stopped
     command: ["python", "-m", "daemon.ufogalaxy_daemon"]

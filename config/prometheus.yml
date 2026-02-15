@@ -1,0 +1,27 @@
+# UFO Galaxy - Prometheus Configuration
+# ======================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # Galaxy Gateway metrics
+  - job_name: 'galaxy-gateway'
+    static_configs:
+      - targets: ['galaxy-gateway:8080']
+    metrics_path: '/api/v1/monitoring/metrics'
+    scrape_interval: 30s
+
+  # Node Registry metrics
+  - job_name: 'node-registry'
+    static_configs:
+      - targets: ['node-registry:8500']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

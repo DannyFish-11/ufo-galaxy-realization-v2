@@ -40,7 +40,7 @@ EXPOSE 8000 8001 8080
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8080/health/live || exit 1
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
 # 默认启动命令
 CMD ["python", "unified_launcher.py", "--port", "8080"]
