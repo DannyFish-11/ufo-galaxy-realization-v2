@@ -142,3 +142,18 @@ __all__ = [
     "create_api_routes",
     "create_websocket_routes",
 ]
+
+# 安全模块
+from .safe_eval import SafeEval, SafeEvalError, safe_eval, safe_literal_eval
+from .secure_config import (
+    SecureConfig, APIKeys, DatabaseConfig, SecurityConfig,
+    get_config, get_api_key, get_database_url
+)
+
+__all__.extend([
+    # Safe Eval
+    "SafeEval", "SafeEvalError", "safe_eval", "safe_literal_eval",
+    # Secure Config
+    "SecureConfig", "APIKeys", "DatabaseConfig", "SecurityConfig",
+    "get_config", "get_api_key", "get_database_url",
+])

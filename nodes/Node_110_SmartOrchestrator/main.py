@@ -3,6 +3,9 @@ Node 110 - SmartOrchestrator (智能编排节点)
 提供任务编排、工作流管理和智能调度能力
 """
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from core.safe_eval import safe_eval
 import json
 import asyncio
 import logging
