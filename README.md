@@ -1,189 +1,205 @@
-# UFO Galaxy 节点实现
+# UFO Galaxy V2
 
-本目录包含UFO Galaxy系统的P0级优先节点实现。
+**L4 级自主性智能系统 - 多设备协调星系**
 
-## 🎯 系统架构 (Round 2 - R-4)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-green)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-### 能力注册与发现系统 (OpenClaw 风格)
+---
 
-UFO Galaxy 现已集成**统一能力注册和发现系统**，提供：
+## 🚀 快速开始
 
-- **能力注册**：节点启动时自动注册能力到中央索引
-- **能力发现**：通过名称、分类或节点查询可用能力
-- **状态跟踪**：实时监控能力状态（在线/离线/错误）
-- **持久化存储**：能力信息保存到 `config/capabilities.json`
+### 方式一：一键部署
 
-### 稳定连接管理 (向日葵风格)
-
-系统内置**连接管理器**，确保节点间通信稳定：
-
-- **心跳保活**：自动心跳机制，检测连接健康
-- **自动重连**：断线后指数退避重连策略
-- **健康监控**：实时连接状态报告
-- **故障恢复**：智能重试和故障转移
-
-### 统一运行时流程
-
-```
-配置加载 → 能力注册 → 节点启动 → 连接初始化 → 健康监控
-    ↓           ↓           ↓            ↓            ↓
-  环境变量   能力索引   进程管理    心跳/重连    状态报告
-```
-
-**核心组件**：
-- `core/capability_manager.py` - 能力管理器
-- `core/connection_manager.py` - 连接管理器  
-- `core/node_registry.py` - 节点注册表（已增强）
-- `system_manager.py` - 系统管理器（已集成）
-- `health_monitor.py` - 健康监控（已集成）
-
-**验证工具**：
 ```bash
-# 验证能力注册系统
-python scripts/verify_capability_registry.py
+# 克隆仓库
+git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
+cd ufo-galaxy-realization-v2
 
-# 运行集成测试
-python tests/test_capability_integration.py
+# 一键部署
+chmod +x deploy.sh
+./deploy.sh
+
+# 配置 API Key
+nano .env
+
+# 启动系统
+./start.sh
+```
+
+### 方式二：Docker 部署
+
+```bash
+# 克隆仓库
+git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
+cd ufo-galaxy-realization-v2
+
+# Docker 启动
+./docker-start.sh
+```
+
+### 方式三：手动部署
+
+```bash
+# 克隆仓库
+git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
+cd ufo-galaxy-realization-v2
+
+# 创建虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 配置环境
+cp .env.example .env
+nano .env  # 填写 API Key
+
+# 启动系统
+python main.py --minimal
 ```
 
 ---
 
-## 已实现的节点列表
+## 📊 系统架构
 
-### 第一优先级 - 基础服务节点
-
-| 节点 | 名称 | 端口 | 功能 |
-|------|------|------|------|
-| Node_02_Tasker | 任务调度器 | 8002 | 任务队列、定时任务、状态跟踪 |
-| Node_03_SecretVault | 密钥管理 | 8003 | 密钥存储、加密解密、密钥轮换 |
-| Node_05_Auth | 认证服务 | 8005 | 用户认证、JWT令牌、权限控制 |
-| Node_06_Filesystem | 文件系统 | 8006 | 文件读写、目录管理、压缩解压 |
-
-### 第二优先级 - 数据库节点
-
-| 节点 | 名称 | 端口 | 功能 |
-|------|------|------|------|
-| Node_12_Postgres | PostgreSQL | 8012 | PostgreSQL连接、查询、事务 |
-| Node_13_SQLite | SQLite | 8013 | SQLite数据库操作 |
-| Node_20_Qdrant | 向量数据库 | 8020 | 向量存储、相似度搜索 |
-
-### 第三优先级 - 工具节点
-
-| 节点 | 名称 | 端口 | 功能 |
-|------|------|------|------|
-| Node_14_FFmpeg | 视频处理 | 8014 | 视频转码、剪辑、截图 |
-| Node_16_Email | 邮件服务 | 8016 | SMTP邮件发送、模板 |
-| Node_17_EdgeTTS | 语音合成 | 8017 | 文本转语音 |
-| Node_18_DeepL | 翻译服务 | 8018 | 文本翻译 |
-| Node_19_Crypto | 加密服务 | 8019 | 加密解密、哈希、签名 |
-
-### 第四优先级 - 搜索节点
-
-| 节点 | 名称 | 端口 | 功能 |
-|------|------|------|------|
-| Node_22_BraveSearch | Brave搜索 | 8022 | 网页搜索、图片搜索 |
-| Node_25_GoogleSearch | Google搜索 | 8025 | Google搜索 |
-
-### 第五优先级 - 时间和天气节点
-
-| 节点 | 名称 | 端口 | 功能 |
-|------|------|------|------|
-| Node_23_Calendar | 日历服务 | 8023 | 日历管理、事件创建 |
-| Node_23_Time | 时间服务 | 8123 | 时间查询、时区转换 |
-| Node_24_Weather | 天气查询 | 8024 | 天气查询、预报 |
-
-### 第六优先级 - 设备控制节点
-
-| 节点 | 名称 | 端口 | 功能 |
-|------|------|------|------|
-| Node_39_SSH | SSH连接 | 8039 | SSH连接、命令执行 |
-| Node_41_MQTT | MQTT消息队列 | 8041 | MQTT发布订阅 |
-
-## 快速开始
-
-### 安装依赖
-
-```bash
-pip install -r requirements.txt
+```
+UFO Galaxy V2
+├── 核心层 (Core Layer)
+│   ├── NodeRegistry - 节点注册中心
+│   ├── NodeCommunication - 节点通信
+│   ├── CacheManager - 缓存管理
+│   ├── MonitoringManager - 监控管理
+│   ├── SafeEval - 安全表达式求值
+│   └── SecureConfig - 安全配置
+│
+├── 节点层 (Node Layer)
+│   ├── 108 个功能节点
+│   ├── 设备控制节点 (ADB/Scrcpy/AppleScript/UIA)
+│   ├── 工具节点 (Git/OCR/FFmpeg/Search)
+│   └── AI 节点 (OneAPI/Router/Transformer)
+│
+├── 协调层 (Coordination Layer)
+│   ├── Node_71 - 多设备协调引擎
+│   ├── 设备发现 (mDNS/UPnP)
+│   ├── 状态同步 (向量时钟)
+│   └── 任务调度 (多策略)
+│
+└── 网关层 (Gateway Layer)
+    ├── GalaxyGateway - 统一网关
+    ├── CrossDeviceCoordinator - 跨设备协调
+    └── MCPAdapter - MCP 协议适配
 ```
 
-### 运行节点
+---
+
+## ✨ 核心功能
+
+### 1. 多设备互控
+
+- ✅ Android 设备控制 (ADB/Scrcpy)
+- ✅ iOS/Mac 控制 (AppleScript)
+- ✅ Windows 控制 (UI Automation)
+- ✅ 蓝牙设备控制 (BLE)
+- ✅ 远程设备控制 (SSH)
+- ✅ IoT 设备控制 (MQTT)
+
+### 2. 跨设备协调
+
+- ✅ 剪贴板同步
+- ✅ 文件传输
+- ✅ 媒体控制同步
+- ✅ 通知同步
+
+### 3. AI 能力
+
+- ✅ 多 LLM 支持 (OpenAI/Anthropic/DeepSeek/Gemini)
+- ✅ 智能路由
+- ✅ 意图理解
+- ✅ 任务分解
+
+### 4. MCP Skill 支持
+
+- ✅ 24+ MCP 服务集成
+- ✅ 工具注册和调用
+- ✅ 健康检查
+
+---
+
+## 📋 配置说明
+
+### 必需配置
 
 ```bash
-# 进入节点目录
-cd nodes/Node_02_Tasker
+# 至少配置一个 LLM API Key
+OPENAI_API_KEY=sk-xxxxx
+# 或
+DEEPSEEK_API_KEY=sk-xxxxx
+```
 
-# 运行节点
+### 可选配置
+
+```bash
+# 数据库
+REDIS_URL=redis://localhost:6379
+QDRANT_URL=http://localhost:6333
+
+# 安全
+JWT_SECRET=your-secret-key
+```
+
+---
+
+## 🔧 常用命令
+
+```bash
+# 最小启动
+python main.py --minimal
+
+# 完整启动
 python main.py
+
+# 查看状态
+python main.py --status
+
+# 运行测试
+python verify_system.py
 ```
 
-### 环境变量配置
+---
 
-```bash
-# Node 03: SecretVault
-export SECRETVAULT_MASTER_KEY="your-master-key"
-
-# Node 05: Auth
-export AUTH_JWT_SECRET="your-jwt-secret"
-
-# Node 12: PostgreSQL
-export POSTGRES_HOST="localhost"
-export POSTGRES_USER="postgres"
-export POSTGRES_PASSWORD="your-password"
-export POSTGRES_DATABASE="postgres"
-
-# Node 16: Email
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_USER="your-email@gmail.com"
-export SMTP_PASSWORD="your-password"
-
-# Node 18: DeepL
-export DEEPL_API_KEY="your-api-key"
-
-# Node 22: BraveSearch
-export BRAVE_API_KEY="your-api-key"
-
-# Node 24: Weather
-export OPENWEATHER_API_KEY="your-api-key"
-
-# Node 25: GoogleSearch
-export GOOGLE_API_KEY="your-api-key"
-export GOOGLE_CSE_ID="your-cse-id"
-
-# Node 41: MQTT
-export MQTT_BROKER="localhost"
-export MQTT_PORT="1883"
-```
-
-## API文档
-
-每个节点都提供以下标准端点：
-
-- `GET /health` - 健康检查
-- 各节点特有的功能端点
-
-启动节点后，访问 `http://localhost:{port}/docs` 查看完整的API文档（Swagger UI）。
-
-## 节点结构
-
-每个节点包含以下文件：
+## 📁 项目结构
 
 ```
-Node_XX_Name/
-├── main.py          # 主要业务逻辑
-├── fusion_entry.py  # 融合入口文件
-└── README.md        # 节点说明（可选）
+ufo-galaxy-realization-v2/
+├── core/                   # 核心模块
+├── nodes/                  # 功能节点
+├── galaxy_gateway/         # 网关层
+├── enhancements/           # 增强模块
+├── tests/                  # 测试文件
+├── main.py                 # 主入口
+├── unified_launcher.py     # 统一启动器
+├── deploy.sh               # 一键部署
+├── start.sh                # 快速启动
+└── docker-start.sh         # Docker 启动
 ```
 
-## 依赖说明
+---
 
-- **必需依赖**: fastapi, uvicorn, pydantic
-- **数据库节点**: asyncpg (PostgreSQL), qdrant-client (Qdrant)
-- **加密节点**: cryptography
-- **语音节点**: edge-tts
-- **SSH节点**: asyncssh
-- **MQTT节点**: paho-mqtt
+## 🔗 相关仓库
 
-## 许可证
+- [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) - Android 客户端
+
+---
+
+## 📄 许可证
 
 MIT License
+
+---
+
+## 🙏 致谢
+
+感谢所有贡献者和开源社区的支持！

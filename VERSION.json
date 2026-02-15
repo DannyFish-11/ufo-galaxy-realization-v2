@@ -1,0 +1,17 @@
+{
+    "version": "2.0.4",
+    "codename": "Galaxy",
+    "release_date": "2026-02-15",
+    "python_version": "3.10+",
+    "features": {
+        "multi_device_coordination": true,
+        "mcp_skill_support": true,
+        "safe_eval": true,
+        "secure_config": true,
+        "capability_manager": true
+    },
+    "nodes": 108,
+    "core_modules": 33,
+    "api_endpoints": 158,
+    "test_coverage": "97%"
+}
