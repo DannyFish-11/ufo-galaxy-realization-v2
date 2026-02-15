@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaxy - 系统配置中心</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .input-field {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+        .input-field:focus {
+            border-color: #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+        }
+        .priority-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+        }
+        .priority-1 { background: linear-gradient(135deg, #00d4ff, #0099cc); }
+        .priority-2 { background: linear-gradient(135deg, #7b2cbf, #5a1f8f); }
+        .priority-3 { background: linear-gradient(135deg, #ff6b6b, #cc5555); }
+        .tab-active {
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            border-bottom: 2px solid #00d4ff;
+        }
+        .save-btn {
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            transition: all 0.3s;
+        }
+        .save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+        .status-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <div id="app" v-cloak>
+        <!-- Header -->
+        <header class="border-b border-white/10">
+            <div class="container mx-auto px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-3xl">🌌</div>
+                        <div>
+                            <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                                Galaxy
+                            </h1>
+                            <p class="text-sm text-gray-400">系统配置中心</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <a href="/" class="text-gray-400 hover:text-white transition">控制面板</a>
+                        <a href="/devices" class="text-gray-400 hover:text-white transition">设备管理</a>
+                        <a href="/docs" class="text-gray-400 hover:text-white transition">API 文档</a>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full bg-green-400 status-dot"></div>
+                            <span class="text-sm text-gray-300">{{ systemStatus }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-6 py-8">
+            <!-- Tabs -->
+            <div class="flex space-x-8 border-b border-white/10 mb-8">
+                <button v-for="tab in tabs" :key="tab.id" 
+                        @click="activeTab = tab.id"
+                        :class="['pb-4 px-2 transition', activeTab === tab.id ? 'tab-active' : 'text-gray-400 hover:text-white']">
+                    {{ tab.icon }} {{ tab.name }}
+                </button>
+            </div>
+
+            <!-- API Keys Tab -->
+            <div v-show="activeTab === 'api'" class="space-y-6">
+                <div class="glass-card rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="mr-2">🔑</span> API 密钥配置
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- OpenAI -->
+                        <div class="space-y-2">
+                            <label class="flex items-center justify-between">
+                                <span class="text-gray-300">OpenAI API Key</span>
+                                <span class="text-xs text-gray-500">推荐</span>
+                            </label>
+                            <input v-model="config.apiKeys.openai" type="password" 
+                                   placeholder="sk-xxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        
+                        <!-- DeepSeek -->
+                        <div class="space-y-2">
+                            <label class="flex items-center justify-between">
+                                <span class="text-gray-300">DeepSeek API Key</span>
+                                <span class="text-xs text-green-400">性价比高</span>
+                            </label>
+                            <input v-model="config.apiKeys.deepseek" type="password" 
+                                   placeholder="sk-xxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        
+                        <!-- Anthropic -->
+                        <div class="space-y-2">
+                            <label class="text-gray-300">Anthropic API Key</label>
+                            <input v-model="config.apiKeys.anthropic" type="password" 
+                                   placeholder="sk-ant-xxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        
+                        <!-- Google -->
+                        <div class="space-y-2">
+                            <label class="text-gray-300">Google Gemini API Key</label>
+                            <input v-model="config.apiKeys.google" type="password" 
+                                   placeholder="AIzaxxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        
+                        <!-- Groq -->
+                        <div class="space-y-2">
+                            <label class="text-gray-300">Groq API Key</label>
+                            <input v-model="config.apiKeys.groq" type="password" 
+                                   placeholder="gsk_xxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        
+                        <!-- OpenRouter -->
+                        <div class="space-y-2">
+                            <label class="text-gray-300">OpenRouter API Key</label>
+                            <input v-model="config.apiKeys.openrouter" type="password" 
+                                   placeholder="sk-or-xxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OneAPI Configuration -->
+                <div class="glass-card rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="mr-2">🌐</span> OneAPI 统一网关配置
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-2">
+                            <label class="text-gray-300">OneAPI 地址</label>
+                            <input v-model="config.oneapi.url" type="text" 
+                                   placeholder="http://localhost:3000"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">OneAPI Key</label>
+                            <input v-model="config.oneapi.key" type="password" 
+                                   placeholder="sk-xxxxxxxxxxxxxxxx"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LLM Router Tab -->
+            <div v-show="activeTab === 'router'" class="space-y-6">
+                <div class="glass-card rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="mr-2">🔀</span> 智能路由配置 - 三级优先模型
+                    </h2>
+                    
+                    <p class="text-gray-400 mb-6">
+                        配置三个优先级的 LLM 模型，系统将按优先级顺序调用，实现负载均衡和故障转移。
+                    </p>
+
+                    <!-- Priority 1 -->
+                    <div class="mb-6 p-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center">
+                                <span class="priority-badge priority-1 mr-3">优先级 1</span>
+                                <span class="font-medium">主模型 - 首选</span>
+                            </div>
+                            <label class="flex items-center">
+                                <input type="checkbox" v-model="config.router.priority1.enabled" class="mr-2">
+                                <span class="text-sm text-gray-400">启用</span>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">提供商</label>
+                                <select v-model="config.router.priority1.provider" 
+                                        class="w-full input-field rounded-lg px-4 py-2 text-white outline-none">
+                                    <option value="openai">OpenAI</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="google">Google</option>
+                                    <option value="groq">Groq</option>
+                                    <option value="oneapi">OneAPI</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">模型</label>
+                                <input v-model="config.router.priority1.model" type="text" 
+                                       placeholder="gpt-4o"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">权重 (%)</label>
+                                <input v-model="config.router.priority1.weight" type="number" 
+                                       placeholder="60"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Priority 2 -->
+                    <div class="mb-6 p-4 rounded-lg border border-purple-500/30 bg-purple-500/5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center">
+                                <span class="priority-badge priority-2 mr-3">优先级 2</span>
+                                <span class="font-medium">备用模型 - 次选</span>
+                            </div>
+                            <label class="flex items-center">
+                                <input type="checkbox" v-model="config.router.priority2.enabled" class="mr-2">
+                                <span class="text-sm text-gray-400">启用</span>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">提供商</label>
+                                <select v-model="config.router.priority2.provider" 
+                                        class="w-full input-field rounded-lg px-4 py-2 text-white outline-none">
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="google">Google</option>
+                                    <option value="groq">Groq</option>
+                                    <option value="oneapi">OneAPI</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">模型</label>
+                                <input v-model="config.router.priority2.model" type="text" 
+                                       placeholder="deepseek-chat"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">权重 (%)</label>
+                                <input v-model="config.router.priority2.weight" type="number" 
+                                       placeholder="30"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Priority 3 -->
+                    <div class="p-4 rounded-lg border border-red-500/30 bg-red-500/5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center">
+                                <span class="priority-badge priority-3 mr-3">优先级 3</span>
+                                <span class="font-medium">兜底模型 - 最后</span>
+                            </div>
+                            <label class="flex items-center">
+                                <input type="checkbox" v-model="config.router.priority3.enabled" class="mr-2">
+                                <span class="text-sm text-gray-400">启用</span>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">提供商</label>
+                                <select v-model="config.router.priority3.provider" 
+                                        class="w-full input-field rounded-lg px-4 py-2 text-white outline-none">
+                                    <option value="groq">Groq</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="google">Google</option>
+                                    <option value="oneapi">OneAPI</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">模型</label>
+                                <input v-model="config.router.priority3.model" type="text" 
+                                       placeholder="llama-3.1-70b-versatile"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">权重 (%)</label>
+                                <input v-model="config.router.priority3.weight" type="number" 
+                                       placeholder="10"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Router Settings -->
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-sm text-gray-400">故障转移策略</label>
+                            <select v-model="config.router.failoverStrategy" 
+                                    class="w-full input-field rounded-lg px-4 py-2 text-white outline-none">
+                                <option value="priority">按优先级</option>
+                                <option value="round_robin">轮询</option>
+                                <option value="random">随机</option>
+                                <option value="weight">按权重</option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm text-gray-400">重试次数</label>
+                            <input v-model="config.router.retryCount" type="number" 
+                                   placeholder="3"
+                                   class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm text-gray-400">超时时间 (秒)</label>
+                            <input v-model="config.router.timeout" type="number" 
+                                   placeholder="30"
+                                   class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Tab -->
+            <div v-show="activeTab === 'system'" class="space-y-6">
+                <div class="glass-card rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="mr-2">⚙️</span> 系统设置
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-2">
+                            <label class="text-gray-300">系统名称</label>
+                            <input v-model="config.system.name" type="text" 
+                                   placeholder="Galaxy"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">节点 ID</label>
+                            <input v-model="config.system.nodeId" type="text" 
+                                   placeholder="master"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">HTTP 端口</label>
+                            <input v-model="config.system.httpPort" type="number" 
+                                   placeholder="8080"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">WebSocket 端口</label>
+                            <input v-model="config.system.websocketPort" type="number" 
+                                   placeholder="8765"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">日志级别</label>
+                            <select v-model="config.system.logLevel" 
+                                    class="w-full input-field rounded-lg px-4 py-3 text-white outline-none">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">环境</label>
+                            <select v-model="config.system.environment" 
+                                    class="w-full input-field rounded-lg px-4 py-3 text-white outline-none">
+                                <option value="development">开发环境</option>
+                                <option value="production">生产环境</option>
+                                <option value="test">测试环境</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7x24 Running -->
+                <div class="glass-card rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="mr-2">🔄</span> 7×24 小时运行配置
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <label class="flex items-center justify-between p-4 rounded-lg bg-white/5">
+                            <div>
+                                <div class="font-medium">自动启动</div>
+                                <div class="text-sm text-gray-400">系统启动时自动运行</div>
+                            </div>
+                            <input type="checkbox" v-model="config.daemon.autoStart" class="w-5 h-5">
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-4 rounded-lg bg-white/5">
+                            <div>
+                                <div class="font-medium">自动重启</div>
+                                <div class="text-sm text-gray-400">崩溃时自动重启</div>
+                            </div>
+                            <input type="checkbox" v-model="config.daemon.autoRestart" class="w-5 h-5">
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-4 rounded-lg bg-white/5">
+                            <div>
+                                <div class="font-medium">健康检查</div>
+                                <div class="text-sm text-gray-400">定期检查系统健康状态</div>
+                            </div>
+                            <input type="checkbox" v-model="config.daemon.healthCheck" class="w-5 h-5">
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-4 rounded-lg bg-white/5">
+                            <div>
+                                <div class="font-medium">心跳监控</div>
+                                <div class="text-sm text-gray-400">定期发送心跳信号</div>
+                            </div>
+                            <input type="checkbox" v-model="config.daemon.heartbeat" class="w-5 h-5">
+                        </label>
+
+                        <div class="grid grid-cols-2 gap-4 mt-4">
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">健康检查间隔 (秒)</label>
+                                <input v-model="config.daemon.healthCheckInterval" type="number" 
+                                       placeholder="60"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm text-gray-400">最大重启次数</label>
+                                <input v-model="config.daemon.maxRestarts" type="number" 
+                                       placeholder="5"
+                                       class="w-full input-field rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database -->
+                <div class="glass-card rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="mr-2">🗄️</span> 数据库配置
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-2">
+                            <label class="text-gray-300">Redis URL</label>
+                            <input v-model="config.database.redisUrl" type="text" 
+                                   placeholder="redis://localhost:6379"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-gray-300">Qdrant URL</label>
+                            <input v-model="config.database.qdrantUrl" type="text" 
+                                   placeholder="http://localhost:6333"
+                                   class="w-full input-field rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="flex justify-end mt-8 space-x-4">
+                <button @click="resetConfig" class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition">
+                    重置默认
+                </button>
+                <button @click="saveConfig" :disabled="saving" class="save-btn px-8 py-3 rounded-lg font-medium">
+                    {{ saving ? '保存中...' : '保存配置' }}
+                </button>
+            </div>
+        </main>
+
+        <!-- Toast -->
+        <div v-if="toast.show" 
+             :class="['fixed bottom-8 right-8 px-6 py-3 rounded-lg shadow-lg transition-all', 
+                      toast.type === 'success' ? 'bg-green-600' : 'bg-red-600']">
+            {{ toast.message }}
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    activeTab: 'api',
+                    systemStatus: '运行中',
+                    saving: false,
+                    tabs: [
+                        { id: 'api', name: 'API 密钥', icon: '🔑' },
+                        { id: 'router', name: '智能路由', icon: '🔀' },
+                        { id: 'system', name: '系统设置', icon: '⚙️' }
+                    ],
+                    config: {
+                        apiKeys: {
+                            openai: '',
+                            deepseek: '',
+                            anthropic: '',
+                            google: '',
+                            groq: '',
+                            openrouter: ''
+                        },
+                        oneapi: {
+                            url: '',
+                            key: ''
+                        },
+                        router: {
+                            priority1: { provider: 'openai', model: 'gpt-4o', weight: 60, enabled: true },
+                            priority2: { provider: 'deepseek', model: 'deepseek-chat', weight: 30, enabled: true },
+                            priority3: { provider: 'groq', model: 'llama-3.1-70b-versatile', weight: 10, enabled: true },
+                            failoverStrategy: 'priority',
+                            retryCount: 3,
+                            timeout: 30
+                        },
+                        system: {
+                            name: 'Galaxy',
+                            nodeId: 'master',
+                            httpPort: 8080,
+                            websocketPort: 8765,
+                            logLevel: 'INFO',
+                            environment: 'production'
+                        },
+                        daemon: {
+                            autoStart: true,
+                            autoRestart: true,
+                            healthCheck: true,
+                            heartbeat: true,
+                            healthCheckInterval: 60,
+                            maxRestarts: 5
+                        },
+                        database: {
+                            redisUrl: 'redis://localhost:6379',
+                            qdrantUrl: 'http://localhost:6333'
+                        }
+                    },
+                    toast: { show: false, message: '', type: 'success' }
+                };
+            },
+            mounted() {
+                this.loadConfig();
+            },
+            methods: {
+                async loadConfig() {
+                    try {
+                        const response = await axios.get('/api/config');
+                        if (response.data) {
+                            this.config = { ...this.config, ...response.data };
+                        }
+                    } catch (error) {
+                        console.log('Using default config');
+                    }
+                },
+                async saveConfig() {
+                    this.saving = true;
+                    try {
+                        await axios.post('/api/config', this.config);
+                        this.showToast('配置保存成功！', 'success');
+                        
+                        // 保存到 .env 文件
+                        await axios.post('/api/config/save-env', this.config);
+                    } catch (error) {
+                        this.showToast('保存失败: ' + error.message, 'error');
+                    } finally {
+                        this.saving = false;
+                    }
+                },
+                resetConfig() {
+                    if (confirm('确定要重置为默认配置吗？')) {
+                        location.reload();
+                    }
+                },
+                showToast(message, type) {
+                    this.toast = { show: true, message, type };
+                    setTimeout(() => {
+                        this.toast.show = false;
+                    }, 3000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
