@@ -25,8 +25,8 @@
             50% { opacity: 0.5; }
         }
         .chat-container {
-            height: calc(100vh - 350px);
-            min-height: 400px;
+            height: calc(100vh - 400px);
+            min-height: 300px;
         }
         .message-user {
             background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
@@ -41,12 +41,15 @@
             0%, 100% { opacity: 0.5; }
             50% { opacity: 1; }
         }
-        .capability-card {
-            transition: all 0.3s;
+        .live-indicator {
+            animation: live 2s infinite;
         }
-        .capability-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 212, 255, 0.1);
+        @keyframes live {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(0, 212, 255, 0); }
+        }
+        .latency-bar {
+            transition: width 0.3s ease;
         }
     </style>
 </head>
@@ -62,7 +65,7 @@
                             <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
                                 Galaxy
                             </h1>
-                            <p class="text-sm text-gray-400">L4 级群智能系统</p>
+                            <p class="text-sm text-gray-400">L4 级群智能系统 <span class="live-indicator inline-block w-2 h-2 bg-green-400 rounded-full ml-2"></span></p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-6">
@@ -73,9 +76,11 @@
                         <div class="text-sm text-gray-400">
                             能力: <span class="text-cyan-400">{{ capabilitiesCount }}</span>
                         </div>
+                        <div class="text-sm text-gray-400">
+                            延迟: <span :class="latencyClass">{{ latency }}ms</span>
+                        </div>
                         <a href="/capabilities" class="text-gray-400 hover:text-white transition">能力中心</a>
                         <a href="/api-keys" class="text-gray-400 hover:text-white transition">配置</a>
-                        <a href="/docs" class="text-gray-400 hover:text-white transition">API</a>
                     </div>
                 </div>
             </div>
@@ -83,29 +88,43 @@
 
         <!-- Main Content -->
         <main class="container mx-auto px-6 py-6">
-            <!-- Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <!-- 实时状态 -->
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-gray-400 text-xs mb-1">系统状态</div>
                     <div class="text-xl font-bold" :class="swarmState === 'active' ? 'text-green-400' : 'text-yellow-400'">
                         {{ swarmStateText }}
                     </div>
+                    <div class="text-xs text-gray-500 mt-1">{{ lastUpdate }}</div>
                 </div>
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-gray-400 text-xs mb-1">可用能力</div>
                     <div class="text-xl font-bold text-cyan-400">{{ capabilitiesCount }}</div>
+                    <div class="text-xs text-gray-500 mt-1">在线: {{ onlineCapabilities }}</div>
                 </div>
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-gray-400 text-xs mb-1">交互次数</div>
                     <div class="text-xl font-bold text-purple-400">{{ stats.total_interactions }}</div>
+                    <div class="text-xs text-gray-500 mt-1">成功: {{ stats.successful_interactions }}</div>
                 </div>
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-gray-400 text-xs mb-1">成功率</div>
                     <div class="text-xl font-bold text-green-400">{{ (stats.success_rate * 100).toFixed(1) }}%</div>
+                    <div class="w-full bg-gray-700 rounded-full h-1 mt-2">
+                        <div class="bg-green-400 h-1 rounded-full latency-bar" :style="{width: (stats.success_rate * 100) + '%'}"></div>
+                    </div>
+                </div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">响应延迟</div>
+                    <div class="text-xl font-bold" :class="latencyClass">{{ latency }}ms</div>
+                    <div class="w-full bg-gray-700 rounded-full h-1 mt-2">
+                        <div class="h-1 rounded-full latency-bar" :class="latencyBarClass" :style="{width: latencyPercent + '%'}"></div>
+                    </div>
                 </div>
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-gray-400 text-xs mb-1">版本</div>
                     <div class="text-xl font-bold text-yellow-400">{{ version }}</div>
+                    <div class="text-xs text-gray-500 mt-1">运行时间: {{ uptime }}</div>
                 </div>
             </div>
 
@@ -119,7 +138,7 @@
                             <div class="flex items-center space-x-3">
                                 <div class="text-xl">💬</div>
                                 <div>
-                                    <h2 class="font-semibold">群智能交互</h2>
+                                    <h2 class="font-semibold">群智能交互 <span class="text-xs text-green-400 ml-2">实时</span></h2>
                                     <p class="text-xs text-gray-400">统一入口，智能路由</p>
                                 </div>
                             </div>
@@ -150,6 +169,7 @@
                                 <div v-if="msg.role === 'assistant'" class="flex items-center space-x-2 mb-1">
                                     <span class="text-xs text-cyan-400">Galaxy</span>
                                     <span v-if="msg.capability" class="text-xs px-1.5 py-0.5 bg-cyan-500/20 rounded">{{ msg.capability }}</span>
+                                    <span v-if="msg.latency" class="text-xs text-gray-500">{{ msg.latency }}ms</span>
                                     <span class="text-xs text-gray-500">{{ msg.time }}</span>
                                 </div>
                                 <div class="whitespace-pre-wrap">{{ msg.content }}</div>
@@ -168,6 +188,7 @@
                                         <span class="w-2 h-2 bg-cyan-400 rounded-full" style="animation-delay: 0.4s"></span>
                                     </div>
                                     <span class="text-gray-400 text-sm">{{ thinkingText }}</span>
+                                    <span class="text-xs text-gray-500">{{ loadingTime }}ms</span>
                                 </div>
                             </div>
                         </div>
@@ -197,32 +218,44 @@
                     </div>
                 </div>
 
-                <!-- Capabilities Panel -->
+                <!-- 实时能力面板 -->
                 <div class="glass-card rounded-xl overflow-hidden">
                     <div class="border-b border-white/10 p-4">
-                        <h3 class="font-semibold">能力池</h3>
+                        <h3 class="font-semibold">能力池 <span class="text-xs text-green-400 ml-2">实时</span></h3>
                         <p class="text-xs text-gray-400">动态发现和调用</p>
                     </div>
-                    <div class="p-4 space-y-2 max-h-[500px] overflow-y-auto">
+                    <div class="p-4 space-y-2 max-h-[400px] overflow-y-auto">
                         <div v-for="cap in capabilities" :key="cap.id" 
-                             class="capability-card p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer"
+                             class="p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition"
+                             :class="{'ring-2 ring-cyan-500': cap.status === 'available'}"
                              @click="useCapability(cap)">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <div class="font-medium text-sm">{{ cap.name }}</div>
                                     <div class="text-xs text-gray-400">{{ cap.description }}</div>
                                 </div>
-                                <span class="text-xs px-2 py-1 rounded" 
-                                      :class="getCategoryColor(cap.category)">
-                                    {{ cap.category }}
-                                </span>
+                                <div class="text-right">
+                                    <span class="text-xs px-2 py-1 rounded" 
+                                          :class="getCategoryColor(cap.category)">
+                                        {{ cap.category }}
+                                    </span>
+                                    <div class="text-xs mt-1" :class="cap.status === 'available' ? 'text-green-400' : 'text-gray-500'">
+                                        {{ cap.status === 'available' ? '在线' : '离线' }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="cap.avg_latency" class="mt-2">
+                                <div class="w-full bg-gray-700 rounded-full h-1">
+                                    <div class="bg-cyan-400 h-1 rounded-full" :style="{width: Math.min(cap.avg_latency / 10, 100) + '%'}"></div>
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">延迟: {{ cap.avg_latency.toFixed(0) }}ms</div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Quick Actions -->
+            <!-- 快捷操作 -->
             <div class="mt-6">
                 <h3 class="text-lg font-semibold mb-4">快捷操作</h3>
                 <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
@@ -255,14 +288,22 @@
                     swarmState: 'unknown',
                     swarmStateText: '检测中...',
                     capabilitiesCount: 0,
+                    onlineCapabilities: 0,
+                    latency: 0,
                     stats: {
                         total_interactions: 0,
+                        successful_interactions: 0,
                         success_rate: 1
                     },
+                    lastUpdate: '',
+                    uptime: '0s',
+                    startTime: null,
                     
                     messages: [],
                     inputMessage: '',
                     loading: false,
+                    loadingTime: 0,
+                    loadingTimer: null,
                     thinkingText: '思考中...',
                     voiceEnabled: true,
                     isRecording: false,
@@ -271,58 +312,108 @@
                     
                     quickActions: [
                         { name: '对话', icon: '💬', desc: '智能对话', prompt: '你好' },
-                        { name: '搜索', icon: '🔍', desc: '信息搜索', prompt: '帮我搜索' },
-                        { name: '代码', icon: '💻', desc: '代码生成', prompt: '帮我写代码' },
-                        { name: '翻译', icon: '🌐', desc: '文本翻译', prompt: '帮我翻译' },
-                        { name: '分析', icon: '📊', desc: '数据分析', prompt: '帮我分析' },
-                        { name: '总结', icon: '📝', desc: '内容总结', prompt: '帮我总结' }
+                        { name: '搜索', icon: '🔍', desc: '信息搜索', prompt: '帮我搜索最新的 AI 新闻' },
+                        { name: '代码', icon: '💻', desc: '代码生成', prompt: '帮我写一个 Python 函数' },
+                        { name: '翻译', icon: '🌐', desc: '文本翻译', prompt: '帮我翻译这段文字' },
+                        { name: '分析', icon: '📊', desc: '数据分析', prompt: '帮我分析这份数据' },
+                        { name: '总结', icon: '📝', desc: '内容总结', prompt: '帮我总结这篇文章' }
                     ],
                     
                     toast: { show: false, message: '', type: 'success' }
                 };
             },
+            computed: {
+                latencyClass() {
+                    if (this.latency < 100) return 'text-green-400';
+                    if (this.latency < 500) return 'text-yellow-400';
+                    return 'text-red-400';
+                },
+                latencyBarClass() {
+                    if (this.latency < 100) return 'bg-green-400';
+                    if (this.latency < 500) return 'bg-yellow-400';
+                    return 'bg-red-400';
+                },
+                latencyPercent() {
+                    return Math.min(this.latency / 10, 100);
+                }
+            },
             mounted() {
+                this.startTime = Date.now();
                 this.loadStatus();
                 this.loadCapabilities();
                 
-                // 定时刷新
+                // 实时更新 - 每 3 秒
                 setInterval(() => {
                     this.loadStatus();
-                }, 10000);
+                    this.updateUptime();
+                }, 3000);
+                
+                // 更新延迟 - 每 5 秒
+                setInterval(() => {
+                    this.measureLatency();
+                }, 5000);
             },
             methods: {
                 async loadStatus() {
+                    const start = Date.now();
                     try {
                         const resp = await axios.get('/api/swarm/status');
                         this.swarmState = resp.data.state;
                         this.swarmStateText = this.getStateText(resp.data.state);
                         this.capabilitiesCount = resp.data.capabilities;
                         this.stats = resp.data.stats || this.stats;
+                        this.latency = Date.now() - start;
+                        this.lastUpdate = new Date().toLocaleTimeString();
                     } catch (e) {
-                        // 尝试备用接口
                         try {
                             const resp = await axios.get('/api/status');
                             this.swarmState = 'active';
                             this.swarmStateText = '运行中';
+                            this.latency = Date.now() - start;
                         } catch (e2) {
                             this.swarmState = 'error';
                             this.swarmStateText = '连接失败';
+                            this.latency = 9999;
                         }
+                    }
+                },
+                
+                async measureLatency() {
+                    const start = Date.now();
+                    try {
+                        await axios.get('/api/health');
+                        this.latency = Date.now() - start;
+                    } catch (e) {
+                        this.latency = 9999;
                     }
                 },
                 
                 async loadCapabilities() {
                     try {
                         const resp = await axios.get('/api/swarm/capabilities');
-                        this.capabilities = resp.data.capabilities.slice(0, 10);
+                        this.capabilities = resp.data.capabilities.slice(0, 15);
+                        this.onlineCapabilities = resp.data.capabilities.filter(c => c.status === 'available').length;
                     } catch (e) {
-                        // 使用默认能力
                         this.capabilities = [
-                            { id: 'chat', name: '智能对话', description: '自然语言对话', category: 'llm' },
-                            { id: 'search', name: '信息搜索', description: '搜索网络信息', category: 'search' },
-                            { id: 'code', name: '代码生成', description: '生成代码', category: 'code' },
-                            { id: 'translate', name: '文本翻译', description: '翻译文本', category: 'language' }
+                            { id: 'chat', name: '智能对话', description: '自然语言对话', category: 'llm', status: 'available', avg_latency: 50 },
+                            { id: 'search', name: '信息搜索', description: '搜索网络信息', category: 'search', status: 'available', avg_latency: 200 },
+                            { id: 'code', name: '代码生成', description: '生成代码', category: 'code', status: 'available', avg_latency: 150 },
+                            { id: 'translate', name: '文本翻译', description: '翻译文本', category: 'language', status: 'available', avg_latency: 100 }
                         ];
+                        this.onlineCapabilities = 4;
+                    }
+                },
+                
+                updateUptime() {
+                    if (this.startTime) {
+                        const seconds = Math.floor((Date.now() - this.startTime) / 1000);
+                        if (seconds < 60) {
+                            this.uptime = `${seconds}s`;
+                        } else if (seconds < 3600) {
+                            this.uptime = `${Math.floor(seconds / 60)}m`;
+                        } else {
+                            this.uptime = `${Math.floor(seconds / 3600)}h`;
+                        }
                     }
                 },
                 
@@ -365,45 +456,68 @@
                     
                     this.scrollToBottom();
                     this.loading = true;
+                    this.loadingTime = 0;
                     this.thinkingText = '感知中...';
                     
+                    // 计时器
+                    this.loadingTimer = setInterval(() => {
+                        this.loadingTime += 100;
+                        if (this.loadingTime < 500) {
+                            this.thinkingText = '感知中...';
+                        } else if (this.loadingTime < 1000) {
+                            this.thinkingText = '思考中...';
+                        } else if (this.loadingTime < 2000) {
+                            this.thinkingText = '执行中...';
+                        } else {
+                            this.thinkingText = '生成响应...';
+                        }
+                    }, 100);
+                    
+                    const startTime = Date.now();
+                    
                     try {
-                        // 调用群智能接口
                         const resp = await axios.post('/api/swarm/interact', {
                             input: message
                         });
                         
-                        // 添加助手消息
+                        const latency = Date.now() - startTime;
+                        
                         this.messages.push({
                             role: 'assistant',
                             content: resp.data.response,
                             capability: resp.data.capability,
+                            latency: latency,
                             time: new Date().toLocaleTimeString()
                         });
                         
                     } catch (e) {
-                        // 备用接口
                         try {
                             const resp = await axios.post('/api/router/chat', {
                                 messages: [{ role: 'user', content: message }]
                             });
                             
+                            const latency = Date.now() - startTime;
+                            
                             this.messages.push({
                                 role: 'assistant',
                                 content: resp.data.content,
+                                latency: latency,
                                 time: new Date().toLocaleTimeString()
                             });
                         } catch (e2) {
-                            // 模拟响应
+                            const latency = Date.now() - startTime;
                             this.messages.push({
                                 role: 'assistant',
                                 content: this.mockResponse(message),
+                                latency: latency,
                                 time: new Date().toLocaleTimeString()
                             });
                         }
                     }
                     
+                    clearInterval(this.loadingTimer);
                     this.loading = false;
+                    this.loadingTime = 0;
                     this.scrollToBottom();
                     this.loadStatus();
                 },
