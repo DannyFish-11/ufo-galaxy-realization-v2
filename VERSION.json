@@ -1,46 +1,26 @@
 {
-    "version": "2.1.7",
+    "version": "2.1.9",
     "name": "Galaxy",
-    "description": "L4 级自主性智能系统",
+    "description": "L4 级群智能系统",
     "release_date": "2026-02-15",
     "author": "Galaxy Team",
     "license": "MIT",
     "repository": "https://github.com/DannyFish-11/ufo-galaxy-realization-v2",
     
     "components": {
-        "core_modules": 39,
-        "service_modules": 31,
+        "core_modules": 40,
+        "service_modules": 32,
         "ui_pages": 6,
         "nodes": 108
     },
     
     "features": [
-        "一键启动",
-        "后台运行",
-        "系统托盘",
-        "实时对话",
-        "语音输入",
-        "快捷操作",
-        "配置中心",
-        "设备管理",
-        "记忆系统",
-        "AI 智能路由",
-        "API Key 管理"
+        "群智能核心",
+        "统一交互入口",
+        "Claude Code 风格 UI",
+        "能力动态发现",
+        "AI 驱动决策"
     ],
     
-    "access_urls": {
-        "dashboard": "/",
-        "config": "/config",
-        "devices": "/devices",
-        "memory": "/memory",
-        "router": "/router",
-        "api_keys": "/api-keys",
-        "docs": "/docs"
-    },
-    
-    "startup": {
-        "linux_mac": "python galaxy.py",
-        "windows": "双击 windows/start.bat",
-        "tray_mode": "python windows/galaxy_tray.py"
-    }
+    "ui_style": "Claude Code inspired terminal interface"
 }

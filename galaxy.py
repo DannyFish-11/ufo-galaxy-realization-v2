@@ -27,7 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 配置
 # ============================================================================
 
-VERSION = "2.1.8"
+VERSION = "2.1.9"
 PORT = 8080
 PID_FILE = PROJECT_ROOT / "galaxy.pid"
 LOG_FILE = PROJECT_ROOT / "logs" / "galaxy.log"
