@@ -49,6 +49,14 @@ if STATIC_DIR.exists():
 # 群智能 API (核心)
 try:
     from galaxy_gateway.swarm_api import router as swarm_router
+
+# 一体化系统 API
+try:
+    from galaxy_gateway.integrated_api import router as integrated_router
+    app.include_router(integrated_router, prefix="/api/integrated")
+    logger.info("一体化系统 API 已加载")
+except ImportError as e:
+    logger.warning(f"Integrated API not loaded: {e}")
     app.include_router(swarm_router, prefix="/api/swarm")
     logger.info("群智能 API 已加载")
 except ImportError as e:

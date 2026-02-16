@@ -1,26 +1,14 @@
 {
-    "version": "2.1.9",
-    "name": "Galaxy",
-    "description": "L4 级群智能系统",
-    "release_date": "2026-02-15",
-    "author": "Galaxy Team",
-    "license": "MIT",
-    "repository": "https://github.com/DannyFish-11/ufo-galaxy-realization-v2",
-    
-    "components": {
-        "core_modules": 40,
-        "service_modules": 32,
-        "ui_pages": 6,
-        "nodes": 108
-    },
-    
-    "features": [
-        "群智能核心",
-        "统一交互入口",
-        "Claude Code 风格 UI",
-        "能力动态发现",
-        "AI 驱动决策"
-    ],
-    
-    "ui_style": "Claude Code inspired terminal interface"
+  "version": "2.2.0",
+  "name": "Galaxy",
+  "description": "L4 级群智能系统 - MCP + Skills + HAL 一体化",
+  "release_date": "2026-02-16",
+  "features": [
+    "群智能核心",
+    "MCP 层 (Model Context Protocol)",
+    "Skills 层 (技能模块系统)",
+    "HAL (硬件抽象层)",
+    "数字生命卡支持",
+    "苯苯机械狗支持"
+  ]
 }
