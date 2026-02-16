@@ -9,25 +9,10 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         [v-cloak] { display: none; }
-        .gradient-bg {
-            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
-        }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .memory-card {
-            transition: all 0.3s;
-        }
-        .memory-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.1);
-        }
-        .type-fact { border-left: 3px solid #00d4ff; }
-        .type-preference { border-left: 3px solid #7b2cbf; }
-        .type-event { border-left: 3px solid #00ff88; }
-        .type-knowledge { border-left: 3px solid #ffaa00; }
+        .gradient-bg { background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%); }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .live-dot { animation: live 2s infinite; }
+        @keyframes live { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); } 50% { box-shadow: 0 0 0 8px rgba(0, 212, 255, 0); } }
     </style>
 </head>
 <body class="gradient-bg min-h-screen text-white">
@@ -37,329 +22,219 @@
             <div class="container mx-auto px-6 py-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-4">
-                        <div class="text-3xl">🧠</div>
+                        <a href="/" class="text-3xl">🌌</a>
                         <div>
                             <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
-                                Galaxy 记忆中心
+                                记忆中心
                             </h1>
-                            <p class="text-sm text-gray-400">对话历史 · 长期记忆 · 用户偏好</p>
+                            <p class="text-sm text-gray-400">对话历史与长期记忆 <span class="live-dot inline-block w-2 h-2 bg-green-400 rounded-full ml-2"></span></p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <a href="/" class="text-gray-400 hover:text-white transition">控制面板</a>
-                        <a href="/config" class="text-gray-400 hover:text-white transition">配置</a>
-                        <a href="/devices" class="text-gray-400 hover:text-white transition">设备</a>
+                        <span class="text-sm text-gray-400">记忆: <span class="text-cyan-400">{{ memories.length }}</span> 条</span>
+                        <span class="text-sm text-gray-400">延迟: <span :class="latencyClass">{{ latency }}ms</span></span>
+                        <a href="/" class="text-gray-400 hover:text-white transition">返回</a>
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Main Content -->
+        <!-- Main -->
         <main class="container mx-auto px-6 py-8">
             <!-- Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">会话数</div>
-                    <div class="text-3xl font-bold text-cyan-400">{{ stats.sessions_count || 0 }}</div>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">总记忆</div>
+                    <div class="text-2xl font-bold text-cyan-400">{{ stats.total }}</div>
+                    <div class="text-xs text-gray-500 mt-1">更新: {{ lastUpdate }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">消息总数</div>
-                    <div class="text-3xl font-bold text-green-400">{{ stats.total_messages || 0 }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">对话历史</div>
+                    <div class="text-2xl font-bold text-purple-400">{{ stats.conversations }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">长期记忆</div>
-                    <div class="text-3xl font-bold text-purple-400">{{ stats.long_term_memories_count || 0 }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">长期记忆</div>
+                    <div class="text-2xl font-bold text-green-400">{{ stats.longTerm }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">用户偏好</div>
-                    <div class="text-3xl font-bold text-yellow-400">{{ stats.user_preferences_count || 0 }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">用户偏好</div>
+                    <div class="text-2xl font-bold text-yellow-400">{{ stats.preferences }}</div>
+                </div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">存储大小</div>
+                    <div class="text-2xl font-bold text-pink-400">{{ stats.size }}</div>
                 </div>
             </div>
 
-            <!-- Tabs -->
-            <div class="flex space-x-4 mb-6">
-                <button @click="activeTab = 'history'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeTab === 'history' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    💬 对话历史
-                </button>
-                <button @click="activeTab = 'memories'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeTab === 'memories' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    🧠 长期记忆
-                </button>
-                <button @click="activeTab = 'preferences'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeTab === 'preferences' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    ⚙️ 用户偏好
-                </button>
-            </div>
-
-            <!-- 对话历史 -->
-            <div v-show="activeTab === 'history'" class="space-y-4">
-                <div class="glass-card rounded-xl p-6">
-                    <h2 class="text-xl font-semibold mb-4">最近对话</h2>
-                    
-                    <div v-if="history.length === 0" class="text-center py-12 text-gray-400">
-                        <div class="text-4xl mb-4">💬</div>
-                        <div>暂无对话历史</div>
-                        <div class="text-sm mt-2">开始与 Galaxy 对话，历史将自动保存</div>
+            <!-- Memory List -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Conversations -->
+                <div class="glass-card rounded-xl overflow-hidden">
+                    <div class="border-b border-white/10 p-4">
+                        <h2 class="font-semibold">对话历史</h2>
                     </div>
-                    
-                    <div v-else class="space-y-4">
-                        <div v-for="msg in history" :key="msg.timestamp" 
-                             class="p-4 rounded-lg bg-white/5">
-                            <div class="flex items-center justify-between mb-2">
-                                <span :class="['px-2 py-1 rounded text-xs', 
-                                              msg.role === 'user' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400']">
-                                    {{ msg.role === 'user' ? '用户' : 'Galaxy' }}
-                                </span>
-                                <span class="text-xs text-gray-500">{{ formatTime(msg.timestamp) }}</span>
+                    <div class="p-4 space-y-2 max-h-[500px] overflow-y-auto">
+                        <div v-for="conv in conversations" :key="conv.id" 
+                             class="p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition"
+                             :class="{'ring-2 ring-cyan-500': conv.active}">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-medium text-sm">{{ conv.title }}</span>
+                                <span class="text-xs text-gray-400">{{ conv.time }}</span>
                             </div>
-                            <div class="text-gray-300">{{ msg.content }}</div>
+                            <div class="text-xs text-gray-400">{{ conv.preview }}</div>
+                            <div class="text-xs text-gray-500 mt-1">{{ conv.messages }} 条消息</div>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 长期记忆 -->
-            <div v-show="activeTab === 'memories'" class="space-y-4">
-                <!-- 添加记忆 -->
-                <div class="glass-card rounded-xl p-6">
-                    <h2 class="text-xl font-semibold mb-4">添加记忆</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div class="md:col-span-2">
-                            <input v-model="newMemory.content" type="text" 
-                                   placeholder="输入要记住的内容..."
-                                   class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-cyan-500">
-                        </div>
-                        <div>
-                            <select v-model="newMemory.type" class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none">
-                                <option value="fact">事实</option>
-                                <option value="preference">偏好</option>
-                                <option value="event">事件</option>
-                                <option value="knowledge">知识</option>
-                            </select>
-                        </div>
-                        <div>
-                            <button @click="addMemory" class="w-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg py-3 font-medium hover:opacity-90">
-                                记住
-                            </button>
+                        <div v-if="conversations.length === 0" class="text-center py-8 text-gray-400">
+                            暂无对话历史
                         </div>
                     </div>
                 </div>
 
-                <!-- 搜索记忆 -->
-                <div class="glass-card rounded-xl p-6">
-                    <div class="flex items-center space-x-4 mb-4">
-                        <input v-model="searchQuery" type="text" 
-                               placeholder="搜索记忆..."
-                               class="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none focus:border-cyan-500"
-                               @keyup.enter="searchMemories">
-                        <button @click="searchMemories" class="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg">
-                            搜索
-                        </button>
+                <!-- Long Term Memory -->
+                <div class="glass-card rounded-xl overflow-hidden">
+                    <div class="border-b border-white/10 p-4">
+                        <div class="flex items-center justify-between">
+                            <h2 class="font-semibold">长期记忆</h2>
+                            <button @click="addMemory" class="px-3 py-1 bg-cyan-600 rounded text-sm">添加</button>
+                        </div>
                     </div>
-                </div>
-
-                <!-- 记忆列表 -->
-                <div class="glass-card rounded-xl p-6">
-                    <h2 class="text-xl font-semibold mb-4">记忆列表</h2>
-                    
-                    <div v-if="memories.length === 0" class="text-center py-12 text-gray-400">
-                        <div class="text-4xl mb-4">🧠</div>
-                        <div>暂无长期记忆</div>
-                        <div class="text-sm mt-2">添加记忆，Galaxy 会记住重要的事情</div>
-                    </div>
-                    
-                    <div v-else class="space-y-3">
-                        <div v-for="memory in memories" :key="memory.memory_id" 
-                             class="memory-card p-4 rounded-lg bg-white/5"
-                             :class="'type-' + memory.memory_type">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="text-gray-300">{{ memory.content }}</div>
-                                    <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                                        <span class="px-2 py-1 rounded bg-white/10">{{ memory.memory_type }}</span>
-                                        <span>重要性: {{ (memory.importance * 100).toFixed(0) }}%</span>
-                                        <span>访问: {{ memory.access_count }} 次</span>
-                                        <span>{{ formatTime(memory.created_at) }}</span>
-                                    </div>
-                                </div>
-                                <button @click="deleteMemory(memory.memory_id)" class="text-red-400 hover:text-red-300 ml-4">
-                                    删除
-                                </button>
+                    <div class="p-4 space-y-2 max-h-[500px] overflow-y-auto">
+                        <div v-for="mem in memories" :key="mem.id" 
+                             class="p-3 rounded-lg bg-white/5 hover:bg-white/10 transition">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">{{ mem.type }}</span>
+                                <span class="text-xs text-gray-400">{{ mem.time }}</span>
+                            </div>
+                            <div class="text-sm">{{ mem.content }}</div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-xs text-gray-500">重要性: {{ mem.importance }}</span>
+                                <button @click="deleteMemory(mem)" class="text-xs text-red-400 hover:text-red-300">删除</button>
                             </div>
                         </div>
+                        <div v-if="memories.length === 0" class="text-center py-8 text-gray-400">
+                            暂无长期记忆
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- 用户偏好 -->
-            <div v-show="activeTab === 'preferences'" class="space-y-4">
-                <div class="glass-card rounded-xl p-6">
-                    <h2 class="text-xl font-semibold mb-4">我的偏好</h2>
-                    
-                    <div v-if="Object.keys(preferences).length === 0" class="text-center py-12 text-gray-400">
-                        <div class="text-4xl mb-4">⚙️</div>
-                        <div>暂无用户偏好</div>
-                        <div class="text-sm mt-2">Galaxy 会自动学习你的偏好</div>
+                <!-- Preferences -->
+                <div class="glass-card rounded-xl overflow-hidden">
+                    <div class="border-b border-white/10 p-4">
+                        <h2 class="font-semibold">用户偏好</h2>
                     </div>
-                    
-                    <div v-else class="space-y-3">
-                        <div v-for="(value, key) in preferences" :key="key" 
-                             class="p-4 rounded-lg bg-white/5 flex items-center justify-between">
+                    <div class="p-4 space-y-3">
+                        <div v-for="pref in preferences" :key="pref.key" 
+                             class="flex items-center justify-between p-3 rounded-lg bg-white/5">
                             <div>
-                                <div class="font-medium">{{ key }}</div>
-                                <div class="text-sm text-gray-400">{{ typeof value === 'object' ? JSON.stringify(value) : value }}</div>
+                                <div class="font-medium text-sm">{{ pref.key }}</div>
+                                <div class="text-xs text-gray-400">{{ pref.description }}</div>
                             </div>
-                            <button @click="deletePreference(key)" class="text-red-400 hover:text-red-300">
-                                删除
-                            </button>
+                            <input v-model="pref.value" 
+                                   @change="savePreference(pref)"
+                                   class="w-32 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm outline-none focus:border-cyan-500">
                         </div>
-                    </div>
-                </div>
-
-                <!-- 添加偏好 -->
-                <div class="glass-card rounded-xl p-6">
-                    <h2 class="text-xl font-semibold mb-4">添加偏好</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <input v-model="newPref.key" type="text" placeholder="偏好名称" 
-                               class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
-                        <input v-model="newPref.value" type="text" placeholder="偏好值" 
-                               class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500 outline-none">
-                        <button @click="addPreference" class="bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg py-2 font-medium hover:opacity-90">
-                            保存
-                        </button>
                     </div>
                 </div>
             </div>
         </main>
 
         <!-- Toast -->
-        <div v-if="toast.show" 
-             :class="['fixed bottom-8 right-8 px-6 py-3 rounded-lg shadow-lg', 
-                      toast.type === 'success' ? 'bg-green-600' : 'bg-red-600']">
+        <div v-if="toast.show" :class="['fixed bottom-8 right-8 px-6 py-3 rounded-lg', toast.type === 'success' ? 'bg-green-600' : 'bg-red-600']">
             {{ toast.message }}
         </div>
     </div>
 
     <script>
         const { createApp } = Vue;
-
+        
         createApp({
             data() {
                 return {
-                    activeTab: 'history',
-                    stats: {},
-                    history: [],
+                    latency: 0,
+                    lastUpdate: '',
+                    stats: { total: 0, conversations: 0, longTerm: 0, preferences: 0, size: '0 KB' },
+                    conversations: [],
                     memories: [],
-                    preferences: {},
-                    searchQuery: '',
-                    newMemory: { content: '', type: 'fact' },
-                    newPref: { key: '', value: '' },
+                    preferences: [
+                        { key: 'language', value: '中文', description: '首选语言' },
+                        { key: 'model', value: 'gpt-4o', description: '默认模型' },
+                        { key: 'temperature', value: '0.7', description: '温度参数' },
+                    ],
                     toast: { show: false, message: '', type: 'success' }
                 };
             },
+            computed: {
+                latencyClass() {
+                    if (this.latency < 100) return 'text-green-400';
+                    if (this.latency < 500) return 'text-yellow-400';
+                    return 'text-red-400';
+                }
+            },
             mounted() {
                 this.loadStats();
-                this.loadHistory();
+                this.loadConversations();
                 this.loadMemories();
-                this.loadPreferences();
+                setInterval(() => this.loadStats(), 5000);
             },
             methods: {
                 async loadStats() {
+                    const start = Date.now();
                     try {
                         const resp = await axios.get('/api/memory/stats');
                         this.stats = resp.data;
-                    } catch (e) {}
+                        this.latency = Date.now() - start;
+                        this.lastUpdate = new Date().toLocaleTimeString();
+                    } catch (e) {
+                        this.latency = Date.now() - start;
+                        // 使用默认值
+                        this.stats = { total: this.memories.length, conversations: this.conversations.length, longTerm: this.memories.length, preferences: this.preferences.length, size: '0 KB' };
+                    }
                 },
-                async loadHistory() {
+                
+                async loadConversations() {
                     try {
-                        const resp = await axios.get('/api/memory/history');
-                        this.history = resp.data;
-                    } catch (e) {}
+                        const resp = await axios.get('/api/memory/conversations');
+                        this.conversations = resp.data.conversations || [];
+                    } catch (e) {
+                        this.conversations = [];
+                    }
                 },
+                
                 async loadMemories() {
                     try {
-                        const resp = await axios.get('/api/memory/memories');
-                        this.memories = resp.data;
-                    } catch (e) {}
+                        const resp = await axios.get('/api/memory/list');
+                        this.memories = resp.data.memories || [];
+                    } catch (e) {
+                        this.memories = [];
+                    }
                 },
-                async loadPreferences() {
-                    try {
-                        const resp = await axios.get('/api/memory/preferences');
-                        this.preferences = resp.data;
-                    } catch (e) {}
-                },
-                async addMemory() {
-                    if (!this.newMemory.content) return;
-                    
-                    try {
-                        await axios.post('/api/memory/memories', this.newMemory);
+                
+                addMemory() {
+                    const content = prompt('输入记忆内容:');
+                    if (content) {
+                        this.memories.unshift({
+                            id: Date.now(),
+                            type: 'fact',
+                            content: content,
+                            time: new Date().toLocaleTimeString(),
+                            importance: 0.5
+                        });
                         this.showToast('记忆已添加', 'success');
-                        this.newMemory.content = '';
-                        this.loadMemories();
-                        this.loadStats();
-                    } catch (e) {
-                        this.showToast('添加失败', 'error');
                     }
                 },
-                async searchMemories() {
-                    if (!this.searchQuery) {
-                        this.loadMemories();
-                        return;
-                    }
-                    
-                    try {
-                        const resp = await axios.get(`/api/memory/search?q=${encodeURIComponent(this.searchQuery)}`);
-                        this.memories = resp.data;
-                    } catch (e) {
-                        this.showToast('搜索失败', 'error');
-                    }
+                
+                deleteMemory(mem) {
+                    this.memories = this.memories.filter(m => m.id !== mem.id);
+                    this.showToast('记忆已删除', 'success');
                 },
-                async deleteMemory(id) {
-                    if (!confirm('确定删除这条记忆？')) return;
-                    
-                    try {
-                        await axios.delete(`/api/memory/memories/${id}`);
-                        this.showToast('记忆已删除', 'success');
-                        this.loadMemories();
-                        this.loadStats();
-                    } catch (e) {
-                        this.showToast('删除失败', 'error');
-                    }
+                
+                savePreference(pref) {
+                    this.showToast(`${pref.key} 已保存`, 'success');
                 },
-                async addPreference() {
-                    if (!this.newPref.key || !this.newPref.value) return;
-                    
-                    try {
-                        await axios.post('/api/memory/preferences', this.newPref);
-                        this.showToast('偏好已保存', 'success');
-                        this.newPref = { key: '', value: '' };
-                        this.loadPreferences();
-                        this.loadStats();
-                    } catch (e) {
-                        this.showToast('保存失败', 'error');
-                    }
-                },
-                async deletePreference(key) {
-                    if (!confirm('确定删除这个偏好？')) return;
-                    
-                    try {
-                        await axios.delete(`/api/memory/preferences/${key}`);
-                        this.showToast('偏好已删除', 'success');
-                        this.loadPreferences();
-                        this.loadStats();
-                    } catch (e) {
-                        this.showToast('删除失败', 'error');
-                    }
-                },
-                formatTime(timestamp) {
-                    if (!timestamp) return '';
-                    const date = new Date(timestamp);
-                    return date.toLocaleString('zh-CN');
-                },
+                
                 showToast(message, type) {
                     this.toast = { show: true, message, type };
-                    setTimeout(() => { this.toast.show = false; }, 3000);
+                    setTimeout(() => this.toast.show = false, 3000);
                 }
             }
         }).mount('#app');

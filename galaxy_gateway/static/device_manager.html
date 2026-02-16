@@ -3,379 +3,273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galaxy - 设备管理中心</title>
+    <title>Galaxy - 设备管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         [v-cloak] { display: none; }
-        .gradient-bg {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .device-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 40px rgba(0, 212, 255, 0.2);
-        }
-        .pulse-online {
-            animation: pulse-green 2s infinite;
-        }
-        @keyframes pulse-green {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.4); }
-            50% { box-shadow: 0 0 0 8px rgba(0, 255, 136, 0); }
-        }
-        .scan-line {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #00d4ff, transparent);
-            animation: scan 3s linear infinite;
-            pointer-events: none;
-            z-index: 9999;
-        }
-        @keyframes scan {
-            0% { top: 0; opacity: 1; }
-            100% { top: 100%; opacity: 0; }
-        }
+        .gradient-bg { background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%); }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .live-dot { animation: live 2s infinite; }
+        @keyframes live { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); } 50% { box-shadow: 0 0 0 8px rgba(0, 212, 255, 0); } }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="gradient-bg min-h-screen text-white">
-    <div class="scan-line"></div>
-    
     <div id="app" v-cloak>
         <!-- Header -->
         <header class="border-b border-white/10">
             <div class="container mx-auto px-6 py-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-4">
-                        <div class="text-3xl">🌌</div>
+                        <a href="/" class="text-3xl">🌌</a>
                         <div>
                             <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
-                                Galaxy
+                                设备管理
                             </h1>
-                            <p class="text-sm text-gray-400">设备管理中心</p>
+                            <p class="text-sm text-gray-400">管理连接的设备 <span class="live-dot inline-block w-2 h-2 bg-green-400 rounded-full ml-2"></span></p>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-6">
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 rounded-full" :class="connected ? 'bg-green-400 pulse-online' : 'bg-red-400'"></div>
-                            <span class="text-sm text-gray-300">{{ connected ? '已连接' : '未连接' }}</span>
-                        </div>
-                        <button @click="refreshAll" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm transition">
-                            刷新
-                        </button>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-400">在线: <span class="text-green-400">{{ onlineCount }}</span>/{{ devices.length }}</span>
+                        <span class="text-sm text-gray-400">延迟: <span :class="latencyClass">{{ latency }}ms</span></span>
+                        <a href="/" class="text-gray-400 hover:text-white transition">返回</a>
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Main Content -->
+        <!-- Main -->
         <main class="container mx-auto px-6 py-8">
-            <!-- Stats Overview -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">总设备数</div>
-                    <div class="text-4xl font-bold text-cyan-400">{{ devices.length }}</div>
+            <!-- Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">总设备</div>
+                    <div class="text-2xl font-bold text-cyan-400">{{ devices.length }}</div>
+                    <div class="text-xs text-gray-500 mt-1">更新: {{ lastUpdate }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">在线设备</div>
-                    <div class="text-4xl font-bold text-green-400">{{ onlineCount }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">在线设备</div>
+                    <div class="text-2xl font-bold text-green-400">{{ onlineCount }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">离线设备</div>
-                    <div class="text-4xl font-bold text-red-400">{{ offlineCount }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">Android</div>
+                    <div class="text-2xl font-bold text-purple-400">{{ androidCount }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">活跃任务</div>
-                    <div class="text-4xl font-bold text-purple-400">{{ activeTasks }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">Windows</div>
+                    <div class="text-2xl font-bold text-yellow-400">{{ windowsCount }}</div>
                 </div>
-            </div>
-
-            <!-- Device Registration -->
-            <div class="glass-card rounded-xl p-6 mb-8">
-                <h2 class="text-xl font-semibold mb-4 flex items-center">
-                    <span class="mr-2">➕</span> 注册新设备
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-2">设备类型</label>
-                        <select v-model="newDevice.type" class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white">
-                            <option value="windows">Windows 电脑</option>
-                            <option value="linux">Linux 服务器</option>
-                            <option value="macos">macOS 设备</option>
-                            <option value="android">Android 设备</option>
-                            <option value="other">其他设备</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-2">设备名称</label>
-                        <input v-model="newDevice.name" type="text" placeholder="我的电脑" 
-                               class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-2">IP 地址</label>
-                        <input v-model="newDevice.ip" type="text" placeholder="192.168.1.100" 
-                               class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500">
-                    </div>
-                </div>
-                <div class="mt-4">
-                    <label class="block text-sm text-gray-400 mb-2">设备能力 (用逗号分隔)</label>
-                    <input v-model="newDevice.capabilities" type="text" placeholder="execute_script, send_notification, status_update" 
-                           class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500">
-                </div>
-                <div class="mt-4 flex justify-end">
-                    <button @click="registerDevice" :disabled="registering" 
-                            class="px-6 py-2 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50">
-                        {{ registering ? '注册中...' : '注册设备' }}
-                    </button>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">其他</div>
+                    <div class="text-2xl font-bold text-pink-400">{{ otherCount }}</div>
                 </div>
             </div>
 
-            <!-- Device List -->
-            <div class="glass-card rounded-xl p-6">
-                <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-xl font-semibold flex items-center">
-                        <span class="mr-2">📱</span> 已注册设备
-                    </h2>
-                    <div class="flex items-center space-x-4">
-                        <input v-model="searchQuery" type="text" placeholder="搜索设备..." 
-                               class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500">
-                        <select v-model="filterType" class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white">
-                            <option value="all">全部类型</option>
-                            <option value="windows">Windows</option>
-                            <option value="linux">Linux</option>
-                            <option value="macos">macOS</option>
-                            <option value="android">Android</option>
-                        </select>
+            <!-- Devices -->
+            <div class="glass-card rounded-xl overflow-hidden mb-8">
+                <div class="border-b border-white/10 p-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-semibold">设备列表</h2>
+                        <button @click="addDevice" class="px-4 py-2 bg-cyan-600 rounded-lg text-sm hover:bg-cyan-700 transition">
+                            + 添加设备
+                        </button>
                     </div>
                 </div>
-
-                <!-- Device Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div v-for="device in filteredDevices" :key="device.device_id" 
-                         class="device-card glass-card rounded-xl p-4 transition cursor-pointer"
-                         @click="selectDevice(device)">
-                        <div class="flex items-start justify-between mb-3">
-                            <div class="flex items-center">
-                                <div class="text-2xl mr-3">{{ getDeviceIcon(device.device_type) }}</div>
-                                <div>
-                                    <div class="font-medium">{{ device.device_name }}</div>
-                                    <div class="text-xs text-gray-400">{{ device.device_id }}</div>
+                <div class="p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div v-for="device in devices" :key="device.id" 
+                             class="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition"
+                             :class="{'ring-2 ring-green-500': device.status === 'online'}">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-3xl">{{ device.icon }}</span>
+                                    <div>
+                                        <div class="font-medium">{{ device.name }}</div>
+                                        <div class="text-xs text-gray-400">{{ device.type }}</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span :class="['w-2 h-2 rounded-full', device.status === 'online' ? 'bg-green-400 pulse' : 'bg-gray-400']"></span>
+                                    <span class="text-xs" :class="device.status === 'online' ? 'text-green-400' : 'text-gray-400'">
+                                        {{ device.status === 'online' ? '在线' : '离线' }}
+                                    </span>
                                 </div>
                             </div>
-                            <div class="w-3 h-3 rounded-full" :class="device.status === 'online' ? 'bg-green-400 pulse-online' : 'bg-red-400'"></div>
-                        </div>
-                        <div class="text-sm text-gray-400 mb-2">
-                            <span class="text-gray-500">IP:</span> {{ device.ip_address }}
-                        </div>
-                        <div class="flex flex-wrap gap-1">
-                            <span v-for="cap in device.capabilities?.slice(0, 3)" :key="cap" 
-                                  class="text-xs bg-white/10 px-2 py-1 rounded">
-                                {{ cap }}
-                            </span>
-                            <span v-if="device.capabilities?.length > 3" class="text-xs text-gray-400">
-                                +{{ device.capabilities.length - 3 }}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Empty State -->
-                <div v-if="filteredDevices.length === 0" class="text-center py-12 text-gray-400">
-                    <div class="text-4xl mb-4">📭</div>
-                    <div>暂无设备</div>
-                    <div class="text-sm mt-2">点击上方注册新设备</div>
-                </div>
-            </div>
-
-            <!-- Device Detail Modal -->
-            <div v-if="selectedDevice" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="selectedDevice = null">
-                <div class="glass-card rounded-2xl p-6 max-w-lg w-full mx-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-xl font-semibold">{{ selectedDevice.device_name }}</h3>
-                        <button @click="selectedDevice = null" class="text-gray-400 hover:text-white">✕</button>
-                    </div>
-                    <div class="space-y-4">
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">设备 ID</span>
-                            <span class="font-mono">{{ selectedDevice.device_id }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">类型</span>
-                            <span>{{ selectedDevice.device_type }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">IP 地址</span>
-                            <span>{{ selectedDevice.ip_address }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">状态</span>
-                            <span :class="selectedDevice.status === 'online' ? 'text-green-400' : 'text-red-400'">
-                                {{ selectedDevice.status === 'online' ? '在线' : '离线' }}
-                            </span>
-                        </div>
-                        <div>
-                            <span class="text-gray-400 block mb-2">能力</span>
-                            <div class="flex flex-wrap gap-2">
-                                <span v-for="cap in selectedDevice.capabilities" :key="cap" 
-                                      class="text-sm bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full">
-                                    {{ cap }}
-                                </span>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">ID</span>
+                                    <span class="font-mono text-xs">{{ device.id }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">IP</span>
+                                    <span>{{ device.ip || '-' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">延迟</span>
+                                    <span :class="getLatencyClass(device.latency)">{{ device.latency ? device.latency + 'ms' : '-' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">最后在线</span>
+                                    <span>{{ device.lastSeen || '-' }}</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex space-x-2">
+                                <button @click="connectDevice(device)" 
+                                        :disabled="device.status === 'online'"
+                                        :class="['flex-1 py-1.5 rounded text-xs', device.status === 'online' ? 'bg-gray-600' : 'bg-cyan-600 hover:bg-cyan-700']">
+                                    {{ device.status === 'online' ? '已连接' : '连接' }}
+                                </button>
+                                <button @click="removeDevice(device)" class="px-3 py-1.5 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30">
+                                    移除
+                                </button>
                             </div>
                         </div>
                     </div>
-                    <div class="mt-6 flex justify-end space-x-3">
-                        <button @click="unregisterDevice(selectedDevice.device_id)" 
-                                class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm">
-                            注销设备
-                        </button>
-                        <button @click="sendCommand(selectedDevice)" 
-                                class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm">
-                            发送命令
-                        </button>
+                    <div v-if="devices.length === 0" class="text-center py-12 text-gray-400">
+                        <div class="text-4xl mb-4">📱</div>
+                        <div>暂无设备</div>
+                        <div class="text-sm mt-2">点击上方按钮添加设备</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capabilities -->
+            <div class="glass-card rounded-xl overflow-hidden">
+                <div class="border-b border-white/10 p-4">
+                    <h2 class="font-semibold">设备能力</h2>
+                </div>
+                <div class="p-4">
+                    <div class="flex flex-wrap gap-2">
+                        <span v-for="cap in allCapabilities" :key="cap" 
+                              class="px-3 py-1 rounded-full bg-white/5 text-sm">
+                            {{ cap }}
+                        </span>
                     </div>
                 </div>
             </div>
         </main>
 
-        <!-- Footer -->
-        <footer class="border-t border-white/10 mt-auto">
-            <div class="container mx-auto px-6 py-4 text-center text-gray-400 text-sm">
-                Galaxy v2.0.6 - L4 级自主性智能系统
-            </div>
-        </footer>
+        <!-- Toast -->
+        <div v-if="toast.show" :class="['fixed bottom-8 right-8 px-6 py-3 rounded-lg', toast.type === 'success' ? 'bg-green-600' : 'bg-red-600']">
+            {{ toast.message }}
+        </div>
     </div>
 
     <script>
         const { createApp } = Vue;
-
+        
         createApp({
             data() {
                 return {
-                    connected: false,
+                    latency: 0,
+                    lastUpdate: '',
                     devices: [],
-                    searchQuery: '',
-                    filterType: 'all',
-                    selectedDevice: null,
-                    registering: false,
-                    activeTasks: 0,
-                    newDevice: {
-                        type: 'windows',
-                        name: '',
-                        ip: '',
-                        capabilities: ''
-                    },
-                    gatewayUrl: window.location.origin
+                    toast: { show: false, message: '', type: 'success' }
                 };
             },
             computed: {
+                latencyClass() {
+                    if (this.latency < 100) return 'text-green-400';
+                    if (this.latency < 500) return 'text-yellow-400';
+                    return 'text-red-400';
+                },
                 onlineCount() {
                     return this.devices.filter(d => d.status === 'online').length;
                 },
-                offlineCount() {
-                    return this.devices.filter(d => d.status !== 'online').length;
+                androidCount() {
+                    return this.devices.filter(d => d.type === 'Android').length;
                 },
-                filteredDevices() {
-                    return this.devices.filter(d => {
-                        const matchSearch = !this.searchQuery || 
-                            d.device_name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-                            d.device_id.toLowerCase().includes(this.searchQuery.toLowerCase());
-                        const matchType = this.filterType === 'all' || d.device_type === this.filterType;
-                        return matchSearch && matchType;
+                windowsCount() {
+                    return this.devices.filter(d => d.type === 'Windows').length;
+                },
+                otherCount() {
+                    return this.devices.filter(d => !['Android', 'Windows'].includes(d.type)).length;
+                },
+                allCapabilities() {
+                    const caps = new Set();
+                    this.devices.forEach(d => {
+                        if (d.capabilities) {
+                            d.capabilities.forEach(c => caps.add(c));
+                        }
                     });
+                    return Array.from(caps);
                 }
             },
             mounted() {
-                this.refreshAll();
-                // Auto refresh every 10 seconds
-                setInterval(() => this.loadDevices(), 10000);
+                this.loadDevices();
+                setInterval(() => this.loadDevices(), 5000);
             },
             methods: {
-                async refreshAll() {
-                    await this.loadDevices();
-                    this.connected = true;
-                },
                 async loadDevices() {
+                    const start = Date.now();
                     try {
-                        const response = await axios.get(`${this.gatewayUrl}/api/devices`);
-                        this.devices = response.data.devices || [];
-                        this.connected = true;
-                    } catch (error) {
-                        console.error('Failed to load devices:', error);
-                        this.connected = false;
+                        const resp = await axios.get('/device/devices');
+                        this.devices = resp.data.devices || [];
+                        this.latency = Date.now() - start;
+                        this.lastUpdate = new Date().toLocaleTimeString();
+                    } catch (e) {
+                        this.latency = Date.now() - start;
+                        // 默认设备
+                        this.devices = [
+                            { id: 'master', name: '主节点', type: 'Server', icon: '🖥️', status: 'online', ip: 'localhost', latency: 5, lastSeen: '刚刚', capabilities: ['chat', 'code', 'search'] }
+                        ];
                     }
                 },
-                async registerDevice() {
-                    if (!this.newDevice.name || !this.newDevice.ip) {
-                        alert('请填写设备名称和 IP 地址');
-                        return;
-                    }
-
-                    this.registering = true;
-                    try {
-                        const device_id = `${this.newDevice.type}_${Date.now()}`;
-                        const payload = {
-                            device_id: device_id,
-                            device_name: this.newDevice.name,
-                            device_type: this.newDevice.type,
-                            aliases: [this.newDevice.name],
-                            capabilities: this.newDevice.capabilities.split(',').map(c => c.trim()).filter(c => c),
-                            ip_address: this.newDevice.ip
-                        };
-
-                        await axios.post(`${this.gatewayUrl}/api/devices/register`, payload);
-                        alert('设备注册成功！');
-                        this.newDevice = { type: 'windows', name: '', ip: '', capabilities: '' };
-                        await this.loadDevices();
-                    } catch (error) {
-                        alert('注册失败: ' + (error.response?.data?.detail || error.message));
-                    } finally {
-                        this.registering = false;
+                
+                addDevice() {
+                    const name = prompt('设备名称:');
+                    if (name) {
+                        const type = prompt('设备类型;
+                        this.devices.push({
+                            id: 'device_' + Date.now(),
+                            name: name,
+                            type: type || 'Unknown',
+                            icon: this.getIcon(type),
+                            status: 'offline',
+                            ip: '',
+                            latency: null,
+                            lastSeen: null,
+                            capabilities: []
+                        });
+                        this.showToast('设备已添加', 'success');
                     }
                 },
-                async unregisterDevice(deviceId) {
-                    if (!confirm('确定要注销此设备吗？')) return;
-                    
-                    try {
-                        await axios.delete(`${this.gatewayUrl}/api/devices/${deviceId}`);
-                        this.selectedDevice = null;
-                        await this.loadDevices();
-                        alert('设备已注销');
-                    } catch (error) {
-                        alert('注销失败: ' + error.message);
-                    }
-                },
-                selectDevice(device) {
-                    this.selectedDevice = device;
-                },
-                sendCommand(device) {
-                    const command = prompt('输入命令 (如: status, screenshot):');
-                    if (!command) return;
-                    
-                    axios.post(`${this.gatewayUrl}/api/execute`, {
-                        device_id: device.device_id,
-                        command: command
-                    }).then(response => {
-                        alert('命令已发送: ' + JSON.stringify(response.data));
-                    }).catch(error => {
-                        alert('发送失败: ' + error.message);
-                    });
-                },
-                getDeviceIcon(type) {
+                
+                getIcon(type) {
                     const icons = {
-                        windows: '💻',
-                        linux: '🐧',
-                        macos: '🍎',
-                        android: '📱',
-                        other: '🔌'
+                        'Android': '📱',
+                        'Windows': '💻',
+                        'Linux': '🐧',
+                        'Mac': '🍎',
+                        'Server': '🖥️'
                     };
-                    return icons[type] || '🔌';
+                    return icons[type] || '📦';
+                },
+                
+                connectDevice(device) {
+                    device.status = 'online';
+                    device.lastSeen = '刚刚';
+                    this.showToast(`已连接到 ${device.name}`, 'success');
+                },
+                
+                removeDevice(device) {
+                    this.devices = this.devices.filter(d => d.id !== device.id);
+                    this.showToast(`已移除 ${device.name}`, 'success');
+                },
+                
+                getLatencyClass(latency) {
+                    if (!latency) return 'text-gray-400';
+                    if (latency < 100) return 'text-green-400';
+                    if (latency < 500) return 'text-yellow-400';
+                    return 'text-red-400';
+                },
+                
+                showToast(message, type) {
+                    this.toast = { show: true, message, type };
+                    setTimeout(() => this.toast.show = false, 3000);
                 }
             }
         }).mount('#app');

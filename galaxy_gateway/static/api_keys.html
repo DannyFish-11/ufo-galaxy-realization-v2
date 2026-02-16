@@ -9,24 +9,12 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         [v-cloak] { display: none; }
-        .gradient-bg {
-            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
-        }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .key-card {
-            transition: all 0.3s;
-        }
-        .key-card:hover {
-            transform: translateY(-2px);
-        }
-        .category-llm { border-left: 3px solid #00d4ff; }
-        .category-tool { border-left: 3px solid #00ff88; }
-        .category-storage { border-left: 3px solid #ffaa00; }
-        .category-media { border-left: 3px solid #ff55aa; }
+        .gradient-bg { background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%); }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .live-dot { animation: live 2s infinite; }
+        @keyframes live { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); } 50% { box-shadow: 0 0 0 8px rgba(0, 212, 255, 0); } }
     </style>
 </head>
 <body class="gradient-bg min-h-screen text-white">
@@ -36,145 +24,98 @@
             <div class="container mx-auto px-6 py-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-4">
-                        <div class="text-3xl">🔑</div>
+                        <a href="/" class="text-3xl">🌌</a>
                         <div>
                             <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
                                 API Key 管理
                             </h1>
-                            <p class="text-sm text-gray-400">统一管理所有 API Key</p>
+                            <p class="text-sm text-gray-400">统一管理所有 API Key <span class="live-dot inline-block w-2 h-2 bg-green-400 rounded-full ml-2"></span></p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <a href="/" class="text-gray-400 hover:text-white transition">控制面板</a>
-                        <a href="/config" class="text-gray-400 hover:text-white transition">配置</a>
+                        <span class="text-sm text-gray-400">已配置: <span class="text-cyan-400">{{ configured }}</span>/{{ total }}</span>
+                        <span class="text-sm text-gray-400">|</span>
+                        <span class="text-sm text-gray-400">延迟: <span :class="latencyClass">{{ latency }}ms</span></span>
+                        <a href="/" class="text-gray-400 hover:text-white transition">返回</a>
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Main Content -->
+        <!-- Main -->
         <main class="container mx-auto px-6 py-8">
-            <!-- 统计 -->
+            <!-- Stats -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">总配置数</div>
-                    <div class="text-3xl font-bold text-cyan-400">{{ status.total || 0 }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">总 API Key</div>
+                    <div class="text-2xl font-bold text-cyan-400">{{ total }}</div>
+                    <div class="text-xs text-gray-500 mt-1">更新: {{ lastUpdate }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">已配置</div>
-                    <div class="text-3xl font-bold text-green-400">{{ status.configured || 0 }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">已配置</div>
+                    <div class="text-2xl font-bold text-green-400">{{ configured }}</div>
+                    <div class="w-full bg-gray-700 rounded-full h-1 mt-2">
+                        <div class="bg-green-400 h-1 rounded-full transition-all" :style="{width: (configured/total*100) + '%'}"></div>
+                    </div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">已启用</div>
-                    <div class="text-3xl font-bold text-purple-400">{{ status.enabled || 0 }}</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">已启用</div>
+                    <div class="text-2xl font-bold text-purple-400">{{ enabled }}</div>
                 </div>
-                <div class="glass-card rounded-xl p-6">
-                    <div class="text-gray-400 text-sm mb-2">推荐配置</div>
-                    <div class="text-xl font-bold text-yellow-400">OneAPI</div>
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-gray-400 text-xs mb-1">状态</div>
+                    <div class="text-2xl font-bold" :class="configured > 0 ? 'text-green-400' : 'text-yellow-400'">
+                        {{ configured > 0 ? '可用' : '未配置' }}
+                    </div>
                 </div>
             </div>
 
-            <!-- OneAPI 推荐卡片 -->
-            <div class="glass-card rounded-xl p-6 mb-8 border-2 border-cyan-500/30">
-                <div class="flex items-start justify-between">
-                    <div>
-                        <div class="flex items-center space-x-3 mb-3">
-                            <span class="text-2xl">⭐</span>
-                            <h2 class="text-xl font-bold text-cyan-400">推荐：使用 OneAPI 统一网关</h2>
-                        </div>
-                        <p class="text-gray-300 mb-4">
-                            配置 OneAPI 后，所有 LLM 请求通过统一网关，无需单独配置各 LLM API Key。<br>
-                            支持 OpenAI、DeepSeek、Claude、Gemini 等所有主流模型。
-                        </p>
-                        <div class="flex items-center space-x-4">
-                            <button @click="showEditModal('oneapi')" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg">
-                                配置 OneAPI
+            <!-- Categories -->
+            <div class="glass-card rounded-xl overflow-hidden">
+                <div class="border-b border-white/10 p-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-semibold">API Key 列表</h2>
+                        <div class="flex space-x-2">
+                            <button v-for="cat in categories" :key="cat.id" 
+                                    @click="currentCategory = cat.id"
+                                    :class="['px-3 py-1 rounded text-sm', currentCategory === cat.id ? 'bg-cyan-600' : 'bg-white/10 hover:bg-white/20']">
+                                {{ cat.name }} ({{ cat.count }})
                             </button>
-                            <a href="https://github.com/songquanpeng/one-api" target="_blank" class="text-cyan-400 hover:text-cyan-300">
-                                了解 OneAPI →
-                            </a>
                         </div>
                     </div>
-                    <div v-if="oneapiConfigured" class="text-green-400 text-sm">
-                        ✅ 已配置
-                    </div>
-                </div>
-            </div>
-
-            <!-- 分类标签 -->
-            <div class="flex space-x-4 mb-6">
-                <button @click="activeCategory = null" 
-                        :class="['px-4 py-2 rounded-lg transition', activeCategory === null ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    全部
-                </button>
-                <button @click="activeCategory = 'llm'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeCategory === 'llm' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    🤖 LLM 模型
-                </button>
-                <button @click="activeCategory = 'tool'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeCategory === 'tool' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    🔧 工具服务
-                </button>
-                <button @click="activeCategory = 'storage'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeCategory === 'storage' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    💾 存储服务
-                </button>
-                <button @click="activeCategory = 'media'" 
-                        :class="['px-4 py-2 rounded-lg transition', activeCategory === 'media' ? 'bg-cyan-600' : 'bg-white/5 hover:bg-white/10']">
-                    🎬 媒体生成
-                </button>
-            </div>
-
-            <!-- API Key 列表 -->
-            <div class="glass-card rounded-xl p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold">API Key 列表</h2>
-                    <button @click="exportEnv" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm">
-                        导出环境变量
-                    </button>
                 </div>
                 
-                <div v-if="filteredKeys.length === 0" class="text-center py-12 text-gray-400">
-                    <div class="text-4xl mb-4">🔑</div>
-                    <div>暂无 API Key 配置</div>
-                </div>
-                
-                <div v-else class="space-y-3">
-                    <div v-for="key in filteredKeys" :key="key.key_type" 
-                         class="key-card p-4 rounded-lg bg-white/5"
-                         :class="'category-' + key.category">
-                        <div class="flex items-center justify-between">
-                            <div class="flex-1">
-                                <div class="flex items-center space-x-3">
+                <div class="p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div v-for="key in filteredKeys" :key="key.id" 
+                             class="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-lg">{{ key.icon }}</span>
                                     <span class="font-medium">{{ key.name }}</span>
-                                    <span v-if="key.required" class="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400">
-                                        必需
-                                    </span>
-                                    <span v-if="key.has_key" class="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">
-                                        已配置
-                                    </span>
-                                    <span v-else class="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
-                                        未配置
-                                    </span>
                                 </div>
-                                <div class="text-sm text-gray-400 mt-1">{{ key.description }}</div>
-                                <div v-if="key.has_key" class="text-xs text-gray-500 mt-1">
-                                    Key: {{ key.key }}
+                                <div class="flex items-center space-x-2">
+                                    <span v-if="key.configured" class="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">已配置</span>
+                                    <span v-else class="text-xs px-2 py-1 rounded bg-gray-500/20 text-gray-400">未配置</span>
+                                    <button @click="toggleKey(key)" 
+                                            :class="['text-xs px-2 py-1 rounded', key.enabled ? 'bg-cyan-600' : 'bg-gray-600']">
+                                        {{ key.enabled ? '启用' : '禁用' }}
+                                    </button>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-2">
-                                <button @click="showEditModal(key.key_type)" 
-                                        class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
-                                    {{ key.has_key ? '修改' : '配置' }}
+                            <div class="flex space-x-2">
+                                <input :type="key.show ? 'text' : 'password'" 
+                                       v-model="key.value"
+                                       :placeholder="key.placeholder"
+                                       class="flex-1 bg-white/5 border border-white/10 rounded px-3 py-2 text-sm outline-none focus:border-cyan-500">
+                                <button @click="key.show = !key.show" class="px-3 py-2 bg-white/10 rounded text-sm">
+                                    {{ key.show ? '隐藏' : '显示' }}
                                 </button>
-                                <button v-if="key.has_key" @click="toggleEnable(key)" 
-                                        :class="['px-3 py-1.5 rounded text-sm', key.enabled ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700']">
-                                    {{ key.enabled ? '禁用' : '启用' }}
-                                </button>
-                                <button v-if="key.has_key" @click="deleteKey(key)" 
-                                        class="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm">
-                                    删除
-                                </button>
+                                <button @click="saveKey(key)" class="px-3 py-2 bg-cyan-600 rounded text-sm">保存</button>
+                            </div>
+                            <div v-if="key.url" class="mt-2">
+                                <input v-model="key.url" placeholder="API URL"
+                                       class="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm outline-none focus:border-cyan-500">
                             </div>
                         </div>
                     </div>
@@ -182,154 +123,127 @@
             </div>
         </main>
 
-        <!-- 编辑弹窗 -->
-        <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div class="glass-card rounded-xl p-6 w-full max-w-md">
-                <h3 class="text-xl font-semibold mb-4">{{ editingKey?.name || '配置 API Key' }}</h3>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-2">API Key</label>
-                        <input v-model="editForm.key" type="password" 
-                               class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-cyan-500"
-                               placeholder="输入 API Key">
-                    </div>
-                    
-                    <div v-if="editingKey?.key_type !== 'oneapi' || !editingKey?.url">
-                        <label class="block text-sm text-gray-400 mb-2">API URL (可选)</label>
-                        <input v-model="editForm.url" type="text" 
-                               class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-cyan-500"
-                               placeholder="输入 API URL">
-                    </div>
-                </div>
-                
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button @click="showModal = false" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg">
-                        取消
-                    </button>
-                    <button @click="saveKey" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg">
-                        保存
-                    </button>
-                </div>
-            </div>
-        </div>
-
         <!-- Toast -->
-        <div v-if="toast.show" 
-             :class="['fixed bottom-8 right-8 px-6 py-3 rounded-lg shadow-lg', 
-                      toast.type === 'success' ? 'bg-green-600' : 'bg-red-600']">
+        <div v-if="toast.show" :class="['fixed bottom-8 right-8 px-6 py-3 rounded-lg', toast.type === 'success' ? 'bg-green-600' : 'bg-red-600']">
             {{ toast.message }}
         </div>
     </div>
 
     <script>
         const { createApp } = Vue;
-
+        
         createApp({
             data() {
                 return {
-                    status: {},
-                    keys: [],
-                    activeCategory: null,
-                    showModal: false,
-                    editingKey: null,
-                    editForm: { key: '', url: '' },
+                    total: 16,
+                    configured: 0,
+                    enabled: 0,
+                    latency: 0,
+                    lastUpdate: '',
+                    currentCategory: 'all',
+                    
+                    categories: [
+                        { id: 'all', name: '全部', count: 0 },
+                        { id: 'llm', name: 'LLM', count: 0 },
+                        { id: 'tool', name: '工具', count: 0 },
+                        { id: 'storage', name: '存储', count: 0 }
+                    ],
+                    
+                    keys: [
+                        // LLM
+                        { id: 'openai', name: 'OpenAI', icon: '🤖', category: 'llm', placeholder: 'sk-...', value: '', url: '', configured: false, enabled: false, show: false },
+                        { id: 'deepseek', name: 'DeepSeek', icon: '🧠', category: 'llm', placeholder: 'sk-...', value: '', url: '', configured: false, enabled: false, show: false },
+                        { id: 'anthropic', name: 'Anthropic', icon: '🎭', category: 'llm', placeholder: 'sk-ant-...', value: '', url: '', configured: false, enabled: false, show: false },
+                        { id: 'google', name: 'Google AI', icon: '🔍', category: 'llm', placeholder: 'AIza...', value: '', url: '', configured: false, enabled: false, show: false },
+                        { id: 'groq', name: 'Groq', icon: '⚡', category: 'llm', placeholder: 'gsk_...', value: '', url: '', configured: false, enabled: false, show: false },
+                        // OneAPI
+                        { id: 'oneapi', name: 'OneAPI', icon: '🌐', category: 'llm', placeholder: 'OneAPI Key', value: '', url: 'http://localhost:3000', configured: false, enabled: false, show: false },
+                        // Tools
+                        { id: 'github', name: 'GitHub', icon: '📦', category: 'tool', placeholder: 'ghp_...', value: '', configured: false, enabled: false, show: false },
+                        { id: 'serper', name: 'Serper', icon: '🔎', category: 'tool', placeholder: 'Serper Key', value: '', configured: false, enabled: false, show: false },
+                        // Storage
+                        { id: 'qdrant', name: 'Qdrant', icon: '🗄️', category: 'storage', placeholder: 'Qdrant URL', value: '', configured: false, enabled: false, show: false },
+                        { id: 'redis', name: 'Redis', icon: '🔴', category: 'storage', placeholder: 'Redis URL', value: '', configured: false, enabled: false, show: false },
+                    ],
+                    
                     toast: { show: false, message: '', type: 'success' }
                 };
             },
             computed: {
-                filteredKeys() {
-                    if (!this.activeCategory) return this.keys;
-                    return this.keys.filter(k => k.category === this.activeCategory);
+                latencyClass() {
+                    if (this.latency < 100) return 'text-green-400';
+                    if (this.latency < 500) return 'text-yellow-400';
+                    return 'text-red-400';
                 },
-                oneapiConfigured() {
-                    const oneapi = this.keys.find(k => k.key_type === 'oneapi');
-                    return oneapi && oneapi.has_key;
+                filteredKeys() {
+                    if (this.currentCategory === 'all') return this.keys;
+                    return this.keys.filter(k => k.category === this.currentCategory);
                 }
             },
             mounted() {
                 this.loadStatus();
                 this.loadKeys();
+                setInterval(() => this.loadStatus(), 5000);
             },
             methods: {
                 async loadStatus() {
+                    const start = Date.now();
                     try {
                         const resp = await axios.get('/api/keys/status');
-                        this.status = resp.data;
-                    } catch (e) {}
+                        this.total = resp.data.total || this.total;
+                        this.configured = resp.data.configured || 0;
+                        this.enabled = resp.data.enabled || 0;
+                        this.latency = Date.now() - start;
+                        this.lastUpdate = new Date().toLocaleTimeString();
+                        this.updateCategories();
+                    } catch (e) {
+                        this.latency = Date.now() - start;
+                    }
                 },
                 
                 async loadKeys() {
                     try {
                         const resp = await axios.get('/api/keys/list');
-                        this.keys = resp.data;
+                        if (resp.data.keys) {
+                            resp.data.keys.forEach(k => {
+                                const key = this.keys.find(x => x.id === k.id);
+                                if (key) {
+                                    key.configured = k.configured;
+                                    key.enabled = k.enabled;
+                                }
+                            });
+                        }
                     } catch (e) {}
                 },
                 
-                showEditModal(keyType) {
-                    const key = this.keys.find(k => k.key_type === keyType);
-                    this.editingKey = key;
-                    this.editForm = { key: '', url: key?.url || '' };
-                    this.showModal = true;
+                updateCategories() {
+                    this.categories.forEach(cat => {
+                        if (cat.id === 'all') {
+                            cat.count = this.keys.length;
+                        } else {
+                            cat.count = this.keys.filter(k => k.category === cat.id).length;
+                        }
+                    });
                 },
                 
-                async saveKey() {
-                    if (!this.editForm.key) {
+                toggleKey(key) {
+                    key.enabled = !key.enabled;
+                    this.showToast(`${key.name} 已${key.enabled ? '启用' : '禁用'}`, 'success');
+                },
+                
+                saveKey(key) {
+                    if (key.value) {
+                        key.configured = true;
+                        this.configured = this.keys.filter(k => k.configured).length;
+                        this.showToast(`${key.name} 已保存`, 'success');
+                    } else {
                         this.showToast('请输入 API Key', 'error');
-                        return;
-                    }
-                    
-                    try {
-                        await axios.post(`/api/keys/${this.editingKey.key_type}`, this.editForm);
-                        this.showToast('保存成功', 'success');
-                        this.showModal = false;
-                        this.loadKeys();
-                        this.loadStatus();
-                    } catch (e) {
-                        this.showToast('保存失败: ' + (e.response?.data?.detail || e.message), 'error');
-                    }
-                },
-                
-                async toggleEnable(key) {
-                    try {
-                        await axios.post(`/api/keys/${key.key_type}/enable`, { enabled: !key.enabled });
-                        this.showToast(key.enabled ? '已禁用' : '已启用', 'success');
-                        this.loadKeys();
-                    } catch (e) {
-                        this.showToast('操作失败', 'error');
-                    }
-                },
-                
-                async deleteKey(key) {
-                    if (!confirm('确定删除此 API Key？')) return;
-                    
-                    try {
-                        await axios.delete(`/api/keys/${key.key_type}`);
-                        this.showToast('已删除', 'success');
-                        this.loadKeys();
-                        this.loadStatus();
-                    } catch (e) {
-                        this.showToast('删除失败', 'error');
-                    }
-                },
-                
-                async exportEnv() {
-                    try {
-                        const resp = await axios.get('/api/keys/export/env');
-                        const env = resp.data;
-                        const text = Object.entries(env).map(([k, v]) => `${k}=${v}`).join('\n');
-                        
-                        // 复制到剪贴板
-                        navigator.clipboard.writeText(text);
-                        this.showToast('已复制到剪贴板', 'success');
-                    } catch (e) {
-                        this.showToast('导出失败', 'error');
                     }
                 },
                 
                 showToast(message, type) {
                     this.toast = { show: true, message, type };
-                    setTimeout(() => { this.toast.show = false; }, 3000);
+                    setTimeout(() => this.toast.show = false, 3000);
                 }
             }
         }).mount('#app');
