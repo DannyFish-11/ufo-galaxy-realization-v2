@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Galaxy",
     description="L4 级群智能系统 - 一个有机的整体",
-    version="2.1.9"
+    version="2.1.10"
 )
 
 # CORS

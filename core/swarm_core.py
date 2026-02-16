@@ -404,7 +404,7 @@ class SwarmCore:
         
         self.state = SwarmState.DORMANT
         self.name = "Galaxy"
-        self.version = "2.1.9"
+        self.version = "2.1.10"
         
         self.perception = PerceptionLayer(self)
         self.cognition = CognitionLayer(self)

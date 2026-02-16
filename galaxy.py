@@ -27,7 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 配置
 # ============================================================================
 
-VERSION = "2.1.9"
+VERSION = "2.1.10"
 PORT = 8080
 PID_FILE = PROJECT_ROOT / "galaxy.pid"
 LOG_FILE = PROJECT_ROOT / "logs" / "galaxy.log"
@@ -37,25 +37,30 @@ LOG_FILE = PROJECT_ROOT / "logs" / "galaxy.log"
 # ============================================================================
 
 def print_banner():
-    """打印横幅"""
+    """打印横幅 - UFO Galaxy 风格"""
     print()
-    print("=" * 60)
-    print("   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗")
-    print("   ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝")
-    print("   ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝ ")
-    print("   ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝  ")
-    print("   ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║   ")
-    print("    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ")
+    print("  ╔═══════════════════════════════════════════════════════════════╗")
+    print("  ║                                                               ║")
+    print("  ║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗          ║")
+    print("  ║   ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝          ║")
+    print("  ║   ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝           ║")
+    print("  ║   ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝            ║")
+    print("  ║   ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║             ║")
+    print("  ║    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝             ║")
+    print("  ║                                                               ║")
+    print("  ║              Galaxy - L4 级群智能系统                        ║")
+    print("  ║                                                               ║")
+    print("  ╚═══════════════════════════════════════════════════════════════╝")
     print()
-    print(f"   Galaxy - L4 级群智能系统 v{VERSION}")
-    print("   一个有机的整体，不是一堆独立的服务")
-    print("=" * 60)
+    print(f"  版本: {VERSION}")
+    print(f"  端口: {PORT}")
+    print(f"  状态: 一个有机的整体，不是一堆独立的服务")
     print()
 
 def log(message):
     """打印日志"""
     timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[{timestamp}] {message}")
+    print(f"  [{timestamp}] {message}")
 
 def check_dependencies():
     """检查依赖"""
@@ -67,9 +72,9 @@ def check_dependencies():
     for pkg in required:
         try:
             __import__(pkg)
-            log(f"  ✅ {pkg}")
+            log(f"  ✓ {pkg}")
         except ImportError:
-            log(f"  ❌ {pkg} 未安装")
+            log(f"  ✗ {pkg} 未安装")
             missing.append(pkg)
     
     if missing:
@@ -147,7 +152,7 @@ os.chdir("{PROJECT_ROOT}")
 # 初始化群智能核心
 from core.swarm_core import get_swarm_core
 core = get_swarm_core()
-print(f"群智能核心已初始化: {{core.name}} v{{core.version}}")
+print(f"群智能核心: {{core.name}} v{{core.version}}")
 print(f"可用能力: {{len(core.capability_pool.capabilities)}} 个")
 
 # 启动服务
