@@ -3,232 +3,376 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO³ Galaxy Dashboard</title>
+    <title>UFO³ Galaxy - AI 智能体控制中心</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;700&display=swap');
+        
+        * {
+            font-family: 'Noto Serif SC', serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+        }
+        
+        .scroll-paper {
+            background: linear-gradient(to right, #f5f0e6, #faf8f3, #f5f0e6);
+            box-shadow: -5px 0 20px rgba(0,0,0,0.3), 5px 0 20px rgba(0,0,0,0.3);
+        }
+        
+        .ink-border {
+            background: linear-gradient(to bottom, #333, #000, #333);
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        
+        .status-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .node-card {
+            transition: all 0.3s ease;
+        }
+        
+        .node-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);
+        }
+        
+        .chat-bubble-user {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        }
+        
+        .chat-bubble-ai {
+            background: linear-gradient(135deg, #374151, #1f2937);
+        }
+    </style>
 </head>
-<body class="bg-gray-900 text-gray-100">
-    <div id="app" class="min-h-screen">
-        <!-- Header -->
-        <header class="bg-gray-800 border-b border-gray-700">
-            <div class="container mx-auto px-4 py-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <h1 class="text-2xl font-bold text-blue-400">UFO³ Galaxy</h1>
-                        <span class="text-sm text-gray-400">Dashboard v1.0</span>
+<body class="text-gray-100 min-h-screen">
+    <div id="app">
+        <!-- 主容器 -->
+        <div class="flex h-screen">
+            <!-- 左侧面板 - 系统状态 -->
+            <div class="w-80 bg-gray-900 border-r border-gray-800 flex flex-col">
+                <!-- 系统标题 -->
+                <div class="p-4 border-b border-gray-800">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-3 h-3 rounded-full status-dot" :class="systemStatus === 'healthy' ? 'bg-green-500' : 'bg-red-500'"></div>
+                        <h1 class="text-xl font-bold glow-text">UFO³ GALAXY</h1>
                     </div>
-                    <div class="flex items-center space-x-4">
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 rounded-full" :class="systemStatus === 'healthy' ? 'bg-green-500' : 'bg-red-500'"></div>
-                            <span class="text-sm">{{ systemStatus }}</span>
+                    <p class="text-xs text-gray-500 mt-1">L4 级自主性智能系统</p>
+                </div>
+                
+                <!-- 系统指标 -->
+                <div class="p-4 space-y-3">
+                    <div class="bg-gray-800 rounded-lg p-3">
+                        <div class="text-gray-400 text-xs">节点数量</div>
+                        <div class="text-2xl font-bold text-blue-400">{{ nodes.length }}</div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-3">
+                        <div class="text-gray-400 text-xs">设备连接</div>
+                        <div class="text-2xl font-bold text-green-400">{{ devices.length }}</div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-3">
+                        <div class="text-gray-400 text-xs">Agent 状态</div>
+                        <div class="text-2xl font-bold text-purple-400">{{ agentStatus }}</div>
+                    </div>
+                </div>
+                
+                <!-- 节点列表 -->
+                <div class="flex-1 overflow-auto p-4">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-2">节点状态</h3>
+                    <div class="space-y-2">
+                        <div v-for="node in nodes.slice(0, 10)" :key="node.id" 
+                             class="node-card bg-gray-800 rounded-lg p-2 flex items-center justify-between">
+                            <div>
+                                <div class="text-sm font-medium">{{ node.name }}</div>
+                                <div class="text-xs text-gray-500">{{ node.id }}</div>
+                            </div>
+                            <div class="w-2 h-2 rounded-full" :class="node.status === 'running' ? 'bg-green-500' : 'bg-gray-500'"></div>
                         </div>
-                        <span class="text-sm text-gray-400">{{ currentTime }}</span>
+                    </div>
+                </div>
+                
+                <!-- 设备列表 -->
+                <div class="p-4 border-t border-gray-800">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-2">已连接设备</h3>
+                    <div class="space-y-2">
+                        <div v-for="device in devices" :key="device.id" 
+                             class="bg-gray-800 rounded-lg p-2 flex items-center justify-between">
+                            <div>
+                                <div class="text-sm font-medium">{{ device.name }}</div>
+                                <div class="text-xs text-gray-500">{{ device.type }}</div>
+                            </div>
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </header>
-
-        <!-- Main Content -->
-        <main class="container mx-auto px-4 py-6">
-            <!-- System Overview -->
-            <section class="mb-6">
-                <h2 class="text-xl font-semibold mb-4">系统概览</h2>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                        <div class="text-gray-400 text-sm mb-1">总节点数</div>
-                        <div class="text-3xl font-bold">{{ overview.total_nodes || 0 }}</div>
+            
+            <!-- 中间面板 - 书法卷轴式聊天界面 -->
+            <div class="flex-1 flex flex-col">
+                <!-- 卷轴容器 -->
+                <div class="flex-1 flex">
+                    <!-- 左侧墨迹边框 -->
+                    <div class="w-2 ink-border"></div>
+                    
+                    <!-- 卷轴主体 -->
+                    <div class="flex-1 scroll-paper p-6 overflow-auto">
+                        <!-- 聊天消息 -->
+                        <div class="space-y-4">
+                            <div v-for="msg in messages" :key="msg.id" 
+                                 class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+                                <div class="max-w-2xl rounded-lg p-4 text-gray-900"
+                                     :class="msg.role === 'user' ? 'chat-bubble-user text-white' : 'chat-bubble-ai text-gray-100'">
+                                    <div class="whitespace-pre-wrap">{{ msg.content }}</div>
+                                    <div class="text-xs mt-2 opacity-50">{{ formatTime(msg.timestamp) }}</div>
+                                </div>
+                            </div>
+                            
+                            <!-- 加载指示器 -->
+                            <div v-if="isLoading" class="flex justify-start">
+                                <div class="chat-bubble-ai rounded-lg p-4">
+                                    <div class="flex items-center space-x-2">
+                                        <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                                        <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                                        <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                        <div class="text-gray-400 text-sm mb-1">运行中</div>
-                        <div class="text-3xl font-bold text-green-400">{{ overview.running || 0 }}</div>
-                    </div>
-                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                        <div class="text-gray-400 text-sm mb-1">已停止</div>
-                        <div class="text-3xl font-bold text-yellow-400">{{ overview.stopped || 0 }}</div>
-                    </div>
-                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                        <div class="text-gray-400 text-sm mb-1">健康率</div>
-                        <div class="text-3xl font-bold text-blue-400">{{ overview.health_rate || '0%' }}</div>
+                    
+                    <!-- 右侧墨迹边框 -->
+                    <div class="w-2 ink-border"></div>
+                </div>
+                
+                <!-- 输入区域 -->
+                <div class="p-4 bg-gray-900 border-t border-gray-800">
+                    <div class="flex space-x-4">
+                        <input v-model="inputText" @keyup.enter="sendMessage"
+                               type="text" placeholder="输入命令或问题..."
+                               class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500">
+                        <button @click="sendMessage" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium">
+                            发送
+                        </button>
+                        <button @click="startVoiceInput"
+                                class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-3 rounded-lg">
+                            🎤
+                        </button>
                     </div>
                 </div>
-            </section>
-
-            <!-- Nodes Status -->
-            <section class="mb-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold">节点状态</h2>
-                    <button @click="refreshNodes" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">
-                        刷新
+            </div>
+            
+            <!-- 右侧面板 - Agent 工厂和知识库 -->
+            <div class="w-80 bg-gray-900 border-l border-gray-800 flex flex-col">
+                <!-- Agent 工厂 -->
+                <div class="p-4 border-b border-gray-800">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-3">🤖 Agent 工厂</h3>
+                    <div class="space-y-2">
+                        <div v-for="agent in agents" :key="agent.id" 
+                             class="bg-gray-800 rounded-lg p-3">
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm font-medium">{{ agent.name }}</div>
+                                <div class="text-xs px-2 py-1 rounded" 
+                                     :class="agent.status === 'active' ? 'bg-green-900 text-green-400' : 'bg-gray-700 text-gray-400'">
+                                    {{ agent.status }}
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">{{ agent.task }}</div>
+                        </div>
+                    </div>
+                    <button class="w-full mt-3 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm">
+                        + 创建新 Agent
                     </button>
                 </div>
-                <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                    <table class="w-full">
-                        <thead class="bg-gray-750">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">节点 ID</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">名称</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">状态</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">URL</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">最后检查</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-700">
-                            <tr v-for="node in nodes" :key="node.node_id" class="hover:bg-gray-750">
-                                <td class="px-4 py-3 text-sm">{{ node.node_id }}</td>
-                                <td class="px-4 py-3 text-sm">{{ node.name }}</td>
-                                <td class="px-4 py-3">
-                                    <span class="px-2 py-1 rounded text-xs" :class="getStatusClass(node.status)">
-                                        {{ node.status }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 text-sm text-gray-400">{{ node.url }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-400">{{ formatTime(node.last_check) }}</td>
-                                <td class="px-4 py-3">
-                                    <button @click="restartNode(node.node_id)" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs">
-                                        重启
-                                    </button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Recent Logs -->
-            <section>
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold">最近日志</h2>
-                    <button @click="refreshLogs" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">
-                        刷新
-                    </button>
-                </div>
-                <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-96 overflow-y-auto">
-                    <div v-if="logs.length === 0" class="text-gray-400 text-center py-8">
-                        暂无日志
-                    </div>
-                    <div v-for="log in logs" :key="log.id" class="mb-2 text-sm font-mono">
-                        <span class="text-gray-500">{{ formatTime(log.timestamp) }}</span>
-                        <span :class="getLogLevelClass(log.level)" class="ml-2">{{ log.level }}</span>
-                        <span class="ml-2 text-gray-300">{{ log.message }}</span>
+                
+                <!-- 知识库 -->
+                <div class="p-4 border-b border-gray-800">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-3">📚 知识库</h3>
+                    <div class="space-y-2">
+                        <div v-for="kb in knowledgeBases" :key="kb.id" 
+                             class="bg-gray-800 rounded-lg p-3">
+                            <div class="text-sm font-medium">{{ kb.name }}</div>
+                            <div class="text-xs text-gray-500">{{ kb.documents }} 文档</div>
+                        </div>
                     </div>
                 </div>
-            </section>
-        </main>
+                
+                <!-- 学习进度 -->
+                <div class="p-4 flex-1">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-3">📈 学习进度</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>操作模式学习</span>
+                                <span>{{ learningProgress.operations }}%</span>
+                            </div>
+                            <div class="bg-gray-800 rounded-full h-2">
+                                <div class="bg-blue-500 h-2 rounded-full" :style="{ width: learningProgress.operations + '%' }"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>用户偏好学习</span>
+                                <span>{{ learningProgress.preferences }}%</span>
+                            </div>
+                            <div class="bg-gray-800 rounded-full h-2">
+                                <div class="bg-green-500 h-2 rounded-full" :style="{ width: learningProgress.preferences + '%' }"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>应用适配学习</span>
+                                <span>{{ learningProgress.apps }}%</span>
+                            </div>
+                            <div class="bg-gray-800 rounded-full h-2">
+                                <div class="bg-purple-500 h-2 rounded-full" :style="{ width: learningProgress.apps + '%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-
+    
     <script>
-        const { createApp } = Vue;
-
+        const { createApp, ref, onMounted } = Vue;
+        
         createApp({
-            data() {
-                return {
-                    overview: {},
-                    nodes: [],
-                    logs: [],
-                    currentTime: '',
-                    systemStatus: 'unknown',
-                    ws: null
+            setup() {
+                const systemStatus = ref('healthy');
+                const agentStatus = ref('Active');
+                const inputText = ref('');
+                const isLoading = ref(false);
+                
+                const nodes = ref([
+                    { id: 'Node_00', name: 'StateMachine', status: 'running' },
+                    { id: 'Node_01', name: 'OneAPI', status: 'running' },
+                    { id: 'Node_02', name: 'Tasker', status: 'running' },
+                    { id: 'Node_04', name: 'Router', status: 'running' },
+                    { id: 'Node_50', name: 'Transformer', status: 'running' },
+                    { id: 'Node_70', name: 'AutonomousLearning', status: 'running' },
+                    { id: 'Node_71', name: 'MultiDeviceCoord', status: 'running' },
+                    { id: 'Node_80', name: 'MemorySystem', status: 'running' },
+                    { id: 'Node_110', name: 'SmartOrchestrator', status: 'running' },
+                    { id: 'Node_118', name: 'NodeFactory', status: 'running' },
+                ]);
+                
+                const devices = ref([]);
+                const messages = ref([
+                    { id: '1', role: 'assistant', content: '你好！我是 UFO Galaxy 智能体。\n\n我可以帮你：\n• 控制手机、平板、电脑等设备\n• 执行复杂任务\n• 回答问题\n• 自主学习和编程\n\n请告诉我你想做什么？', timestamp: Date.now() }
+                ]);
+                
+                const agents = ref([
+                    { id: '1', name: '主控 Agent', status: 'active', task: '等待指令' },
+                    { id: '2', name: '学习 Agent', status: 'active', task: '分析用户行为' },
+                    { id: '3', name: '设备 Agent', status: 'idle', task: '监控设备状态' },
+                ]);
+                
+                const knowledgeBases = ref([
+                    { id: '1', name: '操作知识库', documents: 156 },
+                    { id: '2', name: '设备知识库', documents: 89 },
+                    { id: '3', name: '用户偏好库', documents: 234 },
+                ]);
+                
+                const learningProgress = ref({
+                    operations: 78,
+                    preferences: 65,
+                    apps: 42
+                });
+                
+                const formatTime = (timestamp) => {
+                    return new Date(timestamp).toLocaleTimeString();
                 };
-            },
-            mounted() {
-                this.loadData();
-                this.connectWebSocket();
-                this.updateTime();
-                setInterval(() => this.updateTime(), 1000);
-                setInterval(() => this.loadData(), 30000); // 每 30 秒刷新
-            },
-            methods: {
-                async loadData() {
-                    await Promise.all([
-                        this.loadOverview(),
-                        this.loadNodes(),
-                        this.loadLogs()
-                    ]);
-                },
-                async loadOverview() {
-                    try {
-                        const response = await axios.get('http://localhost:3000/api/overview');
-                        this.overview = response.data;
-                        this.systemStatus = parseFloat(this.overview.health_rate) > 80 ? 'healthy' : 'degraded';
-                    } catch (error) {
-                        console.error('Failed to load overview:', error);
-                    }
-                },
-                async loadNodes() {
-                    try {
-                        const response = await axios.get('http://localhost:3000/api/nodes');
-                        this.nodes = response.data.nodes;
-                    } catch (error) {
-                        console.error('Failed to load nodes:', error);
-                    }
-                },
-                async loadLogs() {
-                    try {
-                        const response = await axios.get('http://localhost:3000/api/logs?limit=50');
-                        this.logs = response.data.logs;
-                    } catch (error) {
-                        console.error('Failed to load logs:', error);
-                    }
-                },
-                async refreshNodes() {
-                    await this.loadNodes();
-                },
-                async refreshLogs() {
-                    await this.loadLogs();
-                },
-                async restartNode(nodeId) {
-                    if (!confirm(`确定要重启节点 ${nodeId} 吗？`)) return;
+                
+                const sendMessage = async () => {
+                    if (!inputText.value.trim()) return;
+                    
+                    const userMessage = {
+                        id: Date.now().toString(),
+                        role: 'user',
+                        content: inputText.value,
+                        timestamp: Date.now()
+                    };
+                    messages.value.push(userMessage);
+                    
+                    const query = inputText.value;
+                    inputText.value = '';
+                    isLoading.value = true;
                     
                     try {
-                        await axios.post(`http://localhost:3000/api/nodes/${nodeId}/restart`);
-                        alert('重启命令已发送');
-                        setTimeout(() => this.loadNodes(), 2000);
+                        // 调用后端 API
+                        const response = await axios.post('/api/v1/chat', {
+                            message: query,
+                            device_id: 'web_dashboard',
+                            context: messages.value.slice(-5).map(m => ({
+                                role: m.role,
+                                content: m.content
+                            }))
+                        });
+                        
+                        const aiMessage = {
+                            id: (Date.now() + 1).toString(),
+                            role: 'assistant',
+                            content: response.data.response || response.data.message || '已收到指令，正在处理...',
+                            timestamp: Date.now()
+                        };
+                        messages.value.push(aiMessage);
                     } catch (error) {
-                        alert('重启失败: ' + error.message);
+                        console.error('API Error:', error);
+                        const errorMessage = {
+                            id: (Date.now() + 1).toString(),
+                            role: 'assistant',
+                            content: '抱歉，连接后端服务时出错。请确保后端服务正在运行。\n\n启动命令: python main.py',
+                            timestamp: Date.now()
+                        };
+                        messages.value.push(errorMessage);
                     }
-                },
-                connectWebSocket() {
-                    this.ws = new WebSocket('ws://localhost:3000/ws');
                     
-                    this.ws.onmessage = (event) => {
-                        const message = JSON.parse(event.data);
-                        if (message.type === 'system_overview') {
-                            this.overview = message.data;
-                        }
-                    };
-                    
-                    this.ws.onclose = () => {
-                        console.log('WebSocket closed, reconnecting...');
-                        setTimeout(() => this.connectWebSocket(), 5000);
-                    };
-                },
-                updateTime() {
-                    this.currentTime = new Date().toLocaleString('zh-CN');
-                },
-                formatTime(timestamp) {
-                    if (!timestamp) return '-';
-                    return new Date(timestamp).toLocaleTimeString('zh-CN');
-                },
-                getStatusClass(status) {
-                    const classes = {
-                        running: 'bg-green-900 text-green-300',
-                        stopped: 'bg-yellow-900 text-yellow-300',
-                        error: 'bg-red-900 text-red-300',
-                        unknown: 'bg-gray-700 text-gray-300'
-                    };
-                    return classes[status] || classes.unknown;
-                },
-                getLogLevelClass(level) {
-                    const classes = {
-                        INFO: 'text-blue-400',
-                        WARNING: 'text-yellow-400',
-                        ERROR: 'text-red-400',
-                        DEBUG: 'text-gray-400'
-                    };
-                    return classes[level] || 'text-gray-300';
-                }
+                    isLoading.value = false;
+                };
+                
+                const startVoiceInput = () => {
+                    alert('语音输入功能开发中...');
+                };
+                
+                onMounted(async () => {
+                    // 加载设备列表
+                    try {
+                        const response = await axios.get('/api/v1/devices');
+                        devices.value = response.data.devices || [];
+                    } catch (error) {
+                        console.log('Could not load devices');
+                    }
+                });
+                
+                return {
+                    systemStatus,
+                    agentStatus,
+                    inputText,
+                    isLoading,
+                    nodes,
+                    devices,
+                    messages,
+                    agents,
+                    knowledgeBases,
+                    learningProgress,
+                    formatTime,
+                    sendMessage,
+                    startVoiceInput
+                };
             }
         }).mount('#app');
     </script>

@@ -1,253 +1,41 @@
 """
-UFO³ Galaxy Dashboard Backend
-可视化界面后端 API
+UFO Galaxy Dashboard 后端
+==========================
 
-功能：
-1. 节点状态监控
-2. 任务编排管理
-3. 记忆系统查询
-4. 日志聚合查看
-5. 性能指标统计
+提供完整的 API 服务：
+- 设备管理
+- 对话接口
+- 任务管理
+- 节点状态
+- WebSocket 实时通信
+
+版本: v2.3.19
 """
 
 import os
+import json
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any
 from datetime import datetime
-from contextlib import asynccontextmanager
+from typing import Dict, List, Optional, Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-import uvicorn
-import httpx
 
-# =============================================================================
-# Configuration
-# =============================================================================
-
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-
-# 节点基础 URL
-NODE_BASE_URL = os.getenv("NODE_BASE_URL", "http://localhost")
-NODE_PORT_START = int(os.getenv("NODE_PORT_START", "8000"))
-
+# 配置日志
 logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format="[Dashboard] %(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("UFO-Galaxy-Dashboard")
 
-# =============================================================================
-# Models
-# =============================================================================
+# 创建应用
+app = FastAPI(title="UFO³ Galaxy Dashboard", version="2.3.19")
 
-class NodeStatus(BaseModel):
-    node_id: str
-    name: str
-    status: str  # running, stopped, error
-    url: str
-    health: Optional[Dict[str, Any]] = None
-    last_check: str
-
-class TaskRequest(BaseModel):
-    task_type: str  # simple, sequential, parallel, conditional
-    description: str
-    nodes: List[str]
-    parameters: Dict[str, Any] = {}
-
-# =============================================================================
-# Dashboard Service
-# =============================================================================
-
-class DashboardService:
-    """Dashboard 服务"""
-    
-    def __init__(self):
-        self.http_client = httpx.AsyncClient(timeout=10)
-        self.node_status_cache: Dict[str, NodeStatus] = {}
-        self.websocket_clients: List[WebSocket] = []
-        
-        # 节点映射（ID -> Name）
-        self.node_map = {
-            "00": "StateMachine",
-            "01": "OneAPI",
-            "02": "Tasker",
-            "65": "LoggerCentral",
-            "67": "HealthMonitor",
-            "79": "LocalLLM",
-            "80": "MemorySystem",
-            "81": "Orchestrator",
-            "82": "NetworkGuard",
-            "83": "NewsAggregator",
-            "84": "StockTracker",
-            "85": "PromptLibrary",
-        }
-    
-    async def check_node_health(self, node_id: str) -> NodeStatus:
-        """检查节点健康状态"""
-        node_name = self.node_map.get(node_id, f"Node{node_id}")
-        port = NODE_PORT_START + int(node_id)
-        url = f"{NODE_BASE_URL}:{port}"
-        
-        status = NodeStatus(
-            node_id=node_id,
-            name=node_name,
-            status="unknown",
-            url=url,
-            last_check=datetime.now().isoformat()
-        )
-        
-        try:
-            # 尝试访问 /health 端点
-            response = await self.http_client.get(f"{url}/health", timeout=5)
-            
-            if response.status_code == 200:
-                status.status = "running"
-                status.health = response.json()
-            else:
-                status.status = "error"
-        
-        except httpx.ConnectError:
-            status.status = "stopped"
-        except Exception as e:
-            status.status = "error"
-            logger.error(f"Error checking node {node_id}: {e}")
-        
-        self.node_status_cache[node_id] = status
-        return status
-    
-    async def get_all_nodes_status(self) -> List[NodeStatus]:
-        """获取所有节点状态"""
-        tasks = [
-            self.check_node_health(node_id)
-            for node_id in self.node_map.keys()
-        ]
-        
-        statuses = await asyncio.gather(*tasks)
-        return list(statuses)
-    
-    async def call_node_api(
-        self,
-        node_id: str,
-        endpoint: str,
-        method: str = "GET",
-        data: Optional[Dict] = None
-    ) -> Dict[str, Any]:
-        """调用节点 API"""
-        port = NODE_PORT_START + int(node_id)
-        url = f"{NODE_BASE_URL}:{port}{endpoint}"
-        
-        try:
-            if method == "GET":
-                response = await self.http_client.get(url)
-            elif method == "POST":
-                response = await self.http_client.post(url, json=data)
-            elif method == "PUT":
-                response = await self.http_client.put(url, json=data)
-            elif method == "DELETE":
-                response = await self.http_client.delete(url)
-            else:
-                raise HTTPException(status_code=400, detail="Invalid method")
-            
-            response.raise_for_status()
-            return response.json()
-        
-        except Exception as e:
-            logger.error(f"Error calling node {node_id} API: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-    
-    async def get_system_overview(self) -> Dict[str, Any]:
-        """获取系统概览"""
-        statuses = await self.get_all_nodes_status()
-        
-        running_count = sum(1 for s in statuses if s.status == "running")
-        stopped_count = sum(1 for s in statuses if s.status == "stopped")
-        error_count = sum(1 for s in statuses if s.status == "error")
-        
-        return {
-            "total_nodes": len(statuses),
-            "running": running_count,
-            "stopped": stopped_count,
-            "error": error_count,
-            "health_rate": f"{running_count / len(statuses) * 100:.1f}%",
-            "timestamp": datetime.now().isoformat()
-        }
-    
-    async def get_memory_stats(self) -> Dict[str, Any]:
-        """获取记忆系统统计"""
-        try:
-            return await self.call_node_api("80", "/stats")
-        except Exception:
-            return {"error": "Memory system unavailable"}
-    
-    async def get_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """获取日志"""
-        try:
-            response = await self.call_node_api("65", f"/logs?limit={limit}")
-            return response.get("logs", [])
-        except Exception:
-            return []
-    
-    async def broadcast_update(self, message: Dict[str, Any]):
-        """广播更新到所有 WebSocket 客户端"""
-        disconnected = []
-        
-        for client in self.websocket_clients:
-            try:
-                await client.send_json(message)
-            except Exception:
-                disconnected.append(client)
-        
-        # 移除断开的客户端
-        for client in disconnected:
-            self.websocket_clients.remove(client)
-    
-    async def close(self):
-        """关闭客户端"""
-        await self.http_client.aclose()
-
-# =============================================================================
-# FastAPI Application
-# =============================================================================
-
-dashboard = DashboardService()
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    logger.info("Starting UFO³ Galaxy Dashboard")
-    
-    # 启动后台状态监控
-    async def status_monitor():
-        while True:
-            await asyncio.sleep(30)  # 每 30 秒更新一次
-            try:
-                overview = await dashboard.get_system_overview()
-                await dashboard.broadcast_update({
-                    "type": "system_overview",
-                    "data": overview
-                })
-            except Exception as e:
-                logger.error(f"Status monitor error: {e}")
-    
-    task = asyncio.create_task(status_monitor())
-    
-    yield
-    
-    task.cancel()
-    await dashboard.close()
-    logger.info("Dashboard shutdown complete")
-
-app = FastAPI(
-    title="UFO³ Galaxy Dashboard",
-    description="可视化管理界面",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
+# CORS 配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -256,123 +44,294 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =============================================================================
-# API Endpoints
-# =============================================================================
+# 静态文件
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")
+
+# ============================================================================
+# 数据模型
+# ============================================================================
+
+class ChatRequest(BaseModel):
+    message: str
+    device_id: str = ""
+    context: List[Dict[str, str]] = []
+
+class DeviceRegisterRequest(BaseModel):
+    device_id: str
+    device_type: str = "android"
+    device_name: str = ""
+    capabilities: List[str] = []
+
+class TaskRequest(BaseModel):
+    task_type: str
+    payload: Dict[str, Any] = {}
+    device_id: str = ""
+    priority: int = 5
+
+# ============================================================================
+# 状态存储
+# ============================================================================
+
+devices: Dict[str, Dict] = {}
+nodes: Dict[str, Dict] = {}
+active_websockets: List[WebSocket] = []
+
+# ============================================================================
+# 静态文件路由
+# ============================================================================
 
 @app.get("/")
 async def root():
+    """返回前端页面"""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "UFO³ Galaxy Dashboard API", "version": "2.3.19"}
+
+@app.get("/api")
+async def api_info():
+    """API 信息"""
     return {
-        "service": "UFO³ Galaxy Dashboard",
-        "status": "running",
-        "version": "1.0.0"
+        "name": "UFO³ Galaxy Dashboard API",
+        "version": "2.3.19",
+        "endpoints": {
+            "chat": "/api/v1/chat",
+            "devices": "/api/v1/devices",
+            "tasks": "/api/v1/tasks",
+            "nodes": "/api/v1/nodes",
+            "websocket": "/ws"
+        }
     }
 
-@app.get("/api/overview")
-async def get_overview():
-    """获取系统概览"""
-    overview = await dashboard.get_system_overview()
-    return overview
+# ============================================================================
+# 对话 API
+# ============================================================================
 
-@app.get("/api/nodes")
-async def get_nodes():
-    """获取所有节点状态"""
-    statuses = await dashboard.get_all_nodes_status()
+@app.post("/api/v1/chat")
+async def chat(request: ChatRequest):
+    """对话接口"""
+    logger.info(f"Chat request from {request.device_id}: {request.message[:50]}...")
+    
+    # TODO: 连接到 Node_50_Transformer 进行真正的 NLU
+    # 目前返回模拟响应
+    
+    message = request.message.lower()
+    
+    # 简单的意图识别
+    if "打开" in message or "启动" in message:
+        response = f"好的，我正在为您执行: {request.message}\n\n请确保目标设备已连接。"
+    elif "搜索" in message or "查找" in message:
+        response = f"我正在为您搜索: {request.message}\n\n搜索结果将显示在设备上。"
+    elif "控制" in message or "操作" in message:
+        response = f"正在控制设备执行: {request.message}\n\n请确认操作。"
+    elif "状态" in message or "信息" in message:
+        response = f"系统状态:\n• 节点数量: 108\n• 设备连接: {len(devices)}\n• Agent 状态: Active"
+    elif "帮助" in message or "help" in message:
+        response = """我可以帮你：
+
+📱 设备控制
+• 打开/关闭应用
+• 控制手机、平板、电脑
+• 截图、录屏
+
+🔍 信息查询
+• 搜索网络
+• 查询天气、新闻
+• 获取设备状态
+
+🤖 智能任务
+• 复杂任务编排
+• 跨设备协同
+• 自动化流程
+
+请告诉我你想做什么？"""
+    else:
+        response = f"收到您的指令: {request.message}\n\n我正在处理，请稍候..."
+    
+    return JSONResponse({
+        "response": response,
+        "device_id": request.device_id,
+        "timestamp": datetime.now().isoformat()
+    })
+
+# ============================================================================
+# 设备管理 API
+# ============================================================================
+
+@app.get("/api/v1/devices")
+async def list_devices():
+    """列出所有设备"""
     return {
-        "nodes": [s.dict() for s in statuses],
-        "count": len(statuses)
+        "devices": list(devices.values()),
+        "total": len(devices)
     }
 
-@app.get("/api/nodes/{node_id}")
-async def get_node(node_id: str):
-    """获取单个节点状态"""
-    status = await dashboard.check_node_health(node_id)
-    return status.dict()
+@app.post("/api/v1/devices/register")
+async def register_device(request: DeviceRegisterRequest):
+    """注册设备"""
+    device = {
+        "id": request.device_id,
+        "type": request.device_type,
+        "name": request.device_name or f"Device-{request.device_id[:8]}",
+        "capabilities": request.capabilities,
+        "status": "online",
+        "registered_at": datetime.now().isoformat()
+    }
+    devices[request.device_id] = device
+    logger.info(f"Device registered: {request.device_id}")
+    
+    # 广播设备上线
+    await broadcast_message({
+        "type": "device_online",
+        "device": device
+    })
+    
+    return {"status": "success", "device": device}
 
-@app.post("/api/nodes/{node_id}/restart")
-async def restart_node(node_id: str):
-    """重启节点（通过 Node 67）"""
+@app.delete("/api/v1/devices/{device_id}")
+async def unregister_device(device_id: str):
+    """注销设备"""
+    if device_id in devices:
+        del devices[device_id]
+        logger.info(f"Device unregistered: {device_id}")
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Device not found")
+
+# ============================================================================
+# 任务管理 API
+# ============================================================================
+
+@app.post("/api/v1/tasks")
+async def create_task(request: TaskRequest):
+    """创建任务"""
+    task_id = f"task-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    task = {
+        "id": task_id,
+        "type": request.task_type,
+        "payload": request.payload,
+        "device_id": request.device_id,
+        "priority": request.priority,
+        "status": "pending",
+        "created_at": datetime.now().isoformat()
+    }
+    
+    logger.info(f"Task created: {task_id}")
+    
+    # TODO: 发送到任务队列
+    
+    return {"status": "success", "task": task}
+
+@app.get("/api/v1/tasks")
+async def list_tasks():
+    """列出任务"""
+    # TODO: 从任务队列获取
+    return {"tasks": [], "total": 0}
+
+# ============================================================================
+# 节点管理 API
+# ============================================================================
+
+@app.get("/api/v1/nodes")
+async def list_nodes():
+    """列出所有节点"""
+    # 从配置加载节点
     try:
-        result = await dashboard.call_node_api(
-            "67",
-            f"/restart/{node_id}",
-            method="POST"
-        )
-        return result
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to restart node")
+        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "config", "node_registry.json")
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                return {
+                    "nodes": config.get("nodes", {}),
+                    "total": len(config.get("nodes", {}))
+                }
+    except Exception as e:
+        logger.error(f"Failed to load nodes: {e}")
+    
+    return {"nodes": {}, "total": 0}
 
-@app.get("/api/memory/stats")
-async def get_memory_stats():
-    """获取记忆系统统计"""
-    stats = await dashboard.get_memory_stats()
-    return stats
-
-@app.get("/api/memory/conversations")
-async def get_conversations():
-    """获取对话历史"""
-    try:
-        return await dashboard.call_node_api("80", "/conversations")
-    except Exception:
-        return {"conversations": []}
-
-@app.get("/api/logs")
-async def get_logs(limit: int = 100):
-    """获取日志"""
-    logs = await dashboard.get_logs(limit)
-    return {"logs": logs, "count": len(logs)}
-
-@app.post("/api/tasks")
-async def create_task(task: TaskRequest):
-    """创建任务（通过 Node 81）"""
-    try:
-        result = await dashboard.call_node_api(
-            "81",
-            "/tasks",
-            method="POST",
-            data=task.dict()
-        )
-        return result
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to create task")
-
-@app.get("/api/tasks")
-async def get_tasks():
-    """获取任务列表"""
-    try:
-        return await dashboard.call_node_api("81", "/tasks")
-    except Exception:
-        return {"tasks": []}
-
-@app.get("/api/prompts")
-async def get_prompts():
-    """获取提示词库"""
-    try:
-        return await dashboard.call_node_api("85", "/prompts")
-    except Exception:
-        return {"prompts": []}
+# ============================================================================
+# WebSocket
+# ============================================================================
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket 实时更新"""
+    """WebSocket 端点"""
     await websocket.accept()
-    dashboard.websocket_clients.append(websocket)
+    active_websockets.append(websocket)
+    logger.info(f"WebSocket connected, total: {len(active_websockets)}")
     
     try:
         while True:
-            # 保持连接
             data = await websocket.receive_text()
-            
-            # 处理客户端请求
-            if data == "ping":
-                await websocket.send_json({"type": "pong"})
-    
+            try:
+                message = json.loads(data)
+                await handle_websocket_message(websocket, message)
+            except json.JSONDecodeError:
+                await websocket.send_json({"error": "Invalid JSON"})
     except WebSocketDisconnect:
-        dashboard.websocket_clients.remove(websocket)
+        active_websockets.remove(websocket)
+        logger.info(f"WebSocket disconnected, total: {len(active_websockets)}")
 
-# =============================================================================
-# Main
-# =============================================================================
+async def handle_websocket_message(websocket: WebSocket, message: Dict):
+    """处理 WebSocket 消息"""
+    msg_type = message.get("type", "")
+    
+    if msg_type == "ping":
+        await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
+    elif msg_type == "chat":
+        # 转发到对话 API
+        request = ChatRequest(
+            message=message.get("content", ""),
+            device_id=message.get("device_id", "")
+        )
+        response = await chat(request)
+        await websocket.send_json({
+            "type": "chat_response",
+            "content": response.get("response", ""),
+            "timestamp": datetime.now().isoformat()
+        })
+    else:
+        await websocket.send_json({"type": "ack", "message": f"Received: {msg_type}"})
+
+async def broadcast_message(message: Dict):
+    """广播消息到所有 WebSocket"""
+    for ws in active_websockets:
+        try:
+            await ws.send_json(message)
+        except:
+            pass
+
+# ============================================================================
+# 启动事件
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """启动事件"""
+    logger.info("=" * 60)
+    logger.info("UFO³ Galaxy Dashboard Starting...")
+    logger.info("=" * 60)
+    logger.info(f"Version: 2.3.19")
+    logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("")
+    logger.info("API Endpoints:")
+    logger.info("  POST /api/v1/chat              - 对话接口")
+    logger.info("  GET  /api/v1/devices           - 设备列表")
+    logger.info("  POST /api/v1/devices/register  - 设备注册")
+    logger.info("  POST /api/v1/tasks             - 创建任务")
+    logger.info("  GET  /api/v1/nodes             - 节点列表")
+    logger.info("  WS   /ws                       - WebSocket")
+    logger.info("=" * 60)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """关闭事件"""
+    logger.info("Dashboard shutdown complete")
+
+# ============================================================================
+# 主入口
+# ============================================================================
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3000)
