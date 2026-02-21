@@ -1,11 +1,8 @@
 """
-Galaxy Dashboard 后端 - 完整版
-==============================
+Galaxy Dashboard 后端 - 统一智能体版本
+=====================================
 
-修复:
-1. ASCII 艺术字前后端打通
-2. 多设备协调真正执行
-3. TypeScript 类型定义
+集成所有 108 个节点到统一智能体核心
 
 版本: v2.3.22
 """
@@ -33,30 +30,22 @@ try:
     ASCII_AVAILABLE = True
 except ImportError:
     ASCII_AVAILABLE = False
-    GALAXY_ASCII_MINIMAL = """
-  ╔═══════════════════════════════════════╗
-  ║           GALAXY                      ║
-  ║    L4 Autonomous Intelligence System  ║
-  ╚═══════════════════════════════════════╝
-"""
+    GALAXY_ASCII_MINIMAL = "GALAXY - L4 Autonomous Intelligence System"
 
-# 导入设备控制服务
+# 导入统一智能体核心
 try:
-    from core.device_control_service import device_control, DevicePlatform
-    DEVICE_CONTROL_AVAILABLE = True
+    from core.unified_agent_core import unified_core, ProtocolType
+    UNIFIED_CORE_AVAILABLE = True
 except ImportError:
-    DEVICE_CONTROL_AVAILABLE = False
-    device_control = None
+    UNIFIED_CORE_AVAILABLE = False
+    unified_core = None
 
-# 导入动态 Agent 工厂
+# 导入多协议支持
 try:
-    from enhancements.agent_factory.dynamic_factory import (
-        DynamicAgentFactory, TaskComplexity, agent_factory
-    )
-    AGENT_FACTORY_AVAILABLE = True
+    from core.multi_protocol_layer import multi_protocol, ProtocolType as MultiProtocolType
+    MULTI_PROTOCOL_AVAILABLE = True
 except ImportError:
-    AGENT_FACTORY_AVAILABLE = False
-    agent_factory = None
+    MULTI_PROTOCOL_AVAILABLE = False
 
 # 配置日志
 logging.basicConfig(
@@ -118,460 +107,378 @@ async def get_ascii_art(style: str = "minimal"):
 @app.get("/api/v1/system/info")
 async def get_system_info():
     """获取系统信息"""
-    return {
+    info = {
         "name": "Galaxy",
         "version": "2.3.22",
-        "description": "L4 Autonomous Intelligence System",
+        "description": "L4 Autonomous Intelligence System - 统一智能体版本",
         "ascii": GALAXY_ASCII_MINIMAL,
         "features": {
             "ai_driven": True,
             "multi_device": True,
             "autonomous_learning": True,
-            "visual_understanding": True,
-            "self_programming": True,
-            "digital_twin": True
+            "autonomous_thinking": True,
+            "autonomous_coding": True,
+            "knowledge_base": True,
+            "database": True,
+            "unified_core": UNIFIED_CORE_AVAILABLE,
+            "multi_protocol": MULTI_PROTOCOL_AVAILABLE
         },
-        "nodes": 108,
-        "code_lines": 601051,
         "timestamp": datetime.now().isoformat()
     }
+    
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        status = unified_core.get_status()
+        info["nodes"] = status["total_nodes"]
+        info["active_nodes"] = status["active_nodes"]
+        info["capabilities"] = len(status["capabilities"])
+        info["protocols"] = status["protocols_supported"]
+    
+    return info
 
 # ============================================================================
-# 智能体对话 - 真正执行设备操作
+# 统一智能体 API
+# ============================================================================
+
+@app.get("/api/v1/nodes")
+async def list_nodes():
+    """列出所有节点"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        nodes = []
+        for node_id, node in unified_core.nodes.items():
+            nodes.append({
+                "node_id": node.node_id,
+                "name": node.name,
+                "port": node.port,
+                "status": node.status.value,
+                "capabilities": node.capabilities,
+                "endpoint": node.endpoint
+            })
+        return {"nodes": nodes, "total": len(nodes)}
+    return {"nodes": [], "total": 0}
+
+@app.get("/api/v1/nodes/{node_id}")
+async def get_node(node_id: str):
+    """获取节点详情"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        node = unified_core.get_node(node_id)
+        if node:
+            return {
+                "node_id": node.node_id,
+                "name": node.name,
+                "port": node.port,
+                "status": node.status.value,
+                "capabilities": node.capabilities,
+                "endpoint": node.endpoint,
+                "last_heartbeat": node.last_heartbeat.isoformat() if node.last_heartbeat else None
+            }
+    raise HTTPException(status_code=404, detail="Node not found")
+
+@app.post("/api/v1/nodes/{node_id}/call")
+async def call_node(node_id: str, request: dict):
+    """调用节点"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        action = request.get("action", "")
+        params = request.get("params", {})
+        protocol = request.get("protocol", "http")
+        
+        protocol_type = ProtocolType.HTTP
+        if protocol == "websocket":
+            protocol_type = ProtocolType.WEBSOCKET
+        elif protocol == "aip":
+            protocol_type = ProtocolType.AIP
+        elif protocol == "local":
+            protocol_type = ProtocolType.LOCAL
+        
+        result = await unified_core.call_node(node_id, action, params, protocol_type)
+        return result
+    
+    return {"success": False, "error": "Unified core not available"}
+
+@app.post("/api/v1/smart-call")
+async def smart_call(request: dict):
+    """智能调用 - 自动选择最佳节点"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        capability = request.get("capability", "")
+        action = request.get("action", "")
+        params = request.get("params", {})
+        prefer_local = request.get("prefer_local", True)
+        
+        result = await unified_core.smart_call(capability, action, params, prefer_local)
+        return result
+    
+    return {"success": False, "error": "Unified core not available"}
+
+# ============================================================================
+# Agent 分发 API
+# ============================================================================
+
+@app.post("/api/v1/dispatch")
+async def dispatch_agent(request: dict):
+    """
+    分发 Agent 到目标设备
+    
+    支持本地轻量 Agent 和远处分发
+    """
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        task_type = request.get("task_type", "")
+        target_device = request.get("target_device", "")
+        params = request.get("params", {})
+        protocol = request.get("protocol", "http")
+        
+        protocol_type = ProtocolType.HTTP
+        if protocol == "websocket":
+            protocol_type = ProtocolType.WEBSOCKET
+        elif protocol == "aip":
+            protocol_type = ProtocolType.AIP
+        
+        result = await unified_core.dispatch_agent(task_type, target_device, params, protocol_type)
+        return result
+    
+    return {"success": False, "error": "Unified core not available"}
+
+# ============================================================================
+# 自主能力 API
+# ============================================================================
+
+@app.post("/api/v1/learn")
+async def autonomous_learn(request: dict):
+    """自主学习"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        result = await unified_core.autonomous_learn(request)
+        return result
+    return {"success": False, "error": "Unified core not available"}
+
+@app.post("/api/v1/think")
+async def autonomous_think(request: dict):
+    """自主思考"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        goal = request.get("goal", "")
+        context = request.get("context", {})
+        result = await unified_core.autonomous_think(goal, context)
+        return result
+    return {"success": False, "error": "Unified core not available"}
+
+@app.post("/api/v1/code")
+async def autonomous_code(request: dict):
+    """自主编程"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        task = request.get("task", "")
+        files = request.get("files", [])
+        result = await unified_core.autonomous_code(task, files)
+        return result
+    return {"success": False, "error": "Unified core not available"}
+
+@app.post("/api/v1/knowledge/query")
+async def query_knowledge(request: dict):
+    """查询知识库"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        query = request.get("query", "")
+        top_k = request.get("top_k", 5)
+        result = await unified_core.query_knowledge(query, top_k)
+        return result
+    return {"success": False, "error": "Unified core not available"}
+
+@app.post("/api/v1/knowledge/store")
+async def store_knowledge(request: dict):
+    """存储知识"""
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        content = request.get("content", "")
+        metadata = request.get("metadata", {})
+        result = await unified_core.store_knowledge(content, metadata)
+        return result
+    return {"success": False, "error": "Unified core not available"}
+
+# ============================================================================
+# 智能体对话
 # ============================================================================
 
 @app.post("/api/v1/chat")
 async def chat(request: dict):
     """
-    智能体对话 - 真正执行设备操作
+    智能体对话 - 统一入口
+    
+    自动识别意图，调用相应节点
     """
     message = request.get("message", "")
     device_id = request.get("device_id", "")
+    protocol = request.get("protocol", "http")
     
     logger.info(f"Chat: {message[:50]}...")
     
     message_lower = message.lower()
     
-    # =========================================================================
-    # 1. 打开应用 - 真正执行
-    # =========================================================================
+    # 解析意图
+    intent = parse_intent(message)
     
-    if any(kw in message_lower for kw in ["打开", "启动", "运行", "open", "launch"]):
-        app_name = extract_app_name(message)
-        if app_name:
-            target_device = device_id or get_default_device()
-            
-            if AGENT_FACTORY_AVAILABLE and agent_factory:
-                agent = await agent_factory.create_agent(
-                    task=f"打开应用: {app_name}",
-                    device_id=device_id,
-                    target_device_id=target_device,
-                    complexity=TaskComplexity.LOW
-                )
-                
-                result = await agent_factory.execute_agent(
-                    agent.agent_id,
-                    {"app_name": app_name}
-                )
-                
-                return JSONResponse({
-                    "response": f"✅ 已执行\n\n正在为你打开 {app_name}...\n\nAgent: {agent.name}\nLLM: {agent.llm_config.provider}\n目标设备: {target_device or '默认'}",
-                    "agent": {"id": agent.agent_id, "llm": agent.llm_config.provider},
-                    "executed": result.get("success", False),
-                    "timestamp": datetime.now().isoformat()
-                })
-            
-            if DEVICE_CONTROL_AVAILABLE and device_control:
-                if target_device and target_device not in device_control.devices:
-                    await device_control.register_device(
-                        target_device, "android", f"Device-{target_device[:8]}"
-                    )
-                
-                result = await device_control.open_app(target_device, app_name)
-                return JSONResponse({
-                    "response": f"✅ 已执行\n\n正在为你打开 {app_name}...\n\n结果: {result.get('message', '已发送')}",
-                    "executed": result.get("success", True),
-                    "timestamp": datetime.now().isoformat()
-                })
-            
-            return JSONResponse({
-                "response": f"✅ 任务已创建\n\n打开 {app_name}",
-                "timestamp": datetime.now().isoformat()
-            })
-    
-    # =========================================================================
-    # 2. 多设备同时操作
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["同时", "一起", "所有设备", "全部设备"]):
-        return await handle_multi_device_operation(message, device_id)
-    
-    # =========================================================================
-    # 3. 截图 - 真正执行
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["截图", "截屏", "screenshot"]):
-        target_device = device_id or get_default_device()
-        
-        if AGENT_FACTORY_AVAILABLE and agent_factory:
-            agent = await agent_factory.create_agent(
-                task="截图",
-                device_id=device_id,
-                target_device_id=target_device,
-                complexity=TaskComplexity.LOW
+    if UNIFIED_CORE_AVAILABLE and unified_core:
+        # 根据意图分发
+        if intent["type"] == "device_control":
+            result = await unified_core.dispatch_agent(
+                intent["action"],
+                device_id or "default",
+                intent["params"],
+                ProtocolType.HTTP if protocol == "http" else ProtocolType.WEBSOCKET
             )
-            result = await agent_factory.execute_agent(agent.agent_id)
-            
             return JSONResponse({
-                "response": f"✅ 已执行\n\n截图已保存。\n\nAgent: {agent.name}\n目标设备: {target_device or '默认'}",
+                "response": f"✅ 已执行: {intent['action']}\n\n结果: {result.get('success', False)}",
+                "intent": intent,
                 "executed": result.get("success", False),
                 "timestamp": datetime.now().isoformat()
             })
         
-        return JSONResponse({
-            "response": "✅ 任务已创建\n\n截图",
-            "timestamp": datetime.now().isoformat()
-        })
-    
-    # =========================================================================
-    # 4. 滑动/滚动 - 真正执行
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["滑动", "滚动", "swipe", "scroll"]):
-        direction = "down"
-        if any(kw in message_lower for kw in ["上", "up"]):
-            direction = "up"
-        elif any(kw in message_lower for kw in ["左", "left"]):
-            direction = "left"
-        elif any(kw in message_lower for kw in ["右", "right"]):
-            direction = "right"
-        
-        target_device = device_id or get_default_device()
-        
-        if AGENT_FACTORY_AVAILABLE and agent_factory:
-            agent = await agent_factory.create_agent(
-                task=f"滑动: {direction}",
-                device_id=device_id,
-                target_device_id=target_device,
-                complexity=TaskComplexity.LOW
-            )
-            result = await agent_factory.execute_agent(
-                agent.agent_id,
-                {"direction": direction}
-            )
-            
-            direction_cn = {"up": "向上", "down": "向下", "left": "向左", "right": "向右"}.get(direction, direction)
+        elif intent["type"] == "learning":
+            result = await unified_core.autonomous_learn(intent["params"])
             return JSONResponse({
-                "response": f"✅ 已执行\n\n{direction_cn}滑动。\n\nAgent: {agent.name}\n目标设备: {target_device or '默认'}",
-                "executed": result.get("success", False),
+                "response": f"✅ 已学习: {intent['params'].get('action', '')}",
+                "intent": intent,
                 "timestamp": datetime.now().isoformat()
             })
         
-        return JSONResponse({
-            "response": f"✅ 任务已创建\n\n{direction} 滑动",
-            "timestamp": datetime.now().isoformat()
-        })
-    
-    # =========================================================================
-    # 5. 输入 - 真正执行
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["输入", "填写", "type", "input"]):
-        text = extract_input_text(message)
-        if text:
-            target_device = device_id or get_default_device()
-            
-            if AGENT_FACTORY_AVAILABLE and agent_factory:
-                agent = await agent_factory.create_agent(
-                    task=f"输入: {text}",
-                    device_id=device_id,
-                    target_device_id=target_device,
-                    complexity=TaskComplexity.LOW
-                )
-                result = await agent_factory.execute_agent(
-                    agent.agent_id,
-                    {"text": text}
-                )
-                
-                return JSONResponse({
-                    "response": f"✅ 已执行\n\n已输入: {text}\n\nAgent: {agent.name}\n目标设备: {target_device or '默认'}",
-                    "executed": result.get("success", False),
-                    "timestamp": datetime.now().isoformat()
-                })
+        elif intent["type"] == "thinking":
+            result = await unified_core.autonomous_think(
+                intent["params"].get("goal", message),
+                intent["params"].get("context", {})
+            )
+            return JSONResponse({
+                "response": f"✅ 思考结果:\n\n{result.get('result', result)}",
+                "intent": intent,
+                "timestamp": datetime.now().isoformat()
+            })
         
-        return JSONResponse({
-            "response": "请告诉我你想输入什么内容。",
-            "timestamp": datetime.now().isoformat()
-        })
-    
-    # =========================================================================
-    # 6. Agent 管理
-    # =========================================================================
-    
-    if "agent" in message_lower:
-        if any(kw in message_lower for kw in ["列表", "状态", "查看"]):
-            if AGENT_FACTORY_AVAILABLE and agent_factory:
-                agents_list = agent_factory.list_agents()
-                response = f"🤖 Agent 列表\n\n共 {len(agents_list)} 个 Agent\n\n"
-                for a in agents_list:
-                    response += f"• {a['name']} - {a['task_type']} - {a['state']}\n"
-                    response += f"  LLM: {a['llm_provider']} | 设备: {a['target_device_id'] or '默认'}\n"
-                return JSONResponse({"response": response})
+        elif intent["type"] == "coding":
+            result = await unified_core.autonomous_code(
+                intent["params"].get("task", message),
+                intent["params"].get("files", [])
+            )
+            return JSONResponse({
+                "response": f"✅ 代码生成完成:\n\n{result.get('code', result)}",
+                "intent": intent,
+                "timestamp": datetime.now().isoformat()
+            })
         
-        if any(kw in message_lower for kw in ["创建", "新建"]):
-            if AGENT_FACTORY_AVAILABLE and agent_factory:
-                agent = await agent_factory.create_agent(task="用户创建的 Agent")
-                return JSONResponse({
-                    "response": f"✅ Agent 创建成功\n\n名称: {agent.name}\nID: {agent.agent_id}\nLLM: {agent.llm_config.provider}"
-                })
-    
-    # =========================================================================
-    # 7. 设备管理
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["设备", "device"]):
-        if any(kw in message_lower for kw in ["列表", "状态", "查看"]):
-            if DEVICE_CONTROL_AVAILABLE and device_control:
-                devices_list = device_control.list_devices()
-                response = f"📱 设备列表\n\n共 {len(devices_list)} 台设备\n\n"
-                for d in devices_list:
-                    response += f"• {d.name} ({d.platform.value}) - {d.status}\n"
-                return JSONResponse({"response": response})
-            return JSONResponse({"response": "📱 设备列表\n\n当前没有已连接的设备。"})
-    
-    # =========================================================================
-    # 8. LLM 提供商
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["llm", "模型", "提供商"]):
-        if AGENT_FACTORY_AVAILABLE and agent_factory:
-            providers = agent_factory.list_llm_providers()
-            response = "📋 LLM 提供商\n\n"
-            for p in providers:
-                status = "✅" if p["available"] else "❌"
-                response += f"{status} {p['provider']}: {p['model']}\n"
-                response += f"   速度: {p['speed_score']}/10 | 质量: {p['quality_score']}/10\n"
-            return JSONResponse({"response": response})
-    
-    # =========================================================================
-    # 9. 孪生模型
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["孪生", "twin"]):
-        if any(kw in message_lower for kw in ["解耦", "decouple"]):
-            if AGENT_FACTORY_AVAILABLE and agent_factory and agent_factory.agents:
-                last_agent_id = list(agent_factory.agents.keys())[-1]
-                agent_factory.decouple_twin(last_agent_id)
-                return JSONResponse({"response": f"✅ 已解耦 Agent {last_agent_id} 的孪生模型"})
+        elif intent["type"] == "knowledge_query":
+            result = await unified_core.query_knowledge(
+                intent["params"].get("query", message)
+            )
+            return JSONResponse({
+                "response": f"📚 知识检索结果:\n\n{result.get('results', result)}",
+                "intent": intent,
+                "timestamp": datetime.now().isoformat()
+            })
         
-        if any(kw in message_lower for kw in ["耦合", "couple"]):
-            if AGENT_FACTORY_AVAILABLE and agent_factory and agent_factory.agents:
-                last_agent_id = list(agent_factory.agents.keys())[-1]
-                agent_factory.couple_twin(last_agent_id)
-                return JSONResponse({"response": f"✅ 已耦合 Agent {last_agent_id} 的孪生模型"})
-        
-        if AGENT_FACTORY_AVAILABLE and agent_factory:
-            twins = agent_factory.twins
-            response = f"🔄 孪生模型状态\n\n共 {len(twins)} 个孪生\n\n"
-            for t in twins.values():
-                response += f"• {t.twin_id}\n"
-                response += f"  Agent: {t.agent_id}\n"
-                response += f"  耦合模式: {t.coupling_mode}\n"
-            return JSONResponse({"response": response})
-    
-    # =========================================================================
-    # 10. 系统状态
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["系统状态", "状态", "status"]):
-        response = f"""🖥️ 系统状态
-
-{GALAXY_ASCII_MINIMAL}
-
-Galaxy - L4 级自主性智能系统
-版本: v2.3.22
-
-核心能力:
-✅ AI 驱动 - 多 LLM 提供商支持
-✅ 动态 Agent 工厂 - 根据任务复杂度分配
-✅ 设备控制 - 真正执行设备操作
-✅ 孪生模型 - 状态同步和解耦
-✅ 跨设备互控 - 从任何设备控制任何设备
-
-"""
-        if AGENT_FACTORY_AVAILABLE and agent_factory:
-            response += f"Agent 数量: {len(agent_factory.agents)}\n"
-            response += f"孪生数量: {len(agent_factory.twins)}\n"
-            response += f"LLM 提供商: {len(agent_factory.llm_providers)}\n"
-        
-        if DEVICE_CONTROL_AVAILABLE and device_control:
-            response += f"已连接设备: {len(device_control.devices)}\n"
-        
-        return JSONResponse({"response": response})
-    
-    # =========================================================================
-    # 11. 帮助
-    # =========================================================================
-    
-    if any(kw in message_lower for kw in ["帮助", "help"]):
-        response = """📖 使用帮助
-
-Galaxy 智能体会真正执行设备操作！
-
-设备控制:
-• "打开微信" - 真正打开微信
-• "截图" - 真正截图
-• "向上滑动" - 真正滑动
-• "输入你好" - 真正输入文字
-
-多设备同时操作:
-• "同时让所有设备截图" - 所有设备同时截图
-• "让手机打开微信，电脑打开浏览器" - 多设备并行
-
-跨设备控制:
-• "控制手机打开微信" - 控制手机
-• "控制电脑截图" - 控制电脑
-• "控制平板打开淘宝" - 控制平板
-
-Agent 管理:
-• "查看 Agent" - 查看 Agent 列表
-• "创建 Agent" - 创建新 Agent
-
-设备管理:
-• "查看设备" - 查看已连接设备
-
-LLM 管理:
-• "查看 LLM" - 查看可用的 LLM 提供商
-
-孪生模型:
-• "查看孪生" - 查看孪生模型状态
-• "解耦孪生" - 解耦孪生模型
-• "耦合孪生" - 重新耦合孪生模型
-
-💡 系统会真正执行设备操作！"""
-        return JSONResponse({"response": response})
-    
-    # =========================================================================
-    # 12. 默认处理
-    # =========================================================================
-    
-    if AGENT_FACTORY_AVAILABLE and agent_factory:
-        agent = await agent_factory.create_agent(task=message, device_id=device_id)
-        result = await agent_factory.execute_agent(agent.agent_id)
-        
-        return JSONResponse({
-            "response": f"{result.get('result', {}).get('message', result.get('result', {}).get('content', '处理完成'))}\n\n[使用 {agent.llm_config.provider} 处理]",
-            "agent": {"id": agent.agent_id, "llm": agent.llm_config.provider},
-            "timestamp": datetime.now().isoformat()
-        })
+        else:
+            # 默认使用 LLM 处理
+            result = await unified_core.smart_call("chat", "chat", {"message": message})
+            return JSONResponse({
+                "response": result.get("response", result.get("result", "处理完成")),
+                "intent": intent,
+                "timestamp": datetime.now().isoformat()
+            })
     
     return JSONResponse({
-        "response": f"收到: {message}\n\n正在处理...",
+        "response": f"收到: {message}",
         "timestamp": datetime.now().isoformat()
     })
 
 
-async def handle_multi_device_operation(message: str, device_id: str) -> JSONResponse:
-    """处理多设备同时操作"""
-    import httpx
-    
+def parse_intent(message: str) -> Dict[str, Any]:
+    """解析意图"""
     message_lower = message.lower()
     
-    # 解析操作
-    operations = []
+    # 设备控制
+    if any(kw in message_lower for kw in ["打开", "启动", "open"]):
+        return {
+            "type": "device_control",
+            "action": "open_app",
+            "params": {"app_name": extract_app_name(message)}
+        }
     
-    # 截图
-    if "截图" in message_lower:
-        operations.append({"action": "screenshot", "params": {}})
+    if any(kw in message_lower for kw in ["截图", "screenshot"]):
+        return {
+            "type": "device_control",
+            "action": "screenshot",
+            "params": {}
+        }
     
-    # 打开应用
-    app_name = extract_app_name(message)
-    if app_name:
-        operations.append({"action": "open_app", "params": {"app_name": app_name}})
+    if any(kw in message_lower for kw in ["滑动", "滚动", "scroll"]):
+        direction = "down"
+        if "上" in message_lower:
+            direction = "up"
+        return {
+            "type": "device_control",
+            "action": "scroll",
+            "params": {"direction": direction}
+        }
     
-    # 获取所有设备
-    all_devices = []
-    if DEVICE_CONTROL_AVAILABLE and device_control:
-        all_devices = list(device_control.devices.keys())
+    if any(kw in message_lower for kw in ["输入", "input"]):
+        return {
+            "type": "device_control",
+            "action": "input",
+            "params": {"text": extract_input_text(message)}
+        }
     
-    if not all_devices:
-        return JSONResponse({
-            "response": "⚠️ 没有已连接的设备。请先注册设备。",
-            "timestamp": datetime.now().isoformat()
-        })
+    # 学习
+    if any(kw in message_lower for kw in ["学习", "记住", "learn"]):
+        return {
+            "type": "learning",
+            "params": {
+                "type": "observation",
+                "action": message,
+                "reward": 0.5
+            }
+        }
     
-    # 并行执行
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            tasks = []
-            for dev_id in all_devices:
-                for op in operations:
-                    tasks.append({
-                        "device_id": dev_id,
-                        "action": op["action"],
-                        "params": op["params"]
-                    })
-            
-            # 调用 Node_71 并行执行
-            response = await client.post(
-                "http://localhost:8071/execute/parallel",
-                json={"commands": tasks}
-            )
-            result = response.json()
-            
-            return JSONResponse({
-                "response": f"✅ 多设备操作已执行\n\n设备数: {len(all_devices)}\n操作数: {len(tasks)}\n结果: {result.get('success', False)}",
-                "executed": True,
-                "timestamp": datetime.now().isoformat()
-            })
+    # 思考
+    if any(kw in message_lower for kw in ["思考", "分析", "think"]):
+        return {
+            "type": "thinking",
+            "params": {
+                "goal": message
+            }
+        }
     
-    except Exception as e:
-        return JSONResponse({
-            "response": f"⚠️ 多设备操作失败: {str(e)}",
-            "timestamp": datetime.now().isoformat()
-        })
-
-
-def extract_app_name(message: str) -> Optional[str]:
-    """提取应用名称"""
-    apps = {
-        "微信": ["微信", "wechat"],
-        "淘宝": ["淘宝", "taobao"],
-        "抖音": ["抖音", "douyin"],
-        "QQ": ["qq", "QQ"],
-        "支付宝": ["支付宝", "alipay"],
-        "浏览器": ["浏览器", "browser"],
-        "设置": ["设置", "setting"],
+    # 编程
+    if any(kw in message_lower for kw in ["写代码", "编程", "code"]):
+        return {
+            "type": "coding",
+            "params": {
+                "task": message
+            }
+        }
+    
+    # 知识查询
+    if any(kw in message_lower for kw in ["查询", "搜索", "知识"]):
+        return {
+            "type": "knowledge_query",
+            "params": {
+                "query": message
+            }
+        }
+    
+    # 默认
+    return {
+        "type": "chat",
+        "action": "chat",
+        "params": {"message": message}
     }
-    
-    message_lower = message.lower()
-    for app_name, keywords in apps.items():
-        for kw in keywords:
-            if kw in message_lower:
-                return app_name
-    return None
 
 
-def extract_input_text(message: str) -> Optional[str]:
+def extract_app_name(message: str) -> str:
+    """提取应用名称"""
+    apps = ["微信", "淘宝", "抖音", "QQ", "支付宝", "浏览器", "设置"]
+    for app in apps:
+        if app in message:
+            return app
+    return ""
+
+
+def extract_input_text(message: str) -> str:
     """提取输入文本"""
     import re
-    patterns = [
-        r"输入[\"'](.+?)[\"']",
-        r"填写[\"'](.+?)[\"']",
-        r"输入(.+)$",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, message)
-        if match:
-            return match.group(1).strip()
-    return None
-
-
-def get_default_device() -> str:
-    """获取默认设备"""
-    if DEVICE_CONTROL_AVAILABLE and device_control and device_control.devices:
-        return list(device_control.devices.keys())[0]
-    return "default"
+    match = re.search(r"输入[\"'](.+?)[\"']", message)
+    if match:
+        return match.group(1)
+    return ""
 
 
 # ============================================================================
@@ -580,18 +487,13 @@ def get_default_device() -> str:
 
 @app.get("/api/v1/devices")
 async def list_devices():
-    if DEVICE_CONTROL_AVAILABLE and device_control:
-        return {"devices": [d.__dict__ for d in device_control.list_devices()]}
-    return {"devices": []}
+    return {"devices": list(devices.values())}
 
 @app.post("/api/v1/devices/register")
 async def register_device(request: dict):
     device_id = request.get("device_id", "")
     platform = request.get("device_type", "android")
     name = request.get("device_name", "Device")
-    
-    if DEVICE_CONTROL_AVAILABLE and device_control:
-        await device_control.register_device(device_id, platform, name)
     
     device = {
         "id": device_id,
@@ -602,22 +504,6 @@ async def register_device(request: dict):
     }
     devices[device_id] = device
     return {"status": "success", "device": device}
-
-# ============================================================================
-# Agent API
-# ============================================================================
-
-@app.get("/api/v1/agents")
-async def list_agents():
-    if AGENT_FACTORY_AVAILABLE and agent_factory:
-        return {"agents": agent_factory.list_agents()}
-    return {"agents": []}
-
-@app.get("/api/v1/llm/providers")
-async def list_llm_providers():
-    if AGENT_FACTORY_AVAILABLE and agent_factory:
-        return {"providers": agent_factory.list_llm_providers()}
-    return {"providers": []}
 
 # ============================================================================
 # WebSocket
@@ -654,19 +540,17 @@ async def websocket_endpoint(websocket: WebSocket):
 async def startup_event():
     logger.info("=" * 60)
     print(GALAXY_ASCII_MINIMAL)
-    logger.info("Galaxy Dashboard v2.3.22")
+    logger.info("Galaxy Dashboard v2.3.22 - 统一智能体版本")
     logger.info("=" * 60)
     
-    if DEVICE_CONTROL_AVAILABLE:
-        logger.info("✅ 设备控制服务已启用")
-    else:
-        logger.info("⚠️ 设备控制服务未启用")
+    if UNIFIED_CORE_AVAILABLE:
+        logger.info("✅ 统一智能体核心已启用")
+        status = unified_core.get_status()
+        logger.info(f"   节点数: {status['total_nodes']}")
+        logger.info(f"   能力数: {len(status['capabilities'])}")
     
-    if AGENT_FACTORY_AVAILABLE:
-        logger.info("✅ 动态 Agent 工厂已启用")
-        logger.info(f"   LLM 提供商: {len(agent_factory.llm_providers)} 个")
-    else:
-        logger.info("⚠️ 动态 Agent 工厂未启用")
+    if MULTI_PROTOCOL_AVAILABLE:
+        logger.info("✅ 多协议支持已启用")
 
 if __name__ == "__main__":
     import uvicorn
