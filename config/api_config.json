@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "version": "1.0",
-    "description": "Galaxy API 配置 - 双并行策略",
+    "version": "1.1",
+    "description": "Galaxy API 配置 - 完整版",
     "last_updated": "2026-02-21"
   },
   
@@ -36,74 +36,174 @@
       "enabled": true,
       "api_key": "",
       "base_url": "https://api.openai.com/v1",
-      "models": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+      "models": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+      "env_key": "OPENAI_API_KEY"
     },
     
     "anthropic": {
       "enabled": true,
       "api_key": "",
       "base_url": "https://api.anthropic.com/v1",
-      "models": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"]
+      "models": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"],
+      "env_key": "ANTHROPIC_API_KEY"
     },
     
     "deepseek": {
       "enabled": true,
       "api_key": "",
       "base_url": "https://api.deepseek.com/v1",
-      "models": ["deepseek-chat", "deepseek-coder"]
+      "models": ["deepseek-chat", "deepseek-coder"],
+      "env_key": "DEEPSEEK_API_KEY"
     },
     
     "zhipu": {
       "enabled": true,
       "api_key": "",
       "base_url": "https://open.bigmodel.cn/api/paas/v4",
-      "models": ["glm-4", "glm-4-flash", "glm-4-plus"]
+      "models": ["glm-4", "glm-4-flash", "glm-4-plus"],
+      "env_key": "ZHIPU_API_KEY"
     },
     
     "groq": {
       "enabled": true,
       "api_key": "",
       "base_url": "https://api.groq.com/openai/v1",
-      "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+      "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+      "env_key": "GROQ_API_KEY"
     },
     
     "openrouter": {
       "enabled": true,
       "api_key": "",
       "base_url": "https://openrouter.ai/api/v1",
-      "models": ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"]
+      "models": ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"],
+      "env_key": "OPENROUTER_API_KEY"
+    },
+    
+    "gemini": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://generativelanguage.googleapis.com/v1",
+      "models": ["gemini-2.0-flash-exp", "gemini-1.5-pro"],
+      "env_key": "GEMINI_API_KEY"
+    },
+    
+    "qwen": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://dashscope.aliyuncs.com/api/v1",
+      "models": ["qwen-turbo", "qwen-plus", "qwen-max"],
+      "env_key": "QWEN_API_KEY"
     },
     
     "together": {
       "enabled": false,
       "api_key": "",
       "base_url": "https://api.together.xyz/v1",
-      "models": ["meta-llama/Llama-3-70b-chat-hf"]
+      "models": ["meta-llama/Llama-3-70b-chat-hf"],
+      "env_key": "TOGETHER_API_KEY"
     },
     
     "perplexity": {
       "enabled": false,
       "api_key": "",
       "base_url": "https://api.perplexity.ai",
-      "models": ["llama-3.1-sonar-large-128k-online"]
+      "models": ["llama-3.1-sonar-large-128k-online"],
+      "env_key": "PERPLEXITY_API_KEY"
     }
   },
   
   "tools": {
+    "description": "工具类 API",
+    
     "brave_search": {
       "enabled": true,
       "api_key": "",
-      "description": "Brave 搜索 API"
+      "base_url": "https://api.search.brave.com/res/v1",
+      "description": "Brave 搜索 API",
+      "node": "Node_22_BraveSearch",
+      "env_key": "BRAVE_API_KEY"
     },
+    
+    "notion": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://api.notion.com/v1",
+      "description": "Notion 笔记 API",
+      "node": "Node_21_Notion",
+      "env_key": "NOTION_API_KEY"
+    },
+    
     "openweather": {
       "enabled": true,
       "api_key": "",
-      "description": "OpenWeather 天气 API"
+      "base_url": "https://api.openweathermap.org/data/2.5",
+      "description": "OpenWeather 天气 API",
+      "node": "Node_26_Weather",
+      "env_key": "OPENWEATHER_API_KEY"
     },
-    "github": {
+    
+    "novita": {
       "enabled": true,
       "api_key": "",
-      "description": "GitHub API"
+      "base_url": "https://api.novita.ai/v3",
+      "description": "Novita OCR API",
+      "node": "Node_15_OCR",
+      "env_key": "NOVITA_API_KEY"
+    },
+    
+    "pixverse": {
+      "enabled": false,
+      "api_key": "",
+      "base_url": "https://api.pixverse.ai/v1",
+      "description": "PixVerse 视频生成 API",
+      "node": "Node_48_MediaGen",
+      "env_key": "PIXVERSE_API_KEY"
+    },
+    
+    "deepl": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://api.deepl.com/v2",
+      "description": "DeepL 翻译 API",
+      "node": "Node_29_Translate",
+      "env_key": "DEEPL_API_KEY"
+    },
+    
+    "qdrant": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "http://localhost:6333",
+      "description": "Qdrant 向量数据库",
+      "node": "Node_20_Qdrant",
+      "env_key": "QDRANT_API_KEY"
+    },
+    
+    "google": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://www.googleapis.com",
+      "description": "Google 服务 API",
+      "node": "Node_28_Search",
+      "env_key": "GOOGLE_API_KEY"
+    },
+    
+    "octoprint": {
+      "enabled": false,
+      "api_key": "",
+      "base_url": "http://localhost:5000",
+      "description": "OctoPrint 3D打印 API",
+      "node": "Node_49_OctoPrint",
+      "env_key": "OCTOPRINT_API_KEY"
+    },
+    
+    "agentcpm": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "http://localhost:8104",
+      "description": "AgentCPM 移动端 API",
+      "node": "Node_104_AgentCPM",
+      "env_key": "AGENTCPM_API_KEY"
     }
   },
   
@@ -113,16 +213,34 @@
     "registry": {
       "01": {"name": "OneAPI", "port": 8001, "status": "configured"},
       "04": {"name": "Router", "port": 8004, "status": "configured"},
+      "15": {"name": "OCR", "port": 8015, "status": "configured"},
+      "20": {"name": "Qdrant", "port": 8020, "status": "configured"},
+      "21": {"name": "Notion", "port": 8021, "status": "configured"},
+      "22": {"name": "BraveSearch", "port": 8022, "status": "configured"},
+      "26": {"name": "Weather", "port": 8026, "status": "configured"},
+      "29": {"name": "Translate", "port": 8029, "status": "configured"},
       "33": {"name": "ADB", "port": 8033, "status": "configured"},
       "36": {"name": "UIAWindows", "port": 8036, "status": "configured"},
       "45": {"name": "DesktopAuto", "port": 8045, "status": "configured"},
+      "48": {"name": "MediaGen", "port": 8048, "status": "configured"},
+      "49": {"name": "OctoPrint", "port": 8049, "status": "configured"},
       "50": {"name": "Transformer", "port": 8050, "status": "configured"},
+      "58": {"name": "ModelRouter", "port": 8058, "status": "configured"},
       "70": {"name": "AutonomousLearning", "port": 8070, "status": "configured"},
       "71": {"name": "MultiDeviceCoordination", "port": 8071, "status": "configured"},
       "72": {"name": "KnowledgeBase", "port": 8072, "status": "configured"},
       "90": {"name": "MultimodalVision", "port": 8090, "status": "configured"},
+      "91": {"name": "MultimodalAgent", "port": 8091, "status": "configured"},
       "92": {"name": "AutoControl", "port": 8092, "status": "configured"},
-      "108": {"name": "MetaCognition", "port": 8108, "status": "configured"}
+      "101": {"name": "CodeEngine", "port": 8101, "status": "configured"},
+      "102": {"name": "DebugOptimize", "port": 8102, "status": "configured"},
+      "103": {"name": "KnowledgeGraph", "port": 8103, "status": "configured"},
+      "104": {"name": "AgentCPM", "port": 8104, "status": "configured"},
+      "105": {"name": "UnifiedKnowledgeBase", "port": 8105, "status": "configured"},
+      "106": {"name": "GitHubFlow", "port": 8106, "status": "configured"},
+      "108": {"name": "MetaCognition", "port": 8108, "status": "configured"},
+      "110": {"name": "SmartOrchestrator", "port": 8110, "status": "configured"},
+      "113": {"name": "AndroidVLM", "port": 8113, "status": "configured"}
     }
   }
 }

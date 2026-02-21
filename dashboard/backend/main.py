@@ -627,3 +627,125 @@ async def test_llm(request: dict):
         ])
         return result
     return {"success": False, "error": "API manager not available"}
+"""
+Dashboard 后端 API 扩展
+======================
+
+添加到 main.py 的 API 接口
+"""
+
+# 将以下代码添加到 dashboard/backend/main.py 的末尾
+
+# ============================================================================
+# 工具 API 管理
+# ============================================================================
+
+@app.get("/api/v1/config/tools")
+async def get_tools():
+    """获取所有工具"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return {"tools": api_manager.get_tools()}
+    return {"tools": []}
+
+
+@app.get("/api/v1/config/tools/available")
+async def get_available_tools():
+    """获取可用工具"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return {"tools": api_manager.get_available_tools()}
+    return {"tools": []}
+
+
+@app.post("/api/v1/config/tools/api-key")
+async def set_tool_api_key(request: dict):
+    """设置工具 API Key"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        tool_id = request.get("tool_id", "")
+        api_key = request.get("api_key", "")
+        success = api_manager.set_api_key("tools", tool_id, api_key)
+        return {"success": success}
+    return {"success": False, "error": "API manager not available"}
+
+
+# ============================================================================
+# API 验证 - 关键功能
+# ============================================================================
+
+@app.post("/api/v1/config/validate")
+async def validate_api(request: dict):
+    """
+    验证 API Key 是否有效
+    
+    这是关键功能，确保 API Key 真的能用
+    """
+    if API_MANAGER_AVAILABLE and api_manager:
+        category = request.get("category", "")  # oneapi, direct_models, tools
+        key_name = request.get("key_name", "")
+        
+        result = await api_manager.validate_api_key(category, key_name)
+        return result
+    
+    return {"valid": False, "error": "API manager not available"}
+
+
+@app.post("/api/v1/config/validate-all")
+async def validate_all_apis():
+    """验证所有已配置的 API"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        results = {}
+        
+        # 验证 OneAPI
+        if api_manager.config.get("oneapi", {}).get("api_key"):
+            results["oneapi"] = await api_manager.validate_api_key("oneapi", "")
+        
+        # 验证直接模型
+        for provider, config in api_manager.config.get("direct_models", {}).items():
+            if config.get("api_key"):
+                results[provider] = await api_manager.validate_api_key("direct_models", provider)
+        
+        # 验证工具
+        for tool_id, config in api_manager.config.get("tools", {}).items():
+            if config.get("api_key"):
+                results[tool_id] = await api_manager.validate_api_key("tools", tool_id)
+        
+        return {"results": results}
+    
+    return {"results": {}}
+
+
+# ============================================================================
+# 环境变量同步
+# ============================================================================
+
+@app.post("/api/v1/config/sync-env")
+async def sync_to_env():
+    """
+    将配置同步到环境变量
+    
+    这是关键功能，确保节点能读取到 API Key
+    """
+    if API_MANAGER_AVAILABLE and api_manager:
+        results = api_manager.sync_to_env()
+        return {"success": True, "synced": results}
+    return {"success": False, "error": "API manager not available"}
+
+
+@app.get("/api/v1/config/env-status")
+async def get_env_status():
+    """获取环境变量状态"""
+    env_keys = [
+        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
+        "ZHIPU_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY", "BRAVE_API_KEY", "NOTION_API_KEY",
+        "OPENWEATHER_API_KEY"
+    ]
+    
+    status = {}
+    for key in env_keys:
+        value = os.environ.get(key, "")
+        status[key] = {
+            "configured": bool(value),
+            "masked": value[:8] + "..." if len(value) > 8 else ""
+        }
+    
+    return {"status": status}

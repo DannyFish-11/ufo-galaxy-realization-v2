@@ -40,6 +40,10 @@
         
         .tab-active { background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 47, 255, 0.2)); border-bottom: 2px solid #00d4ff; }
         
+        .valid { color: #00ff88; }
+        .invalid { color: #ff4444; }
+        .pending { color: #ffaa00; }
+        
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
         ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7b2fff); border-radius: 3px; }
@@ -52,38 +56,28 @@
     <div id="app" class="h-screen flex flex-col relative z-10">
         
         <!-- 顶部导航 -->
-        <header class="px-6 py-4 border-b border-white/10 bg-black/30 backdrop-blur-md">
+        <header class="px-6 py-3 border-b border-white/10 bg-black/30 backdrop-blur-md">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-6">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center">
-                            <span class="text-lg font-bold">G</span>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center">
+                            <span class="text-sm font-bold">G</span>
                         </div>
-                        <h1 class="galaxy-title text-2xl font-bold tracking-wider">GALAXY</h1>
+                        <h1 class="galaxy-title text-xl font-bold tracking-wider">GALAXY</h1>
                     </div>
-                    <span class="text-xs text-gray-500 font-mono">v2.3.24</span>
+                    <span class="text-xs text-gray-500 font-mono">v2.3.25</span>
                 </div>
                 
                 <!-- 标签页 -->
-                <div class="flex space-x-1">
-                    <button @click="currentTab = 'chat'" 
-                            :class="currentTab === 'chat' ? 'tab-active' : ''"
-                            class="px-4 py-2 text-sm rounded-t-lg transition-all hover:bg-white/5">
-                        💬 对话
-                    </button>
-                    <button @click="currentTab = 'config'" 
-                            :class="currentTab === 'config' ? 'tab-active' : ''"
-                            class="px-4 py-2 text-sm rounded-t-lg transition-all hover:bg-white/5">
-                        ⚙️ 配置
-                    </button>
-                    <button @click="currentTab = 'nodes'" 
-                            :class="currentTab === 'nodes' ? 'tab-active' : ''"
-                            class="px-4 py-2 text-sm rounded-t-lg transition-all hover:bg-white/5">
-                        🌐 节点
-                    </button>
+                <div class="flex space-x-1 text-sm">
+                    <button @click="currentTab = 'chat'" :class="currentTab === 'chat' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">💬 对话</button>
+                    <button @click="currentTab = 'llm'" :class="currentTab === 'llm' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🤖 LLM</button>
+                    <button @click="currentTab = 'tools'" :class="currentTab === 'tools' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🔧 工具</button>
+                    <button @click="currentTab = 'nodes'" :class="currentTab === 'nodes' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🌐 节点</button>
                 </div>
                 
-                <div class="flex items-center space-x-4 text-sm">
+                <div class="flex items-center space-x-3 text-xs">
+                    <span class="text-green-400" v-if="configuredCount > 0">✓ {{ configuredCount }} 已配置</span>
                     <span class="text-gray-600 font-mono">{{ currentTime }}</span>
                 </div>
             </div>
@@ -94,24 +88,22 @@
             
             <!-- 对话页面 -->
             <div v-show="currentTab === 'chat'" class="h-full flex flex-col">
-                <div class="flex-1 overflow-auto p-6 space-y-4" ref="chatContainer">
-                    <div v-if="messages.length === 0" class="text-center py-20">
-                        <div class="galaxy-title text-4xl font-bold mb-4">GALAXY</div>
-                        <div class="text-gray-500 text-lg mb-2">L4 级自主性智能系统</div>
-                        <div class="text-gray-600 text-sm">请先在「配置」页面配置 API Key</div>
+                <div class="flex-1 overflow-auto p-4 space-y-3" ref="chatContainer">
+                    <div v-if="messages.length === 0" class="text-center py-16">
+                        <div class="galaxy-title text-3xl font-bold mb-3">GALAXY</div>
+                        <div class="text-gray-500 mb-2">L4 级自主性智能系统</div>
+                        <div class="text-gray-600 text-sm">请先配置 API Key</div>
                     </div>
                     
-                    <div v-for="msg in messages" :key="msg.id" 
-                         class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                        <div class="max-w-2xl rounded-2xl p-4"
-                             :class="msg.role === 'user' ? 'bg-cyan-900/30 border border-cyan-500/30' : 'bg-purple-900/30 border border-purple-500/30'">
-                            <div class="whitespace-pre-wrap text-sm leading-relaxed">{{ msg.content }}</div>
-                            <div class="text-xs mt-2 opacity-50 font-mono">{{ formatTime(msg.timestamp) }}</div>
+                    <div v-for="msg in messages" :key="msg.id" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+                        <div class="max-w-2xl rounded-xl p-3 text-sm" :class="msg.role === 'user' ? 'bg-cyan-900/30 border border-cyan-500/30' : 'bg-purple-900/30 border border-purple-500/30'">
+                            <div class="whitespace-pre-wrap">{{ msg.content }}</div>
+                            <div class="text-xs mt-1 opacity-50">{{ formatTime(msg.timestamp) }}</div>
                         </div>
                     </div>
                     
                     <div v-if="isLoading" class="flex justify-start">
-                        <div class="bg-purple-900/30 rounded-2xl p-4">
+                        <div class="bg-purple-900/30 rounded-xl p-3">
                             <div class="flex space-x-1">
                                 <div class="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
                                 <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
@@ -121,103 +113,71 @@
                     </div>
                 </div>
                 
-                <div class="p-4 border-t border-white/10 bg-black/30 backdrop-blur-md">
-                    <div class="flex space-x-3">
-                        <input v-model="inputMessage" @keypress.enter="sendMessage" type="text"
-                               placeholder="输入消息..." class="galaxy-input flex-1 rounded-xl px-4 py-3 text-white outline-none">
-                        <button @click="sendMessage" class="px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-cyan-500 to-purple-600">
-                            发送
-                        </button>
+                <div class="p-3 border-t border-white/10 bg-black/30">
+                    <div class="flex space-x-2">
+                        <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="galaxy-input flex-1 rounded-lg px-3 py-2 text-sm outline-none">
+                        <button @click="sendMessage" class="px-4 py-2 rounded-lg text-sm bg-gradient-to-r from-cyan-500 to-purple-600">发送</button>
                     </div>
                 </div>
             </div>
             
-            <!-- 配置页面 -->
-            <div v-show="currentTab === 'config'" class="h-full overflow-auto p-6">
-                <div class="max-w-4xl mx-auto space-y-6">
+            <!-- LLM 配置页面 -->
+            <div v-show="currentTab === 'llm'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto space-y-4">
                     
-                    <!-- 状态卡片 -->
-                    <div class="status-card rounded-xl p-4">
-                        <h3 class="text-lg font-semibold mb-3">📊 系统状态</h3>
-                        <div class="grid grid-cols-4 gap-4 text-center">
-                            <div>
-                                <div class="text-2xl font-bold text-cyan-400">{{ configStatus.total_models || 0 }}</div>
-                                <div class="text-xs text-gray-500">总模型</div>
-                            </div>
-                            <div>
-                                <div class="text-2xl font-bold text-green-400">{{ configStatus.configured_models || 0 }}</div>
-                                <div class="text-xs text-gray-500">已配置</div>
-                            </div>
-                            <div>
-                                <div class="text-2xl font-bold text-purple-400">{{ configStatus.total_nodes || 0 }}</div>
-                                <div class="text-xs text-gray-500">节点数</div>
-                            </div>
-                            <div>
-                                <div class="text-2xl font-bold" :class="configStatus.oneapi_configured ? 'text-green-400' : 'text-red-400'">
-                                    {{ configStatus.oneapi_configured ? '✓' : '✗' }}
-                                </div>
-                                <div class="text-xs text-gray-500">OneAPI</div>
-                            </div>
+                    <!-- 状态 -->
+                    <div class="status-card rounded-xl p-3">
+                        <div class="grid grid-cols-5 gap-3 text-center text-sm">
+                            <div><div class="text-xl font-bold text-cyan-400">{{ configStatus.total_models || 0 }}</div><div class="text-xs text-gray-500">总模型</div></div>
+                            <div><div class="text-xl font-bold text-green-400">{{ configStatus.configured_models || 0 }}</div><div class="text-xs text-gray-500">已配置</div></div>
+                            <div><div class="text-xl font-bold text-purple-400">{{ configStatus.total_tools || 0 }}</div><div class="text-xs text-gray-500">工具</div></div>
+                            <div><div class="text-xl font-bold text-pink-400">{{ configStatus.configured_tools || 0 }}</div><div class="text-xs text-gray-500">工具已配</div></div>
+                            <div><div class="text-xl font-bold" :class="configStatus.oneapi_configured ? 'text-green-400' : 'text-red-400'">{{ configStatus.oneapi_configured ? '✓' : '✗' }}</div><div class="text-xs text-gray-500">OneAPI</div></div>
                         </div>
                     </div>
                     
-                    <!-- OneAPI 配置 -->
-                    <div class="status-card rounded-xl p-4">
-                        <h3 class="text-lg font-semibold mb-3">🔗 OneAPI 聚合器 (核心)</h3>
-                        <p class="text-xs text-gray-500 mb-4">OneAPI 是模型聚合器，支持多种 LLM 提供商</p>
-                        
-                        <div class="space-y-3">
-                            <div>
-                                <label class="text-xs text-gray-400">Base URL</label>
-                                <input v-model="oneapiUrl" type="text" placeholder="http://localhost:8001/v1"
-                                       class="galaxy-input w-full rounded-lg px-3 py-2 text-sm outline-none">
+                    <!-- OneAPI -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">🔗 OneAPI 聚合器 (核心)</h3>
+                        <div class="grid grid-cols-3 gap-2">
+                            <input v-model="oneapiUrl" type="text" placeholder="Base URL" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
+                            <input v-model="oneapiKey" type="password" placeholder="API Key" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
+                            <div class="flex space-x-1">
+                                <button @click="saveOneAPI" class="flex-1 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">保存</button>
+                                <button @click="validateOneAPI" class="flex-1 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
                             </div>
-                            <div>
-                                <label class="text-xs text-gray-400">API Key</label>
-                                <input v-model="oneapiKey" type="password" placeholder="sk-..."
-                                       class="galaxy-input w-full rounded-lg px-3 py-2 text-sm outline-none">
-                            </div>
-                            <button @click="saveOneAPI" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-sm">
-                                保存 OneAPI 配置
-                            </button>
                         </div>
+                        <div v-if="oneapiStatus" class="mt-2 text-xs" :class="oneapiStatus.valid ? 'valid' : 'invalid'">{{ oneapiStatus.message || oneapiStatus.error }}</div>
                     </div>
                     
-                    <!-- 直接模型配置 -->
-                    <div class="status-card rounded-xl p-4">
-                        <h3 class="text-lg font-semibold mb-3">🤖 直接模型 (细节)</h3>
-                        <p class="text-xs text-gray-500 mb-4">直接连接各 LLM 提供商的 API</p>
-                        
-                        <div class="grid grid-cols-2 gap-4">
-                            <div v-for="(provider, name) in directProviders" :key="name" class="bg-black/30 rounded-lg p-3">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="font-medium">{{ provider.name }}</span>
-                                    <span :class="provider.configured ? 'text-green-400' : 'text-gray-500'" class="text-xs">
-                                        {{ provider.configured ? '已配置' : '未配置' }}
+                    <!-- 直接模型 -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">🤖 直接模型 (细节)</h3>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div v-for="(provider, name) in directProviders" :key="name" class="bg-black/30 rounded p-2">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs font-medium">{{ provider.name }}</span>
+                                    <span :class="provider.valid ? 'valid' : (provider.apiKey ? 'pending' : 'text-gray-500')" class="text-xs">
+                                        {{ provider.valid ? '✓' : (provider.apiKey ? '?' : '✗') }}
                                     </span>
                                 </div>
-                                <input v-model="provider.apiKey" type="password" :placeholder="'API Key'"
-                                       class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-2">
-                                <button @click="saveProvider(name, provider.apiKey)" 
-                                        class="w-full py-1 rounded text-xs bg-purple-600 hover:bg-purple-500">
-                                    保存
-                                </button>
+                                <input v-model="provider.apiKey" type="password" placeholder="API Key" class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-1">
+                                <div class="flex space-x-1">
+                                    <button @click="saveProvider(name, provider.apiKey)" class="flex-1 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-xs">保存</button>
+                                    <button @click="validateProvider(name)" class="flex-1 py-0.5 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- 测试 LLM -->
-                    <div class="status-card rounded-xl p-4">
-                        <h3 class="text-lg font-semibold mb-3">🧪 测试 LLM</h3>
-                        <div class="flex space-x-3">
-                            <input v-model="testMessage" type="text" placeholder="输入测试消息..."
-                                   class="galaxy-input flex-1 rounded-lg px-3 py-2 text-sm outline-none">
-                            <button @click="testLLM" class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-sm">
-                                测试
-                            </button>
+                    <!-- 测试 -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">🧪 测试 LLM</h3>
+                        <div class="flex space-x-2">
+                            <input v-model="testMessage" type="text" placeholder="测试消息" class="galaxy-input flex-1 rounded px-2 py-1 text-sm outline-none">
+                            <button @click="testLLM" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-sm">测试</button>
                         </div>
-                        <div v-if="testResult" class="mt-3 p-3 bg-black/30 rounded-lg text-sm">
-                            <div class="text-xs text-gray-500 mb-1">结果:</div>
+                        <div v-if="testResult" class="mt-2 p-2 bg-black/30 rounded text-xs">
                             <pre class="whitespace-pre-wrap">{{ testResult }}</pre>
                         </div>
                     </div>
@@ -225,25 +185,50 @@
                 </div>
             </div>
             
-            <!-- 节点页面 -->
-            <div v-show="currentTab === 'nodes'" class="h-full overflow-auto p-6">
-                <div class="max-w-4xl mx-auto">
-                    <div class="status-card rounded-xl p-4 mb-4">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-semibold">🌐 节点状态</h3>
-                            <button @click="checkNodes" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-sm">
-                                检查所有节点
-                            </button>
+            <!-- 工具配置页面 -->
+            <div v-show="currentTab === 'tools'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto">
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">🔧 工具 API 配置</h3>
+                            <button @click="validateAllTools" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证全部</button>
                         </div>
                         
-                        <div class="grid grid-cols-4 gap-2">
-                            <div v-for="node in nodes" :key="node.node_id" 
-                                 class="bg-black/30 rounded-lg p-2 text-center cursor-pointer hover:bg-black/50 transition-all">
-                                <div class="text-xs font-mono text-gray-500">{{ node.node_id }}</div>
-                                <div class="text-sm truncate">{{ node.name }}</div>
-                                <div class="text-xs" :class="node.status === 'healthy' ? 'text-green-400' : 'text-gray-500'">
-                                    {{ node.status || '未知' }}
+                        <div class="grid grid-cols-3 gap-2">
+                            <div v-for="tool in tools" :key="tool.tool_id" class="bg-black/30 rounded p-2">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs font-medium">{{ tool.name }}</span>
+                                    <span :class="tool.valid ? 'valid' : (tool.apiKey ? 'pending' : 'text-gray-500')" class="text-xs">
+                                        {{ tool.valid ? '✓ 有效' : (tool.apiKey ? '? 待验证' : '✗ 未配置') }}
+                                    </span>
                                 </div>
+                                <div class="text-xs text-gray-500 mb-1">{{ tool.description }}</div>
+                                <input v-model="tool.apiKey" type="password" placeholder="API Key" class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-1">
+                                <div class="flex space-x-1">
+                                    <button @click="saveTool(tool.tool_id, tool.apiKey)" class="flex-1 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">保存</button>
+                                    <button @click="validateTool(tool.tool_id)" class="flex-1 py-0.5 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
+                                </div>
+                                <div v-if="tool.status" class="mt-1 text-xs" :class="tool.valid ? 'valid' : 'invalid'">{{ tool.status }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 节点页面 -->
+            <div v-show="currentTab === 'nodes'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto">
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">🌐 节点状态</h3>
+                            <button @click="checkNodes" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">检查全部</button>
+                        </div>
+                        
+                        <div class="grid grid-cols-6 gap-1">
+                            <div v-for="node in nodes" :key="node.node_id" class="bg-black/30 rounded p-1 text-center cursor-pointer hover:bg-black/50">
+                                <div class="text-xs text-gray-500">{{ node.node_id }}</div>
+                                <div class="text-xs truncate">{{ node.name }}</div>
+                                <div class="text-xs" :class="node.status === 'healthy' ? 'valid' : 'text-gray-500'">{{ node.status || '?' }}</div>
                             </div>
                         </div>
                     </div>
@@ -258,7 +243,7 @@
         
         createApp({
             setup() {
-                const currentTab = ref('config');
+                const currentTab = ref('llm');
                 const messages = ref([]);
                 const inputMessage = ref('');
                 const isLoading = ref(false);
@@ -266,27 +251,42 @@
                 const chatContainer = ref(null);
                 const starsContainer = ref(null);
                 
-                // 配置相关
                 const configStatus = ref({});
                 const oneapiUrl = ref('http://localhost:8001/v1');
                 const oneapiKey = ref('');
+                const oneapiStatus = ref(null);
+                
                 const directProviders = ref({
-                    openai: { name: 'OpenAI', apiKey: '', configured: false },
-                    anthropic: { name: 'Anthropic', apiKey: '', configured: false },
-                    deepseek: { name: 'DeepSeek', apiKey: '', configured: false },
-                    zhipu: { name: '智谱 AI', apiKey: '', configured: false },
-                    groq: { name: 'Groq', apiKey: '', configured: false },
-                    openrouter: { name: 'OpenRouter', apiKey: '', configured: false }
+                    openai: { name: 'OpenAI', apiKey: '', valid: false },
+                    anthropic: { name: 'Anthropic', apiKey: '', valid: false },
+                    deepseek: { name: 'DeepSeek', apiKey: '', valid: false },
+                    zhipu: { name: '智谱 AI', apiKey: '', valid: false },
+                    groq: { name: 'Groq', apiKey: '', valid: false },
+                    openrouter: { name: 'OpenRouter', apiKey: '', valid: false },
+                    gemini: { name: 'Gemini', apiKey: '', valid: false },
+                    qwen: { name: '通义千问', apiKey: '', valid: false }
                 });
                 
-                const testMessage = ref('Hello, this is a test.');
-                const testResult = ref('');
+                const tools = ref([]);
                 const nodes = ref([]);
+                const testMessage = ref('Hello');
+                const testResult = ref('');
                 
-                // 生成星星
+                const configuredCount = computed(() => {
+                    let count = 0;
+                    if (oneapiKey.value) count++;
+                    for (const p of Object.values(directProviders.value)) {
+                        if (p.apiKey) count++;
+                    }
+                    for (const t of tools.value) {
+                        if (t.apiKey) count++;
+                    }
+                    return count;
+                });
+                
                 const generateStars = () => {
                     if (!starsContainer.value) return;
-                    for (let i = 0; i < 100; i++) {
+                    for (let i = 0; i < 80; i++) {
                         const star = document.createElement('div');
                         star.className = 'star';
                         star.style.left = Math.random() * 100 + '%';
@@ -299,93 +299,114 @@
                     }
                 };
                 
-                const updateTime = () => {
-                    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-                };
+                const updateTime = () => { currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); };
                 
-                // 加载配置状态
                 const loadConfigStatus = async () => {
                     try {
                         const response = await axios.get('/api/v1/config/status');
                         configStatus.value = response.data;
-                    } catch (error) {
-                        console.error('Failed to load config status:', error);
-                    }
+                    } catch (error) { console.error('Failed to load config status:', error); }
                 };
                 
-                // 加载节点
+                const loadTools = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/config/tools');
+                        tools.value = (response.data.tools || []).map(t => ({ ...t, status: '' }));
+                    } catch (error) { console.error('Failed to load tools:', error); }
+                };
+                
                 const loadNodes = async () => {
                     try {
                         const response = await axios.get('/api/v1/config/nodes');
                         nodes.value = response.data.nodes || [];
-                    } catch (error) {
-                        console.error('Failed to load nodes:', error);
-                    }
+                    } catch (error) { console.error('Failed to load nodes:', error); }
                 };
                 
-                // 保存 OneAPI 配置
                 const saveOneAPI = async () => {
                     try {
                         await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value });
-                        alert('OneAPI 配置已保存');
                         loadConfigStatus();
-                    } catch (error) {
-                        alert('保存失败: ' + error.message);
-                    }
+                    } catch (error) { alert('保存失败: ' + error.message); }
                 };
                 
-                // 保存提供商配置
+                const validateOneAPI = async () => {
+                    oneapiStatus.value = { valid: false, message: '验证中...' };
+                    try {
+                        const response = await axios.post('/api/v1/config/validate', { category: 'oneapi', key_name: '' });
+                        oneapiStatus.value = response.data;
+                    } catch (error) { oneapiStatus.value = { valid: false, error: error.message }; }
+                };
+                
                 const saveProvider = async (name, apiKey) => {
                     try {
                         await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey });
-                        directProviders.value[name].configured = true;
-                        alert(name + ' 配置已保存');
                         loadConfigStatus();
-                    } catch (error) {
-                        alert('保存失败: ' + error.message);
+                    } catch (error) { alert('保存失败: ' + error.message); }
+                };
+                
+                const validateProvider = async (name) => {
+                    directProviders.value[name].valid = false;
+                    try {
+                        const response = await axios.post('/api/v1/config/validate', { category: 'direct_models', key_name: name });
+                        directProviders.value[name].valid = response.data.valid;
+                    } catch (error) { directProviders.value[name].valid = false; }
+                };
+                
+                const saveTool = async (toolId, apiKey) => {
+                    try {
+                        await axios.post('/api/v1/config/tools/api-key', { tool_id: toolId, api_key: apiKey });
+                        loadConfigStatus();
+                    } catch (error) { alert('保存失败: ' + error.message); }
+                };
+                
+                const validateTool = async (toolId) => {
+                    const tool = tools.value.find(t => t.tool_id === toolId);
+                    if (tool) {
+                        tool.status = '验证中...';
+                        try {
+                            const response = await axios.post('/api/v1/config/validate', { category: 'tools', key_name: toolId });
+                            tool.valid = response.data.valid;
+                            tool.status = response.data.valid ? '有效' : response.data.error;
+                        } catch (error) { tool.status = error.message; }
                     }
                 };
                 
-                // 测试 LLM
+                const validateAllTools = async () => {
+                    for (const tool of tools.value) {
+                        if (tool.apiKey) {
+                            await validateTool(tool.tool_id);
+                        }
+                    }
+                };
+                
                 const testLLM = async () => {
                     testResult.value = '测试中...';
                     try {
                         const response = await axios.post('/api/v1/config/test-llm', { message: testMessage.value });
                         testResult.value = JSON.stringify(response.data, null, 2);
-                    } catch (error) {
-                        testResult.value = '测试失败: ' + error.message;
-                    }
+                    } catch (error) { testResult.value = '测试失败: ' + error.message; }
                 };
                 
-                // 检查节点
                 const checkNodes = async () => {
                     try {
                         const response = await axios.post('/api/v1/config/nodes/check');
                         const results = response.data.results;
-                        nodes.value.forEach(node => {
-                            node.status = results[node.node_id]?.success ? 'healthy' : 'unhealthy';
-                        });
-                    } catch (error) {
-                        console.error('Failed to check nodes:', error);
-                    }
+                        nodes.value.forEach(node => { node.status = results[node.node_id]?.success ? 'healthy' : 'error'; });
+                    } catch (error) { console.error('Failed to check nodes:', error); }
                 };
                 
-                // 发送消息
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim() || isLoading.value) return;
                     const message = inputMessage.value.trim();
                     inputMessage.value = '';
-                    
                     messages.value.push({ id: Date.now(), role: 'user', content: message, timestamp: new Date() });
                     isLoading.value = true;
-                    
                     try {
                         const response = await axios.post('/api/v1/chat', { message });
                         messages.value.push({ id: Date.now() + 1, role: 'assistant', content: response.data.response || '处理完成', timestamp: new Date() });
                     } catch (error) {
                         messages.value.push({ id: Date.now() + 1, role: 'assistant', content: '❌ 连接失败: ' + error.message, timestamp: new Date() });
                     }
-                    
                     isLoading.value = false;
                 };
                 
@@ -396,13 +417,16 @@
                     updateTime();
                     setInterval(updateTime, 1000);
                     loadConfigStatus();
+                    loadTools();
                     loadNodes();
                 });
                 
                 return {
                     currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
-                    configStatus, oneapiUrl, oneapiKey, directProviders, testMessage, testResult, nodes,
-                    loadConfigStatus, saveOneAPI, saveProvider, testLLM, checkNodes, sendMessage, formatTime
+                    configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes,
+                    testMessage, testResult, configuredCount,
+                    loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
+                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage, formatTime
                 };
             }
         }).mount('#app');
