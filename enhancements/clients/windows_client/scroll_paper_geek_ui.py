@@ -1,8 +1,11 @@
 """
-Galaxy - 书法卷轴式极客 UI
-==========================
+Galaxy - 星系风格极客 UI
+=======================
 
-版本: v2.3.21
+Windows 客户端主 UI
+F12 唤醒/隐藏
+
+版本: v2.3.23
 """
 
 import tkinter as tk
@@ -12,9 +15,12 @@ from datetime import datetime
 import keyboard
 from typing import Optional
 import httpx
+import math
+import random
 
-class ScrollPaperGeekUI:
-    """书法卷轴式极客 UI"""
+
+class GalaxyGeekUI:
+    """星系风格极客 UI"""
     
     def __init__(self, server_url: str = "http://localhost:8080"):
         self.server_url = server_url
@@ -31,11 +37,25 @@ class ScrollPaperGeekUI:
         self.width = 500
         self.height = self.root.winfo_screenheight()
         screen_width = self.root.winfo_screenwidth()
-        self.x_visible = screen_width - self.width
+        self.x_visible = screen_width - self.width - 20
         self.x_hidden = screen_width + 10
         
         # 初始隐藏
         self.root.geometry(f"1x{self.height}+{self.x_hidden}+0")
+        
+        # 颜色配置 - 星系风格
+        self.colors = {
+            'bg': '#000000',
+            'panel': '#0a0a1a',
+            'border': '#1a1a3a',
+            'accent_cyan': '#00d4ff',
+            'accent_purple': '#7b2fff',
+            'accent_pink': '#ff006e',
+            'text': '#ffffff',
+            'text_dim': '#666666',
+            'user_bg': '#0a1a2a',
+            'ai_bg': '#1a0a2a',
+        }
         
         # 创建 UI
         self._create_ui()
@@ -46,24 +66,28 @@ class ScrollPaperGeekUI:
         # 绑定 ESC 键
         self.root.bind('<Escape>', lambda e: self.hide_panel())
         
+        # 启动动画
+        self._start_animations()
+        
         # 启动状态更新
         self._update_time()
     
     def _create_ui(self):
         """创建 UI"""
         # 主容器
-        self.main_frame = tk.Frame(self.root, bg='#000000')
+        self.main_frame = tk.Frame(self.root, bg=self.colors['bg'])
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 创建画布
-        self.canvas = tk.Canvas(self.main_frame, bg='#000000', highlightthickness=0)
+        # 创建画布 (用于绘制星系效果)
+        self.canvas = tk.Canvas(
+            self.main_frame, 
+            bg=self.colors['bg'], 
+            highlightthickness=0
+        )
         self.canvas.pack(fill=tk.BOTH, expand=True)
         
-        # 绘制背景
-        self._draw_background()
-        
-        # 创建卷轴边缘
-        self._create_scroll_edge()
+        # 绘制星系背景
+        self._draw_galaxy_background()
         
         # 创建标题栏
         self._create_header()
@@ -77,184 +101,271 @@ class ScrollPaperGeekUI:
         # 创建状态栏
         self._create_status_bar()
     
-    def _draw_background(self):
-        """绘制极客风格背景"""
-        for i in range(self.height):
-            ratio = i / self.height
-            gray = int(20 * ratio)
-            color = f'#{gray:02x}{gray:02x}{gray:02x}'
-            self.canvas.create_line(0, i, self.width, i, fill=color)
+    def _draw_galaxy_background(self):
+        """绘制星系背景"""
+        width = self.width
+        height = self.height
         
-        self.canvas.create_line(30, 50, self.width-30, 50, fill='#ffffff', width=1)
-        self.canvas.create_line(30, self.height-100, self.width-30, self.height-100, fill='#ffffff', width=1)
+        # 绘制星星
+        for _ in range(100):
+            x = random.randint(0, width)
+            y = random.randint(0, height)
+            size = random.randint(1, 3)
+            opacity = random.randint(100, 255)
+            color = f'#{opacity:02x}{opacity:02x}{opacity:02x}'
+            
+            self.canvas.create_oval(
+                x, y, x + size, y + size,
+                fill=color, outline=''
+            )
         
-        for i in range(-100, self.width + 100, 60):
-            self.canvas.create_line(i, 0, i + 150, 150, fill='#1a1a1a', width=1)
-    
-    def _create_scroll_edge(self):
-        """创建卷轴边缘"""
-        self.scroll_edge = tk.Canvas(self.main_frame, width=15, bg='#000000', highlightthickness=0)
-        self.scroll_edge.place(x=0, y=0, relheight=1)
-        
-        for i in range(15):
-            alpha = int(255 * (1 - i/15))
-            color = f'#{alpha:02x}{alpha:02x}{alpha:02x}'
-            self.scroll_edge.create_line(i, 0, i, self.height, fill=color)
+        # 绘制星云
+        for _ in range(3):
+            x = random.randint(0, width)
+            y = random.randint(0, height)
+            size = random.randint(50, 150)
+            
+            colors = [
+                ('#00d4ff', 30),  # 青色
+                ('#7b2fff', 25),  # 紫色
+                ('#ff006e', 20),  # 粉色
+            ]
+            
+            color, opacity = random.choice(colors)
+            
+            self.canvas.create_oval(
+                x - size, y - size, x + size, y + size,
+                fill='', outline=color, width=1
+            )
     
     def _create_header(self):
         """创建标题栏"""
-        self.canvas.create_text(
-            self.width // 2, 25,
+        header_frame = tk.Frame(self.canvas, bg=self.colors['panel'])
+        
+        # 使用 canvas 创建窗口
+        self.canvas.create_window(
+            0, 0, 
+            window=header_frame, 
+            anchor='nw', 
+            width=self.width,
+            height=60
+        )
+        
+        # Logo 和标题
+        title_frame = tk.Frame(header_frame, bg=self.colors['panel'])
+        title_frame.pack(side=tk.LEFT, padx=15, pady=10)
+        
+        # Logo 圆形
+        logo_canvas = tk.Canvas(
+            title_frame, 
+            width=40, 
+            height=40, 
+            bg=self.colors['panel'], 
+            highlightthickness=0
+        )
+        logo_canvas.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 绘制渐变圆
+        logo_canvas.create_oval(
+            5, 5, 35, 35,
+            fill=self.colors['accent_cyan'],
+            outline=self.colors['accent_purple'],
+            width=2
+        )
+        logo_canvas.create_text(
+            20, 20,
+            text="G",
+            fill='white',
+            font=('Orbitron', 14, 'bold')
+        )
+        
+        # 标题
+        title_label = tk.Label(
+            title_frame,
             text="GALAXY",
-            font=('Consolas', 18, 'bold'),
-            fill='#ffffff'
+            font=('Orbitron', 18, 'bold'),
+            fg=self.colors['accent_cyan'],
+            bg=self.colors['panel']
         )
+        title_label.pack(side=tk.LEFT)
         
-        self.canvas.create_text(
-            self.width // 2, 45,
-            text="L4 AUTONOMOUS INTELLIGENCE - v2.3.21",
-            font=('Consolas', 8),
-            fill='#666666'
+        # 版本
+        version_label = tk.Label(
+            title_frame,
+            text="v2.3.23",
+            font=('Consolas', 9),
+            fg=self.colors['text_dim'],
+            bg=self.colors['panel']
         )
+        version_label.pack(side=tk.LEFT, padx=(10, 0))
         
-        close_btn = tk.Button(
-            self.root,
-            text="×",
-            font=('Consolas', 14),
-            bg='#000000',
-            fg='#ffffff',
-            bd=0,
-            command=self.hide_panel,
-            activebackground='#ff3333',
-            width=3
+        # 状态指示器
+        status_frame = tk.Frame(header_frame, bg=self.colors['panel'])
+        status_frame.pack(side=tk.RIGHT, padx=15, pady=10)
+        
+        self.status_label = tk.Label(
+            status_frame,
+            text="● 运行中",
+            font=('Consolas', 10),
+            fg='#00ff88',
+            bg=self.colors['panel']
         )
-        close_btn.place(x=self.width-35, y=5)
+        self.status_label.pack()
+        
+        self.time_label = tk.Label(
+            status_frame,
+            text="00:00:00",
+            font=('Consolas', 9),
+            fg=self.colors['text_dim'],
+            bg=self.colors['panel']
+        )
+        self.time_label.pack()
     
     def _create_chat_area(self):
         """创建对话区域"""
-        self.chat_frame = tk.Frame(self.root, bg='#0a0a0a')
-        self.chat_frame.place(x=20, y=60, width=self.width-40, height=self.height-180)
+        # 对话区域框架
+        chat_frame = tk.Frame(self.canvas, bg=self.colors['bg'])
         
-        self.chat_history = scrolledtext.ScrolledText(
-            self.chat_frame,
-            font=('Consolas', 10),
-            bg='#0f0f0f',
-            fg='#cccccc',
-            insertbackground='#ffffff',
-            bd=0,
-            wrap=tk.WORD,
-            state=tk.DISABLED
+        self.canvas.create_window(
+            0, 60,
+            window=chat_frame,
+            anchor='nw',
+            width=self.width,
+            height=self.height - 180
         )
-        self.chat_history.pack(fill=tk.BOTH, expand=True)
         
-        self.chat_history.tag_config('user', foreground='#ffffff', font=('Consolas', 10, 'bold'))
-        self.chat_history.tag_config('ai', foreground='#00aaff')
-        self.chat_history.tag_config('system', foreground='#666666')
+        # 欢迎消息
+        welcome_frame = tk.Frame(chat_frame, bg=self.colors['bg'])
+        welcome_frame.pack(fill=tk.BOTH, expand=True, pady=50)
         
-        self._append_chat("[AI] 你好！我是 Galaxy 智能体。", 'ai')
-        self._append_chat("[AI] 你可以随便说，我会自动理解并执行操作。", 'ai')
+        welcome_label = tk.Label(
+            welcome_frame,
+            text="GALAXY",
+            font=('Orbitron', 28, 'bold'),
+            fg=self.colors['accent_cyan'],
+            bg=self.colors['bg']
+        )
+        welcome_label.pack()
+        
+        subtitle_label = tk.Label(
+            welcome_frame,
+            text="L4 级自主性智能系统",
+            font=('Microsoft YaHei', 12),
+            fg=self.colors['text_dim'],
+            bg=self.colors['bg']
+        )
+        subtitle_label.pack(pady=(5, 0))
+        
+        hint_label = tk.Label(
+            welcome_frame,
+            text="星系级智能体，随时为您服务",
+            font=('Microsoft YaHei', 10),
+            fg=self.colors['text_dim'],
+            bg=self.colors['bg']
+        )
+        hint_label.pack(pady=(20, 0))
+        
+        # 消息显示区域
+        self.messages_frame = tk.Frame(chat_frame, bg=self.colors['bg'])
+        self.messages_frame.pack(fill=tk.BOTH, expand=True, padx=15)
+        
+        # 消息列表
+        self.messages = []
     
     def _create_input_area(self):
         """创建输入区域"""
-        self.input_frame = tk.Frame(self.root, bg='#0a0a0a')
-        self.input_frame.place(x=20, y=self.height-110, width=self.width-40, height=50)
+        input_frame = tk.Frame(self.canvas, bg=self.colors['panel'])
         
-        self.chat_input = tk.Entry(
-            self.input_frame,
-            font=('Consolas', 11),
-            bg='#1a1a1a',
-            fg='#ffffff',
-            insertbackground='#ffffff',
-            bd=0
+        self.canvas.create_window(
+            0, self.height - 120,
+            window=input_frame,
+            anchor='nw',
+            width=self.width,
+            height=80
         )
-        self.chat_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
-        self.chat_input.bind('<Return>', lambda e: self._send_chat())
         
-        send_btn = tk.Button(
-            self.input_frame,
-            text="发送",
-            font=('Consolas', 10, 'bold'),
-            bg='#ffffff',
-            fg='#000000',
-            bd=0,
-            command=self._send_chat
+        # 输入框
+        self.input_entry = tk.Entry(
+            input_frame,
+            font=('Microsoft YaHei', 11),
+            bg=self.colors['bg'],
+            fg=self.colors['text'],
+            insertbackground=self.colors['accent_cyan'],
+            relief='flat',
+            highlightthickness=1,
+            highlightcolor=self.colors['accent_cyan'],
+            highlightbackground=self.colors['border']
         )
-        send_btn.pack(side=tk.RIGHT)
+        self.input_entry.pack(fill=tk.X, padx=15, pady=10, ipady=8)
+        self.input_entry.bind('<Return>', lambda e: self.send_message())
+        
+        # 提示
+        hint_frame = tk.Frame(input_frame, bg=self.colors['panel'])
+        hint_frame.pack(fill=tk.X, padx=15)
+        
+        hint_label = tk.Label(
+            hint_frame,
+            text="💡 试试: \"打开微信\" / \"截图\" / \"控制手机\"",
+            font=('Microsoft YaHei', 9),
+            fg=self.colors['text_dim'],
+            bg=self.colors['panel']
+        )
+        hint_label.pack(side=tk.LEFT)
     
     def _create_status_bar(self):
         """创建状态栏"""
-        self.status_frame = tk.Frame(self.root, bg='#000000')
-        self.status_frame.place(x=0, y=self.height-50, width=self.width, height=50)
+        status_frame = tk.Frame(self.canvas, bg=self.colors['panel'])
         
-        self.status_canvas = tk.Canvas(self.status_frame, width=12, height=12, bg='#000000', highlightthickness=0)
-        self.status_canvas.place(x=20, y=10)
-        self.status_dot = self.status_canvas.create_oval(2, 2, 10, 10, fill='#00ff00', outline='')
+        self.canvas.create_window(
+            0, self.height - 40,
+            window=status_frame,
+            anchor='nw',
+            width=self.width,
+            height=40
+        )
         
-        self.status_label = tk.Label(
-            self.status_frame,
-            text="CONNECTED",
+        # 节点状态
+        nodes_label = tk.Label(
+            status_frame,
+            text="● 节点: 108",
             font=('Consolas', 9),
-            bg='#000000',
-            fg='#00ff00'
+            fg=self.colors['accent_cyan'],
+            bg=self.colors['panel']
         )
-        self.status_label.place(x=38, y=8)
+        nodes_label.pack(side=tk.LEFT, padx=15, pady=10)
         
-        self.time_label = tk.Label(
-            self.status_frame,
-            text="",
+        # 设备状态
+        self.devices_label = tk.Label(
+            status_frame,
+            text="● 设备: 0",
             font=('Consolas', 9),
-            bg='#000000',
-            fg='#666666'
+            fg=self.colors['accent_purple'],
+            bg=self.colors['panel']
         )
-        self.time_label.place(x=self.width-100, y=8)
+        self.devices_label.pack(side=tk.LEFT, padx=10, pady=10)
         
-        hint_label = tk.Label(
-            self.status_frame,
-            text="F12 唤醒/隐藏 | ESC 隐藏 | 随便说，我会理解并执行",
-            font=('Consolas', 8),
-            bg='#000000',
-            fg='#444444'
+        # Agent 状态
+        self.agents_label = tk.Label(
+            status_frame,
+            text="● Agent: 0",
+            font=('Consolas', 9),
+            fg=self.colors['accent_pink'],
+            bg=self.colors['panel']
         )
-        hint_label.place(x=20, y=28)
+        self.agents_label.pack(side=tk.LEFT, padx=10, pady=10)
     
-    def _append_chat(self, message: str, tag: str = 'system'):
-        """添加聊天消息"""
-        self.chat_history.config(state=tk.NORMAL)
-        self.chat_history.insert(tk.END, f"{message}\n\n", tag)
-        self.chat_history.see(tk.END)
-        self.chat_history.config(state=tk.DISABLED)
+    def _start_animations(self):
+        """启动动画"""
+        pass
     
-    def _send_chat(self):
-        """发送聊天消息"""
-        message = self.chat_input.get().strip()
-        if not message:
-            return
-        
-        self.chat_input.delete(0, tk.END)
-        self._append_chat(f"[USER] {message}", 'user')
-        
-        threading.Thread(target=self._send_to_server, args=(message,), daemon=True).start()
-    
-    def _send_to_server(self, message: str):
-        """发送消息到服务器"""
-        try:
-            response = httpx.post(
-                f"{self.server_url}/api/v1/chat",
-                json={"message": message, "device_id": "windows_client"},
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                ai_response = data.get("response", "已收到指令")
-                self.root.after(0, lambda: self._append_chat(f"[AI] {ai_response}", 'ai'))
-            else:
-                self.root.after(0, lambda: self._append_chat(f"[ERROR] HTTP {response.status_code}", 'system'))
-        except Exception as e:
-            self.root.after(0, lambda: self._append_chat(f"[ERROR] {str(e)}", 'system'))
+    def _update_time(self):
+        """更新时间"""
+        now = datetime.now()
+        self.time_label.config(text=now.strftime('%H:%M:%S'))
+        self.root.after(1000, self._update_time)
     
     def toggle_panel(self):
-        """切换面板"""
+        """切换面板显示/隐藏"""
         if self.is_visible:
             self.hide_panel()
         else:
@@ -262,72 +373,108 @@ class ScrollPaperGeekUI:
     
     def show_panel(self):
         """显示面板"""
-        if not self.is_visible:
-            self.is_visible = True
-            self._animate_scroll_open()
+        self.is_visible = True
+        
+        # 动画展开
+        for i in range(10):
+            x = self.x_hidden - (self.x_hidden - self.x_visible) * (i + 1) / 10
+            self.root.geometry(f"{self.width}x{self.height}+{int(x)}+0")
+            self.root.update()
+            self.root.after(10)
+        
+        self.root.geometry(f"{self.width}x{self.height}+{self.x_visible}+0")
+        self.input_entry.focus()
     
     def hide_panel(self):
         """隐藏面板"""
-        if self.is_visible:
-            self.is_visible = False
-            self._animate_scroll_close()
-    
-    def _animate_scroll_open(self):
-        """卷轴展开动画"""
-        steps = 30
-        start_width = 1
-        end_width = self.width
-        start_x = self.x_hidden
-        end_x = self.x_visible
+        self.is_visible = False
         
-        def animate(step=0):
-            if step < steps:
-                progress = step / steps
-                eased = 1 - (1 - progress) ** 3
-                
-                current_width = int(start_width + (end_width - start_width) * eased)
-                current_x = int(start_x + (end_x - start_x) * eased)
-                
-                self.root.geometry(f"{current_width}x{self.height}+{current_x}+0")
-                self.root.after(15, lambda: animate(step + 1))
+        # 动画收起
+        for i in range(10):
+            x = self.x_visible + (self.x_hidden - self.x_visible) * (i + 1) / 10
+            self.root.geometry(f"{self.width}x{self.height}+{int(x)}+0")
+            self.root.update()
+            self.root.after(10)
+        
+        self.root.geometry(f"1x{self.height}+{self.x_hidden}+0")
+    
+    def send_message(self):
+        """发送消息"""
+        message = self.input_entry.get().strip()
+        if not message:
+            return
+        
+        self.input_entry.delete(0, tk.END)
+        
+        # 添加用户消息
+        self._add_message("user", message)
+        
+        # 发送到服务器
+        threading.Thread(
+            target=self._send_to_server,
+            args=(message,),
+            daemon=True
+        ).start()
+    
+    def _send_to_server(self, message: str):
+        """发送消息到服务器"""
+        try:
+            response = httpx.post(
+                f"{self.server_url}/api/v1/chat",
+                json={"message": message},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self._add_message("ai", data.get("response", "处理完成"))
             else:
-                self.root.geometry(f"{self.width}x{self.height}+{self.x_visible}+0")
+                self._add_message("ai", f"❌ 错误: {response.status_code}")
         
-        animate()
+        except Exception as e:
+            self._add_message("ai", f"❌ 连接失败: {str(e)}")
     
-    def _animate_scroll_close(self):
-        """卷轴收起动画"""
-        steps = 20
-        start_width = self.width
-        end_width = 1
-        start_x = self.x_visible
-        end_x = self.x_hidden
+    def _add_message(self, role: str, content: str):
+        """添加消息"""
+        def _add():
+            # 创建消息框架
+            msg_frame = tk.Frame(
+                self.messages_frame,
+                bg=self.colors['user_bg'] if role == 'user' else self.colors['ai_bg']
+            )
+            msg_frame.pack(fill=tk.X, pady=5)
+            
+            # 消息内容
+            msg_label = tk.Label(
+                msg_frame,
+                text=content,
+                font=('Microsoft YaHei', 10),
+                fg=self.colors['text'],
+                bg=self.colors['user_bg'] if role == 'user' else self.colors['ai_bg'],
+                wraplength=self.width - 60,
+                justify='left' if role == 'ai' else 'right'
+            )
+            msg_label.pack(padx=10, pady=8, anchor='e' if role == 'user' else 'w')
+            
+            # 滚动到底部
+            self.messages_frame.update_idletasks()
         
-        def animate(step=0):
-            if step < steps:
-                progress = step / steps
-                eased = progress ** 2
-                
-                current_width = int(start_width + (end_width - start_width) * eased)
-                current_x = int(start_x + (end_x - start_x) * eased)
-                
-                self.root.geometry(f"{current_width}x{self.height}+{current_x}+0")
-                self.root.after(10, lambda: animate(step + 1))
-            else:
-                self.root.geometry(f"1x{self.height}+{self.x_hidden}+0")
-        
-        animate()
-    
-    def _update_time(self):
-        """更新时间"""
-        self.time_label.config(text=datetime.now().strftime("%H:%M:%S"))
-        self.root.after(1000, self._update_time)
+        self.root.after(0, _add)
     
     def run(self):
         """运行"""
+        print()
+        print("  ═══════════════════════════════════════")
+        print("  🌌 Galaxy Windows 客户端已启动")
+        print("  ═══════════════════════════════════════")
+        print()
+        print("  按 F12 唤醒/隐藏面板")
+        print("  按 ESC 隐藏面板")
+        print()
+        
         self.root.mainloop()
 
 
 if __name__ == "__main__":
-    app = ScrollPaperGeekUI()
+    app = GalaxyGeekUI()
     app.run()

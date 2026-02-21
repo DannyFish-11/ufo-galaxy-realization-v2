@@ -3,243 +3,581 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galaxy - AI 智能体</title>
+    <title>Galaxy - 星系智能体</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
         
         * {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Rajdhani', sans-serif;
         }
         
         body {
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            background: #000000;
+            overflow: hidden;
         }
         
-        .scroll-paper {
-            background: linear-gradient(to right, #f5f0e6, #faf8f3, #f5f0e6);
-            box-shadow: -5px 0 20px rgba(0,0,0,0.3), 5px 0 20px rgba(0,0,0,0.3);
+        /* 星系背景 */
+        .galaxy-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at center, #0a0a20 0%, #000000 70%),
+                radial-gradient(circle at 20% 80%, rgba(120, 0, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 150, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 100, 0, 0.1) 0%, transparent 40%);
+            z-index: -2;
         }
         
-        .ink-border {
-            background: linear-gradient(to bottom, #333, #000, #333);
+        /* 星星 */
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
         }
         
-        .glow-text {
-            text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle var(--duration) ease-in-out infinite;
         }
         
-        .status-dot {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        @keyframes twinkle {
+            0%, 100% { opacity: var(--opacity); transform: scale(1); }
+            50% { opacity: 0.2; transform: scale(0.8); }
         }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        /* 星云效果 */
+        .nebula {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.3;
+            animation: nebula-drift 20s ease-in-out infinite;
+            z-index: -1;
         }
         
-        .chat-bubble-user {
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        @keyframes nebula-drift {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(20px, -20px) scale(1.1); }
         }
         
-        .chat-bubble-ai {
-            background: linear-gradient(135deg, #374151, #1f2937);
+        /* 行星 */
+        .planet {
+            position: fixed;
+            border-radius: 50%;
+            z-index: -1;
         }
         
-        .typing-indicator span {
-            animation: typing 1.4s infinite;
+        .planet-ring {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: rotateX(70deg);
         }
         
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        /* 轨道 */
+        .orbit {
+            position: fixed;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+            z-index: -1;
+        }
         
-        @keyframes typing {
+        /* 标题样式 */
+        .galaxy-title {
+            font-family: 'Orbitron', monospace;
+            background: linear-gradient(135deg, #00d4ff, #7b2fff, #ff006e, #00d4ff);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradient-shift 5s ease infinite;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+        }
+        
+        @keyframes gradient-shift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        /* 节点指示器 */
+        .node-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { 
+                box-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+                transform: scale(1.2);
+            }
+        }
+        
+        /* 消息气泡 */
+        .message-user {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 47, 255, 0.2));
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+        }
+        
+        .message-ai {
+            background: linear-gradient(135deg, rgba(255, 0, 110, 0.1), rgba(123, 47, 255, 0.1));
+            border: 1px solid rgba(255, 0, 110, 0.2);
+            box-shadow: 0 0 20px rgba(255, 0, 110, 0.1);
+        }
+        
+        /* 输入框 */
+        .galaxy-input {
+            background: rgba(10, 10, 30, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        .galaxy-input:focus {
+            border-color: rgba(0, 212, 255, 0.6);
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* 发送按钮 */
+        .galaxy-button {
+            background: linear-gradient(135deg, #00d4ff, #7b2fff);
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .galaxy-button:hover {
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+            transform: scale(1.05);
+        }
+        
+        /* 状态卡片 */
+        .status-card {
+            background: rgba(10, 10, 30, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        /* 打字指示器 */
+        .typing-dot {
+            animation: typing-bounce 1.4s ease-in-out infinite;
+        }
+        
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typing-bounce {
             0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-10px); }
+            30% { transform: translateY(-8px); }
+        }
+        
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #00d4ff, #7b2fff);
+            border-radius: 3px;
+        }
+        
+        /* 节点网格 */
+        .node-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 8px;
+        }
+        
+        .node-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        .node-dot:hover {
+            transform: scale(1.5);
+            box-shadow: 0 0 15px currentColor;
         }
     </style>
 </head>
-<body class="text-gray-100 min-h-screen">
-    <div id="app" class="h-screen flex flex-col">
-        <!-- 顶部标题栏 -->
-        <header class="bg-gray-900 border-b border-gray-800 px-6 py-4">
+<body class="text-white min-h-screen">
+    <!-- 星系背景 -->
+    <div class="galaxy-bg"></div>
+    
+    <!-- 星星 -->
+    <div class="stars" ref="starsContainer"></div>
+    
+    <!-- 星云 -->
+    <div class="nebula" style="width: 400px; height: 400px; background: radial-gradient(circle, rgba(123, 47, 255, 0.3), transparent); top: 10%; left: -10%;"></div>
+    <div class="nebula" style="width: 300px; height: 300px; background: radial-gradient(circle, rgba(0, 212, 255, 0.2), transparent); bottom: 20%; right: -5%; animation-delay: -10s;"></div>
+    <div class="nebula" style="width: 250px; height: 250px; background: radial-gradient(circle, rgba(255, 0, 110, 0.2), transparent); top: 50%; left: 60%; animation-delay: -5s;"></div>
+    
+    <!-- 轨道 -->
+    <div class="orbit" style="width: 600px; height: 600px; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+    <div class="orbit" style="width: 800px; height: 800px; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+    <div class="orbit" style="width: 1000px; height: 1000px; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+    
+    <!-- Vue 应用 -->
+    <div id="app" class="h-screen flex flex-col relative z-10">
+        
+        <!-- 顶部导航 -->
+        <header class="px-6 py-4 border-b border-white/10 bg-black/30 backdrop-blur-md">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div class="w-3 h-3 rounded-full status-dot" :class="systemStatus === 'healthy' ? 'bg-green-500' : 'bg-red-500'"></div>
-                    <h1 class="text-xl font-bold glow-text">GALAXY</h1>
-                    <span class="text-xs text-gray-500">L4 自主性智能系统 v2.3.21</span>
+                <div class="flex items-center space-x-6">
+                    <!-- Logo -->
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center">
+                            <span class="text-lg font-bold">G</span>
+                        </div>
+                        <h1 class="galaxy-title text-2xl font-bold tracking-wider">GALAXY</h1>
+                    </div>
+                    
+                    <!-- 版本 -->
+                    <span class="text-xs text-gray-500 font-mono">v2.3.23</span>
                 </div>
-                <div class="flex items-center space-x-4 text-xs text-gray-400">
-                    <span>节点: {{ nodeCount }}</span>
-                    <span>设备: {{ deviceCount }}</span>
-                    <span>Agent: {{ agentCount }}</span>
-                    <span>{{ currentTime }}</span>
+                
+                <!-- 状态指示器 -->
+                <div class="flex items-center space-x-6 text-sm">
+                    <div class="flex items-center space-x-2">
+                        <div class="node-indicator bg-cyan-400" style="color: #00d4ff;"></div>
+                        <span class="text-gray-400">节点: <span class="text-cyan-400 font-mono">{{ nodeCount }}</span></span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="node-indicator bg-purple-500" style="color: #7b2fff;"></div>
+                        <span class="text-gray-400">设备: <span class="text-purple-400 font-mono">{{ deviceCount }}</span></span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="node-indicator bg-pink-500" style="color: #ff006e;"></div>
+                        <span class="text-gray-400">Agent: <span class="text-pink-400 font-mono">{{ agentCount }}</span></span>
+                    </div>
+                    <span class="text-gray-600 font-mono">{{ currentTime }}</span>
                 </div>
             </div>
         </header>
         
-        <!-- 主内容区 - 书法卷轴式对话界面 -->
+        <!-- 主内容区 -->
         <main class="flex-1 flex overflow-hidden">
-            <div class="w-2 ink-border"></div>
             
-            <div class="flex-1 scroll-paper overflow-auto p-6" ref="chatContainer">
-                <div class="max-w-4xl mx-auto space-y-4">
-                    <div v-for="msg in messages" :key="msg.id" 
-                         class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                        <div class="max-w-3xl rounded-lg p-4"
-                             :class="msg.role === 'user' ? 'chat-bubble-user text-white' : 'chat-bubble-ai text-gray-100'">
-                            <div class="whitespace-pre-wrap text-sm leading-relaxed">{{ msg.content }}</div>
-                            <div class="text-xs mt-2 opacity-50">{{ formatTime(msg.timestamp) }}</div>
+            <!-- 左侧面板 - 节点状态 -->
+            <aside class="w-64 border-r border-white/10 bg-black/20 backdrop-blur-sm p-4 overflow-auto">
+                <h2 class="text-sm font-semibold text-gray-400 mb-4 uppercase tracking-wider">节点状态</h2>
+                
+                <!-- 节点网格 -->
+                <div class="node-grid mb-6">
+                    <div v-for="i in 108" :key="i" 
+                         class="node-dot cursor-pointer"
+                         :class="getNodeColor(i)"
+                         :title="'Node ' + i"
+                         @click="showNodeInfo(i)">
+                    </div>
+                </div>
+                
+                <!-- 系统状态 -->
+                <div class="space-y-3">
+                    <div class="status-card rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">系统状态</div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                            <span class="text-green-400 text-sm">运行中</span>
                         </div>
                     </div>
                     
+                    <div class="status-card rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">协议</div>
+                        <div class="text-xs text-cyan-400 font-mono">node_protocol</div>
+                        <div class="text-xs text-purple-400 font-mono">device_protocol</div>
+                        <div class="text-xs text-pink-400 font-mono">mcp_adapter</div>
+                    </div>
+                    
+                    <div class="status-card rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">自主能力</div>
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400">学习</span>
+                            <span class="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">思考</span>
+                            <span class="text-xs px-2 py-0.5 rounded bg-pink-500/20 text-pink-400">编程</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- 中间 - 对话区域 -->
+            <div class="flex-1 flex flex-col">
+                
+                <!-- 消息列表 -->
+                <div class="flex-1 overflow-auto p-6 space-y-4" ref="chatContainer">
+                    
+                    <!-- 欢迎消息 -->
+                    <div v-if="messages.length === 0" class="text-center py-20">
+                        <div class="galaxy-title text-4xl font-bold mb-4">GALAXY</div>
+                        <div class="text-gray-500 text-lg mb-2">L4 级自主性智能系统</div>
+                        <div class="text-gray-600 text-sm">星系级智能体，随时为您服务</div>
+                    </div>
+                    
+                    <!-- 消息 -->
+                    <div v-for="msg in messages" :key="msg.id" 
+                         class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+                        <div class="max-w-2xl rounded-2xl p-4"
+                             :class="msg.role === 'user' ? 'message-user' : 'message-ai'">
+                            <div class="whitespace-pre-wrap text-sm leading-relaxed">{{ msg.content }}</div>
+                            <div class="text-xs mt-2 opacity-50 font-mono">{{ formatTime(msg.timestamp) }}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 打字指示器 -->
                     <div v-if="isLoading" class="flex justify-start">
-                        <div class="chat-bubble-ai rounded-lg p-4">
-                            <div class="typing-indicator flex space-x-1">
-                                <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
-                                <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
-                                <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        <div class="message-ai rounded-2xl p-4">
+                            <div class="flex space-x-1">
+                                <div class="typing-dot w-2 h-2 bg-cyan-400 rounded-full"></div>
+                                <div class="typing-dot w-2 h-2 bg-purple-400 rounded-full"></div>
+                                <div class="typing-dot w-2 h-2 bg-pink-400 rounded-full"></div>
                             </div>
                         </div>
                     </div>
                 </div>
+                
+                <!-- 输入区域 -->
+                <div class="p-4 border-t border-white/10 bg-black/30 backdrop-blur-md">
+                    <div class="flex space-x-3">
+                        <input 
+                            v-model="inputMessage"
+                            @keypress.enter="sendMessage"
+                            type="text"
+                            placeholder="输入消息... (支持自然语言指令)"
+                            class="galaxy-input flex-1 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none"
+                        />
+                        <button 
+                            @click="sendMessage"
+                            class="galaxy-button px-6 py-3 rounded-xl font-semibold text-white"
+                        >
+                            发送
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-4 mt-2 text-xs text-gray-600">
+                        <span>💡 试试: "打开微信" / "截图" / "控制手机"</span>
+                        <span>|</span>
+                        <span>🧠 自主学习 / 思考 / 编程</span>
+                    </div>
+                </div>
             </div>
             
-            <div class="w-2 ink-border"></div>
+            <!-- 右侧面板 - 设备和 Agent -->
+            <aside class="w-64 border-l border-white/10 bg-black/20 backdrop-blur-sm p-4 overflow-auto">
+                <h2 class="text-sm font-semibold text-gray-400 mb-4 uppercase tracking-wider">连接设备</h2>
+                
+                <div class="space-y-2 mb-6">
+                    <div v-for="device in devices" :key="device.id" 
+                         class="status-card rounded-lg p-3 cursor-pointer hover:border-cyan-500/50 transition-all">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-xs">
+                                {{ device.type === 'android' ? '📱' : '💻' }}
+                            </div>
+                            <div>
+                                <div class="text-sm">{{ device.name }}</div>
+                                <div class="text-xs text-gray-500">{{ device.type }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div v-if="devices.length === 0" class="text-center text-gray-600 text-sm py-4">
+                        暂无连接设备
+                    </div>
+                </div>
+                
+                <h2 class="text-sm font-semibold text-gray-400 mb-4 uppercase tracking-wider">活跃 Agent</h2>
+                
+                <div class="space-y-2">
+                    <div v-for="agent in agents" :key="agent.id"
+                         class="status-card rounded-lg p-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm">{{ agent.name }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded"
+                                  :class="agent.status === 'running' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'">
+                                {{ agent.status }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">{{ agent.task }}</div>
+                    </div>
+                    
+                    <div v-if="agents.length === 0" class="text-center text-gray-600 text-sm py-4">
+                        暂无活跃 Agent
+                    </div>
+                </div>
+            </aside>
         </main>
-        
-        <!-- 底部输入区 -->
-        <footer class="bg-gray-900 border-t border-gray-800 p-4">
-            <div class="max-w-4xl mx-auto flex space-x-4">
-                <input v-model="inputText" @keyup.enter="sendMessage"
-                       type="text" placeholder="随便说点什么，我会理解并执行..."
-                       class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 text-sm">
-                <button @click="sendMessage" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium text-sm">
-                    发送
-                </button>
-                <button @click="startVoiceInput"
-                        class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-3 rounded-lg text-sm">
-                    🎤
-                </button>
-            </div>
-            <div class="max-w-4xl mx-auto mt-2 text-xs text-gray-500">
-                💡 随便说，我会自动理解你的意图并执行操作
-            </div>
-        </footer>
     </div>
     
     <script>
-        const { createApp, ref, onMounted, nextTick } = Vue;
+        const { createApp, ref, onMounted, computed } = Vue;
         
         createApp({
             setup() {
-                const systemStatus = ref('healthy');
-                const inputText = ref('');
+                const messages = ref([]);
+                const inputMessage = ref('');
                 const isLoading = ref(false);
-                const currentTime = ref('');
                 const nodeCount = ref(108);
                 const deviceCount = ref(0);
                 const agentCount = ref(0);
+                const currentTime = ref('');
+                const devices = ref([]);
+                const agents = ref([]);
                 const chatContainer = ref(null);
+                const starsContainer = ref(null);
                 
-                const messages = ref([
-                    {
-                        id: '1',
-                        role: 'assistant',
-                        content: `你好！我是 Galaxy 智能体。
-
-我是 L4 级自主性智能系统，可以真正帮你操作设备。
-
-你可以随便说，我会自动理解你的意图：
-• "打开微信" → 我会帮你打开微信
-• "搜索手机" → 我会帮你搜索
-• "截图" → 我会帮你截图
-• "向上滑动" → 我会帮你滑动
-
-不需要特定关键词，随便说就行！`,
-                        timestamp: Date.now()
-                    }
-                ]);
-                
-                const formatTime = (timestamp) => new Date(timestamp).toLocaleTimeString();
-                
-                const scrollToBottom = async () => {
-                    await nextTick();
-                    if (chatContainer.value) {
-                        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+                // 生成星星
+                const generateStars = () => {
+                    if (!starsContainer.value) return;
+                    
+                    for (let i = 0; i < 200; i++) {
+                        const star = document.createElement('div');
+                        star.className = 'star';
+                        star.style.left = Math.random() * 100 + '%';
+                        star.style.top = Math.random() * 100 + '%';
+                        star.style.width = Math.random() * 2 + 1 + 'px';
+                        star.style.height = star.style.width;
+                        star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
+                        star.style.setProperty('--opacity', Math.random() * 0.5 + 0.3);
+                        starsContainer.value.appendChild(star);
                     }
                 };
                 
+                // 更新时间
+                const updateTime = () => {
+                    const now = new Date();
+                    currentTime.value = now.toLocaleTimeString('zh-CN', { hour12: false });
+                };
+                
+                // 发送消息
                 const sendMessage = async () => {
-                    if (!inputText.value.trim()) return;
+                    if (!inputMessage.value.trim() || isLoading.value) return;
                     
-                    const userMessage = {
-                        id: Date.now().toString(),
+                    const message = inputMessage.value.trim();
+                    inputMessage.value = '';
+                    
+                    // 添加用户消息
+                    messages.value.push({
+                        id: Date.now(),
                         role: 'user',
-                        content: inputText.value,
-                        timestamp: Date.now()
-                    };
-                    messages.value.push(userMessage);
+                        content: message,
+                        timestamp: new Date()
+                    });
                     
-                    const query = inputText.value;
-                    inputText.value = '';
                     isLoading.value = true;
-                    scrollToBottom();
                     
                     try {
-                        const response = await axios.post('/api/v1/chat', {
-                            message: query,
-                            device_id: 'web_dashboard'
+                        const response = await axios.post('/api/v1/chat', { message });
+                        
+                        messages.value.push({
+                            id: Date.now() + 1,
+                            role: 'assistant',
+                            content: response.data.response || '处理完成',
+                            timestamp: new Date()
                         });
-                        
-                        const aiMessage = {
-                            id: (Date.now() + 1).toString(),
-                            role: 'assistant',
-                            content: response.data.response || '已收到指令，正在执行...',
-                            timestamp: Date.now()
-                        };
-                        messages.value.push(aiMessage);
-                        
-                        if (response.data.data) {
-                            if (response.data.data.nodes) nodeCount.value = response.data.data.total || 108;
-                            if (response.data.data.devices) deviceCount.value = response.data.data.total || 0;
-                            if (response.data.data.agents) agentCount.value = response.data.data.total || 0;
-                        }
                     } catch (error) {
-                        const errorMessage = {
-                            id: (Date.now() + 1).toString(),
+                        messages.value.push({
+                            id: Date.now() + 1,
                             role: 'assistant',
-                            content: '抱歉，连接服务时出错。\n\n请确保后端服务正在运行:\npython main.py',
-                            timestamp: Date.now()
-                        };
-                        messages.value.push(errorMessage);
+                            content: '❌ 连接失败，请检查服务是否启动',
+                            timestamp: new Date()
+                        });
                     }
                     
                     isLoading.value = false;
-                    scrollToBottom();
+                    
+                    // 滚动到底部
+                    setTimeout(() => {
+                        if (chatContainer.value) {
+                            chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+                        }
+                    }, 100);
                 };
                 
-                const startVoiceInput = () => {
-                    alert('语音输入功能开发中...');
+                // 格式化时间
+                const formatTime = (date) => {
+                    return new Date(date).toLocaleTimeString('zh-CN', { hour12: false });
                 };
                 
-                const updateTime = () => {
-                    currentTime.value = new Date().toLocaleTimeString();
-                    setTimeout(updateTime, 1000);
+                // 获取节点颜色
+                const getNodeColor = (index) => {
+                    const colors = [
+                        'bg-cyan-400', 'bg-purple-500', 'bg-pink-500', 
+                        'bg-blue-400', 'bg-green-400', 'bg-yellow-400'
+                    ];
+                    return colors[index % colors.length];
+                };
+                
+                // 显示节点信息
+                const showNodeInfo = (index) => {
+                    console.log('Node', index);
+                };
+                
+                // 加载系统状态
+                const loadStatus = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/system/info');
+                        nodeCount.value = response.data.nodes || 108;
+                        deviceCount.value = response.data.devices || 0;
+                    } catch (error) {
+                        console.error('Failed to load status:', error);
+                    }
+                };
+                
+                // 加载设备
+                const loadDevices = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/devices');
+                        devices.value = response.data.devices || [];
+                        deviceCount.value = devices.value.length;
+                    } catch (error) {
+                        console.error('Failed to load devices:', error);
+                    }
                 };
                 
                 onMounted(() => {
+                    generateStars();
                     updateTime();
-                    scrollToBottom();
+                    setInterval(updateTime, 1000);
+                    loadStatus();
+                    loadDevices();
                 });
                 
                 return {
-                    systemStatus, inputText, isLoading, currentTime,
-                    nodeCount, deviceCount, agentCount, messages, chatContainer,
-                    formatTime, sendMessage, startVoiceInput
+                    messages,
+                    inputMessage,
+                    isLoading,
+                    nodeCount,
+                    deviceCount,
+                    agentCount,
+                    currentTime,
+                    devices,
+                    agents,
+                    chatContainer,
+                    starsContainer,
+                    sendMessage,
+                    formatTime,
+                    getNodeColor,
+                    showNodeInfo
                 };
             }
         }).mount('#app');
