@@ -1,10 +1,13 @@
 """
-Galaxy Dashboard 后端 - 统一智能体版本
-=====================================
+Galaxy Dashboard 后端
+====================
 
-集成所有 108 个节点到统一智能体核心
+使用已有协议:
+- core/node_protocol.py
+- enhancements/multidevice/device_protocol.py
+- nodes/common/mcp_adapter.py
 
-版本: v2.3.22
+版本: v2.3.23
 """
 
 import os
@@ -26,26 +29,30 @@ from pydantic import BaseModel
 
 # 导入 ASCII 艺术字
 try:
-    from core.ascii_art import GALAXY_ASCII_MINIMAL, GALAXY_ASCII, GALAXY_ASCII_LARGE
-    ASCII_AVAILABLE = True
+    from core.ascii_art import GALAXY_ASCII_MINIMAL
 except ImportError:
-    ASCII_AVAILABLE = False
     GALAXY_ASCII_MINIMAL = "GALAXY - L4 Autonomous Intelligence System"
 
-# 导入统一智能体核心
+# 导入整合核心
 try:
-    from core.unified_agent_core import unified_core, ProtocolType
-    UNIFIED_CORE_AVAILABLE = True
+    from core.galaxy_core import galaxy_core
+    GALAXY_CORE_AVAILABLE = True
 except ImportError:
-    UNIFIED_CORE_AVAILABLE = False
-    unified_core = None
+    GALAXY_CORE_AVAILABLE = False
+    galaxy_core = None
 
-# 导入多协议支持
+# 导入已有协议
 try:
-    from core.multi_protocol_layer import multi_protocol, ProtocolType as MultiProtocolType
-    MULTI_PROTOCOL_AVAILABLE = True
+    from core.node_protocol import Message, MessageHeader, MessageType
+    NODE_PROTOCOL_AVAILABLE = True
 except ImportError:
-    MULTI_PROTOCOL_AVAILABLE = False
+    NODE_PROTOCOL_AVAILABLE = False
+
+try:
+    from enhancements.multidevice.device_protocol import AIPMessage, AIPProtocol
+    DEVICE_PROTOCOL_AVAILABLE = True
+except ImportError:
+    DEVICE_PROTOCOL_AVAILABLE = False
 
 # 配置日志
 logging.basicConfig(
@@ -58,7 +65,7 @@ logger = logging.getLogger("Galaxy")
 print(GALAXY_ASCII_MINIMAL)
 
 # 创建应用
-app = FastAPI(title="Galaxy Dashboard", version="2.3.22")
+app = FastAPI(title="Galaxy Dashboard", version="2.3.23")
 
 # CORS 配置
 app.add_middleware(
@@ -73,13 +80,6 @@ app.add_middleware(
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")
 
 # ============================================================================
-# 状态存储
-# ============================================================================
-
-devices: Dict[str, Dict] = {}
-active_websockets: List[WebSocket] = []
-
-# ============================================================================
 # 静态文件路由
 # ============================================================================
 
@@ -88,7 +88,7 @@ async def root():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return {"message": "Galaxy Dashboard API", "version": "2.3.22"}
+    return {"message": "Galaxy Dashboard API", "version": "2.3.23"}
 
 # ============================================================================
 # ASCII 艺术字 API
@@ -97,144 +97,105 @@ async def root():
 @app.get("/api/v1/ascii")
 async def get_ascii_art(style: str = "minimal"):
     """获取 ASCII 艺术字"""
-    if style == "large":
-        return {"ascii": GALAXY_ASCII_LARGE}
-    elif style == "normal":
-        return {"ascii": GALAXY_ASCII}
-    else:
-        return {"ascii": GALAXY_ASCII_MINIMAL}
+    return {"ascii": GALAXY_ASCII_MINIMAL}
 
 @app.get("/api/v1/system/info")
 async def get_system_info():
     """获取系统信息"""
     info = {
         "name": "Galaxy",
-        "version": "2.3.22",
-        "description": "L4 Autonomous Intelligence System - 统一智能体版本",
+        "version": "2.3.23",
+        "description": "L4 Autonomous Intelligence System",
         "ascii": GALAXY_ASCII_MINIMAL,
-        "features": {
-            "ai_driven": True,
-            "multi_device": True,
-            "autonomous_learning": True,
-            "autonomous_thinking": True,
-            "autonomous_coding": True,
-            "knowledge_base": True,
-            "database": True,
-            "unified_core": UNIFIED_CORE_AVAILABLE,
-            "multi_protocol": MULTI_PROTOCOL_AVAILABLE
+        "protocols": {
+            "node_protocol": NODE_PROTOCOL_AVAILABLE,
+            "device_protocol": DEVICE_PROTOCOL_AVAILABLE,
+            "galaxy_core": GALAXY_CORE_AVAILABLE
         },
         "timestamp": datetime.now().isoformat()
     }
     
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        status = unified_core.get_status()
-        info["nodes"] = status["total_nodes"]
-        info["active_nodes"] = status["active_nodes"]
-        info["capabilities"] = len(status["capabilities"])
-        info["protocols"] = status["protocols_supported"]
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        status = galaxy_core.get_status()
+        info["nodes"] = status["nodes"]
+        info["devices"] = status["devices"]
     
     return info
 
 # ============================================================================
-# 统一智能体 API
+# 节点 API - 使用已有协议
 # ============================================================================
 
 @app.get("/api/v1/nodes")
 async def list_nodes():
     """列出所有节点"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        nodes = []
-        for node_id, node in unified_core.nodes.items():
-            nodes.append({
-                "node_id": node.node_id,
-                "name": node.name,
-                "port": node.port,
-                "status": node.status.value,
-                "capabilities": node.capabilities,
-                "endpoint": node.endpoint
-            })
-        return {"nodes": nodes, "total": len(nodes)}
-    return {"nodes": [], "total": 0}
-
-@app.get("/api/v1/nodes/{node_id}")
-async def get_node(node_id: str):
-    """获取节点详情"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        node = unified_core.get_node(node_id)
-        if node:
-            return {
-                "node_id": node.node_id,
-                "name": node.name,
-                "port": node.port,
-                "status": node.status.value,
-                "capabilities": node.capabilities,
-                "endpoint": node.endpoint,
-                "last_heartbeat": node.last_heartbeat.isoformat() if node.last_heartbeat else None
-            }
-    raise HTTPException(status_code=404, detail="Node not found")
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        return {"nodes": galaxy_core.nodes, "total": len(galaxy_core.nodes)}
+    return {"nodes": {}, "total": 0}
 
 @app.post("/api/v1/nodes/{node_id}/call")
 async def call_node(node_id: str, request: dict):
-    """调用节点"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
+    """调用节点 - 使用已有协议"""
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
         action = request.get("action", "")
         params = request.get("params", {})
-        protocol = request.get("protocol", "http")
-        
-        protocol_type = ProtocolType.HTTP
-        if protocol == "websocket":
-            protocol_type = ProtocolType.WEBSOCKET
-        elif protocol == "aip":
-            protocol_type = ProtocolType.AIP
-        elif protocol == "local":
-            protocol_type = ProtocolType.LOCAL
-        
-        result = await unified_core.call_node(node_id, action, params, protocol_type)
+        result = await galaxy_core.call_node(node_id, action, params)
         return result
-    
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
 
-@app.post("/api/v1/smart-call")
-async def smart_call(request: dict):
-    """智能调用 - 自动选择最佳节点"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        capability = request.get("capability", "")
-        action = request.get("action", "")
-        params = request.get("params", {})
-        prefer_local = request.get("prefer_local", True)
-        
-        result = await unified_core.smart_call(capability, action, params, prefer_local)
+@app.post("/api/v1/mcp/call")
+async def mcp_call(request: dict):
+    """
+    MCP 调用 - 统一入口
+    
+    通过 Node_04_Router 路由到具体节点
+    """
+    node_id = request.get("node_id", "04")
+    tool = request.get("tool", "")
+    params = request.get("params", {})
+    
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        result = await galaxy_core.call_node(node_id, tool, params)
         return result
     
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
 
 # ============================================================================
-# Agent 分发 API
+# 设备 API - 使用 device_protocol
 # ============================================================================
 
-@app.post("/api/v1/dispatch")
-async def dispatch_agent(request: dict):
-    """
-    分发 Agent 到目标设备
-    
-    支持本地轻量 Agent 和远处分发
-    """
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        task_type = request.get("task_type", "")
-        target_device = request.get("target_device", "")
-        params = request.get("params", {})
-        protocol = request.get("protocol", "http")
+@app.get("/api/v1/devices")
+async def list_devices():
+    """列出所有设备"""
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        return {"devices": list(galaxy_core.devices.values())}
+    return {"devices": []}
+
+@app.post("/api/v1/devices/register")
+async def register_device(request: dict):
+    """注册设备 - 使用 device_protocol"""
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        device_id = request.get("device_id", "")
+        device_type = request.get("device_type", "android")
+        name = request.get("device_name", "Device")
+        endpoint = request.get("endpoint", "")
         
-        protocol_type = ProtocolType.HTTP
-        if protocol == "websocket":
-            protocol_type = ProtocolType.WEBSOCKET
-        elif protocol == "aip":
-            protocol_type = ProtocolType.AIP
-        
-        result = await unified_core.dispatch_agent(task_type, target_device, params, protocol_type)
+        result = await galaxy_core.register_device(device_id, device_type, name, endpoint)
         return result
     
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
+
+@app.post("/api/v1/devices/{device_id}/command")
+async def send_device_command(device_id: str, request: dict):
+    """发送设备命令 - 使用 device_protocol"""
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        command = request.get("command", "")
+        params = request.get("params", {})
+        
+        result = await galaxy_core.send_device_command(device_id, command, params)
+        return result
+    
+    return {"success": False, "error": "Galaxy core not available"}
 
 # ============================================================================
 # 自主能力 API
@@ -243,135 +204,113 @@ async def dispatch_agent(request: dict):
 @app.post("/api/v1/learn")
 async def autonomous_learn(request: dict):
     """自主学习"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        result = await unified_core.autonomous_learn(request)
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        result = await galaxy_core.autonomous_learn(request)
         return result
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
 
 @app.post("/api/v1/think")
 async def autonomous_think(request: dict):
     """自主思考"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
         goal = request.get("goal", "")
         context = request.get("context", {})
-        result = await unified_core.autonomous_think(goal, context)
+        result = await galaxy_core.autonomous_think(goal, context)
         return result
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
 
 @app.post("/api/v1/code")
 async def autonomous_code(request: dict):
     """自主编程"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
         task = request.get("task", "")
         files = request.get("files", [])
-        result = await unified_core.autonomous_code(task, files)
+        result = await galaxy_core.autonomous_code(task, files)
         return result
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
 
 @app.post("/api/v1/knowledge/query")
 async def query_knowledge(request: dict):
     """查询知识库"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
         query = request.get("query", "")
         top_k = request.get("top_k", 5)
-        result = await unified_core.query_knowledge(query, top_k)
+        result = await galaxy_core.query_knowledge(query, top_k)
         return result
-    return {"success": False, "error": "Unified core not available"}
-
-@app.post("/api/v1/knowledge/store")
-async def store_knowledge(request: dict):
-    """存储知识"""
-    if UNIFIED_CORE_AVAILABLE and unified_core:
-        content = request.get("content", "")
-        metadata = request.get("metadata", {})
-        result = await unified_core.store_knowledge(content, metadata)
-        return result
-    return {"success": False, "error": "Unified core not available"}
+    return {"success": False, "error": "Galaxy core not available"}
 
 # ============================================================================
-# 智能体对话
+# 智能对话
 # ============================================================================
 
 @app.post("/api/v1/chat")
 async def chat(request: dict):
     """
-    智能体对话 - 统一入口
+    智能对话 - 统一入口
     
     自动识别意图，调用相应节点
     """
     message = request.get("message", "")
     device_id = request.get("device_id", "")
-    protocol = request.get("protocol", "http")
     
     logger.info(f"Chat: {message[:50]}...")
     
     message_lower = message.lower()
     
-    # 解析意图
-    intent = parse_intent(message)
-    
-    if UNIFIED_CORE_AVAILABLE and unified_core:
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        # 解析意图
+        intent = parse_intent(message)
+        
         # 根据意图分发
         if intent["type"] == "device_control":
-            result = await unified_core.dispatch_agent(
-                intent["action"],
+            result = await galaxy_core.send_device_command(
                 device_id or "default",
-                intent["params"],
-                ProtocolType.HTTP if protocol == "http" else ProtocolType.WEBSOCKET
+                intent["action"],
+                intent["params"]
             )
             return JSONResponse({
-                "response": f"✅ 已执行: {intent['action']}\n\n结果: {result.get('success', False)}",
-                "intent": intent,
+                "response": f"✅ 已执行: {intent['action']}",
                 "executed": result.get("success", False),
                 "timestamp": datetime.now().isoformat()
             })
         
         elif intent["type"] == "learning":
-            result = await unified_core.autonomous_learn(intent["params"])
+            result = await galaxy_core.autonomous_learn(intent["params"])
             return JSONResponse({
-                "response": f"✅ 已学习: {intent['params'].get('action', '')}",
-                "intent": intent,
+                "response": "✅ 已学习",
                 "timestamp": datetime.now().isoformat()
             })
         
         elif intent["type"] == "thinking":
-            result = await unified_core.autonomous_think(
-                intent["params"].get("goal", message),
-                intent["params"].get("context", {})
+            result = await galaxy_core.autonomous_think(
+                intent["params"].get("goal", message)
             )
             return JSONResponse({
-                "response": f"✅ 思考结果:\n\n{result.get('result', result)}",
-                "intent": intent,
+                "response": f"✅ 思考完成",
                 "timestamp": datetime.now().isoformat()
             })
         
         elif intent["type"] == "coding":
-            result = await unified_core.autonomous_code(
-                intent["params"].get("task", message),
-                intent["params"].get("files", [])
+            result = await galaxy_core.autonomous_code(
+                intent["params"].get("task", message)
             )
             return JSONResponse({
-                "response": f"✅ 代码生成完成:\n\n{result.get('code', result)}",
-                "intent": intent,
+                "response": "✅ 代码生成完成",
                 "timestamp": datetime.now().isoformat()
             })
         
-        elif intent["type"] == "knowledge_query":
-            result = await unified_core.query_knowledge(
-                intent["params"].get("query", message)
-            )
+        elif intent["type"] == "knowledge":
+            result = await galaxy_core.query_knowledge(message)
             return JSONResponse({
-                "response": f"📚 知识检索结果:\n\n{result.get('results', result)}",
-                "intent": intent,
+                "response": "✅ 知识检索完成",
                 "timestamp": datetime.now().isoformat()
             })
         
         else:
-            # 默认使用 LLM 处理
-            result = await unified_core.smart_call("chat", "chat", {"message": message})
+            # 默认通过 Node_50_Transformer 处理
+            result = await galaxy_core.call_node("50", "chat", {"message": message})
             return JSONResponse({
-                "response": result.get("response", result.get("result", "处理完成")),
-                "intent": intent,
+                "response": result.get("response", "处理完成"),
                 "timestamp": datetime.now().isoformat()
             })
     
@@ -410,57 +349,35 @@ def parse_intent(message: str) -> Dict[str, Any]:
             "params": {"direction": direction}
         }
     
-    if any(kw in message_lower for kw in ["输入", "input"]):
-        return {
-            "type": "device_control",
-            "action": "input",
-            "params": {"text": extract_input_text(message)}
-        }
-    
     # 学习
     if any(kw in message_lower for kw in ["学习", "记住", "learn"]):
         return {
             "type": "learning",
-            "params": {
-                "type": "observation",
-                "action": message,
-                "reward": 0.5
-            }
+            "params": {"action": message, "reward": 0.5}
         }
     
     # 思考
     if any(kw in message_lower for kw in ["思考", "分析", "think"]):
         return {
             "type": "thinking",
-            "params": {
-                "goal": message
-            }
+            "params": {"goal": message}
         }
     
     # 编程
     if any(kw in message_lower for kw in ["写代码", "编程", "code"]):
         return {
             "type": "coding",
-            "params": {
-                "task": message
-            }
+            "params": {"task": message}
         }
     
-    # 知识查询
+    # 知识
     if any(kw in message_lower for kw in ["查询", "搜索", "知识"]):
         return {
-            "type": "knowledge_query",
-            "params": {
-                "query": message
-            }
+            "type": "knowledge",
+            "params": {"query": message}
         }
     
-    # 默认
-    return {
-        "type": "chat",
-        "action": "chat",
-        "params": {"message": message}
-    }
+    return {"type": "chat", "params": {"message": message}}
 
 
 def extract_app_name(message: str) -> str:
@@ -472,42 +389,11 @@ def extract_app_name(message: str) -> str:
     return ""
 
 
-def extract_input_text(message: str) -> str:
-    """提取输入文本"""
-    import re
-    match = re.search(r"输入[\"'](.+?)[\"']", message)
-    if match:
-        return match.group(1)
-    return ""
-
-
-# ============================================================================
-# 设备管理 API
-# ============================================================================
-
-@app.get("/api/v1/devices")
-async def list_devices():
-    return {"devices": list(devices.values())}
-
-@app.post("/api/v1/devices/register")
-async def register_device(request: dict):
-    device_id = request.get("device_id", "")
-    platform = request.get("device_type", "android")
-    name = request.get("device_name", "Device")
-    
-    device = {
-        "id": device_id,
-        "type": platform,
-        "name": name,
-        "status": "online",
-        "registered_at": datetime.now().isoformat()
-    }
-    devices[device_id] = device
-    return {"status": "success", "device": device}
-
 # ============================================================================
 # WebSocket
 # ============================================================================
+
+active_websockets: List[WebSocket] = []
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -540,18 +426,110 @@ async def websocket_endpoint(websocket: WebSocket):
 async def startup_event():
     logger.info("=" * 60)
     print(GALAXY_ASCII_MINIMAL)
-    logger.info("Galaxy Dashboard v2.3.22 - 统一智能体版本")
+    logger.info("Galaxy Dashboard v2.3.23")
     logger.info("=" * 60)
     
-    if UNIFIED_CORE_AVAILABLE:
-        logger.info("✅ 统一智能体核心已启用")
-        status = unified_core.get_status()
-        logger.info(f"   节点数: {status['total_nodes']}")
-        logger.info(f"   能力数: {len(status['capabilities'])}")
+    if NODE_PROTOCOL_AVAILABLE:
+        logger.info("✅ node_protocol 已加载")
     
-    if MULTI_PROTOCOL_AVAILABLE:
-        logger.info("✅ 多协议支持已启用")
+    if DEVICE_PROTOCOL_AVAILABLE:
+        logger.info("✅ device_protocol 已加载")
+    
+    if GALAXY_CORE_AVAILABLE:
+        logger.info("✅ galaxy_core 已加载")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
+
+# ============================================================================
+# 仓库协调 API
+# ============================================================================
+
+# 导入协调层
+try:
+    from core.repo_coordinator import repo_coordinator
+    REPO_COORDINATOR_AVAILABLE = True
+except ImportError:
+    REPO_COORDINATOR_AVAILABLE = False
+    repo_coordinator = None
+
+
+@app.post("/api/v1/android/register")
+async def register_android_device(request: dict):
+    """
+    注册 Android 设备
+    
+    Android 仓库通过此接口注册到主仓库
+    """
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        device_id = request.get("device_id", "")
+        device_info = request.get("device_info", {})
+        result = await repo_coordinator.register_android_device(device_id, device_info)
+        return result
+    return {"success": False, "error": "Repo coordinator not available"}
+
+
+@app.post("/api/v1/android/unregister")
+async def unregister_android_device(request: dict):
+    """注销 Android 设备"""
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        device_id = request.get("device_id", "")
+        result = await repo_coordinator.unregister_android_device(device_id)
+        return result
+    return {"success": False, "error": "Repo coordinator not available"}
+
+
+@app.post("/api/v1/android/heartbeat")
+async def android_heartbeat(request: dict):
+    """Android 设备心跳"""
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        device_id = request.get("device_id", "")
+        result = await repo_coordinator.heartbeat_android_device(device_id)
+        return result
+    return {"success": False, "error": "Repo coordinator not available"}
+
+
+@app.get("/api/v1/android/devices")
+async def list_android_devices():
+    """列出所有 Android 设备"""
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        devices = repo_coordinator.get_android_devices()
+        return {"devices": devices, "total": len(devices)}
+    return {"devices": [], "total": 0}
+
+
+@app.post("/api/v1/android/dispatch")
+async def dispatch_to_android(request: dict):
+    """
+    分发 Agent 到 Android 设备
+    
+    通过 WebSocket 或 HTTP 发送命令
+    """
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        device_id = request.get("device_id", "")
+        task_type = request.get("task_type", "")
+        params = request.get("params", {})
+        result = await repo_coordinator.dispatch_agent_to_android(device_id, task_type, params)
+        return result
+    return {"success": False, "error": "Repo coordinator not available"}
+
+
+@app.post("/api/v1/android/broadcast")
+async def broadcast_to_android(request: dict):
+    """广播到所有 Android 设备"""
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        task_type = request.get("task_type", "")
+        params = request.get("params", {})
+        result = await repo_coordinator.broadcast_to_all_android(task_type, params)
+        return result
+    return {"success": False, "error": "Repo coordinator not available"}
+
+
+@app.get("/api/v1/coordinator/status")
+async def get_coordinator_status():
+    """获取协调器状态"""
+    if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
+        return repo_coordinator.get_status()
+    return {"error": "Repo coordinator not available"}
