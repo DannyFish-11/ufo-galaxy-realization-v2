@@ -1964,8 +1964,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                         api_key = os.environ.get("OPENAI_API_KEY", "")
                         if api_key:
                             import httpx
+                            # 注入 AGENTS.md 上下文 (基于 Vercel 研究: 100% vs 79%)
+                            agent_context = get_agent_context()
+                            system_content = f"你是 UFO Galaxy 智能助手。\n\n{agent_context}"
+                            
                             messages = [
-                                {"role": "system", "content": "你是 UFO Galaxy 智能助手。"},
+                                {"role": "system", "content": system_content},
                                 {"role": "user", "content": chat_req.message}
                             ]
                             async with httpx.AsyncClient(timeout=60) as client:
@@ -2038,251 +2042,52 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         except Exception:
             connection_manager.unsubscribe_status(websocket)
 
-    return router
 
-
-# ============================================================================
-# LLM 降级调用
-# ============================================================================
-
-async def _chat_with_gemini(req: ChatRequest, api_key: str) -> JSONResponse:
-    """使用 Gemini API 进行对话"""
-    import httpx
+    # ========================================================================
+    # /api/v1/agents - Agent 上下文 API (基于 Vercel 研究)
+    # ========================================================================
     
-    contents = []
-    for ctx in req.context[-10:]:
-        role = "user" if ctx.get("role") == "user" else "model"
-        contents.append({"role": role, "parts": [{"text": ctx.get("content", "")}]})
-    contents.append({"role": "user", "parts": [{"text": req.message}]})
-    
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-            json={
-                "contents": contents,
-                "systemInstruction": {
-                    "parts": [{"text": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
-                }
-            }
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        reply = data["candidates"][0]["content"]["parts"][0]["text"]
+    @router.get("/api/v1/agents/context")
+    async def get_agent_context_api():
+        """
+        获取 Agent 上下文 (AGENTS.md)
         
-        return JSONResponse({
-            "success": True,
-            "reply": reply,
-            "model": "gemini-2.0-flash"
-        })
-
-
-async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
-    """使用 OpenRouter API 进行对话"""
-    import httpx
-    
-    messages = [{"role": "system", "content": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
-    for ctx in req.context[-10:]:
-        messages.append(ctx)
-    messages.append({"role": "user", "content": req.message})
-    
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "model": "google/gemini-2.0-flash-exp:free",
-                "messages": messages,
-                "max_tokens": 2048
-            }
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        reply = data["choices"][0]["message"]["content"]
-        
-        return JSONResponse({
-            "success": True,
-            "reply": reply,
-            "model": data.get("model", "openrouter")
-        })
-
-
-# ============================================================================
-# WebSocket 端点
-# ============================================================================
-
-def create_websocket_routes(app: FastAPI, service_manager=None):
-    """创建 WebSocket 端点"""
-    
-    @app.websocket("/ws/device/{device_id}")
-    async def device_websocket(websocket: WebSocket, device_id: str):
-        """设备 WebSocket 连接 - 双向通信，兼容安卓端"""
-        await connection_manager.connect_device(websocket, device_id)
-        
-        # 兼容安卓端：自动注册设备
+        基于 Vercel 研究：被动上下文比主动调用更可靠
+        """
         try:
-            from core.device_registry import device_registry
-            device = device_registry.get(device_id)
-            if not device:
-                # 自动注册设备
-                await device_registry.register(
-                    device_id=device_id,
-                    device_type="android",
-                    name=f"Android Device ({device_id[:8]})",
-                    capabilities=["screen", "touch", "keyboard"],
-                    tags=["android", "auto-registered"],
-                )
-                logger.info(f"自动注册设备: {device_id}")
-        except Exception as e:
-            logger.warning(f"自动注册设备失败: {device_id} - {e}")
-        
-        # 更新设备在线状态
-        if device_id in registered_devices:
-            registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
-            registered_devices[device_id]["status"] = "online"
-        
-        try:
-            while True:
-                data = await websocket.receive_json()
-                msg_type = data.get("type", "")
-                
-                if msg_type == "heartbeat":
-                    # 心跳
-                    if device_id in registered_devices:
-                        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
-                    await websocket.send_json({
-                        "type": "heartbeat_ack",
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    
-                elif msg_type == "status_update":
-                    # 设备状态更新
-                    if device_id in registered_devices:
-                        registered_devices[device_id]["status_detail"] = data.get("status", {})
-                        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
-                    await connection_manager.broadcast_status({
-                        "type": "device_status_update",
-                        "device_id": device_id,
-                        "status": data.get("status", {}),
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    
-                elif msg_type == "task_result":
-                    # 任务结果回调
-                    task_id = data.get("task_id", "")
-                    if task_id in task_queue:
-                        task_queue[task_id]["status"] = "completed"
-                        task_queue[task_id]["result"] = data.get("result", {})
-                        task_queue[task_id]["completed_at"] = datetime.now().isoformat()
-                    
-                elif msg_type == "ocr_request":
-                    # OCR 请求
-                    image_b64 = data.get("image", "")
-                    mode = data.get("mode", "full")
-                    instruction = data.get("instruction", "")
-                    
-                    try:
-                        image_data = base64.b64decode(image_b64)
-                        from core.vision_pipeline import VisionPipeline
-                        pipeline = VisionPipeline()
-                        result = await asyncio.get_event_loop().run_in_executor(
-                            None, pipeline.understand, image_data, mode, instruction
-                        )
-                        await websocket.send_json({
-                            "type": "ocr_result",
-                            "request_id": data.get("request_id", ""),
-                            "success": True,
-                            "result": result
-                        })
-                    except Exception as e:
-                        await websocket.send_json({
-                            "type": "ocr_result",
-                            "request_id": data.get("request_id", ""),
-                            "success": False,
-                            "error": str(e)
-                        })
-                    
-                elif msg_type == "chat":
-                    # 对话请求
-                    try:
-                        chat_req = ChatRequest(
-                            message=data.get("message", ""),
-                            device_id=device_id,
-                            context=data.get("context", [])
-                        )
-                        # 复用 chat 逻辑
-                        api_key = os.environ.get("OPENAI_API_KEY", "")
-                        if api_key:
-                            import httpx
-                            messages = [
-                                {"role": "system", "content": "你是 UFO Galaxy 智能助手。"},
-                                {"role": "user", "content": chat_req.message}
-                            ]
-                            async with httpx.AsyncClient(timeout=60) as client:
-                                resp = await client.post(
-                                    f"{os.environ.get('OPENAI_API_BASE', 'https://api.openai.com/v1')}/chat/completions",
-                                    headers={"Authorization": f"Bearer {api_key}"},
-                                    json={"model": "gpt-4o-mini", "messages": messages}
-                                )
-                                resp_data = resp.json()
-                                reply = resp_data["choices"][0]["message"]["content"]
-                        else:
-                            reply = "LLM 服务未配置"
-                        
-                        await websocket.send_json({
-                            "type": "chat_reply",
-                            "request_id": data.get("request_id", ""),
-                            "reply": reply
-                        })
-                    except Exception as e:
-                        await websocket.send_json({
-                            "type": "chat_reply",
-                            "request_id": data.get("request_id", ""),
-                            "reply": f"处理消息时出错: {str(e)}"
-                        })
-                
-                else:
-                    # 未知消息类型
-                    logger.warning(f"未知消息类型: {msg_type} from {device_id}")
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": f"未知消息类型: {msg_type}"
-                    })
-                    
-        except WebSocketDisconnect:
-            connection_manager.disconnect_device(device_id)
-            if device_id in registered_devices:
-                registered_devices[device_id]["status"] = "offline"
-            await connection_manager.broadcast_status({
-                "type": "device_disconnected",
-                "device_id": device_id,
-                "timestamp": datetime.now().isoformat()
-            })
-        except Exception as e:
-            logger.error(f"WebSocket 错误 ({device_id}): {e}")
-            connection_manager.disconnect_device(device_id)
-    
-    @app.websocket("/ws/status")
-    async def status_websocket(websocket: WebSocket):
-        """状态推送 WebSocket - 订阅系统状态变更"""
-        await connection_manager.subscribe_status(websocket)
-        try:
-            # 发送当前状态
-            await websocket.send_json({
-                "type": "initial_status",
-                "devices_online": len(connection_manager.active_devices),
-                "devices_registered": len(registered_devices),
-                "timestamp": datetime.now().isoformat()
-            })
+            from core.agent_context import get_agent_context, get_context_size
             
-            while True:
-                # 保持连接，等待客户端消息
-                data = await websocket.receive_text()
-                if data == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": datetime.now().isoformat()
-                    })
-        except WebSocketDisconnect:
-            connection_manager.unsubscribe_status(websocket)
-        except Exception:
-            connection_manager.unsubscribe_status(websocket)
+            context = get_agent_context()
+            size = get_context_size()
+            
+            return JSONResponse({
+                "success": True,
+                "context": context,
+                "size": size,
+                "size_kb": round(size / 1024, 2),
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+    
+    @router.get("/api/v1/agents/prompt")
+    async def get_agent_system_prompt_api():
+        """获取 Agent 系统提示词"""
+        try:
+            from core.agent_context import get_system_prompt
+            
+            prompt = get_system_prompt()
+            
+            return JSONResponse({
+                "success": True,
+                "prompt": prompt,
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+
+    return router
