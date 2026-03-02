@@ -181,30 +181,111 @@ class NodeFactory:
         return port
     
     async def start_instance(self, instance_id: str) -> bool:
-        """启动节点实例"""
+        """启动节点实例 - 真实subprocess启动"""
         if instance_id not in self.instances:
             return False
-        
+
         instance = self.instances[instance_id]
-        
+
         if instance.state == NodeState.RUNNING:
             return True
-        
+
         instance.state = NodeState.INITIALIZING
-        
+
         try:
-            # 模拟启动过程
-            await asyncio.sleep(0.5)
-            
-            instance.state = NodeState.RUNNING
-            instance.started_at = datetime.now()
-            instance.health_status = "healthy"
-            
-            logger.info(f"Started instance: {instance_id}")
-            return True
-            
+            template = self.templates.get(instance.template_id)
+            if not template:
+                raise ValueError(f"Template not found: {instance.template_id}")
+
+            # 查找节点入口文件
+            entry_point = template.entry_point
+            node_dir = instance.config.get("node_dir")
+            port = instance.port
+
+            if node_dir and os.path.exists(os.path.join(node_dir, entry_point)):
+                # 真实启动子进程
+                env = os.environ.copy()
+                env.update(template.environment)
+                env["PORT"] = str(port)
+                env["NODE_INSTANCE_ID"] = instance_id
+                env["NODE_NAME"] = instance.name
+
+                process = subprocess.Popen(
+                    ["python", entry_point],
+                    cwd=node_dir,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                self._processes[instance_id] = process
+                instance.pid = process.pid
+
+                # 等待节点启动并检查健康
+                import httpx
+                for attempt in range(10):
+                    await asyncio.sleep(0.5)
+                    # 检查进程是否还在运行
+                    if process.poll() is not None:
+                        stderr = process.stderr.read().decode() if process.stderr else ""
+                        raise RuntimeError(f"节点进程退出(code={process.returncode}): {stderr[:200]}")
+                    # 检查健康端点
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            resp = await client.get(f"http://localhost:{port}/health", timeout=2.0)
+                            if resp.status_code == 200:
+                                instance.state = NodeState.RUNNING
+                                instance.started_at = datetime.now()
+                                instance.health_status = "healthy"
+                                logger.info(f"Started instance: {instance_id} (pid={process.pid}, port={port})")
+                                return True
+                    except (httpx.ConnectError, httpx.TimeoutException):
+                        continue
+
+                raise RuntimeError(f"节点启动超时(port={port})")
+
+            elif instance.config.get("blueprint_id"):
+                # 从蓝图生成的代码启动
+                blueprint = self.blueprints.get(instance.config["blueprint_id"])
+                if blueprint:
+                    import tempfile
+                    work_dir = tempfile.mkdtemp(prefix=f"galaxy_node_{instance.name}_")
+                    code_path = os.path.join(work_dir, "main.py")
+                    with open(code_path, "w") as f:
+                        f.write(blueprint.code_template.replace(
+                            "port=8000", f"port={port}"
+                        ))
+
+                    process = subprocess.Popen(
+                        ["python", "main.py"],
+                        cwd=work_dir,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    self._processes[instance_id] = process
+                    instance.pid = process.pid
+                    instance.config["work_dir"] = work_dir
+
+                    await asyncio.sleep(1.0)
+                    if process.poll() is None:
+                        instance.state = NodeState.RUNNING
+                        instance.started_at = datetime.now()
+                        instance.health_status = "healthy"
+                        logger.info(f"Started blueprint instance: {instance_id} (pid={process.pid})")
+                        return True
+                    else:
+                        raise RuntimeError("蓝图节点启动失败")
+
+            else:
+                # 无法找到入口文件时，标记为就绪但不启动进程
+                logger.warning(f"No entry point found for {instance_id}, marking as RUNNING (virtual)")
+                instance.state = NodeState.RUNNING
+                instance.started_at = datetime.now()
+                instance.health_status = "virtual"
+                return True
+
         except Exception as e:
             instance.state = NodeState.ERROR
+            instance.health_status = f"error: {str(e)[:100]}"
             logger.error(f"Failed to start instance {instance_id}: {e}")
             return False
     

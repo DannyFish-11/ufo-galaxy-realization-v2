@@ -1,19 +1,28 @@
 [Unit]
-Description=UFO Galaxy AI System
-After=network.target neo4j.service qdrant.service redis.service mongodb.service
-Wants=neo4j.service qdrant.service redis.service mongodb.service
+Description=UFO Galaxy L4 Autonomous Intelligence System
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=ufo-galaxy
 Group=ufo-galaxy
 WorkingDirectory=/opt/ufo-galaxy
-Environment=PYTHONPATH=/opt/ufo-galaxy
 EnvironmentFile=/opt/ufo-galaxy/.env
-ExecStart=/usr/bin/python3 /opt/ufo-galaxy/galaxy_main_loop.py
+Environment=PYTHONPATH=/opt/ufo-galaxy
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/ufo-galaxy/unified_launcher.py --host 0.0.0.0 --port 8080
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
+WatchdogSec=120
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ufo-galaxy/data /opt/ufo-galaxy/logs
+
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=ufo-galaxy

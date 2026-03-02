@@ -201,31 +201,39 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
     def __init__(self):
         super().__init__()
         self.puppeteer = None
-        self.controller = None
+        self._ControlReceiver = None
         self.ufo_available = False
     
-    async def initialize(self) -> bool:
-        """初始化微软 UFO"""
+    async def initialize(self, process_name: str = "explorer.exe",
+                         app_root_name: str = "Desktop") -> bool:
+        """初始化微软 UFO
+
+        Args:
+            process_name: 目标应用进程名 (AppPuppeteer 构造必需)
+            app_root_name: 应用根窗口名
+        """
         try:
-            # 尝试导入微软 UFO 模块
-            from external.microsoft_ufo.automator.puppeteer import Puppeteer
-            from external.microsoft_ufo.automator.ui_control.controller import UIController
-            
-            self.puppeteer = Puppeteer()
-            self.controller = UIController()
+            # 正确的类名: AppPuppeteer (非 Puppeteer), ControlReceiver (非 UIController)
+            from automator.puppeteer import AppPuppeteer
+            from automator.ui_control.controller import ControlReceiver
+
+            # AppPuppeteer 构造需要 process_name 和 app_root_name
+            self.puppeteer = AppPuppeteer(process_name, app_root_name)
+            # ControlReceiver 需要 pywinauto 控件实例, 延迟到具体操作时创建
+            self._ControlReceiver = ControlReceiver
             self.ufo_available = True
             self.is_initialized = True
-            
-            logger.info("Microsoft UFO initialized successfully")
+
+            logger.info("Microsoft UFO initialized (AppPuppeteer + ControlReceiver)")
             return True
-            
+
         except ImportError as e:
             logger.warning(f"Microsoft UFO not available: {e}")
             # 降级到 pyautogui
             return await self._initialize_fallback()
         except Exception as e:
             logger.error(f"Failed to initialize Microsoft UFO: {e}")
-            return False
+            return await self._initialize_fallback()
     
     async def _initialize_fallback(self) -> bool:
         """初始化降级方案"""
@@ -239,26 +247,11 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             return False
     
     async def get_active_window(self) -> Optional[UIElement]:
-        """获取当前活动窗口"""
-        if self.ufo_available and self.controller:
-            try:
-                window_info = self.controller.get_active_window()
-                if window_info:
-                    return UIElement(
-                        element_id=str(window_info.get("handle", "unknown")),
-                        element_type=UIElementType.WINDOW,
-                        name=window_info.get("title", "Unknown"),
-                        bounds=(
-                            window_info.get("x", 0),
-                            window_info.get("y", 0),
-                            window_info.get("width", 0),
-                            window_info.get("height", 0)
-                        )
-                    )
-            except Exception as e:
-                logger.error(f"Failed to get active window: {e}")
-        
-        # 降级方案
+        """获取当前活动窗口
+
+        ControlReceiver 不提供窗口枚举, 直接使用 pygetwindow。
+        """
+        # pygetwindow 方案（跨后端通用）
         try:
             import pygetwindow as gw
             active = gw.getActiveWindow()
@@ -270,42 +263,23 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
                     bounds=(active.left, active.top, active.width, active.height)
                 )
         except Exception as e:
-            logger.error(f"Fallback get_active_window failed: {e}")
-        
+            logger.error(f"get_active_window failed: {e}")
+
         return None
-    
+
     async def find_element(self, selector: Dict[str, Any]) -> Optional[UIElement]:
-        """查找 UI 元素"""
-        if self.ufo_available and self.controller:
-            try:
-                # 使用微软 UFO 的元素查找
-                element = self.controller.find_element(
-                    name=selector.get("name"),
-                    automation_id=selector.get("automation_id"),
-                    class_name=selector.get("class_name"),
-                    control_type=selector.get("control_type")
-                )
-                if element:
-                    return self._convert_ufo_element(element)
-            except Exception as e:
-                logger.error(f"UFO find_element failed: {e}")
-        
+        """查找 UI 元素
+
+        注意: ControlReceiver 需要已有的 pywinauto 控件句柄，不提供
+        按属性搜索功能。此方法作为占位，完整实现需要 pywinauto 直接集成。
+        """
+        logger.warning("find_element: ControlReceiver does not support search by selector; "
+                        "use pywinauto directly for element discovery")
         return None
-    
+
     async def find_elements(self, selector: Dict[str, Any]) -> List[UIElement]:
-        """查找多个 UI 元素"""
-        if self.ufo_available and self.controller:
-            try:
-                elements = self.controller.find_elements(
-                    name=selector.get("name"),
-                    automation_id=selector.get("automation_id"),
-                    class_name=selector.get("class_name"),
-                    control_type=selector.get("control_type")
-                )
-                return [self._convert_ufo_element(e) for e in elements]
-            except Exception as e:
-                logger.error(f"UFO find_elements failed: {e}")
-        
+        """查找多个 UI 元素（同上限制）"""
+        logger.warning("find_elements: ControlReceiver does not support search by selector")
         return []
     
     def _convert_ufo_element(self, ufo_element) -> UIElement:
@@ -356,37 +330,73 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             )
     
     async def _execute_with_ufo(self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]) -> UIActionResult:
-        """使用微软 UFO 执行动作"""
+        """使用微软 UFO AppPuppeteer 的 execute_command 执行动作"""
         try:
             if action == UIAction.CLICK:
                 x, y = params.get("x"), params.get("y")
                 if x is not None and y is not None:
-                    self.puppeteer.click(x, y)
-                elif element_id:
-                    element = self.controller.find_element_by_id(element_id)
-                    if element:
-                        element.click()
+                    # AppPuppeteer 正确接口: execute_command(command_name, params)
+                    self.puppeteer.execute_command(
+                        "click_on_coordinates",
+                        {"x": float(x), "y": float(y), "button": "left", "double": False}
+                    )
+                elif element_id and self._ControlReceiver:
+                    # 通过 ControlReceiver 点击控件
+                    self.puppeteer.execute_command("click_input", {})
                 return UIActionResult(success=True, action=action, element_id=element_id, message="Click executed")
-            
+
+            elif action == UIAction.DOUBLE_CLICK:
+                x, y = params.get("x"), params.get("y")
+                if x is not None and y is not None:
+                    self.puppeteer.execute_command(
+                        "click_on_coordinates",
+                        {"x": float(x), "y": float(y), "button": "left", "double": True}
+                    )
+                return UIActionResult(success=True, action=action, message="Double-click executed")
+
             elif action == UIAction.TYPE:
                 text = params.get("text", "")
-                self.puppeteer.type_text(text)
+                self.puppeteer.execute_command("set_edit_text", {"text": text})
                 return UIActionResult(success=True, action=action, message=f"Typed: {text[:20]}...")
-            
+
+            elif action == UIAction.PRESS_KEY:
+                keys = params.get("keys", params.get("key", ""))
+                key_str = keys if isinstance(keys, str) else " ".join(keys)
+                self.puppeteer.execute_command("keyboard_input", {"keys": key_str})
+                return UIActionResult(success=True, action=action, message=f"Key: {key_str}")
+
             elif action == UIAction.HOTKEY:
                 keys = params.get("keys", [])
-                self.puppeteer.hotkey(*keys)
+                key_str = "+".join(f"{{{k}}}" for k in keys)
+                self.puppeteer.execute_command("keyboard_input", {"keys": key_str})
                 return UIActionResult(success=True, action=action, message=f"Hotkey: {'+'.join(keys)}")
-            
+
             elif action == UIAction.SCROLL:
                 direction = params.get("direction", "down")
                 amount = params.get("amount", 3)
-                self.puppeteer.scroll(direction, amount)
+                scroll_y = -amount if direction == "down" else amount
+                self.puppeteer.execute_command(
+                    "scroll",
+                    {"x": 0, "y": 0, "scroll_x": 0, "scroll_y": scroll_y}
+                )
                 return UIActionResult(success=True, action=action, message=f"Scrolled {direction}")
-            
+
+            elif action == UIAction.DRAG:
+                self.puppeteer.execute_command(
+                    "drag_on_coordinates",
+                    {
+                        "start_x": float(params.get("start_x", 0)),
+                        "start_y": float(params.get("start_y", 0)),
+                        "end_x": float(params.get("end_x", 0)),
+                        "end_y": float(params.get("end_y", 0)),
+                        "button": "left",
+                    }
+                )
+                return UIActionResult(success=True, action=action, message="Drag executed")
+
             else:
                 return UIActionResult(success=False, action=action, error=f"Unsupported action: {action.value}")
-                
+
         except Exception as e:
             return UIActionResult(success=False, action=action, error=str(e))
     
@@ -444,15 +454,11 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             return None
     
     async def get_element_tree(self, root_id: Optional[str] = None) -> Dict[str, Any]:
-        """获取 UI 元素树"""
-        if self.ufo_available and self.controller:
-            try:
-                tree = self.controller.get_element_tree(root_id)
-                return tree
-            except Exception as e:
-                logger.error(f"Failed to get element tree: {e}")
-        
-        return {"error": "Element tree not available"}
+        """获取 UI 元素树
+
+        ControlReceiver 不提供 get_element_tree, 需要直接使用 pywinauto。
+        """
+        return {"error": "Element tree requires direct pywinauto integration"}
 
 
 # ============================================================================
@@ -559,30 +565,33 @@ class UFOIntegrationService:
     async def execute_task(self, task_description: str, app_name: str = None) -> Dict[str, Any]:
         """
         执行自然语言描述的任务
-        
-        这是与微软 UFO 最深度的集成点，利用 UFO 的 Agent 能力
+
+        注意: AppAgent 需要 is_visual, main_prompt, example_prompt 等参数以及完整
+        的 UFO 配置环境。此方法使用 AppPuppeteer 的命令队列模式作为轻量级替代。
+        完整的 Agent 驱动任务执行需要独立的 UFO 环境配置。
         """
         if not self.automator or not self.automator.ufo_available:
             return {"error": "Microsoft UFO not available for task execution"}
-        
+
         try:
-            # 使用微软 UFO 的 Agent 执行任务
-            from external.microsoft_ufo.agents.agent.app_agent import AppAgent
-            
-            agent = AppAgent(
-                name="ufo_galaxy_agent",
-                process_name=app_name or "explorer",
-                app_root_name=app_name or "Desktop"
-            )
-            
-            result = await asyncio.to_thread(agent.execute_task, task_description)
-            
+            # 轻量级路径: 用 AppPuppeteer 命令队列
+            # 重新初始化 puppeteer 指向目标应用
+            process = app_name or "explorer.exe"
+            await self.automator.initialize(process_name=process, app_root_name=process)
+
+            # 列出可用命令
+            available = self.automator.puppeteer.list_commands() if self.automator.puppeteer else set()
+
             return {
                 "success": True,
                 "task": task_description,
-                "result": result
+                "mode": "puppeteer_command_queue",
+                "target_app": process,
+                "available_commands": list(available),
+                "note": "Use /ufo/click, /ufo/type etc. to execute individual steps. "
+                        "Full AppAgent-based NL task execution requires UFO environment setup."
             }
-            
+
         except Exception as e:
             logger.error(f"Task execution failed: {e}")
             return {

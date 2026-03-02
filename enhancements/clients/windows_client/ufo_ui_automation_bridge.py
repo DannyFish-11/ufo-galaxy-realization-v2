@@ -70,34 +70,48 @@ class UFOUIAutomationBridge:
             return self._execute_with_basic_automation(software, action, steps)
     
     def _execute_with_ufo(self, software: str, action: str, steps: List[Dict]) -> Dict[str, Any]:
-        """使用微软 UFO 执行（如果可用）"""
+        """使用微软 UFO AppPuppeteer 执行（如果可用）"""
         try:
-            # 尝试导入 UFO 的 AppAgent
-            from ufo.agents.app_agent import AppAgent
-            from ufo.config.config import Config
-            
-            # 创建配置
-            config = Config()
-            
-            # 创建 AppAgent
-            agent = AppAgent(
-                name=f"{software}_agent",
-                process_name=software,
-                app_root_name=software
-            )
-            
-            # 执行动作
-            result = agent.execute_action(action, steps)
-            
+            # 正确导入路径: agents.agent.app_agent, automator.puppeteer
+            from automator.puppeteer import AppPuppeteer
+
+            # AppPuppeteer 需要 (process_name, app_root_name)
+            process_name = self._get_process_name(software)
+            puppeteer = AppPuppeteer(process_name, process_name)
+
+            if action == "open":
+                # AppPuppeteer 无法启动应用, 降级到 subprocess
+                raise Exception("open action not supported by AppPuppeteer")
+
+            # 通过命令队列执行步骤
+            results = []
+            for step in steps:
+                cmd_name = step.get("command", step.get("action", ""))
+                params = step.get("params", step.get("parameters", {}))
+                result = puppeteer.execute_command(cmd_name, params)
+                results.append(result)
+
             return {
                 "status": "success",
-                "method": "microsoft_ufo",
-                "result": result
+                "method": "microsoft_ufo_puppeteer",
+                "results": results
             }
         except ImportError as e:
             raise Exception(f"无法导入微软 UFO 模块: {e}")
         except Exception as e:
             raise Exception(f"微软 UFO 执行失败: {e}")
+
+    @staticmethod
+    def _get_process_name(software: str) -> str:
+        """软件名 → 进程名"""
+        mapping = {
+            "wechat": "WeChat.exe", "qq": "QQ.exe",
+            "chrome": "chrome.exe", "edge": "msedge.exe",
+            "notepad": "notepad.exe", "vscode": "Code.exe",
+            "word": "WINWORD.EXE", "excel": "EXCEL.EXE",
+            "powerpoint": "POWERPNT.EXE",
+        }
+        return mapping.get(software, f"{software}.exe")
     
     def _execute_with_basic_automation(self, software: str, action: str, steps: List[Dict]) -> Dict[str, Any]:
         """使用基本的 Windows 自动化（降级方案）"""

@@ -23,7 +23,11 @@ import java.util.concurrent.TimeUnit
 class AgentWebSocket(
     private val gatewayUrl: String,
     private val agentRegistry: AgentRegistry,
-    private val messageHandler: (JSONObject) -> Unit
+    private val messageHandler: (JSONObject) -> Unit,
+    /** 供 GalaxyAgent 注入，在连接建立后自动注册 */
+    internal var onConnectedCallback: (() -> Unit)? = null,
+    /** 供 GalaxyAgent 注入，处理注册响应 */
+    internal var onRegistrationResponse: ((JSONObject) -> Unit)? = null
 ) {
     
     private val TAG = "AgentWebSocket"
@@ -216,25 +220,37 @@ class AgentWebSocket(
             isConnected = true
             isConnecting = false
             reconnectAttempts = 0
-            
-            // 启动心跳
+
+            // 1. 触发注册回调 — GalaxyAgent.sendRegistration() 会发 AIP/1.0 register 消息
+            onConnectedCallback?.invoke()
+
+            // 2. 启动心跳
             startHeartbeat()
-            
-            // 发送初始心跳
-            sendHeartbeat()
         }
         
         override fun onMessage(webSocket: WebSocket, text: String) {
-            Log.d(TAG, "📨 收到消息: ${text.take(100)}...")
-            
+            Log.d(TAG, "📨 收到消息: ${text.take(200)}...")
+
             try {
                 val message = JSONObject(text)
-                
-                // 在主线程处理消息
+                val msgType = message.optString("type", "")
+
+                // 如果是注册响应 (type=response 且 payload.registered_at 存在)，
+                // 先交给注册回调处理
+                if (msgType == "response") {
+                    val payload = message.optJSONObject("payload")
+                    if (payload != null && payload.has("registered_at")) {
+                        Log.i(TAG, "📝 收到注册响应")
+                        onRegistrationResponse?.invoke(message)
+                        return  // 注册响应不再传给通用 messageHandler
+                    }
+                }
+
+                // 其他消息在主线程处理
                 scope.launch(Dispatchers.Main) {
                     messageHandler(message)
                 }
-                
+
             } catch (e: Exception) {
                 Log.e(TAG, "解析消息失败", e)
             }

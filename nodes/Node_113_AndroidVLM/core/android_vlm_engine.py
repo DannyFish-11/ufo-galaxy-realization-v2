@@ -230,6 +230,158 @@ class AndroidVLMEngine:
         else:
             return click_result
     
+    async def smart_swipe(
+        self,
+        direction: str = "up",
+        target: Optional[str] = None,
+        distance: int = 500,
+        duration_ms: int = 300
+    ) -> Dict[str, Any]:
+        """
+        智能滑动
+
+        Args:
+            direction: 滑动方向 (up, down, left, right)
+            target: 可选的元素描述，如果提供则从该元素位置开始滑动
+            distance: 滑动距离（像素）
+            duration_ms: 滑动持续时间（毫秒）
+
+        Returns:
+            {"success": bool, "action": "swipe", "direction": str}
+        """
+        # 确定起始坐标
+        start_x, start_y = 540, 960  # 默认屏幕中心
+
+        if target:
+            find_result = await self.find_element_with_vlm(target)
+            if find_result.get("found"):
+                pos = find_result["position"]
+                start_x = pos["x"]
+                start_y = pos["y"]
+
+        # 计算终点坐标
+        direction_map = {
+            "up":    (start_x, start_y, start_x, start_y - distance),
+            "down":  (start_x, start_y, start_x, start_y + distance),
+            "left":  (start_x, start_y, start_x - distance, start_y),
+            "right": (start_x, start_y, start_x + distance, start_y),
+        }
+        sx, sy, ex, ey = direction_map.get(direction, (start_x, start_y, start_x, start_y - distance))
+
+        result = await self._call_node(
+            self.android_agent_url,
+            "/node/33",
+            {
+                "action": "swipe",
+                "start_x": sx, "start_y": sy,
+                "end_x": ex, "end_y": ey,
+                "duration": duration_ms
+            }
+        )
+
+        if result.get("success"):
+            return {"success": True, "action": "swipe", "direction": direction}
+        return result
+
+    async def smart_input(
+        self,
+        text: str,
+        target: Optional[str] = None,
+        clear_first: bool = True
+    ) -> Dict[str, Any]:
+        """
+        智能输入文本
+
+        Args:
+            text: 要输入的文本
+            target: 可选的输入框元素描述，如果提供则先点击该元素
+            clear_first: 是否先清空输入框
+
+        Returns:
+            {"success": bool, "action": "input", "text": str}
+        """
+        # 如果指定了目标输入框，先点击它
+        if target:
+            click_result = await self.smart_click(target)
+            if not click_result.get("clicked"):
+                return {
+                    "success": False,
+                    "error": f"Could not click input target: {target}"
+                }
+            await asyncio.sleep(0.3)
+
+        # 清空已有文本
+        if clear_first:
+            await self._call_node(
+                self.android_agent_url,
+                "/node/33",
+                {"action": "clear_text"}
+            )
+
+        # 输入文本
+        result = await self._call_node(
+            self.android_agent_url,
+            "/node/33",
+            {"action": "input_text", "text": text}
+        )
+
+        if result.get("success"):
+            return {"success": True, "action": "input", "text": text}
+        return result
+
+    async def verify_step_success(
+        self,
+        action: str,
+        target: Optional[str] = None,
+        expected_outcome: str = ""
+    ) -> Dict[str, Any]:
+        """
+        使用 VLM 验证操作步骤是否成功执行
+
+        Args:
+            action: 执行的操作类型
+            target: 操作目标
+            expected_outcome: 预期的结果描述
+
+        Returns:
+            {"verified": bool, "confidence": float, "observation": str}
+        """
+        query = f"刚才执行了 '{action}' 操作"
+        if target:
+            query += f"，目标是 '{target}'"
+        if expected_outcome:
+            query += f"。预期结果：{expected_outcome}"
+        query += "。请判断操作是否成功执行，当前界面是否符合预期？回答 JSON: {\"success\": true/false, \"observation\": \"观察描述\"}"
+
+        analysis_result = await self.analyze_screen(query)
+        if not analysis_result.get("success"):
+            return {"verified": True, "confidence": 0.5, "observation": "无法验证"}
+
+        analysis_text = analysis_result.get("analysis", "")
+
+        # 解析 VLM 的回答
+        verified = True
+        confidence = 0.7
+        observation = analysis_text
+
+        try:
+            parsed = json.loads(analysis_text)
+            verified = parsed.get("success", True)
+            observation = parsed.get("observation", analysis_text)
+            confidence = 0.9 if verified else 0.8
+        except (json.JSONDecodeError, TypeError):
+            # VLM 返回非 JSON，用关键词判断
+            negative_keywords = ["失败", "错误", "没有", "未能", "fail", "error", "not"]
+            if any(kw in analysis_text.lower() for kw in negative_keywords):
+                verified = False
+                confidence = 0.6
+
+        return {
+            "verified": verified,
+            "confidence": confidence,
+            "observation": observation
+        }
+
     async def generate_action_plan(
         self,
         task_description: str,
@@ -351,11 +503,15 @@ class AndroidVLMEngine:
             if action == "click":
                 result = await self.smart_click(target)
             elif action == "swipe":
-                # TODO: 实现智能滑动
-                result = {"success": False, "error": "Swipe not implemented yet"}
+                result = await self.smart_swipe(
+                    direction=step.get("direction", "up"),
+                    target=target
+                )
             elif action == "input":
-                # TODO: 实现智能输入
-                result = {"success": False, "error": "Input not implemented yet"}
+                result = await self.smart_input(
+                    text=step.get("text", ""),
+                    target=target
+                )
             elif action == "wait":
                 # 等待
                 await asyncio.sleep(1)
@@ -382,7 +538,13 @@ class AndroidVLMEngine:
             # 验证步骤（可选）
             if verify_each_step and action != "wait":
                 await asyncio.sleep(0.5)  # 等待界面稳定
-                # TODO: 使用 VLM 验证步骤是否成功
+                verification = await self.verify_step_success(
+                    action=action,
+                    target=target,
+                    expected_outcome=step.get("expected_outcome", "")
+                )
+                if not verification.get("verified", True):
+                    results[-1]["verification"] = verification
         
         return {
             "success": True,

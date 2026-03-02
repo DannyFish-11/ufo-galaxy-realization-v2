@@ -1,5 +1,988 @@
 {
-  "version": "1.0.0",
-  "timestamp": "2026-02-11T08:24:08.010566",
-  "capabilities": []
+  "version": "2.1",
+  "timestamp": "2026-02-27T10:21:33.371914",
+  "total": 109,
+  "capabilities": [
+    {
+      "name": "Node_00_StateMachine",
+      "description": "状态机核心",
+      "group": "core",
+      "port": 8000,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_01_OneAPI",
+      "description": "统一API网关",
+      "group": "core",
+      "port": 8001,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_02_Tasker",
+      "description": "任务调度引擎",
+      "group": "core",
+      "port": 8002,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_03_SecretVault",
+      "description": "密钥保险箱",
+      "group": "core",
+      "port": 8003,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_04_Router",
+      "description": "全局路由器",
+      "group": "core",
+      "port": 8004,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_05_Auth",
+      "description": "认证授权中心",
+      "group": "core",
+      "port": 8005,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_06_Filesystem",
+      "description": "文件系统管理",
+      "group": "core",
+      "port": 8006,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_07_Git",
+      "description": "Git版本控制",
+      "group": "core",
+      "port": 8007,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_08_Fetch",
+      "description": "网络请求服务",
+      "group": "core",
+      "port": 8008,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_09_Sandbox",
+      "description": "沙箱执行环境",
+      "group": "core",
+      "port": 8009,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_10_Slack",
+      "description": "Slack集成",
+      "group": "tools",
+      "port": 8010,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_11_GitHub",
+      "description": "GitHub集成",
+      "group": "tools",
+      "port": 8011,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_12_Postgres",
+      "description": "PostgreSQL数据库",
+      "group": "tools",
+      "port": 8012,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_12_File",
+      "description": "File",
+      "group": "tools",
+      "port": 8200,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_13_SQLite",
+      "description": "SQLite数据库",
+      "group": "tools",
+      "port": 8013,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_13_Web",
+      "description": "Web",
+      "group": "tools",
+      "port": 8201,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_14_FFmpeg",
+      "description": "音视频处理",
+      "group": "tools",
+      "port": 8014,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_14_Shell",
+      "description": "Shell",
+      "group": "tools",
+      "port": 8202,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_15_OCR",
+      "description": "光学字符识别",
+      "group": "tools",
+      "port": 8015,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_16_Email",
+      "description": "邮件服务",
+      "group": "tools",
+      "port": 8016,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_17_EdgeTTS",
+      "description": "文本转语音",
+      "group": "tools",
+      "port": 8017,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_18_DeepL",
+      "description": "翻译服务",
+      "group": "tools",
+      "port": 8018,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_19_Crypto",
+      "description": "加密服务",
+      "group": "tools",
+      "port": 8019,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_20_Qdrant",
+      "description": "向量数据库",
+      "group": "tools",
+      "port": 8020,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_21_Notion",
+      "description": "Notion集成",
+      "group": "tools",
+      "port": 8021,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_22_BraveSearch",
+      "description": "Brave搜索",
+      "group": "tools",
+      "port": 8022,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_23_Calendar",
+      "description": "日历服务",
+      "group": "tools",
+      "port": 8023,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_23_Time",
+      "description": "Time",
+      "group": "tools",
+      "port": 8123,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_24_Weather",
+      "description": "天气服务",
+      "group": "tools",
+      "port": 8025,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_25_GoogleSearch",
+      "description": "Google搜索",
+      "group": "tools",
+      "port": 8026,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_27_SmartHome",
+      "description": "SmartHome",
+      "group": "tools",
+      "port": 8027,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_28_Reserved",
+      "description": "Reserved",
+      "group": "tools",
+      "port": 8028,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_29_Reserved",
+      "description": "Reserved",
+      "group": "tools",
+      "port": 8029,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_30_Reserved",
+      "description": "Reserved",
+      "group": "tools",
+      "port": 8030,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_31_Reserved",
+      "description": "Reserved",
+      "group": "tools",
+      "port": 8031,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_32_Reserved",
+      "description": "Reserved",
+      "group": "tools",
+      "port": 8032,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_33_ADB",
+      "description": "Android调试桥",
+      "group": "physical",
+      "port": 8033,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_34_Scrcpy",
+      "description": "屏幕镜像控制",
+      "group": "physical",
+      "port": 8034,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_35_AppleScript",
+      "description": "AppleScript自动化",
+      "group": "physical",
+      "port": 8035,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_36_UIAWindows",
+      "description": "Windows UI自动化",
+      "group": "physical",
+      "port": 8036,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_37_LinuxDBus",
+      "description": "Linux D-Bus控制",
+      "group": "physical",
+      "port": 8037,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_38_BLE",
+      "description": "蓝牙低功耗",
+      "group": "physical",
+      "port": 8038,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_39_SSH",
+      "description": "SSH远程控制",
+      "group": "physical",
+      "port": 8039,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_40_SFTP",
+      "description": "SFTP文件传输",
+      "group": "physical",
+      "port": 8040,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_41_MQTT",
+      "description": "MQTT消息队列",
+      "group": "physical",
+      "port": 8041,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_42_CANbus",
+      "description": "CAN总线控制",
+      "group": "physical",
+      "port": 8042,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_43_MAVLink",
+      "description": "无人机通信协议",
+      "group": "physical",
+      "port": 8043,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_44_NFC",
+      "description": "NFC近场通信",
+      "group": "physical",
+      "port": 8044,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_45_DesktopAuto",
+      "description": "桌面自动化",
+      "group": "physical",
+      "port": 8045,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_46_Camera",
+      "description": "摄像头控制",
+      "group": "physical",
+      "port": 8046,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_46_LinuxDesktopAuto",
+      "description": "LinuxDesktopAuto",
+      "group": "physical",
+      "port": 8203,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_47_Audio",
+      "description": "音频控制",
+      "group": "physical",
+      "port": 8047,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_48_MediaGen",
+      "description": "MediaGen",
+      "group": "physical",
+      "port": 8048,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_48_Serial",
+      "description": "Serial",
+      "group": "physical",
+      "port": 8204,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_49_OctoPrint",
+      "description": "3D打印控制",
+      "group": "physical",
+      "port": 8050,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_50_Transformer",
+      "description": "Transformer推理引擎",
+      "group": "intelligence",
+      "port": 8051,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_51_QuantumDispatcher",
+      "description": "量子计算调度器",
+      "group": "intelligence",
+      "port": 8052,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_52_QiskitSimulator",
+      "description": "Qiskit量子模拟器",
+      "group": "intelligence",
+      "port": 8053,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_53_GraphLogic",
+      "description": "图逻辑推理",
+      "group": "intelligence",
+      "port": 8054,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_54_SymbolicMath",
+      "description": "符号数学计算",
+      "group": "intelligence",
+      "port": 8055,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_56_AgentSwarm",
+      "description": "智能体集群",
+      "group": "intelligence",
+      "port": 8056,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_56_Planning",
+      "description": "Planning",
+      "group": "intelligence",
+      "port": 8205,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_57_QuantumCloud",
+      "description": "量子云服务",
+      "group": "intelligence",
+      "port": 8058,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_58_ModelRouter",
+      "description": "模型路由器",
+      "group": "intelligence",
+      "port": 8059,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_59_CausalInference",
+      "description": "因果推理",
+      "group": "intelligence",
+      "port": 8060,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_61_GeometricReasoning",
+      "description": "几何推理",
+      "group": "intelligence",
+      "port": 8061,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_62_ProbabilisticProgramming",
+      "description": "概率编程",
+      "group": "intelligence",
+      "port": 8062,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_64_Telemetry",
+      "description": "遥测数据收集",
+      "group": "monitoring",
+      "port": 8063,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_65_LoggerCentral",
+      "description": "中央日志系统",
+      "group": "monitoring",
+      "port": 8064,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_66_ConfigManager",
+      "description": "配置管理器",
+      "group": "monitoring",
+      "port": 8065,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_67_HealthMonitor",
+      "description": "健康监控",
+      "group": "monitoring",
+      "port": 8066,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_68_Security",
+      "description": "安全监控",
+      "group": "monitoring",
+      "port": 8067,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_69_BackupRestore",
+      "description": "备份恢复",
+      "group": "monitoring",
+      "port": 8068,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_70_BambuLab",
+      "description": "BambuLab 3D打印",
+      "group": "advanced",
+      "port": 8070,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_70_AutonomousLearning",
+      "description": "AutonomousLearning",
+      "group": "advanced",
+      "port": 8206,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_71_MediaGen",
+      "description": "媒体生成",
+      "group": "advanced",
+      "port": 8071,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_71_MultiDeviceCoordination",
+      "description": "MultiDeviceCoordination",
+      "group": "advanced",
+      "port": 8207,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_72_KnowledgeBase",
+      "description": "知识库系统",
+      "group": "advanced",
+      "port": 8072,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_73_Learning",
+      "description": "自学习系统",
+      "group": "advanced",
+      "port": 8073,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_74_DigitalTwin",
+      "description": "数字孪生",
+      "group": "advanced",
+      "port": 8074,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_79_LocalLLM",
+      "description": "本地大语言模型",
+      "group": "advanced",
+      "port": 8079,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_80_MemorySystem",
+      "description": "记忆系统",
+      "group": "advanced",
+      "port": 8080,
+      "health_endpoint": "/health",
+      "critical": true,
+      "status": "registered"
+    },
+    {
+      "name": "Node_81_Orchestrator",
+      "description": "任务编排器",
+      "group": "orchestration",
+      "port": 8081,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_82_NetworkGuard",
+      "description": "网络守卫",
+      "group": "orchestration",
+      "port": 8082,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_83_NewsAggregator",
+      "description": "新闻聚合器",
+      "group": "orchestration",
+      "port": 8083,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_84_StockTracker",
+      "description": "股票追踪",
+      "group": "orchestration",
+      "port": 8084,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_85_PromptLibrary",
+      "description": "提示词库",
+      "group": "orchestration",
+      "port": 8085,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_90_MultimodalVision",
+      "description": "多模态视觉",
+      "group": "multimodal",
+      "port": 8090,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_91_MultimodalAgent",
+      "description": "多模态智能体",
+      "group": "multimodal",
+      "port": 8091,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_92_AutoControl",
+      "description": "自动控制",
+      "group": "multimodal",
+      "port": 8092,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_95_WebRTC_Receiver",
+      "description": "WebRTC接收器",
+      "group": "multimodal",
+      "port": 8095,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_96_SmartTransportRouter",
+      "description": "智能传输路由",
+      "group": "multimodal",
+      "port": 8096,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_97_AcademicSearch",
+      "description": "学术搜索",
+      "group": "multimodal",
+      "port": 8097,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_100_MemorySystem",
+      "description": "MemorySystem",
+      "group": "academic",
+      "port": 8100,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_101_CodeEngine",
+      "description": "代码引擎",
+      "group": "academic",
+      "port": 8101,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_102_DebugOptimize",
+      "description": "调试优化",
+      "group": "academic",
+      "port": 8102,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_103_KnowledgeGraph",
+      "description": "知识图谱",
+      "group": "academic",
+      "port": 8103,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_104_AgentCPM",
+      "description": "智能体CPM",
+      "group": "academic",
+      "port": 8104,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_105_UnifiedKnowledgeBase",
+      "description": "统一知识库",
+      "group": "academic",
+      "port": 8105,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_106_GitHubFlow",
+      "description": "GitHub工作流",
+      "group": "academic",
+      "port": 8106,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_108_MetaCognition",
+      "description": "元认知系统",
+      "group": "academic",
+      "port": 8108,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_109_ProactiveSensing",
+      "description": "主动感知",
+      "group": "academic",
+      "port": 8109,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_110_SmartOrchestrator",
+      "description": "智能编排器",
+      "group": "academic",
+      "port": 8110,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_111_ContextManager",
+      "description": "上下文管理器",
+      "group": "academic",
+      "port": 8111,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_112_SelfHealing",
+      "description": "自愈系统",
+      "group": "academic",
+      "port": 8112,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_113_AndroidVLM",
+      "description": "Android视觉语言模型",
+      "group": "academic",
+      "port": 8113,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_116_ExternalToolWrapper",
+      "description": "外部工具包装器",
+      "group": "academic",
+      "port": 8116,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_117_OpenCode",
+      "description": "开放代码",
+      "group": "academic",
+      "port": 8117,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    },
+    {
+      "name": "Node_118_NodeFactory",
+      "description": "节点工厂",
+      "group": "academic",
+      "port": 8118,
+      "health_endpoint": "/health",
+      "critical": false,
+      "status": "registered"
+    }
+  ]
 }

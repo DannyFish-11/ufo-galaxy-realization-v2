@@ -56,7 +56,11 @@ class ScreenCaptureService : Service() {
     private var frameRate = 30
     private var bitRate = 2000000 // 2 Mbps
     
-    companion {
+    // WebSocket 引用，由启动方通过 setWebSocket() 注入
+    private var webSocketSender: ((okio.ByteString) -> Boolean)? = null
+    private var frameCount = 0L
+
+    companion object {
         const val ACTION_START = "com.ufo.galaxy.webrtc.START_CAPTURE"
         const val ACTION_STOP = "com.ufo.galaxy.webrtc.STOP_CAPTURE"
         const val EXTRA_RESULT_CODE = "result_code"
@@ -64,13 +68,22 @@ class ScreenCaptureService : Service() {
         const val EXTRA_WIDTH = "width"
         const val EXTRA_HEIGHT = "height"
         const val EXTRA_FPS = "fps"
-        
+
         @Volatile
         private var instance: ScreenCaptureService? = null
-        
+
         fun getInstance(): ScreenCaptureService? = instance
-        
+
         fun isRunning(): Boolean = instance != null
+    }
+
+    /**
+     * 注入 WebSocket 二进制发送能力
+     * 调用方应传入 okhttp3.WebSocket.send(ByteString) 的包装
+     */
+    fun setWebSocket(sender: (okio.ByteString) -> Boolean) {
+        this.webSocketSender = sender
+        Log.i(TAG, "WebSocket sender 已注入")
     }
     
     override fun onCreate() {
@@ -256,17 +269,51 @@ class ScreenCaptureService : Service() {
     }
     
     /**
-     * 发送编码后的数据
-     * TODO: 集成 WebRTC 或 WebSocket 发送逻辑
+     * 发送编码后的 H.264 帧数据
+     *
+     * 帧格式 (二进制):
+     *   [4 bytes: frame_size (big-endian)] [4 bytes: pts_us (big-endian)]
+     *   [4 bytes: flags (big-endian)]      [frame_size bytes: H.264 NAL data]
+     *
+     * 如果 WebSocket sender 未注入，仅记录日志。
      */
     private fun sendEncodedData(buffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) {
-        // 这里需要将编码后的 H.264 数据通过 WebRTC 或 WebSocket 发送到 PC 端
-        // 当前版本仅记录日志
-        Log.d(TAG, "Encoded frame: size=${bufferInfo.size}, pts=${bufferInfo.presentationTimeUs}, flags=${bufferInfo.flags}")
-        
-        // TODO: 实现 WebSocket 发送
-        // val data = ByteArray(bufferInfo.size)
-        // buffer.get(data)
-        // webSocketClient.send(data)
+        frameCount++
+
+        val sender = webSocketSender
+        if (sender == null) {
+            // WebSocket 未注入，只记日志（每 60 帧一次避免洪泛）
+            if (frameCount % 60 == 0L) {
+                Log.d(TAG, "Encoded frame #$frameCount: size=${bufferInfo.size}, " +
+                        "pts=${bufferInfo.presentationTimeUs}, flags=${bufferInfo.flags} " +
+                        "(WebSocket sender 未注入，帧未发送)")
+            }
+            return
+        }
+
+        try {
+            // 提取 NAL 数据
+            val data = ByteArray(bufferInfo.size)
+            buffer.get(data)
+
+            // 构建帧头 (12 bytes) + 负载
+            val framePacket = ByteBuffer.allocate(12 + data.size).apply {
+                order(java.nio.ByteOrder.BIG_ENDIAN)
+                putInt(data.size)
+                putInt((bufferInfo.presentationTimeUs / 1000).toInt())  // ms
+                putInt(bufferInfo.flags)
+                put(data)
+                flip()
+            }
+
+            val byteString = okio.ByteString.of(framePacket)
+            val ok = sender(byteString)
+
+            if (!ok && frameCount % 30 == 0L) {
+                Log.w(TAG, "WebSocket 帧发送失败 (frame #$frameCount)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "帧数据发送异常", e)
+        }
     }
 }

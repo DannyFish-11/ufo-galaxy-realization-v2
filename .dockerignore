@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Runtime data
+data/
+logs/
+*.log
+
+# Secrets
+.env
+*.bak
+
+# Tests (not needed in image)
+tests/
+test_*.py
+
+# Docs
+*.md
+!SKILL.md

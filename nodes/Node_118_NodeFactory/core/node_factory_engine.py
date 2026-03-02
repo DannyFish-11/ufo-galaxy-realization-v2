@@ -210,48 +210,159 @@ class NodeFactoryEngine:
     def _load_templates(self) -> Dict[str, str]:
         """加载节点模板"""
         return {
-            "engine": """
-# {node_name} Engine
+            "engine": '''"""
+{node_name} Engine
+==================
+
+{description}
+"""
+
+import logging
+from typing import Dict, Any, Optional, List
+from datetime import datetime
+
+logger = logging.getLogger("UFO-Galaxy.Node_{node_number}_{node_name}")
+
 
 class {node_name}Engine:
-    def __init__(self):
-        pass
-    
-    def process(self, data):
-        # TODO: Implement processing logic
-        return data
-""",
-            "server": """
-from fastapi import FastAPI
+    """Node_{node_number}_{node_name} 核心引擎"""
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.config = config or {{}}
+        self._initialized = False
+        self._stats = {{"processed": 0, "errors": 0, "start_time": None}}
+        logger.info(f"{node_name}Engine 初始化")
+
+    async def initialize(self) -> bool:
+        """初始化引擎"""
+        self._initialized = True
+        self._stats["start_time"] = datetime.now().isoformat()
+        logger.info(f"{node_name}Engine 已就绪")
+        return True
+
+    async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        处理输入数据
+
+        Args:
+            data: 输入数据字典
+
+        Returns:
+            处理结果
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        try:
+            self._stats["processed"] += 1
+            result = await self._do_process(data)
+            return {{"success": True, "result": result}}
+        except Exception as e:
+            self._stats["errors"] += 1
+            logger.error(f"处理失败: {{e}}")
+            return {{"success": False, "error": str(e)}}
+
+    async def _do_process(self, data: Dict[str, Any]) -> Any:
+        """核心处理逻辑 - 子类可重写"""
+        return {{"status": "processed", "input_keys": list(data.keys())}}
+
+    def get_stats(self) -> Dict[str, Any]:
+        """获取引擎统计"""
+        return {{**self._stats, "initialized": self._initialized}}
+
+    async def shutdown(self):
+        """关闭引擎"""
+        self._initialized = False
+        logger.info(f"{node_name}Engine 已关闭")
+''',
+            "server": '''"""
+Node_{node_number}_{node_name} Server
+"""
+
+import os
+import logging
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Dict, Any, Optional
 import uvicorn
 
-app = FastAPI(title="Node_{node_number}_{node_name}")
+from core.engine import {node_name}Engine
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("Node_{node_number}_{node_name}")
+
+app = FastAPI(
+    title="Node_{node_number}_{node_name}",
+    description="{description}",
+    version="1.0.0"
+)
+
+engine = {node_name}Engine()
+
+
+class ProcessRequest(BaseModel):
+    data: Dict[str, Any] = {{}}
+    options: Optional[Dict[str, Any]] = None
+
+
+@app.on_event("startup")
+async def startup():
+    await engine.initialize()
+    logger.info("Node_{node_number}_{node_name} 服务已启动")
+
 
 @app.get("/")
 async def root():
     return {{"node": "Node_{node_number}_{node_name}", "status": "running"}}
 
+
 @app.get("/health")
 async def health():
-    return {{"status": "healthy"}}
+    stats = engine.get_stats()
+    return {{"status": "healthy", "initialized": stats["initialized"], "processed": stats["processed"]}}
+
+
+@app.post("/process")
+async def process(request: ProcessRequest):
+    result = await engine.process(request.data)
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error"))
+    return result
+
+
+@app.get("/stats")
+async def stats():
+    return engine.get_stats()
+
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port={port})
-""",
-            "readme": """
-# Node_{node_number}_{node_name}
+    port = int(os.getenv("PORT", "{port}"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+''',
+            "readme": '''# Node_{node_number}_{node_name}
 
 {description}
 
 ## API Endpoints
 
-- GET `/` - Root endpoint
-- GET `/health` - Health check
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Root - node info |
+| GET | `/health` | Health check |
+| POST | `/process` | Process data |
+| GET | `/stats` | Engine statistics |
 
 ## Port
 
 {port}
-"""
+
+## Usage
+
+```bash
+cd nodes/Node_{node_number}_{node_name}
+python server.py
+```
+'''
         }
     
     def _create_node_structure(self, node_spec: NodeSpecification) -> str:

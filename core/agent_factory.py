@@ -636,22 +636,5 @@ def get_agent_factory(llm_router=None) -> AgentFactory:
     return _factory_instance
 
 
-# ============================================================================
-
-
-# ============================================================================
-# 全局实例
-# ============================================================================
-
-# 创建全局 Agent 工厂实例
-_factory_singleton: Optional[AgentFactory] = None
-
-def get_agent_factory_instance() -> AgentFactory:
-    """获取全局 Agent 工厂实例"""
-    global _factory_singleton
-    if _factory_singleton is None:
-        _factory_singleton = AgentFactory()
-    return _factory_singleton
-
-# 导出别名
-agent_factory = get_agent_factory_instance()
+# 兼容别名 (main 分支使用)
+get_agent_factory_instance = get_agent_factory

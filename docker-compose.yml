@@ -1,20 +1,66 @@
-# UFO Galaxy - Docker/Podman 部署配置
-# 使用方式:
-#   Docker: docker-compose up -d
-#   Podman: podman-compose up -d
+# ============================================================
+# UFO Galaxy — Development Docker Compose
+# ============================================================
 #
-# 新增服务:
-#   - Neo4j: 图数据库 (MemOS 记忆系统)
-#   - Qdrant: 向量数据库 (语义搜索)
-#   - Coturn: WebRTC TURN 服务器
-#   - MinIO: 对象存储
-#   - Redis: 缓存和消息队列
-#   - MongoDB: 文档存储
-
-version: '3.8'
+# Usage:
+#   docker compose up -d                  # Core services
+#   docker compose --profile full up -d   # All services
+#
+# Services:
+#   galaxy        — Main Galaxy application (API + scheduler)
+#   ufo-gateway   — Lightweight API gateway
+#   neo4j         — Graph database (MemOS)
+#   qdrant        — Vector database (semantic search)
+#   redis         — Cache & message broker
+#   mongodb       — Document storage
+#   ollama        — Local LLM serving
+#   coturn        — WebRTC TURN server [profile: full]
+#   minio         — Object storage [profile: full]
+#   oneapi        — LLM API gateway [profile: full]
+#   memos         — MemOS memory system [profile: full]
+#   agentcpm      — AgentCPM-GUI [profile: full]
 
 services:
-  # ============ UFO Galaxy 统一网关 ============
+  # ============ Galaxy Main Application ============
+  galaxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ufo-galaxy
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      - UFO_GALAXY_MODE=development
+      - UFO_GALAXY_LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      - NEO4J_URI=bolt://neo4j:7687
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://mongoadmin:mongoadmin123@mongodb:27017
+      - OLLAMA_URL=http://ollama:11434
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./core:/app/core
+      - ./config:/app/config
+      - ./nodes:/app/nodes
+      - galaxy-data:/app/data
+      - galaxy-logs:/app/logs
+    networks:
+      - ufo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============ UFO Gateway ============
   ufo-gateway:
     build:
       context: .
@@ -262,7 +308,7 @@ services:
     profiles:
       - full
 
-  # ============ Redis (达工用配置合合配置) ============
+  # ============ Redis ============
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -279,7 +325,7 @@ services:
       timeout: 3s
       retries: 3
 
-  # ============ MongoDB (组件存储) ============
+  # ============ MongoDB ============
   mongodb:
     image: mongo:7
     container_name: mongodb
@@ -301,7 +347,7 @@ services:
       retries: 3
       start_period: 40s
 
-  # ============ AgentCPM-GUI 服务失败 语义个人推 ============
+  # ============ AgentCPM-GUI ============
   agentcpm:
     build:
       context: .
@@ -334,23 +380,27 @@ networks:
         - subnet: 172.20.0.0/16
 
 volumes:
-  # Neo4j 数据号
+  # Neo4j
   neo4j-data:
   neo4j-logs:
   neo4j-import:
   neo4j-plugins:
   
-  # Qdrant 数据号
+  # Qdrant
   qdrant-storage:
   qdrant-snapshots:
   
-  # MinIO 数据号
+  # MinIO
   minio-data:
   
-  # MongoDB 数据号
+  # MongoDB
   mongo-data:
   
-  # 原背数据号
+  # Galaxy
+  galaxy-data:
+  galaxy-logs:
+
+  # Others
   oneapi-data:
   ollama-models:
   memos-data:

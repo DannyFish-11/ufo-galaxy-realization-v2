@@ -54,6 +54,9 @@ class AgentMessageHandler(
             Log.d(TAG, "处理消息类型: $messageType")
             
             when (messageType) {
+                // 通用命令 (服务端 send_command_and_wait 下发，需回传 command_id)
+                "command" -> handleCommand(message)
+
                 // 任务执行相关
                 "task_execute" -> handleTaskExecute(message)
                 "task_cancel" -> handleTaskCancel(message)
@@ -86,6 +89,87 @@ class AgentMessageHandler(
         }
     }
     
+    /**
+     * 处理通用命令 (服务端 ConnectionManager.send_command_and_wait 下发)
+     *
+     * 入站格式:
+     *   { "type": "command", "command_id": "cmd_xxx", "command": "...", "params": {...} }
+     *
+     * 回传格式:
+     *   { "type": "command_result", "command_id": "cmd_xxx", "payload": {...} }
+     */
+    private fun handleCommand(message: JSONObject) {
+        val commandId = message.optString("command_id", "")
+        val command = message.optString("command", "")
+        val params = message.optJSONObject("params") ?: JSONObject()
+
+        Log.i(TAG, "收到命令: command=$command, id=$commandId")
+
+        scope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    when (command) {
+                        "screenshot" -> {
+                            // 截屏 — 返回 base64 (需要 MediaProjection，此处仅 UI 树作为替代)
+                            autonomyManager.captureUITree()
+                        }
+                        "ui_tree" -> autonomyManager.captureUITree()
+                        "click" -> {
+                            val action = JSONObject().apply {
+                                put("type", "click")
+                                put("params", params)
+                            }
+                            autonomyManager.executeAction(action)
+                        }
+                        "input_text" -> {
+                            val action = JSONObject().apply {
+                                put("type", "input_text")
+                                put("params", params)
+                            }
+                            autonomyManager.executeAction(action)
+                        }
+                        "start_app" -> {
+                            val action = JSONObject().apply {
+                                put("type", "start_app")
+                                put("params", params)
+                            }
+                            autonomyManager.executeAction(action)
+                        }
+                        "press_key" -> {
+                            val action = JSONObject().apply {
+                                put("type", "press_key")
+                                put("params", params)
+                            }
+                            autonomyManager.executeAction(action)
+                        }
+                        "device_info" -> getDeviceInfo()
+                        "app_list" -> getInstalledApps()
+                        else -> JSONObject().apply {
+                            put("status", "error")
+                            put("message", "未知命令: $command")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "命令执行失败: $command", e)
+                JSONObject().apply {
+                    put("status", "error")
+                    put("message", e.message ?: "执行异常")
+                }
+            }
+
+            // 回传结果，携带 command_id 供服务端 resolve_command_response 匹配
+            val response = JSONObject().apply {
+                put("type", "command_result")
+                if (commandId.isNotEmpty()) put("command_id", commandId)
+                put("command", command)
+                put("payload", result)
+                put("timestamp", System.currentTimeMillis())
+            }
+            agentWebSocket.sendMessage(response)
+        }
+    }
+
     /**
      * 处理任务执行请求
      */

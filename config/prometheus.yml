@@ -1,0 +1,62 @@
+# UFO Galaxy — Prometheus Scrape Configuration
+# ==============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  external_labels:
+    cluster: 'ufo-galaxy'
+    environment: 'production'
+
+# ── Alerting (optional — uncomment to enable) ──
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# ── Rules ──
+# rule_files:
+#   - /etc/prometheus/rules/*.yml
+
+# ── Scrape Targets ──
+scrape_configs:
+  # Galaxy core API — main metrics endpoint
+  - job_name: 'galaxy-core'
+    static_configs:
+      - targets: ['galaxy:8080']
+        labels:
+          service: 'galaxy-core'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Galaxy gateway
+  - job_name: 'galaxy-gateway'
+    static_configs:
+      - targets: ['gateway:8000']
+        labels:
+          service: 'gateway'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Galaxy dashboard
+  - job_name: 'galaxy-dashboard'
+    static_configs:
+      - targets: ['dashboard:8001']
+        labels:
+          service: 'dashboard'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Galaxy health (detailed health info)
+  - job_name: 'galaxy-health'
+    static_configs:
+      - targets: ['galaxy:8080']
+    metrics_path: '/health/metrics'
+    scrape_interval: 30s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

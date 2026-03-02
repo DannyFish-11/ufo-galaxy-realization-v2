@@ -71,13 +71,21 @@ class GalaxyAgent private constructor(private val context: Context) {
         // 更新 Gateway URL
         gatewayUrl?.let { this.gatewayUrl = it }
         
-        // 初始化 WebSocket 和消息处理器
+        // 初始化消息处理器（先于 WebSocket，因为 WS 需要引用它）
+        // 使用延迟初始化避免循环依赖
+        val tempHandler = { message: JSONObject ->
+            if (::messageHandler.isInitialized) messageHandler.handleMessage(message)
+        }
+
+        // 初始化 WebSocket
         agentWebSocket = AgentWebSocket(
             gatewayUrl = this.gatewayUrl,
             agentRegistry = agentRegistry,
-            messageHandler = { message -> messageHandler.handleMessage(message) }
+            messageHandler = tempHandler,
+            onConnectedCallback = { sendRegistration() },
+            onRegistrationResponse = { response -> handleRegistrationResponse(response) }
         )
-        
+
         messageHandler = AgentMessageHandler(context, agentWebSocket)
         
         isInitialized = true
@@ -89,47 +97,39 @@ class GalaxyAgent private constructor(private val context: Context) {
     
     /**
      * 启动 Agent
+     *
+     * 流程: 连接 WebSocket → onOpen 发送 register 消息 → 服务端回 response → 标记已注册
+     * 注册走 WebSocket (AIP/1.0)，而非 HTTP，因为服务端 websocket_handler.py
+     * 的 handle_register() 就是处理 WS 消息。
      */
     fun start() {
         if (!isInitialized) {
             Log.e(TAG, "❌ Agent 未初始化，请先调用 initialize()")
             return
         }
-        
+
         if (isRunning) {
             Log.w(TAG, "Agent 已在运行中")
             return
         }
-        
+
         Log.i(TAG, "🚀 正在启动 UFO³ Galaxy Agent...")
-        
+
         scope.launch {
             try {
                 // 步骤 1: 检查无障碍服务
                 if (!autonomyManager.isAccessibilityServiceEnabled()) {
                     Log.w(TAG, "⚠️ 无障碍服务未启用，部分功能将受限")
                 }
-                
-                // 步骤 2: 注册或验证注册状态
-                if (!agentRegistry.isRegistered()) {
-                    Log.i(TAG, "📝 Agent 未注册，开始注册流程...")
-                    val registered = registerToGateway()
-                    
-                    if (!registered) {
-                        Log.e(TAG, "❌ Agent 注册失败，无法启动")
-                        return@launch
-                    }
-                } else {
-                    Log.i(TAG, "✅ Agent 已注册")
-                }
-                
-                // 步骤 3: 建立 WebSocket 连接
+
+                // 步骤 2: 建立 WebSocket 连接
+                // 注册会在 WebSocket onOpen 回调中自动进行
                 Log.i(TAG, "🔗 正在连接到 Galaxy Gateway...")
                 agentWebSocket.connect()
-                
+
                 isRunning = true
                 Log.i(TAG, "✅ UFO³ Galaxy Agent 已启动")
-                
+
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Agent 启动失败", e)
             }
@@ -165,38 +165,26 @@ class GalaxyAgent private constructor(private val context: Context) {
     }
     
     /**
-     * 向 Gateway 注册
+     * 通过 WebSocket 向 Gateway 注册 (由 AgentWebSocket onOpen 回调触发)
+     *
+     * 发送 AIP/1.0 register 消息，服务端 websocket_handler.py handle_register()
+     * 会返回 type=response 的确认。AgentWebSocket 收到后调 handleRegistrationResponse。
      */
-    private suspend fun registerToGateway(): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val registrationRequest = agentRegistry.generateRegistrationRequest()
-                
-                // TODO: 通过 HTTP POST 发送注册请求到 Gateway
-                // 这里暂时模拟成功
-                Log.i(TAG, "📤 发送注册请求: ${registrationRequest.toString(2)}")
-                
-                // 模拟响应
-                val response = JSONObject().apply {
-                    put("status", "success")
-                    put("token", "mock-token-${System.currentTimeMillis()}")
-                    put("message", "Agent 注册成功")
-                }
-                
-                val success = agentRegistry.handleRegistrationResponse(response)
-                
-                if (success) {
-                    Log.i(TAG, "✅ Agent 注册成功")
-                } else {
-                    Log.e(TAG, "❌ Agent 注册失败")
-                }
-                
-                success
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ 注册过程异常", e)
-                false
-            }
+    internal fun sendRegistration() {
+        val registrationRequest = agentRegistry.generateRegistrationRequest()
+        Log.i(TAG, "📤 通过 WebSocket 发送注册请求: ${registrationRequest.toString(2)}")
+        agentWebSocket.sendMessage(registrationRequest)
+    }
+
+    /**
+     * 处理服务端注册响应
+     */
+    internal fun handleRegistrationResponse(response: JSONObject) {
+        val success = agentRegistry.handleRegistrationResponse(response)
+        if (success) {
+            Log.i(TAG, "✅ Agent 注册成功")
+        } else {
+            Log.e(TAG, "❌ Agent 注册失败")
         }
     }
     

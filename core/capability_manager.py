@@ -22,7 +22,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Dict, List, Set, Optional, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime
 from enum import Enum
 
@@ -36,6 +36,7 @@ logger = logging.getLogger("CapabilityManager")
 class CapabilityStatus(Enum):
     """能力状态"""
     UNKNOWN = "unknown"
+    REGISTERED = "registered"
     ONLINE = "online"
     OFFLINE = "offline"
     ERROR = "error"
@@ -66,10 +67,33 @@ class Capability:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Capability':
-        """从字典创建"""
-        if 'status' in data and isinstance(data['status'], str):
-            data['status'] = CapabilityStatus(data['status'])
-        return cls(**data)
+        """从字典创建 — 兼容 capabilities.json 和内部格式
+
+        capabilities.json 使用 group/port/health_endpoint/critical,
+        内部使用 node_id/node_name/category/input_schema/output_schema.
+        """
+        d = dict(data)
+
+        # 字段映射: JSON → dataclass
+        if 'group' in d and 'category' not in d:
+            d['category'] = d.pop('group')
+        if 'node_id' not in d:
+            d['node_id'] = d.get('name', '')
+        if 'node_name' not in d:
+            d['node_name'] = d.get('name', '')
+
+        # status 转换
+        if 'status' in d and isinstance(d['status'], str):
+            try:
+                d['status'] = CapabilityStatus(d['status'])
+            except ValueError:
+                d['status'] = CapabilityStatus.UNKNOWN
+
+        # 过滤 dataclass 不认识的字段
+        valid_fields = {f.name for f in fields(cls)}
+        d = {k: v for k, v in d.items() if k in valid_fields}
+
+        return cls(**d)
 
 
 # ============================================================================
