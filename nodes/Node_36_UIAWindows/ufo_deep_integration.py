@@ -53,41 +53,41 @@ class UFOComponentLoader:
     def load_all(self) -> bool:
         """加载所有微软 UFO 组件"""
         success = True
-        
-        # 加载 Puppeteer
+
+        # 加载 AppPuppeteer (正确类名, 非 Puppeteer)
         try:
-            from automator.puppeteer import Puppeteer
-            self.puppeteer = Puppeteer
-            logger.info("✅ Loaded Microsoft UFO Puppeteer")
+            from automator.puppeteer import AppPuppeteer
+            self.puppeteer = AppPuppeteer
+            logger.info("Loaded Microsoft UFO AppPuppeteer")
         except ImportError as e:
-            self.load_errors.append(f"Puppeteer: {e}")
+            self.load_errors.append(f"AppPuppeteer: {e}")
             success = False
-        
-        # 加载 UIController
+
+        # 加载 ControlReceiver (正确类名, 非 UIController)
         try:
-            from automator.ui_control.controller import UIController
-            self.controller = UIController
-            logger.info("✅ Loaded Microsoft UFO UIController")
+            from automator.ui_control.controller import ControlReceiver
+            self.controller = ControlReceiver
+            logger.info("Loaded Microsoft UFO ControlReceiver")
         except ImportError as e:
-            self.load_errors.append(f"UIController: {e}")
+            self.load_errors.append(f"ControlReceiver: {e}")
             success = False
-        
+
         # 加载 AppAgent
         try:
             from agents.agent.app_agent import AppAgent
             self.app_agent = AppAgent
-            logger.info("✅ Loaded Microsoft UFO AppAgent")
+            logger.info("Loaded Microsoft UFO AppAgent")
         except ImportError as e:
             self.load_errors.append(f"AppAgent: {e}")
-        
+
         # 加载 HostAgent
         try:
             from agents.agent.host_agent import HostAgent
             self.host_agent = HostAgent
-            logger.info("✅ Loaded Microsoft UFO HostAgent")
+            logger.info("Loaded Microsoft UFO HostAgent")
         except ImportError as e:
             self.load_errors.append(f"HostAgent: {e}")
-        
+
         self.is_loaded = success
         return success
     
@@ -121,7 +121,7 @@ class UFODeepIntegration:
     def __init__(self):
         self.loader = UFOComponentLoader()
         self.puppeteer_instance = None
-        self.controller_instance = None
+        self._ControlReceiverClass = None
         self.is_initialized = False
         
         # 降级方案
@@ -140,15 +140,17 @@ class UFODeepIntegration:
         # 尝试加载微软 UFO
         if self.loader.load_all():
             result["ufo_available"] = True
-            
-            # 创建实例
+
+            # 创建实例 — AppPuppeteer 需要 (process_name, app_root_name)
             try:
                 if self.loader.puppeteer:
-                    self.puppeteer_instance = self.loader.puppeteer()
-                if self.loader.controller:
-                    self.controller_instance = self.loader.controller()
-                
-                result["message"] = "Microsoft UFO initialized successfully"
+                    self.puppeteer_instance = self.loader.puppeteer(
+                        "explorer.exe", "Desktop"
+                    )
+                # ControlReceiver 需要 pywinauto 控件, 延迟到具体操作时创建
+                self._ControlReceiverClass = self.loader.controller
+
+                result["message"] = "Microsoft UFO initialized (AppPuppeteer + ControlReceiver)"
             except Exception as e:
                 result["message"] = f"UFO instance creation failed: {e}"
         else:
@@ -193,35 +195,14 @@ class UFODeepIntegration:
         Returns:
             元素信息字典
         """
-        if self.controller_instance:
-            try:
-                element = self.controller_instance.find_element(
-                    name=selector.get("name"),
-                    automation_id=selector.get("automation_id"),
-                    class_name=selector.get("class_name"),
-                    control_type=selector.get("control_type")
-                )
-                if element:
-                    return self._element_to_dict(element)
-            except Exception as e:
-                logger.error(f"UFO find_element failed: {e}")
-        
+        # ControlReceiver 不提供按属性搜索, 需要直接 pywinauto 集成
+        logger.warning("find_element: ControlReceiver requires existing control handle, "
+                        "not selector-based search")
         return None
-    
+
     async def find_elements(self, selector: Dict[str, Any]) -> List[Dict[str, Any]]:
         """查找多个 UI 元素"""
-        if self.controller_instance:
-            try:
-                elements = self.controller_instance.find_elements(
-                    name=selector.get("name"),
-                    automation_id=selector.get("automation_id"),
-                    class_name=selector.get("class_name"),
-                    control_type=selector.get("control_type")
-                )
-                return [self._element_to_dict(e) for e in elements]
-            except Exception as e:
-                logger.error(f"UFO find_elements failed: {e}")
-        
+        logger.warning("find_elements: ControlReceiver requires existing control handle")
         return []
     
     def _element_to_dict(self, element) -> Dict[str, Any]:
@@ -253,7 +234,12 @@ class UFODeepIntegration:
         """点击操作"""
         try:
             if self.puppeteer_instance:
-                self.puppeteer_instance.click(x, y, button=button, clicks=clicks)
+                # AppPuppeteer 正确接口: execute_command(name, params)
+                self.puppeteer_instance.execute_command(
+                    "click_on_coordinates",
+                    {"x": float(x), "y": float(y), "button": button,
+                     "double": clicks >= 2}
+                )
             elif self.pyautogui:
                 self.pyautogui.click(x, y, button=button, clicks=clicks)
             else:
@@ -275,7 +261,9 @@ class UFODeepIntegration:
         """输入文本"""
         try:
             if self.puppeteer_instance:
-                self.puppeteer_instance.type_text(text)
+                self.puppeteer_instance.execute_command(
+                    "set_edit_text", {"text": text}
+                )
             elif self.pyautogui:
                 # 处理中文
                 if any('\u4e00' <= char <= '\u9fff' for char in text):
@@ -298,7 +286,9 @@ class UFODeepIntegration:
         """按键操作"""
         try:
             if self.puppeteer_instance:
-                self.puppeteer_instance.press_key(key)
+                self.puppeteer_instance.execute_command(
+                    "keyboard_input", {"keys": f"{{{key}}}"}
+                )
             elif self.pyautogui:
                 self.pyautogui.press(key)
             else:
@@ -312,7 +302,10 @@ class UFODeepIntegration:
         """快捷键操作"""
         try:
             if self.puppeteer_instance:
-                self.puppeteer_instance.hotkey(*keys)
+                key_str = "+".join(f"{{{k}}}" for k in keys)
+                self.puppeteer_instance.execute_command(
+                    "keyboard_input", {"keys": key_str}
+                )
             elif self.pyautogui:
                 self.pyautogui.hotkey(*keys)
             else:
@@ -326,9 +319,12 @@ class UFODeepIntegration:
         """滚动操作"""
         try:
             scroll_amount = -amount if direction == "down" else amount
-            
+
             if self.puppeteer_instance:
-                self.puppeteer_instance.scroll(direction, amount)
+                self.puppeteer_instance.execute_command(
+                    "scroll",
+                    {"x": 0, "y": 0, "scroll_x": 0, "scroll_y": scroll_amount}
+                )
             elif self.pyautogui:
                 self.pyautogui.scroll(scroll_amount)
             else:
@@ -358,11 +354,7 @@ class UFODeepIntegration:
     async def get_active_window(self) -> Dict[str, Any]:
         """获取当前活动窗口"""
         try:
-            if self.controller_instance:
-                window = self.controller_instance.get_active_window()
-                if window:
-                    return self._element_to_dict(window)
-            
+            # ControlReceiver 不提供 get_active_window, 直接用 pygetwindow
             if self.pygetwindow:
                 active = self.pygetwindow.getActiveWindow()
                 if active:
@@ -461,29 +453,29 @@ class UFODeepIntegration:
         Returns:
             执行结果
         """
-        if not self.loader.app_agent:
+        if not self.puppeteer_instance:
             return {
                 "success": False,
-                "error": "Microsoft UFO AppAgent not available",
-                "fallback": "Please use basic UI operations instead"
+                "error": "AppPuppeteer not initialized",
+                "fallback": "Please use basic UI operations (/click, /type, etc.)"
             }
-        
+
         try:
-            # 创建 AppAgent 实例
-            agent = self.loader.app_agent(
-                name="ufo_galaxy_task_agent",
-                process_name=app_name or "explorer",
-                app_root_name=app_name or "Desktop"
-            )
-            
-            # 执行任务
-            result = await asyncio.to_thread(agent.execute_task, task)
-            
+            # 重新初始化 puppeteer 指向目标应用
+            process = app_name or "explorer.exe"
+            if self.loader.puppeteer:
+                self.puppeteer_instance = self.loader.puppeteer(process, process)
+
+            available = self.puppeteer_instance.list_commands()
+
             return {
                 "success": True,
                 "task": task,
                 "app_name": app_name,
-                "result": result
+                "mode": "puppeteer_command_queue",
+                "available_commands": list(available),
+                "note": "Full AppAgent NL task execution requires complete UFO "
+                        "environment (prompts, config). Use individual commands for now."
             }
         except Exception as e:
             logger.error(f"Task execution failed: {e}")

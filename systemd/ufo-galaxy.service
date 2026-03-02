@@ -1,0 +1,47 @@
+[Unit]
+Description=UFO Galaxy L4 Autonomous Intelligence System
+Documentation=https://github.com/DannyFish-11/ufo-galaxy-realization
+After=network.target docker.service
+Wants=network.target docker.service
+
+[Service]
+Type=simple
+User=ufo-galaxy
+Group=ufo-galaxy
+WorkingDirectory=/opt/ufo-galaxy
+
+# Environment
+Environment=PYTHONPATH=/opt/ufo-galaxy
+Environment=UFO_GALAXY_HOME=/opt/ufo-galaxy
+Environment=UFO_GALAXY_LOG_LEVEL=INFO
+Environment=UFO_GALAXY_MODE=production
+
+# Main executable
+ExecStart=/opt/ufo-galaxy/venv/bin/python -m galaxy_launcher --daemon --auto-restart
+
+# Restart policy - 24/7 operation
+Restart=always
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Graceful shutdown
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security
+NoNewPrivileges=false
+ProtectSystem=no
+ProtectHome=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ufo-galaxy
+
+[Install]
+WantedBy=multi-user.target

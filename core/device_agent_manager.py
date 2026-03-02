@@ -23,7 +23,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Dict, Any, Optional, List, Callable, Type
-import aiohttp
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

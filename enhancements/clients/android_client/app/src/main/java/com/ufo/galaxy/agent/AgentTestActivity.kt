@@ -97,7 +97,12 @@ fun AgentTestScreen(galaxyAgent: GalaxyAgent) {
             Button(
                 onClick = {
                     scope.launch {
-                        val gatewayUrl = "ws://192.168.1.100:8000/ws/agent"
+                        // 从 config.properties 读取 Gateway URL
+                        val props = java.util.Properties()
+                        try {
+                            context.assets.open("config.properties").use { props.load(it) }
+                        } catch (_: Exception) {}
+                        val gatewayUrl = props.getProperty("galaxy.gateway.url", "ws://192.168.1.100:8000/ws/agent")
                         galaxyAgent.initialize(gatewayUrl)
                         statusText = "Agent 已初始化\nGateway: $gatewayUrl"
                     }

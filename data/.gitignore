@@ -1,0 +1,5 @@
+# Runtime data — not committed
+rag_memory/
+*.jsonl
+*.db
+*.sqlite

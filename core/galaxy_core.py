@@ -23,16 +23,35 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 # 导入已有协议
-from core.node_protocol import (
-    Message, MessageHeader, MessageType, MessagePriority,
-    NodeProtocolClient, NodeProtocolServer
-)
+try:
+    from core.node_protocol import (
+        Message, MessageHeader, MessageType, MessagePriority,
+    )
+    # NodeProtocolClient/Server may not exist in all versions
+    try:
+        from core.node_protocol import NodeProtocolClient, NodeProtocolServer
+    except ImportError:
+        NodeProtocolClient = None
+        NodeProtocolServer = None
+except ImportError:
+    Message = MessageHeader = MessageType = MessagePriority = None
+    NodeProtocolClient = NodeProtocolServer = None
 
-from enhancements.multidevice.device_protocol import (
-    AIPMessage, AIPProtocol, MessageType as AIPMessageType
-)
+try:
+    from enhancements.multidevice.device_protocol import (
+        AIPMessage, MessageType as AIPMessageType
+    )
+    try:
+        from enhancements.multidevice.device_protocol import AIPProtocol
+    except ImportError:
+        AIPProtocol = None
+except ImportError:
+    AIPMessage = AIPMessageType = AIPProtocol = None
 
-from nodes.common.mcp_adapter import MCPAdapter, PythonMCPAdapter
+try:
+    from nodes.common.mcp_adapter import MCPAdapter, PythonMCPAdapter
+except ImportError:
+    MCPAdapter = PythonMCPAdapter = None
 
 import httpx
 

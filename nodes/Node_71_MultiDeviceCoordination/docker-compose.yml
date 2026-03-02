@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  node71-coordinator:
+    build: .
+    container_name: ufo-node71-coordinator
+    ports:
+      - "8071:8071"
+    environment:
+      - NODE71_HOST=0.0.0.0
+      - NODE71_PORT=8071
+      - NODE71_NAME=MultiDeviceCoordinator
+      - NODE71_MDNS_ENABLED=true
+      - NODE71_UPNP_ENABLED=true
+      - NODE71_BROADCAST_ENABLED=true
+      - NODE71_BROADCAST_PORT=37021
+      - NODE71_CB_FAILURE_THRESHOLD=5
+      - NODE71_CB_TIMEOUT=30.0
+      - NODE71_RETRY_MAX=3
+      - NODE71_RETRY_BASE_DELAY=1.0
+    volumes:
+      - node71-data:/app/data
+      - node71-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8071/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ufo-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  node71-data:
+  node71-logs:
+
+networks:
+  ufo-network:
+    external: true
+    name: ufo-galaxy-network

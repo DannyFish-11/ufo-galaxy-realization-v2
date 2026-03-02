@@ -1,28 +1,74 @@
-# UFO Galaxy 24/7 Production Deployment
-# 
-# This Docker Compose configuration is optimized for:
-# - 24/7 continuous operation
-# - Automatic restart on failure
-# - Health monitoring
-# - Log rotation
-# - Resource limits
+# ============================================================
+# UFO Galaxy — Production Docker Compose
+# 24/7 continuous operation with monitoring stack
 #
 # Usage:
-#   docker-compose -f docker-compose.production.yml up -d
-#   docker-compose -f docker-compose.production.yml logs -f
-
-version: '3.8'
+#   docker compose -f docker-compose.production.yml up -d
+#   docker compose -f docker-compose.production.yml logs -f galaxy
+# ============================================================
 
 services:
-  # Main Galaxy Gateway
-  galaxy-gateway:
+  # ── Core: Galaxy Main Service ──
+  galaxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ufo-galaxy
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 20
+        window: 60s
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    env_file: .env
+    environment:
+      - UFO_GALAXY_MODE=production
+      - UFO_GALAXY_LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+
+    ports:
+      - "8080:8080"   # Main API
+      - "8001:8001"   # Dashboard
+
+    volumes:
+      - galaxy-data:/app/data
+      - galaxy-logs:/app/logs
+      - ./config:/app/config:ro
+
+    networks:
+      - galaxy-net
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  # ── Gateway: Lightweight API Proxy ──
+  gateway:
     build:
       context: .
       dockerfile: Dockerfile.gateway
     container_name: ufo-galaxy-gateway
     restart: unless-stopped
-    
-    # 24/7 operation settings
+
     deploy:
       resources:
         limits:
@@ -31,234 +77,202 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-      restart_policy:
-        condition: any
-        delay: 10s
-        max_attempts: 10
-        window: 60s
-    
-    # Health check
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
-    
-    # Environment
+      start_period: 20s
+
+    env_file: .env
     environment:
       - UFO_GALAXY_MODE=production
-      - UFO_GALAXY_LOG_LEVEL=INFO
-      - UFO_GALAXY_HOME=/app
-      - PYTHONUNBUFFERED=1
-    
-    # Ports
+      - GALAXY_UPSTREAM=http://galaxy:8080
+
     ports:
-      - "8080:8080"
-      - "8443:8443"
-    
-    # Volumes
+      - "8000:8000"
+
     volumes:
-      - galaxy-data:/app/data
       - galaxy-logs:/app/logs
       - ./config:/app/config:ro
-    
-    # Networks
+
     networks:
-      - galaxy-network
-    
-    # Logging
+      - galaxy-net
+
+    depends_on:
+      galaxy:
+        condition: service_healthy
+
     logging:
       driver: "json-file"
       options:
-        max-size: "100m"
-        max-file: "10"
-        labels: "service,gateway"
-        env: "OS_ENVIRONMENT,OS_DEBUG"
+        max-size: "50m"
+        max-file: "5"
 
-  # Health Monitor
-  health-monitor:
+  # ── Dashboard: Web UI ──
+  dashboard:
     build:
       context: .
-      dockerfile: Dockerfile.gateway
-    container_name: ufo-galaxy-health
+      dockerfile: Dockerfile
+    container_name: ufo-galaxy-dashboard
     restart: unless-stopped
-    command: ["python", "-m", "health_monitor", "--watchdog", "--interval", "30"]
-    
+    command: ["python", "start_galaxy.py", "--port", "8001"]
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    env_file: .env
+
+    ports:
+      - "8001:8001"
+
+    volumes:
+      - galaxy-data:/app/data:ro
+      - galaxy-logs:/app/logs
+      - ./config:/app/config:ro
+
+    networks:
+      - galaxy-net
+
+    depends_on:
+      galaxy:
+        condition: service_healthy
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Watchdog: 24/7 Process Guardian ──
+  watchdog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ufo-galaxy-watchdog
+    restart: unless-stopped
+    command: ["python", "-m", "daemon.ufogalaxy_daemon"]
+
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 256M
-    
+
+    env_file: .env
     environment:
-      - UFO_GALAXY_MODE=production
-      - WATCHDOG_TARGET=galaxy-gateway:8080
-    
+      - WATCHDOG_MODE=production
+      - HEALTH_CHECK_INTERVAL=30
+      - AUTO_RESTART=true
+      - GALAXY_HEALTH_URL=http://galaxy:8080/health/live
+
     volumes:
       - galaxy-logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    
+      - ./daemon/config.json:/app/daemon/config.json:ro
+
     networks:
-      - galaxy-network
-    
+      - galaxy-net
+
     depends_on:
-      - galaxy-gateway
-    
+      galaxy:
+        condition: service_healthy
+
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "20m"
+        max-file: "3"
 
-  # Node Registry & Discovery
-  node-registry:
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    container_name: ufo-galaxy-registry
+  # ── Monitoring: Prometheus ──
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ufo-galaxy-prometheus
     restart: unless-stopped
-    command: ["python", "-m", "nodes.registry_service"]
-    
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-    
-    environment:
-      - REGISTRY_PORT=8500
-      - DISCOVERY_INTERVAL=30
-    
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+
     ports:
-      - "8500:8500"
-    
+      - "9090:9090"
+
     volumes:
-      - galaxy-data:/app/data
-      - galaxy-logs:/app/logs
-    
+      - prometheus-data:/prometheus
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
     networks:
-      - galaxy-network
-    
+      - galaxy-net
+
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
-        max-file: "5"
+        max-file: "3"
 
-  # Log Aggregator
-  log-aggregator:
+  # ── Monitoring: Grafana Dashboard ──
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ufo-galaxy-grafana
+    restart: unless-stopped
+
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana:/etc/grafana/provisioning:ro
+
+    networks:
+      - galaxy-net
+
+    depends_on:
+      - prometheus
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ── Log Aggregator: Fluent Bit ──
+  fluent-bit:
     image: fluent/fluent-bit:latest
     container_name: ufo-galaxy-logs
     restart: unless-stopped
-    
+
     volumes:
       - galaxy-logs:/logs:ro
       - ./config/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-    
+
     networks:
-      - galaxy-network
-    
+      - galaxy-net
+
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  # Metrics Collector (Prometheus)
-  metrics:
-    image: prom/prometheus:latest
-    container_name: ufo-galaxy-metrics
-    restart: unless-stopped
-    
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    
-    ports:
-      - "9090:9090"
-    
-    volumes:
-      - prometheus-data:/prometheus
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    
-    networks:
-      - galaxy-network
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-
-  # Dashboard (Grafana)
-  dashboard:
-    image: grafana/grafana:latest
-    container_name: ufo-galaxy-dashboard
-    restart: unless-stopped
-    
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3000
-    
-    ports:
-      - "3000:3000"
-    
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./config/grafana:/etc/grafana/provisioning:ro
-    
-    networks:
-      - galaxy-network
-    
-    depends_on:
-      - metrics
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-
-  # Watchdog - ensures 24/7 operation
-  watchdog:
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    container_name: ufo-galaxy-watchdog
-    restart: unless-stopped
-    command: ["python", "-m", "daemon.ufogalaxy_daemon"]
-    
-    privileged: true
-    
-    volumes:
-      - galaxy-logs:/app/logs
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./daemon/config.json:/app/daemon/config.json:ro
-    
-    environment:
-      - WATCHDOG_MODE=production
-      - HEALTH_CHECK_INTERVAL=30
-      - AUTO_RESTART=true
-    
-    networks:
-      - galaxy-network
-    
-    depends_on:
-      - galaxy-gateway
-      - health-monitor
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-
-# Volumes
+# ── Volumes ──
 volumes:
   galaxy-data:
     driver: local
@@ -269,9 +283,9 @@ volumes:
   grafana-data:
     driver: local
 
-# Networks
+# ── Network ──
 networks:
-  galaxy-network:
+  galaxy-net:
     driver: bridge
     ipam:
       config:

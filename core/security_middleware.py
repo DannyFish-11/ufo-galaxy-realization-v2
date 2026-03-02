@@ -182,6 +182,198 @@ class IPBlockList:
         }
 
 
+# ───────────────────── 速率限制 ─────────────────────
+
+class RateLimiter:
+    """
+    令牌桶速率限制器
+
+    对每个客户端IP进行独立的速率限制。
+    """
+
+    def __init__(
+        self,
+        requests_per_minute: int = 120,
+        burst_size: int = 30,
+    ):
+        self._rpm = requests_per_minute
+        self._burst = burst_size
+        self._buckets: Dict[str, Dict] = {}  # ip -> {tokens, last_refill}
+        self._cleanup_interval = 300  # 5分钟清理一次过期桶
+
+    def _get_bucket(self, ip: str) -> Dict:
+        now = time.time()
+        if ip not in self._buckets:
+            self._buckets[ip] = {"tokens": self._burst, "last_refill": now}
+        bucket = self._buckets[ip]
+        # 补充令牌
+        elapsed = now - bucket["last_refill"]
+        refill = elapsed * (self._rpm / 60.0)
+        bucket["tokens"] = min(self._burst, bucket["tokens"] + refill)
+        bucket["last_refill"] = now
+        return bucket
+
+    def is_allowed(self, ip: str) -> bool:
+        """检查请求是否被允许"""
+        bucket = self._get_bucket(ip)
+        if bucket["tokens"] >= 1:
+            bucket["tokens"] -= 1
+            return True
+        return False
+
+    def get_remaining(self, ip: str) -> int:
+        """获取剩余令牌数"""
+        bucket = self._get_bucket(ip)
+        return max(0, int(bucket["tokens"]))
+
+    def cleanup(self):
+        """清理长时间未使用的桶"""
+        now = time.time()
+        stale = [
+            ip for ip, bucket in self._buckets.items()
+            if now - bucket["last_refill"] > self._cleanup_interval
+        ]
+        for ip in stale:
+            del self._buckets[ip]
+
+    def get_stats(self) -> Dict:
+        return {
+            "active_clients": len(self._buckets),
+            "requests_per_minute": self._rpm,
+            "burst_size": self._burst,
+        }
+
+
+# ───────────────────── 输入验证 ─────────────────────
+
+class InputValidator:
+    """
+    请求输入安全验证器
+
+    检测和阻止常见的注入攻击模式。
+    """
+
+    # 常见的注入攻击模式
+    SQL_INJECTION_PATTERNS = [
+        r"(?i)(union\s+select)",
+        r"(?i)(;\s*drop\s+table)",
+        r"(?i)(--\s*$)",
+        r"(?i)('\s*or\s+'1'\s*=\s*'1)",
+        r"(?i)(;\s*delete\s+from)",
+        r"(?i)(;\s*insert\s+into)",
+        r"(?i)(;\s*update\s+.*\s+set)",
+    ]
+
+    XSS_PATTERNS = [
+        r"<script[^>]*>",
+        r"javascript\s*:",
+        r"on\w+\s*=\s*[\"']",
+        r"<iframe[^>]*>",
+        r"<object[^>]*>",
+        r"<embed[^>]*>",
+    ]
+
+    COMMAND_INJECTION_PATTERNS = [
+        r";\s*rm\s+-rf",
+        r"\|\|\s*rm\s+",
+        r"&&\s*rm\s+",
+        r"`[^`]*`",
+        r"\$\([^)]+\)",
+        r";\s*cat\s+/etc/",
+        r";\s*wget\s+",
+        r";\s*curl\s+.*\|.*sh",
+    ]
+
+    PATH_TRAVERSAL_PATTERNS = [
+        r"\.\./",
+        r"\.\.\\",
+        r"%2e%2e%2f",
+        r"%2e%2e/",
+    ]
+
+    def __init__(self, strict: bool = False):
+        import re
+        self._strict = strict
+        self._sql_re = [re.compile(p) for p in self.SQL_INJECTION_PATTERNS]
+        self._xss_re = [re.compile(p) for p in self.XSS_PATTERNS]
+        self._cmd_re = [re.compile(p) for p in self.COMMAND_INJECTION_PATTERNS]
+        self._path_re = [re.compile(p) for p in self.PATH_TRAVERSAL_PATTERNS]
+        self._violations: deque = deque(maxlen=1000)
+
+    def validate(self, value: str, context: str = "") -> Optional[str]:
+        """
+        验证输入值，返回 None 表示安全，否则返回威胁类型
+        """
+        if not isinstance(value, str):
+            return None
+
+        for pattern in self._sql_re:
+            if pattern.search(value):
+                self._record_violation("sql_injection", value, context)
+                return "sql_injection"
+
+        for pattern in self._xss_re:
+            if pattern.search(value):
+                self._record_violation("xss", value, context)
+                return "xss"
+
+        for pattern in self._cmd_re:
+            if pattern.search(value):
+                self._record_violation("command_injection", value, context)
+                return "command_injection"
+
+        for pattern in self._path_re:
+            if pattern.search(value):
+                self._record_violation("path_traversal", value, context)
+                return "path_traversal"
+
+        return None
+
+    def validate_dict(self, data: Dict[str, Any], context: str = "") -> Optional[str]:
+        """递归验证字典中的所有字符串值"""
+        for key, value in data.items():
+            if isinstance(value, str):
+                threat = self.validate(value, f"{context}.{key}")
+                if threat:
+                    return threat
+            elif isinstance(value, dict):
+                threat = self.validate_dict(value, f"{context}.{key}")
+                if threat:
+                    return threat
+            elif isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, str):
+                        threat = self.validate(item, f"{context}.{key}[{i}]")
+                        if threat:
+                            return threat
+                    elif isinstance(item, dict):
+                        threat = self.validate_dict(item, f"{context}.{key}[{i}]")
+                        if threat:
+                            return threat
+        return None
+
+    def _record_violation(self, threat_type: str, value: str, context: str):
+        self._violations.append({
+            "type": threat_type,
+            "value": value[:100],
+            "context": context,
+            "timestamp": time.time()
+        })
+        logger.warning(f"[安全] 输入验证检测到 {threat_type}: {context} = {value[:50]}...")
+
+    def get_violations(self, limit: int = 50) -> List[Dict]:
+        return list(self._violations)[-limit:]
+
+    def get_stats(self) -> Dict:
+        violations_by_type: Dict[str, int] = defaultdict(int)
+        for v in self._violations:
+            violations_by_type[v["type"]] += 1
+        return {
+            "total_violations": len(self._violations),
+            "by_type": dict(violations_by_type)
+        }
+
+
 # ───────────────────── FastAPI 中间件 ─────────────────────
 
 def create_audit_middleware(app, audit_logger: Optional[AuditLogger] = None):
@@ -259,7 +451,8 @@ def create_security_headers_middleware(app):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
 
             # 移除可能泄露信息的头
-            response.headers.pop("Server", None)
+            if "Server" in response.headers:
+                del response.headers["Server"]
 
             return response
 
@@ -300,34 +493,143 @@ def create_ip_block_middleware(app, block_list: Optional[IPBlockList] = None):
     return block_list
 
 
+def create_rate_limit_middleware(app, rate_limiter: Optional[RateLimiter] = None):
+    """
+    创建速率限制中间件
+    """
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse, Response
+
+    if rate_limiter is None:
+        rate_limiter = RateLimiter()
+
+    class RateLimitMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next) -> Response:
+            client_ip = request.client.host if request.client else "unknown"
+
+            # 跳过健康检查端点
+            if request.url.path in ("/health", "/healthz", "/ready"):
+                return await call_next(request)
+
+            if not rate_limiter.is_allowed(client_ip):
+                logger.warning(f"[安全] 速率限制触发: {client_ip}")
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "rate_limited", "message": "Too many requests"},
+                    headers={"Retry-After": "60"}
+                )
+
+            response = await call_next(request)
+
+            # 添加速率限制头
+            remaining = rate_limiter.get_remaining(client_ip)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+            response.headers["X-RateLimit-Limit"] = str(rate_limiter._rpm)
+
+            return response
+
+    app.add_middleware(RateLimitMiddleware)
+    return rate_limiter
+
+
+def create_input_validation_middleware(app, validator: Optional[InputValidator] = None):
+    """
+    创建输入验证中间件
+
+    检查请求体中的注入攻击模式。
+    """
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse, Response
+    import json as json_module
+
+    if validator is None:
+        validator = InputValidator()
+
+    class InputValidationMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next) -> Response:
+            # 只检查 POST/PUT/PATCH 请求
+            if request.method in ("POST", "PUT", "PATCH"):
+                content_type = request.headers.get("content-type", "")
+                if "application/json" in content_type:
+                    try:
+                        body = await request.body()
+                        if body:
+                            data = json_module.loads(body)
+                            if isinstance(data, dict):
+                                threat = validator.validate_dict(data, request.url.path)
+                                if threat:
+                                    return JSONResponse(
+                                        status_code=400,
+                                        content={
+                                            "error": "input_validation_failed",
+                                            "threat_type": threat,
+                                            "message": f"Potential {threat} detected in request"
+                                        }
+                                    )
+                    except (json_module.JSONDecodeError, UnicodeDecodeError):
+                        pass  # 让后续处理器处理格式错误
+
+            # 检查查询参数
+            for key, value in request.query_params.items():
+                threat = validator.validate(value, f"query.{key}")
+                if threat:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "input_validation_failed",
+                            "threat_type": threat,
+                            "message": f"Potential {threat} detected in query parameter"
+                        }
+                    )
+
+            return await call_next(request)
+
+    app.add_middleware(InputValidationMiddleware)
+    return validator
+
+
 # ───────────────────── 安全管理器 ─────────────────────
 
 class SecurityManager:
     """
     统一安全管理器
 
-    整合审计日志、IP 黑名单和安全中间件。
+    整合审计日志、IP 黑名单、速率限制和输入验证中间件。
     """
 
-    def __init__(self):
+    def __init__(self, config: Optional[Dict] = None):
+        config = config or {}
         self.audit = AuditLogger()
         self.ip_block = IPBlockList()
+        self.rate_limiter = RateLimiter(
+            requests_per_minute=config.get("rate_limit_rpm", 120),
+            burst_size=config.get("rate_limit_burst", 30)
+        )
+        self.input_validator = InputValidator(
+            strict=config.get("strict_validation", False)
+        )
 
     def setup_middleware(self, app):
         """为 FastAPI 应用安装所有安全中间件"""
         # 注意：中间件按添加的逆序执行
-        # 执行顺序：IP Block → Security Headers → Audit → Handler
+        # 执行顺序：IP Block → Rate Limit → Input Validation → Security Headers → Audit → Handler
 
         create_audit_middleware(app, self.audit)
         create_security_headers_middleware(app)
+        create_input_validation_middleware(app, self.input_validator)
+        create_rate_limit_middleware(app, self.rate_limiter)
         create_ip_block_middleware(app, self.ip_block)
 
-        logger.info("安全中间件已全部安装 (审计日志 + 安全头 + IP 黑名单)")
+        logger.info("安全中间件已全部安装 (审计日志 + 安全头 + IP黑名单 + 速率限制 + 输入验证)")
 
     def get_dashboard(self) -> Dict:
         return {
             "audit": self.audit.get_stats(),
             "blocked_ips": self.ip_block.get_blocked_list(),
+            "rate_limiter": self.rate_limiter.get_stats(),
+            "input_validation": self.input_validator.get_stats(),
         }
 
 

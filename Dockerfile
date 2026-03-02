@@ -1,46 +1,67 @@
-# UFO Galaxy L4 - Docker 镜像
-# 基于 Python 3.11
+# ============================================================
+# UFO Galaxy L4 — Production Docker Image
+# Multi-stage build for smaller, secure images
+# ============================================================
 
-FROM python:3.11-slim
+# ── Stage 1: Builder ──
+FROM python:3.11-slim AS builder
 
-# 设置工作目录
-WORKDIR /app
+WORKDIR /build
 
-# 设置环境变量
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
-
-# 安装系统依赖
+# Install build-time system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    ffmpeg \
-    libpq-dev \
     gcc \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
 COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# ── Stage 2: Runtime ──
+FROM python:3.11-slim
 
-# 复制项目文件
-COPY . .
+LABEL maintainer="UFO Galaxy Team"
+LABEL version="2.3.23"
 
-# 创建非 root 用户
-RUN useradd -m -u 1000 galaxy && \
-    chown -R galaxy:galaxy /app
+WORKDIR /app
+
+# Runtime-only system deps (no compiler)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    libpq5 \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /install /usr/local
+
+# Environment
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    UFO_GALAXY_HOME=/app \
+    UFO_GALAXY_MODE=production
+
+# Create non-root user before COPY
+RUN groupadd -r galaxy && useradd -r -g galaxy -m -u 1000 galaxy \
+    && mkdir -p /app/data /app/logs /app/config \
+    && chown -R galaxy:galaxy /app
+
+# Copy project files
+COPY --chown=galaxy:galaxy . .
 
 USER galaxy
 
-# 暴露端口
-EXPOSE 8000 8001 8080
+# Ports: API=8080, Dashboard=8001, WS=8000
+EXPOSE 8080 8001 8000
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8080/health/live || exit 1
+# Health check (uses core health endpoint)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -sf http://localhost:8080/health/live || exit 1
 
-# 默认启动命令
-CMD ["python", "unified_launcher.py", "--port", "8080"]
+# Use tini as init to handle signals properly
+ENTRYPOINT ["tini", "--"]
+
+# Default: launch via unified_launcher
+CMD ["python", "unified_launcher.py", "--host", "0.0.0.0", "--port", "8080"]

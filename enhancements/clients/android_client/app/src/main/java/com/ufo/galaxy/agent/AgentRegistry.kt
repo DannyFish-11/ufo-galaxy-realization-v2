@@ -136,17 +136,35 @@ class AgentRegistry(private val context: Context) {
     }
     
     /**
-     * 生成注册请求数据
+     * 生成注册请求数据 (AIP/1.0 协议格式)
+     *
+     * 服务端 websocket_handler.py handle_register() 期望:
+     *   protocol: "AIP/1.0"
+     *   type: "register"
+     *   from: device_id
+     *   to: "Node_50"
+     *   payload.device_id, payload.device_type, payload.capabilities
      */
     fun generateRegistrationRequest(): JSONObject {
+        val deviceId = getDeviceId()
+        val agentId = getAgentId()
         return JSONObject().apply {
-            put("type", "agent_register")
-            put("agent_id", getAgentId())
-            put("device_id", getDeviceId())
-            put("platform", "android")
-            put("device_info", getDeviceInfo())
-            put("capabilities", getAgentCapabilities())
-            put("timestamp", System.currentTimeMillis())
+            put("protocol", "AIP/1.0")
+            put("message_id", "android_${agentId}_${System.currentTimeMillis()}")
+            put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                .format(java.util.Date()))
+            put("from", deviceId)
+            put("to", "Node_50")
+            put("type", "register")
+            put("payload", JSONObject().apply {
+                put("device_id", deviceId)
+                put("agent_id", agentId)
+                put("device_type", "android")
+                put("platform", "android")
+                put("device_info", getDeviceInfo())
+                put("capabilities", getAgentCapabilities())
+            })
         }
     }
     
@@ -195,16 +213,25 @@ class AgentRegistry(private val context: Context) {
     }
     
     /**
-     * 生成心跳数据
+     * 生成心跳数据 (AIP/1.0 协议格式)
      */
     fun generateHeartbeatData(): JSONObject {
+        val deviceId = getDeviceId()
         return JSONObject().apply {
-            put("type", "agent_heartbeat")
-            put("agent_id", getAgentId())
-            put("token", getAgentToken())
-            put("status", "online")
-            put("timestamp", System.currentTimeMillis())
-            put("stats", getAgentStats())
+            put("protocol", "AIP/1.0")
+            put("message_id", "hb_${getAgentId()}_${System.currentTimeMillis()}")
+            put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                .format(java.util.Date()))
+            put("from", deviceId)
+            put("to", "Node_50")
+            put("type", "heartbeat")
+            put("payload", JSONObject().apply {
+                put("agent_id", getAgentId())
+                put("token", getAgentToken())
+                put("status", "online")
+                put("stats", getAgentStats())
+            })
         }
     }
     
@@ -246,29 +273,43 @@ class AgentRegistry(private val context: Context) {
     }
     
     /**
-     * 处理注册响应
+     * 处理注册响应 (AIP/1.0 格式)
+     *
+     * 服务端返回格式:
+     *   { "protocol": "AIP/1.0", "type": "response",
+     *     "payload": { "success": true, "message": "...", "registered_at": "..." } }
+     *
+     * 也兼容简化格式:
+     *   { "status": "success", "token": "..." }
      */
     fun handleRegistrationResponse(response: JSONObject): Boolean {
         return try {
-            val status = response.getString("status")
-            
-            if (status == "success") {
-                val token = response.optString("token", null)
-                if (token != null) {
-                    saveAgentToken(token)
-                    markAsRegistered()
-                    Log.i(TAG, "✅ Agent 注册成功: ${getAgentId()}")
-                    true
-                } else {
-                    Log.e(TAG, "❌ 注册响应缺少 token")
-                    false
-                }
+            // 优先检查 AIP/1.0 payload 格式
+            val payload = response.optJSONObject("payload")
+            val success = if (payload != null) {
+                payload.optBoolean("success", false)
             } else {
-                val message = response.optString("message", "未知错误")
+                response.optString("status") == "success"
+            }
+
+            if (success) {
+                // token 可能在 payload 或根层级；服务端当前不下发 token，
+                // 此时用 agent_id 作为自签 token（后续可改为 JWT）
+                val token = payload?.optString("token", null)
+                    ?: response.optString("token", null)
+                    ?: "self-signed-${getAgentId()}-${System.currentTimeMillis()}"
+
+                saveAgentToken(token)
+                markAsRegistered()
+                Log.i(TAG, "✅ Agent 注册成功: ${getAgentId()}")
+                true
+            } else {
+                val message = payload?.optString("message")
+                    ?: response.optString("message", "未知错误")
                 Log.e(TAG, "❌ Agent 注册失败: $message")
                 false
             }
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "❌ 处理注册响应失败", e)
             false

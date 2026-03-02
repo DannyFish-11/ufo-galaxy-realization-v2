@@ -15,7 +15,10 @@ import time
 import signal
 import logging
 import asyncio
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 import json
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field, asdict
@@ -31,7 +34,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/var/log/ufo-galaxy/daemon.log')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -406,23 +408,30 @@ class UFOGalaxyDaemon:
         """Collect system health metrics"""
         try:
             metrics = HealthMetrics()
-            
+
+            if psutil is None:
+                # Fallback: minimal metrics without psutil
+                if self.start_time:
+                    metrics.uptime_seconds = (datetime.now() - self.start_time).total_seconds()
+                self.health_history.append(metrics)
+                return metrics
+
             # CPU usage
             metrics.cpu_percent = psutil.cpu_percent(interval=1)
-            
+
             # Memory usage
             memory = psutil.virtual_memory()
             metrics.memory_percent = memory.percent
             metrics.memory_used_mb = memory.used / (1024 * 1024)
-            
+
             # Disk usage
             disk = psutil.disk_usage('/')
             metrics.disk_percent = (disk.used / disk.total) * 100
-            
+
             # Network I/O
             net_io = psutil.net_io_counters()
             metrics.network_io_mb = (net_io.bytes_sent + net_io.bytes_recv) / (1024 * 1024)
-            
+
             # Process info
             metrics.process_count = len(psutil.pids())
             metrics.thread_count = sum(p.num_threads() for p in psutil.process_iter())
@@ -514,6 +523,9 @@ if __name__ == "__main__":
         # Send stop signal
         import signal
         # Find and stop running daemon
+        if psutil is None:
+            print("psutil not available, cannot find daemon process")
+            sys.exit(1)
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             if 'ufogalaxy_daemon' in ' '.join(proc.info['cmdline'] or []):
                 os.kill(proc.info['pid'], signal.SIGTERM)

@@ -1,323 +1,303 @@
 #!/bin/bash
 # ============================================================
-# UFO Galaxy System - Deployment Script
-# 一键部署脚本
+# UFO Galaxy — Production Deployment Script
 # ============================================================
 
-set -e
+set -euo pipefail
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# ── Colors ──
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
-# 打印函数
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+ok()      { echo -e "${GREEN}[OK]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+err()     { echo -e "${RED}[ERROR]${NC} $1"; }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+COMPOSE_FILE="docker-compose.production.yml"
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+# ── Pre-flight checks ──
+preflight() {
+    info "Pre-flight checks..."
 
-# 检查 Docker 是否安装
-check_docker() {
-    print_info "检查 Docker 环境..."
-    if ! command -v docker &> /dev/null; then
-        print_error "Docker 未安装，请先安装 Docker"
+    # Docker
+    if ! command -v docker &>/dev/null; then
+        err "Docker not installed. Install: https://docs.docker.com/get-docker/"
         exit 1
     fi
-    
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "Docker Compose 未安装，请先安装 Docker Compose"
+
+    # Docker Compose (v2 plugin or standalone)
+    if docker compose version &>/dev/null; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        err "Docker Compose not found."
         exit 1
     fi
-    
-    print_success "Docker 环境检查通过"
+
+    # Python (for local mode)
+    if command -v python3 &>/dev/null; then
+        PYTHON_CMD="python3"
+    elif command -v python &>/dev/null; then
+        PYTHON_CMD="python"
+    else
+        PYTHON_CMD=""
+    fi
+
+    ok "Docker: $(docker --version | head -c 60)"
+    ok "Compose: $COMPOSE_CMD"
 }
 
-# 检查 .env 文件
-check_env() {
-    print_info "检查环境配置文件..."
+# ── Environment setup ──
+setup_env() {
     if [ ! -f ".env" ]; then
-        print_warning ".env 文件不存在，从 .env.example 创建..."
-        cp .env.example .env
-        print_warning "请编辑 .env 文件，填入你的 API Keys 后再运行此脚本"
-        print_info "使用命令: nano .env 或 vim .env"
-        exit 1
+        if [ -f ".env.example" ]; then
+            cp .env.example .env
+            warn "Created .env from .env.example — edit it with your API keys:"
+            warn "  nano $SCRIPT_DIR/.env"
+            exit 1
+        else
+            err ".env.example not found"
+            exit 1
+        fi
     fi
-    print_success ".env 文件已存在"
+    ok ".env loaded"
 }
 
-# 创建必要目录
-create_directories() {
-    print_info "创建必要目录..."
-    mkdir -p monitoring/grafana/dashboards
-    mkdir -p monitoring/grafana/datasources
-    mkdir -p data/neo4j
-    mkdir -p data/qdrant
-    mkdir -p data/minio
-    mkdir -p data/redis
-    mkdir -p data/ollama
-    mkdir -p logs
-    print_success "目录创建完成"
+# ── Create directories ──
+setup_dirs() {
+    mkdir -p data logs config
+    ok "Directories ready"
 }
 
-# 部署核心服务
-deploy_core() {
-    print_info "部署核心服务 (Neo4j, Qdrant, MinIO, Redis)..."
-    docker-compose up -d neo4j qdrant minio redis
-    print_success "核心服务部署完成"
-}
+# ── Deploy with Docker Compose ──
+deploy_docker() {
+    local target="${1:-all}"
 
-# 部署监控服务
-deploy_monitoring() {
-    print_info "部署监控服务 (Prometheus, Grafana, Jaeger)..."
-    docker-compose up -d prometheus grafana jaeger
-    print_success "监控服务部署完成"
-}
+    preflight
+    setup_env
+    setup_dirs
 
-# 部署本地模型
-deploy_ollama() {
-    print_info "部署 Ollama 本地模型服务..."
-    docker-compose up -d ollama
-    print_success "Ollama 部署完成"
-    
-    print_info "正在拉取常用模型 (llama3.2, qwen2.5)..."
-    sleep 5
-    docker exec ufo-ollama ollama pull llama3.2 || print_warning "llama3.2 拉取失败"
-    docker exec ufo-ollama ollama pull qwen2.5 || print_warning "qwen2.5 拉取失败"
-    print_success "模型拉取完成"
-}
-
-# 部署 TURN 服务器
-deploy_turn() {
-    print_info "部署 TURN 服务器..."
-    
-    # 获取外部 IP
-    EXTERNAL_IP=$(curl -s ifconfig.me 2>/dev/null || echo "127.0.0.1")
-    print_info "检测到外部 IP: $EXTERNAL_IP"
-    
-    # 更新 .env 文件
-    if grep -q "EXTERNAL_IP=" .env; then
-        sed -i "s/EXTERNAL_IP=.*/EXTERNAL_IP=$EXTERNAL_IP/" .env
-    fi
-    
-    docker-compose up -d turn
-    print_success "TURN 服务器部署完成"
-}
-
-# 部署所有服务
-deploy_all() {
-    print_info "部署所有服务..."
-    docker-compose up -d
-    print_success "所有服务部署完成"
-}
-
-# 检查服务健康状态
-check_health() {
-    print_info "检查服务健康状态..."
-    
-    # 等待服务启动
-    sleep 5
-    
-    # 检查 Neo4j
-    if curl -s http://localhost:7474 > /dev/null 2>&1; then
-        print_success "Neo4j 运行正常 (http://localhost:7474)"
-    else
-        print_warning "Neo4j 可能还在启动中..."
-    fi
-    
-    # 检查 Qdrant
-    if curl -s http://localhost:6333/healthz > /dev/null 2>&1; then
-        print_success "Qdrant 运行正常 (http://localhost:6333)"
-    else
-        print_warning "Qdrant 可能还在启动中..."
-    fi
-    
-    # 检查 MinIO
-    if curl -s http://localhost:9000/minio/health/live > /dev/null 2>&1; then
-        print_success "MinIO 运行正常 (http://localhost:9000)"
-        print_info "MinIO Console: http://localhost:9001"
-    else
-        print_warning "MinIO 可能还在启动中..."
-    fi
-    
-    # 检查 Redis
-    if docker exec ufo-redis redis-cli ping > /dev/null 2>&1; then
-        print_success "Redis 运行正常"
-    else
-        print_warning "Redis 可能还在启动中..."
-    fi
-    
-    # 检查 Grafana
-    if curl -s http://localhost:3000 > /dev/null 2>&1; then
-        print_success "Grafana 运行正常 (http://localhost:3000)"
-        print_info "默认账号: admin / admin123"
-    else
-        print_warning "Grafana 可能还在启动中..."
-    fi
-    
-    # 检查 Prometheus
-    if curl -s http://localhost:9090 > /dev/null 2>&1; then
-        print_success "Prometheus 运行正常 (http://localhost:9090)"
-    else
-        print_warning "Prometheus 可能还在启动中..."
-    fi
-}
-
-# 显示服务状态
-show_status() {
-    print_info "当前服务状态:"
-    docker-compose ps
-}
-
-# 显示访问信息
-show_access_info() {
-    echo ""
-    echo "============================================================"
-    echo -e "${GREEN}UFO Galaxy 服务访问信息${NC}"
-    echo "============================================================"
-    echo ""
-    echo -e "${BLUE}数据库服务:${NC}"
-    echo "  Neo4j Browser:    http://localhost:7474"
-    echo "  Neo4j Bolt:       bolt://localhost:7687"
-    echo "  Qdrant REST API:  http://localhost:6333"
-    echo "  Qdrant gRPC:      localhost:6334"
-    echo "  MinIO API:        http://localhost:9000"
-    echo "  MinIO Console:    http://localhost:9001"
-    echo "  Redis:            localhost:6379"
-    echo ""
-    echo -e "${BLUE}监控服务:${NC}"
-    echo "  Grafana:          http://localhost:3000  (admin/admin123)"
-    echo "  Prometheus:       http://localhost:9090"
-    echo "  Jaeger UI:        http://localhost:16686"
-    echo ""
-    echo -e "${BLUE}本地模型服务:${NC}"
-    echo "  Ollama:           http://localhost:11434"
-    echo ""
-    echo -e "${BLUE}WebRTC:${NC}"
-    echo "  TURN Server:      turn://localhost:3478"
-    echo ""
-    echo "============================================================"
-}
-
-# 停止所有服务
-stop_all() {
-    print_info "停止所有服务..."
-    docker-compose down
-    print_success "所有服务已停止"
-}
-
-# 清理数据
-cleanup() {
-    print_warning "这将删除所有数据卷！"
-    read -p "确定要继续吗? (y/N) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        docker-compose down -v
-        rm -rf data/
-        print_success "数据已清理"
-    else
-        print_info "取消清理"
-    fi
-}
-
-# 显示帮助
-show_help() {
-    echo "UFO Galaxy 部署脚本"
-    echo ""
-    echo "用法: ./deploy.sh [命令]"
-    echo ""
-    echo "命令:"
-    echo "  all         部署所有服务"
-    echo "  core        仅部署核心服务 (数据库)"
-    echo "  monitoring  仅部署监控服务"
-    echo "  ollama      部署 Ollama 本地模型"
-    echo "  turn        部署 TURN 服务器"
-    echo "  status      显示服务状态"
-    echo "  health      检查服务健康状态"
-    echo "  stop        停止所有服务"
-    echo "  cleanup     清理所有数据和卷"
-    echo "  help        显示帮助信息"
-    echo ""
-    echo "示例:"
-    echo "  ./deploy.sh all        # 部署所有服务"
-    echo "  ./deploy.sh core       # 仅部署数据库"
-    echo "  ./deploy.sh status     # 查看状态"
-}
-
-# 主函数
-main() {
-    echo "============================================================"
-    echo "  UFO Galaxy System - Deployment Script"
-    echo "============================================================"
-    echo ""
-    
-    # 检查命令
-    case "${1:-all}" in
+    case "$target" in
         all)
-            check_docker
-            check_env
-            create_directories
-            deploy_all
-            check_health
-            show_access_info
+            info "Deploying full stack..."
+            $COMPOSE_CMD -f "$COMPOSE_FILE" up -d --build
             ;;
-        core)
-            check_docker
-            check_env
-            create_directories
-            deploy_core
-            check_health
+        galaxy)
+            info "Deploying Galaxy core only..."
+            $COMPOSE_CMD -f "$COMPOSE_FILE" up -d --build galaxy
             ;;
         monitoring)
-            check_docker
-            check_env
-            deploy_monitoring
-            check_health
+            info "Deploying monitoring stack..."
+            $COMPOSE_CMD -f "$COMPOSE_FILE" up -d prometheus grafana fluent-bit
             ;;
-        ollama)
-            check_docker
-            deploy_ollama
-            ;;
-        turn)
-            check_docker
-            check_env
-            deploy_turn
-            ;;
-        status)
-            show_status
-            ;;
-        health)
-            check_health
-            ;;
-        stop)
-            stop_all
-            ;;
-        cleanup)
-            cleanup
-            ;;
-        help|--help|-h)
-            show_help
-            ;;
-        *)
-            print_error "未知命令: $1"
-            show_help
-            exit 1
+        gateway)
+            info "Deploying gateway..."
+            $COMPOSE_CMD -f "$COMPOSE_FILE" up -d --build gateway
             ;;
     esac
+
+    ok "Deployment complete"
+    sleep 3
+    health_check
 }
 
-# 运行主函数
-main "$@"
+# ── Local mode (no Docker) ──
+deploy_local() {
+    info "Starting Galaxy in local mode (no Docker)..."
+
+    if [ -z "${PYTHON_CMD:-}" ]; then
+        preflight
+        if [ -z "${PYTHON_CMD:-}" ]; then
+            err "Python3 not found"
+            exit 1
+        fi
+    fi
+
+    # Check venv
+    if [ ! -d "venv" ]; then
+        info "Creating virtual environment..."
+        $PYTHON_CMD -m venv venv
+    fi
+
+    source venv/bin/activate 2>/dev/null || . venv/bin/activate
+
+    info "Installing dependencies..."
+    pip install -q -r requirements.txt
+
+    info "Starting Galaxy on port ${GALAXY_PORT:-8080}..."
+    $PYTHON_CMD unified_launcher.py --host 0.0.0.0 --port "${GALAXY_PORT:-8080}"
+}
+
+# ── Health check ──
+health_check() {
+    info "Health check..."
+
+    local services=("galaxy:8080" "gateway:8000" "dashboard:8001")
+    for svc in "${services[@]}"; do
+        local name="${svc%%:*}"
+        local port="${svc##*:}"
+        if curl -sf "http://localhost:$port/health" &>/dev/null || \
+           curl -sf "http://localhost:$port/health/live" &>/dev/null; then
+            ok "$name (port $port) — healthy"
+        else
+            warn "$name (port $port) — not responding (may still be starting)"
+        fi
+    done
+
+    # Prometheus
+    if curl -sf "http://localhost:9090/-/healthy" &>/dev/null; then
+        ok "Prometheus (port 9090) — healthy"
+    fi
+
+    # Grafana
+    if curl -sf "http://localhost:3000/api/health" &>/dev/null; then
+        ok "Grafana (port 3000) — healthy"
+    fi
+}
+
+# ── Status ──
+show_status() {
+    preflight
+    $COMPOSE_CMD -f "$COMPOSE_FILE" ps
+}
+
+# ── Logs ──
+show_logs() {
+    preflight
+    $COMPOSE_CMD -f "$COMPOSE_FILE" logs -f --tail=100 "${1:-galaxy}"
+}
+
+# ── Stop ──
+stop() {
+    preflight
+    info "Stopping services..."
+    $COMPOSE_CMD -f "$COMPOSE_FILE" down
+    ok "All services stopped"
+}
+
+# ── Systemd install ──
+install_systemd() {
+    if [ "$(id -u)" -ne 0 ]; then
+        err "Run with sudo for systemd installation"
+        exit 1
+    fi
+
+    local INSTALL_DIR="${1:-/opt/ufo-galaxy}"
+    info "Installing systemd service (install dir: $INSTALL_DIR)..."
+
+    # Create system user
+    if ! id -u ufo-galaxy &>/dev/null; then
+        useradd -r -m -s /bin/bash ufo-galaxy
+        ok "Created system user: ufo-galaxy"
+    fi
+
+    # Copy files
+    mkdir -p "$INSTALL_DIR"
+    rsync -a --exclude='.git' --exclude='venv' --exclude='__pycache__' \
+        "$SCRIPT_DIR/" "$INSTALL_DIR/"
+    chown -R ufo-galaxy:ufo-galaxy "$INSTALL_DIR"
+
+    # Generate service file
+    cat > /etc/systemd/system/ufo-galaxy.service <<SVCEOF
+[Unit]
+Description=UFO Galaxy L4 Autonomous Intelligence System
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ufo-galaxy
+Group=ufo-galaxy
+WorkingDirectory=$INSTALL_DIR
+EnvironmentFile=$INSTALL_DIR/.env
+Environment=PYTHONPATH=$INSTALL_DIR
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 $INSTALL_DIR/unified_launcher.py --host 0.0.0.0 --port 8080
+ExecReload=/bin/kill -HUP \$MAINPID
+Restart=always
+RestartSec=10
+WatchdogSec=120
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$INSTALL_DIR/data $INSTALL_DIR/logs
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ufo-galaxy
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+    systemctl daemon-reload
+    systemctl enable ufo-galaxy
+    ok "Systemd service installed. Start with: systemctl start ufo-galaxy"
+}
+
+# ── Print access info ──
+access_info() {
+    echo ""
+    echo -e "${CYAN}============================================================${NC}"
+    echo -e "${CYAN}  UFO Galaxy — Service Endpoints${NC}"
+    echo -e "${CYAN}============================================================${NC}"
+    echo ""
+    echo -e "  ${GREEN}Galaxy API:${NC}      http://localhost:8080"
+    echo -e "  ${GREEN}Gateway:${NC}         http://localhost:8000"
+    echo -e "  ${GREEN}Dashboard:${NC}       http://localhost:8001"
+    echo -e "  ${GREEN}Prometheus:${NC}      http://localhost:9090"
+    echo -e "  ${GREEN}Grafana:${NC}         http://localhost:3000"
+    echo ""
+    echo -e "  ${BLUE}Health:${NC}          curl http://localhost:8080/health/live"
+    echo -e "  ${BLUE}Logs:${NC}            ./deploy.sh logs [service]"
+    echo -e "  ${BLUE}Status:${NC}          ./deploy.sh status"
+    echo ""
+}
+
+# ── Help ──
+show_help() {
+    echo "UFO Galaxy Deployment Script"
+    echo ""
+    echo "Usage: ./deploy.sh <command> [options]"
+    echo ""
+    echo "Docker commands:"
+    echo "  up [target]       Deploy services (all|galaxy|monitoring|gateway)"
+    echo "  stop              Stop all services"
+    echo "  status            Show service status"
+    echo "  logs [service]    Follow service logs (default: galaxy)"
+    echo "  health            Run health checks"
+    echo "  info              Show access endpoints"
+    echo ""
+    echo "Local commands:"
+    echo "  local             Run Galaxy locally (no Docker)"
+    echo ""
+    echo "System commands:"
+    echo "  install [dir]     Install as systemd service (requires sudo)"
+    echo ""
+    echo "Examples:"
+    echo "  ./deploy.sh up                # Deploy full stack"
+    echo "  ./deploy.sh up galaxy         # Deploy Galaxy only"
+    echo "  ./deploy.sh local             # Run locally"
+    echo "  sudo ./deploy.sh install      # Install as systemd service"
+}
+
+# ── Main ──
+case "${1:-help}" in
+    up|deploy|all)   deploy_docker "${2:-all}" && access_info ;;
+    local)           deploy_local ;;
+    stop|down)       stop ;;
+    status|ps)       show_status ;;
+    logs)            show_logs "${2:-}" ;;
+    health)          preflight; health_check ;;
+    info)            access_info ;;
+    install)         install_systemd "${2:-/opt/ufo-galaxy}" ;;
+    help|--help|-h)  show_help ;;
+    *)               err "Unknown command: $1"; show_help; exit 1 ;;
+esac

@@ -3,6 +3,13 @@ Node 34: Scrcpy - Android 屏幕镜像与控制
 =========================================
 功能: 通过 scrcpy/adb 实现 Android 设备的屏幕镜像、截图、录屏、输入控制
 依赖: adb (Android Debug Bridge), scrcpy (可选)
+
+NOTE: Node_33 (ADB) 和 Node_34 (Scrcpy) 功能有较大重叠——两者都封装 adb
+命令实现 tap/swipe/shell/screenshot/input/keyevent。区别在于:
+  - Node_33: 异步 (asyncio), 有安全中间件, 自动重连, 通用 /execute 入口
+  - Node_34: 同步 (subprocess), 有 MCP 接口, 额外支持 install/packages/device_info
+TODO: 未来应将 Node_34 的独有功能 (install, packages, device_info, mcp/call)
+      迁移到 Node_33, 并让 Node_34 专注于真正的 scrcpy 屏幕镜像/投射。
 """
 import os
 import subprocess
