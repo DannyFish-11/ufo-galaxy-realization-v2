@@ -213,6 +213,24 @@ class AutonomousPlanner:
         # 实际实现中应该更复杂
         return None
     
+    def update_decision_weights(self, performance_metrics: Dict) -> None:
+        """根据学习/优化输出更新规划器的决策权重"""
+        try:
+            avg_success_rate = performance_metrics.get('average_success_rate', 0.0)
+            for resource in self.available_resources:
+                if avg_success_rate < 0.5:
+                    # Low success rate: reduce availability to encourage fallback paths
+                    resource.availability = max(0.1, resource.availability * 0.9)
+                elif avg_success_rate > 0.8:
+                    # High success rate: gradually restore availability
+                    resource.availability = min(1.0, resource.availability * 1.05)
+            logger.info(
+                f"决策权重已更新: 成功率={avg_success_rate:.1%}, "
+                f"资源数={len(self.available_resources)}"
+            )
+        except Exception as e:
+            logger.warning(f"更新决策权重失败: {e}")
+
     def update_plan(self, plan: Plan, feedback: Dict) -> Plan:
         """根据反馈更新计划"""
         logger.info(f"根据反馈更新计划: {feedback}")

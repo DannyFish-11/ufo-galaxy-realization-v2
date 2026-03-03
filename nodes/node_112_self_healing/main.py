@@ -58,7 +58,12 @@ class FixAction(Enum):
     RESET = "reset"
     SWITCH = "switch"
     CLEANUP = "cleanup"
+    CODE_FIX = "code_fix"
     NONE = "none"
+
+
+# Keywords in a diagnosis recommendation that indicate a code-level fix is needed.
+_CODE_FIX_KEYWORDS = ("代码", "code fix", "code_fix", "修复代码", "程序修复")
 
 
 @dataclass
@@ -295,6 +300,8 @@ class AutoFixer:
             return self._reset_node(diagnosis, timestamp)
         elif action == FixAction.SWITCH:
             return self._switch_backup(diagnosis, timestamp)
+        elif action == FixAction.CODE_FIX:
+            return self._code_fix(diagnosis, timestamp)
         else:
             result = FixResult(
                 action=FixAction.NONE,
@@ -313,7 +320,14 @@ class AutoFixer:
             IssueType.SERVICE_DOWN: FixAction.RESTART,
             IssueType.NETWORK_ERROR: FixAction.RESET
         }
-        return action_map.get(diagnosis.issue_type, FixAction.NONE)
+        action = action_map.get(diagnosis.issue_type, FixAction.NONE)
+        # Conservative: only trigger CODE_FIX when no other action matched and
+        # the recommendation explicitly indicates a code-level fix is needed.
+        if action == FixAction.NONE:
+            rec_lower = diagnosis.recommendation.lower()
+            if any(kw in rec_lower for kw in _CODE_FIX_KEYWORDS):
+                action = FixAction.CODE_FIX
+        return action
 
     def _restart_service(self, diagnosis: DiagnosisResult, timestamp: str) -> FixResult:
         try:
@@ -389,6 +403,40 @@ class AutoFixer:
                 message=f"切换失败: {str(e)}",
                 timestamp=timestamp
             )
+
+    def _code_fix(self, diagnosis: DiagnosisResult, timestamp: str) -> FixResult:
+        try:
+            from enhancements.reasoning.autonomous_coder import AutonomousCoder, CodingTask
+            coder = AutonomousCoder()
+            task = CodingTask(
+                requirement=diagnosis.description,
+                language="python",
+                target_type="script",
+                constraints=[diagnosis.recommendation],
+                expected_output=None,
+                context_code=None
+            )
+            coding_result = coder.generate_and_execute(task)
+            message = (
+                f"代码修复完成" if coding_result.success
+                else f"代码修复失败: {', '.join(coding_result.errors)}"
+            )
+            result = FixResult(
+                action=FixAction.CODE_FIX,
+                success=coding_result.success,
+                message=message,
+                timestamp=timestamp
+            )
+        except Exception as e:
+            logger.error(f"代码修复失败: {e}")
+            result = FixResult(
+                action=FixAction.CODE_FIX,
+                success=False,
+                message=f"代码修复失败: {str(e)}",
+                timestamp=timestamp
+            )
+        self.fix_history.append(result)
+        return result
 
 
 class ReportGenerator:

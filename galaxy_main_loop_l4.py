@@ -462,6 +462,9 @@ class GalaxyMainLoopL4:
                 self.logger.info(f"优化应用成功: {action['description']}")
             else:
                 self.logger.warning(f"优化应用失败: {action['description']}")
+
+        # 将学习输出反馈给规划器，更新决策权重
+        self.planner.update_decision_weights(self.learning_optimizer.performance_metrics)
         
         self.logger.info("优化完成")
     
