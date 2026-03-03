@@ -149,6 +149,22 @@ class MessageType(str, Enum):
     COORD_LOCK = "coord_lock"
     COORD_UNLOCK = "coord_unlock"
     
+    # === Agent 控制 (与 AgentMessageHandler.kt 对齐) ===
+    TASK_EXECUTE = "task_execute"
+    AGENT_PING = "agent_ping"
+    AGENT_CONFIG_UPDATE = "agent_config_update"
+    AGENT_RESTART = "agent_restart"
+
+    # === UI 树操作 (与 AgentMessageHandler.kt 对齐) ===
+    UI_TREE_REQUEST = "ui_tree_request"
+    ACTION_EXECUTE = "action_execute"
+    ACTION_SEQUENCE_EXECUTE = "action_sequence_execute"
+
+    # === 应用/系统控制 (与 AgentMessageHandler.kt 对齐) ===
+    APP_START = "app_start"
+    APP_STOP = "app_stop"
+    SYSTEM_COMMAND = "system_command"
+
     # === 错误处理 ===
     ERROR = "error"
     ERROR_RECOVERY = "error_recovery"
@@ -552,6 +568,20 @@ class AndroidBridge:
         self._message_handlers[MessageType.TASK_PROGRESS] = self._handle_task_progress
         self._message_handlers[MessageType.COMMAND_RESULT] = self._handle_command_result
         self._message_handlers[MessageType.ERROR] = self._handle_error
+
+        # AgentMessageHandler.kt 对齐类型
+        self._message_handlers[MessageType.TASK_EXECUTE] = self._handle_task_execute
+        self._message_handlers[MessageType.TASK_CANCEL] = self._handle_generic_forward
+        self._message_handlers[MessageType.TASK_STATUS] = self._handle_generic_forward
+        self._message_handlers[MessageType.AGENT_PING] = self._handle_agent_ping
+        self._message_handlers[MessageType.AGENT_CONFIG_UPDATE] = self._handle_generic_forward
+        self._message_handlers[MessageType.AGENT_RESTART] = self._handle_generic_forward
+        self._message_handlers[MessageType.UI_TREE_REQUEST] = self._handle_generic_forward
+        self._message_handlers[MessageType.ACTION_EXECUTE] = self._handle_generic_forward
+        self._message_handlers[MessageType.ACTION_SEQUENCE_EXECUTE] = self._handle_generic_forward
+        self._message_handlers[MessageType.APP_START] = self._handle_generic_forward
+        self._message_handlers[MessageType.APP_STOP] = self._handle_generic_forward
+        self._message_handlers[MessageType.SYSTEM_COMMAND] = self._handle_generic_forward
     
     async def handle_message(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理来自安卓设备的消息"""
@@ -644,6 +674,38 @@ class AndroidBridge:
         error_message = message.get("error_message")
         
         logger.error(f"Error from {device_id}: [{error_code}] {error_message}")
+
+    async def _handle_generic_forward(self, websocket: Any, message: Dict[str, Any]) -> None:
+        """通用占位处理器：记录日志（后续可扩展为实际转发逻辑）"""
+        msg_type = message.get("type")
+        device_id = message.get("device_id")
+        logger.debug(f"Received {msg_type} from {device_id}: forwarding")
+
+    async def _handle_task_execute(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """处理 task_execute 请求"""
+        device_id = message.get("device_id")
+        # task_id 优先；若客户端未提供则回退到 message_id（兼容旧版协议）
+        task_id = message.get("task_id") or message.get("message_id")
+        task_type = message.get("task_type", "generic")
+        payload = message.get("payload", {})
+        logger.info(f"Task execute request from {device_id}: task_id={task_id}, type={task_type}")
+
+        async with self._lock:
+            if device_id in self._devices:
+                self._devices[device_id].current_task_id = task_id
+
+        return MessageBuilder.task_assign(
+            device_id=device_id,
+            task_id=task_id,
+            task_type=task_type,
+            payload=payload
+        )
+
+    async def _handle_agent_ping(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理 agent_ping 请求，返回 heartbeat_ack"""
+        device_id = message.get("device_id")
+        logger.debug(f"Agent ping from {device_id}")
+        return MessageBuilder.heartbeat_ack(device_id)
     
     # =========================================================================
     # 公共 API
