@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+"""
+Tests for the three autonomous loops added to UFO Galaxy:
+
+Loop 1: Self-healing -> code fix (node_112_self_healing)
+Loop 2: Learning -> planner strategy (galaxy_main_loop_l4 + autonomous_planner)
+Loop 3: Capability gap -> auto expand (autonomous_coder._deploy_as_node)
+"""
+
+import sys
+import os
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ---------------------------------------------------------------------------
+# Loop 1: Self-healing -> code fix
+# ---------------------------------------------------------------------------
+
+class TestSelfHealingCodeFix:
+    """Loop 1: FixAction.CODE_FIX enum, _determine_action heuristic, _code_fix dispatch."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from nodes.node_112_self_healing.main import (
+            FixAction, AutoFixer, DiagnosisResult, IssueType, HealthStatus,
+            _CODE_FIX_KEYWORDS,
+        )
+        self.FixAction = FixAction
+        self.AutoFixer = AutoFixer
+        self.DiagnosisResult = DiagnosisResult
+        self.IssueType = IssueType
+        self.HealthStatus = HealthStatus
+        self.CODE_FIX_KEYWORDS = _CODE_FIX_KEYWORDS
+
+    def _diagnosis(self, issue_type=None, recommendation="继续监控"):
+        return self.DiagnosisResult(
+            issue_type=issue_type or self.IssueType.UNKNOWN,
+            severity=self.HealthStatus.WARNING,
+            description="测试诊断",
+            affected_components=["test"],
+            recommendation=recommendation,
+        )
+
+    def test_code_fix_enum_exists(self):
+        """FixAction.CODE_FIX must be a member of the enum."""
+        assert hasattr(self.FixAction, "CODE_FIX")
+        assert self.FixAction.CODE_FIX.value == "code_fix"
+
+    def test_code_fix_keywords_defined(self):
+        """_CODE_FIX_KEYWORDS must be a non-empty tuple of strings."""
+        assert isinstance(self.CODE_FIX_KEYWORDS, tuple)
+        assert len(self.CODE_FIX_KEYWORDS) > 0
+        for kw in self.CODE_FIX_KEYWORDS:
+            assert isinstance(kw, str)
+
+    def test_determine_action_returns_code_fix_for_keyword(self):
+        """_determine_action returns CODE_FIX when recommendation contains a keyword."""
+        fixer = self.AutoFixer()
+        # Use a keyword from _CODE_FIX_KEYWORDS
+        kw = self.CODE_FIX_KEYWORDS[0]
+        diag = self._diagnosis(recommendation=f"需要{kw}处理")
+        assert fixer._determine_action(diag) == self.FixAction.CODE_FIX
+
+    def test_determine_action_no_false_positive(self):
+        """_determine_action must NOT return CODE_FIX for generic recommendations."""
+        fixer = self.AutoFixer()
+        diag = self._diagnosis(recommendation="需要人工介入")
+        assert fixer._determine_action(diag) == self.FixAction.NONE
+
+    def test_determine_action_standard_issues_unchanged(self):
+        """Standard issue types must still map to their original actions."""
+        fixer = self.AutoFixer()
+        cases = {
+            self.IssueType.HIGH_CPU: self.FixAction.RESTART,
+            self.IssueType.HIGH_MEMORY: self.FixAction.RESTART,
+            self.IssueType.DISK_FULL: self.FixAction.CLEANUP,
+            self.IssueType.SERVICE_DOWN: self.FixAction.RESTART,
+            self.IssueType.NETWORK_ERROR: self.FixAction.RESET,
+        }
+        for issue_type, expected_action in cases.items():
+            diag = self._diagnosis(issue_type=issue_type)
+            assert fixer._determine_action(diag) == expected_action, (
+                f"Expected {expected_action} for {issue_type}"
+            )
+
+    def test_fix_dispatches_to_code_fix(self):
+        """AutoFixer.fix must invoke _code_fix when action is CODE_FIX."""
+        fixer = self.AutoFixer()
+        kw = self.CODE_FIX_KEYWORDS[0]
+        diag = self._diagnosis(recommendation=f"{kw} fix needed")
+
+        from nodes.node_112_self_healing.main import FixResult
+        with patch.object(fixer, "_code_fix") as stub:
+            stub.return_value = FixResult(
+                action=self.FixAction.CODE_FIX,
+                success=True,
+                message="stub",
+                timestamp="t",
+            )
+            result = fixer.fix(diag)
+            stub.assert_called_once()
+            assert result.action == self.FixAction.CODE_FIX
+
+
+# ---------------------------------------------------------------------------
+# Loop 2: Learning -> planner strategy
+# ---------------------------------------------------------------------------
+
+class TestLearningPlannerFeedback:
+    """Loop 2: AutonomousPlanner.update_decision_weights and its call from _perform_optimization."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from enhancements.reasoning.autonomous_planner import (
+            AutonomousPlanner, Resource, ResourceType,
+        )
+        self.AutonomousPlanner = AutonomousPlanner
+        self.Resource = Resource
+        self.ResourceType = ResourceType
+
+    def _planner_with_resource(self, availability: float = 0.5):
+        r = self.Resource(
+            id="r1",
+            type=self.ResourceType.NODE,
+            name="TestNode",
+            capabilities=[],
+            availability=availability,
+            metadata={},
+        )
+        return self.AutonomousPlanner(available_resources=[r])
+
+    def test_update_decision_weights_method_exists(self):
+        """AutonomousPlanner must expose update_decision_weights."""
+        planner = self._planner_with_resource()
+        assert callable(getattr(planner, "update_decision_weights", None))
+
+    def test_high_success_rate_increases_availability(self):
+        """High success rate (>0.8) should increase resource availability."""
+        planner = self._planner_with_resource(availability=0.5)
+        planner.update_decision_weights({"average_success_rate": 0.9})
+        assert planner.available_resources[0].availability > 0.5
+
+    def test_low_success_rate_decreases_availability(self):
+        """Low success rate (<0.5) should decrease resource availability."""
+        planner = self._planner_with_resource(availability=0.5)
+        planner.update_decision_weights({"average_success_rate": 0.3})
+        assert planner.available_resources[0].availability < 0.5
+
+    def test_availability_bounded_above(self):
+        """Availability must never exceed 1.0."""
+        planner = self._planner_with_resource(availability=1.0)
+        planner.update_decision_weights({"average_success_rate": 1.0})
+        assert planner.available_resources[0].availability <= 1.0
+
+    def test_availability_bounded_below(self):
+        """Availability must not drop below 0.1."""
+        planner = self._planner_with_resource(availability=0.1)
+        planner.update_decision_weights({"average_success_rate": 0.0})
+        assert planner.available_resources[0].availability >= 0.1
+
+    def test_empty_metrics_safe(self):
+        """update_decision_weights must not raise on empty/missing metrics."""
+        planner = self._planner_with_resource()
+        planner.update_decision_weights({})  # missing average_success_rate
+
+    def test_galaxy_l4_calls_update_decision_weights(self):
+        """_perform_optimization in galaxy_main_loop_l4 must call update_decision_weights."""
+        import importlib.util
+        import asyncio
+
+        spec = importlib.util.spec_from_file_location(
+            "gml4", str(PROJECT_ROOT / "galaxy_main_loop_l4.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        loop = mod.GalaxyMainLoopL4()
+
+        # Replace planner and optimizer with mocks so no real IO happens.
+        mock_optimizer = MagicMock()
+        # Return a non-empty insight list so the early-return is not triggered.
+        mock_optimizer.analyze_performance.return_value = [{"type": "test"}]
+        mock_optimizer.generate_optimization_plan.return_value = []
+        mock_optimizer.performance_metrics = {"average_success_rate": 0.85}
+        loop.learning_optimizer = mock_optimizer
+
+        mock_planner = MagicMock()
+        loop.planner = mock_planner
+
+        asyncio.run(loop._perform_optimization())
+
+        mock_planner.update_decision_weights.assert_called_once_with(
+            mock_optimizer.performance_metrics
+        )
+
+
+# ---------------------------------------------------------------------------
+# Loop 3: Capability gap -> auto expand
+# ---------------------------------------------------------------------------
+
+class TestAutoExpandDeployAsNode:
+    """Loop 3: _deploy_as_node registers node in NodeFactory and capability_manager."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from enhancements.reasoning.autonomous_coder import AutonomousCoder
+        self.AutonomousCoder = AutonomousCoder
+
+    def test_deploy_as_node_calls_node_factory_register(self, tmp_path):
+        """_deploy_as_node must call NodeFactory.register_node when available."""
+        from enhancements.reasoning.autonomous_coder import CodingTask
+
+        coder = self.AutonomousCoder()
+        task = CodingTask(
+            requirement="print('hello')",
+            language="python",
+            target_type="node",
+            constraints=[],
+            expected_output=None,
+            context_code=None,
+        )
+        mock_factory = MagicMock()
+        nodes_dir = tmp_path / "nodes"
+        nodes_dir.mkdir()
+        orig_join = os.path.join
+
+        def _join(*a):
+            # Redirect the top-level nodes directory to tmp_path
+            if len(a) == 4 and a[-1] == "nodes":
+                return str(nodes_dir)
+            return orig_join(*a)
+
+        with patch(
+            "nodes.node_118_node_factory.main.get_node_factory",
+            return_value=mock_factory,
+        ), patch(
+            "core.capability_manager.get_capability_manager",
+            side_effect=Exception("cap mgr unavailable"),
+        ), patch("os.path.join", side_effect=_join):
+            coder._deploy_as_node("print('hello')", task)
+
+        mock_factory.register_node.assert_called()
+
+    def test_deploy_as_node_node_factory_error_is_non_fatal(self, tmp_path):
+        """NodeFactory failure must be swallowed; the method must not propagate it."""
+        from enhancements.reasoning.autonomous_coder import CodingTask
+
+        coder = self.AutonomousCoder()
+        task = CodingTask(
+            requirement="test",
+            language="python",
+            target_type="node",
+            constraints=[],
+            expected_output=None,
+            context_code=None,
+        )
+
+        nodes_dir = tmp_path / "nodes"
+        nodes_dir.mkdir()
+
+        with patch(
+            "nodes.node_118_node_factory.main.get_node_factory",
+            side_effect=Exception("factory error"),
+        ), patch(
+            "core.capability_manager.get_capability_manager",
+            side_effect=Exception("cap mgr error"),
+        ):
+            # Use real filesystem but redirect nodes dir to tmp_path
+            orig_join = os.path.join
+
+            def _join(*a):
+                if len(a) == 4 and a[-1] == "nodes":
+                    return str(nodes_dir)
+                return orig_join(*a)
+
+            with patch("os.path.join", side_effect=_join):
+                # Should not raise even though both registries fail
+                node_name, main_file = coder._deploy_as_node("print('x')", task)
+            assert node_name.startswith("Node_")
+
+    def test_deploy_as_node_calls_capability_manager_register(self, tmp_path):
+        """_deploy_as_node must call capability_manager.register_capability when available."""
+        from enhancements.reasoning.autonomous_coder import CodingTask
+        import asyncio
+
+        coder = self.AutonomousCoder()
+        task = CodingTask(
+            requirement="print('cap')",
+            language="python",
+            target_type="node",
+            constraints=[],
+            expected_output=None,
+            context_code=None,
+        )
+
+        mock_cap_mgr = MagicMock()
+
+        async def _fake_register(**kwargs):
+            return True
+
+        mock_cap_mgr.register_capability = MagicMock(
+            return_value=_fake_register()
+        )
+
+        nodes_dir = tmp_path / "nodes"
+        nodes_dir.mkdir()
+        orig_join = os.path.join
+
+        def _join(*a):
+            if len(a) == 4 and a[-1] == "nodes":
+                return str(nodes_dir)
+            return orig_join(*a)
+
+        with patch(
+            "nodes.node_118_node_factory.main.get_node_factory",
+            side_effect=Exception("factory unavailable"),
+        ), patch(
+            "core.capability_manager.get_capability_manager",
+            return_value=mock_cap_mgr,
+        ), patch("os.path.join", side_effect=_join):
+            coder._deploy_as_node("print('cap')", task)
+
+        mock_cap_mgr.register_capability.assert_called()
+
+    def test_deploy_as_node_signature(self):
+        """_deploy_as_node must accept (code, task) parameters."""
+        import inspect
+        coder = self.AutonomousCoder()
+        sig = inspect.signature(coder._deploy_as_node)
+        params = list(sig.parameters.keys())
+        assert "code" in params
+        assert "task" in params
