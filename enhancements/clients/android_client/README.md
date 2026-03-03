@@ -1,12 +1,25 @@
 # UFO³ Galaxy Android Client
 
-**版本:** v2.2 Premium  
-**更新日期:** 2026-01-22  
-**状态:** ✅ 生产就绪
+> ⚠️ **已迁移通知（Deprecated）**
+>
+> 本目录中的 Android 客户端源码**已停止维护**。
+> Android APK 的唯一来源是独立仓库：
+>
+> 👉 **https://github.com/DannyFish-11/ufo-galaxy-android**
+>
+> 如需构建 APK，请克隆上述独立仓库，按其 README 操作。
+> 服务端连接端点与协议规范见 [`android_client/README.md`](../../../android_client/README.md) 和
+> [`docs/ANDROID_PROTOCOL_ALIGNMENT.md`](../../../docs/ANDROID_PROTOCOL_ALIGNMENT.md)。
 
 ---
 
-## 📱 项目简介
+**版本:** v2.2 Premium  
+**更新日期:** 2026-01-22  
+**状态:** ⚠️ 已弃用，请使用独立仓库 DannyFish-11/ufo-galaxy-android
+
+---
+
+## 📱 项目简介（历史归档）
 
 UFO³ Galaxy Android Client 是 Microsoft UFO³ Galaxy 系统的移动端子代理（Sub-Agent），为用户提供了一个便携、高效、美观的方式来访问和控制整个 Galaxy 系统。
 

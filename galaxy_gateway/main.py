@@ -11,7 +11,9 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from fastapi import FastAPI, HTTPException, WebSocket
+import json
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -24,6 +26,7 @@ import logging
 from core.llm_manager import LLMManager
 from galaxy_gateway.websocket_handler import handle_websocket, connection_manager
 from galaxy_gateway.device_router import device_router
+from galaxy_gateway.android_bridge import android_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -377,6 +380,85 @@ async def websocket_agent_endpoint(websocket: WebSocket):
     """
     connection_id = str(uuid.uuid4())
     await handle_websocket(websocket, connection_id)
+
+
+async def _parse_aip_message(websocket: WebSocket, raw: str):
+    """Parse an AIP v3.0 JSON message; send an error frame and return None on failure."""
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        await websocket.send_json({
+            "version": "3.0",
+            "type": "error",
+            "error_code": "INVALID_JSON",
+            "error_message": "Message is not valid JSON"
+        })
+        return None
+
+
+@app.websocket("/ws/android")
+async def websocket_android_endpoint(websocket: WebSocket):
+    """
+    Android APK WebSocket 连接端点 (AIP v3.0)
+
+    Android 客户端 APK（来自 DannyFish-11/ufo-galaxy-android 仓库）通过此端点连接。
+    协议: AIP v3.0 — 消息须包含 version="3.0", type, device_id, message_id, timestamp 字段。
+    支持注册、心跳、任务调度、GUI 操作及命令分发等完整流程。
+    """
+    await websocket.accept()
+    device_id = None
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            message = await _parse_aip_message(websocket, raw)
+            if message is None:
+                continue
+
+            if not device_id:
+                device_id = message.get("device_id")
+
+            response = await android_bridge.handle_message(websocket, message)
+            if response:
+                await websocket.send_json(response)
+
+    except WebSocketDisconnect:
+        if device_id:
+            await android_bridge.disconnect_device(device_id)
+        logger.info(f"Android WebSocket disconnected: {device_id}")
+    except Exception as e:
+        logger.error(f"Android WebSocket error ({device_id}): {e}")
+        if device_id:
+            await android_bridge.disconnect_device(device_id)
+
+
+@app.websocket("/ws/device/{device_id}")
+async def websocket_device_endpoint(websocket: WebSocket, device_id: str):
+    """
+    设备专属 WebSocket 通道 (AIP v3.0)
+
+    注册成功后，Android APK 可通过此端点建立设备专属通道，接收服务端主动推送的命令。
+    协议同 /ws/android，均使用 AIP v3.0。
+    """
+    await websocket.accept()
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            message = await _parse_aip_message(websocket, raw)
+            if message is None:
+                continue
+
+            # Ensure message carries the path device_id
+            message.setdefault("device_id", device_id)
+            response = await android_bridge.handle_message(websocket, message)
+            if response:
+                await websocket.send_json(response)
+
+    except WebSocketDisconnect:
+        await android_bridge.disconnect_device(device_id)
+        logger.info(f"Device WebSocket disconnected: {device_id}")
+    except Exception as e:
+        logger.error(f"Device WebSocket error ({device_id}): {e}")
+        await android_bridge.disconnect_device(device_id)
 
 
 # ===== 设备管理 API =====
