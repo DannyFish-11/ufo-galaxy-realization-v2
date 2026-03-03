@@ -265,17 +265,6 @@ class TestAutoExpandDeployAsNode:
         nodes_dir = tmp_path / "nodes"
         nodes_dir.mkdir()
 
-        import json as _json
-        real_open = open
-
-        def _open_stub(path, mode="r", **kw):
-            if "w" in mode and str(path).endswith(".py"):
-                return real_open(str(path), mode, **kw)
-            if "w" in mode and str(path).endswith(".json"):
-                import io
-                return io.StringIO()
-            return real_open(str(path), mode, **kw)
-
         with patch(
             "nodes.node_118_node_factory.main.get_node_factory",
             side_effect=Exception("factory error"),
@@ -287,7 +276,7 @@ class TestAutoExpandDeployAsNode:
             orig_join = os.path.join
 
             def _join(*a):
-                if len(a) == 3 and a[2] == "nodes":
+                if len(a) == 4 and a[-1] == "nodes":
                     return str(nodes_dir)
                 return orig_join(*a)
 
@@ -325,7 +314,7 @@ class TestAutoExpandDeployAsNode:
         orig_join = os.path.join
 
         def _join(*a):
-            if len(a) == 3 and a[2] == "nodes":
+            if len(a) == 4 and a[-1] == "nodes":
                 return str(nodes_dir)
             return orig_join(*a)
 
