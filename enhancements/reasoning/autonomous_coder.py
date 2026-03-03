@@ -15,6 +15,7 @@ import logging
 import json
 import ast
 import re
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -747,6 +748,49 @@ if __name__ == '__main__':
             json.dump(config, f, indent=2)
         
         logger.info(f"节点已部署: {node_name} at {node_dir}")
+
+        # Ensure repo root is on sys.path for optional registry imports
+        import sys as _sys
+        _repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+
+        # Register in NodeFactory so the new node is indexed
+        try:
+            from nodes.node_118_node_factory.main import get_node_factory
+            factory = get_node_factory()
+            factory.register_node(node_name, {
+                "template": "auto_generated",
+                "config": config,
+                "code": code,
+                "created_at": config["created_at"]
+            })
+            logger.info(f"节点已注册到 NodeFactory: {node_name}")
+        except Exception as e:
+            logger.warning(f"NodeFactory 注册失败 (非致命): {e}")
+
+        # Register capability so the new node is discoverable
+        try:
+            import asyncio as _asyncio
+            from core.capability_manager import get_capability_manager
+            capability_manager = get_capability_manager()
+            coro = capability_manager.register_capability(
+                name=f"{node_name.lower()}_capability",
+                description=task.requirement,
+                node_id=str(next_node_id),
+                node_name=node_name,
+                category="auto_generated"
+            )
+            # Use the running event loop if available; otherwise run synchronously.
+            try:
+                loop = _asyncio.get_running_loop()
+                loop.create_task(coro)
+            except RuntimeError:
+                _asyncio.run(coro)
+            logger.info(f"能力已注册到 CapabilityManager: {node_name}")
+        except Exception as e:
+            logger.warning(f"CapabilityManager 注册失败 (非致命): {e}")
+
         return node_name, main_file
     
     def _save_to_file(self, code: str, language: str) -> str:
