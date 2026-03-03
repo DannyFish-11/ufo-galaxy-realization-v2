@@ -184,6 +184,31 @@ Node_XX_Name/
 - **SSH节点**: asyncssh
 - **MQTT节点**: paho-mqtt
 
+## 相关仓库
+
+| 仓库 | 职责 | 说明 |
+|------|------|------|
+| [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) | **唯一 Android 真相源** | 打包 APK，实现 Android 客户端 UI 和 Agent |
+| ufo-galaxy-realization-v2（本仓库） | **服务端 + 桥接 + VLM** | 接收 APK 连接，提供 AI 推理和节点调度 |
+
+### 架构示意图
+
+```
+独立仓库(APK)
+  DannyFish-11/ufo-galaxy-android
+        │
+        │  WebSocket (AIP v3.0)
+        │  ws://<host>:8765/ws/android
+        ▼
+galaxy_gateway/android_bridge.py   ← 桥接层（本仓库）
+        │
+        │  HTTP
+        ▼
+Node_113_AndroidVLM                ← VLM 分析节点（本仓库）
+```
+
+协议详细说明见 [docs/ANDROID_PROTOCOL_ALIGNMENT.md](docs/ANDROID_PROTOCOL_ALIGNMENT.md)。
+
 ## 许可证
 
 MIT License
