@@ -13,7 +13,10 @@ import os
 import sys
 import json
 import time
-import psutil
+try:
+    import psutil
+except ImportError:  # pragma: no cover
+    psutil = None  # type: ignore[assignment]
 import logging
 import subprocess
 from datetime import datetime
@@ -154,6 +157,8 @@ class AnomalyDetector:
     def collect_metrics(self) -> HealthMetrics:
         """收集系统健康指标"""
         try:
+            if psutil is None:
+                raise RuntimeError("psutil is not installed; run: pip install psutil")
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage("/")
