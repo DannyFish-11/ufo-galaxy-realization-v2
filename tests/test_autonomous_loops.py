@@ -529,3 +529,124 @@ class TestForcedDecisionWeightUpdate:
         }
         asyncio.run(loop_obj._learn_from_execution(execution_result))
         assert real_planner.available_resources[0].availability < 0.5
+
+
+# ---------------------------------------------------------------------------
+# Loop 1 supplemental: sandbox + commit gating for CODE_FIX
+# ---------------------------------------------------------------------------
+
+class TestCodeFixSandboxGating:
+    """Loop 1: verify that the commit step is gated on sandbox success and that
+    apply_code_fix() writes a real file to disk when auto_commit is enabled."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from nodes.node_112_self_healing.main import (
+            SelfHealingEngine, AutoFixer, FixResult, FixAction,
+            HealthMetrics, IssueType, HealthStatus, DiagnosisResult,
+        )
+        self.SelfHealingEngine = SelfHealingEngine
+        self.AutoFixer = AutoFixer
+        self.FixResult = FixResult
+        self.FixAction = FixAction
+        self.HealthMetrics = HealthMetrics
+        self.IssueType = IssueType
+        self.HealthStatus = HealthStatus
+        self.DiagnosisResult = DiagnosisResult
+
+    def _make_metrics(self, cpu=95.0):
+        return self.HealthMetrics(
+            cpu_percent=cpu, memory_percent=50.0, disk_percent=50.0,
+            network_ok=True, timestamp="2026-01-01T00:00:00"
+        )
+
+    def _make_diag(self):
+        return self.DiagnosisResult(
+            issue_type=self.IssueType.HIGH_CPU,
+            severity=self.HealthStatus.CRITICAL,
+            description="cpu high",
+            affected_components=["cpu"],
+            recommendation="code fix needed",
+        )
+
+    def test_apply_code_fix_writes_file(self, tmp_path):
+        """apply_code_fix() must write the last coding result's code to disk."""
+        fixer = self.AutoFixer()
+        # Simulate a successful _code_fix result by setting _last_coding_result
+        from types import SimpleNamespace
+        fixer._last_coding_result = SimpleNamespace(code="print('hello')")
+        applied = fixer.apply_code_fix(target_dir=str(tmp_path))
+        assert applied != ""
+        assert Path(applied).exists()
+        assert Path(applied).read_text(encoding="utf-8") == "print('hello')"
+
+    def test_apply_code_fix_returns_empty_when_no_result(self, tmp_path):
+        """apply_code_fix() returns empty string when no coding result is stored."""
+        fixer = self.AutoFixer()
+        applied = fixer.apply_code_fix(target_dir=str(tmp_path))
+        assert applied == ""
+
+    def test_auto_commit_calls_apply_on_success(self, tmp_path):
+        """When auto_commit=True and CODE_FIX succeeds, apply_code_fix is invoked."""
+        engine = self.SelfHealingEngine({
+            "report_dir": str(tmp_path),
+            "auto_commit": True,
+            "applied_fixes_dir": str(tmp_path / "fixes"),
+        })
+        code_fix_result = self.FixResult(
+            action=self.FixAction.CODE_FIX, success=True,
+            message="fixed", timestamp="t"
+        )
+        with patch.object(engine.detector, "collect_metrics",
+                          return_value=self._make_metrics()), \
+             patch.object(engine.diagnoser, "diagnose",
+                          return_value=self._make_diag()), \
+             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
+             patch.object(engine.reporter, "generate_report",
+                          return_value=MagicMock()), \
+             patch.object(engine.fixer, "apply_code_fix",
+                          return_value=str(tmp_path / "fixes" / "fix.py")) as mock_apply:
+            engine.run_once()
+        mock_apply.assert_called_once()
+
+    def test_no_commit_when_fix_fails(self, tmp_path):
+        """When CODE_FIX sandbox fails, apply_code_fix must NOT be called."""
+        engine = self.SelfHealingEngine({
+            "report_dir": str(tmp_path),
+            "auto_commit": True,
+            "applied_fixes_dir": str(tmp_path / "fixes"),
+        })
+        failed_result = self.FixResult(
+            action=self.FixAction.CODE_FIX, success=False,
+            message="sandbox failed", timestamp="t"
+        )
+        with patch.object(engine.detector, "collect_metrics",
+                          return_value=self._make_metrics()), \
+             patch.object(engine.diagnoser, "diagnose",
+                          return_value=self._make_diag()), \
+             patch.object(engine.fixer, "fix", return_value=failed_result), \
+             patch.object(engine.reporter, "generate_report",
+                          return_value=MagicMock()), \
+             patch.object(engine.fixer, "apply_code_fix") as mock_apply:
+            engine.run_once()
+        mock_apply.assert_not_called()
+
+    def test_no_commit_without_auto_commit_flag(self, tmp_path):
+        """When auto_commit=False (default), apply_code_fix must NOT be called
+        even when the sandbox passes."""
+        engine = self.SelfHealingEngine({"report_dir": str(tmp_path)})
+        assert engine.auto_commit is False
+        code_fix_result = self.FixResult(
+            action=self.FixAction.CODE_FIX, success=True,
+            message="fixed", timestamp="t"
+        )
+        with patch.object(engine.detector, "collect_metrics",
+                          return_value=self._make_metrics()), \
+             patch.object(engine.diagnoser, "diagnose",
+                          return_value=self._make_diag()), \
+             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
+             patch.object(engine.reporter, "generate_report",
+                          return_value=MagicMock()), \
+             patch.object(engine.fixer, "apply_code_fix") as mock_apply:
+            engine.run_once()
+        mock_apply.assert_not_called()

@@ -291,6 +291,9 @@ class AutoFixer:
 
     def __init__(self):
         self.fix_history: List[FixResult] = []
+        # Stores the last CodingResult produced by _code_fix so that
+        # apply_code_fix() can write the tested code to disk.
+        self._last_coding_result = None
 
     def fix(self, diagnosis: DiagnosisResult) -> FixResult:
         """执行自动修复"""
@@ -421,7 +424,13 @@ class AutoFixer:
                 expected_output=None,
                 context_code=None
             )
+            logger.info("[SANDBOX_TEST] Executing code fix in sandbox")
             coding_result = coder.generate_and_execute(task)
+            self._last_coding_result = coding_result
+            if coding_result.success:
+                logger.info("[SANDBOX_TEST] Sandbox execution passed")
+            else:
+                logger.warning(f"[SANDBOX_TEST] Sandbox execution failed: {coding_result.errors}")
             message = (
                 f"代码修复完成" if coding_result.success
                 else f"代码修复失败: {', '.join(coding_result.errors)}"
@@ -442,6 +451,29 @@ class AutoFixer:
             )
         self.fix_history.append(result)
         return result
+
+    def apply_code_fix(self, target_dir: str = "applied_fixes") -> str:
+        """Write the last sandbox-tested code fix to a persistent location.
+
+        This method gates the commit on sandbox success: it should only be
+        called after ``_code_fix`` returned a successful ``FixResult``.  When
+        ``auto_commit`` is enabled in ``SelfHealingEngine``, ``run_once``
+        invokes this method automatically.
+
+        Returns the path of the applied file, or an empty string when nothing
+        was available to write.
+        """
+        coding_result = self._last_coding_result
+        if coding_result is None or not coding_result.code:
+            logger.warning("[COMMIT] No sandbox-tested code available to apply")
+            return ""
+        os.makedirs(target_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = os.path.join(target_dir, f"fix_{ts}.py")
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(coding_result.code)
+        logger.info(f"[COMMIT] Code fix written to {out_path}")
+        return out_path
 
 
 class ReportGenerator:
@@ -513,6 +545,9 @@ class SelfHealingEngine:
         self.reporter = ReportGenerator(self.config.get("report_dir", "reports"))
         self.running = False
         self.check_interval = self.config.get("check_interval", 60)
+        # When True, sandbox-passing code fixes are written to disk automatically.
+        self.auto_commit: bool = bool(self.config.get("auto_commit", False))
+        self.applied_fixes_dir: str = self.config.get("applied_fixes_dir", "applied_fixes")
 
     def run_once(self) -> Optional[IncidentReport]:
         """执行一次自愈循环"""
@@ -541,7 +576,11 @@ class SelfHealingEngine:
         if fix_result.action == FixAction.CODE_FIX:
             if fix_result.success:
                 logger.info("[SANDBOX_TEST] Code fix sandbox tests passed")
-                logger.info("[COMMIT] Applying code fix (sandbox tests passed)")
+                if self.auto_commit:
+                    applied = self.fixer.apply_code_fix(target_dir=self.applied_fixes_dir)
+                    logger.info(f"[COMMIT] Code fix applied to {applied}")
+                else:
+                    logger.info("[COMMIT] Applying code fix (sandbox tests passed)")
             else:
                 logger.warning("[SANDBOX_TEST] Code fix sandbox tests failed — fix not committed")
         logger.info(f"[CODE_FIX] Action={fix_result.action.value}, "
