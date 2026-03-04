@@ -101,12 +101,20 @@ class RAGMemory:
     - 知识库检索 (对接现有 Node)
     - 对话记忆 (对接 ai_intent)
     - 学习积累 (pattern → rule)
+
+    新增：命名空间/租户隔离
+    - 传入 namespace 参数时，按命名空间读写，互不干扰
+    - 不传 namespace 则使用全局（默认）行为，兼容现有代码
     """
 
-    def __init__(self, data_dir: str = None):
+    def __init__(self, data_dir: str = None, namespace: str = ""):
+        self._namespace = namespace or ""
         self._data_dir = data_dir or os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "data", "rag_memory"
         )
+        # 若有命名空间，使用独立子目录
+        if self._namespace:
+            self._data_dir = os.path.join(self._data_dir, "ns_" + self._namespace)
         os.makedirs(self._data_dir, exist_ok=True)
 
         # 统计 (必须在 _load_experiences 之前初始化)
@@ -118,6 +126,15 @@ class RAGMemory:
 
         # 学习到的 patterns
         self._patterns: List[Dict] = []
+
+    @staticmethod
+    def namespace_for(device_id: str = "", worker_id: str = "") -> str:
+        """从 device_id 或 worker_id 推导 namespace 字符串"""
+        if device_id:
+            return f"device_{device_id}"
+        if worker_id:
+            return f"worker_{worker_id}"
+        return ""
 
     # ================================================================
     # 经验记录
@@ -474,10 +491,35 @@ class RAGMemory:
 # ============================================================================
 
 _rag_instance: Optional[RAGMemory] = None
+_rag_ns_instances: Dict[str, RAGMemory] = {}
 
 
-def get_rag_memory() -> RAGMemory:
+def get_rag_memory(namespace: str = "") -> RAGMemory:
+    """
+    获取 RAGMemory 实例。
+
+    Args:
+        namespace: 命名空间字符串（如 device_id 或 worker_id）。
+                   为空时返回全局单例，保持向后兼容。
+    """
     global _rag_instance
-    if _rag_instance is None:
-        _rag_instance = RAGMemory()
-    return _rag_instance
+    if not namespace:
+        if _rag_instance is None:
+            _rag_instance = RAGMemory()
+        return _rag_instance
+
+    if namespace not in _rag_ns_instances:
+        _rag_ns_instances[namespace] = RAGMemory(namespace=namespace)
+    return _rag_ns_instances[namespace]
+
+
+def get_rag_memory_for_device(device_id: str) -> RAGMemory:
+    """便捷函数：按 device_id 获取隔离的 RAGMemory 实例"""
+    ns = RAGMemory.namespace_for(device_id=device_id)
+    return get_rag_memory(namespace=ns)
+
+
+def get_rag_memory_for_worker(worker_id: str) -> RAGMemory:
+    """便捷函数：按 worker_id 获取隔离的 RAGMemory 实例"""
+    ns = RAGMemory.namespace_for(worker_id=worker_id)
+    return get_rag_memory(namespace=ns)

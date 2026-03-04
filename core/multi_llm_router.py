@@ -380,13 +380,26 @@ class MultiLLMRouter:
         self._lock = asyncio.Lock()
         self._discover_providers()
 
+    def _get_key(self, key_name: str) -> str:
+        """优先从 CredentialVault 获取密钥，若不可用则回退环境变量"""
+        try:
+            from core.credential_vault import get_vault
+            val = get_vault().get_credential(key_name, actor="llm_router")
+            if val:
+                return val
+        except Exception:
+            pass
+        return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
+
     def _discover_providers(self):
-        """从环境变量自动发现并注册提供商"""
+        """从环境变量（或 CredentialVault）自动发现并注册提供商"""
 
         # OpenAI
-        key = os.environ.get("OPENAI_API_KEY", "")
+        key = self._get_key("openai")
+        if not key:
+            key = os.environ.get("OPENAI_API_KEY", "")
         if key and not key.startswith("your-"):
-            base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
+            base = self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
             cfg = ProviderConfig(
                 name="openai", api_key=key, base_url=base,
                 models=["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
@@ -397,7 +410,9 @@ class MultiLLMRouter:
             self.adapters["openai"] = OpenAIAdapter(cfg)
 
         # Anthropic
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        key = self._get_key("anthropic")
+        if not key:
+            key = os.environ.get("ANTHROPIC_API_KEY", "")
         if key and not key.startswith("your-"):
             cfg = ProviderConfig(
                 name="anthropic", api_key=key,
@@ -410,7 +425,9 @@ class MultiLLMRouter:
             self.adapters["anthropic"] = AnthropicAdapter(cfg)
 
         # DeepSeek
-        key = os.environ.get("DEEPSEEK_API_KEY", "")
+        key = self._get_key("deepseek")
+        if not key:
+            key = os.environ.get("DEEPSEEK_API_KEY", "")
         if key and not key.startswith("your-"):
             cfg = ProviderConfig(
                 name="deepseek", api_key=key,
@@ -423,7 +440,9 @@ class MultiLLMRouter:
             self.adapters["deepseek"] = DeepSeekAdapter(cfg)
 
         # Groq
-        key = os.environ.get("GROQ_API_KEY", "")
+        key = self._get_key("groq")
+        if not key:
+            key = os.environ.get("GROQ_API_KEY", "")
         if key and not key.startswith("your-"):
             cfg = ProviderConfig(
                 name="groq", api_key=key,
@@ -437,7 +456,9 @@ class MultiLLMRouter:
             self.adapters["groq"] = GroqAdapter(cfg)
 
         # Ollama (local)
-        ollama_url = os.environ.get("OLLAMA_URL", "")
+        ollama_url = self._get_key("ollama")
+        if not ollama_url:
+            ollama_url = os.environ.get("OLLAMA_URL", "")
         if ollama_url and not ollama_url.startswith("your-"):
             cfg = ProviderConfig(
                 name="ollama", api_key="", base_url=ollama_url,
@@ -449,8 +470,12 @@ class MultiLLMRouter:
             self.adapters["ollama"] = OllamaAdapter(cfg)
 
         # OneAPI fallback
-        oneapi_key = os.environ.get("ONEAPI_API_KEY", "")
-        oneapi_url = os.environ.get("ONEAPI_URL", "")
+        oneapi_key = self._get_key("oneapi")
+        if not oneapi_key:
+            oneapi_key = os.environ.get("ONEAPI_API_KEY", "")
+        oneapi_url = self._get_key("oneapi_url")
+        if not oneapi_url:
+            oneapi_url = os.environ.get("ONEAPI_URL", "")
         if oneapi_key and not oneapi_key.startswith("your-") and oneapi_url:
             models = self._discover_oneapi_models(oneapi_url, oneapi_key)
             cfg = ProviderConfig(
@@ -691,6 +716,24 @@ class MultiLLMRouter:
                 )
                 if self.providers[prov_name].status == ProviderStatus.DEGRADED:
                     self.providers[prov_name].status = ProviderStatus.HEALTHY
+
+                # 记录成本（非阻塞，失败不影响主流程）
+                try:
+                    from core.cost_tracker import get_cost_tracker
+                    prov_cfg = self.providers[prov_name]
+                    get_cost_tracker().record(
+                        provider=prov_name,
+                        model=mdl,
+                        input_tokens=response.input_tokens,
+                        output_tokens=response.output_tokens,
+                        task_type=classified.value,
+                        latency_ms=response.latency_ms,
+                        success=True,
+                        cost_per_1k_input=prov_cfg.cost_per_1k_input,
+                        cost_per_1k_output=prov_cfg.cost_per_1k_output,
+                    )
+                except Exception:
+                    pass
 
                 # 记录调用历史
                 self.call_history.append({
