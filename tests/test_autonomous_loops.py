@@ -337,3 +337,195 @@ class TestAutoExpandDeployAsNode:
         params = list(sig.parameters.keys())
         assert "code" in params
         assert "task" in params
+
+
+# ---------------------------------------------------------------------------
+# Loop 1 supplemental: SelfHealingEngine phase logging & verification
+# ---------------------------------------------------------------------------
+
+class TestSelfHealingPhaseLogging:
+    """Loop 1: run_once() must emit phase-tagged log messages and run a verification step."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from nodes.node_112_self_healing.main import (
+            SelfHealingEngine, HealthMetrics, HealthStatus, IssueType,
+            DiagnosisResult, FixResult, FixAction, IncidentReport,
+        )
+        self.SelfHealingEngine = SelfHealingEngine
+        self.HealthMetrics = HealthMetrics
+        self.HealthStatus = HealthStatus
+        self.IssueType = IssueType
+        self.DiagnosisResult = DiagnosisResult
+        self.FixResult = FixResult
+        self.FixAction = FixAction
+        self.IncidentReport = IncidentReport
+
+    def _make_metrics(self, cpu=50.0, mem=50.0, disk=50.0, net=True):
+        return self.HealthMetrics(
+            cpu_percent=cpu, memory_percent=mem, disk_percent=disk,
+            network_ok=net, timestamp="2026-01-01T00:00:00"
+        )
+
+    def test_run_once_emits_detection_log(self, caplog):
+        """run_once must log [DETECTION] when anomalies are found."""
+        import logging
+        engine = self.SelfHealingEngine({"report_dir": "/tmp"})
+        bad_metrics = self._make_metrics(cpu=95.0)  # triggers CRITICAL
+        fix_result = self.FixResult(
+            action=self.FixAction.RESTART, success=True,
+            message="ok", timestamp="t"
+        )
+        diag = self.DiagnosisResult(
+            issue_type=self.IssueType.HIGH_CPU,
+            severity=self.HealthStatus.CRITICAL,
+            description="cpu high",
+            affected_components=["cpu"],
+            recommendation="restart"
+        )
+        with patch.object(engine.detector, "collect_metrics", return_value=bad_metrics), \
+             patch.object(engine.diagnoser, "diagnose", return_value=diag), \
+             patch.object(engine.fixer, "fix", return_value=fix_result), \
+             patch.object(engine.reporter, "generate_report") as mock_report, \
+             caplog.at_level(logging.INFO, logger="SelfHealing"):
+            mock_report.return_value = MagicMock()
+            engine.run_once()
+        assert any("[DETECTION]" in r.message for r in caplog.records)
+
+    def test_run_once_emits_verification_log(self, caplog):
+        """run_once must log [VERIFICATION] after attempting a fix."""
+        import logging
+        engine = self.SelfHealingEngine({"report_dir": "/tmp"})
+        bad_metrics = self._make_metrics(mem=95.0)
+        healthy_metrics = self._make_metrics()
+        fix_result = self.FixResult(
+            action=self.FixAction.RESTART, success=True,
+            message="ok", timestamp="t"
+        )
+        diag = self.DiagnosisResult(
+            issue_type=self.IssueType.HIGH_MEMORY,
+            severity=self.HealthStatus.CRITICAL,
+            description="mem high",
+            affected_components=["memory"],
+            recommendation="restart"
+        )
+        call_count = [0]
+
+        def _metrics():
+            call_count[0] += 1
+            return bad_metrics if call_count[0] == 1 else healthy_metrics
+
+        with patch.object(engine.detector, "collect_metrics", side_effect=_metrics), \
+             patch.object(engine.diagnoser, "diagnose", return_value=diag), \
+             patch.object(engine.fixer, "fix", return_value=fix_result), \
+             patch.object(engine.reporter, "generate_report") as mock_report, \
+             caplog.at_level(logging.INFO, logger="SelfHealing"):
+            mock_report.return_value = MagicMock()
+            engine.run_once()
+        assert any("[VERIFICATION]" in r.message for r in caplog.records)
+        assert any("restored" in r.message for r in caplog.records)
+
+    def test_run_once_code_fix_logs_sandbox_and_commit(self, caplog):
+        """When CODE_FIX succeeds, run_once must log [SANDBOX_TEST] and [COMMIT]."""
+        import logging
+        engine = self.SelfHealingEngine({"report_dir": "/tmp"})
+        bad_metrics = self._make_metrics(cpu=95.0)
+        code_fix_result = self.FixResult(
+            action=self.FixAction.CODE_FIX, success=True,
+            message="fixed", timestamp="t"
+        )
+        diag = self.DiagnosisResult(
+            issue_type=self.IssueType.HIGH_CPU,
+            severity=self.HealthStatus.CRITICAL,
+            description="cpu high",
+            affected_components=["cpu"],
+            recommendation="code fix needed"
+        )
+        with patch.object(engine.detector, "collect_metrics", return_value=bad_metrics), \
+             patch.object(engine.diagnoser, "diagnose", return_value=diag), \
+             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
+             patch.object(engine.reporter, "generate_report") as mock_report, \
+             caplog.at_level(logging.INFO, logger="SelfHealing"):
+            mock_report.return_value = MagicMock()
+            engine.run_once()
+        messages = [r.message for r in caplog.records]
+        assert any("[SANDBOX_TEST]" in m for m in messages)
+        assert any("[COMMIT]" in m for m in messages)
+
+
+# ---------------------------------------------------------------------------
+# Loop 2 supplemental: forced weight update in _learn_from_execution
+# ---------------------------------------------------------------------------
+
+class TestForcedDecisionWeightUpdate:
+    """Loop 2: _learn_from_execution must call update_decision_weights even without
+    the full learning engine (e.g., when numpy is unavailable)."""
+
+    def test_learn_from_execution_updates_weights_without_learning_engine(self):
+        """Even when learning_optimizer is None, planner.update_decision_weights is called."""
+        import importlib.util
+        import asyncio
+
+        spec = importlib.util.spec_from_file_location(
+            "gml4_forced", str(PROJECT_ROOT / "galaxy_main_loop_l4.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        loop_obj = mod.GalaxyMainLoopL4()
+        # Force learning engine to None to simulate numpy unavailable
+        loop_obj.learning_optimizer = None
+
+        mock_planner = MagicMock()
+        loop_obj.planner = mock_planner
+
+        execution_result = {
+            "success": True,
+            "summary": {
+                "goal": "test",
+                "total_duration": 1.0,
+                "total_actions": 2,
+                "success_rate": 0.9,
+            },
+        }
+
+        asyncio.run(loop_obj._learn_from_execution(execution_result))
+
+        mock_planner.update_decision_weights.assert_called_once()
+        call_kwargs = mock_planner.update_decision_weights.call_args[0][0]
+        assert "average_success_rate" in call_kwargs
+
+    def test_forced_weight_update_affects_routing(self):
+        """After _learn_from_execution, resource availability changes based on success rate."""
+        import importlib.util
+        import asyncio
+        from enhancements.reasoning.autonomous_planner import (
+            AutonomousPlanner, Resource, ResourceType,
+        )
+
+        spec = importlib.util.spec_from_file_location(
+            "gml4_routing", str(PROJECT_ROOT / "galaxy_main_loop_l4.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        loop_obj = mod.GalaxyMainLoopL4()
+        loop_obj.learning_optimizer = None
+
+        resource = Resource(
+            id="r1", type=ResourceType.NODE, name="TestNode",
+            capabilities=[], availability=0.5, metadata={}
+        )
+        real_planner = AutonomousPlanner(available_resources=[resource])
+        loop_obj.planner = real_planner
+
+        # Low success rate → availability should decrease
+        execution_result = {
+            "success": False,
+            "summary": {
+                "goal": "test", "total_duration": 1.0,
+                "total_actions": 1, "success_rate": 0.1,
+            },
+        }
+        asyncio.run(loop_obj._learn_from_execution(execution_result))
+        assert real_planner.available_resources[0].availability < 0.5
