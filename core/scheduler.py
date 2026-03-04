@@ -229,6 +229,8 @@ class AutonomousScheduler:
             f"Scheduler 工具发现完成: {len(self.tools_cache)} 工具 "
             f"({len(_BUILTIN_TOOLS)} 内置 + {len(loaded_nodes)} 节点)"
         )
+        # 注入已加载的 MCP 工具
+        self.inject_mcp_tools()
 
     def _infer_description_from_main(self, main_py_path: str, node_name: str) -> Optional[str]:
         """从 main.py 的头部注释/docstring 推断节点描述"""
@@ -282,6 +284,34 @@ class AutonomousScheduler:
 
     def get_tools(self) -> List[Dict[str, Any]]:
         return self.tools_cache
+
+    def inject_mcp_tools(self):
+        """将 mcp_loader 中已加载的所有 MCP 工具注入到工具列表（可在加载新 MCP Server 后调用）"""
+        try:
+            from core.mcp_loader import mcp_loader, MCPServerStatus
+            injected = 0
+            existing_names = {t["function"]["name"] for t in self.tools_cache}
+            for server_id, server in mcp_loader.servers.items():
+                if server.status != MCPServerStatus.RUNNING:
+                    continue
+                for tool in server.tools:
+                    func_name = f"mcp_{server_id}_{tool.name}"
+                    if func_name in existing_names:
+                        continue
+                    self.tools_cache.append({
+                        "type": "function",
+                        "function": {
+                            "name": func_name,
+                            "description": f"[MCP:{server.name}] {tool.description}",
+                            "parameters": tool.inputSchema or {"type": "object", "properties": {}},
+                        },
+                    })
+                    existing_names.add(func_name)
+                    injected += 1
+            if injected:
+                logger.info(f"注入 {injected} 个 MCP 工具到调度器")
+        except Exception as e:
+            logger.warning(f"注入 MCP 工具失败: {e}")
 
     async def plan_and_execute(
         self,
@@ -489,6 +519,10 @@ CROSS-DEVICE:
             if function_name == "mesh_send":
                 return await self._exec_mesh_send(args)
 
+            # MCP 工具: mcp_{server_id}_{tool_name}
+            if function_name.startswith("mcp_"):
+                return await self._exec_mcp_tool(function_name, args)
+
             # 节点工具: call_Node_xxx
             if function_name.startswith("call_"):
                 node_id = function_name.replace("call_", "")
@@ -602,6 +636,25 @@ CROSS-DEVICE:
         except Exception as e:
             return json.dumps({"error": f"Mesh send failed: {e}"})
 
+    async def _exec_mcp_tool(self, function_name: str, args: Dict) -> str:
+        """调用 MCP 工具 — 格式: mcp_{server_id}_{tool_name}
+        
+        server_id 由 mcp_loader 生成（8 位不含下划线的十六进制），
+        tool_name 可包含下划线，因此以首个下划线为分隔符切分即可。
+        """
+        try:
+            from core.mcp_loader import mcp_loader
+            # function_name 形如 mcp_<server_id>_<tool_name>
+            # server_id 是 8 位十六进制 UUID 片段，tool_name 可能含下划线
+            parts = function_name[len("mcp_"):].split("_", 1)
+            if len(parts) != 2:
+                return json.dumps({"error": f"Invalid MCP tool name: {function_name}"})
+            server_id, tool_name = parts
+            result = await mcp_loader.call_tool(server_id, tool_name, args)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": f"MCP tool failed: {e}"})
+
     def _select_relevant_tools(self, instruction: str, max_tools: int = 20) -> List[Dict]:
         """根据指令选择最相关的工具 (避免 token 爆炸)"""
         if len(self.tools_cache) <= max_tools:
@@ -634,6 +687,8 @@ CROSS-DEVICE:
             if any(k in inst_lower for k in ["手机", "android", "安卓", "adb"]) and "adb" in func_name:
                 score += 20
             if any(k in inst_lower for k in ["shell", "命令", "终端"]) and "shell" in func_name:
+                score += 20
+            if any(k in inst_lower for k in ["windows", "电脑", "桌面", "窗口", "点击", "输入"]) and func_name.startswith("mcp_"):
                 score += 20
             scored.append((score, tool))
 
