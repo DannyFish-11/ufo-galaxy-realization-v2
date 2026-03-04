@@ -169,6 +169,12 @@ class MessageType(str, Enum):
     ERROR = "error"
     ERROR_RECOVERY = "error_recovery"
 
+    # === 能力/诊断上报 ===
+    CAPABILITY_REPORT = "capability_report"
+    CAPABILITY_REPORT_ACK = "capability_report_ack"
+    DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
+    DIAGNOSTICS_PAYLOAD_ACK = "diagnostics_payload_ack"
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -582,6 +588,10 @@ class AndroidBridge:
         self._message_handlers[MessageType.APP_START] = self._handle_generic_forward
         self._message_handlers[MessageType.APP_STOP] = self._handle_generic_forward
         self._message_handlers[MessageType.SYSTEM_COMMAND] = self._handle_generic_forward
+
+        # 能力/诊断上报
+        self._message_handlers[MessageType.CAPABILITY_REPORT] = self._handle_capability_report
+        self._message_handlers[MessageType.DIAGNOSTICS_PAYLOAD] = self._handle_diagnostics_payload
     
     async def handle_message(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理来自安卓设备的消息"""
@@ -706,6 +716,39 @@ class AndroidBridge:
         device_id = message.get("device_id")
         logger.debug(f"Agent ping from {device_id}")
         return MessageBuilder.heartbeat_ack(device_id)
+
+    async def _handle_capability_report(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理设备能力上报"""
+        device_id = message.get("device_id")
+        platform = message.get("platform")
+        supported_actions = message.get("supported_actions", [])
+        version = message.get("version")
+        logger.info(f"Capability report from {device_id}: platform={platform}, "
+                    f"actions={supported_actions}, version={version}")
+
+        async with self._lock:
+            if device_id in self._devices:
+                self._devices[device_id].last_heartbeat = time.time()
+
+        ack = MessageBuilder._base_message(MessageType.CAPABILITY_REPORT_ACK, device_id or "unknown")
+        ack["accepted"] = True
+        ack["message"] = "capability_report accepted"
+        return ack
+
+    async def _handle_diagnostics_payload(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理诊断数据上报"""
+        device_id = message.get("device_id")
+        error_type = message.get("error_type")
+        error_context = message.get("error_context")
+        task_id = message.get("task_id")
+        node_name = message.get("node_name")
+        logger.warning(f"Diagnostics from {device_id}: error_type={error_type}, "
+                       f"task_id={task_id}, node={node_name}, context={error_context}")
+
+        ack = MessageBuilder._base_message(MessageType.DIAGNOSTICS_PAYLOAD_ACK, device_id or "unknown")
+        ack["accepted"] = True
+        ack["message"] = "diagnostics_payload accepted"
+        return ack
     
     # =========================================================================
     # 公共 API
