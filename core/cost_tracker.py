@@ -85,6 +85,8 @@ class CostTracker:
         self._log_file = os.path.join(self._data_dir, "cost_records.jsonl")
         # 最近 500 条保存在内存中供快速查询
         self._records: List[CostRecord] = []
+        self._consecutive_write_failures: int = 0
+        self._total_write_failures: int = 0
         self._load_recent(500)
 
     # ================================================================
@@ -186,11 +188,23 @@ class CostTracker:
     # 持久化
     # ================================================================
 
+    def get_write_health(self) -> Dict:
+        """获取文件写入健康状态"""
+        status = "degraded" if self._consecutive_write_failures >= 3 else "ok"
+        return {
+            "status": status,
+            "consecutive_failures": self._consecutive_write_failures,
+            "total_failures": self._total_write_failures,
+        }
+
     def _append_to_file(self, rec: CostRecord) -> None:
         try:
             with open(self._log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
+            self._consecutive_write_failures = 0
         except Exception as e:
+            self._consecutive_write_failures += 1
+            self._total_write_failures += 1
             logger.warning(f"Cost record save failed: {e}")
 
     def _load_recent(self, limit: int = 500) -> None:
