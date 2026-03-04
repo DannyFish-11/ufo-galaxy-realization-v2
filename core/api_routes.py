@@ -2383,16 +2383,53 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    @router.get("/api/v1/vault/tokens/{token}/info")
+    async def vault_token_info(token: str):
+        """获取 token 元信息（device_id、过期时间、scopes 等，不含凭证值）"""
+        try:
+            from core.credential_vault import get_vault
+            info = get_vault().get_token_info(token)
+            if info is None:
+                raise HTTPException(status_code=404, detail="Token not found or expired")
+            return JSONResponse(info)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/vault/tokens/validate")
+    async def vault_validate_token(request: Request):
+        """验证 token 有效性，返回 valid 和 device_id"""
+        body = await request.json()
+        token = body.get("token", "")
+        if not token:
+            raise HTTPException(status_code=400, detail="token is required")
+        try:
+            from core.credential_vault import get_vault
+            valid, device_id = get_vault().validate_token(token)
+            return JSONResponse({"valid": valid, "device_id": device_id})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     # ========================================================================
     # 成本追踪 API
     # ========================================================================
 
     @router.get("/api/v1/cost/records")
-    async def cost_get_records(limit: int = 50):
-        """获取最近 N 条 LLM 调用成本记录"""
+    async def cost_get_records(limit: int = 50, provider: str = "", model: str = ""):
+        """获取最近 N 条 LLM 调用成本记录，支持按 provider/model 过滤"""
         try:
             from core.cost_tracker import get_cost_tracker
-            return JSONResponse({"records": get_cost_tracker().get_recent(limit=limit)})
+            tracker = get_cost_tracker()
+            if provider or model:
+                records = tracker.get_recent_filtered(
+                    limit=limit,
+                    provider=provider or None,
+                    model=model or None,
+                )
+            else:
+                records = tracker.get_recent(limit=limit)
+            return JSONResponse({"records": records})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -2447,6 +2484,22 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    @router.post("/api/v1/channels/auto_load")
+    async def channel_auto_load(request: Request):
+        """自动扫描并加载渠道插件目录（默认 external/channels/）"""
+        try:
+            body = {}
+            try:
+                body = await request.json()
+            except Exception:
+                logger.debug("channel_auto_load: no JSON body, using defaults")
+            plugins_dir = body.get("directory") if body else None
+            from core.channel_plugins import get_channel_loader
+            result = await get_channel_loader().auto_load_plugins(plugins_dir=plugins_dir)
+            return JSONResponse(result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.post("/api/v1/channels/{plugin_id}/send")
     async def channel_send_message(plugin_id: str, request: Request):
         """通过指定渠道插件发送消息"""
@@ -2479,6 +2532,20 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             else:
                 overall = "degraded"
             return JSONResponse({"health": results, "overall": overall})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/channels/{plugin_id}/schema")
+    async def channel_get_schema(plugin_id: str):
+        """获取指定渠道插件的配置 schema"""
+        try:
+            from core.channel_plugins import get_channel_loader
+            adapter = get_channel_loader().get_adapter(plugin_id)
+            if adapter is None:
+                raise HTTPException(status_code=404, detail=f"Plugin '{plugin_id}' not loaded")
+            return JSONResponse({"plugin_id": plugin_id, "schema": adapter.get_config_schema()})
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -2517,6 +2584,30 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             from core.galaxy_federation import get_federation
             peer = get_federation().register_peer(url, instance_id=instance_id, name=name)
             return JSONResponse({"success": True, "peer": peer.to_dict()})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.delete("/api/v1/federation/peers/{instance_id}")
+    async def federation_unregister_peer(instance_id: str):
+        """注销指定 peer 实例"""
+        try:
+            from core.galaxy_federation import get_federation
+            removed = get_federation().unregister_peer(instance_id)
+            if not removed:
+                raise HTTPException(status_code=404, detail=f"Peer '{instance_id}' not found")
+            return JSONResponse({"success": True, "instance_id": instance_id})
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/federation/peers/cleanup")
+    async def federation_cleanup_peers(max_age: int = 60):
+        """移除 last_heartbeat 超过 max_age 秒的 stale peers"""
+        try:
+            from core.galaxy_federation import get_federation
+            removed = get_federation().cleanup_stale_peers(max_age=max_age)
+            return JSONResponse({"success": True, "removed": removed})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
