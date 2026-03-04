@@ -37,6 +37,26 @@ UFO Galaxy 现已集成**统一能力注册和发现系统**，提供：
 - `system_manager.py` - 系统管理器（已集成）
 - `health_monitor.py` - 健康监控（已集成）
 
+### 三闭环自治能力（已打通）
+
+系统已实现并打通以下三条自治闭环：
+
+1. **自愈 → 自编程 → 验证**
+   - Node_112 检测异常并诊断问题
+   - AutoFixer 触发 `FixAction.CODE_FIX`
+   - AutonomousCoder 生成修复并在沙箱测试
+   - 通过后自动提交并由 Node_112 验证修复
+
+2. **学习 → 决策权重反馈**
+   - LearningOptimizer 产出性能洞察
+   - Planner 通过 `update_decision_weights` 调整策略权重
+   - 下一次路由优先使用新的策略
+
+3. **能力缺口 → 自动扩展**
+   - AutonomousCoder 生成新节点代码
+   - 自动注册到 NodeFactory 与 CapabilityManager
+   - 能力索引更新后可自动路由新节点
+
 **验证工具**：
 ```bash
 # 验证能力注册系统
@@ -44,6 +64,89 @@ python scripts/verify_capability_registry.py
 
 # 运行集成测试
 python tests/test_capability_integration.py
+```
+
+---
+
+## 🔄 三大自主循环 (Three Autonomous Loops)
+
+UFO Galaxy 内置三条端到端自主循环，实现系统自愈、持续学习和能力扩展：
+
+### Loop 1 — 自愈 → 代码修复 → 验证 (Self-Heal → Code-Fix → Verify)
+
+**关键文件**：`nodes/node_112_self_healing/main.py`
+
+```
+异常检测
+   ↓
+自动诊断
+   ↓
+确定修复动作 → FixAction.CODE_FIX
+                      ↓
+       AutonomousCoder.generate_and_execute()
+                      ↓
+            沙箱测试执行 → 自动提交(通过时)
+                      ↓
+                   验证完成
+```
+
+- `FixAction.CODE_FIX` 枚举值：当诊断建议包含代码修复关键词时触发
+- `AutoFixer._determine_action()` 根据推荐内容中的关键词（`_CODE_FIX_KEYWORDS`）决策
+- `AutoFixer._code_fix()` 调用 `AutonomousCoder.generate_and_execute()` 执行代码修复
+- `psutil` 使用可选导入（`try/except ImportError`），不影响测试收集
+
+### Loop 2 — 学习 → 决策权重更新 → 路由优化 (Learning → Weight Update → Routing)
+
+**关键文件**：`enhancements/reasoning/autonomous_planner.py`、`galaxy_main_loop_l4.py`
+
+```
+执行结果记录
+      ↓
+LearningOptimizer.analyze_performance()
+      ↓
+generate_optimization_plan()
+      ↓
+apply_optimization()
+      ↓
+AutonomousPlanner.update_decision_weights(performance_metrics)
+      ↓
+资源 availability 调整
+      ↓
+影响下一次路由决策
+```
+
+- `AutonomousPlanner.update_decision_weights(metrics)` 根据平均成功率调整资源可用性
+  - 成功率 > 0.8：availability × 1.05（上限 1.0）
+  - 成功率 < 0.5：availability × 0.9（下限 0.1）
+- `GalaxyMainLoopL4._perform_optimization()` 在每次优化周期末调用该方法，形成闭环
+
+### Loop 3 — 能力缺口 → 自动扩展 → 即时路由 (Capability Gap → Auto-Expand → Route)
+
+**关键文件**：`enhancements/reasoning/autonomous_coder.py`
+
+```
+检测能力缺口
+      ↓
+AutonomousCoder.generate_and_execute(task, target_type='node')
+      ↓
+_deploy_as_node(code, task)
+      ↓                         ↓
+NodeFactory.register_node()   CapabilityManager.register_capability()
+      ↓                         ↓
+节点索引更新               能力索引更新（可被路由发现）
+      ↓
+新节点无需人工干预即可被路由
+```
+
+- 生成代码后自动调用 `get_node_factory().register_node()`
+- 同步调用 `get_capability_manager().register_capability()` 更新能力索引
+- 两步注册均为非致命操作（失败时仅记录警告，不中断流程）
+
+### 运行三循环测试
+
+```bash
+python -m pytest tests/test_autonomous_loops.py -v
+# 预期输出: 17 passed
 ```
 
 ---

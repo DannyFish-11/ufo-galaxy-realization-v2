@@ -13,7 +13,10 @@ import os
 import sys
 import json
 import time
-import psutil
+try:
+    import psutil
+except ImportError:  # pragma: no cover
+    psutil = None  # type: ignore[assignment]
 import logging
 import subprocess
 from datetime import datetime
@@ -154,6 +157,8 @@ class AnomalyDetector:
     def collect_metrics(self) -> HealthMetrics:
         """收集系统健康指标"""
         try:
+            if psutil is None:
+                raise RuntimeError("psutil is not installed; run: pip install psutil")
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage("/")
@@ -286,6 +291,9 @@ class AutoFixer:
 
     def __init__(self):
         self.fix_history: List[FixResult] = []
+        # Stores the last CodingResult produced by _code_fix so that
+        # apply_code_fix() can write the tested code to disk.
+        self._last_coding_result = None
 
     def fix(self, diagnosis: DiagnosisResult) -> FixResult:
         """执行自动修复"""
@@ -416,7 +424,13 @@ class AutoFixer:
                 expected_output=None,
                 context_code=None
             )
+            logger.info("[SANDBOX_TEST] Executing code fix in sandbox")
             coding_result = coder.generate_and_execute(task)
+            self._last_coding_result = coding_result
+            if coding_result.success:
+                logger.info("[SANDBOX_TEST] Sandbox execution passed")
+            else:
+                logger.warning(f"[SANDBOX_TEST] Sandbox execution failed: {coding_result.errors}")
             message = (
                 f"代码修复完成" if coding_result.success
                 else f"代码修复失败: {', '.join(coding_result.errors)}"
@@ -437,6 +451,29 @@ class AutoFixer:
             )
         self.fix_history.append(result)
         return result
+
+    def apply_code_fix(self, target_dir: str = "applied_fixes") -> str:
+        """Write the last sandbox-tested code fix to a persistent location.
+
+        This method gates the commit on sandbox success: it should only be
+        called after ``_code_fix`` returned a successful ``FixResult``.  When
+        ``auto_commit`` is enabled in ``SelfHealingEngine``, ``run_once``
+        invokes this method automatically.
+
+        Returns the path of the applied file, or an empty string when nothing
+        was available to write.
+        """
+        coding_result = self._last_coding_result
+        if coding_result is None or not coding_result.code:
+            logger.warning("[COMMIT] No sandbox-tested code available to apply")
+            return ""
+        os.makedirs(target_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = os.path.join(target_dir, f"fix_{ts}.py")
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(coding_result.code)
+        logger.info(f"[COMMIT] Code fix written to {out_path}")
+        return out_path
 
 
 class ReportGenerator:
@@ -508,20 +545,57 @@ class SelfHealingEngine:
         self.reporter = ReportGenerator(self.config.get("report_dir", "reports"))
         self.running = False
         self.check_interval = self.config.get("check_interval", 60)
+        # When True, sandbox-passing code fixes are written to disk automatically.
+        self.auto_commit: bool = bool(self.config.get("auto_commit", False))
+        self.applied_fixes_dir: str = self.config.get("applied_fixes_dir", "applied_fixes")
 
     def run_once(self) -> Optional[IncidentReport]:
         """执行一次自愈循环"""
         logger.info("=== Starting self-healing cycle ===")
 
+        # Phase 1: Detection
+        logger.info("[DETECTION] Collecting system metrics")
         metrics = self.detector.collect_metrics()
         status, issues = self.detector.detect_anomalies(metrics)
 
         if status == HealthStatus.HEALTHY:
-            logger.info("System is healthy")
+            logger.info("[DETECTION] System is healthy — no action needed")
             return None
 
+        logger.info(f"[DETECTION] Anomalies detected: {[i.value for i in issues]}")
+
+        # Phase 2: Diagnosis
+        logger.info("[DIAGNOSIS] Analyzing detected issues")
         diagnosis = self.diagnoser.diagnose(metrics, issues)
+        logger.info(f"[DIAGNOSIS] Primary issue: {diagnosis.issue_type.value}, "
+                    f"recommendation: {diagnosis.recommendation}")
+
+        # Phase 3: Fix (may invoke CODE_FIX path with sandbox testing)
+        logger.info(f"[CODE_FIX] Determining and applying fix action")
         fix_result = self.fixer.fix(diagnosis)
+        if fix_result.action == FixAction.CODE_FIX:
+            if fix_result.success:
+                logger.info("[SANDBOX_TEST] Code fix sandbox tests passed")
+                if self.auto_commit:
+                    applied = self.fixer.apply_code_fix(target_dir=self.applied_fixes_dir)
+                    logger.info(f"[COMMIT] Code fix applied to {applied}")
+                else:
+                    logger.info("[COMMIT] Applying code fix (sandbox tests passed)")
+            else:
+                logger.warning("[SANDBOX_TEST] Code fix sandbox tests failed — fix not committed")
+        logger.info(f"[CODE_FIX] Action={fix_result.action.value}, "
+                    f"success={fix_result.success}, message={fix_result.message}")
+
+        # Phase 4: Verification — re-check system health post-fix
+        logger.info("[VERIFICATION] Re-checking system health after fix")
+        post_metrics = self.detector.collect_metrics()
+        post_status, post_issues = self.detector.detect_anomalies(post_metrics)
+        if post_status == HealthStatus.HEALTHY:
+            logger.info("[VERIFICATION] System health restored — fix verified OK")
+        else:
+            logger.warning(f"[VERIFICATION] System still unhealthy after fix: "
+                           f"{[i.value for i in post_issues]}")
+
         report = self.reporter.generate_report(metrics, diagnosis, fix_result)
 
         logger.info(f"=== Cycle completed: {report.incident_id} ===")

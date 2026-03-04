@@ -397,6 +397,13 @@ class GalaxyMainLoopL4:
         # 记录到历史
         self.task_history.append(observation)
         
+        # 强制步骤：无论学习引擎是否可用，都将执行结果反馈给规划器决策权重
+        _DEFAULT_SUCCESS_RATE = 0.5  # fallback when no history yet
+        recent = self.task_history[-10:] if self.task_history else []
+        avg_success = sum(t.get('success_rate', 0) for t in recent) / len(recent) if recent else _DEFAULT_SUCCESS_RATE
+        self.planner.update_decision_weights({"average_success_rate": avg_success})
+        self.logger.info(f"[LEARNING] 决策权重已更新 (近期平均成功率={avg_success:.1%})")
+        
         # 检查是否需要优化
         if self.learning_optimizer and self.learning_optimizer.should_optimize():
             self.logger.info("检测到需要优化")
