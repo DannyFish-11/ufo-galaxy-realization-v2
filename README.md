@@ -37,6 +37,26 @@ UFO Galaxy 现已集成**统一能力注册和发现系统**，提供：
 - `system_manager.py` - 系统管理器（已集成）
 - `health_monitor.py` - 健康监控（已集成）
 
+### 三闭环自治能力（已打通）
+
+系统已实现并打通以下三条自治闭环：
+
+1. **自愈 → 自编程 → 验证**
+   - Node_112 检测异常并诊断问题
+   - AutoFixer 触发 `FixAction.CODE_FIX`
+   - AutonomousCoder 生成修复并在沙箱测试
+   - 通过后自动提交并由 Node_112 验证修复
+
+2. **学习 → 决策权重反馈**
+   - LearningOptimizer 产出性能洞察
+   - Planner 通过 `update_decision_weights` 调整策略权重
+   - 下一次路由优先使用新的策略
+
+3. **能力缺口 → 自动扩展**
+   - AutonomousCoder 生成新节点代码
+   - 自动注册到 NodeFactory 与 CapabilityManager
+   - 能力索引更新后可自动路由新节点
+
 **验证工具**：
 ```bash
 # 验证能力注册系统
