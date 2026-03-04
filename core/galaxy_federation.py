@@ -122,6 +122,12 @@ class GalaxyFederation:
         self._offline_threshold: int = int(
             os.environ.get("FEDERATION_OFFLINE_THRESHOLD", "3")
         )
+        # Minimum seconds between accepted heartbeats from the same peer (anti-spam throttle)
+        self._min_heartbeat_interval: float = float(
+            os.environ.get("FEDERATION_MIN_HEARTBEAT_INTERVAL", "5")
+        )
+        # Tracks the last time a heartbeat was accepted from each peer instance_id
+        self._last_received: Dict[str, float] = {}
 
         # 从环境变量预注册 peers
         for url in _federation_peers():
@@ -328,12 +334,20 @@ class GalaxyFederation:
         if not instance_id:
             return {"status": "error", "error": "missing instance_id"}
 
+        # Throttle: reject if within min_heartbeat_interval to avoid spam
+        now = time.time()
+        last = self._last_received.get(instance_id, 0.0)
+        if now - last < self._min_heartbeat_interval:
+            retry_after = round(self._min_heartbeat_interval - (now - last), 1)
+            return {"status": "throttled", "retry_after": retry_after}
+        self._last_received[instance_id] = now
+
         if instance_id not in self._peers:
             self._peers[instance_id] = PeerInstance(
                 instance_id=instance_id, url=url, status="healthy"
             )
         else:
-            self._peers[instance_id].last_heartbeat = time.time()
+            self._peers[instance_id].last_heartbeat = now
             self._peers[instance_id].status = "healthy"
             if url:
                 self._peers[instance_id].url = url
@@ -341,7 +355,7 @@ class GalaxyFederation:
         return {
             "status": "ok",
             "instance_id": self.instance_id,
-            "timestamp": time.time(),
+            "timestamp": now,
         }
 
     def local_info(self) -> Dict:

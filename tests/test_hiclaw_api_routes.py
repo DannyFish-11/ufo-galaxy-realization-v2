@@ -346,6 +346,45 @@ class TestFederationRoutes:
         )
         assert r.status_code == 400
 
+    def test_federation_health(self, client):
+        """GET /api/v1/federation/health — 联邦健康摘要"""
+        r = client.get("/api/v1/federation/health")
+        assert r.status_code == 200
+        data = r.json()
+        assert "instance_id" in data
+        assert "peers_count" in data
+        assert "alive" in data
+        assert "degraded" in data
+        assert "offline" in data
+        assert "enabled" in data
+
+    def test_peer_ping_not_found(self, client):
+        """GET /api/v1/federation/peers/{instance_id}/ping — 未知 peer 返回 404"""
+        r = client.get("/api/v1/federation/peers/nonexistent-peer-xyz/ping")
+        assert r.status_code == 404
+
+    def test_peer_ping_known_peer(self, client):
+        """GET /api/v1/federation/peers/{instance_id}/ping — 已知 peer 返回状态"""
+        r = client.get("/api/v1/federation/peers/galaxy-B/ping")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["instance_id"] == "galaxy-B"
+        assert "status" in data
+        assert "last_heartbeat_age_s" in data
+        assert "alive" in data
+
+    def test_heartbeat_throttle(self, client):
+        """POST /api/v1/federation/heartbeat — 短时间内二次心跳被 throttle"""
+        payload = {"instance_id": "galaxy-throttle-test", "url": "http://127.0.0.1:9999"}
+        r1 = client.post("/api/v1/federation/heartbeat", json=payload)
+        assert r1.status_code == 200
+        # Second immediate heartbeat should be throttled (min_interval default 5s)
+        r2 = client.post("/api/v1/federation/heartbeat", json=payload)
+        assert r2.status_code == 200
+        data2 = r2.json()
+        assert data2["status"] == "throttled"
+        assert "retry_after" in data2
+
 
 # ============================================================================
 # 运行入口
