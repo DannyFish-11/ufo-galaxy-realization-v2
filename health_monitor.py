@@ -361,10 +361,28 @@ async def get_status():
     results = await monitor.check_all()
     summary = monitor.get_summary()
     
-    return {
+    response = {
         "summary": summary,
         "nodes": results
     }
+
+    # Surface federation health summary if available
+    try:
+        from core.galaxy_federation import get_federation, _federation_enabled
+        fed = get_federation()
+        peers = fed.list_peers()
+        response["federation"] = {
+            "instance_id": fed.instance_id,
+            "enabled": _federation_enabled(),
+            "peers_count": len(peers),
+            "alive": sum(1 for p in peers if p["status"] == "healthy"),
+            "degraded": sum(1 for p in peers if p["status"] == "degraded"),
+            "offline": sum(1 for p in peers if p["status"] == "offline"),
+        }
+    except Exception:
+        pass
+
+    return response
 
 @app.get("/api/history/{node_id}")
 async def get_history(node_id: str):

@@ -2282,6 +2282,15 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # 凭证 Vault API
     # ========================================================================
 
+    # Rate limiters for sensitive endpoints (in-memory token bucket per client IP)
+    try:
+        from core.security_middleware import RateLimiter as _RateLimiter
+        _vault_fetch_limiter = _RateLimiter(requests_per_minute=30, burst_size=10)
+        _channel_send_limiter = _RateLimiter(requests_per_minute=60, burst_size=20)
+    except Exception:
+        _vault_fetch_limiter = None
+        _channel_send_limiter = None
+
     @router.post("/api/v1/vault/credentials")
     async def vault_set_credential(request: Request):
         """管理端写入/更新凭证"""
@@ -2339,6 +2348,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/vault/fetch")
     async def vault_fetch_by_token(request: Request):
         """Worker 用 token 拉取凭证"""
+        if _vault_fetch_limiter is not None:
+            client_ip = request.client.host if request.client else "unknown"
+            if not _vault_fetch_limiter.is_allowed(client_ip):
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
         body = await request.json()
         token = body.get("token", "")
         key_name = body.get("key_name", "")
@@ -2503,6 +2516,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/channels/{plugin_id}/send")
     async def channel_send_message(plugin_id: str, request: Request):
         """通过指定渠道插件发送消息"""
+        if _channel_send_limiter is not None:
+            client_ip = request.client.host if request.client else "unknown"
+            if not _channel_send_limiter.is_allowed(client_ip):
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
         body = await request.json()
         message = body.get("message", "")
         if not message:
@@ -2648,6 +2665,48 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             from core.galaxy_federation import get_federation
             result = await get_federation().forward_task(target, task)
             return JSONResponse(result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/federation/health")
+    async def federation_health_summary():
+        """联邦健康摘要：本地状态 + peers 数量 + alive/degraded/offline 统计"""
+        try:
+            from core.galaxy_federation import get_federation, _federation_enabled
+            fed = get_federation()
+            peers = fed.list_peers()
+            alive = sum(1 for p in peers if p["status"] == "healthy")
+            degraded = sum(1 for p in peers if p["status"] == "degraded")
+            offline = sum(1 for p in peers if p["status"] == "offline")
+            return JSONResponse({
+                "instance_id": fed.instance_id,
+                "local_url": fed.local_url,
+                "enabled": _federation_enabled(),
+                "peers_count": len(peers),
+                "alive": alive,
+                "degraded": degraded,
+                "offline": offline,
+            })
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/federation/peers/{instance_id}/ping")
+    async def federation_peer_ping(instance_id: str):
+        """检查特定 peer 的最后心跳时间，返回状态和心跳年龄"""
+        try:
+            from core.galaxy_federation import get_federation
+            peer = get_federation().get_peer(instance_id)
+            if not peer:
+                raise HTTPException(status_code=404, detail=f"Peer '{instance_id}' not found")
+            age = time.time() - peer.last_heartbeat
+            return JSONResponse({
+                "instance_id": instance_id,
+                "status": peer.status,
+                "last_heartbeat_age_s": round(age, 1),
+                "alive": peer.is_alive(),
+            })
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

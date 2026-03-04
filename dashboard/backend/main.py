@@ -780,3 +780,27 @@ async def get_env_status():
         }
     
     return {"status": status}
+
+
+# ============================================================================
+# 联邦健康摘要
+# ============================================================================
+
+@app.get("/api/v1/federation/health")
+async def get_federation_health():
+    """联邦健康摘要：本地状态 + peers 数量 + alive/degraded/offline 统计"""
+    try:
+        from core.galaxy_federation import get_federation, _federation_enabled
+        fed = get_federation()
+        peers = fed.list_peers()
+        return {
+            "instance_id": fed.instance_id,
+            "local_url": fed.local_url,
+            "enabled": _federation_enabled(),
+            "peers_count": len(peers),
+            "alive": sum(1 for p in peers if p["status"] == "healthy"),
+            "degraded": sum(1 for p in peers if p["status"] == "degraded"),
+            "offline": sum(1 for p in peers if p["status"] == "offline"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
