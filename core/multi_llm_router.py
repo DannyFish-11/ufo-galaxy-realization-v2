@@ -452,11 +452,12 @@ class MultiLLMRouter:
         oneapi_key = os.environ.get("ONEAPI_API_KEY", "")
         oneapi_url = os.environ.get("ONEAPI_URL", "")
         if oneapi_key and not oneapi_key.startswith("your-") and oneapi_url:
+            models = self._discover_oneapi_models(oneapi_url, oneapi_key)
             cfg = ProviderConfig(
                 name="oneapi", api_key=oneapi_key,
                 base_url=f"{oneapi_url}/v1",
-                models=["gpt-4o", "gpt-4o-mini"],
-                default_model="gpt-4o",
+                models=models,
+                default_model=models[0] if models else "gpt-4o",
             )
             self.providers["oneapi"] = cfg
             self.adapters["oneapi"] = OpenAIAdapter(cfg)
@@ -465,6 +466,46 @@ class MultiLLMRouter:
             f"LLM 路由器已初始化，发现 {len(self.providers)} 个提供商: "
             f"{list(self.providers.keys())}"
         )
+
+    def _discover_oneapi_models(self, base_url: str, api_key: str) -> List[str]:
+        """从 config/api_config.json 读取已配置模型，并尝试通过 /v1/models 动态补充"""
+        models: List[str] = []
+
+        # 1. 读取 config/api_config.json 中预配置的模型
+        try:
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), "config", "api_config.json"
+            )
+            with open(config_path, "r", encoding="utf-8") as f:
+                api_cfg = json.load(f)
+            configured = api_cfg.get("oneapi", {}).get("models", [])
+            if isinstance(configured, list):
+                models.extend(configured)
+        except Exception as e:
+            logger.debug(f"Could not load config/api_config.json for OneAPI models: {e}")
+
+        # 2. 动态发现：调用 /v1/models
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(
+                    f"{base_url}/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    remote_ids = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m]
+                    for mid in remote_ids:
+                        if mid not in models:
+                            models.append(mid)
+        except Exception as e:
+            logger.debug(f"OneAPI /v1/models discovery failed (non-fatal): {e}")
+
+        # 3. 若仍为空，使用保守默认值
+        if not models:
+            models = ["gpt-4o", "gpt-4o-mini"]
+            logger.debug("OneAPI: falling back to default model list")
+
+        return models
 
     # ───────── 路由决策 ─────────
 

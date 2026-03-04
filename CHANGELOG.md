@@ -5,12 +5,29 @@ All notable changes to UFO Galaxy are documented here.
 ## [Unreleased]
 
 ### Added
-- CI workflow (`.github/workflows/ci.yml`) – runs pytest on push/PR to `main`
+- CI workflow (`.github/workflows/ci.yml`) – runs pytest (including dev dependencies) on push/PR to `main`
 - Cross-platform integration tests (`tests/test_cross_platform_integration.py`) covering AIP v3.0 protocol messages
+- Cross-device integration tests (`tests/test_cross_device_integration.py`) – full Android ↔ Server handshake
 - `CHANGELOG.md` and `CONTRIBUTING.md` documentation
+- `vision_request` handler in `android_bridge.py`: Android screenshot → VisionPipeline analysis → `task_assign` reply (断链2/3)
+- OneAPI dynamic model discovery in `multi_llm_router.py` via `config/api_config.json` + `/v1/models` (断链4)
+- `capability_report` handler persists `supported_actions` into `AndroidDevice` (断链5)
+- `MessageBuilder.capability_report_ack`, `MessageBuilder.diagnostics_payload_ack`, `MessageBuilder.vision_result` factory methods
 
 ### Removed
 - Duplicate Android client source code under `enhancements/clients/android_client/` (Kotlin, Gradle, scripts, extra docs); canonical source lives at [DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android)
+
+---
+
+## [v2.1]
+
+### Added – PR #5: Remove Android client duplication
+- Removed Android client source (Kotlin, Gradle, scripts) from this repository to eliminate duplication.
+- Redirected contributors to [DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) as the sole canonical source for the Android client.
+
+### Added – PR #4: Wire `/ws/android` to `android_bridge`
+- Integrated the Android stack with the V2 backend by wiring the `/ws/android` WebSocket endpoint to `android_bridge`.
+- Enables end-to-end AIP v3.0 message flow between the Android client and the server.
 
 ---
 
