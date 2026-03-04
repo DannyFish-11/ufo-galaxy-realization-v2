@@ -518,15 +518,45 @@ class SelfHealingEngine:
         """执行一次自愈循环"""
         logger.info("=== Starting self-healing cycle ===")
 
+        # Phase 1: Detection
+        logger.info("[DETECTION] Collecting system metrics")
         metrics = self.detector.collect_metrics()
         status, issues = self.detector.detect_anomalies(metrics)
 
         if status == HealthStatus.HEALTHY:
-            logger.info("System is healthy")
+            logger.info("[DETECTION] System is healthy — no action needed")
             return None
 
+        logger.info(f"[DETECTION] Anomalies detected: {[i.value for i in issues]}")
+
+        # Phase 2: Diagnosis
+        logger.info("[DIAGNOSIS] Analyzing detected issues")
         diagnosis = self.diagnoser.diagnose(metrics, issues)
+        logger.info(f"[DIAGNOSIS] Primary issue: {diagnosis.issue_type.value}, "
+                    f"recommendation: {diagnosis.recommendation}")
+
+        # Phase 3: Fix (may invoke CODE_FIX path with sandbox testing)
+        logger.info(f"[CODE_FIX] Determining and applying fix action")
         fix_result = self.fixer.fix(diagnosis)
+        if fix_result.action == FixAction.CODE_FIX:
+            if fix_result.success:
+                logger.info("[SANDBOX_TEST] Code fix sandbox tests passed")
+                logger.info("[COMMIT] Applying code fix (sandbox tests passed)")
+            else:
+                logger.warning("[SANDBOX_TEST] Code fix sandbox tests failed — fix not committed")
+        logger.info(f"[CODE_FIX] Action={fix_result.action.value}, "
+                    f"success={fix_result.success}, message={fix_result.message}")
+
+        # Phase 4: Verification — re-check system health post-fix
+        logger.info("[VERIFICATION] Re-checking system health after fix")
+        post_metrics = self.detector.collect_metrics()
+        post_status, post_issues = self.detector.detect_anomalies(post_metrics)
+        if post_status == HealthStatus.HEALTHY:
+            logger.info("[VERIFICATION] System health restored — fix verified OK")
+        else:
+            logger.warning(f"[VERIFICATION] System still unhealthy after fix: "
+                           f"{[i.value for i in post_issues]}")
+
         report = self.reporter.generate_report(metrics, diagnosis, fix_result)
 
         logger.info(f"=== Cycle completed: {report.incident_id} ===")
