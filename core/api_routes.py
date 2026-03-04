@@ -2278,6 +2278,247 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         await mesh_coordinator.probe_all_peers()
         return JSONResponse({"status": "probed", "peers": mesh_coordinator.list_peers()})
 
+    # ========================================================================
+    # 凭证 Vault API
+    # ========================================================================
+
+    @router.post("/api/v1/vault/credentials")
+    async def vault_set_credential(request: Request):
+        """管理端写入/更新凭证"""
+        body = await request.json()
+        key_name = body.get("key_name", "")
+        value = body.get("value", "")
+        if not key_name or not value:
+            raise HTTPException(status_code=400, detail="key_name and value are required")
+        try:
+            from core.credential_vault import get_vault
+            get_vault().set_credential(key_name, value)
+            return JSONResponse({"success": True, "key_name": key_name})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/vault/credentials")
+    async def vault_list_credentials():
+        """列出所有凭证键名（不返回值）"""
+        try:
+            from core.credential_vault import get_vault
+            return JSONResponse({"keys": get_vault().list_credential_keys()})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.delete("/api/v1/vault/credentials/{key_name}")
+    async def vault_delete_credential(key_name: str):
+        """删除 Vault 内的凭证"""
+        try:
+            from core.credential_vault import get_vault
+            deleted = get_vault().delete_credential(key_name)
+            return JSONResponse({"success": deleted, "key_name": key_name})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/vault/tokens")
+    async def vault_issue_token(request: Request):
+        """为 Worker/Device 颁发短期 token"""
+        body = await request.json()
+        device_id = body.get("device_id", "")
+        ttl = int(body.get("ttl", 300))
+        scopes = body.get("scopes")  # None 表示全部
+        if not device_id:
+            raise HTTPException(status_code=400, detail="device_id is required")
+        try:
+            from core.credential_vault import get_vault
+            token = get_vault().issue_token(device_id, ttl=ttl, scopes=scopes)
+            return JSONResponse({"success": True, "token": token, "ttl": ttl})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/vault/fetch")
+    async def vault_fetch_by_token(request: Request):
+        """Worker 用 token 拉取凭证"""
+        body = await request.json()
+        token = body.get("token", "")
+        key_name = body.get("key_name", "")
+        if not token or not key_name:
+            raise HTTPException(status_code=400, detail="token and key_name are required")
+        try:
+            from core.credential_vault import get_vault
+            value = get_vault().get_credential_by_token(token, key_name)
+            if value is None:
+                raise HTTPException(status_code=403, detail="Invalid token or insufficient scope")
+            return JSONResponse({"success": True, "key_name": key_name, "value": value})
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/vault/audit")
+    async def vault_audit_log(limit: int = 100):
+        """获取最近 N 条凭证访问审计记录"""
+        try:
+            from core.credential_vault import get_vault
+            return JSONResponse({"records": get_vault().get_audit_log(limit=limit)})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ========================================================================
+    # 成本追踪 API
+    # ========================================================================
+
+    @router.get("/api/v1/cost/records")
+    async def cost_get_records(limit: int = 50):
+        """获取最近 N 条 LLM 调用成本记录"""
+        try:
+            from core.cost_tracker import get_cost_tracker
+            return JSONResponse({"records": get_cost_tracker().get_recent(limit=limit)})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/cost/summary")
+    async def cost_get_summary():
+        """获取 LLM 调用成本汇总统计"""
+        try:
+            from core.cost_tracker import get_cost_tracker
+            return JSONResponse(get_cost_tracker().get_summary())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ========================================================================
+    # 渠道插件 API
+    # ========================================================================
+
+    @router.get("/api/v1/channels")
+    async def channel_list_plugins():
+        """列出已加载的渠道插件"""
+        try:
+            from core.channel_plugins import get_channel_loader
+            return JSONResponse({"plugins": get_channel_loader().list_plugins()})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/channels/load")
+    async def channel_load_plugin(request: Request):
+        """加载渠道插件（内置或外部路径）"""
+        body = await request.json()
+        plugin_id = body.get("plugin_id", "")
+        path = body.get("path")  # None 表示内置
+        config = body.get("config")
+        if not plugin_id:
+            raise HTTPException(status_code=400, detail="plugin_id is required")
+        try:
+            from core.channel_plugins import get_channel_loader
+            result = await get_channel_loader().load_plugin(plugin_id, path=path, config=config)
+            if not result.get("success"):
+                raise HTTPException(status_code=400, detail=result.get("error", "load failed"))
+            return JSONResponse(result)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/channels/{plugin_id}/send")
+    async def channel_send_message(plugin_id: str, request: Request):
+        """通过指定渠道插件发送消息"""
+        body = await request.json()
+        message = body.get("message", "")
+        if not message:
+            raise HTTPException(status_code=400, detail="message is required")
+        try:
+            from core.channel_plugins import get_channel_loader
+            result = await get_channel_loader().send(plugin_id, message, **{
+                k: v for k, v in body.items() if k != "message"
+            })
+            return JSONResponse(result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/channels/health")
+    async def channel_health_check():
+        """检查所有已加载渠道插件健康状态"""
+        try:
+            from core.channel_plugins import get_channel_loader
+            results = await get_channel_loader().health_check_all()
+            return JSONResponse({"health": results})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ========================================================================
+    # Galaxy Federation API
+    # ========================================================================
+
+    @router.get("/api/v1/federation/info")
+    async def federation_info():
+        """获取本实例联邦信息"""
+        try:
+            from core.galaxy_federation import get_federation
+            return JSONResponse(get_federation().local_info())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/federation/peers")
+    async def federation_list_peers():
+        """列出所有已知的联邦 peer 实例"""
+        try:
+            from core.galaxy_federation import get_federation
+            return JSONResponse({"peers": get_federation().list_peers()})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/federation/peers")
+    async def federation_register_peer(request: Request):
+        """手动注册一个 peer 实例"""
+        body = await request.json()
+        url = body.get("url", "")
+        instance_id = body.get("instance_id", "")
+        name = body.get("name", "")
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+        try:
+            from core.galaxy_federation import get_federation
+            peer = get_federation().register_peer(url, instance_id=instance_id, name=name)
+            return JSONResponse({"success": True, "peer": peer.to_dict()})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/federation/heartbeat")
+    async def federation_receive_heartbeat(request: Request):
+        """接收来自其他实例的心跳"""
+        body = await request.json()
+        try:
+            from core.galaxy_federation import get_federation
+            result = get_federation().receive_heartbeat(body)
+            return JSONResponse(result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/federation/task")
+    async def federation_receive_task(request: Request):
+        """接收来自其他实例的转发任务（简单 echo 处理）"""
+        body = await request.json()
+        from_instance = body.get("from_instance", "unknown")
+        task = body.get("task", {})
+        logger.info(f"Federation task received from {from_instance}: {task.get('command', '')}")
+        # 实际场景中可接入 command_router 处理
+        return JSONResponse({
+            "success": True,
+            "from_instance": from_instance,
+            "task_received": task,
+        })
+
+    @router.post("/api/v1/federation/forward")
+    async def federation_forward_task(request: Request):
+        """将任务转发给指定 peer 实例"""
+        body = await request.json()
+        target = body.get("target", "")
+        task = body.get("task", {})
+        if not target:
+            raise HTTPException(status_code=400, detail="target is required")
+        try:
+            from core.galaxy_federation import get_federation
+            result = await get_federation().forward_task(target, task)
+            return JSONResponse(result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     return router
 
 
