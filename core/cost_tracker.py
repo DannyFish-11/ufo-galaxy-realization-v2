@@ -148,6 +148,20 @@ class CostTracker:
         """获取最近 N 条成本记录"""
         return [r.to_dict() for r in self._records[-limit:]]
 
+    def get_recent_filtered(
+        self,
+        limit: int = 50,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> List[Dict]:
+        """获取最近 N 条成本记录，支持按 provider/model 过滤"""
+        records = [
+            r for r in self._records
+            if (not provider or r.provider == provider)
+            and (not model or r.model == model)
+        ]
+        return [r.to_dict() for r in records[-limit:]]
+
     def get_summary(self) -> Dict:
         """获取成本汇总统计"""
         if not self._records:

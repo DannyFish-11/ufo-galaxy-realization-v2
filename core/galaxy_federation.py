@@ -183,6 +183,15 @@ class GalaxyFederation:
     def get_peer(self, instance_id: str) -> Optional[PeerInstance]:
         return self._peers.get(instance_id)
 
+    def cleanup_stale_peers(self, max_age: int = 60) -> int:
+        """移除 last_heartbeat 超过 max_age 秒的 stale peers，返回移除数量"""
+        cutoff = time.time() - max_age
+        stale = [pid for pid, p in self._peers.items() if p.last_heartbeat < cutoff]
+        for pid in stale:
+            del self._peers[pid]
+            logger.info(f"Stale peer removed: {pid}")
+        return len(stale)
+
     # ================================================================
     # 心跳
     # ================================================================
