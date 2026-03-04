@@ -169,6 +169,16 @@ class MessageType(str, Enum):
     ERROR = "error"
     ERROR_RECOVERY = "error_recovery"
 
+    # === 能力/诊断上报 ===
+    CAPABILITY_REPORT = "capability_report"
+    CAPABILITY_REPORT_ACK = "capability_report_ack"
+    DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
+    DIAGNOSTICS_PAYLOAD_ACK = "diagnostics_payload_ack"
+
+    # === 视觉请求 ===
+    VISION_REQUEST = "vision_request"
+    VISION_RESULT = "vision_result"
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -358,7 +368,8 @@ class AndroidDevice:
     screen_width: Optional[int] = None
     screen_height: Optional[int] = None
     capabilities: int = 0
-    
+    supported_actions: List[str] = field(default_factory=list)  # Action types this device can perform (e.g., tap, swipe, screenshot)
+
     # 连接状态
     connected: bool = False
     last_heartbeat: float = 0
@@ -381,6 +392,7 @@ class AndroidDevice:
             "screen_height": self.screen_height,
             "capabilities": self.capabilities,
             "capabilities_list": DeviceCapability.to_list(self.capabilities),
+            "supported_actions": self.supported_actions,
             "connected": self.connected,
             "last_heartbeat": self.last_heartbeat,
             "current_task_id": self.current_task_id
@@ -537,6 +549,37 @@ class MessageBuilder:
             msg["details"] = details
         return msg
 
+    @classmethod
+    def capability_report_ack(cls, device_id: str, accepted: bool = True,
+                              message: Optional[str] = None) -> Dict[str, Any]:
+        """能力上报确认"""
+        msg = cls._base_message(MessageType.CAPABILITY_REPORT_ACK, device_id)
+        msg["accepted"] = accepted
+        if message:
+            msg["message"] = message
+        return msg
+
+    @classmethod
+    def diagnostics_payload_ack(cls, device_id: str, accepted: bool = True,
+                                message: Optional[str] = None) -> Dict[str, Any]:
+        """诊断数据确认"""
+        msg = cls._base_message(MessageType.DIAGNOSTICS_PAYLOAD_ACK, device_id)
+        msg["accepted"] = accepted
+        if message:
+            msg["message"] = message
+        return msg
+
+    @classmethod
+    def vision_result(cls, device_id: str, task_id: str,
+                      result: Dict[str, Any]) -> Dict[str, Any]:
+        """视觉分析结果（以 task_assign 形式下发操作指令）"""
+        return cls.task_assign(
+            device_id=device_id,
+            task_id=task_id,
+            task_type="vision_action",
+            payload=result,
+        )
+
 
 # =============================================================================
 # Android Bridge 服务
@@ -582,6 +625,13 @@ class AndroidBridge:
         self._message_handlers[MessageType.APP_START] = self._handle_generic_forward
         self._message_handlers[MessageType.APP_STOP] = self._handle_generic_forward
         self._message_handlers[MessageType.SYSTEM_COMMAND] = self._handle_generic_forward
+
+        # 能力/诊断上报
+        self._message_handlers[MessageType.CAPABILITY_REPORT] = self._handle_capability_report
+        self._message_handlers[MessageType.DIAGNOSTICS_PAYLOAD] = self._handle_diagnostics_payload
+
+        # 视觉请求
+        self._message_handlers[MessageType.VISION_REQUEST] = self._handle_vision_request
     
     async def handle_message(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理来自安卓设备的消息"""
@@ -706,6 +756,95 @@ class AndroidBridge:
         device_id = message.get("device_id")
         logger.debug(f"Agent ping from {device_id}")
         return MessageBuilder.heartbeat_ack(device_id)
+
+    async def _handle_capability_report(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理设备能力上报，并持久化 supported_actions"""
+        device_id = message.get("device_id")
+        platform = message.get("platform")
+        supported_actions = message.get("supported_actions", [])
+        version = message.get("version")
+        logger.info(f"Capability report from {device_id}: platform={platform}, "
+                    f"actions={supported_actions}, version={version}")
+
+        async with self._lock:
+            if device_id in self._devices:
+                self._devices[device_id].supported_actions = list(supported_actions)
+                self._devices[device_id].last_heartbeat = time.time()
+
+        return MessageBuilder.capability_report_ack(
+            device_id=device_id or "unknown",
+            accepted=True,
+            message="capability_report accepted",
+        )
+
+    async def _handle_diagnostics_payload(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理诊断数据上报"""
+        device_id = message.get("device_id")
+        error_type = message.get("error_type")
+        error_context = message.get("error_context")
+        task_id = message.get("task_id")
+        node_name = message.get("node_name")
+        logger.warning(f"Diagnostics from {device_id}: error_type={error_type}, "
+                       f"task_id={task_id}, node={node_name}, context={error_context}")
+
+        return MessageBuilder.diagnostics_payload_ack(
+            device_id=device_id or "unknown",
+            accepted=True,
+            message="diagnostics_payload accepted",
+        )
+
+    async def _handle_vision_request(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """处理视觉请求：Android 上传截图 → VisionPipeline 分析 → task_assign 回推"""
+        device_id = message.get("device_id")
+        task_id = message.get("task_id") or message.get("message_id") or str(uuid.uuid4())
+        image_base64 = message.get("image_base64", "")
+        mode = message.get("mode", "full")
+        task_context = message.get("task_context", "")
+
+        logger.info(f"Vision request from {device_id}: task_id={task_id}, mode={mode}")
+
+        if not image_base64:
+            return MessageBuilder.error(
+                device_id or "unknown",
+                "VISION_NO_IMAGE",
+                "image_base64 is required for vision_request",
+            )
+
+        # 调用 VisionPipeline 进行分析
+        vision_payload: Dict[str, Any] = {}
+        try:
+            from core.vision_pipeline import VisionPipeline
+            pipeline = VisionPipeline()
+            vision_result = await pipeline.understand(
+                image_base64=image_base64,
+                mode=mode,
+                task_context=task_context,
+            )
+            vision_payload = {
+                "success": vision_result.success,
+                "analysis": vision_result.to_dict() if hasattr(vision_result, "to_dict") else {
+                    k: v for k, v in vars(vision_result).items() if not k.startswith("_")
+                },
+            }
+        except Exception as e:
+            logger.warning(f"VisionPipeline unavailable, returning raw error: {e}")
+            vision_payload = {"success": False, "error": str(e)}
+
+        # 以 task_assign 形式把结果回推给 Android 设备
+        response = MessageBuilder.vision_result(
+            device_id=device_id or "unknown",
+            task_id=task_id,
+            result=vision_payload,
+        )
+
+        # 通过 WebSocket 主动推送（异步，不等待 ACK）
+        try:
+            if websocket is not None:
+                await websocket.send_json(response)
+        except Exception as e:
+            logger.warning(f"Failed to push vision_result to {device_id}: {e}")
+
+        return response
     
     # =========================================================================
     # 公共 API

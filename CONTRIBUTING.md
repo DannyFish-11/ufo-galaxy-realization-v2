@@ -16,6 +16,13 @@ Thank you for contributing!
 python -m pytest tests/ -v
 ```
 
+> **Note:** `pytest` and `pytest-asyncio` live in `requirements-dev.txt`.
+> Install them before running tests:
+>
+> ```bash
+> pip install -r requirements-dev.txt
+> ```
+
 ### Verifying the Three Autonomous Loops
 
 ```bash
