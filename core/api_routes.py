@@ -2312,7 +2312,11 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         try:
             from core.credential_vault import get_vault
             deleted = get_vault().delete_credential(key_name)
-            return JSONResponse({"success": deleted, "key_name": key_name})
+            if not deleted:
+                raise HTTPException(status_code=404, detail=f"Credential '{key_name}' not found")
+            return JSONResponse({"success": True, "key_name": key_name})
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
