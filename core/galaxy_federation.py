@@ -76,6 +76,8 @@ class PeerInstance:
     status: str = "unknown"  # healthy / degraded / offline
     capabilities: List[str] = field(default_factory=list)
     latency_ms: float = 0.0
+    consecutive_failures: int = 0
+    backoff_until: float = 0.0
 
     def is_alive(self, timeout: float = 30.0) -> bool:
         return (time.time() - self.last_heartbeat) < timeout
@@ -117,6 +119,9 @@ class GalaxyFederation:
             os.environ.get("FEDERATION_HEARTBEAT_INTERVAL", "15")
         )
         self._running = False
+        self._offline_threshold: int = int(
+            os.environ.get("FEDERATION_OFFLINE_THRESHOLD", "3")
+        )
 
         # 从环境变量预注册 peers
         for url in _federation_peers():
@@ -200,7 +205,11 @@ class GalaxyFederation:
             "timestamp": time.time(),
         }
 
+        now = time.time()
         for peer in list(self._peers.values()):
+            if peer.backoff_until > now:
+                logger.debug(f"Skipping heartbeat to {peer.url} (backoff until {peer.backoff_until:.1f})")
+                continue
             asyncio.create_task(self._ping_peer(peer, payload))
 
     async def _ping_peer(self, peer: PeerInstance, payload: Dict) -> None:
@@ -219,9 +228,20 @@ class GalaxyFederation:
                     else:
                         peer.status = "degraded"
                     peer.last_heartbeat = time.time()
+                    peer.consecutive_failures = 0
+                    peer.backoff_until = 0.0
         except Exception as e:
-            peer.status = "offline"
-            logger.debug(f"Heartbeat to {peer.url} failed: {e}")
+            peer.consecutive_failures += 1
+            if peer.consecutive_failures >= self._offline_threshold:
+                peer.status = "offline"
+            else:
+                peer.status = "degraded"
+            backoff_secs = min(2 ** min(peer.consecutive_failures, 10) * 5, 120)
+            peer.backoff_until = time.time() + backoff_secs
+            logger.debug(
+                f"Heartbeat to {peer.url} failed "
+                f"(consecutive={peer.consecutive_failures}, backoff={backoff_secs}s): {e}"
+            )
 
     # ================================================================
     # 任务转发
@@ -245,7 +265,7 @@ class GalaxyFederation:
             远程响应字典
         """
         if not _AIOHTTP_AVAILABLE:
-            return {"success": False, "error": "aiohttp not installed"}
+            return {"success": False, "error": "aiohttp not installed", "error_type": "MissingDependency", "target": target_url_or_id}
 
         # 解析目标
         if target_url_or_id.startswith("http"):
@@ -253,7 +273,7 @@ class GalaxyFederation:
         else:
             peer = self._peers.get(target_url_or_id)
             if not peer:
-                return {"success": False, "error": f"Unknown peer: {target_url_or_id}"}
+                return {"success": False, "error": f"Unknown peer: {target_url_or_id}", "error_type": "UnknownPeer", "target": target_url_or_id}
             url = peer.url
 
         payload = {
@@ -274,9 +294,19 @@ class GalaxyFederation:
                         return await resp.json()
                     else:
                         text = await resp.text()
-                        return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                        return {
+                            "success": False,
+                            "error": f"HTTP {resp.status}: {text}",
+                            "error_type": "HTTPError",
+                            "target": url,
+                        }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "target": url,
+            }
 
     # ================================================================
     # 接收端（处理来自其他实例的心跳/任务）

@@ -233,6 +233,14 @@ class CredentialVault:
         """获取最近 N 条审计记录"""
         return self._audit_log[-limit:]
 
+    def get_health_metrics(self) -> Dict:
+        """返回 Vault 健康指标（token 数量、凭证键数量、审计条目数）"""
+        return {
+            "token_count": len(self._tokens),
+            "credential_key_count": len(self._credentials),
+            "audit_entries": len(self._audit_log),
+        }
+
     def get_token_info(self, token: str) -> Optional[Dict]:
         """获取 token 元信息（不含凭证值）"""
         info = self._tokens.get(token)

@@ -2364,6 +2364,25 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    @router.post("/api/v1/vault/cleanup")
+    async def vault_cleanup_tokens():
+        """清理过期 token，返回清理数量"""
+        try:
+            from core.credential_vault import get_vault
+            count = get_vault().cleanup_expired_tokens()
+            return JSONResponse({"success": True, "cleaned_up": count})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/vault/health")
+    async def vault_health():
+        """Vault 健康状态：token 数量、凭证键数量、审计条目数"""
+        try:
+            from core.credential_vault import get_vault
+            return JSONResponse(get_vault().get_health_metrics())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     # ========================================================================
     # 成本追踪 API
     # ========================================================================
@@ -2383,6 +2402,15 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         try:
             from core.cost_tracker import get_cost_tracker
             return JSONResponse(get_cost_tracker().get_summary())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/cost/health")
+    async def cost_health():
+        """获取成本追踪器写入健康状态"""
+        try:
+            from core.cost_tracker import get_cost_tracker
+            return JSONResponse(get_cost_tracker().get_write_health())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -2441,7 +2469,16 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         try:
             from core.channel_plugins import get_channel_loader
             results = await get_channel_loader().health_check_all()
-            return JSONResponse({"health": results})
+            if not results:
+                overall = "unknown"
+            elif all(
+                isinstance(v, dict) and v.get("healthy", False)
+                for v in results.values()
+            ):
+                overall = "healthy"
+            else:
+                overall = "degraded"
+            return JSONResponse({"health": results, "overall": overall})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

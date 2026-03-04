@@ -42,6 +42,7 @@ class UnifiedHealthManager:
         self._concurrency = None     # ConcurrencyManager
         self._discovery = None       # NodeDiscoveryService
         self._health_checker = None  # HealthChecker
+        self._channel_loader = None  # ChannelPluginLoader
 
         self._running = False
         self._sync_task: Optional[asyncio.Task] = None
@@ -54,6 +55,7 @@ class UnifiedHealthManager:
         concurrency=None,
         discovery=None,
         health_checker=None,
+        channel_loader=None,
     ):
         """连接各子系统（可选，缺失的会跳过）"""
         self._monitoring = monitoring
@@ -62,6 +64,7 @@ class UnifiedHealthManager:
         self._concurrency = concurrency
         self._discovery = discovery
         self._health_checker = health_checker
+        self._channel_loader = channel_loader
 
         # 向 HealthAggregator 注册额外检查
         if monitoring and monitoring.health:
@@ -81,6 +84,10 @@ class UnifiedHealthManager:
                 monitoring.health.register_check(
                     "node_discovery", self._check_discovery
                 )
+            if channel_loader:
+                monitoring.health.register_check(
+                    "channel_plugins", self._check_channel_plugins
+                )
 
         logger.info(
             "UnifiedHealthManager 已连接 "
@@ -88,7 +95,8 @@ class UnifiedHealthManager:
             f"load={'Y' if load_monitor else 'N'}, "
             f"errors={'Y' if error_tracker else 'N'}, "
             f"concurrency={'Y' if concurrency else 'N'}, "
-            f"discovery={'Y' if discovery else 'N'})"
+            f"discovery={'Y' if discovery else 'N'}, "
+            f"channels={'Y' if channel_loader else 'N'})"
         )
 
     async def start(self):
@@ -234,6 +242,20 @@ class UnifiedHealthManager:
                 "status": "healthy",
                 "total_nodes": total,
                 "healthy_nodes": healthy,
+            }
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
+
+    def _check_channel_plugins(self) -> Dict:
+        """渠道插件检查"""
+        if not self._channel_loader:
+            return {"status": "unhealthy", "error": "channel_loader not configured"}
+        try:
+            plugins = self._channel_loader.list_plugins()
+            return {
+                "status": "healthy",
+                "plugin_count": len(plugins),
+                "plugins": [p["plugin_id"] for p in plugins],
             }
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
