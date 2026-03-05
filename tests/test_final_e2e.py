@@ -66,9 +66,9 @@ def test_key_nodes():
         ('Node_43_MAVLink', '无人机控制'),
         ('Node_49_OctoPrint', '3D打印机控制'),
         ('Node_51_QuantumDispatcher', '量子计算调度'),
-        ('Node_12_File', '文件操作'),
-        ('Node_13_Web', '网络请求'),
-        ('Node_14_Shell', 'Shell命令执行')
+        ('Node_120_File', '文件操作'),
+        ('Node_121_Web', '网络请求'),
+        ('Node_122_Shell', 'Shell命令执行')
     ]
     
     for node_name, description in key_nodes:

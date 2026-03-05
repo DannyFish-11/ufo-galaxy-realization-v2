@@ -146,10 +146,10 @@
       "last_updated": "2026-03-03T15:35:39.715352"
     },
     {
-      "name": "Node_12_File",
+      "name": "Node_120_File",
       "description": "File",
-      "node_id": "Node_12_File",
-      "node_name": "Node_12_File",
+      "node_id": "Node_120_File",
+      "node_name": "Node_120_File",
       "category": "tools",
       "input_schema": {},
       "output_schema": {},
@@ -168,10 +168,10 @@
       "last_updated": "2026-03-03T15:35:39.715363"
     },
     {
-      "name": "Node_13_Web",
+      "name": "Node_121_Web",
       "description": "Web",
-      "node_id": "Node_13_Web",
-      "node_name": "Node_13_Web",
+      "node_id": "Node_121_Web",
+      "node_name": "Node_121_Web",
       "category": "tools",
       "input_schema": {},
       "output_schema": {},
@@ -190,10 +190,10 @@
       "last_updated": "2026-03-03T15:35:39.715374"
     },
     {
-      "name": "Node_14_Shell",
+      "name": "Node_122_Shell",
       "description": "Shell",
-      "node_id": "Node_14_Shell",
-      "node_name": "Node_14_Shell",
+      "node_id": "Node_122_Shell",
+      "node_name": "Node_122_Shell",
       "category": "tools",
       "input_schema": {},
       "output_schema": {},
@@ -289,10 +289,10 @@
       "last_updated": "2026-03-03T15:35:39.715423"
     },
     {
-      "name": "Node_23_Calendar",
+      "name": "Node_123_Calendar",
       "description": "日历服务",
-      "node_id": "Node_23_Calendar",
-      "node_name": "Node_23_Calendar",
+      "node_id": "Node_123_Calendar",
+      "node_name": "Node_123_Calendar",
       "category": "tools",
       "input_schema": {},
       "output_schema": {},
@@ -553,10 +553,10 @@
       "last_updated": "2026-03-03T15:35:39.715547"
     },
     {
-      "name": "Node_46_LinuxDesktopAuto",
+      "name": "Node_124_LinuxDesktopAuto",
       "description": "LinuxDesktopAuto",
-      "node_id": "Node_46_LinuxDesktopAuto",
-      "node_name": "Node_46_LinuxDesktopAuto",
+      "node_id": "Node_124_LinuxDesktopAuto",
+      "node_name": "Node_124_LinuxDesktopAuto",
       "category": "physical",
       "input_schema": {},
       "output_schema": {},
@@ -575,10 +575,10 @@
       "last_updated": "2026-03-03T15:35:39.715559"
     },
     {
-      "name": "Node_48_MediaGen",
+      "name": "Node_125_MediaGen",
       "description": "MediaGen",
-      "node_id": "Node_48_MediaGen",
-      "node_name": "Node_48_MediaGen",
+      "node_id": "Node_125_MediaGen",
+      "node_name": "Node_125_MediaGen",
       "category": "physical",
       "input_schema": {},
       "output_schema": {},
@@ -663,10 +663,10 @@
       "last_updated": "2026-03-03T15:35:39.715600"
     },
     {
-      "name": "Node_56_AgentSwarm",
+      "name": "Node_126_AgentSwarm",
       "description": "智能体集群",
-      "node_id": "Node_56_AgentSwarm",
-      "node_name": "Node_56_AgentSwarm",
+      "node_id": "Node_126_AgentSwarm",
+      "node_name": "Node_126_AgentSwarm",
       "category": "intelligence",
       "input_schema": {},
       "output_schema": {},
@@ -806,10 +806,10 @@
       "last_updated": "2026-03-03T15:35:39.715664"
     },
     {
-      "name": "Node_70_BambuLab",
+      "name": "Node_127_BambuLab",
       "description": "BambuLab 3D打印",
-      "node_id": "Node_70_BambuLab",
-      "node_name": "Node_70_BambuLab",
+      "node_id": "Node_127_BambuLab",
+      "node_name": "Node_127_BambuLab",
       "category": "advanced",
       "input_schema": {},
       "output_schema": {},
@@ -828,10 +828,10 @@
       "last_updated": "2026-03-03T15:35:39.715675"
     },
     {
-      "name": "Node_71_MediaGen",
+      "name": "Node_128_MediaGen",
       "description": "媒体生成",
-      "node_id": "Node_71_MediaGen",
-      "node_name": "Node_71_MediaGen",
+      "node_id": "Node_128_MediaGen",
+      "node_name": "Node_128_MediaGen",
       "category": "advanced",
       "input_schema": {},
       "output_schema": {},

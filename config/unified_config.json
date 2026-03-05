@@ -214,8 +214,8 @@
       "description": "PostgreSQL数据库",
       "health_endpoint": "/health"
     },
-    "Node_12_File": {
-      "port": 8200,
+    "Node_120_File": {
+      "port": 8120,
       "group": "tools",
       "priority": 2,
       "dependencies": [
@@ -238,8 +238,8 @@
       "description": "SQLite数据库",
       "health_endpoint": "/health"
     },
-    "Node_13_Web": {
-      "port": 8201,
+    "Node_121_Web": {
+      "port": 8121,
       "group": "tools",
       "priority": 2,
       "dependencies": [
@@ -262,8 +262,8 @@
       "description": "音视频处理",
       "health_endpoint": "/health"
     },
-    "Node_14_Shell": {
-      "port": 8202,
+    "Node_122_Shell": {
+      "port": 8122,
       "group": "tools",
       "priority": 2,
       "dependencies": [
@@ -368,8 +368,8 @@
       "description": "Brave搜索",
       "health_endpoint": "/health"
     },
-    "Node_23_Calendar": {
-      "port": 8023,
+    "Node_123_Calendar": {
+      "port": 8123,
       "group": "tools",
       "priority": 2,
       "dependencies": [
@@ -656,8 +656,8 @@
       "description": "摄像头控制",
       "health_endpoint": "/health"
     },
-    "Node_46_LinuxDesktopAuto": {
-      "port": 8203,
+    "Node_124_LinuxDesktopAuto": {
+      "port": 8124,
       "group": "physical",
       "priority": 3,
       "dependencies": [
@@ -680,8 +680,8 @@
       "description": "音频控制",
       "health_endpoint": "/health"
     },
-    "Node_48_MediaGen": {
-      "port": 8048,
+    "Node_125_MediaGen": {
+      "port": 8125,
       "group": "physical",
       "priority": 3,
       "dependencies": [
@@ -776,8 +776,8 @@
       "description": "符号数学计算",
       "health_endpoint": "/health"
     },
-    "Node_56_AgentSwarm": {
-      "port": 8056,
+    "Node_126_AgentSwarm": {
+      "port": 8126,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -928,8 +928,8 @@
       "description": "备份恢复",
       "health_endpoint": "/health"
     },
-    "Node_70_BambuLab": {
-      "port": 8070,
+    "Node_127_BambuLab": {
+      "port": 8127,
       "group": "advanced",
       "priority": 6,
       "dependencies": [
@@ -952,8 +952,8 @@
       "description": "自主学习系统",
       "health_endpoint": "/health"
     },
-    "Node_71_MediaGen": {
-      "port": 8071,
+    "Node_128_MediaGen": {
+      "port": 8128,
       "group": "advanced",
       "priority": 6,
       "dependencies": [

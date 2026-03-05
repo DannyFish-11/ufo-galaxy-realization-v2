@@ -279,15 +279,15 @@
       "optional_dependencies": [],
       "description": "Auto-generated config for Node_22_BraveSearch"
     },
-    "Node_23_Calendar": {
-      "port": 8023,
+    "Node_123_Calendar": {
+      "port": 8123,
       "group": "development",
       "priority": 3,
       "dependencies": [
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_23_Calendar"
+      "description": "Auto-generated config for Node_123_Calendar"
     },
     "Node_23_Time": {
       "port": 9000,
@@ -596,15 +596,15 @@
         "audio_effects"
       ]
     },
-    "Node_48_MediaGen": {
-      "port": 8048,
+    "Node_125_MediaGen": {
+      "port": 8125,
       "group": "extended",
       "priority": 4,
       "dependencies": [
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_48_MediaGen"
+      "description": "Auto-generated config for Node_125_MediaGen"
     },
     "Node_48_Serial": {
       "port": 9001,
@@ -682,15 +682,15 @@
       "optional_dependencies": [],
       "description": "Auto-generated config for Node_54_SymbolicMath"
     },
-    "Node_56_AgentSwarm": {
-      "port": 8056,
+    "Node_126_AgentSwarm": {
+      "port": 8126,
       "group": "extended",
       "priority": 4,
       "dependencies": [
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_56_AgentSwarm"
+      "description": "Auto-generated config for Node_126_AgentSwarm"
     },
     "Node_56_Planning": {
       "port": 9002,
@@ -818,18 +818,18 @@
       "optional_dependencies": [],
       "description": "Auto-generated config for Node_69_BackupRestore"
     },
-    "Node_70_BambuLab": {
-      "port": 8070,
+    "Node_127_BambuLab": {
+      "port": 8127,
       "group": "extended",
       "priority": 4,
       "dependencies": [
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_70_BambuLab"
+      "description": "Auto-generated config for Node_127_BambuLab"
     },
-    "Node_71_MediaGen": {
-      "port": 8071,
+    "Node_128_MediaGen": {
+      "port": 8128,
       "group": "extended",
       "priority": 4,
       "dependencies": [

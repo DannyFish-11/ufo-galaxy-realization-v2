@@ -191,7 +191,7 @@ python -m pytest tests/test_autonomous_loops.py -v
 
 | 节点 | 名称 | 端口 | 功能 |
 |------|------|------|------|
-| Node_23_Calendar | 日历服务 | 8023 | 日历管理、事件创建 |
+| Node_123_Calendar | 日历服务 | 8123 | 日历管理、事件创建 |
 | Node_23_Time | 时间服务 | 8123 | 时间查询、时区转换 |
 | Node_24_Weather | 天气查询 | 8024 | 天气查询、预报 |
 

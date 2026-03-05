@@ -39,9 +39,9 @@ def test_all_modules():
     print("\n[测试 2] 关键节点完整性")
     import os
     critical_nodes = [
-        'Node_12_File',
-        'Node_13_Web', 
-        'Node_14_Shell',
+        'Node_120_File',
+        'Node_121_Web', 
+        'Node_122_Shell',
         'Node_43_MAVLink',
         'Node_49_OctoPrint',
         'Node_51_QuantumDispatcher'

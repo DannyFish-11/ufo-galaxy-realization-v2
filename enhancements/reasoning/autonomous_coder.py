@@ -757,7 +757,7 @@ if __name__ == '__main__':
 
         # Register in NodeFactory so the new node is indexed
         try:
-            from nodes.node_118_node_factory.main import get_node_factory
+            from nodes.Node_118_NodeFactory.main import get_node_factory
             factory = get_node_factory()
             factory.register_node(node_name, {
                 "template": "auto_generated",

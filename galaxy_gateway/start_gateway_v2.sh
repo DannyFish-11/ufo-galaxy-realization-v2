@@ -43,4 +43,4 @@ echo "LLM 提供商: $LLM_PROVIDER"
 echo "LLM API 地址: $LLM_API_BASE"
 echo "======================================================================"
 
-python3 gateway_service_v2.py
+python3 gateway_service.py
