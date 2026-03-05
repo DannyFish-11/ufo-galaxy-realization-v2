@@ -23,7 +23,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("node_48_mediagen.log")
+        logging.FileHandler("node_125_mediagen.log")
     ]
 )
 logger = logging.getLogger("Node_125_MediaGen")
