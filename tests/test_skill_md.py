@@ -10,7 +10,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 async def test_skill_md_loader():
@@ -21,7 +21,7 @@ async def test_skill_md_loader():
         from core.skill_md_loader import skill_md_loader
         
         # 加载示例技能
-        skill_path = Path(__file__).parent / "skills" / "examples" / "weather"
+        skill_path = Path(__file__).parent.parent / "skills" / "examples" / "weather"
         
         print(f"加载技能: {skill_path}")
         result = await skill_md_loader.load(str(skill_path))

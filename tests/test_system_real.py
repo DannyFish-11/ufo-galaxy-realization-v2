@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 
 # 设置路径
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 print("=" * 60)

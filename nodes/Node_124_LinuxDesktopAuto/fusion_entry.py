@@ -24,7 +24,7 @@ def _import_node_main():
 
 class FusionNode:
     def __init__(self):
-        self.node_id = "46"
+        self.node_id = "124"
         self.instance = None
         self._load_original_logic()
 
