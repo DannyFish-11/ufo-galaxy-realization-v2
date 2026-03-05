@@ -7,7 +7,6 @@ Shared fixtures and configuration for all tests.
 
 import os
 import sys
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -20,14 +19,6 @@ if str(PROJECT_ROOT) not in sys.path:
 # Set test environment variables
 os.environ.setdefault("UFO_GALAXY_MODE", "test")
 os.environ.setdefault("PYTHONPATH", str(PROJECT_ROOT))
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create a session-scoped event loop for async tests."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture

@@ -222,10 +222,10 @@ async def main():
     # 你可以使用 `python -m http.server` 启动一个本地服务器，但这不适用于 SFTP
     # 可以使用 `docker run -p 2222:22 -d atmoz/sftp user:pass:::upload` 快速启动一个测试服务器
     sftp_config = SFTPConfig(
-        host="localhost",
-        port=2222,
-        username="user",
-        password="pass",
+        host=os.environ.get("SFTP_HOST", "localhost"),
+        port=int(os.environ.get("SFTP_PORT", "2222")),
+        username=os.environ.get("SFTP_USER", "user"),
+        password=os.environ.get("SFTP_PASSWORD", ""),
     )
 
     service = SFTPNodeService(sftp_config)

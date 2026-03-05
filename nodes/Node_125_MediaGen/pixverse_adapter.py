@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("PixVerseAdapter")
 
 # PixVerse API 配置
-PIXVERSE_API_KEY = os.getenv("PIXVERSE_API_KEY", "sk-f5c7177f35ee6cceab5d97d6ffae26d0")
+PIXVERSE_API_KEY = os.getenv("PIXVERSE_API_KEY", "")
 PIXVERSE_API_BASE = "https://api.pixverse.ai/v1"
 
 # 下载目录
