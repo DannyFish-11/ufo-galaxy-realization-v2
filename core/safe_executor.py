@@ -46,6 +46,7 @@ _DANGEROUS_PATTERNS_PYTHON = [
     "subprocess.Popen",
     "subprocess.run",
     "__import__('os')",
+    "__import__(\"os\")",
     "exec(",
     "eval(",
     "compile(",
@@ -58,6 +59,15 @@ _DANGEROUS_PATTERNS_PYTHON = [
     "import ctypes",
     "import socket",
     "__builtins__",
+    "__subclasses__",
+    "__class__",
+    "__bases__",
+    "importlib",
+    "globals()",
+    "locals()",
+    "getattr(",
+    "delattr(",
+    "setattr(",
 ]
 
 _DANGEROUS_PATTERNS_BASH = [
@@ -291,15 +301,13 @@ class SafeExecutor:
             )
 
     async def _exec_python(self, code: str, timeout: int, stdin: str) -> ExecutionResult:
-        """Python 沙箱执行"""
-        # 包装代码: 限制 builtins
+        """Python 沙箱执行
+
+        安全模型：pattern-based 检测 + subprocess 隔离 + 超时限制。
+        不依赖 Python builtins 限制（容易绕过），而是在独立子进程中运行。
+        """
         wrapped = (
             "import sys\n"
-            "# Restricted builtins\n"
-            "_safe_builtins = {k: v for k, v in __builtins__.__dict__.items() "
-            "if k not in ('exec', 'eval', 'compile', '__import__', 'open', 'input')}\n"
-            "# Allow safe open for reading\n"
-            "import io\n"
             "try:\n"
         )
         indented = "\n".join("    " + line for line in code.split("\n"))

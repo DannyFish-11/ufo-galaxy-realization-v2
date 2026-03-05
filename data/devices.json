@@ -4,7 +4,7 @@
       "device_id": "windows_001",
       "device_type": "windows",
       "name": "测试电脑",
-      "status": "offline",
+      "status": "online",
       "manufacturer": "",
       "model": "",
       "os_version": "",
@@ -39,9 +39,9 @@
       "port": 0,
       "mac_address": "",
       "metadata": {},
-      "registered_at": 1771764644.625912,
-      "last_seen": 1771764644.6259124,
-      "last_heartbeat": 1771764644.6259124,
+      "registered_at": 1772702385.89616,
+      "last_seen": 1772702385.8961604,
+      "last_heartbeat": 1772702385.8961606,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
@@ -73,5 +73,5 @@
     ],
     "touch": []
   },
-  "saved_at": 1771838934.9723027
+  "saved_at": 1772702690.8247693
 }

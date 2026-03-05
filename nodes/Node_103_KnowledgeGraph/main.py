@@ -45,7 +45,7 @@ app.add_middleware(
 # ============================================================================
 
 DB_PATH = os.getenv("KNOWLEDGE_DB_PATH", "/tmp/galaxy_knowledge.db")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-be72ac32a25e4de08ef261d50feebb60")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
 
 # ============================================================================

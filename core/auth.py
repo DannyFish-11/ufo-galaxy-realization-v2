@@ -8,6 +8,7 @@ Author: Copilot
 Date: 2026-02-12
 """
 
+import hmac
 import os
 import logging
 from typing import Optional
@@ -34,8 +35,8 @@ def verify_api_token(token: str) -> bool:
         logger.debug("UFO_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
         return True
     
-    # 验证 token
-    is_valid = token == expected_token
+    # 验证 token (使用常量时间比较防止计时攻击)
+    is_valid = hmac.compare_digest(token, expected_token)
     if not is_valid:
         logger.warning(f"无效的 API Token")
     
