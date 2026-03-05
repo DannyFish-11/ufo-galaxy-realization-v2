@@ -543,22 +543,35 @@ class SemanticSearch:
     """
     语义搜索引擎
 
-    双模式：
-      - 本地模式：Jaccard 相似度（无外部依赖）
-      - Qdrant 模式：向量数据库语义搜索（高精度）
+    三模式（通过 KB_VECTOR_BACKEND 环境变量或构造参数选择）：
+      - local  模式：Jaccard 相似度（无外部依赖，默认）
+      - qdrant 模式：Qdrant 向量数据库（高精度，需 QDRANT_URL）
+      - chroma 模式：ChromaDB 本地向量存储（需 pip install chromadb）
 
-    自动检测 Qdrant 可用性并升级。
+    所有模式均可自动检测并降级为 local 模式，启动不因向量引擎失败而中断。
     """
 
     def __init__(self, qdrant_url: str = ""):
         self._index: Dict[str, Dict[str, Any]] = {}
         self._qdrant_client = None
-        self._collection_name = "ufo_galaxy_docs"
+        self._collection_name = os.environ.get("KB_COLLECTION", "ufo_galaxy_docs")
         self._qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "")
         self._qdrant_ready = False
+        # 延迟引入，避免循环依赖
+        self._vb = None
+
+    def _get_vector_backend(self):
+        """惰性获取统一向量后端（供 search/index 使用）"""
+        if self._vb is None:
+            try:
+                from core.vector_backend import create_vector_backend
+                self._vb = create_vector_backend(collection_name=self._collection_name)
+            except Exception as exc:
+                logger.warning(f"vector_backend 加载失败: {exc}，使用内置本地索引")
+        return self._vb
 
     async def initialize_qdrant(self):
-        """尝试连接 Qdrant 向量数据库"""
+        """尝试连接 Qdrant 向量数据库（保持向后兼容）"""
         if not self._qdrant_url:
             return False
         try:
@@ -588,7 +601,15 @@ class SemanticSearch:
             return False
 
     def index_document(self, doc_id: str, content: str, metadata: Optional[Dict] = None):
-        """索引文档（本地模式）"""
+        """索引文档（优先使用统一向量后端，降级到内置本地索引）"""
+        vb = self._get_vector_backend()
+        if vb is not None:
+            try:
+                vb.add_document(doc_id, content, metadata)
+                return
+            except Exception as exc:
+                logger.warning(f"vector_backend.add_document 失败: {exc}，写入内置索引")
+        # 内置本地索引（备用）
         words = set(content.lower().split())
         self._index[doc_id] = {
             "content": content,
@@ -642,7 +663,15 @@ class SemanticSearch:
             return []
 
     def search(self, query: str, top_k: int = 5) -> List[Dict]:
-        """本地搜索（Jaccard 相似度）"""
+        """搜索文档（优先使用统一向量后端，降级到内置 Jaccard 搜索）"""
+        vb = self._get_vector_backend()
+        if vb is not None:
+            try:
+                results = vb.search(query, top_k)
+                return [r.to_dict() for r in results]
+            except Exception as exc:
+                logger.warning(f"vector_backend.search 失败: {exc}，使用内置搜索")
+        # 内置本地 Jaccard 搜索（备用）
         query_words = set(query.lower().split())
         scores = []
 
@@ -663,6 +692,12 @@ class SemanticSearch:
 
     @property
     def document_count(self) -> int:
+        vb = self._get_vector_backend()
+        if vb is not None:
+            try:
+                return vb.document_count
+            except Exception:
+                pass
         return len(self._index)
 
     @property

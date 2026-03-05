@@ -410,25 +410,46 @@ class MCPManager:
     # ========================================================================
     
     async def load_from_config(self):
-        """从配置文件加载"""
+        """从配置文件加载；若文件不存在则创建默认模板"""
         if not self.config_path.exists():
-            return
-        
+            self._create_default_config()
+
         try:
             with open(self.config_path) as f:
                 config = json.load(f)
-            
+
+            loaded = 0
             for server_config in config.get("servers", []):
-                await self.load_server(
-                    name=server_config["name"],
-                    command=server_config["command"],
-                    env=server_config.get("env", {}),
-                    auto_start=server_config.get("auto_start", False),
-                )
-            
-            logger.info(f"从配置加载了 {len(self.servers)} 个 MCP 服务器")
+                try:
+                    await self.load_server(
+                        name=server_config["name"],
+                        command=server_config["command"],
+                        env=server_config.get("env", {}),
+                        auto_start=server_config.get("auto_start", False),
+                    )
+                    loaded += 1
+                except Exception as srv_err:
+                    logger.warning(f"加载 MCP 服务器 '{server_config.get('name')}' 失败: {srv_err}")
+
+            logger.info(f"从配置加载了 {loaded} 个 MCP 服务器")
         except Exception as e:
-            logger.error(f"加载配置失败: {e}")
+            logger.error(f"加载 MCP 配置失败: {e}")
+
+    def _create_default_config(self):
+        """若配置文件不存在则创建默认模板"""
+        try:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            default = {
+                "version": "1.0.0",
+                "description": "MCP 服务器配置 - 支持动态加载 MCP 工具",
+                "servers": [],
+                "custom_servers": [],
+            }
+            with open(self.config_path, "w") as f:
+                json.dump(default, f, indent=2, ensure_ascii=False)
+            logger.info(f"已创建默认 MCP 配置模板: {self.config_path}")
+        except Exception as e:
+            logger.warning(f"创建 MCP 配置模板失败: {e}")
 
 
 # ============================================================================

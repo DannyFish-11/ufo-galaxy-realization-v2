@@ -15,6 +15,7 @@ Node 105: Unified Knowledge Base
 
 import os
 import json
+import logging
 import time
 import hashlib
 import asyncio
@@ -25,6 +26,8 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
+
+logger = logging.getLogger("UFO-Galaxy.Node105KB")
 
 app = FastAPI(title="Node 105 - Unified Knowledge Base", version="1.0.0")
 app.add_middleware(
@@ -70,19 +73,37 @@ class AskRequest(BaseModel):
 # ============================================================================
 
 class UnifiedKnowledgeBase:
-    """统一知识库系统"""
-    
+    """统一知识库系统（Node 105）
+
+    支持向量检索后端（ChromaDB / Qdrant / 本地关键词），通过
+    KB_VECTOR_BACKEND 环境变量配置，不可用时自动降级为关键词搜索。
+    """
+
     def __init__(self, persist_dir: str = "./unified_kb"):
         self.persist_dir = persist_dir
         self.knowledge_entries: Dict[str, KnowledgeEntry] = {}
-        self.use_mock = True  # Mock 模式（无需安装向量数据库）
-        
+
         os.makedirs(persist_dir, exist_ok=True)
-        
+
+        # 初始化向量后端（自动检测并降级）
+        self._backend = None
+        try:
+            from core.vector_backend import create_vector_backend
+            self._backend = create_vector_backend(
+                chroma_persist_dir=os.path.join(persist_dir, "chroma_db"),
+            )
+            _mode = getattr(self._backend, "name", "local")
+        except Exception as exc:
+            _mode = "local"
+            logger.warning(f"vector_backend 加载失败: {exc}，使用关键词搜索")
+
+        # use_mock 为 False 表示向量后端可用
+        self.use_mock = not getattr(self._backend, "is_vector_mode", False)
+
         # 加载已有知识
         self._load_knowledge()
-        
-        print(f"✅ 统一知识库已初始化 (Mock 模式: {self.use_mock})")
+
+        logger.info(f"统一知识库已初始化 (向量后端: {_mode}, 向量模式: {not self.use_mock})")
     
     def _load_knowledge(self):
         """加载已有知识"""
@@ -94,24 +115,32 @@ class UnifiedKnowledgeBase:
                     for entry_dict in data:
                         entry = KnowledgeEntry(**entry_dict)
                         self.knowledge_entries[entry.id] = entry
-                print(f"✅ 已加载 {len(self.knowledge_entries)} 条知识")
+                logger.info(f"已加载 {len(self.knowledge_entries)} 条知识")
             except Exception as e:
-                print(f"⚠️ 加载知识失败: {e}")
+                logger.warning(f"加载知识失败: {e}")
     
     def _save_knowledge(self):
-        """保存知识到磁盘"""
+        """保存知识到磁盘，并同步到向量后端"""
         kb_file = os.path.join(self.persist_dir, "knowledge.json")
         try:
             data = [asdict(entry) for entry in self.knowledge_entries.values()]
             with open(kb_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"⚠️ 保存知识失败: {e}")
+            logger.warning(f"保存知识失败: {e}")
     
     def _generate_id(self, content: str, source: str) -> str:
         """生成唯一 ID"""
         unique_str = f"{content[:100]}{source}{time.time()}"
         return hashlib.md5(unique_str.encode()).hexdigest()
+
+    def _index_entry(self, entry: "KnowledgeEntry"):
+        """将条目索引到向量后端（若可用）"""
+        if self._backend is not None:
+            try:
+                self._backend.add_document(entry.id, entry.content, entry.metadata)
+            except Exception as exc:
+                logger.warning(f"向量后端索引失败: {exc}")
     
     async def add_from_file(self, file_path: str, metadata: Dict[str, Any] = None) -> str:
         """从文件添加知识"""
@@ -137,10 +166,11 @@ class UnifiedKnowledgeBase:
         )
         
         self.knowledge_entries[entry_id] = entry
+        self._index_entry(entry)
         self._save_knowledge()
-        
+
         return entry_id
-    
+
     async def add_from_url(self, url: str, metadata: Dict[str, Any] = None) -> str:
         """从 URL 添加知识"""
         # 抓取网页内容
@@ -151,7 +181,7 @@ class UnifiedKnowledgeBase:
                 content = response.text
         except Exception as e:
             raise ValueError(f"抓取网页失败: {e}")
-        
+
         # 创建知识条目
         entry_id = self._generate_id(content, url)
         entry = KnowledgeEntry(
@@ -162,10 +192,11 @@ class UnifiedKnowledgeBase:
             metadata=metadata or {},
             timestamp=time.time()
         )
-        
+
         self.knowledge_entries[entry_id] = entry
+        self._index_entry(entry)
         self._save_knowledge()
-        
+
         return entry_id
     
     async def add_from_github(self, repo_url: str, metadata: Dict[str, Any] = None) -> str:
@@ -267,71 +298,44 @@ class UnifiedKnowledgeBase:
     def search_keyword(self, query: str, top_k: int = 5) -> List[KnowledgeEntry]:
         """关键词搜索"""
         query_lower = query.lower()
-        results = []
-        
-        for entry in self.knowledge_entries.values():
-            if query_lower in entry.content.lower():
-                results.append(entry)
-        
-        # 按时间戳排序
+        results = [e for e in self.knowledge_entries.values() if query_lower in e.content.lower()]
         results.sort(key=lambda x: x.timestamp, reverse=True)
-        
         return results[:top_k]
-    
+
     def search_vector(self, query: str, top_k: int = 5) -> List[KnowledgeEntry]:
-        """向量搜索（Mock 模式：退化为关键词搜索）"""
-        # 在 Mock 模式下，向量搜索退化为关键词搜索
-        if self.use_mock:
-            return self.search_keyword(query, top_k)
-        
-        # 真实模式：使用向量数据库（Chroma）
-        try:
-            import chromadb
-            from chromadb.utils import embedding_functions
-            
-            # 初始化 Chroma
-            client = chromadb.PersistentClient(path=self.persist_dir)
-            embedding_function = embedding_functions.DefaultEmbeddingFunction()
-            collection = client.get_or_create_collection(
-                name="unified_kb",
-                embedding_function=embedding_function
-            )
-            
-            # 搜索
-            results = collection.query(
-                query_texts=[query],
-                n_results=top_k
-            )
-            
-            # 转换为 KnowledgeEntry
-            entries = []
-            if results['ids'] and results['ids'][0]:
-                for i, entry_id in enumerate(results['ids'][0]):
-                    if entry_id in self.knowledge_entries:
-                        entries.append(self.knowledge_entries[entry_id])
-            
-            return entries
-        except ImportError:
-            print("⚠️ Chroma 未安装，降级为关键词搜索")
-            return self.search_keyword(query, top_k)
-        except Exception as e:
-            print(f"⚠️ 向量搜索失败: {e}，降级为关键词搜索")
-            return self.search_keyword(query, top_k)
-    
+        """向量搜索（优先使用统一向量后端，降级为关键词搜索）"""
+        if self._backend is not None:
+            try:
+                backend_results = self._backend.search(query, top_k)
+                entries = []
+                for r in backend_results:
+                    if r.doc_id in self.knowledge_entries:
+                        entries.append(self.knowledge_entries[r.doc_id])
+                    else:
+                        entries.append(KnowledgeEntry(
+                            id=r.doc_id,
+                            content=r.content,
+                            source_type="unknown",
+                            source="",
+                            metadata=r.metadata,
+                        ))
+                if entries:
+                    return entries
+            except Exception as exc:
+                logger.warning(f"向量搜索失败: {exc}，降级为关键词搜索")
+        return self.search_keyword(query, top_k)
+
     def search_hybrid(self, query: str, top_k: int = 5) -> List[KnowledgeEntry]:
-        """混合搜索"""
-        # 简单实现：合并关键词和向量搜索结果
+        """混合搜索（关键词 + 向量，去重合并）"""
         keyword_results = self.search_keyword(query, top_k)
         vector_results = self.search_vector(query, top_k)
-        
-        # 去重
-        seen_ids = set()
+
+        seen_ids: set = set()
         results = []
         for entry in keyword_results + vector_results:
             if entry.id not in seen_ids:
                 results.append(entry)
                 seen_ids.add(entry.id)
-        
         return results[:top_k]
     
     def ask(self, question: str, top_k: int = 3) -> Dict[str, Any]:
