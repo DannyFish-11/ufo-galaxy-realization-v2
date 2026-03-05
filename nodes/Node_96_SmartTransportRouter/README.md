@@ -132,7 +132,7 @@ curl -X POST http://localhost:8096/route \
 
 ## 集成到 Gateway
 
-在 `gateway_service_v3.py` 中集成：
+在 `gateway_service.py` 中集成：
 
 ```python
 from smart_transport_router import SmartTransportRouter, TransportRequest

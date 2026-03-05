@@ -394,8 +394,8 @@ curl http://localhost:8099/api/v1/command/b2c3d4e5-f6a7-8901-bcde-f12345678901/s
 以下端点已被统一命令端点替代，但保持向后兼容：
 
 - `/api/commands` (galaxy_gateway/app.py)
-- `/api/command` (galaxy_gateway/gateway_service_v2.py, main.py)
-- `/execute_command` (galaxy_gateway/gateway_service_v4.py)
+- `/api/command` (galaxy_gateway/gateway_service.py, main.py)
+- `/execute_command` (galaxy_gateway/gateway_service.py)
 
 ### 迁移指南
 

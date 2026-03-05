@@ -38,7 +38,7 @@ All notable changes to UFO Galaxy are documented here.
 - Capability registration & discovery system (OpenClaw style)
 - Connection manager with heartbeat and auto-reconnect
 - Three autonomous loops
-  - **Loop 1** – Self-heal: detects and attempts automated code fixes (`node_112_self_healing`)
+  - **Loop 1** – Self-heal: detects and attempts automated code fixes (`Node_112_SelfHealing`)
   - **Loop 2** – Learning: updates planner strategy from execution history (`galaxy_main_loop_l4` + `autonomous_planner`)
   - **Loop 3** – Auto-expand: detects capability gaps and deploys new nodes (`autonomous_coder._deploy_as_node`)
 - Android bridge integration (AIP v3.0 protocol, `Node_113_AndroidVLM`)

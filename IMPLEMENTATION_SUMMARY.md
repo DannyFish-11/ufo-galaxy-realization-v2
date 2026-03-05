@@ -8,8 +8,8 @@ Successfully implemented a unified command endpoint `/api/v1/command` for the UF
 
 The system previously had multiple scattered command endpoints:
 - `/api/commands` (galaxy_gateway/app.py)
-- `/api/command` (galaxy_gateway/gateway_service_v2.py, main.py)
-- `/execute_command` (galaxy_gateway/gateway_service_v4.py)
+- `/api/command` (galaxy_gateway/gateway_service.py, main.py)
+- `/execute_command` (galaxy_gateway/gateway_service.py)
 
 Issues:
 - Inconsistent protocols

@@ -56,7 +56,7 @@
 **启动 ufo-galaxy**：
 ```bash
 cd E:\ufo-galaxy\galaxy_gateway
-python gateway_service_v3.py
+python gateway_service.py
 ```
 
 **启动微软 UFO**（如果您有）：
