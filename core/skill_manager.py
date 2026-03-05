@@ -621,6 +621,60 @@ class SkillManager:
         
         logger.info("已注册内置技能")
 
+    async def load_from_config(self):
+        """从配置文件加载技能包；若文件不存在则创建默认模板"""
+        if not self.config_path.exists():
+            self._create_default_config()
+
+        try:
+            with open(self.config_path) as f:
+                config = json.load(f)
+
+            # 注册配置中声明的内置技能（元数据注册，无 handler）
+            for skill_def in config.get("builtin_skills", []):
+                sid = skill_def.get("id", "")
+                if sid and sid not in self.skills:
+                    self.register_skill(
+                        id=sid,
+                        name=skill_def.get("name", sid),
+                        description=skill_def.get("description", ""),
+                        type=SkillType(skill_def.get("type", "action")),
+                        tags=skill_def.get("tags", []),
+                    )
+
+            # 加载 auto_load=true 的技能包
+            loaded = 0
+            for pkg in config.get("skill_packages", []):
+                if not pkg.get("auto_load", False):
+                    continue
+                try:
+                    source = pkg.get("source", "")
+                    if source:
+                        await self.load_skill_package(source, pkg.get("name"))
+                        loaded += 1
+                except Exception as pkg_err:
+                    logger.warning(f"加载技能包 '{pkg.get('name')}' 失败: {pkg_err}")
+
+            logger.info(f"从配置注册了 {len(self.skills)} 个技能，加载了 {loaded} 个技能包")
+        except Exception as e:
+            logger.error(f"加载技能配置失败: {e}")
+
+    def _create_default_config(self):
+        """若配置文件不存在则创建默认模板"""
+        try:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            default = {
+                "version": "1.0.0",
+                "description": "技能配置 - 支持动态加载技能包",
+                "builtin_skills": [],
+                "skill_packages": [],
+            }
+            with open(self.config_path, "w") as f:
+                json.dump(default, f, indent=2, ensure_ascii=False)
+            logger.info(f"已创建默认技能配置模板: {self.config_path}")
+        except Exception as e:
+            logger.warning(f"创建技能配置模板失败: {e}")
+
 
 # ============================================================================
 # 全局实例
