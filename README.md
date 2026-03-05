@@ -74,7 +74,7 @@ UFO Galaxy 内置三条端到端自主循环，实现系统自愈、持续学习
 
 ### Loop 1 — 自愈 → 代码修复 → 验证 (Self-Heal → Code-Fix → Verify)
 
-**关键文件**：`nodes/node_112_self_healing/main.py`
+**关键文件**：`nodes/Node_112_SelfHealing/main.py`
 
 ```
 异常检测
