@@ -2,7 +2,7 @@
 """
 Tests for the three autonomous loops added to UFO Galaxy:
 
-Loop 1: Self-healing -> code fix (node_112_self_healing)
+Loop 1: Self-healing -> code fix (Node_112_SelfHealing)
 Loop 2: Learning -> planner strategy (galaxy_main_loop_l4 + autonomous_planner)
 Loop 3: Capability gap -> auto expand (autonomous_coder._deploy_as_node)
 """
@@ -28,7 +28,7 @@ class TestSelfHealingCodeFix:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from nodes.node_112_self_healing.main import (
+        from nodes.Node_112_SelfHealing.main import (
             FixAction, AutoFixer, DiagnosisResult, IssueType, HealthStatus,
             _CODE_FIX_KEYWORDS,
         )
@@ -96,7 +96,7 @@ class TestSelfHealingCodeFix:
         kw = self.CODE_FIX_KEYWORDS[0]
         diag = self._diagnosis(recommendation=f"{kw} fix needed")
 
-        from nodes.node_112_self_healing.main import FixResult
+        from nodes.Node_112_SelfHealing.main import FixResult
         with patch.object(fixer, "_code_fix") as stub:
             stub.return_value = FixResult(
                 action=self.FixAction.CODE_FIX,
@@ -238,7 +238,7 @@ class TestAutoExpandDeployAsNode:
             return orig_join(*a)
 
         with patch(
-            "nodes.node_118_node_factory.main.get_node_factory",
+            "nodes.Node_118_NodeFactory.main.get_node_factory",
             return_value=mock_factory,
         ), patch(
             "core.capability_manager.get_capability_manager",
@@ -266,7 +266,7 @@ class TestAutoExpandDeployAsNode:
         nodes_dir.mkdir()
 
         with patch(
-            "nodes.node_118_node_factory.main.get_node_factory",
+            "nodes.Node_118_NodeFactory.main.get_node_factory",
             side_effect=Exception("factory error"),
         ), patch(
             "core.capability_manager.get_capability_manager",
@@ -319,7 +319,7 @@ class TestAutoExpandDeployAsNode:
             return orig_join(*a)
 
         with patch(
-            "nodes.node_118_node_factory.main.get_node_factory",
+            "nodes.Node_118_NodeFactory.main.get_node_factory",
             side_effect=Exception("factory unavailable"),
         ), patch(
             "core.capability_manager.get_capability_manager",
@@ -348,7 +348,7 @@ class TestSelfHealingPhaseLogging:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from nodes.node_112_self_healing.main import (
+        from nodes.Node_112_SelfHealing.main import (
             SelfHealingEngine, HealthMetrics, HealthStatus, IssueType,
             DiagnosisResult, FixResult, FixAction, IncidentReport,
         )
@@ -541,7 +541,7 @@ class TestCodeFixSandboxGating:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from nodes.node_112_self_healing.main import (
+        from nodes.Node_112_SelfHealing.main import (
             SelfHealingEngine, AutoFixer, FixResult, FixAction,
             HealthMetrics, IssueType, HealthStatus, DiagnosisResult,
         )

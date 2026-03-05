@@ -226,10 +226,10 @@
       "main_size": 5267,
       "status": "active"
     },
-    "Node_12_File": {
-      "id": "12",
+    "Node_120_File": {
+      "id": "120",
       "name": "File",
-      "path": "nodes/Node_12_File",
+      "path": "nodes/Node_120_File",
       "has_main": true,
       "main_size": 23456,
       "status": "active"
@@ -250,10 +250,10 @@
       "main_size": 11856,
       "status": "active"
     },
-    "Node_13_Web": {
-      "id": "13",
+    "Node_121_Web": {
+      "id": "121",
       "name": "Web",
-      "path": "nodes/Node_13_Web",
+      "path": "nodes/Node_121_Web",
       "has_main": true,
       "main_size": 19280,
       "status": "active"
@@ -266,10 +266,10 @@
       "main_size": 3970,
       "status": "active"
     },
-    "Node_14_Shell": {
-      "id": "14",
+    "Node_122_Shell": {
+      "id": "122",
       "name": "Shell",
-      "path": "nodes/Node_14_Shell",
+      "path": "nodes/Node_122_Shell",
       "has_main": true,
       "main_size": 16326,
       "status": "active"
@@ -338,10 +338,10 @@
       "main_size": 6695,
       "status": "active"
     },
-    "Node_23_Calendar": {
-      "id": "23",
+    "Node_123_Calendar": {
+      "id": "123",
       "name": "Calendar",
-      "path": "nodes/Node_23_Calendar",
+      "path": "nodes/Node_123_Calendar",
       "has_main": true,
       "main_size": 4035,
       "status": "active"
@@ -530,10 +530,10 @@
       "main_size": 3169,
       "status": "active"
     },
-    "Node_48_MediaGen": {
-      "id": "48",
+    "Node_125_MediaGen": {
+      "id": "125",
       "name": "MediaGen",
-      "path": "nodes/Node_48_MediaGen",
+      "path": "nodes/Node_125_MediaGen",
       "has_main": true,
       "main_size": 3562,
       "status": "active"
@@ -594,10 +594,10 @@
       "main_size": 21897,
       "status": "active"
     },
-    "Node_56_AgentSwarm": {
-      "id": "56",
+    "Node_126_AgentSwarm": {
+      "id": "126",
       "name": "AgentSwarm",
-      "path": "nodes/Node_56_AgentSwarm",
+      "path": "nodes/Node_126_AgentSwarm",
       "has_main": true,
       "main_size": 34735,
       "status": "active"
@@ -706,18 +706,18 @@
       "main_size": 0,
       "status": "stub"
     },
-    "Node_70_BambuLab": {
-      "id": "70",
+    "Node_127_BambuLab": {
+      "id": "127",
       "name": "BambuLab",
-      "path": "nodes/Node_70_BambuLab",
+      "path": "nodes/Node_127_BambuLab",
       "has_main": true,
       "main_size": 5854,
       "status": "active"
     },
-    "Node_71_MediaGen": {
-      "id": "71",
+    "Node_128_MediaGen": {
+      "id": "128",
       "name": "MediaGen",
-      "path": "nodes/Node_71_MediaGen",
+      "path": "nodes/Node_128_MediaGen",
       "has_main": true,
       "main_size": 3562,
       "status": "active"

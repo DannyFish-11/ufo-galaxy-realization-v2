@@ -282,8 +282,8 @@ def test_tool_nodes():
     
     # 测试 File 节点
     try:
-        # 读取并执行 Node_12_File 的核心类
-        file_path = PROJECT_ROOT / "nodes" / "Node_12_File" / "main.py"
+        # 读取并执行 Node_120_File 的核心类
+        file_path = PROJECT_ROOT / "nodes" / "Node_120_File" / "main.py"
         if file_path.exists():
             # 只导入核心类，不启动服务
             code = file_path.read_text()
@@ -294,17 +294,17 @@ def test_tool_nodes():
             FileService = exec_globals.get("FileService")
             if FileService:
                 fs = FileService("/tmp/ufo_test")
-                log_test("Node_12_File (FileService)", True)
+                log_test("Node_120_File (FileService)", True)
             else:
-                log_test("Node_12_File (FileService)", False, "FileService 类未找到")
+                log_test("Node_120_File (FileService)", False, "FileService 类未找到")
         else:
-            log_skip("Node_12_File", "文件不存在")
+            log_skip("Node_120_File", "文件不存在")
     except Exception as e:
-        log_test("Node_12_File", False, str(e))
+        log_test("Node_120_File", False, str(e))
     
     # 测试 Web 节点
     try:
-        file_path = PROJECT_ROOT / "nodes" / "Node_13_Web" / "main.py"
+        file_path = PROJECT_ROOT / "nodes" / "Node_121_Web" / "main.py"
         if file_path.exists():
             code = file_path.read_text()
             exec_globals = {"__name__": "__test__"}
@@ -313,17 +313,17 @@ def test_tool_nodes():
             WebService = exec_globals.get("WebService")
             if WebService:
                 ws = WebService("/tmp/ufo_downloads")
-                log_test("Node_13_Web (WebService)", True)
+                log_test("Node_121_Web (WebService)", True)
             else:
-                log_test("Node_13_Web (WebService)", False, "WebService 类未找到")
+                log_test("Node_121_Web (WebService)", False, "WebService 类未找到")
         else:
-            log_skip("Node_13_Web", "文件不存在")
+            log_skip("Node_121_Web", "文件不存在")
     except Exception as e:
-        log_test("Node_13_Web", False, str(e))
+        log_test("Node_121_Web", False, str(e))
     
     # 测试 Shell 节点
     try:
-        file_path = PROJECT_ROOT / "nodes" / "Node_14_Shell" / "main.py"
+        file_path = PROJECT_ROOT / "nodes" / "Node_122_Shell" / "main.py"
         if file_path.exists():
             code = file_path.read_text()
             exec_globals = {"__name__": "__test__"}
@@ -332,13 +332,13 @@ def test_tool_nodes():
             ShellService = exec_globals.get("ShellService")
             if ShellService:
                 ss = ShellService("/tmp")
-                log_test("Node_14_Shell (ShellService)", True)
+                log_test("Node_122_Shell (ShellService)", True)
             else:
-                log_test("Node_14_Shell (ShellService)", False, "ShellService 类未找到")
+                log_test("Node_122_Shell (ShellService)", False, "ShellService 类未找到")
         else:
-            log_skip("Node_14_Shell", "文件不存在")
+            log_skip("Node_122_Shell", "文件不存在")
     except Exception as e:
-        log_test("Node_14_Shell", False, str(e))
+        log_test("Node_122_Shell", False, str(e))
 
 
 # =============================================================================

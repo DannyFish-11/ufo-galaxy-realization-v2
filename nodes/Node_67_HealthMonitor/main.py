@@ -408,7 +408,7 @@ class HealthMonitor:
         
         # Disable non-essential features
         self.non_essential_disabled = [
-            "Node_56_AgentSwarm",  # Multi-agent debate
+            "Node_126_AgentSwarm",  # Multi-agent debate
             "Node_51_QuantumDispatcher",  # Quantum simulation
             "Node_52_QiskitSimulator",
         ]

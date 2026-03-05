@@ -219,8 +219,8 @@ layer_tools:
       dependencies: ["Node_01_OneAPI"]
       description: "Brave搜索"
       
-    Node_23_Calendar:
-      port: 8023
+    Node_123_Calendar:
+      port: 8123
       name: "Calendar"
       group: "tools"
       critical: false
@@ -413,8 +413,8 @@ layer_physical:
       dependencies: ["Node_01_OneAPI"]
       description: "音频控制"
       
-    Node_48_MediaGen:
-      port: 8048
+    Node_125_MediaGen:
+      port: 8125
       name: "MediaGen"
       group: "physical"
       critical: false
@@ -484,8 +484,8 @@ layer_intelligence:
       dependencies: ["Node_01_OneAPI"]
       description: "符号数学计算"
       
-    Node_56_AgentSwarm:
-      port: 8056
+    Node_126_AgentSwarm:
+      port: 8126
       name: "AgentSwarm"
       group: "intelligence"
       critical: false
@@ -602,16 +602,16 @@ layer_advanced:
   description: "高级功能层"
   priority: 6
   nodes:
-    Node_70_BambuLab:
-      port: 8070
+    Node_127_BambuLab:
+      port: 8127
       name: "BambuLab"
       group: "advanced"
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "BambuLab 3D打印"
       
-    Node_71_MediaGen:
-      port: 8071
+    Node_128_MediaGen:
+      port: 8128
       name: "MediaGen"
       group: "advanced"
       critical: false
