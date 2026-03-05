@@ -1,5 +1,7 @@
 # UFO Galaxy 节点系统修复报告
 
+> **注意**: 本报告记录的是 2026-02-05 的系统状态。其中部分节点 ID 已在 PR #23 中重新编号（例如 Node_23_Calendar → Node_123_Calendar），详见 CHANGELOG.md。
+
 ## 执行摘要
 
 本次修复成功实现了UFO Galaxy系统的P0级优先节点，共计**19个节点**已完整实现并推送到GitHub仓库。
