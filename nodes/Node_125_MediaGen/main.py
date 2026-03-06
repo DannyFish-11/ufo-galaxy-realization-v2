@@ -64,7 +64,7 @@ class MediaGenConfig:
         "audio_gen_api_key": "dummy_audio_api_key_xxxxxxxx",
         "video_gen_api_key": "dummy_video_api_key_xxxxxxxx",
     })
-    output_directory: str = "/home/ubuntu/media_output"
+    output_directory: str = os.path.join(os.path.expanduser("~"), "media_output")
     max_concurrent_tasks: int = 10
     default_image_model: str = "stable-diffusion-v1.5"
     default_audio_model: str = "tts-1"

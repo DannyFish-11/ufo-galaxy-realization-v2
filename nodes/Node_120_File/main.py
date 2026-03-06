@@ -47,7 +47,7 @@ NODE_NAME = os.getenv("NODE_NAME", "FileOperations")
 NODE_PORT = int(os.getenv("NODE_PORT", "8120"))
 STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "/home/ubuntu/workspace")
+WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.join(os.path.expanduser("~"), "workspace"))
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100MB
 
 logging.basicConfig(

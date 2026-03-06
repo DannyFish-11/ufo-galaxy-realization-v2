@@ -44,7 +44,7 @@ NODE_NAME = os.getenv("NODE_NAME", "WebOperations")
 NODE_PORT = int(os.getenv("NODE_PORT", "8121"))
 STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "/home/ubuntu/downloads")
+DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", os.path.join(os.path.expanduser("~"), "downloads"))
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "30"))
 MAX_DOWNLOAD_SIZE = int(os.getenv("MAX_DOWNLOAD_SIZE", str(500 * 1024 * 1024)))  # 500MB
 

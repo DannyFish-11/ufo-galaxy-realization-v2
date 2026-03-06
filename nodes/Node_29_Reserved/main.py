@@ -81,7 +81,7 @@ class ReservedNodeConfig:
     """节点配置的数据类"""
     node_id: str = "Node_29_Reserved"
     node_name: str = "通用插件框架"
-    plugin_directory: str = "/home/ubuntu/plugins"
+    plugin_directory: str = "./plugins"
     plugin_config: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     health_check_interval: int = 60  # seconds
 

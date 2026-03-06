@@ -19,8 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 # --- 配置和常量 --- #
 
 LOG_LEVEL = logging.INFO
-DEFAULT_CONFIG_PATH = "/home/ubuntu/kb_config.json"
-DEFAULT_KB_PATH = "/home/ubuntu/knowledge_base.json"
+DEFAULT_CONFIG_PATH = os.path.join(os.path.expanduser("~"), "kb_config.json")
+DEFAULT_KB_PATH = os.path.join(os.path.expanduser("~"), "knowledge_base.json")
 
 # 配置日志记录器
 logging.basicConfig(

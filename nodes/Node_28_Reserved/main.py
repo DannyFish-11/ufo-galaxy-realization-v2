@@ -54,7 +54,7 @@ class NodeConfig:
     """节点配置"""
     node_name: str = "Node_28_Reserved"
     log_level: LogLevel = LogLevel.INFO
-    plugin_dir: str = "/home/ubuntu/plugins"
+    plugin_dir: str = "./plugins"
     health_check_port: int = 8080
 
 @dataclass

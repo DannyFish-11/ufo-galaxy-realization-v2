@@ -49,7 +49,7 @@ class NodeConfig:
     """节点配置信息"""
     node_name: str = "Node_31_Reserved"
     log_level: str = "INFO"
-    plugin_dir: str = "/home/ubuntu/plugins"
+    plugin_dir: str = "./plugins"
     health_check_port: int = 8080
 
 @dataclass
@@ -300,7 +300,7 @@ async def main():
 
 if __name__ == "__main__":
     # 为了演示，创建一个示例插件
-    plugin_dir = "/home/ubuntu/plugins"
+    plugin_dir = "./plugins"
     os.makedirs(plugin_dir, exist_ok=True)
     sample_plugin_code = """
 from typing import Any
