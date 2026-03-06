@@ -14,9 +14,10 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 05 - Auth", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # JWT配置
 JWT_SECRET = os.getenv("AUTH_JWT_SECRET", secrets.token_urlsafe(32))

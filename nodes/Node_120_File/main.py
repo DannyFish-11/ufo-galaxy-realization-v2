@@ -36,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import uvicorn
+from nodes.common.cors_config import get_cors_origins
 
 # =============================================================================
 # Configuration
@@ -181,8 +182,7 @@ class FileService:
         try:
             p.resolve().relative_to(self.workspace_root.resolve())
         except ValueError:
-            # Allow absolute paths outside workspace for flexibility
-            pass
+            raise ValueError(f"Path '{path}' is outside the workspace. Access denied.")
         
         return p
     
@@ -579,7 +579,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

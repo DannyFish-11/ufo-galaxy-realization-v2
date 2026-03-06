@@ -205,8 +205,8 @@ class DeviceCommunication:
             try:
                 from core.device_registry import device_registry
                 await device_registry.update_status(device_id, status="online")
-            except:
-                pass
+            except (ImportError, AttributeError) as e:
+                logger.debug(f"设备注册表不可用: {e}")
             
             # 启动心跳任务
             if not self._heartbeat_task:
@@ -229,19 +229,19 @@ class DeviceCommunication:
         
         conn = self.connections.pop(device_id)
         
-        # 关闭 WebSocket
+        # 关闭 WebSocket（带超时防止挂起）
         if conn.websocket:
             try:
-                await conn.websocket.close()
-            except:
-                pass
-        
+                await asyncio.wait_for(conn.websocket.close(), timeout=5.0)
+            except Exception as e:
+                logger.debug(f"WebSocket 关闭异常: {device_id} - {e}")
+
         # 更新设备注册表
         try:
             from core.device_registry import device_registry, DeviceStatus
             await device_registry.update_status(device_id, status=DeviceStatus.OFFLINE)
-        except:
-            pass
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"设备注册表不可用: {e}")
         
         # 触发事件
         await self._emit_event("disconnected", device_id)
@@ -524,8 +524,8 @@ class DeviceCommunication:
             status_data = message.payload
             # 更新设备状态
             # ...
-        except:
-            pass
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"设备注册表不可用: {e}")
     
     async def _handle_event(self, device_id: str, message: DeviceMessage):
         """处理事件"""

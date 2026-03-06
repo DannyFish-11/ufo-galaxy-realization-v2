@@ -24,6 +24,7 @@ from .protocol import (
 from .transport import WebSocketManager
 from .handlers import DeviceManager, MessageHandler
 from .orchestrator import TaskOrchestrator, TaskPriority
+from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
 logging.basicConfig(
@@ -101,7 +102,7 @@ app = FastAPI(
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

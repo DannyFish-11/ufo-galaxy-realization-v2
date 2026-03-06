@@ -209,13 +209,12 @@ class AndroidGranularAdapter:
         return {"status": "success", "action": "install_apk", "path": apk_path, "result": str(result)}
 
     async def _handle_list_packages(self, device_id: str, params: Dict) -> Dict:
-        """处理列出已安装应用"""
+        """处理列出已安装应用（安全：Python 侧过滤，不使用 shell 管道）"""
         filter_str = params.get("filter", "")
-        cmd = "pm list packages"
-        if filter_str:
-            cmd += f" | grep {filter_str}"
-        result = await self.adb.shell(cmd, device_id)
+        result = await self.adb.shell("pm list packages", device_id)
         packages = [line.replace("package:", "").strip() for line in str(result).split("\n") if line.strip()]
+        if filter_str:
+            packages = [p for p in packages if filter_str in p]
         return {"status": "success", "action": "list_packages", "packages": packages}
 
     async def _handle_device_info(self, device_id: str, params: Dict) -> Dict:

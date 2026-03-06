@@ -368,8 +368,12 @@ class MCPLoader:
             try:
                 server.process.terminate()
                 server.process.wait(timeout=5)
-            except:
-                server.process.kill()
+            except (OSError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"MCP 进程 terminate 失败，强制 kill: {e}")
+                try:
+                    server.process.kill()
+                except OSError:
+                    pass
             server.process = None
         
         server.status = MCPServerStatus.STOPPED

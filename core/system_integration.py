@@ -227,7 +227,7 @@ class SystemIntegration:
             
             config_path = Path("config/node_registry.json")
             if config_path.exists():
-                with open(config_path) as f:
+                with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
                 
                 for node_name, node_info in config.get("nodes", {}).items():
@@ -398,15 +398,15 @@ class SystemIntegration:
                 from core.device_registry import device_registry
                 device = device_registry.get(cap.source)
                 return device and device.is_online()
-            except:
+            except (ImportError, AttributeError):
                 return False
-        
+
         elif cap.type == CapabilityType.MCP:
             try:
                 from core.mcp_loader import mcp_loader
                 server = mcp_loader.servers.get(cap.source)
                 return server and server.status.value == "running"
-            except:
+            except (ImportError, AttributeError):
                 return False
         
         elif cap.type == CapabilityType.SKILL:
@@ -523,14 +523,14 @@ class SystemIntegration:
             # 尝试 skill_loader
             try:
                 return await skill_loader.execute(skill_id, **params)
-            except:
-                pass
-            
+            except Exception as e:
+                logger.debug(f"skill_loader 执行 {skill_id} 失败: {e}")
+
             # 尝试 skill_md_loader
             try:
                 return await skill_md_loader.execute(skill_id, params)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"skill_md_loader 执行 {skill_id} 失败: {e}")
             
             raise ValueError(f"技能不存在: {skill_id}")
         except Exception as e:

@@ -484,7 +484,7 @@ class WebUIServer:
                                description="L4 级自主性智能系统")
             self.app.add_middleware(
                 CORSMiddleware,
-                allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+                allow_origins=get_cors_origins(), allow_methods=["*"], allow_headers=["*"]
             )
 
             galaxy = self.galaxy_ref  # 捕获引用
@@ -1097,6 +1097,7 @@ def main():
     # 运行配置向导
     if args.setup:
         from setup_wizard import SetupWizard
+from nodes.common.cors_config import get_cors_origins
         wizard = SetupWizard()
         wizard.run_interactive_setup()
         return

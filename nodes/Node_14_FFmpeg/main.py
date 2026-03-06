@@ -14,9 +14,10 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 14 - FFmpeg", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # 配置
 WORK_DIR = os.getenv("FFMPEG_WORK_DIR", "/tmp/ffmpeg")

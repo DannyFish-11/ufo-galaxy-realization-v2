@@ -16,6 +16,7 @@ UFO Galaxy 知识库系统 - Node 72
 
 import json
 import logging
+import os
 import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -49,11 +50,55 @@ class KnowledgeBaseSystem:
 
     def __init__(self, persist_directory: str = "./knowledge_db"):
         self.persist_directory = persist_directory
+        os.makedirs(persist_directory, exist_ok=True)
+        self._persist_file = os.path.join(persist_directory, "knowledge_entries.json")
         # 内存索引（当向量后端不可用时使用）
         self.knowledge_entries: Dict[str, KnowledgeEntry] = {}
         self._backend = _get_backend()
         _mode = getattr(self._backend, "name", "local") if self._backend else "local"
-        logger.info(f"知识库系统已初始化，向量后端: {_mode}，持久化目录: {persist_directory}")
+        # 从磁盘恢复知识
+        self._load_from_disk()
+        logger.info(f"知识库系统已初始化，向量后端: {_mode}，持久化目录: {persist_directory}，"
+                     f"已有条目: {len(self.knowledge_entries)}")
+
+    def _load_from_disk(self):
+        """从持久化文件恢复知识条目"""
+        if not os.path.exists(self._persist_file):
+            return
+        try:
+            with open(self._persist_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for item in data.get("entries", []):
+                entry = KnowledgeEntry(
+                    id=item["id"],
+                    content=item["content"],
+                    metadata=item.get("metadata", {}),
+                    timestamp=item.get("timestamp", 0.0),
+                )
+                self.knowledge_entries[entry.id] = entry
+        except Exception as e:
+            logger.warning(f"从磁盘恢复知识失败: {e}")
+
+    def _save_to_disk(self):
+        """将知识条目持久化到磁盘（JSON 格式）"""
+        try:
+            tmp_path = self._persist_file + ".tmp"
+            data = {
+                "entries": [
+                    {
+                        "id": e.id,
+                        "content": e.content,
+                        "metadata": {k: v for k, v in e.metadata.items() if not k.startswith("_")},
+                        "timestamp": e.timestamp,
+                    }
+                    for e in self.knowledge_entries.values()
+                ]
+            }
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, self._persist_file)  # atomic on POSIX
+        except Exception as e:
+            logger.error(f"知识库持久化失败: {e}")
 
     def add_knowledge(self, content: str, metadata: Dict[str, Any] = None) -> str:
         """添加知识到知识库"""
@@ -74,23 +119,29 @@ class KnowledgeBaseSystem:
             except Exception as exc:
                 logger.warning(f"向量后端写入失败: {exc}")
 
+        self._save_to_disk()
         return entry_id
 
     def search(self, query: str, top_k: int = 5) -> List[KnowledgeEntry]:
-        """搜索相关知识（优先使用向量后端）"""
+        """搜索相关知识（优先使用向量后端）
+
+        返回的每个 KnowledgeEntry 的 metadata 中会包含 ``_search_mode`` 字段，
+        值为 ``"vector"`` 或 ``"keyword"``，方便调用方判断搜索降级情况。
+        """
         if self._backend is not None:
             try:
                 results = self._backend.search(query, top_k)
                 entries = []
                 for r in results:
                     if r.doc_id in self.knowledge_entries:
-                        entries.append(self.knowledge_entries[r.doc_id])
+                        entry = self.knowledge_entries[r.doc_id]
+                        entry.metadata["_search_mode"] = "vector"
+                        entries.append(entry)
                     else:
-                        # 向量后端中有，但内存未同步时，构造临时条目
                         entries.append(KnowledgeEntry(
                             id=r.doc_id,
                             content=r.content,
-                            metadata=r.metadata,
+                            metadata={**r.metadata, "_search_mode": "vector"},
                         ))
                 return entries
             except Exception as exc:
@@ -98,7 +149,11 @@ class KnowledgeBaseSystem:
 
         # 降级：基于关键词匹配
         query_lower = query.lower()
-        results = [e for e in self.knowledge_entries.values() if query_lower in e.content.lower()]
+        results = []
+        for e in self.knowledge_entries.values():
+            if query_lower in e.content.lower():
+                e.metadata["_search_mode"] = "keyword"
+                results.append(e)
         return results[:top_k]
 
     def rag_query(self, query: str, context_size: int = 3) -> Dict[str, Any]:
@@ -127,6 +182,7 @@ class KnowledgeBaseSystem:
                 self._backend.add_document(entry_id, new_content, entry.metadata)
             except Exception as exc:
                 logger.warning(f"向量后端更新失败: {exc}")
+        self._save_to_disk()
         return True
 
     def delete_knowledge(self, entry_id: str) -> bool:
@@ -139,6 +195,7 @@ class KnowledgeBaseSystem:
                 self._backend.delete_document(entry_id)
             except Exception as exc:
                 logger.warning(f"向量后端删除失败: {exc}")
+        self._save_to_disk()
         return True
 
     def get_statistics(self) -> Dict[str, Any]:

@@ -16,6 +16,9 @@ import asyncio
 import json
 import logging
 import hashlib
+import os
+import sqlite3
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable, Set, Tuple, AsyncIterator
 from dataclasses import dataclass, field, asdict
@@ -33,6 +36,238 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class LearningPersistence:
+    """SQLite-based persistence layer for the learning system.
+
+    Stores observations, patterns, experiments, cycles, and accumulated
+    knowledge so that data survives process restarts.
+    """
+
+    _CREATE_SQL = """
+    CREATE TABLE IF NOT EXISTS observations (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        metadata TEXT,
+        confidence REAL DEFAULT 0.0
+    );
+    CREATE TABLE IF NOT EXISTS patterns (
+        id TEXT PRIMARY KEY,
+        pattern_type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        observations TEXT,
+        confidence REAL DEFAULT 0.0,
+        created_at TEXT,
+        last_updated TEXT,
+        frequency INTEGER DEFAULT 1,
+        examples TEXT,
+        metadata TEXT
+    );
+    CREATE TABLE IF NOT EXISTS experiments (
+        id TEXT PRIMARY KEY,
+        hypothesis TEXT,
+        pattern_id TEXT,
+        status TEXT,
+        results TEXT,
+        created_at TEXT,
+        completed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS learning_cycles (
+        id TEXT PRIMARY KEY,
+        stage TEXT,
+        observations_count INTEGER,
+        patterns_count INTEGER,
+        experiments_count INTEGER,
+        start_time TEXT,
+        end_time TEXT,
+        metadata TEXT
+    );
+    CREATE TABLE IF NOT EXISTS knowledge (
+        key TEXT PRIMARY KEY,
+        pattern_type TEXT,
+        description TEXT,
+        confidence REAL,
+        frequency INTEGER,
+        sources TEXT,
+        created_at TEXT,
+        last_updated TEXT,
+        pattern_ids TEXT,
+        examples TEXT,
+        metadata TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_obs_source ON observations(source);
+    CREATE INDEX IF NOT EXISTS idx_pat_type ON patterns(pattern_type);
+    CREATE INDEX IF NOT EXISTS idx_exp_status ON experiments(status);
+    """
+
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path or os.getenv(
+            "LEARNING_DB_PATH",
+            os.path.join(os.path.dirname(__file__), "learning_data.db"),
+        )
+        self._lock = threading.Lock()
+        self._init_db()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def _init_db(self):
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                conn.executescript(self._CREATE_SQL)
+                conn.commit()
+            finally:
+                conn.close()
+        logger.info(f"LearningPersistence 初始化完成: {self.db_path}")
+
+    # ── Observations ──
+
+    def save_observations(self, observations: list):
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                for obs in observations:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO observations VALUES (?,?,?,?,?,?)",
+                        (
+                            obs.id,
+                            obs.source,
+                            obs.content,
+                            obs.timestamp.isoformat() if isinstance(obs.timestamp, datetime) else str(obs.timestamp),
+                            json.dumps(obs.metadata, default=str),
+                            obs.confidence,
+                        ),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def load_observations(self, limit: int = 1000) -> list:
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                rows = conn.execute(
+                    "SELECT id, source, content, timestamp, metadata, confidence "
+                    "FROM observations ORDER BY timestamp DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            finally:
+                conn.close()
+        result = []
+        for r in rows:
+            result.append(LearningObservation(
+                id=r[0], source=r[1], content=r[2],
+                timestamp=datetime.fromisoformat(r[3]),
+                metadata=json.loads(r[4]) if r[4] else {},
+                confidence=r[5],
+            ))
+        return result
+
+    # ── Patterns ──
+
+    def save_patterns(self, patterns: list):
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                for p in patterns:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO patterns VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            p.id,
+                            p.pattern_type.value if hasattr(p.pattern_type, 'value') else str(p.pattern_type),
+                            p.description,
+                            json.dumps(p.observations, default=str),
+                            p.confidence,
+                            p.created_at.isoformat() if isinstance(p.created_at, datetime) else str(p.created_at),
+                            p.last_updated.isoformat() if isinstance(p.last_updated, datetime) else str(p.last_updated),
+                            p.frequency,
+                            json.dumps(p.examples, default=str),
+                            json.dumps(p.metadata, default=str),
+                        ),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+    # ── Knowledge ──
+
+    def save_knowledge(self, knowledge: dict):
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                for key, item in knowledge.items():
+                    conn.execute(
+                        "INSERT OR REPLACE INTO knowledge VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            key,
+                            item.get("pattern_type", ""),
+                            item.get("description", ""),
+                            item.get("confidence", 0),
+                            item.get("frequency", 0),
+                            json.dumps(list(item.get("sources", set())), default=str),
+                            item.get("created_at", ""),
+                            item.get("last_updated", ""),
+                            json.dumps(list(item.get("pattern_ids", set())), default=str),
+                            json.dumps(item.get("examples", []), default=str),
+                            json.dumps(item.get("metadata", {}), default=str),
+                        ),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def load_knowledge(self) -> dict:
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                rows = conn.execute("SELECT * FROM knowledge").fetchall()
+            finally:
+                conn.close()
+        result = {}
+        for r in rows:
+            result[r[0]] = {
+                "key": r[0],
+                "pattern_type": r[1],
+                "description": r[2],
+                "confidence": r[3],
+                "frequency": r[4],
+                "sources": set(json.loads(r[5])) if r[5] else set(),
+                "created_at": r[6],
+                "last_updated": r[7],
+                "pattern_ids": set(json.loads(r[8])) if r[8] else set(),
+                "examples": json.loads(r[9]) if r[9] else [],
+                "metadata": json.loads(r[10]) if r[10] else {},
+            }
+        return result
+
+    # ── Cycles ──
+
+    def save_cycle(self, cycle):
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                conn.execute(
+                    "INSERT OR REPLACE INTO learning_cycles VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        cycle.id,
+                        cycle.stage.name if hasattr(cycle.stage, 'name') else str(cycle.stage),
+                        len(cycle.observations),
+                        len(cycle.patterns),
+                        len(cycle.experiments),
+                        cycle.start_time.isoformat() if isinstance(cycle.start_time, datetime) else str(cycle.start_time),
+                        cycle.end_time.isoformat() if isinstance(cycle.end_time, datetime) and cycle.end_time else None,
+                        json.dumps(cycle.metadata, default=str),
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
 
 
 class LearningStage(Enum):
@@ -120,13 +355,14 @@ class PatternRecognizer:
     semantic, and anomaly detection.
     """
     
-    def __init__(self, min_confidence: float = 0.6):
+    def __init__(self, min_confidence: float = 0.6, max_buffer_size: int = 5000):
         self.min_confidence = min_confidence
-        self.vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
-        self.pca = PCA(n_components=50)
+        self.vectorizer = TfidfVectorizer(max_features=500, stop_words='english')
+        self.pca = PCA(n_components=min(50, 100))
         self.clusterer = DBSCAN(eps=0.5, min_samples=3)
         self._patterns: Dict[str, DiscoveredPattern] = {}
-        self._observation_buffer: deque = deque(maxlen=10000)
+        self._observation_buffer: deque = deque(maxlen=max_buffer_size)
+        self._fitted_vectorizer = False  # 避免重复 fit
         logger.info("PatternRecognizer initialized")
     
     async def recognize_patterns(
@@ -182,18 +418,26 @@ class PatternRecognizer:
         """Recognize semantic patterns using clustering."""
         if len(observations) < 5:
             return []
-        
+
+        # 对大量观测进行采样以控制性能（O(n^2) → O(sample^2)）
+        max_sample = 500
+        if len(observations) > max_sample:
+            import random
+            observations = random.sample(observations, max_sample)
+
         try:
             # Extract text content
             texts = [obs.content for obs in observations]
-            
-            # Vectorize
+
+            # Vectorize（使用 transform 避免每次重新拟合词汇表）
             vectors = self.vectorizer.fit_transform(texts).toarray()
-            
+
             # Reduce dimensions
-            if vectors.shape[1] > 50:
+            n_components = min(50, vectors.shape[1], vectors.shape[0])
+            if vectors.shape[1] > n_components and n_components >= 2:
+                self.pca = PCA(n_components=n_components)
                 vectors = self.pca.fit_transform(vectors)
-            
+
             # Cluster
             labels = self.clusterer.fit_predict(vectors)
             
@@ -349,11 +593,20 @@ class KnowledgeAccumulator:
     confidence scoring.
     """
     
-    def __init__(self, max_knowledge_items: int = 10000):
+    def __init__(self, max_knowledge_items: int = 10000, persistence: Optional[LearningPersistence] = None):
         self.max_knowledge_items = max_knowledge_items
+        self._persistence = persistence
         self._knowledge: Dict[str, Dict[str, Any]] = {}
         self._knowledge_history: deque = deque(maxlen=1000)
         self._confidence_threshold = 0.5
+        self._merge_lock = asyncio.Lock()
+        # Restore knowledge from disk if available
+        if self._persistence:
+            try:
+                self._knowledge = self._persistence.load_knowledge()
+                logger.info(f"从数据库恢复了 {len(self._knowledge)} 条知识")
+            except Exception as e:
+                logger.warning(f"恢复知识失败: {e}")
         logger.info("KnowledgeAccumulator initialized")
     
     async def accumulate(
@@ -378,47 +631,55 @@ class KnowledgeAccumulator:
             'rejected': 0
         }
         
-        for pattern in patterns:
-            if pattern.confidence < self._confidence_threshold:
-                stats['rejected'] += 1
-                continue
-            
-            knowledge_key = self._generate_knowledge_key(pattern)
-            
-            if knowledge_key in self._knowledge:
-                # Update existing knowledge
-                existing = self._knowledge[knowledge_key]
-                existing['confidence'] = max(existing['confidence'], pattern.confidence)
-                existing['frequency'] += pattern.frequency
-                existing['sources'].add(source)
-                existing['last_updated'] = datetime.now().isoformat()
-                existing['pattern_ids'].add(pattern.id)
-                stats['updated'] += 1
-            else:
-                # Check for similar knowledge to merge
-                merged = await self._try_merge(pattern, source)
-                if merged:
-                    stats['merged'] += 1
+        async with self._merge_lock:
+            for pattern in patterns:
+                if pattern.confidence < self._confidence_threshold:
+                    stats['rejected'] += 1
+                    continue
+
+                knowledge_key = self._generate_knowledge_key(pattern)
+
+                if knowledge_key in self._knowledge:
+                    # Update existing knowledge
+                    existing = self._knowledge[knowledge_key]
+                    existing['confidence'] = max(existing['confidence'], pattern.confidence)
+                    existing['frequency'] += pattern.frequency
+                    existing['sources'].add(source)
+                    existing['last_updated'] = datetime.now().isoformat()
+                    existing['pattern_ids'].add(pattern.id)
+                    stats['updated'] += 1
                 else:
-                    # Add new knowledge
-                    self._knowledge[knowledge_key] = {
-                        'key': knowledge_key,
-                        'pattern_type': pattern.pattern_type.value,
-                        'description': pattern.description,
-                        'confidence': pattern.confidence,
-                        'frequency': pattern.frequency,
-                        'sources': {source},
-                        'created_at': datetime.now().isoformat(),
-                        'last_updated': datetime.now().isoformat(),
-                        'pattern_ids': {pattern.id},
-                        'examples': pattern.examples,
-                        'metadata': pattern.metadata
-                    }
-                    stats['added'] += 1
-        
-        # Manage capacity
-        await self._consolidate_if_needed()
-        
+                    # Check for similar knowledge to merge
+                    merged = await self._try_merge(pattern, source)
+                    if merged:
+                        stats['merged'] += 1
+                    else:
+                        # Add new knowledge
+                        self._knowledge[knowledge_key] = {
+                            'key': knowledge_key,
+                            'pattern_type': pattern.pattern_type.value,
+                            'description': pattern.description,
+                            'confidence': pattern.confidence,
+                            'frequency': pattern.frequency,
+                            'sources': {source},
+                            'created_at': datetime.now().isoformat(),
+                            'last_updated': datetime.now().isoformat(),
+                            'pattern_ids': {pattern.id},
+                            'examples': list(pattern.examples),  # defensive copy
+                            'metadata': dict(pattern.metadata),
+                        }
+                        stats['added'] += 1
+
+            # Manage capacity
+            await self._consolidate_if_needed()
+
+            # Persist to database
+            if self._persistence:
+                try:
+                    self._persistence.save_knowledge(self._knowledge)
+                except Exception as e:
+                    logger.error(f"知识持久化失败: {e}")
+
         logger.info(f"Knowledge accumulation: {stats}")
         return stats
     
@@ -436,7 +697,7 @@ class KnowledgeAccumulator:
         for key, knowledge in self._knowledge.items():
             similarity = self._calculate_similarity(pattern, knowledge)
             if similarity > 0.8:
-                # Merge
+                # Merge (use defensive copies to avoid mutating pattern data)
                 knowledge['confidence'] = max(
                     knowledge['confidence'],
                     pattern.confidence
@@ -444,8 +705,9 @@ class KnowledgeAccumulator:
                 knowledge['frequency'] += pattern.frequency
                 knowledge['sources'].add(source)
                 knowledge['pattern_ids'].add(pattern.id)
-                knowledge['examples'].extend(pattern.examples)
-                knowledge['examples'] = knowledge['examples'][:5]  # Keep top 5
+                merged_examples = list(knowledge['examples']) + list(pattern.examples)
+                knowledge['examples'] = merged_examples[:5]  # Keep top 5
+                knowledge['last_updated'] = datetime.now().isoformat()
                 return True
         return False
     
@@ -544,18 +806,29 @@ class AutonomousLearningEngine:
         self,
         pattern_recognizer: Optional[PatternRecognizer] = None,
         knowledge_accumulator: Optional[KnowledgeAccumulator] = None,
-        cycle_interval: float = 60.0
+        cycle_interval: float = 60.0,
+        persistence: Optional[LearningPersistence] = None,
     ):
+        self._persistence = persistence or LearningPersistence()
         self.pattern_recognizer = pattern_recognizer or PatternRecognizer()
-        self.knowledge_accumulator = knowledge_accumulator or KnowledgeAccumulator()
+        self.knowledge_accumulator = knowledge_accumulator or KnowledgeAccumulator(
+            persistence=self._persistence,
+        )
         self.cycle_interval = cycle_interval
-        
+
         self._current_stage = LearningStage.OBSERVE
         self._cycles: List[LearningCycle] = []
         self._observations: List[LearningObservation] = []
         self._experiments: List[LearningExperiment] = []
         self._running = False
         self._task: Optional[asyncio.Task] = None
+
+        # Restore observations from persistence
+        try:
+            self._observations = self._persistence.load_observations(limit=5000)
+            logger.info(f"从数据库恢复了 {len(self._observations)} 条观测")
+        except Exception as e:
+            logger.warning(f"恢复观测数据失败: {e}")
         
         # Callbacks for each stage
         self._stage_callbacks: Dict[LearningStage, List[Callable]] = {
@@ -648,10 +921,19 @@ class AutonomousLearningEngine:
                 # Complete cycle
                 cycle.end_time = datetime.now()
                 self._cycles.append(cycle)
-                
+
+                # Persist cycle data
+                if self._persistence:
+                    try:
+                        self._persistence.save_cycle(cycle)
+                        self._persistence.save_observations(observations)
+                        self._persistence.save_patterns(patterns)
+                    except Exception as pe:
+                        logger.error(f"周期数据持久化失败: {pe}")
+
                 # Reset to observe for next cycle
                 self._current_stage = LearningStage.OBSERVE
-                
+
                 logger.info(f"[{cycle_id}] Learning cycle completed")
                 
                 # Wait for next cycle

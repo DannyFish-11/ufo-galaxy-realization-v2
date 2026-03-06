@@ -671,7 +671,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -794,6 +794,7 @@ if __name__ == "__main__":
 # =============================================================================
 
 from academic_extension import academic_manager, PaperNote, CitationNetwork
+from nodes.common.cors_config import get_cors_origins
 
 @app.post("/academic/paper_note")
 async def save_academic_paper_note(paper: PaperNote):

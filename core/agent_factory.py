@@ -20,6 +20,111 @@ from enum import Enum
 logger = logging.getLogger("UFO-Galaxy.AgentFactory")
 
 
+# ───────────────────── Agent 消息通信 ─────────────────────
+
+@dataclass
+class AgentMessage:
+    """Agent 间通信消息"""
+    id: str
+    sender_id: str
+    receiver_id: str
+    msg_type: str  # task_assign, task_result, heartbeat, status_query, status_response
+    payload: Dict = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
+    ack: bool = False  # 已确认
+
+
+class AgentMessageBus:
+    """
+    Agent 消息总线 —— 基于内存队列的发布/订阅通信系统。
+
+    每个 Agent 拥有独立的消息队列，支持:
+    - 点对点消息发送（send）
+    - 带超时的接收（receive）
+    - 广播消息（broadcast）
+    - 请求-回复模式（request / reply）
+    """
+
+    def __init__(self):
+        self._queues: Dict[str, asyncio.Queue] = {}
+        self._pending_acks: Dict[str, asyncio.Event] = {}
+        logger.info("AgentMessageBus 初始化")
+
+    def register(self, agent_id: str):
+        """为 Agent 注册一个消息队列"""
+        if agent_id not in self._queues:
+            self._queues[agent_id] = asyncio.Queue()
+
+    def unregister(self, agent_id: str):
+        if agent_id in self._queues:
+            del self._queues[agent_id]
+
+    async def send(self, msg: AgentMessage) -> bool:
+        """发送消息到目标 Agent 的队列"""
+        q = self._queues.get(msg.receiver_id)
+        if q is None:
+            logger.warning(f"目标 Agent {msg.receiver_id} 不存在")
+            return False
+        await q.put(msg)
+        return True
+
+    async def receive(self, agent_id: str, timeout: float = 5.0) -> Optional[AgentMessage]:
+        """从队列中接收消息，带超时"""
+        q = self._queues.get(agent_id)
+        if q is None:
+            return None
+        try:
+            return await asyncio.wait_for(q.get(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+
+    async def broadcast(self, sender_id: str, msg_type: str, payload: Dict):
+        """向所有已注册 Agent 广播消息"""
+        for agent_id in list(self._queues.keys()):
+            if agent_id == sender_id:
+                continue
+            msg = AgentMessage(
+                id=f"msg_{uuid.uuid4().hex[:12]}",
+                sender_id=sender_id,
+                receiver_id=agent_id,
+                msg_type=msg_type,
+                payload=payload,
+            )
+            await self.send(msg)
+
+    async def request(self, msg: AgentMessage, timeout: float = 10.0) -> Optional[AgentMessage]:
+        """请求-回复模式：发送请求并等待回复"""
+        reply_event = asyncio.Event()
+        self._pending_acks[msg.id] = reply_event
+        await self.send(msg)
+        try:
+            await asyncio.wait_for(reply_event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(f"请求超时: {msg.id}")
+            self._pending_acks.pop(msg.id, None)
+            return None
+        self._pending_acks.pop(msg.id, None)
+        # 从接收方队列中取回复（按 convention 回复 msg_type = 'reply_{original_id}'）
+        return await self.receive(msg.sender_id, timeout=1.0)
+
+    def notify_ack(self, original_msg_id: str):
+        """通知请求方消息已被处理"""
+        ev = self._pending_acks.get(original_msg_id)
+        if ev:
+            ev.set()
+
+
+# 全局消息总线单例
+_message_bus: Optional["AgentMessageBus"] = None
+
+
+def get_message_bus() -> AgentMessageBus:
+    global _message_bus
+    if _message_bus is None:
+        _message_bus = AgentMessageBus()
+    return _message_bus
+
+
 # ───────────────────── 数据模型 ─────────────────────
 
 class AgentRole(Enum):
@@ -225,6 +330,7 @@ class AgentFactory:
         self.agents: Dict[str, TaskAgent] = {}
         self.agent_tree: Dict[str, List[str]] = {}  # parent_id → [child_ids]
         self._task_handlers: Dict[str, Callable] = {}
+        self.message_bus = get_message_bus()
         logger.info("AgentFactory 已初始化")
 
     # ─────── 模式 1: 模板创建 ─────────
@@ -474,19 +580,42 @@ class AgentFactory:
            agent.depth < agent.config.max_depth:
             children = await self.split_agent(agent_id)
             if children:
+                # 通过消息总线向子 Agent 分发任务
+                for child in children:
+                    for task_item in child.task_queue:
+                        task_msg = AgentMessage(
+                            id=f"msg_{uuid.uuid4().hex[:12]}",
+                            sender_id=agent.id,
+                            receiver_id=child.id,
+                            msg_type="task_assign",
+                            payload=task_item,
+                        )
+                        await self.message_bus.send(task_msg)
                 # 子 Agent 并行执行
                 results = await asyncio.gather(
                     *[self._run_agent(c.id) for c in children],
                     return_exceptions=True,
                 )
+                # 收集执行结果并通过消息总线通知父 Agent
+                child_results = []
+                for i, child in enumerate(children):
+                    r = results[i]
+                    result_payload = r if not isinstance(r, Exception) else {"error": str(r)}
+                    child_results.append(result_payload)
+                    # 发送结果消息给父 Agent
+                    result_msg = AgentMessage(
+                        id=f"msg_{uuid.uuid4().hex[:12]}",
+                        sender_id=child.id,
+                        receiver_id=agent.id,
+                        msg_type="task_result",
+                        payload=result_payload if isinstance(result_payload, dict) else {},
+                    )
+                    await self.message_bus.send(result_msg)
                 agent.state = AgentState.IDLE
                 return {
                     "strategy": "split_and_parallel",
                     "children": [c.id for c in children],
-                    "results": [
-                        r if not isinstance(r, Exception) else {"error": str(r)}
-                        for r in results
-                    ],
+                    "results": child_results,
                 }
 
         # 直接执行
@@ -545,6 +674,7 @@ class AgentFactory:
 
     def _register_agent(self, agent: TaskAgent):
         self.agents[agent.id] = agent
+        self.message_bus.register(agent.id)
         if agent.parent_id:
             if agent.parent_id not in self.agent_tree:
                 self.agent_tree[agent.parent_id] = []
@@ -594,6 +724,7 @@ class AgentFactory:
                 self.terminate_agent(child_id, recursive=True)
 
         agent.state = AgentState.TERMINATED
+        self.message_bus.unregister(agent_id)
         logger.info(f"Agent 已终止: {agent.config.name} ({agent_id})")
 
     def cleanup_expired(self):

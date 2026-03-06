@@ -230,6 +230,10 @@ class IntentParser:
                 api_base = "https://api.deepseek.com/v1"
 
             if not api_key:
+                logger.info(
+                    "LLM intent parsing skipped: no API key configured "
+                    "(set OPENAI_API_KEY or DEEPSEEK_API_KEY to enable)"
+                )
                 return None
 
             async with httpx.AsyncClient(timeout=10) as client:

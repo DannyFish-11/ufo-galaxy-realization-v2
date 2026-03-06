@@ -192,7 +192,7 @@ class SkillLoader:
         
         try:
             # 读取技能定义
-            with open(skill_file) as f:
+            with open(skill_file, encoding="utf-8") as f:
                 skill_def = json.load(f)
             
             # 生成 ID

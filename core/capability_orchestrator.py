@@ -160,7 +160,7 @@ class CapabilityOrchestrator:
         try:
             config_path = Path("config/node_registry.json")
             if config_path.exists():
-                with open(config_path) as f:
+                with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
                 
                 for node_name, node_info in config.get("nodes", {}).items():

@@ -379,10 +379,25 @@ class SkillManager:
                 results.append(result)
             
             elif step_type == "code":
-                # 执行代码
+                # 执行代码（受限沙箱：禁用危险内置函数）
                 code = step.get("code")
+                _SAFE_BUILTINS = {
+                    k: getattr(__builtins__, k) if hasattr(__builtins__, k)
+                    else __builtins__[k] if isinstance(__builtins__, dict) else None
+                    for k in [
+                        "len", "range", "str", "int", "float", "list", "dict",
+                        "bool", "tuple", "set", "frozenset", "type",
+                        "isinstance", "issubclass", "enumerate", "zip",
+                        "map", "filter", "sorted", "reversed", "min", "max",
+                        "sum", "abs", "round", "print", "repr", "hash",
+                        "True", "False", "None",
+                    ]
+                    if (hasattr(__builtins__, k) if not isinstance(__builtins__, dict)
+                        else k in __builtins__)
+                }
+                restricted_globals = {"__builtins__": _SAFE_BUILTINS}
                 local_vars = {"params": context, "result": None}
-                exec(code, local_vars)
+                exec(code, restricted_globals, local_vars)
                 result = local_vars.get("result")
                 results.append(result)
         
@@ -525,7 +540,7 @@ class SkillManager:
             logger.warning(f"技能定义文件不存在: {skill_file}")
             return False
         
-        with open(skill_file) as f:
+        with open(skill_file, encoding="utf-8") as f:
             skill_def = json.load(f)
         
         # 加载处理函数
@@ -627,7 +642,7 @@ class SkillManager:
             self._create_default_config()
 
         try:
-            with open(self.config_path) as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 config = json.load(f)
 
             # 注册配置中声明的内置技能（元数据注册，无 handler）
@@ -669,7 +684,7 @@ class SkillManager:
                 "builtin_skills": [],
                 "skill_packages": [],
             }
-            with open(self.config_path, "w") as f:
+            with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(default, f, indent=2, ensure_ascii=False)
             logger.info(f"已创建默认技能配置模板: {self.config_path}")
         except Exception as e:

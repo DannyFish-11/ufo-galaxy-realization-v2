@@ -200,7 +200,7 @@ class SystemLoadMonitor:
         
         try:
             # 读取 /proc/stat
-            with open('/proc/stat', 'r') as f:
+            with open('/proc/stat', "r", encoding="utf-8") as f:
                 line = f.readline()
                 parts = line.split()
                 
@@ -227,7 +227,7 @@ class SystemLoadMonitor:
                     self._last_cpu_times = (user, nice, system, idle, iowait, total)
             
             # 读取 /proc/loadavg
-            with open('/proc/loadavg', 'r') as f:
+            with open('/proc/loadavg', "r", encoding="utf-8") as f:
                 parts = f.readline().split()
                 stats.load_avg_1m = float(parts[0])
                 stats.load_avg_5m = float(parts[1])
@@ -268,7 +268,7 @@ class SystemLoadMonitor:
         stats = MemoryStats()
         
         try:
-            with open('/proc/meminfo', 'r') as f:
+            with open('/proc/meminfo', "r", encoding="utf-8") as f:
                 meminfo = {}
                 for line in f:
                     parts = line.split(':')
@@ -328,7 +328,7 @@ class SystemLoadMonitor:
             stats.usage_percent = (stats.used_bytes / stats.total_bytes * 100) if stats.total_bytes > 0 else 0
             
             # 读取 /proc/diskstats
-            with open('/proc/diskstats', 'r') as f:
+            with open('/proc/diskstats', "r", encoding="utf-8") as f:
                 total_read = 0
                 total_write = 0
                 for line in f:
@@ -373,7 +373,7 @@ class SystemLoadMonitor:
         stats = NetworkStats()
         
         try:
-            with open('/proc/net/dev', 'r') as f:
+            with open('/proc/net/dev', "r", encoding="utf-8") as f:
                 lines = f.readlines()[2:]  # 跳过标题行
                 
                 for line in lines:
@@ -390,9 +390,9 @@ class SystemLoadMonitor:
                         stats.drop_out += int(parts[12])
             
             # 统计连接数
-            with open('/proc/net/tcp', 'r') as f:
+            with open('/proc/net/tcp', "r", encoding="utf-8") as f:
                 stats.connections_count = len(f.readlines()) - 1
-            with open('/proc/net/tcp6', 'r') as f:
+            with open('/proc/net/tcp6', "r", encoding="utf-8") as f:
                 stats.connections_count += len(f.readlines()) - 1
         
         except Exception as e:

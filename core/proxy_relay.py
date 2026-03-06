@@ -225,7 +225,7 @@ class ProxyRelay:
             return result
 
         # 等待回复
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
         self._reply_futures[request.relay_id] = future
 
         try:

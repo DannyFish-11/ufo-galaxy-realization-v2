@@ -25,6 +25,7 @@ from enum import Enum
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -154,7 +155,8 @@ class DeviceStatusManager:
         self._devices[device_state.device_id] = device_state
         self._status_history[device_state.device_id] = []
         logger.info(f"Device registered: {device_state.device_id} ({device_state.device_name})")
-        asyncio.create_task(self._broadcast_update("device_registered", device_state.to_dict()))
+        from core.task_utils import create_tracked_task
+        create_tracked_task(self._broadcast_update("device_registered", device_state.to_dict()), name="broadcast_device_registered")
         return True
     
     def unregister_device(self, device_id: str) -> bool:
@@ -163,7 +165,8 @@ class DeviceStatusManager:
             device = self._devices.pop(device_id)
             self._status_history.pop(device_id, None)
             logger.info(f"Device unregistered: {device_id}")
-            asyncio.create_task(self._broadcast_update("device_unregistered", {"device_id": device_id}))
+            from core.task_utils import create_tracked_task
+            create_tracked_task(self._broadcast_update("device_unregistered", {"device_id": device_id}), name="broadcast_device_unregistered")
             return True
         return False
     
@@ -198,7 +201,8 @@ class DeviceStatusManager:
         self._record_history(device_id, device.to_dict())
         
         # 广播更新
-        asyncio.create_task(self._broadcast_update("device_status_updated", device.to_dict()))
+        from core.task_utils import create_tracked_task
+        create_tracked_task(self._broadcast_update("device_status_updated", device.to_dict()), name="broadcast_device_status")
         
         return True
     
@@ -316,7 +320,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

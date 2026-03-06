@@ -324,21 +324,31 @@ class NodeRegistry:
     # 节点调用
     # ========================================================================
     
-    async def call_node(self, node_id: str, action: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """调用节点"""
+    async def call_node(self, node_id: str, action: str, params: Dict[str, Any] = None,
+                        allow_failover: bool = True) -> Dict[str, Any]:
+        """
+        调用节点，支持自动故障转移
+
+        当节点不可用或调用失败时，自动查找具有相同能力的备选节点重试。
+        """
         node = self.get_node(node_id)
         if not node:
+            if allow_failover:
+                return await self._failover_call(node_id, action, params, f"节点不存在: {node_id}")
             return {"success": False, "error": f"节点不存在: {node_id}"}
-            
+
         if node.metadata.status not in [NodeStatus.READY, NodeStatus.RUNNING]:
+            if allow_failover:
+                return await self._failover_call(node_id, action, params,
+                                                  f"节点未就绪: {node.metadata.status.name}")
             return {"success": False, "error": f"节点未就绪: {node.metadata.status.name}"}
-            
+
         params = params or {}
         start_time = datetime.now()
-        
+
         try:
             result = await node.execute(action, params)
-            
+
             # 更新统计
             node.metadata.call_count += 1
             node.metadata.success_count += 1
@@ -346,13 +356,54 @@ class NodeRegistry:
             node.metadata.avg_response_time = (
                 node.metadata.avg_response_time * 0.9 + elapsed * 0.1
             )
-            
+
             return {"success": True, "data": result}
-            
+
         except Exception as e:
             node.metadata.call_count += 1
+            node.metadata.status = NodeStatus.ERROR
+            node.metadata.error_message = str(e)
             logger.error(f"节点调用失败 {node_id}.{action}: {e}")
+
+            if allow_failover:
+                return await self._failover_call(node_id, action, params, str(e))
             return {"success": False, "error": str(e)}
+
+    async def _failover_call(self, failed_node_id: str, action: str,
+                              params: Dict[str, Any], reason: str) -> Dict[str, Any]:
+        """
+        故障转移：查找具有相同能力的备选节点并重试
+
+        按健康分数排序选择最佳替代节点。
+        """
+        # 收集失败节点的能力
+        failed_meta = self.metadata.get(failed_node_id)
+        if not failed_meta:
+            return {"success": False, "error": reason, "failover": "no_metadata"}
+
+        # 查找具有相同能力的其他就绪节点
+        candidates = []
+        for cap in failed_meta.capabilities:
+            cap_name = cap.name if hasattr(cap, "name") else str(cap)
+            node_ids = self.capability_index.get(cap_name, set())
+            for nid in node_ids:
+                if nid == failed_node_id:
+                    continue
+                alt_node = self.get_node(nid)
+                if alt_node and alt_node.metadata.status in [NodeStatus.READY, NodeStatus.RUNNING]:
+                    candidates.append(alt_node)
+
+        if not candidates:
+            logger.warning(f"故障转移失败: {failed_node_id} 无可用备选节点")
+            return {"success": False, "error": reason, "failover": "no_candidates"}
+
+        # 按健康分数排序
+        candidates.sort(key=lambda n: n.metadata.health_score, reverse=True)
+        best = candidates[0]
+        logger.info(f"故障转移: {failed_node_id} → {best.node_id} (原因: {reason})")
+
+        # 使用备选节点调用（禁止再次故障转移，防止循环）
+        return await self.call_node(best.node_id, action, params, allow_failover=False)
             
     async def call_capability(self, capability: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """按能力调用（自动选择最佳节点）"""

@@ -162,7 +162,7 @@ class NodeDiscoveryService:
         self._running = True
 
         # 启动 UDP 监听
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             self._transport, _ = await loop.create_datagram_endpoint(
                 lambda: _DiscoveryProtocol(self),

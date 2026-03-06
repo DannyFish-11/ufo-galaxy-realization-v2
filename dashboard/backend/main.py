@@ -22,6 +22,9 @@ from typing import Dict, List, Optional, Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
+from core.unified_response import UnifiedChatResponse
+from nodes.common.cors_config import get_cors_origins
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -70,7 +73,7 @@ app = FastAPI(title="Galaxy Dashboard", version="2.3.23")
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -243,77 +246,140 @@ async def query_knowledge(request: dict):
 # 智能对话
 # ============================================================================
 
-@app.post("/api/v1/chat")
+async def get_parsed_intent_modern(message: str, context: Optional[List] = None) -> Optional[Dict[str, Any]]:
+    """
+    使用 core.ai_intent.IntentParser 进行意图解析（现代版）
+
+    返回与旧 parse_intent() 兼容的 dict 格式，失败时返回 None。
+    """
+    try:
+        from core.ai_intent import get_intent_parser
+        parser = get_intent_parser()
+        ctx = {"history": context} if context else None
+        parsed = await parser.parse(message, ctx)
+        # 映射 ParsedIntent → 旧 dict 格式
+        intent_type = parsed.intent
+        action = parsed.command
+        params = parsed.params
+        # 保持旧代码分发可用的 type/action 结构
+        return {
+            "type": intent_type,
+            "action": action,
+            "params": params,
+            "confidence": parsed.confidence,
+            "suggestions": parsed.suggestions,
+            "targets": parsed.targets,
+        }
+    except Exception as e:
+        logger.debug(f"Modern intent parser failed, will fallback: {e}")
+        return None
+
+
+@app.post("/api/v1/dashboard/chat")
 async def chat(request: dict):
     """
-    智能对话 - 统一入口
-    
-    自动识别意图，调用相应节点
+    Dashboard 智能对话入口
+
+    路由: /api/v1/dashboard/chat (避免与 core/api_routes.py 的 /api/v1/chat 冲突)
+    返回: UnifiedChatResponse 格式
     """
     message = request.get("message", "")
     device_id = request.get("device_id", "")
-    
-    logger.info(f"Chat: {message[:50]}...")
-    
-    message_lower = message.lower()
-    
-    if GALAXY_CORE_AVAILABLE and galaxy_core:
-        # 解析意图
+    context = request.get("context", [])
+    session_id = device_id or "dashboard-default"
+
+    logger.info(f"Dashboard chat: {message[:50]}...")
+
+    # === 对话记忆：记录用户消息 ===
+    memory = None
+    try:
+        from core.ai_intent import get_conversation_memory
+        memory = get_conversation_memory()
+        await memory.add_turn(session_id, "user", message)
+        if not context:
+            context = await memory.get_context(session_id, max_turns=10)
+    except Exception as e:
+        logger.debug(f"Conversation memory load failed: {e}")
+
+    # === 意图解析：优先使用现代解析器 ===
+    intent = await get_parsed_intent_modern(message, context)
+    if intent is None:
         intent = parse_intent(message)
-        
-        # 根据意图分发
-        if intent["type"] == "device_control":
-            result = await galaxy_core.send_device_command(
-                device_id or "default",
-                intent["action"],
-                intent["params"]
-            )
-            return JSONResponse({
-                "response": f"✅ 已执行: {intent['action']}",
-                "executed": result.get("success", False),
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "learning":
-            result = await galaxy_core.autonomous_learn(intent["params"])
-            return JSONResponse({
-                "response": "✅ 已学习",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "thinking":
-            result = await galaxy_core.autonomous_think(
-                intent["params"].get("goal", message)
-            )
-            return JSONResponse({
-                "response": f"✅ 思考完成",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "coding":
-            result = await galaxy_core.autonomous_code(
-                intent["params"].get("task", message)
-            )
-            return JSONResponse({
-                "response": "✅ 代码生成完成",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "knowledge":
-            result = await galaxy_core.query_knowledge(message)
-            return JSONResponse({
-                "response": "✅ 知识检索完成",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        else:
-            # 默认通过 Node_50_Transformer 处理
-            result = await galaxy_core.call_node("50", "chat", {"message": message})
-            return JSONResponse({
-                "response": result.get("response", "处理完成"),
-                "timestamp": datetime.now().isoformat()
-            })
-    
+
+    intent_type = intent.get("type", "chat")
+    confidence = intent.get("confidence", 0.5)
+    suggestions = intent.get("suggestions", [])
+
+    def _make_response(response_text: str, success: bool = True, mode: str = "chat",
+                       extra_data: Dict = None, error: str = "") -> JSONResponse:
+        resp = UnifiedChatResponse(
+            success=success,
+            response=response_text,
+            intent=intent_type,
+            confidence=confidence,
+            mode=mode,
+            suggestions=suggestions,
+            data=extra_data or {},
+            error=error,
+            session_id=session_id,
+        )
+        return JSONResponse(resp.to_json_response())
+
+    async def _save_assistant_reply(reply_text: str):
+        if memory:
+            try:
+                await memory.add_turn(session_id, "assistant", reply_text)
+            except Exception as e:
+                logger.debug(f"Failed to save assistant reply to memory: {e}")
+
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        try:
+            if intent_type == "device_control":
+                result = await galaxy_core.send_device_command(
+                    device_id or "default",
+                    intent.get("action", ""),
+                    intent.get("params", {}),
+                )
+                reply = f"已执行: {intent.get('action', '')}"
+                await _save_assistant_reply(reply)
+                return _make_response(reply, mode="agent_react",
+                                      extra_data={"executed": result.get("success", False)})
+
+            elif intent_type == "learning":
+                await galaxy_core.autonomous_learn(intent.get("params", {}))
+                reply = "已学习"
+                await _save_assistant_reply(reply)
+                return _make_response(reply, mode="agent_react")
+
+            elif intent_type == "thinking":
+                await galaxy_core.autonomous_think(intent.get("params", {}).get("goal", message))
+                reply = "思考完成"
+                await _save_assistant_reply(reply)
+                return _make_response(reply, mode="agent_react")
+
+            elif intent_type == "coding":
+                await galaxy_core.autonomous_code(intent.get("params", {}).get("task", message))
+                reply = "代码生成完成"
+                await _save_assistant_reply(reply)
+                return _make_response(reply, mode="agent_react")
+
+            elif intent_type == "knowledge":
+                result = await galaxy_core.query_knowledge(message)
+                reply = "知识检索完成"
+                await _save_assistant_reply(reply)
+                return _make_response(reply, mode="agent_react", extra_data=result)
+
+            else:
+                # 默认通过 Node_50_Transformer 处理
+                result = await galaxy_core.call_node("50", "chat", {"message": message})
+                reply = result.get("response", "处理完成")
+                await _save_assistant_reply(reply)
+                return _make_response(reply)
+        except Exception as e:
+            logger.error(f"Galaxy core dispatch failed: {e}")
+            # 降级到 LLM
+            pass
+
     # 如果 galaxy_core 不可用，尝试调用 LLM
     if API_MANAGER_AVAILABLE and api_manager:
         try:
@@ -321,48 +387,49 @@ async def chat(request: dict):
                 {"role": "user", "content": message}
             ])
             if result.get("success"):
-                return JSONResponse({
-                    "response": result.get("content", "处理完成"),
-                    "provider": result.get("provider", ""),
-                    "model": result.get("model", ""),
-                    "timestamp": datetime.now().isoformat()
-                })
+                reply = result.get("content", "处理完成")
+                await _save_assistant_reply(reply)
+                return _make_response(reply, mode="chat",
+                                      extra_data={"model": result.get("model", "")})
             else:
-                return JSONResponse({
-                    "response": f"❌ LLM 调用失败: {result.get('error', 'Unknown error')}",
-                    "timestamp": datetime.now().isoformat()
-                })
+                return _make_response(
+                    f"LLM 调用失败: {result.get('error', 'Unknown error')}",
+                    success=False, error=result.get("error", "Unknown error"))
         except Exception as e:
-            return JSONResponse({
-                "response": f"❌ 错误: {str(e)}",
-                "timestamp": datetime.now().isoformat()
-            })
-    
-    return JSONResponse({
-        "response": f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。",
-        "timestamp": datetime.now().isoformat()
-    })
+            return _make_response(f"错误: {str(e)}", success=False, error=str(e))
+
+    reply = f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。"
+    return _make_response(reply, success=False, mode="fallback",
+                          error="未配置 LLM API Key")
 
 
 def parse_intent(message: str) -> Dict[str, Any]:
-    """解析意图"""
+    """
+    简单关键词意图解析 (fallback)
+
+    当 core.ai_intent.IntentParser 不可用时使用此版本。
+    """
     message_lower = message.lower()
-    
+
     # 设备控制
     if any(kw in message_lower for kw in ["打开", "启动", "open"]):
         return {
             "type": "device_control",
             "action": "open_app",
-            "params": {"app_name": extract_app_name(message)}
+            "params": {"app_name": extract_app_name(message)},
+            "confidence": 0.5,
+            "suggestions": [],
         }
-    
+
     if any(kw in message_lower for kw in ["截图", "screenshot"]):
         return {
             "type": "device_control",
             "action": "screenshot",
-            "params": {}
+            "params": {},
+            "confidence": 0.5,
+            "suggestions": [],
         }
-    
+
     if any(kw in message_lower for kw in ["滑动", "滚动", "scroll"]):
         direction = "down"
         if "上" in message_lower:
@@ -370,38 +437,33 @@ def parse_intent(message: str) -> Dict[str, Any]:
         return {
             "type": "device_control",
             "action": "scroll",
-            "params": {"direction": direction}
+            "params": {"direction": direction},
+            "confidence": 0.5,
+            "suggestions": [],
         }
-    
+
     # 学习
     if any(kw in message_lower for kw in ["学习", "记住", "learn"]):
-        return {
-            "type": "learning",
-            "params": {"action": message, "reward": 0.5}
-        }
-    
+        return {"type": "learning", "params": {"action": message, "reward": 0.5},
+                "confidence": 0.5, "suggestions": []}
+
     # 思考
     if any(kw in message_lower for kw in ["思考", "分析", "think"]):
-        return {
-            "type": "thinking",
-            "params": {"goal": message}
-        }
-    
+        return {"type": "thinking", "params": {"goal": message},
+                "confidence": 0.5, "suggestions": []}
+
     # 编程
     if any(kw in message_lower for kw in ["写代码", "编程", "code"]):
-        return {
-            "type": "coding",
-            "params": {"task": message}
-        }
-    
+        return {"type": "coding", "params": {"task": message},
+                "confidence": 0.5, "suggestions": []}
+
     # 知识
     if any(kw in message_lower for kw in ["查询", "搜索", "知识"]):
-        return {
-            "type": "knowledge",
-            "params": {"query": message}
-        }
-    
-    return {"type": "chat", "params": {"message": message}}
+        return {"type": "knowledge", "params": {"query": message},
+                "confidence": 0.5, "suggestions": []}
+
+    return {"type": "chat", "params": {"message": message},
+            "confidence": 0.3, "suggestions": []}
 
 
 def extract_app_name(message: str) -> str:

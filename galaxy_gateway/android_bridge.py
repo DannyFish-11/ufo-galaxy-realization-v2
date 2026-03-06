@@ -958,15 +958,59 @@ class AndroidBridge:
         """清理超时的设备"""
         current_time = time.time()
         stale_devices = []
-        
+
         async with self._lock:
             for device_id, device in self._devices.items():
                 if device.connected and (current_time - device.last_heartbeat) > timeout_seconds:
                     stale_devices.append(device_id)
-        
+
         for device_id in stale_devices:
             await self.disconnect_device(device_id)
             logger.warning(f"Device timed out: {device_id}")
+
+    async def reconnect_device(self, device_id: str, websocket: Any) -> bool:
+        """重新连接设备（WebSocket 断线重连时调用）"""
+        async with self._lock:
+            device = self._devices.get(device_id)
+            if device is None:
+                logger.warning(f"重连失败: 设备 {device_id} 未曾注册")
+                return False
+            device.websocket = websocket
+            device.connected = True
+            device.last_heartbeat = time.time()
+        logger.info(f"设备重连成功: {device_id}")
+        return True
+
+    def get_device_health(self) -> Dict[str, Any]:
+        """获取所有设备的健康状态摘要"""
+        now = time.time()
+        healthy = 0
+        stale = 0
+        disconnected = 0
+        device_details = []
+        for d in self._devices.values():
+            if not d.connected:
+                disconnected += 1
+                status = "disconnected"
+            elif now - d.last_heartbeat > 60:
+                stale += 1
+                status = "stale"
+            else:
+                healthy += 1
+                status = "healthy"
+            device_details.append({
+                "device_id": d.device_id,
+                "model": d.model,
+                "status": status,
+                "last_heartbeat_ago_s": round(now - d.last_heartbeat, 1) if d.last_heartbeat else None,
+            })
+        return {
+            "total": len(self._devices),
+            "healthy": healthy,
+            "stale": stale,
+            "disconnected": disconnected,
+            "devices": device_details,
+        }
 
 
 # =============================================================================

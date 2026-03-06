@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional, Callable
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 # 尝试导入paho-mqtt
 try:
@@ -20,7 +21,7 @@ except ImportError:
     MQTT_AVAILABLE = False
 
 app = FastAPI(title="Node 41 - MQTT", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # MQTT配置
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
@@ -39,11 +40,14 @@ class MQTTSubscribeRequest(BaseModel):
     qos: int = 0
 
 class MQTTManager:
+    MAX_MESSAGE_HISTORY = 500  # 防止无限增长导致 OOM
+
     def __init__(self):
         self.client = None
         self.connected = False
         self.subscriptions: Dict[str, int] = {}
-        self.messages: List[Dict] = []
+        from collections import deque
+        self.messages: deque = deque(maxlen=self.MAX_MESSAGE_HISTORY)
         self.message_handlers: Dict[str, List[Callable]] = {}
         self._setup_client()
 
@@ -77,10 +81,7 @@ class MQTTManager:
             "timestamp": datetime.now().isoformat()
         }
         self.messages.append(message)
-
-        # 限制消息数量
-        if len(self.messages) > 1000:
-            self.messages = self.messages[-1000:]
+        # deque(maxlen=) 自动淘汰旧消息，无需手动截断
 
         # 调用处理器
         for topic, handlers in self.message_handlers.items():

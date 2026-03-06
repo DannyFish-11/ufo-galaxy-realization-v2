@@ -39,6 +39,7 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from core.unified_response import UnifiedChatResponse
 
 # 导入鉴权模块
 try:
@@ -245,7 +246,7 @@ class ConnectionManager:
             设备返回的 payload, 或 {"error": "..."} 超时/失败。
         """
         command_id = f"cmd_{uuid.uuid4().hex[:12]}"
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         self._pending_responses[command_id] = future
 
@@ -582,7 +583,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                     node_config = {}
                     if os.path.exists(config_file):
                         try:
-                            with open(config_file) as f:
+                            with open(config_file, encoding="utf-8") as f:
                                 node_config = json.load(f)
                         except Exception:
                             pass
@@ -611,7 +612,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         node_config = {}
         if os.path.exists(config_file):
             try:
-                with open(config_file) as f:
+                with open(config_file, encoding="utf-8") as f:
                     node_config = json.load(f)
             except Exception:
                 pass
@@ -680,7 +681,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             if inspect.iscoroutinefunction(func):
                 return await func(action, params)
             else:
-                return await asyncio.get_event_loop().run_in_executor(
+                return await asyncio.get_running_loop().run_in_executor(
                     None, func, action, params
                 )
         elif node_info["type"] == "instance":
@@ -689,7 +690,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             if inspect.iscoroutinefunction(method):
                 return await method(action, **params)
             else:
-                return await asyncio.get_event_loop().run_in_executor(
+                return await asyncio.get_running_loop().run_in_executor(
                     None, lambda: method(action, **params)
                 )
         return None
@@ -936,7 +937,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.vision_pipeline import VisionPipeline
                 pipeline = VisionPipeline()
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, pipeline.understand, image_data, req.mode, req.instruction
                 )
                 return JSONResponse({
@@ -951,7 +952,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCR2Adapter
                 adapter = DeepSeekOCR2Adapter()
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, adapter.process_image, image_data, req.mode
                 )
                 return JSONResponse({
@@ -990,7 +991,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCR2Adapter
                 adapter = DeepSeekOCR2Adapter()
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, adapter.process_image, image_data, req.mode
                 )
                 return JSONResponse({
@@ -1428,8 +1429,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 await memory.add_turn(session_id, "user", req.message)
                 if not req.context:
                     req.context = await memory.get_context(session_id, max_turns=10)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Conversation memory unavailable: {e}")
 
             # === 意图分流 ===
             if _is_action_intent(req.message) and llm_manager.is_available():
@@ -1443,11 +1444,13 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
         except Exception as e:
             logger.error(f"对话失败: {e}")
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-                "reply": f"处理消息时出错: {str(e)}"
-            })
+            resp = UnifiedChatResponse(
+                success=False,
+                response=f"处理消息时出错: {str(e)}",
+                error=str(e),
+                session_id=session_id,
+            )
+            return JSONResponse(resp.to_json_response())
 
     async def _handle_agent_action(req: ChatRequest, session_id: str) -> JSONResponse:
         """操作指令 → ReAct Agent 调度"""
@@ -1533,14 +1536,17 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             except Exception:
                 pass
 
-            return JSONResponse({
-                "success": plan_result.get("success", True),
-                "reply": full_reply,
-                "model": llm_manager.get_default_model(),
-                "mode": "agent_react",
-                "steps": steps,
-                "session_id": session_id,
-            })
+            resp = UnifiedChatResponse(
+                success=plan_result.get("success", True),
+                response=full_reply,
+                intent="action",
+                confidence=0.9,
+                mode="agent_react",
+                model=llm_manager.get_default_model(),
+                data={"steps": steps},
+                session_id=session_id,
+            )
+            return JSONResponse(resp.to_json_response())
 
         except ValueError as ve:
             # LLM 不可用，降级到纯聊天
@@ -1548,12 +1554,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             return await _handle_pure_chat(req, session_id)
         except Exception as e:
             logger.error(f"Agent 调度异常: {e}")
-            return JSONResponse({
-                "success": False,
-                "reply": f"操作调度失败: {str(e)}",
-                "mode": "agent_react_error",
-                "session_id": session_id,
-            })
+            resp = UnifiedChatResponse(
+                success=False,
+                response=f"操作调度失败: {str(e)}",
+                mode="agent_react",
+                error=str(e),
+                session_id=session_id,
+            )
+            return JSONResponse(resp.to_json_response())
 
     async def _handle_pure_chat(req: ChatRequest, session_id: str) -> JSONResponse:
         """纯 LLM 对话 (无工具调用)"""
@@ -1582,26 +1590,32 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 except Exception:
                     pass
 
-                return JSONResponse({
-                    "success": True,
-                    "reply": reply,
-                    "model": model_name,
-                    "mode": "chat",
-                    "session_id": session_id,
-                })
+                resp = UnifiedChatResponse(
+                    success=True,
+                    response=reply,
+                    intent="chat",
+                    confidence=1.0,
+                    mode="chat",
+                    model=model_name,
+                    session_id=session_id,
+                )
+                return JSONResponse(resp.to_json_response())
             except Exception as e:
                 logger.warning(f"LLMManager chat failed: {e}")
 
         # LLMManager 已处理所有 Provider 的 fallback 链
         # 如果到这里说明没有任何可用的 LLM Provider
-        return JSONResponse({
-            "success": False,
-            "error": "未配置 LLM API Key",
-            "reply": (
+        resp = UnifiedChatResponse(
+            success=False,
+            response=(
                 "LLM 服务未配置。请在 Dashboard 的 API CONFIG 面板设置 API Key，"
                 "或在 .env 文件中设置 OPENAI_API_KEY / DEEPSEEK_API_KEY 等。"
             ),
-        })
+            mode="fallback",
+            error="未配置 LLM API Key",
+            session_id=session_id,
+        )
+        return JSONResponse(resp.to_json_response())
 
     async def _save_reply(session_id: str, response: JSONResponse):
         """保存 LLM 回复到对话记忆"""
@@ -2852,7 +2866,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                         image_data = base64.b64decode(image_b64)
                         from core.vision_pipeline import VisionPipeline
                         pipeline = VisionPipeline()
-                        result = await asyncio.get_event_loop().run_in_executor(
+                        result = await asyncio.get_running_loop().run_in_executor(
                             None, pipeline.understand, image_data, mode, instruction
                         )
                         await websocket.send_json({

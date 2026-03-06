@@ -60,7 +60,7 @@ def get_system_metrics() -> Dict[str, Any]:
     except ImportError:
         # psutil 未安装时使用基础方法
         try:
-            with open("/proc/meminfo") as f:
+            with open("/proc/meminfo", encoding="utf-8") as f:
                 lines = f.readlines()
             mem_total = int(lines[0].split()[1]) / 1024  # MB
             mem_avail = int(lines[2].split()[1]) / 1024  # MB

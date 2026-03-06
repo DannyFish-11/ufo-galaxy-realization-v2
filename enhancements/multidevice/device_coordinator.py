@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from enhancements.multidevice.device_protocol import (
+from nodes.common.cors_config import get_cors_origins
     AIPMessage, MessageType, DeviceInfo, DeviceStatus, ErrorCode,
     MessageBuilder, ProtocolValidator, ProtocolHandler, MessageRouter
 )
@@ -681,7 +682,7 @@ def create_app(coordinator: Optional[DeviceCoordinator] = None) -> FastAPI:
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=get_cors_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"]
