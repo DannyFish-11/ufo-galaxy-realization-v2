@@ -3,6 +3,7 @@
 将高层次目标分解为可执行的子任务
 """
 
+import json
 import logging
 from typing import List, Dict, Optional
 from dataclasses import dataclass
@@ -117,7 +118,18 @@ class GoalDecomposer:
         return GoalType.TASK_EXECUTION
     
     def _generate_subtasks(self, goal: Goal, goal_type: GoalType) -> List[SubTask]:
-        """生成子任务"""
+        """生成子任务 — 优先使用 LLM，回退到模板匹配"""
+        # 尝试 LLM 路径
+        if self.llm_client:
+            try:
+                subtasks = self._generate_subtasks_with_llm(goal, goal_type)
+                if subtasks:
+                    logger.info(f"LLM 分解成功，生成 {len(subtasks)} 个子任务")
+                    return subtasks
+            except Exception as e:
+                logger.warning(f"LLM 分解失败，回退到模板: {e}")
+
+        # 模板匹配 fallback
         if goal_type == GoalType.INFORMATION_GATHERING:
             return self._generate_information_gathering_subtasks(goal)
         elif goal_type == GoalType.CREATION:
@@ -129,6 +141,72 @@ class GoalDecomposer:
         else:
             return self._generate_generic_subtasks(goal)
     
+    def _generate_subtasks_with_llm(self, goal: Goal, goal_type: GoalType) -> List[SubTask]:
+        """使用 LLM 分解目标为子任务"""
+        import asyncio
+
+        prompt = (
+            f"将以下目标分解为可执行的子任务列表。\n"
+            f"目标: {goal.description}\n"
+            f"目标类型: {goal_type.value}\n"
+            f"约束: {', '.join(goal.constraints) if goal.constraints else '无'}\n\n"
+            f"返回 JSON 数组，每个元素包含:\n"
+            f'  "id": 子任务ID, "type": "search|read|write|execute|synthesize",\n'
+            f'  "description": 描述, "dependencies": [依赖的子任务ID],\n'
+            f'  "estimated_duration": 预计秒数, "priority": 1-10\n'
+            f"只返回 JSON，不要其他内容。"
+        )
+
+        messages = [
+            {"role": "system", "content": "你是一个任务分解专家。只返回合法 JSON。"},
+            {"role": "user", "content": prompt},
+        ]
+
+        # llm_client 可能是 MultiLLMRouter 或其他有 chat() 的对象
+        if asyncio.iscoroutinefunction(getattr(self.llm_client, 'chat', None)):
+            # 在同步上下文中调用异步方法
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    resp = pool.submit(asyncio.run, self.llm_client.chat(messages=messages, task_type="planning")).result()
+            else:
+                resp = asyncio.run(self.llm_client.chat(messages=messages, task_type="planning"))
+        else:
+            resp = self.llm_client.chat(messages=messages, task_type="planning")
+
+        content = resp.content if hasattr(resp, 'content') else str(resp)
+        # 提取 JSON
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1].rsplit("```", 1)[0]
+
+        items = json.loads(content)
+
+        type_map = {
+            "search": SubTaskType.SEARCH,
+            "read": SubTaskType.READ,
+            "write": SubTaskType.WRITE,
+            "execute": SubTaskType.EXECUTE,
+            "synthesize": SubTaskType.SYNTHESIZE,
+        }
+
+        subtasks = []
+        for item in items:
+            st_type = type_map.get(item.get("type", "execute"), SubTaskType.EXECUTE)
+            subtasks.append(SubTask(
+                id=str(item["id"]),
+                type=st_type,
+                description=item.get("description", ""),
+                dependencies=item.get("dependencies", []),
+                required_capabilities=[],
+                estimated_duration=int(item.get("estimated_duration", 60)),
+                priority=int(item.get("priority", 5)),
+                metadata={},
+            ))
+
+        return subtasks
+
     def _generate_information_gathering_subtasks(self, goal: Goal) -> List[SubTask]:
         """生成信息收集子任务"""
         subtasks = [

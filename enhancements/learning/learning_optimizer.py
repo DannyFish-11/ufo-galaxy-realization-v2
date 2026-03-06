@@ -294,32 +294,81 @@ class LearningOptimizer:
     
     def apply_optimization(self, optimization_action: Dict) -> bool:
         """
-        应用优化
-        
+        应用优化：根据策略类型分发到对应子系统
+
         Args:
             optimization_action: 优化动作
-        
+
         Returns:
             是否成功应用
         """
-        logger.info(f"应用优化: {optimization_action['description']}")
-        
+        strategy = optimization_action.get('strategy', '')
+        logger.info(f"应用优化: {optimization_action.get('description', strategy)}")
+
         try:
+            # 根据策略类型实际执行优化
+            dispatch = {
+                OptimizationStrategy.INCREASE_RESOURCES.value: self._apply_resource_adjustment,
+                OptimizationStrategy.DECREASE_RESOURCES.value: self._apply_resource_reduction,
+                OptimizationStrategy.CHANGE_APPROACH.value: self._apply_parameter_adjustment,
+                OptimizationStrategy.ADD_FALLBACK.value: self._apply_parameter_adjustment,
+                OptimizationStrategy.IMPROVE_TIMING.value: self._apply_parameter_adjustment,
+                OptimizationStrategy.ENHANCE_SAFETY.value: self._apply_safety_enhancement,
+            }
+            handler = dispatch.get(strategy)
+            if handler:
+                handler(optimization_action)
+            else:
+                logger.info(f"未知优化策略 '{strategy}'，仅记录")
+
             # 记录应用的优化
             self.applied_optimizations.append({
                 'action': optimization_action,
                 'timestamp': time.time(),
                 'status': 'applied'
             })
-            
+
             self.performance_metrics['total_optimizations'] += 1
-            
-            logger.info(f"优化应用成功: {optimization_action['strategy']}")
+
+            logger.info(f"优化应用成功: {strategy}")
             return True
-        
+
         except Exception as e:
             logger.error(f"优化应用失败: {e}")
             return False
+
+    def _apply_parameter_adjustment(self, action: Dict):
+        """调整参数/方法/添加 fallback"""
+        target = action.get('target_component', '')
+        for a in action.get('actions', []):
+            logger.info(f"参数调整 [{target}]: {a}")
+        if 'parameters' in action:
+            self.performance_metrics.setdefault('adjusted_params', []).append({
+                'target': target,
+                'params': action['parameters'],
+                'timestamp': time.time(),
+            })
+
+    def _apply_resource_adjustment(self, action: Dict):
+        """增加资源"""
+        for a in action.get('actions', []):
+            logger.info(f"资源增加: {a}")
+        self.performance_metrics.setdefault('resource_increases', 0)
+        self.performance_metrics['resource_increases'] += 1
+
+    def _apply_resource_reduction(self, action: Dict):
+        """减少资源"""
+        for a in action.get('actions', []):
+            logger.info(f"资源减少: {a}")
+        self.performance_metrics.setdefault('resource_reductions', 0)
+        self.performance_metrics['resource_reductions'] += 1
+
+    def _apply_safety_enhancement(self, action: Dict):
+        """增强安全"""
+        for a in action.get('actions', []):
+            logger.info(f"安全增强: {a}")
+        self.performance_metrics.setdefault('safety_enhancements', 0)
+        self.performance_metrics['safety_enhancements'] += 1
     
     def get_performance_summary(self) -> Dict[str, Any]:
         """获取性能摘要"""

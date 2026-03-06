@@ -114,13 +114,31 @@ class MultiDeviceCoordinator:
         self._task_queue: asyncio.Queue = asyncio.Queue()
         self._is_running = False
         
-        # 设备控制服务地址
-        self.device_control_url = os.getenv("DEVICE_CONTROL_URL", "http://localhost:8092")
-        self.auto_control_url = os.getenv("NODE_92_URL", "http://localhost:8092")
+        # 设备控制服务地址 — 优先从 node registry 查找，env-var 为 fallback
+        self.device_control_url = self._resolve_node_url(
+            "Node_92_AutoControl", "DEVICE_CONTROL_URL", "http://localhost:8092"
+        )
+        self.auto_control_url = self._resolve_node_url(
+            "Node_92_AutoControl", "NODE_92_URL", "http://localhost:8092"
+        )
         
         # HTTP 客户端
         self._client: Optional[httpx.AsyncClient] = None
     
+    @staticmethod
+    def _resolve_node_url(node_id: str, env_var: str, default: str) -> str:
+        """Resolve a node URL: registry → env var → default"""
+        try:
+            from core.node_registry import NodeRegistry
+            registry = NodeRegistry.get_instance() if hasattr(NodeRegistry, 'get_instance') else None
+            if registry:
+                node = registry.get_node(node_id)
+                if node and node.config.get("url"):
+                    return node.config["url"]
+        except Exception:
+            pass
+        return os.getenv(env_var, default)
+
     async def _get_client(self) -> httpx.AsyncClient:
         """获取 HTTP 客户端"""
         if self._client is None:

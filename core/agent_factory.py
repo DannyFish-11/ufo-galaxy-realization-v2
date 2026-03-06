@@ -653,6 +653,7 @@ class AgentFactory:
                         "task": task,
                         "output": f"Agent {agent.config.name} 已处理任务（无 LLM 模式）",
                         "simulated": True,
+                        "status": "simulated",
                     }
 
                 latency = (time.monotonic() - t0) * 1000
@@ -662,13 +663,24 @@ class AgentFactory:
                 agent.completed_tasks.append(result)
                 results.append(result)
 
+                if result.get("simulated"):
+                    logger.warning(
+                        f"Agent {agent_id} task was SIMULATED (no LLM): "
+                        f"{task.get('description', str(task)[:80])}"
+                    )
+
             except Exception as e:
                 agent.metrics["tasks_failed"] += 1
                 results.append({"task": task, "error": str(e)})
 
         agent.state = AgentState.IDLE
         agent.last_active = time.time()
-        return {"agent_id": agent_id, "results": results}
+        any_simulated = any(r.get("simulated") for r in results)
+        return {
+            "agent_id": agent_id,
+            "results": results,
+            "status": "simulated" if any_simulated else "completed",
+        }
 
     # ─────── 内部工具 ─────────
 

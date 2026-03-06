@@ -109,7 +109,7 @@ class CrossDeviceCoordinator:
                 return {"success": False, "error": f"没有可用的{source_type}设备"}
             
             # 发送查询任务到源设备
-            source_result = await device_router._dispatch_single_device_task(
+            source_result = await device_router.dispatch_task(
                 {"task_id": "clipboard_get", "payload": source_task},
                 source_devices[0]
             )
@@ -133,7 +133,7 @@ class CrossDeviceCoordinator:
             if not target_devices:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
             
-            target_result = await device_router._dispatch_single_device_task(
+            target_result = await device_router.dispatch_task(
                 {"task_id": "clipboard_set", "payload": target_task},
                 target_devices[0]
             )
@@ -194,7 +194,7 @@ class CrossDeviceCoordinator:
                     "target": "",
                     "params": {"command": f"pull {file_path} {transfer_path}"}
                 }
-                pull_result = await device_router._dispatch_single_device_task(
+                pull_result = await device_router.dispatch_task(
                     {"task_id": "file_pull", "payload": pull_task}, source_device
                 )
             elif source_type == DeviceType.WINDOWS:
@@ -221,7 +221,7 @@ class CrossDeviceCoordinator:
                     "target": "",
                     "params": {"command": f"push {transfer_path} {target_path}"}
                 }
-                push_result = await device_router._dispatch_single_device_task(
+                push_result = await device_router.dispatch_task(
                     {"task_id": "file_push", "payload": push_task}, target_device
                 )
             elif target_type == DeviceType.WINDOWS:
@@ -290,7 +290,7 @@ class CrossDeviceCoordinator:
                     "params": {}
                 }
                 
-                tasks.append(device_router._dispatch_single_device_task(
+                tasks.append(device_router.dispatch_task(
                     {"task_id": f"media_{device.device_id}", "payload": task},
                     device
                 ))
@@ -338,7 +338,7 @@ class CrossDeviceCoordinator:
                     }
                 }
                 
-                tasks.append(device_router._dispatch_single_device_task(
+                tasks.append(device_router.dispatch_task(
                     {"task_id": f"notify_{device.device_id}", "payload": task},
                     device
                 ))

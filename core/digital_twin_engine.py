@@ -202,6 +202,7 @@ class DigitalTwin:
     async def _sync_from_physical(self):
         """从物理设备拉取状态"""
         if not self._state_fetcher:
+            logger.warning(f"Twin {self.twin_id}: no state_fetcher configured, skipping sync")
             return
 
         try:

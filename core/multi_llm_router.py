@@ -549,39 +549,47 @@ class MultiLLMRouter:
                 last_user_msg = m.get("content", "").lower()
                 break
 
-        # 关键词 → 任务类型
-        patterns = {
+        # 加权关键词 → 任务类型 (keyword, weight)
+        weighted_patterns: Dict[TaskType, List[tuple]] = {
             TaskType.CODING: [
-                "代码", "编程", "函数", "类", "bug", "code", "implement",
-                "debug", "function", "class", "api", "脚本", "script",
+                ("代码", 2), ("编程", 2), ("函数", 2), ("类", 1), ("bug", 3),
+                ("code", 3), ("implement", 3), ("debug", 3), ("function", 2),
+                ("class", 1), ("api", 2), ("脚本", 2), ("script", 2),
             ],
             TaskType.REASONING: [
-                "为什么", "推理", "解释", "分析原因", "why", "reason",
-                "explain", "思考", "逻辑", "论证",
+                ("为什么", 3), ("推理", 3), ("解释", 2), ("分析原因", 3),
+                ("why", 3), ("reason", 3), ("explain", 2), ("思考", 2),
+                ("逻辑", 3), ("论证", 2),
             ],
             TaskType.PLANNING: [
-                "计划", "规划", "步骤", "方案", "plan", "strategy",
-                "分解", "目标", "路线图", "roadmap",
+                ("计划", 3), ("规划", 3), ("步骤", 2), ("方案", 2),
+                ("plan", 3), ("strategy", 3), ("分解", 2), ("目标", 1),
+                ("路线图", 3), ("roadmap", 3),
             ],
             TaskType.CREATIVE: [
-                "创作", "写", "故事", "诗", "write", "create",
-                "creative", "设计", "文章", "作文",
+                ("创作", 3), ("写", 1), ("故事", 3), ("诗", 3),
+                ("write", 1), ("create", 2), ("creative", 3),
+                ("设计", 2), ("文章", 2), ("作文", 3),
             ],
             TaskType.ANALYSIS: [
-                "分析", "数据", "报告", "统计", "analyze", "data",
-                "report", "评估", "比较",
+                ("分析", 3), ("数据", 2), ("报告", 2), ("统计", 3),
+                ("analyze", 3), ("data", 2), ("report", 2),
+                ("评估", 2), ("比较", 2),
             ],
             TaskType.AGENT_CONTROL: [
-                "agent", "执行", "控制", "设备", "节点", "device",
-                "node", "命令", "command",
+                ("agent", 3), ("执行", 1), ("控制", 2), ("设备", 2),
+                ("节点", 2), ("device", 3), ("node", 2),
+                ("命令", 2), ("command", 2),
             ],
         }
 
-        scores: Dict[TaskType, int] = {}
-        for task_type, keywords in patterns.items():
-            score = sum(1 for kw in keywords if kw in last_user_msg)
+        scores: Dict[TaskType, float] = {}
+        for task_type, weighted_keywords in weighted_patterns.items():
+            total_weight = sum(w for _, w in weighted_keywords)
+            score = sum(w for kw, w in weighted_keywords if kw in last_user_msg)
             if score > 0:
-                scores[task_type] = score
+                # Normalize by total possible weight
+                scores[task_type] = score / max(total_weight, 1)
 
         if scores:
             return max(scores, key=scores.get)

@@ -14,6 +14,7 @@ UFO³ Galaxy - P2P 连接器
 
 import asyncio
 import logging
+import os
 import socket as sock_module
 import struct
 import json
@@ -137,7 +138,7 @@ class STUNClient:
             sock.settimeout(5)
             
             # 构建 STUN Binding Request
-            transaction_id = b'\x00' * 12  # 简化版，实际应该是随机的
+            transaction_id = os.urandom(12)  # 随机生成事务 ID
             message = struct.pack('!HHI', STUNClient.BINDING_REQUEST, 0, 0x2112A442) + transaction_id
             
             # 发送请求

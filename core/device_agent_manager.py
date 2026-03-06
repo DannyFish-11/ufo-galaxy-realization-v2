@@ -318,7 +318,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
         """加载微软 UFO 模块"""
         try:
             import sys
-            if self.ufo_path:
+            if self.ufo_path and os.path.isdir(self.ufo_path):
                 sys.path.insert(0, self.ufo_path)
             
             # 尝试导入微软 UFO 的 Puppeteer
@@ -372,7 +372,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
                 pyautogui.click(params.get("x"), params.get("y"))
                 return {"success": True, "method": "pyautogui"}
             elif command == "type":
-                pyautogui.write(params.get("text"))
+                pyautogui.typewrite(params.get("text", ""), interval=0.02)
                 return {"success": True, "method": "pyautogui"}
             else:
                 return {"error": f"Unknown command: {command}"}
@@ -440,7 +440,20 @@ class IoTDeviceAgent(BaseDeviceAgent):
     
     async def _connect_http(self):
         """通过 HTTP 连接"""
-        pass
+        try:
+            import httpx
+            address = self.device_info.address or self.device_info.metadata.get("http_url", "")
+            if not address:
+                logger.warning(f"IoT device {self.device_id}: no HTTP address configured")
+                return
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(address)
+                resp.raise_for_status()
+                logger.info(f"IoT device {self.device_id}: HTTP connection OK (status {resp.status_code})")
+        except ImportError:
+            logger.warning("httpx not installed, HTTP connection skipped")
+        except Exception as e:
+            logger.warning(f"IoT device {self.device_id}: HTTP connection failed: {e}")
     
     async def disconnect(self) -> bool:
         if self.mqtt_client:
