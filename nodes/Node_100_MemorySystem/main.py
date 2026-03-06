@@ -30,11 +30,12 @@ from collections import defaultdict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node_100_MemorySystem", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -110,15 +111,26 @@ class ExtractPatternsRequest(BaseModel):
 # ============================================================================
 
 class MemoryDatabase:
-    """记忆数据库"""
-    
+    """记忆数据库（使用连接池）"""
+
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self._local = __import__("threading").local()
         self.init_database()
-    
+
+    def _get_conn(self) -> sqlite3.Connection:
+        """获取线程本地连接（连接复用，避免每次操作都新建连接）"""
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            self._local.conn = conn
+        return conn
+
     def init_database(self):
         """初始化数据库"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
         
         # 创建经验表
@@ -165,19 +177,22 @@ class MemoryDatabase:
         # 创建索引
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_command ON experiences(command)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_session ON experiences(session_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON experiences(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_success ON experiences(success)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_topic ON knowledge(topic)")
-        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_confidence ON knowledge(confidence)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pat_freq ON patterns(frequency)")
+
         conn.commit()
-        conn.close()
     
     def store_experience(self, experience: Experience) -> bool:
         """存储经验"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                INSERT INTO experiences 
+                INSERT INTO experiences
                 (id, timestamp, command, context, actions, result, success, duration, session_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -191,31 +206,29 @@ class MemoryDatabase:
                 experience.duration,
                 experience.session_id
             ))
-            
+
             conn.commit()
-            conn.close()
             return True
         except Exception as e:
-            print(f"Error storing experience: {e}")
+            logging.getLogger(__name__).error(f"Error storing experience: {e}")
             return False
     
     def retrieve_experiences(self, query: str, limit: int = 10) -> List[Experience]:
         """检索经验"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
-            # 简单的关键词匹配
+
+            # 使用参数化查询防止 SQL 注入
             cursor.execute("""
-                SELECT * FROM experiences 
+                SELECT * FROM experiences
                 WHERE command LIKE ?
                 ORDER BY timestamp DESC
                 LIMIT ?
             """, (f"%{query}%", limit))
-            
+
             rows = cursor.fetchall()
-            conn.close()
-            
+
             experiences = []
             for row in rows:
                 experiences.append(Experience(
@@ -229,22 +242,21 @@ class MemoryDatabase:
                     duration=row[7],
                     session_id=row[8]
                 ))
-            
+
             return experiences
         except Exception as e:
-            print(f"Error retrieving experiences: {e}")
+            logging.getLogger(__name__).error(f"Error retrieving experiences: {e}")
             return []
-    
+
     def get_all_experiences(self) -> List[Experience]:
         """获取所有经验"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
+
             cursor.execute("SELECT * FROM experiences ORDER BY timestamp DESC")
             rows = cursor.fetchall()
-            conn.close()
-            
+
             experiences = []
             for row in rows:
                 experiences.append(Experience(
@@ -258,20 +270,20 @@ class MemoryDatabase:
                     duration=row[7],
                     session_id=row[8]
                 ))
-            
+
             return experiences
         except Exception as e:
-            print(f"Error getting all experiences: {e}")
+            logging.getLogger(__name__).error(f"Error getting all experiences: {e}")
             return []
     
     def store_pattern(self, pattern: Pattern) -> bool:
         """存储模式"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                INSERT OR REPLACE INTO patterns 
+                INSERT OR REPLACE INTO patterns
                 (id, name, description, frequency, examples, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -283,9 +295,8 @@ class MemoryDatabase:
                 pattern.created_at,
                 pattern.updated_at
             ))
-            
+
             conn.commit()
-            conn.close()
             return True
         except Exception as e:
             print(f"Error storing pattern: {e}")
@@ -294,13 +305,12 @@ class MemoryDatabase:
     def get_patterns(self) -> List[Pattern]:
         """获取所有模式"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
+
             cursor.execute("SELECT * FROM patterns ORDER BY frequency DESC")
             rows = cursor.fetchall()
-            conn.close()
-            
+
             patterns = []
             for row in rows:
                 patterns.append(Pattern(
@@ -312,20 +322,20 @@ class MemoryDatabase:
                     created_at=row[5],
                     updated_at=row[6]
                 ))
-            
+
             return patterns
         except Exception as e:
-            print(f"Error getting patterns: {e}")
+            logging.getLogger(__name__).error(f"Error getting patterns: {e}")
             return []
-    
+
     def store_knowledge(self, knowledge: Knowledge) -> bool:
         """存储知识"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                INSERT OR REPLACE INTO knowledge 
+                INSERT OR REPLACE INTO knowledge
                 (id, topic, content, source, confidence, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -337,29 +347,27 @@ class MemoryDatabase:
                 knowledge.created_at,
                 knowledge.updated_at
             ))
-            
+
             conn.commit()
-            conn.close()
             return True
         except Exception as e:
-            print(f"Error storing knowledge: {e}")
+            logging.getLogger(__name__).error(f"Error storing knowledge: {e}")
             return False
-    
+
     def get_knowledge(self, topic: str) -> List[Knowledge]:
         """获取知识"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                SELECT * FROM knowledge 
+                SELECT * FROM knowledge
                 WHERE topic LIKE ?
                 ORDER BY confidence DESC
             """, (f"%{topic}%",))
-            
+
             rows = cursor.fetchall()
-            conn.close()
-            
+
             knowledge_list = []
             for row in rows:
                 knowledge_list.append(Knowledge(
@@ -371,10 +379,10 @@ class MemoryDatabase:
                     created_at=row[5],
                     updated_at=row[6]
                 ))
-            
+
             return knowledge_list
         except Exception as e:
-            print(f"Error getting knowledge: {e}")
+            logging.getLogger(__name__).error(f"Error getting knowledge: {e}")
             return []
 
 # 初始化数据库

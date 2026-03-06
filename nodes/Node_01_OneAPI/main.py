@@ -13,9 +13,10 @@ from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 01 - OneAPI Gateway", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # ============ API 配置 (从环境变量读取) ============
 # 云端 LLM 提供商

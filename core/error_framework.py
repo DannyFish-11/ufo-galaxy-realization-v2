@@ -332,9 +332,68 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
 
 # ───────────────────── FastAPI 集成 ─────────────────────
 
+def api_response(data: Any = None, message: str = "ok",
+                 error: Optional[Dict] = None,
+                 status_code: int = 200) -> Dict:
+    """
+    统一 API 响应信封格式
+
+    成功：{"ok": true,  "data": ..., "message": "ok",       "error": null}
+    失败：{"ok": false, "data": null, "message": "错误描述", "error": {...}}
+
+    用法：
+        from core.error_framework import api_response
+        return api_response(data={"items": [...]})
+        return api_response(error=exc.to_dict(), message="查询失败", status_code=400)
+    """
+    return {
+        "ok": error is None,
+        "data": data,
+        "message": message,
+        "error": error,
+    }
+
+
+# ───────────────────── 标准错误码 ─────────────────────
+
+class ErrorCode:
+    """统一错误码常量，客户端按此判断错误类型"""
+    # 通用
+    INTERNAL_ERROR = "E0001"
+    INVALID_REQUEST = "E0002"
+    NOT_FOUND = "E0003"
+    TIMEOUT = "E0004"
+    # 认证
+    AUTH_REQUIRED = "E1001"
+    AUTH_INVALID_TOKEN = "E1002"
+    AUTH_PERMISSION_DENIED = "E1003"
+    # 设备
+    DEVICE_OFFLINE = "E2001"
+    DEVICE_BUSY = "E2002"
+    DEVICE_NOT_FOUND = "E2003"
+    # LLM
+    LLM_PROVIDER_ERROR = "E3001"
+    LLM_RATE_LIMIT = "E3002"
+    LLM_CONTEXT_TOO_LONG = "E3003"
+    # 节点
+    NODE_UNAVAILABLE = "E4001"
+    NODE_TIMEOUT = "E4002"
+    # 数据
+    DATA_VALIDATION_FAILED = "E5001"
+    DATA_CONFLICT = "E5002"
+    # 并发
+    CONCURRENCY_LIMIT = "E6001"
+    LOCK_TIMEOUT = "E6002"
+    # 配置
+    CONFIG_INVALID = "E7001"
+    CONFIG_MISSING = "E7002"
+
+
 def create_error_handlers(app):
     """
     为 FastAPI 应用注册统一错误处理器
+
+    所有错误响应使用 api_response() 信封格式 + 标准错误码。
 
     用法：
         from core.error_framework import create_error_handlers
@@ -343,20 +402,45 @@ def create_error_handlers(app):
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
+    _CATEGORY_TO_STATUS = {
+        ErrorCategory.AUTH: 401,
+        ErrorCategory.CONFIG: 500,
+        ErrorCategory.DATA: 400,
+        ErrorCategory.TIMEOUT: 504,
+        ErrorCategory.RESOURCE: 503,
+        ErrorCategory.NODE: 502,
+        ErrorCategory.CONCURRENCY: 429,
+    }
+
+    _CATEGORY_TO_CODE = {
+        ErrorCategory.AUTH: ErrorCode.AUTH_REQUIRED,
+        ErrorCategory.CONFIG: ErrorCode.CONFIG_INVALID,
+        ErrorCategory.DATA: ErrorCode.DATA_VALIDATION_FAILED,
+        ErrorCategory.TIMEOUT: ErrorCode.TIMEOUT,
+        ErrorCategory.RESOURCE: ErrorCode.NOT_FOUND,
+        ErrorCategory.NODE: ErrorCode.NODE_UNAVAILABLE,
+        ErrorCategory.CONCURRENCY: ErrorCode.CONCURRENCY_LIMIT,
+        ErrorCategory.DEVICE: ErrorCode.DEVICE_OFFLINE,
+        ErrorCategory.LLM: ErrorCode.LLM_PROVIDER_ERROR,
+        ErrorCategory.NETWORK: ErrorCode.INTERNAL_ERROR,
+        ErrorCategory.INTERNAL: ErrorCode.INTERNAL_ERROR,
+        ErrorCategory.EXTERNAL: ErrorCode.INTERNAL_ERROR,
+    }
+
     @app.exception_handler(UFOError)
     async def ufo_error_handler(request: Request, exc: UFOError):
         _global_tracker.record(exc, handled=True)
-        status_code = {
-            ErrorCategory.AUTH: 401,
-            ErrorCategory.CONFIG: 500,
-            ErrorCategory.DATA: 400,
-            ErrorCategory.TIMEOUT: 504,
-            ErrorCategory.RESOURCE: 503,
-        }.get(exc.category, 500)
+        status_code = _CATEGORY_TO_STATUS.get(exc.category, 500)
+        error_code = _CATEGORY_TO_CODE.get(exc.category, ErrorCode.INTERNAL_ERROR)
+        error_detail = exc.to_dict()
+        error_detail["code"] = error_code
 
         return JSONResponse(
             status_code=status_code,
-            content=exc.to_dict(),
+            content=api_response(
+                error=error_detail,
+                message=exc.message,
+            ),
         )
 
     @app.exception_handler(Exception)
@@ -368,9 +452,14 @@ def create_error_handlers(app):
             cause=exc,
         )
         _global_tracker.record(ufo_err)
+        error_detail = ufo_err.to_dict()
+        error_detail["code"] = ErrorCode.INTERNAL_ERROR
         return JSONResponse(
             status_code=500,
-            content=ufo_err.to_dict(),
+            content=api_response(
+                error=error_detail,
+                message=str(exc),
+            ),
         )
 
 

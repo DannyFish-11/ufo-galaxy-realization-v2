@@ -24,6 +24,7 @@ import logging
 from core.llm_manager import LLMManager
 from galaxy_gateway.websocket_handler import handle_websocket, connection_manager
 from galaxy_gateway.device_router import device_router
+from nodes.common.cors_config import get_cors_origins
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ app = FastAPI(
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

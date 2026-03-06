@@ -267,7 +267,7 @@ class RAGMemory:
         # 尝试 Node_105
         try:
             from nodes.Node_105_UnifiedKnowledgeBase.main import search_knowledge
-            results = await asyncio.get_event_loop().run_in_executor(
+            results = await asyncio.get_running_loop().run_in_executor(
                 None, search_knowledge, query, top_k
             )
             for r in (results or []):

@@ -278,15 +278,38 @@ class HotReloadConfigManager:
         return []
 
     def save_to_file(self, path: Optional[str] = None) -> Optional[str]:
-        """保存配置到文件"""
+        """
+        原子保存配置到文件
+
+        先写入临时文件，成功后 rename 替换目标文件，
+        保证即使进程崩溃也不会产生半写的配置文件。
+        """
         path = path or self._config_path
         if not path:
             return "未指定配置文件路径"
 
+        import tempfile
+
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(self._config, f, indent=2, ensure_ascii=False)
-            logger.info(f"配置已保存: {path}")
+            dir_name = os.path.dirname(path) or "."
+            # 写入同目录的临时文件（确保同文件系统，rename 才是原子的）
+            fd, tmp_path = tempfile.mkstemp(
+                dir=dir_name, suffix=".tmp", prefix=".config_"
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(self._config, f, indent=2, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, path)  # 原子替换
+            except Exception:
+                # 清理临时文件
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            logger.info(f"配置已原子保存: {path}")
             return None
         except Exception as e:
             return f"保存失败: {e}"
@@ -337,11 +360,23 @@ class HotReloadConfigManager:
         self._subscribers.append(callback)
 
     def _notify_subscribers(self, changes: Dict):
+        """通知所有订阅者，单个回调失败不影响其他"""
+        failed = 0
         for cb in self._subscribers:
             try:
-                cb(changes)
+                result = cb(changes)
+                # 支持异步回调
+                if asyncio.iscoroutine(result):
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(result)
+                    except RuntimeError:
+                        pass  # 没有事件循环时跳过异步回调
             except Exception as e:
+                failed += 1
                 logger.warning(f"配置变更通知回调异常: {e}")
+        if failed:
+            logger.warning(f"配置变更通知: {failed}/{len(self._subscribers)} 回调失败")
 
     # ─── 验证 ───
 

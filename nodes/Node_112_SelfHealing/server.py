@@ -12,6 +12,7 @@ from typing import Optional
 import uvicorn
 
 from core.healing_engine import SelfHealingEngine
+from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +28,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

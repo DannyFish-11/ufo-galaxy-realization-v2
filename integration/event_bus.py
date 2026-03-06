@@ -103,12 +103,13 @@ class EventBus:
         self._initialized = True
         self._subscribers: Dict[EventType, Set[Callable]] = {event_type: set() for event_type in EventType}
         self._async_subscribers: Dict[EventType, Set[Callable]] = {event_type: set() for event_type in EventType}
-        self._event_history: List[UIGalaxyEvent] = []
+        from collections import deque
+        self._event_history: deque = deque(maxlen=1000)
         self._max_history = 1000
         self._logger = logging.getLogger("EventBus")
         
-        # 事件队列（用于异步处理）
-        self._event_queue: asyncio.Queue = asyncio.Queue()
+        # 事件队列（有界，防止 OOM；满时丢弃最旧事件）
+        self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=5000)
         self._processing_task: Optional[asyncio.Task] = None
         self._running = False
     

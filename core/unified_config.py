@@ -88,7 +88,7 @@ class UnifiedConfig:
         """加载 config.json"""
         if self.config_file.exists():
             try:
-                with open(self.config_file) as f:
+                with open(self.config_file, encoding="utf-8") as f:
                     data = json.load(f)
                     self._config.update(self._flatten_dict(data))
                 logger.info(f"加载配置文件: {self.config_file}")
@@ -99,7 +99,7 @@ class UnifiedConfig:
         """加载 .env 文件"""
         if self.env_file.exists():
             try:
-                with open(self.env_file) as f:
+                with open(self.env_file, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith("#") and "=" in line:
@@ -258,7 +258,7 @@ class UnifiedConfig:
             if skills:
                 config_data["skills"] = skills
             
-            with open(self.config_file, "w") as f:
+            with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=2, ensure_ascii=False)
             
             logger.info(f"配置已保存: {self.config_file}")
@@ -276,7 +276,7 @@ class UnifiedConfig:
                         env_lines.append(f"{key.upper()}={value}")
             
             if env_lines:
-                with open(self.env_file, "w") as f:
+                with open(self.env_file, "w", encoding="utf-8") as f:
                     f.write("# UFO Galaxy 配置文件\n")
                     f.write("# 自动生成，请勿手动编辑\n\n")
                     f.write("\n".join(env_lines))

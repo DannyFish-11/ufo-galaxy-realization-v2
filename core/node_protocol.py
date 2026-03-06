@@ -434,7 +434,7 @@ class MessageRouter:
         
     async def send_request(self, request: Request, timeout: float = 30.0) -> Response:
         """发送请求并等待响应"""
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
         self.pending_requests[request.header.message_id] = future
         
         try:

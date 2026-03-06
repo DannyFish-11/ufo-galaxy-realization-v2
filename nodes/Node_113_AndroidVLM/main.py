@@ -19,11 +19,12 @@ from pydantic import BaseModel
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.android_vlm_engine import AndroidVLMEngine
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 113 - AndroidVLM", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

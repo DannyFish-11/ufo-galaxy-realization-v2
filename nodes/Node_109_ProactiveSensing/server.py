@@ -15,6 +15,7 @@ import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.proactive_sensing_engine import (
+from nodes.common.cors_config import get_cors_origins
     ProactiveSensingEngine,
     AlertLevel,
     OpportunityType,
@@ -36,7 +37,7 @@ app = FastAPI(
 # CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

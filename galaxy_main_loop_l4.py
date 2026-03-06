@@ -101,6 +101,7 @@ class GalaxyMainLoopL4:
         self.cycle_count = 0
         self.cycle_results: List[L4CycleResult] = []
         self.task_history: List[Dict] = []
+        self._max_task_history = 500  # 限制历史长度防止内存泄漏
         self._shutdown_event = asyncio.Event()
         self._main_task: Optional[asyncio.Task] = None
 
@@ -378,37 +379,60 @@ class GalaxyMainLoopL4:
     async def _learn_from_execution(self, execution_result: Dict):
         """从执行中学习"""
         self.logger.info("从执行中学习")
-        
+
         # 记录执行结果
         if self.learning_optimizer:
             self.learning_optimizer.record_execution(execution_result)
-        
+
         # 提取观察
         summary = execution_result.get('summary', {})
-        
+
         observation = {
             'goal': summary.get('goal', 'unknown'),
             'success': execution_result.get('success', False),
             'duration': summary.get('total_duration', 0),
             'actions_count': summary.get('total_actions', 0),
-            'success_rate': summary.get('success_rate', 0)
+            'success_rate': summary.get('success_rate', 0),
+            'timestamp': datetime.now().isoformat(),
         }
-        
-        # 记录到历史
+
+        # 记录到历史（限制大小，防止内存泄漏）
         self.task_history.append(observation)
-        
-        # 强制步骤：无论学习引擎是否可用，都将执行结果反馈给规划器决策权重
-        _DEFAULT_SUCCESS_RATE = 0.5  # fallback when no history yet
-        recent = self.task_history[-10:] if self.task_history else []
-        avg_success = sum(t.get('success_rate', 0) for t in recent) / len(recent) if recent else _DEFAULT_SUCCESS_RATE
-        self.planner.update_decision_weights({"average_success_rate": avg_success})
-        self.logger.info(f"[LEARNING] 决策权重已更新 (近期平均成功率={avg_success:.1%})")
-        
+        if len(self.task_history) > self._max_task_history:
+            self.task_history = self.task_history[-self._max_task_history:]
+
+        # 使用指数加权移动平均 (EWMA) 更新决策权重，比简单平均更能反映近期趋势
+        _DEFAULT_SUCCESS_RATE = 0.5
+        recent = self.task_history[-20:] if self.task_history else []
+        if recent:
+            alpha = 0.3  # EWMA 衰减因子
+            ewma = recent[0].get('success_rate', _DEFAULT_SUCCESS_RATE)
+            for t in recent[1:]:
+                ewma = alpha * t.get('success_rate', 0) + (1 - alpha) * ewma
+            avg_success = ewma
+        else:
+            avg_success = _DEFAULT_SUCCESS_RATE
+
+        # 计算趋势（是否在改善）
+        if len(recent) >= 4:
+            first_half = sum(t.get('success_rate', 0) for t in recent[:len(recent)//2]) / (len(recent) // 2)
+            second_half = sum(t.get('success_rate', 0) for t in recent[len(recent)//2:]) / (len(recent) - len(recent) // 2)
+            trend = "improving" if second_half > first_half + 0.05 else ("declining" if second_half < first_half - 0.05 else "stable")
+        else:
+            trend = "insufficient_data"
+
+        self.planner.update_decision_weights({
+            "average_success_rate": avg_success,
+            "trend": trend,
+            "sample_size": len(recent),
+        })
+        self.logger.info(f"[LEARNING] 决策权重已更新 (EWMA 成功率={avg_success:.1%}, 趋势={trend})")
+
         # 检查是否需要优化
         if self.learning_optimizer and self.learning_optimizer.should_optimize():
             self.logger.info("检测到需要优化")
             await self._perform_optimization()
-        
+
         self.logger.info(f"学习完成: 成功={observation['success']}, 时长={observation['duration']:.1f}s, 成功率={observation['success_rate']:.1%}")
     
     async def _reflect_on_performance(self) -> List:

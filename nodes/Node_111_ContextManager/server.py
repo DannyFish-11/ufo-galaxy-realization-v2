@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any, List
 import uvicorn
 
 from core.context_engine import ContextManager
+from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +28,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

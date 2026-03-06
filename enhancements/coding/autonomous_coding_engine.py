@@ -59,20 +59,37 @@ class CodingResult:
 
 class AutonomousCodingEngine:
     """自主编程引擎"""
-    
-    def __init__(self, workspace_root: str = "/home/ubuntu/code_audit/ufo-galaxy-realization"):
+
+    def __init__(self, workspace_root: str = None):
         """
         初始化自主编程引擎
-        
+
         Args:
-            workspace_root: 工作空间根目录
+            workspace_root: 工作空间根目录（默认使用项目根目录）
         """
-        self.workspace_root = workspace_root
+        if workspace_root is None:
+            workspace_root = os.getenv(
+                "GALAXY_WORKSPACE_ROOT",
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            )
+        self.workspace_root = os.path.abspath(workspace_root)
         self.available_tools = self._scan_available_tools()
         self.coding_history: List[Dict] = []
-        
-        logger.info(f"AutonomousCodingEngine 初始化完成，工作空间: {workspace_root}")
+        # 加载历史记录
+        self._load_coding_history()
+
+        logger.info(f"AutonomousCodingEngine 初始化完成，工作空间: {self.workspace_root}")
         logger.info(f"可用工具: {', '.join(self.available_tools)}")
+
+    def _load_coding_history(self):
+        """从磁盘加载编程历史"""
+        history_file = os.path.join(self.workspace_root, 'coding_history.json')
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r') as f:
+                    self.coding_history = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                self.coding_history = []
     
     def _scan_available_tools(self) -> List[str]:
         """扫描可用的编程工具"""
@@ -307,7 +324,7 @@ class NewFeature:
 
 import pytest
 import sys
-sys.path.insert(0, '/home/ubuntu/code_audit/ufo-galaxy-realization')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from {module_name} import *
 
@@ -325,28 +342,47 @@ def test_edge_cases():
 """
     
     def _apply_code_changes(self, code_changes: Dict[str, str]) -> tuple:
-        """应用代码更改"""
+        """应用代码更改（带备份和原子写入）"""
         modified_files = []
         created_files = []
-        
+        backup_dir = os.path.join(self.workspace_root, ".code_backups")
+
         for file_path, code in code_changes.items():
-            full_path = os.path.join(self.workspace_root, file_path)
-            
+            # 安全检查：禁止路径遍历
+            full_path = os.path.normpath(os.path.join(self.workspace_root, file_path))
+            if not full_path.startswith(self.workspace_root):
+                logger.error(f"安全拒绝: 路径遍历尝试 {file_path}")
+                continue
+
             # 确保目录存在
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            
-            # 检查文件是否已存在
+
+            # 如果文件已存在，先备份
             if os.path.exists(full_path):
+                os.makedirs(backup_dir, exist_ok=True)
+                import shutil
+                backup_name = file_path.replace("/", "_").replace("\\", "_")
+                backup_path = os.path.join(backup_dir, f"{backup_name}.bak")
+                try:
+                    shutil.copy2(full_path, backup_path)
+                except IOError as e:
+                    logger.warning(f"备份失败 {file_path}: {e}")
                 modified_files.append(file_path)
             else:
                 created_files.append(file_path)
-            
-            # 写入代码
-            with open(full_path, 'w') as f:
-                f.write(code)
-            
-            logger.info(f"应用代码更改: {file_path}")
-        
+
+            # 原子写入：先写临时文件，再 rename
+            tmp_path = full_path + ".tmp"
+            try:
+                with open(tmp_path, 'w') as f:
+                    f.write(code)
+                os.replace(tmp_path, full_path)
+                logger.info(f"应用代码更改: {file_path}")
+            except Exception as e:
+                logger.error(f"写入失败 {file_path}: {e}")
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+
         return modified_files, created_files
     
     async def _run_tests(self, context: CodingContext, files: List[str]) -> Dict:

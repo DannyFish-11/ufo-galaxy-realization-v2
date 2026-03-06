@@ -12,9 +12,10 @@ from contextlib import contextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 13 - SQLite", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # SQLite配置
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "/tmp/sqlite.db")
@@ -97,16 +98,26 @@ class SQLiteManager:
         rows = self.execute(query)
         return [row["name"] for row in rows]
 
+    @staticmethod
+    def _validate_identifier(name: str) -> str:
+        """验证 SQL 标识符，防止 SQL 注入"""
+        import re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+            raise ValueError(f"Invalid SQL identifier: {name!r}")
+        return f'"{name}"'
+
     def get_table_schema(self, table_name: str) -> List[Dict]:
         """获取表结构"""
-        query = f"PRAGMA table_info({table_name})"
+        safe_name = self._validate_identifier(table_name)
+        query = f"PRAGMA table_info({safe_name})"
         rows = self.execute(query)
-        return [{"name": r["name"], "type": r["type"], "notnull": r["notnull"], 
+        return [{"name": r["name"], "type": r["type"], "notnull": r["notnull"],
                  "default": r["dflt_value"], "pk": r["pk"]} for r in rows]
 
     def get_table_stats(self, table_name: str) -> Dict:
         """获取表统计信息"""
-        query = f"SELECT COUNT(*) as count FROM {table_name}"
+        safe_name = self._validate_identifier(table_name)
+        query = f"SELECT COUNT(*) as count FROM {safe_name}"
         result = self.execute(query, fetch="one")
         return {"table_name": table_name, "row_count": result["count"] if result else 0}
 

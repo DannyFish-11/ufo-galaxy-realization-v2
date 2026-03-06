@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
 # 尝试导入asyncpg
 try:
@@ -21,7 +22,7 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
 
 app = FastAPI(title="Node 12 - PostgreSQL", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # PostgreSQL配置
 PG_HOST = os.getenv("POSTGRES_HOST", "localhost")
@@ -127,9 +128,18 @@ class PostgresManager:
         """
         return await self.execute(query, [table_name])
 
+    @staticmethod
+    def _validate_identifier(name: str) -> str:
+        """验证 SQL 标识符，防止 SQL 注入"""
+        import re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+            raise ValueError(f"Invalid SQL identifier: {name!r}")
+        return f'"{name}"'
+
     async def get_table_stats(self, table_name: str) -> Dict:
         """获取表统计信息"""
-        query = f"SELECT COUNT(*) as count FROM {table_name}"
+        safe_name = self._validate_identifier(table_name)
+        query = f"SELECT COUNT(*) as count FROM {safe_name}"
         result = await self.execute(query, fetch="one")
         return {"table_name": table_name, "row_count": result["count"] if result else 0}
 

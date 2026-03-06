@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from nodes.common.cors_config import get_cors_origins
 
 
 class MCPAdapter(ABC):
@@ -38,7 +39,7 @@ class MCPAdapter(ABC):
         """设置中间件"""
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=get_cors_origins(),
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

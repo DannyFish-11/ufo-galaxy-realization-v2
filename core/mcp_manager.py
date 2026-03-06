@@ -415,7 +415,7 @@ class MCPManager:
             self._create_default_config()
 
         try:
-            with open(self.config_path) as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 config = json.load(f)
 
             loaded = 0
@@ -445,7 +445,7 @@ class MCPManager:
                 "servers": [],
                 "custom_servers": [],
             }
-            with open(self.config_path, "w") as f:
+            with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(default, f, indent=2, ensure_ascii=False)
             logger.info(f"已创建默认 MCP 配置模板: {self.config_path}")
         except Exception as e:

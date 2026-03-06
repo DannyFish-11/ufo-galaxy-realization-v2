@@ -18,6 +18,8 @@ import asyncio
 import logging
 from typing import Optional
 
+from core.task_utils import create_tracked_task
+
 logger = logging.getLogger("UFO-Galaxy.EventBridge")
 
 
@@ -212,7 +214,7 @@ class EventBridge:
         # 6. 启动事件总线 + 周期清理任务
         # ====================================================================
         await event_bus.start()
-        self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+        self._cleanup_task = create_tracked_task(self._periodic_cleanup(), name="event_bridge_cleanup")
 
         logger.info("EventBridge: 所有连接已建立，事件总线已启动")
 

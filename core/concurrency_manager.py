@@ -482,6 +482,7 @@ class ConcurrencyManager:
     统一并发管理器
 
     整合锁管理、并发限制、资源队列和重试策略。
+    增强：跟踪后台任务防止泄漏，异常安全的清理循环。
     """
 
     def __init__(self, global_max_concurrency: int = 50,
@@ -499,37 +500,94 @@ class ConcurrencyManager:
         self.resources = ResourceQueue()
         self.retry = RetryPolicy()
         self._cleanup_task: Optional[asyncio.Task] = None
+        # 跟踪所有由本管理器创建的后台任务，防止泄漏
+        self._tracked_tasks: Dict[str, asyncio.Task] = {}
+        try:
+            asyncio.get_running_loop()
+            self._tracked_mu = asyncio.Lock()
+        except RuntimeError:
+            self._tracked_mu = None
+        self._max_tracked_tasks = 200  # 防止无限制增长
         logger.info(f"ConcurrencyManager 已初始化 (最大并发: {global_max_concurrency})")
 
     async def start(self):
         """启动后台清理任务"""
-        self._cleanup_task = asyncio.ensure_future(self._cleanup_loop())
+        if self._tracked_mu is None:
+            self._tracked_mu = asyncio.Lock()
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task.add_done_callback(self._on_cleanup_done)
+
+    def _on_cleanup_done(self, task: asyncio.Task):
+        """清理任务意外退出时记录日志"""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            logger.error(f"清理循环意外退出: {exc}")
 
     async def stop(self):
-        """停止"""
+        """停止并清理所有跟踪的任务"""
         if self._cleanup_task and not self._cleanup_task.done():
             self._cleanup_task.cancel()
             try:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
+        # 取消所有跟踪的后台任务
+        if self._tracked_mu:
+            async with self._tracked_mu:
+                for tid, task in list(self._tracked_tasks.items()):
+                    if not task.done():
+                        task.cancel()
+                        logger.debug(f"已取消跟踪任务: {tid}")
+                self._tracked_tasks.clear()
+
+    async def track_task(self, task_id: str, task: asyncio.Task):
+        """注册一个后台任务到跟踪器，防止泄漏"""
+        if self._tracked_mu is None:
+            self._tracked_mu = asyncio.Lock()
+        async with self._tracked_mu:
+            if len(self._tracked_tasks) >= self._max_tracked_tasks:
+                # 清理已完成的任务腾出空间
+                self._tracked_tasks = {
+                    k: v for k, v in self._tracked_tasks.items() if not v.done()
+                }
+                if len(self._tracked_tasks) >= self._max_tracked_tasks:
+                    logger.warning(f"跟踪任务已达上限 ({self._max_tracked_tasks})，拒绝新任务")
+                    task.cancel()
+                    return
+            self._tracked_tasks[task_id] = task
 
     async def _cleanup_loop(self):
-        """定期清理过期锁和槽位"""
+        """定期清理过期锁、槽位和已完成的跟踪任务"""
         while True:
             try:
                 await asyncio.sleep(10)
                 expired_locks = self.locks.cleanup_expired()
                 expired_slots = await self.limiter.cleanup_expired()
-                if expired_locks or expired_slots:
+
+                # 清理已完成的跟踪任务
+                cleaned_tasks = 0
+                if self._tracked_mu:
+                    async with self._tracked_mu:
+                        before = len(self._tracked_tasks)
+                        self._tracked_tasks = {
+                            k: v for k, v in self._tracked_tasks.items()
+                            if not v.done()
+                        }
+                        cleaned_tasks = before - len(self._tracked_tasks)
+
+                if expired_locks or expired_slots or cleaned_tasks:
                     logger.info(
                         f"清理: {len(expired_locks)} 过期锁, "
-                        f"{len(expired_slots)} 过期槽位"
+                        f"{len(expired_slots)} 过期槽位, "
+                        f"{cleaned_tasks} 已完成任务"
                     )
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"清理循环异常: {e}")
+                await asyncio.sleep(5)  # 异常后短暂等待再重试
 
     # ─── 便捷方法 ───
 

@@ -292,7 +292,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -450,6 +450,7 @@ async def get_patterns(
     """
     try:
         from autonomous_learning_engine import PatternType
+from nodes.common.cors_config import get_cors_origins
         
         type_filter = None
         if pattern_type:

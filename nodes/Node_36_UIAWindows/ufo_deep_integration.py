@@ -490,19 +490,27 @@ class UFODeepIntegration:
     # ========================================================================
     
     async def launch_app(self, app_path: str) -> Dict[str, Any]:
-        """启动应用程序"""
+        """启动应用程序（安全：不使用 shell=True）"""
         try:
             import subprocess
-            subprocess.Popen(app_path, shell=True)
+            import re
+            # 验证路径不含 shell 元字符
+            if re.search(r'[;&|`$]', app_path):
+                return {"success": False, "error": f"Invalid characters in app path: {app_path!r}"}
+            subprocess.Popen([app_path])
             return {"success": True, "app": app_path}
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
+
     async def close_app(self, process_name: str) -> Dict[str, Any]:
-        """关闭应用程序"""
+        """关闭应用程序（安全：不使用 shell=True）"""
         try:
             import subprocess
-            subprocess.run(f"taskkill /f /im {process_name}", shell=True, capture_output=True)
+            import re
+            # 验证进程名只含安全字符
+            if not re.match(r'^[a-zA-Z0-9_.\-]+$', process_name):
+                return {"success": False, "error": f"Invalid process name: {process_name!r}"}
+            subprocess.run(["taskkill", "/f", "/im", process_name], capture_output=True)
             return {"success": True, "process": process_name}
         except Exception as e:
             return {"success": False, "error": str(e)}

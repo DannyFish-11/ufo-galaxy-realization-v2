@@ -81,7 +81,7 @@ class GalaxyCore:
         
         if os.path.exists(registry_path):
             try:
-                with open(registry_path, 'r') as f:
+                with open(registry_path, "r", encoding="utf-8") as f:
                     registry = json.load(f)
                     self.nodes = registry.get("nodes", {})
                     logger.info(f"已加载 {len(self.nodes)} 个节点")
@@ -138,26 +138,36 @@ class GalaxyCore:
         
         try:
             client = await self._get_http_client()
-            
-            # 使用 /mcp/call 接口 (已有)
+
+            # 方式一：使用 /mcp/call 接口
             response = await client.post(
                 f"{endpoint}/mcp/call",
-                json={"tool": action, "params": params}
+                json={"tool": action, "params": params},
+                timeout=10.0,
             )
-            
+
             if response.status_code == 200:
                 return response.json()
-            
-            # 尝试直接调用
+
+            logger.warning(
+                f"节点 {node_id} /mcp/call 返回 {response.status_code}, "
+                f"尝试直接调用 /{action}"
+            )
+
+            # 方式二：直接调用
             response = await client.post(
                 f"{endpoint}/{action}",
-                json=params
+                json=params,
+                timeout=10.0,
             )
-            
+            response.raise_for_status()
             return response.json()
-        
+
         except Exception as e:
-            logger.error(f"调用节点 {node_id} 失败: {e}")
+            logger.error(
+                f"调用节点 {node_id} 失败: action={action}, "
+                f"endpoint={endpoint}, error={e}"
+            )
             return {"success": False, "error": str(e)}
     
     async def call_node_with_protocol(

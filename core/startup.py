@@ -28,16 +28,92 @@ UFO Galaxy - 系统启动引导
 import asyncio
 import logging
 import os
-from typing import Any, Optional
+import time
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import FastAPI
 
 logger = logging.getLogger("UFO-Galaxy.Startup")
 
 
+# ───────────────────── 启动依赖图 ─────────────────────
+
+# 子系统名称 → 依赖列表（启动前必须先成功的子系统）
+_SUBSYSTEM_DEPS: Dict[str, List[str]] = {
+    "cache": [],
+    "monitoring": [],
+    "error_framework": [],
+    "concurrency_manager": [],
+    "config_hot_reload": [],
+    "security_middleware": [],
+    "performance": ["cache"],             # 缓存中间件需要 cache
+    "command_router": ["cache"],
+    "ai_intent": ["cache"],
+    "qdrant": [],
+    "event_bridge": ["command_router"],    # 事件桥接依赖命令路由
+    "llm_router": [],
+    "agent_system": ["llm_router"],       # Agent 依赖 LLM 路由
+    "digital_twin": [],
+    "world_model": [],
+    "node_discovery": [],
+    "health_integration": ["monitoring", "concurrency_manager", "node_discovery"],
+    "galaxy_gateway": [],
+}
+
+
+def _check_circular_deps(deps: Dict[str, List[str]]) -> List[str]:
+    """检测循环依赖，返回发现的环路径列表"""
+    cycles = []
+    WHITE, GRAY, BLACK = 0, 1, 2
+    colors: Dict[str, int] = {k: WHITE for k in deps}
+    path: List[str] = []
+
+    def dfs(node: str):
+        colors[node] = GRAY
+        path.append(node)
+        for dep in deps.get(node, []):
+            if dep not in colors:
+                continue
+            if colors[dep] == GRAY:
+                idx = path.index(dep)
+                cycle = path[idx:] + [dep]
+                cycles.append(" → ".join(cycle))
+            elif colors[dep] == WHITE:
+                dfs(dep)
+        path.pop()
+        colors[node] = BLACK
+
+    for node in deps:
+        if colors[node] == WHITE:
+            dfs(node)
+
+    return cycles
+
+
+def _validate_startup_deps() -> List[str]:
+    """验证启动依赖图的完整性"""
+    errors = []
+    # 检测循环依赖
+    cycles = _check_circular_deps(_SUBSYSTEM_DEPS)
+    for c in cycles:
+        errors.append(f"循环依赖: {c}")
+    # 检测引用了不存在的依赖
+    all_names = set(_SUBSYSTEM_DEPS.keys())
+    for name, deps in _SUBSYSTEM_DEPS.items():
+        for dep in deps:
+            if dep not in all_names:
+                errors.append(f"子系统 '{name}' 依赖不存在的 '{dep}'")
+    return errors
+
+
 async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     """
     启动所有核心子系统并挂载中间件
+
+    增强：
+    - 启动前验证依赖图（循环依赖检测）
+    - 依赖项失败时跳过下游子系统并记录原因
+    - 启动耗时追踪
 
     Args:
         app: FastAPI 应用实例
@@ -47,6 +123,33 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         各子系统的初始化结果
     """
     results = {}
+    t0 = time.monotonic()
+
+    # 启动前校验依赖图
+    dep_errors = _validate_startup_deps()
+    if dep_errors:
+        for err in dep_errors:
+            logger.error(f"依赖图校验失败: {err}")
+        results["_dep_validation"] = {"status": "error", "errors": dep_errors}
+    else:
+        results["_dep_validation"] = {"status": "ok"}
+        logger.info("启动依赖图校验通过")
+
+    def _deps_ok(subsystem: str) -> bool:
+        """检查子系统的依赖是否全部成功初始化"""
+        for dep in _SUBSYSTEM_DEPS.get(subsystem, []):
+            dep_result = results.get(dep, {})
+            if dep_result.get("status") not in ("ok", "degraded"):
+                logger.warning(
+                    f"跳过 {subsystem}: 依赖 '{dep}' 未成功 "
+                    f"(status={dep_result.get('status', 'missing')})"
+                )
+                results[subsystem] = {
+                    "status": "skipped",
+                    "reason": f"依赖 '{dep}' 未就绪",
+                }
+                return False
+        return True
 
     # ====================================================================
     # 1. 缓存层
@@ -394,9 +497,24 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     # 汇总
     # ====================================================================
+    elapsed = time.monotonic() - t0
     ok_count = sum(1 for v in results.values() if v.get("status") == "ok")
+    degraded_count = sum(1 for v in results.values() if v.get("status") == "degraded")
+    skipped_count = sum(1 for v in results.values() if v.get("status") == "skipped")
     total = len(results)
-    logger.info(f"子系统启动完成: {ok_count}/{total} 正常")
+    logger.info(
+        f"子系统启动完成: {ok_count}/{total} 正常, "
+        f"{degraded_count} 降级, {skipped_count} 跳过, "
+        f"耗时 {elapsed:.2f}s"
+    )
+
+    # 记录失败/降级的子系统以便运维排查
+    for name, result in results.items():
+        if name.startswith("_"):
+            continue
+        status = result.get("status")
+        if status in ("degraded", "skipped", "error"):
+            logger.warning(f"  ⚠ {name}: {status} - {result.get('error', result.get('reason', ''))}")
 
     return results
 

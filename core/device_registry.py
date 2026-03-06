@@ -712,7 +712,7 @@ class DeviceRegistry:
                 "saved_at": time.time(),
             }
             
-            with open(self.storage_path, "w") as f:
+            with open(self.storage_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"保存设备数据失败: {e}")
@@ -723,7 +723,7 @@ class DeviceRegistry:
             if not self.storage_path.exists():
                 return
             
-            with open(self.storage_path) as f:
+            with open(self.storage_path, encoding="utf-8") as f:
                 data = json.load(f)
             
             # 加载设备

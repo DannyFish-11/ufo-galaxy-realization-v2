@@ -16,9 +16,10 @@ from pydantic import BaseModel
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 03 - SecretVault", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # 主密钥（从环境变量读取）
 MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", Fernet.generate_key().decode())

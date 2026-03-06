@@ -167,7 +167,7 @@ class SkillMDLoader:
                 elif value.startswith("{"):
                     try:
                         value = json.loads(value)
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         pass
                 
                 result[key] = value

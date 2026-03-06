@@ -31,6 +31,7 @@ import uvicorn
 import httpx
 import feedparser
 from bs4 import BeautifulSoup
+from nodes.common.cors_config import get_cors_origins
 
 # =============================================================================
 # Configuration
@@ -320,7 +321,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

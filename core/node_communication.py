@@ -418,6 +418,7 @@ class UniversalCommunicator:
         self.routing_table = RoutingTable()
         self.load_balancer = LoadBalancer()
         self._pending_messages: Dict[str, PendingMessage] = {}  # message_id -> PendingMessage
+        self._max_pending = 10000  # 防止无限增长导致 OOM
         self._message_handlers: Dict[MessageType, Callable] = {}
         self._event_listeners: Dict[str, List[Callable]] = {}
         self._sequence_number = 0
@@ -427,9 +428,10 @@ class UniversalCommunicator:
         # Register default handlers
         self._register_default_handlers()
         
-        # Start background tasks
-        asyncio.create_task(self._cleanup_loop())
-        asyncio.create_task(self._health_check_loop())
+        # Start background tasks (tracked to prevent silent failures)
+        from core.task_utils import create_tracked_task
+        self._cleanup_task = create_tracked_task(self._cleanup_loop(), name="node_comm_cleanup")
+        self._health_task = create_tracked_task(self._health_check_loop(), name="node_comm_health")
     
     def _register_default_handlers(self):
         """Register default message handlers"""
@@ -518,6 +520,15 @@ class UniversalCommunicator:
         try:
             # Track pending message if ACK required
             if message.requires_ack:
+                # 防止 pending 消息无限增长
+                if len(self._pending_messages) >= self._max_pending:
+                    oldest_ids = sorted(
+                        self._pending_messages,
+                        key=lambda k: self._pending_messages[k].send_time
+                    )[:len(self._pending_messages) // 4]
+                    for oid in oldest_ids:
+                        del self._pending_messages[oid]
+                    logger.warning(f"pending 消息达到上限 {self._max_pending}，已清理 {len(oldest_ids)} 条最旧消息")
                 pending = PendingMessage(message=message, send_time=time.time())
                 self._pending_messages[message.message_id] = pending
             

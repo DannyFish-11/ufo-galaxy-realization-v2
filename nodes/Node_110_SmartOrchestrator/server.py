@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any
 import uvicorn
 
 from core.orchestrator_engine import SmartOrchestrator
+from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
 logging.basicConfig(
@@ -31,7 +32,7 @@ app = FastAPI(
 # 添加 CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
