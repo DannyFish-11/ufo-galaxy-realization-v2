@@ -277,6 +277,8 @@ class GlobalHotkeyThread(threading.Thread):
                     keyboard.wait(timeout=1)
                 except Exception:
                     import time
+                    if not self._running:
+                        break
                     time.sleep(1)
         except ImportError:
             logger.warning("keyboard 库不可用，F12 热键降级为窗口内快捷键。安装: pip install keyboard")

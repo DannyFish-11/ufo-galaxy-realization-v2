@@ -389,8 +389,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         # 在生产环境中，这里应该有更严格的鉴权
         
         # 获取主机地址，用于构建 WebSocket URL
-        host = "localhost"
-        port = "8099"
+        host = os.getenv("API_HOST", "localhost")
+        port = os.getenv("API_PORT", "8099")
         if request:
             host = request.url.hostname or "localhost"
             port = str(request.url.port or 8099)

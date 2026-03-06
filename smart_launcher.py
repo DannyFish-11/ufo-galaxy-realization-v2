@@ -14,6 +14,7 @@ import sys
 import time
 import subprocess
 import signal
+import threading
 from pathlib import Path
 from typing import Dict, List, Set
 from collections import defaultdict
@@ -220,8 +221,9 @@ class SmartLauncher:
         print(f"{CYAN}按 Ctrl+C 停止监控{RESET}\n")
         
         try:
+            monitor_interval = self.config.get("monitor_interval", 10)
             while True:
-                time.sleep(10)  # 每 10 秒检查一次
+                time.sleep(monitor_interval)
                 
                 for node_name in list(self.processes.keys()):
                     if not self._check_node_health(node_name):
@@ -315,10 +317,11 @@ def main():
         print(f"停止所有节点: python smart_launcher.py stop")
         print()
         
-        # 保持运行
+        # 保持运行 (使用 Event 等待，支持快速退出)
+        stop_event = threading.Event()
         try:
-            while True:
-                time.sleep(1)
+            while not stop_event.is_set():
+                stop_event.wait(1)
         except KeyboardInterrupt:
             launcher.stop_all()
     

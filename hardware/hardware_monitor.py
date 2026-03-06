@@ -123,6 +123,7 @@ class HardwareMonitor:
         """
         self.config = config or {}
         self._running = False
+        self._stop_event = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
         self._watchdog_thread: Optional[threading.Thread] = None
         
@@ -174,10 +175,11 @@ class HardwareMonitor:
     def stop_monitoring(self):
         """Stop hardware monitoring"""
         self._running = False
-        
+        self._stop_event.set()
+
         if self._monitor_thread:
             self._monitor_thread.join(timeout=5)
-        
+
         if self._watchdog_thread:
             self._watchdog_thread.join(timeout=5)
         
@@ -204,11 +206,8 @@ class HardwareMonitor:
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
             
-            # Wait for next interval
-            for _ in range(interval):
-                if not self._running:
-                    break
-                time.sleep(1)
+            # Wait for next interval (immediately interruptible via stop_event)
+            self._stop_event.wait(interval)
     
     def _collect_metrics(self) -> HardwareMetrics:
         """Collect hardware metrics"""
@@ -462,7 +461,7 @@ class HardwareMonitor:
     def _watchdog_loop(self):
         """Hardware watchdog loop"""
         while self._running:
-            time.sleep(1)
+            self._stop_event.wait(1)
             
             # Check if watchdog has been pet recently
             elapsed = time.time() - self._last_pet

@@ -54,6 +54,7 @@ class ProviderConfig:
     max_tokens: int = 4096
     supports_tools: bool = True
     supports_json_mode: bool = True
+    timeout: float = 60.0
     # 运行时状态
     status: ProviderStatus = ProviderStatus.HEALTHY
     latency_avg_ms: float = 0.0
@@ -153,7 +154,7 @@ class BaseProviderAdapter:
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=60.0)
+            self._client = httpx.AsyncClient(timeout=self.config.timeout)
         return self._client
 
     async def chat(self, messages: List[Dict], model: str,
