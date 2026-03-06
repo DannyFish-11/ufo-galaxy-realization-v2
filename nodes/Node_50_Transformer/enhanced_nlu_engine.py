@@ -243,10 +243,66 @@ class EnhancedNLUEngine:
         )
     
     def _understand_with_ai(self, user_input: str) -> Intent:
-        """使用 AI 模型进行意图识别（通过 OneAPI）"""
-        # TODO: 实现 AI 模型调用
-        # 这里可以调用 OneAPI 来使用更强大的 LLM 进行意图识别
-        return self._understand_with_rules(user_input)
+        """使用 AI 模型进行意图识别（通过 OneAPI / OpenAI 兼容接口）"""
+        import os
+        api_key = os.getenv("ONEAPI_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
+        api_base = os.getenv("ONEAPI_BASE_URL") or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+
+        if not api_key:
+            return self._understand_with_rules(user_input)
+
+        try:
+            import urllib.request
+            prompt = (
+                "你是一个意图识别系统。分析用户输入并返回 JSON:\n"
+                '{"intent_type": "software_operation|media_generation|cross_device_task|information_query|general_chat",'
+                ' "target": "目标应用/对象", "action": "操作动作", "device": "windows|android|auto",'
+                ' "parameters": {}, "confidence": 0.0-1.0}\n\n'
+                f"用户输入: {user_input}\n\n只返回 JSON，不要其他内容。"
+            )
+            data = json.dumps({
+                "model": os.getenv("LLM_MODEL", "gpt-3.5-turbo"),
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 256,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{api_base.rstrip('/')}/chat/completions",
+                data=data,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            content = result["choices"][0]["message"]["content"].strip()
+            # 提取 JSON（处理可能的 markdown 包裹）
+            if "```" in content:
+                content = content.split("```")[1].lstrip("json\n")
+            parsed = json.loads(content)
+
+            intent_map = {
+                "software_operation": IntentType.SOFTWARE_OPERATION,
+                "media_generation": IntentType.MEDIA_GENERATION,
+                "cross_device_task": IntentType.CROSS_DEVICE_TASK,
+                "information_query": IntentType.INFORMATION_QUERY,
+                "general_chat": IntentType.GENERAL_CHAT,
+            }
+            device_map = {
+                "windows": TargetDevice.WINDOWS,
+                "android": TargetDevice.ANDROID,
+                "auto": TargetDevice.AUTO,
+            }
+
+            return Intent(
+                type=intent_map.get(parsed.get("intent_type", ""), IntentType.GENERAL_CHAT),
+                target=parsed.get("target", ""),
+                action=parsed.get("action", ""),
+                parameters=parsed.get("parameters", {}),
+                device=device_map.get(parsed.get("device", "auto"), TargetDevice.AUTO),
+                confidence=float(parsed.get("confidence", 0.7)),
+            )
+        except Exception as e:
+            # AI 解析失败，回退到规则引擎
+            return self._understand_with_rules(user_input)
     
     def plan_task(self, intent: Intent) -> List[TaskStep]:
         """

@@ -138,8 +138,18 @@ class {name}Tools:
     def _init_client(self):
         """初始化客户端"""
         try:
-            # TODO: 初始化 {library} 客户端
+            import importlib
+            self._lib = importlib.import_module("{library}")
+            # 如果库提供了 Client 类，尝试自动初始化
+            client_cls = getattr(self._lib, "Client", None)
+            if client_cls:
+                api_key = os.getenv("{name_upper}_API_KEY", "")
+                self.client = client_cls(api_key) if api_key else client_cls()
+            else:
+                self.client = self._lib
             self.initialized = True
+        except ImportError:
+            print(f"Warning: {{library}} not installed. Run: pip install {library}")
         except Exception as e:
             print(f"Warning: Failed to initialize {name}: {{e}}")
             
