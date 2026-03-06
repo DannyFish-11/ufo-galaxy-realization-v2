@@ -41,6 +41,13 @@ except ImportError:
     GALAXY_CORE_AVAILABLE = False
     galaxy_core = None
 
+# 导入现代意图解析器和对话记忆
+try:
+    from core.ai_intent import get_intent_parser, get_conversation_memory
+    MODERN_INTENT_AVAILABLE = True
+except ImportError:
+    MODERN_INTENT_AVAILABLE = False
+
 # 导入已有协议
 try:
     from core.node_protocol import Message, MessageHeader, MessageType
@@ -243,77 +250,155 @@ async def query_knowledge(request: dict):
 # 智能对话
 # ============================================================================
 
-@app.post("/api/v1/chat")
-async def chat(request: dict):
+def _build_unified_response(
+    success: bool,
+    response: str,
+    intent: str = "chat",
+    confidence: float = 0.0,
+    suggestions: Optional[List[str]] = None,
+    data: Optional[Dict] = None,
+    error: Optional[str] = None,
+) -> Dict[str, Any]:
+    """构建统一的 API 响应格式 (UnifiedChatResponse)"""
+    return {
+        "success": success,
+        "response": response,
+        "intent": intent,
+        "confidence": confidence,
+        "suggestions": suggestions or [],
+        "data": data or {},
+        "error": error,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+async def get_parsed_intent_modern(message: str, session_id: str = "default"):
     """
-    智能对话 - 统一入口
-    
-    自动识别意图，调用相应节点
+    使用现代 IntentParser 解析意图。
+
+    优先使用 core/ai_intent.IntentParser（规则引擎 + LLM），
+    如果不可用则回退到旧的 parse_intent()。
+    """
+    if MODERN_INTENT_AVAILABLE:
+        try:
+            parser = get_intent_parser()
+            memory = get_conversation_memory()
+            context = {"history": await memory.get_context(session_id, max_turns=5)}
+            parsed = await parser.parse(message, context=context)
+            return {
+                "type": parsed.intent,
+                "action": parsed.command,
+                "params": parsed.params,
+                "confidence": parsed.confidence,
+                "suggestions": parsed.suggestions,
+                "targets": parsed.targets,
+                "modern": True,
+            }
+        except Exception as e:
+            logger.warning(f"现代意图解析器失败，回退到旧版: {e}")
+    # 回退到旧版
+    result = parse_intent(message)
+    result["confidence"] = 0.3
+    result["suggestions"] = []
+    result["modern"] = False
+    return result
+
+
+@app.post("/api/v1/dashboard/chat")
+async def dashboard_chat(request: dict):
+    """
+    Dashboard 对话入口 (路由: /api/v1/dashboard/chat)
+
+    注意: 主对话端点 /api/v1/chat 在 core/api_routes.py 中定义。
+    此端点是 Dashboard 专用的简化版本，转发到 core 的实现或本地处理。
     """
     message = request.get("message", "")
     device_id = request.get("device_id", "")
-    
-    logger.info(f"Chat: {message[:50]}...")
-    
-    message_lower = message.lower()
-    
+    context = request.get("context", [])
+    session_id = device_id or "default"
+
+    logger.info(f"Dashboard Chat: {message[:50]}...")
+
+    # === 集成对话记忆: 记录用户消息 ===
+    if MODERN_INTENT_AVAILABLE:
+        try:
+            memory = get_conversation_memory()
+            await memory.add_turn(session_id, "user", message)
+        except Exception as e:
+            logger.warning(f"记录用户消息失败: {e}")
+
     if GALAXY_CORE_AVAILABLE and galaxy_core:
-        # 解析意图
-        intent = parse_intent(message)
-        
-        # 根据意图分发
-        if intent["type"] == "device_control":
+        # 使用现代意图解析器
+        intent = await get_parsed_intent_modern(message, session_id)
+        intent_type = intent["type"]
+        confidence = intent.get("confidence", 0.3)
+        suggestions = intent.get("suggestions", [])
+
+        response_text = ""
+        exec_success = False
+        result_data = {}
+
+        if intent_type == "device_control":
             result = await galaxy_core.send_device_command(
                 device_id or "default",
-                intent["action"],
+                intent.get("action", "open_app"),
                 intent["params"]
             )
-            return JSONResponse({
-                "response": f"✅ 已执行: {intent['action']}",
-                "executed": result.get("success", False),
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "learning":
+            exec_success = result.get("success", False)
+            response_text = f"已执行: {intent.get('action', '')}" if exec_success else f"执行失败: {result.get('error', '')}"
+            result_data = result
+
+        elif intent_type == "learning":
             result = await galaxy_core.autonomous_learn(intent["params"])
-            return JSONResponse({
-                "response": "✅ 已学习",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "thinking":
+            exec_success = True
+            response_text = "已学习"
+
+        elif intent_type == "thinking":
             result = await galaxy_core.autonomous_think(
                 intent["params"].get("goal", message)
             )
-            return JSONResponse({
-                "response": f"✅ 思考完成",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "coding":
+            exec_success = True
+            response_text = "思考完成"
+            result_data = result
+
+        elif intent_type in ("coding", "code"):
             result = await galaxy_core.autonomous_code(
                 intent["params"].get("task", message)
             )
-            return JSONResponse({
-                "response": "✅ 代码生成完成",
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        elif intent["type"] == "knowledge":
+            exec_success = True
+            response_text = "代码生成完成"
+            result_data = result
+
+        elif intent_type in ("knowledge", "search"):
             result = await galaxy_core.query_knowledge(message)
-            return JSONResponse({
-                "response": "✅ 知识检索完成",
-                "timestamp": datetime.now().isoformat()
-            })
-        
+            exec_success = True
+            response_text = "知识检索完成"
+            result_data = result
+
         else:
             # 默认通过 Node_50_Transformer 处理
             result = await galaxy_core.call_node("50", "chat", {"message": message})
-            return JSONResponse({
-                "response": result.get("response", "处理完成"),
-                "timestamp": datetime.now().isoformat()
-            })
-    
+            exec_success = result.get("success", True)
+            response_text = result.get("response", "处理完成")
+            result_data = result
+
+        # === 集成对话记忆: 记录助手回复 ===
+        if MODERN_INTENT_AVAILABLE:
+            try:
+                memory = get_conversation_memory()
+                await memory.add_turn(session_id, "assistant", response_text)
+            except Exception:
+                pass
+
+        return JSONResponse(_build_unified_response(
+            success=exec_success,
+            response=response_text,
+            intent=intent_type,
+            confidence=confidence,
+            suggestions=suggestions,
+            data=result_data,
+        ))
+
     # 如果 galaxy_core 不可用，尝试调用 LLM
     if API_MANAGER_AVAILABLE and api_manager:
         try:
@@ -321,27 +406,37 @@ async def chat(request: dict):
                 {"role": "user", "content": message}
             ])
             if result.get("success"):
-                return JSONResponse({
-                    "response": result.get("content", "处理完成"),
-                    "provider": result.get("provider", ""),
-                    "model": result.get("model", ""),
-                    "timestamp": datetime.now().isoformat()
-                })
+                reply = result.get("content", "处理完成")
+                # 记录助手回复
+                if MODERN_INTENT_AVAILABLE:
+                    try:
+                        memory = get_conversation_memory()
+                        await memory.add_turn(session_id, "assistant", reply)
+                    except Exception:
+                        pass
+                return JSONResponse(_build_unified_response(
+                    success=True,
+                    response=reply,
+                    data={"provider": result.get("provider", ""), "model": result.get("model", "")},
+                ))
             else:
-                return JSONResponse({
-                    "response": f"❌ LLM 调用失败: {result.get('error', 'Unknown error')}",
-                    "timestamp": datetime.now().isoformat()
-                })
+                return JSONResponse(_build_unified_response(
+                    success=False,
+                    response=f"LLM 调用失败: {result.get('error', 'Unknown error')}",
+                    error=result.get("error", "Unknown error"),
+                ))
         except Exception as e:
-            return JSONResponse({
-                "response": f"❌ 错误: {str(e)}",
-                "timestamp": datetime.now().isoformat()
-            })
-    
-    return JSONResponse({
-        "response": f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。",
-        "timestamp": datetime.now().isoformat()
-    })
+            return JSONResponse(_build_unified_response(
+                success=False,
+                response=f"错误: {str(e)}",
+                error=str(e),
+            ))
+
+    return JSONResponse(_build_unified_response(
+        success=False,
+        response=f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。",
+        error="Galaxy core and API manager not available",
+    ))
 
 
 def parse_intent(message: str) -> Dict[str, Any]:

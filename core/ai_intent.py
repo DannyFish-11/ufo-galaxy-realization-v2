@@ -230,6 +230,11 @@ class IntentParser:
                 api_base = "https://api.deepseek.com/v1"
 
             if not api_key:
+                logger.debug(
+                    "LLM 意图解析跳过: 未配置 OPENAI_API_KEY 或 DEEPSEEK_API_KEY。"
+                    "系统将仅使用规则引擎进行意图识别，精度可能降低。"
+                    "请在 .env 中设置 API Key 以启用 LLM 增强解析。"
+                )
                 return None
 
             async with httpx.AsyncClient(timeout=10) as client:
