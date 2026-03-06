@@ -211,4 +211,4 @@ async def delete_timer(name: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8123)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("NODE_PORT", "8023")))

@@ -177,6 +177,11 @@ class SystemConfig:
                     if line and not line.startswith('#') and '=' in line:
                         key, value = line.split('=', 1)
                         os.environ[key.strip()] = value.strip()
+        else:
+            logger.warning(
+                ".env file not found. Copy .env.example to .env and configure: "
+                "cp .env.example .env"
+            )
         
         # 从环境变量读取
         config.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
