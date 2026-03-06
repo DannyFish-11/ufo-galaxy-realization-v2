@@ -53,7 +53,7 @@ pip install -q -r requirements.txt 2>nul
 echo.
 echo [信息] 启动 UFO Galaxy...
 echo.
-python main.py %*
+python unified_launcher.py %*
 
 :: 退出
 deactivate
