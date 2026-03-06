@@ -159,7 +159,8 @@ class ConfigManagerService:
         """解析 YAML 格式的配置内容"""
         if yaml:
             return yaml.safe_load(content)
-        raise NotImplementedError("YAML parser is not available.")
+        self.logger.error("PyYAML 未安装，无法解析 YAML 格式。请运行 'pip install pyyaml'。")
+        return {}
 
     def _parse_ini(self, content: str) -> Dict[str, Any]:
         """解析 INI 格式的配置内容"""
@@ -168,7 +169,8 @@ class ConfigManagerService:
             parser.read_string(content)
             # 将 ConfigParser 对象转换为字典
             return {section: dict(parser.items(section)) for section in parser.sections()}
-        raise NotImplementedError("INI parser is not available.")
+        self.logger.error("configparser 不可用，无法解析 INI 格式。")
+        return {}
 
     def get_config(self, key: str, default: Any = None) -> Any:
         """

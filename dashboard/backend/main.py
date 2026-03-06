@@ -28,6 +28,7 @@ from nodes.common.cors_config import get_cors_origins
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # 导入 ASCII 艺术字
@@ -81,6 +82,10 @@ app.add_middleware(
 
 # 静态文件
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")
+
+# 挂载静态文件目录（CSS/JS/图片等资源）
+if os.path.isdir(FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 # ============================================================================
 # 静态文件路由
@@ -199,6 +204,80 @@ async def send_device_command(device_id: str, request: dict):
         return result
     
     return {"success": False, "error": "Galaxy core not available"}
+
+# ============================================================================
+# Agent API
+# ============================================================================
+
+@app.get("/api/v1/agents")
+async def list_agents():
+    """列出所有 Agent"""
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        agents = galaxy_core.agents if hasattr(galaxy_core, "agents") else {}
+        return {"agents": list(agents.values()) if isinstance(agents, dict) else agents}
+    return {"agents": []}
+
+# ============================================================================
+# LLM 提供商 API
+# ============================================================================
+
+@app.get("/api/v1/llm/providers")
+async def list_llm_providers():
+    """列出可用的 LLM 提供商"""
+    providers = []
+    llm_env_map = [
+        ("openai", "OPENAI_API_KEY", "gpt-4o", 8, 9),
+        ("anthropic", "ANTHROPIC_API_KEY", "claude-3-5-sonnet-20241022", 7, 10),
+        ("deepseek", "DEEPSEEK_API_KEY", "deepseek-chat", 9, 8),
+        ("zhipu", "ZHIPU_API_KEY", "glm-4", 8, 8),
+        ("groq", "GROQ_API_KEY", "llama-3.3-70b-versatile", 10, 8),
+        ("gemini", "GEMINI_API_KEY", "gemini-1.5-pro", 8, 9),
+    ]
+    for provider, env_key, model, speed, quality in llm_env_map:
+        providers.append({
+            "provider": provider,
+            "model": model,
+            "speed_score": speed,
+            "quality_score": quality,
+            "available": bool(os.environ.get(env_key, "")),
+        })
+    return {"providers": providers}
+
+# ============================================================================
+# 统一聊天 API (/api/v1/chat)
+# ============================================================================
+
+@app.post("/api/v1/chat")
+async def chat_unified(request: dict):
+    """统一聊天入口 - 与 /api/v1/dashboard/chat 功能相同"""
+    return await chat(request)
+
+# ============================================================================
+# 并行执行 API
+# ============================================================================
+
+@app.post("/api/v1/execute/parallel")
+async def execute_parallel(request: dict):
+    """并行执行多设备命令"""
+    commands = request.get("commands", [])
+    results = {}
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        tasks = []
+        for cmd in commands:
+            device_id = cmd.get("device_id", "")
+            action = cmd.get("action", "")
+            params = cmd.get("params", {})
+            tasks.append(galaxy_core.send_device_command(device_id, action, params))
+        if tasks:
+            task_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for cmd, result in zip(commands, task_results):
+                device_id = cmd.get("device_id", "")
+                results[device_id] = result if not isinstance(result, Exception) else {"success": False, "error": str(result)}
+        return {"success": True, "results": results}
+    # 无 galaxy_core 时返回空结果
+    for cmd in commands:
+        results[cmd.get("device_id", "")] = {"success": False, "error": "Galaxy core not available"}
+    return {"success": False, "results": results}
 
 # ============================================================================
 # 自主能力 API
@@ -494,10 +573,15 @@ async def websocket_endpoint(websocket: WebSocket):
                 if message.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
                 elif message.get("type") == "chat":
-                    result = await chat({"message": message.get("content", "")})
+                    ws_response = await chat({"message": message.get("content", "")})
+                    # chat() returns a JSONResponse; extract body as dict
+                    if hasattr(ws_response, "body"):
+                        body = json.loads(ws_response.body)
+                    else:
+                        body = ws_response if isinstance(ws_response, dict) else {}
                     await websocket.send_json({
                         "type": "chat_response",
-                        "content": result.get("response", "")
+                        "content": body.get("response", "")
                     })
             except json.JSONDecodeError:
                 pass

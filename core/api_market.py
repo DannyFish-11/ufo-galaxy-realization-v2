@@ -12,6 +12,8 @@ API 端点:
 """
 
 import logging
+import re
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -94,6 +96,12 @@ BUILTIN_SKILLS = [
     },
 ]
 
+# 用户发布的技能（运行时内存存储）
+_published_skills: List[Dict[str, Any]] = []
+
+# 版本号校验模式（例如 "1.2.3"）
+_VERSION_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
+
 
 # ============================================================================
 # API 端点
@@ -106,7 +114,7 @@ async def list_market_skills(
     offset: int = 0,
 ):
     """列出市场技能"""
-    skills = BUILTIN_SKILLS
+    skills = BUILTIN_SKILLS + _published_skills
     
     # 按标签过滤
     if tag:
@@ -169,26 +177,49 @@ async def search_market_skills(q: str, limit: int = 10):
 
 @router.post("/api/v1/market/publish")
 async def publish_skill(req: SkillPublishRequest):
-    """发布技能 (需要认证)"""
-    # TODO: 实现认证和存储
-    
+    """发布技能"""
+    # 输入校验
+    if not req.name or not req.name.strip():
+        raise HTTPException(status_code=400, detail="技能名称不能为空")
+    if not req.description or not req.description.strip():
+        raise HTTPException(status_code=400, detail="技能描述不能为空")
+    if not _VERSION_PATTERN.match(req.version):
+        raise HTTPException(status_code=400, detail="版本号格式无效，应为 x.y.z")
+
+    skill_id = re.sub(r'-+', '-', re.sub(r'[^a-z0-9-]', '-', req.name.lower().strip())).strip('-')
+
+    # 检查是否与内置技能或已发布技能重名
+    all_ids = [s["id"] for s in BUILTIN_SKILLS + _published_skills]
+    if skill_id in all_ids:
+        raise HTTPException(status_code=409, detail=f"技能 '{skill_id}' 已存在")
+
+    skill_entry: Dict[str, Any] = {
+        "id": skill_id,
+        "name": req.name.strip(),
+        "description": req.description.strip(),
+        "version": req.version,
+        "author": req.author.strip() or "anonymous",
+        "tags": [t.strip() for t in req.tags if t.strip()],
+        "content": req.content,
+        "downloads": 0,
+        "rating": 0.0,
+        "published_at": datetime.utcnow().isoformat() + "Z",
+    }
+    _published_skills.append(skill_entry)
+    logger.info(f"技能已发布: {skill_id} v{req.version} by {skill_entry['author']}")
+
     return JSONResponse({
         "success": True,
-        "message": "技能发布功能暂未开放",
-        "skill": {
-            "id": req.name.lower().replace(" ", "-"),
-            "name": req.name,
-            "description": req.description,
-            "version": req.version,
-        },
-    })
+        "message": f"技能 '{req.name}' 发布成功",
+        "skill": {k: v for k, v in skill_entry.items() if k != "content"},
+    }, status_code=201)
 
 
 @router.get("/api/v1/market/tags")
 async def list_tags():
     """列出所有标签"""
     tags = set()
-    for skill in BUILTIN_SKILLS:
+    for skill in BUILTIN_SKILLS + _published_skills:
         tags.update(skill["tags"])
     
     return JSONResponse({
@@ -200,12 +231,19 @@ async def list_tags():
 @router.get("/api/v1/market/stats")
 async def market_stats():
     """市场统计"""
+    all_skills = BUILTIN_SKILLS + _published_skills
+    avg_rating = (
+        sum(s["rating"] for s in all_skills) / len(all_skills)
+        if all_skills else 0.0
+    )
     return JSONResponse({
         "success": True,
         "stats": {
-            "total_skills": len(BUILTIN_SKILLS),
-            "total_downloads": sum(s["downloads"] for s in BUILTIN_SKILLS),
-            "avg_rating": sum(s["rating"] for s in BUILTIN_SKILLS) / len(BUILTIN_SKILLS),
+            "total_skills": len(all_skills),
+            "builtin_skills": len(BUILTIN_SKILLS),
+            "published_skills": len(_published_skills),
+            "total_downloads": sum(s["downloads"] for s in all_skills),
+            "avg_rating": avg_rating,
         },
     })
 
