@@ -3,9 +3,8 @@ Node 113: AndroidVLM - Android GUI 理解服务
 
 FastAPI 服务器
 
-版本：1.0.0
-日期：2026-01-24
-作者：Manus AI
+版本：1.1.0
+日期：2026-03-07
 """
 
 import os
@@ -18,10 +17,10 @@ from pydantic import BaseModel
 # 添加当前目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core.android_vlm_engine import AndroidVLMEngine
+from core.android_vlm_engine import AndroidVLMEngine, SUPPORTED_VLM_PROVIDERS
 from nodes.common.cors_config import get_cors_origins
 
-app = FastAPI(title="Node 113 - AndroidVLM", version="1.0.0")
+app = FastAPI(title="Node 113 - AndroidVLM", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
@@ -73,6 +72,20 @@ class SmartTaskExecutionRequest(BaseModel):
     task_description: str
     max_steps: int = 10
 
+
+class LongPressRequest(BaseModel):
+    """长按操作"""
+    description: str
+    duration_ms: int = 1000
+    confidence: float = 0.8
+
+
+class DoubleClickRequest(BaseModel):
+    """双击操作"""
+    description: str
+    interval_ms: int = 100
+    confidence: float = 0.8
+
 # ============================================================================
 # API 端点
 # ============================================================================
@@ -82,9 +95,10 @@ async def root():
     """根端点"""
     return {
         "node": "Node_113_AndroidVLM",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "status": "running",
-        "description": "Android GUI 理解引擎（VLM + 无障碍服务）"
+        "description": "Android GUI 理解引擎（VLM + 无障碍服务）",
+        "supported_vlm_providers": SUPPORTED_VLM_PROVIDERS
     }
 
 @app.get("/health")
@@ -177,6 +191,45 @@ async def smart_task_execution(request: SmartTaskExecutionRequest) -> Dict[str, 
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/long_press")
+async def long_press(request: LongPressRequest) -> Dict[str, Any]:
+    """长按操作（截图 -> VLM 查找 -> 长按）"""
+    try:
+        result = await engine.long_press(
+            description=request.description,
+            duration_ms=request.duration_ms,
+            confidence=request.confidence
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/double_click")
+async def double_click(request: DoubleClickRequest) -> Dict[str, Any]:
+    """双击操作（截图 -> VLM 查找 -> 双击）"""
+    try:
+        result = await engine.double_click(
+            description=request.description,
+            interval_ms=request.interval_ms,
+            confidence=request.confidence
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/supported_providers")
+async def get_supported_providers():
+    """获取支持的 VLM 提供商列表"""
+    return {
+        "providers": SUPPORTED_VLM_PROVIDERS,
+        "current": engine.vlm_provider,
+        "claude_configured": bool(engine.claude_api_key),
+        "gpt4v_configured": bool(engine.openai_api_key)
+    }
 
 # ============================================================================
 # 启动服务

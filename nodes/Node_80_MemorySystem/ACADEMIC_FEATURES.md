@@ -288,12 +288,12 @@ This paper surveys the recent advances in quantum machine learning...
 ## 未来计划
 
 - [ ] 可视化引用网络
-- [ ] 自动提取论文关键词
-- [ ] 论文相似度计算
-- [ ] 推荐相关论文
+- [x] 自动提取论文关键词
+- [x] 论文相似度计算
+- [x] 推荐相关论文
 - [ ] 导出为其他格式（EndNote、Zotero）
 - [ ] 集成 PDF 阅读器
-- [ ] 自动生成文献综述
+- [x] 自动生成文献综述
 
 ---
 

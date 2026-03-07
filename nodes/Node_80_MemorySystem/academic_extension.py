@@ -8,10 +8,16 @@ Node 80: Memory System - Academic Extension
 2. 引用关系追踪
 3. 学术标签分类
 4. 文献检索增强
+5. 自动提取论文关键词
+6. 论文相似度计算
+7. 推荐相关论文
+8. BibTeX 导出
+9. 自动生成文献综述
 """
 
 import os
 import json
+import re
 import logging
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -23,6 +29,19 @@ logger = logging.getLogger(__name__)
 # 配置
 MEMOS_URL = os.getenv("MEMOS_URL", "http://localhost:5230")
 MEMOS_TOKEN = os.getenv("MEMOS_TOKEN", "")
+
+# 常用中英文停用词（关键词提取时过滤）
+_STOP_WORDS = {
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "have", "has", "had", "do", "does", "did", "will", "would", "can",
+    "could", "may", "might", "should", "this", "that", "these", "those",
+    "we", "our", "us", "i", "my", "you", "your", "it", "its", "they",
+    "their", "them", "which", "who", "how", "what", "when", "where", "why",
+    "also", "using", "based", "approach", "method", "paper", "proposed",
+    "results", "show", "shows", "novel", "new", "study", "work", "model",
+    "学习", "方法", "研究", "通过", "实现", "论文", "提出", "基于", "系统"
+}
 
 # 请求模型
 class PaperNote(BaseModel):
@@ -312,6 +331,216 @@ class AcademicMemoryManager:
         except Exception as e:
             logger.error(f"转换 BibTeX 失败: {e}")
             return None
+
+    # ── 关键词提取 ──────────────────────────────────────────────────────────
+
+    def extract_keywords(self, text: str, top_n: int = 10) -> List[str]:
+        """从文本（标题/摘要）中自动提取关键词
+
+        使用简单的词频统计（TF），过滤停用词，返回最高频词汇。
+        不依赖任何外部库，可在离线模式下运行。
+
+        Args:
+            text: 输入文本（标题 + 摘要）
+            top_n: 返回的关键词数量
+
+        Returns:
+            关键词列表（按词频降序）
+        """
+        # 转小写，提取词语（支持中英文）
+        words = re.findall(r"[a-z]{3,}|[\u4e00-\u9fa5]{2,}", text.lower())
+
+        # 过滤停用词
+        freq: Dict[str, int] = {}
+        for word in words:
+            if word not in _STOP_WORDS:
+                freq[word] = freq.get(word, 0) + 1
+
+        # 按频次排序
+        sorted_words = sorted(freq.items(), key=lambda x: x[1], reverse=True)
+        return [w for w, _ in sorted_words[:top_n]]
+
+    async def extract_keywords_from_memo(self, memo: Dict, top_n: int = 10) -> List[str]:
+        """从 Memo 笔记中提取关键词"""
+        content = memo.get("content", "")
+        # 仅分析标题 + 摘要部分（减少噪音）
+        title_match = re.search(r"# 📄 (.+)", content)
+        abstract_match = re.search(r"## 摘要\n\n(.+?)(?:\n\n##|$)", content, re.DOTALL)
+        title = title_match.group(1) if title_match else ""
+        abstract = abstract_match.group(1) if abstract_match else ""
+        return self.extract_keywords(f"{title} {abstract}", top_n)
+
+    # ── 论文相似度计算 ────────────────────────────────────────────────────────
+
+    def _keyword_jaccard_similarity(self, kw1: List[str], kw2: List[str]) -> float:
+        """基于关键词的 Jaccard 相似度"""
+        s1, s2 = set(kw1), set(kw2)
+        if not s1 or not s2:
+            return 0.0
+        intersection = len(s1 & s2)
+        union = len(s1 | s2)
+        return intersection / union if union > 0 else 0.0
+
+    async def compute_similarity(self, paper_id_a: str, paper_id_b: str) -> float:
+        """计算两篇论文的关键词相似度（Jaccard）
+
+        Args:
+            paper_id_a: 第一篇论文 ID
+            paper_id_b: 第二篇论文 ID
+
+        Returns:
+            相似度分数 0.0 ~ 1.0
+        """
+        memos_a = await self.search_paper_notes(paper_id_a)
+        memos_b = await self.search_paper_notes(paper_id_b)
+
+        if not memos_a or not memos_b:
+            return 0.0
+
+        kw_a = await self.extract_keywords_from_memo(memos_a[0])
+        kw_b = await self.extract_keywords_from_memo(memos_b[0])
+        return self._keyword_jaccard_similarity(kw_a, kw_b)
+
+    # ── 推荐相关论文 ──────────────────────────────────────────────────────────
+
+    async def recommend_related_papers(
+        self, paper_id: str, top_n: int = 5
+    ) -> List[Dict]:
+        """根据关键词相似度推荐相关论文
+
+        Args:
+            paper_id: 目标论文 ID
+            top_n: 返回推荐数量
+
+        Returns:
+            [{paper_id, title, similarity, memo}, ...]
+        """
+        # 获取目标论文笔记
+        target_memos = await self.search_paper_notes(paper_id)
+        if not target_memos:
+            return []
+
+        target_kw = await self.extract_keywords_from_memo(target_memos[0])
+        if not target_kw:
+            return []
+
+        # 获取所有论文笔记
+        all_memos = await self.get_recent_papers(days=100)
+        recommendations = []
+
+        for memo in all_memos:
+            content = memo.get("content", "")
+            # 跳过目标论文自身
+            if paper_id in content:
+                continue
+
+            kw = await self.extract_keywords_from_memo(memo)
+            similarity = self._keyword_jaccard_similarity(target_kw, kw)
+
+            if similarity > 0:
+                title_match = re.search(r"# 📄 (.+)", content)
+                id_match = re.search(r"\*\*ID\*\*: `([^`]+)`", content)
+                recommendations.append({
+                    "paper_id": id_match.group(1) if id_match else "unknown",
+                    "title": title_match.group(1) if title_match else "unknown",
+                    "similarity": round(similarity, 4),
+                    "keywords": kw[:5]
+                })
+
+        # 按相似度降序排列
+        recommendations.sort(key=lambda x: x["similarity"], reverse=True)
+        return recommendations[:top_n]
+
+    # ── 文献综述生成 ──────────────────────────────────────────────────────────
+
+    async def generate_literature_review(
+        self,
+        paper_ids: List[str],
+        topic: str = ""
+    ) -> str:
+        """根据论文列表自动生成文献综述（Markdown 格式）
+
+        综述内容通过提取各论文的标题、作者、摘要和关键词生成，
+        不依赖外部 LLM，适合快速离线使用。
+
+        Args:
+            paper_ids: 论文 ID 列表
+            topic: 综述主题（可选，填写后会加入标题）
+
+        Returns:
+            Markdown 格式的文献综述字符串
+        """
+        entries = []
+        all_keywords: List[str] = []
+
+        for pid in paper_ids:
+            memos = await self.search_paper_notes(pid)
+            if not memos:
+                continue
+            memo = memos[0]
+            content = memo.get("content", "")
+
+            title_match = re.search(r"# 📄 (.+)", content)
+            abstract_match = re.search(r"## 摘要\n\n(.+?)(?:\n\n##|$)", content, re.DOTALL)
+            authors_match = re.search(r"## 作者\n\n(.+?)(?:\n\n##|$)", content, re.DOTALL)
+            date_match = re.search(r"\*\*发布日期\*\*: (.+)", content)
+
+            title = title_match.group(1).strip() if title_match else pid
+            abstract = abstract_match.group(1).strip() if abstract_match else "N/A"
+            authors = authors_match.group(1).strip() if authors_match else "N/A"
+            date = date_match.group(1).strip() if date_match else "N/A"
+
+            kw = self.extract_keywords(f"{title} {abstract}")
+            all_keywords.extend(kw)
+
+            entries.append({
+                "paper_id": pid,
+                "title": title,
+                "authors": authors,
+                "date": date,
+                "abstract": abstract[:300] + ("..." if len(abstract) > 300 else ""),
+                "keywords": kw[:5]
+            })
+
+        if not entries:
+            return "未找到相关论文笔记，请确认论文已保存到 Memos。"
+
+        # 汇总高频关键词
+        kw_freq: Dict[str, int] = {}
+        for kw in all_keywords:
+            kw_freq[kw] = kw_freq.get(kw, 0) + 1
+        top_kw = [k for k, _ in sorted(kw_freq.items(), key=lambda x: x[1], reverse=True)[:15]]
+
+        # 组装 Markdown 综述
+        title_str = ("\u201c" + topic + "\u201d的文献综述") if topic else "文献综述"
+        review = f"# {title_str}\n\n"
+        review += f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  \n"
+        review += f"**论文数量**: {len(entries)}  \n"
+        review += f"**核心关键词**: {', '.join(top_kw)}\n\n"
+        review += "---\n\n"
+        review += "## 论文摘要汇总\n\n"
+
+        for i, entry in enumerate(entries, 1):
+            review += f"### {i}. {entry['title']}\n\n"
+            review += f"- **作者**: {entry['authors']}\n"
+            review += f"- **发布日期**: {entry['date']}\n"
+            review += f"- **ID**: `{entry['paper_id']}`\n"
+            review += f"- **关键词**: {', '.join(entry['keywords'])}\n\n"
+            review += f"**摘要**: {entry['abstract']}\n\n"
+            review += "---\n\n"
+
+        review += "## 综合分析\n\n"
+        review += (
+            f"本综述共收录 {len(entries)} 篇论文，"
+            f"涵盖的核心研究方向包括：{', '.join(top_kw[:8])}。\n\n"
+            "各论文在研究方法和应用场景上各有侧重，"
+            "建议结合引用网络进一步梳理研究脉络。\n\n"
+        )
+        review += (
+            "*本综述由 UFO³ Galaxy Node_80 (Academic Extension) 自动生成。*\n"
+        )
+        return review
+
 
 # 全局实例
 academic_manager = AcademicMemoryManager()

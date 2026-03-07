@@ -355,6 +355,57 @@
 
 ---
 
+## 节点功能实现状态
+
+### Node_104: AgentCPM Integration（v1.1.0）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| AgentCPM-Explore 深度搜索 | ✅ | 支持 100+ 轮交互 |
+| AgentCPM-Report 研究报告 | ✅ | 深度研究报告生成 |
+| 任务取消 | ✅ | DELETE /task/{task_id} |
+| 任务优先级 | ✅ | priority 字段 1~10 |
+| 流式输出 | ✅ | POST /stream_search, /stream_research (SSE) |
+| 自定义提示词 | ✅ | system_prompt 字段 |
+| 结果缓存 | ✅ | 内存缓存，TTL 可配置（AGENTCPM_CACHE_TTL） |
+
+### Node_97: AcademicSearch（v1.1.0）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| arXiv 搜索 | ✅ | 实时 API |
+| Semantic Scholar 搜索 | ✅ | 实时 API |
+| PubMed 搜索 | ✅ | 实时 API |
+| IEEE Xplore 搜索 | ✅ | 需配置 IEEE_XPLORE_API_KEY，未配置则返回 Mock 数据 |
+| 引用网络 | ✅ | GET /citation_network/{paper_id}，基于 Semantic Scholar |
+| AgentCPM 深度分析 | ✅ | POST /analyze_with_agentcpm |
+
+### Node_113: AndroidVLM（v1.1.0）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| VLM 截图分析 | ✅ | Gemini / Qwen |
+| 智能点击 | ✅ | 截图 → VLM 定位 → 点击 |
+| 长按操作 | ✅ | POST /long_press，支持自定义时长 |
+| 双击操作 | ✅ | POST /double_click，支持自定义间隔 |
+| 步骤验证机制 | ✅ | verify_step_success() |
+| 错误恢复机制 | ✅ | execute_with_recovery()，自动重试 |
+| 多 VLM 支持 | ✅ | Gemini、Qwen、Claude、GPT-4V |
+
+### Node_80: MemorySystem - Academic Extension（v1.1.0）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 论文笔记管理 | ✅ | 保存 / 搜索 / 标签 |
+| 引用网络追踪 | ✅ | GET /academic/citation_network/{paper_id} |
+| BibTeX 导出 | ✅ | POST /academic/export_bibtex |
+| 自动提取关键词 | ✅ | GET /academic/keywords/{paper_id} |
+| 论文相似度计算 | ✅ | GET /academic/similarity?paper_id_a=&paper_id_b= |
+| 推荐相关论文 | ✅ | GET /academic/recommend/{paper_id} |
+| 文献综述生成 | ✅ | POST /academic/literature_review |
+
+---
+
 ## 快速开始
 
 ```bash
