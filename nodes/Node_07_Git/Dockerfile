@@ -4,4 +4,8 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir fastapi==0.109.0 uvicorn[standard]==0.27.0
 COPY main.py .
 EXPOSE 8007
+RUN addgroup --system --gid 1000 galaxy && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy
+RUN chown -R galaxy:galaxy /app
+USER galaxy
+
 CMD ["python", "main.py"]

@@ -18,4 +18,8 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
 
 # Run
 EXPOSE 8000
+RUN addgroup --system --gid 1000 galaxy && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy
+RUN chown -R galaxy:galaxy /app
+USER galaxy
+
 CMD ["python", "main.py"]
