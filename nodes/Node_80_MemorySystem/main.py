@@ -806,7 +806,19 @@ if __name__ == "__main__":
 # Academic Extension API Endpoints
 # =============================================================================
 
-from academic_extension import academic_manager, PaperNote, CitationNetwork
+try:
+    from academic_extension import academic_manager, PaperNote, CitationNetwork
+    HAS_ACADEMIC = True
+except ImportError:
+    HAS_ACADEMIC = False
+    academic_manager = None
+    from pydantic import BaseModel as _AcademicBase
+    class PaperNote(_AcademicBase):
+        paper_id: str = ""
+        title: str = ""
+    class CitationNetwork(_AcademicBase):
+        paper_id: str = ""
+    logging.getLogger("Node_80_MemorySystem").warning("academic_extension 未安装，学术功能不可用")
 from nodes.common.cors_config import get_cors_origins
 
 @app.post("/academic/paper_note")
