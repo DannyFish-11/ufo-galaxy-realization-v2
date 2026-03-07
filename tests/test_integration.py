@@ -6,10 +6,14 @@ UFO Galaxy UI-L4集成测试
 import asyncio
 import unittest
 import sys
+import os
 import time
 from typing import List, Dict, Any
 
-sys.path.insert(0, '/mnt/okcomputer/output/ufo_galaxy_integration')
+# 使用项目根目录替代旧的硬编码路径
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 from integration.event_bus import (
     EventBus, EventType, UIGalaxyEvent, 

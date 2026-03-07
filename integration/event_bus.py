@@ -158,6 +158,14 @@ class EventBus:
                 await async_callback(event)
             except Exception as e:
                 self._logger.error(f"异步回调错误: {e}")
+
+    def _dispatch_sync_callbacks(self, event: UIGalaxyEvent):
+        """仅调用同步回调（无事件循环时使用）"""
+        for callback in self._subscribers.get(event.event_type, set()):
+            try:
+                callback(event)
+            except Exception as e:
+                self._logger.error(f"同步回调错误: {e}")
     
     def subscribe(self, event_type: EventType, callback: Callable, async_callback: bool = False):
         """
@@ -202,12 +210,13 @@ class EventBus:
             except asyncio.QueueFull:
                 self._logger.warning(f"事件队列已满，丢弃事件: {event.event_type.name}")
         else:
-            # 同步分发
+            # 同步分发: 优先尝试在运行中的事件循环创建 task, 无循环时直接调用同步回调
             try:
-                asyncio.create_task(self._dispatch_event(event))
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._dispatch_event(event))
             except RuntimeError:
-                # 没有运行中的事件循环
-                pass
+                # 没有运行中的事件循环 — 直接调用同步回调
+                self._dispatch_sync_callbacks(event)
     
     def publish_sync(self, event_type: EventType, source: str, data: Dict[str, Any] = None):
         """同步发布事件（快捷方法）"""
