@@ -632,7 +632,7 @@ class AutonomousCoder:
         """从模板生成代码（备用）"""
         if task.language == 'python':
             return self._generate_python_template(task, analysis)
-        return f"# TODO: Implement {task.requirement}\n"
+        return f"# Unsupported language: {task.language}\n# Requirement: {task.requirement}\n"
     
     def _generate_python_template(self, task: CodingTask, analysis: Dict) -> str:
         """生成Python模板代码"""
@@ -668,7 +668,7 @@ def main() -> bool:
     try:
         logger.info("执行任务: {task.requirement}")
         
-        # TODO: 实现核心逻辑
+        # Implement core logic here based on the requirement above.
         
         return True
     

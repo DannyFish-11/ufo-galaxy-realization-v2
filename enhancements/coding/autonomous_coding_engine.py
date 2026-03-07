@@ -310,7 +310,7 @@ class NewFeature:
     def execute(self):
         \"\"\"执行新功能\"\"\"
         logger.info("执行新功能")
-        # TODO: 实现具体逻辑
+        # Implement concrete feature logic here based on context.description.
         pass
 """
     
@@ -331,13 +331,13 @@ from {module_name} import *
 
 def test_basic_functionality():
     \"\"\"测试基本功能\"\"\"
-    # TODO: 实现测试逻辑
+    # Add assertions to verify the basic expected behaviour of {module_name}.
     assert True
 
 
 def test_edge_cases():
     \"\"\"测试边界情况\"\"\"
-    # TODO: 实现测试逻辑
+    # Add assertions to verify boundary and error conditions of {module_name}.
     assert True
 """
     
