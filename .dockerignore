@@ -9,6 +9,14 @@ __pycache__
 venv/
 .venv/
 *.egg-info/
+.pytest_cache
+
+# Node
+node_modules
+
+# Build artefacts
+dist/
+build/
 
 # IDE
 .vscode/
