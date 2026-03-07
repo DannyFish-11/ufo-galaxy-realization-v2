@@ -24,6 +24,11 @@ from .protocol import (
 from .transport import WebSocketManager
 from .handlers import DeviceManager, MessageHandler
 from .orchestrator import TaskOrchestrator, TaskPriority
+from .webrtc_proxy import (
+    check_node95_reachable,
+    get_webrtc_endpoint_info,
+    proxy_webrtc_signaling,
+)
 from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
@@ -428,6 +433,46 @@ async def legacy_unregister_device(req: _LegacyUnregisterRequest):
     if device_manager:
         device_manager.update_device_status(req.device_id, "offline")
     return {"success": True, "device_id": req.device_id}
+
+
+# ============================================================================
+# WebRTC Signaling Gateway Proxy
+# ============================================================================
+
+@app.get("/api/v1/webrtc/endpoint")
+async def webrtc_endpoint_info():
+    """
+    Return WebRTC signaling endpoint metadata.
+
+    Android clients call this endpoint to discover:
+    * The Node_95 URL and WS signaling path (direct access).
+    * The gateway WebSocket path they can use instead of connecting to
+      Node_95 directly (``/ws/webrtc/{device_id}``).
+
+    Returns HTTP 503 when Node_95 is not reachable so that callers can
+    detect degraded state early.
+    """
+    if not await check_node95_reachable():
+        raise HTTPException(
+            status_code=503,
+            detail="Node_95 WebRTC Receiver is not reachable",
+        )
+    return get_webrtc_endpoint_info()
+
+
+@app.websocket("/ws/webrtc/{device_id}")
+async def webrtc_signaling_proxy(websocket: WebSocket, device_id: str):
+    """
+    WebSocket passthrough — proxy Android signaling to Node_95.
+
+    Accepts a WebSocket connection from an Android client and relays all
+    signaling messages (Offer / Answer / ICE Candidate) to the Node_95
+    ``/signaling/{device_id}`` endpoint, forwarding responses back.
+
+    Closes with code 1011 (server error / 503-equivalent) when Node_95 is
+    unreachable so the client can fall back gracefully.
+    """
+    await proxy_webrtc_signaling(websocket, device_id)
 
 
 # ============================================================================

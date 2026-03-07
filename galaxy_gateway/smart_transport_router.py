@@ -52,6 +52,7 @@ class TransportRequest(BaseModel):
     quality: Literal["low", "medium", "high"] = "medium"    # 质量要求
     realtime: bool = False                          # 是否需要实时
     preferred_method: Optional[TransportMethod] = None      # 首选方式
+    use_gateway: bool = False                       # 当 True 且 method=webrtc 时返回网关 WS 信令 URL
     
 class TransportResponse(BaseModel):
     """传输响应"""
@@ -107,7 +108,7 @@ class SmartTransportRouter:
         signal = await self._select_signal_method(request.task_type)
         
         # 4. 构建端点
-        endpoint = await self._build_endpoint(method, request.device_id, network)
+        endpoint = await self._build_endpoint(method, request.device_id, network, request.use_gateway)
         
         # 5. 返回响应
         return TransportResponse(
@@ -192,8 +193,15 @@ class SmartTransportRouter:
             return SignalMethod.MQTT
         return SignalMethod.HTTP
     
-    async def _build_endpoint(self, method: TransportMethod, device_id: str, network: NetworkLayer) -> str:
+    async def _build_endpoint(self, method: TransportMethod, device_id: str, network: NetworkLayer, use_gateway: bool = False) -> str:
         """构建端点"""
+        if method == TransportMethod.WEBRTC and use_gateway:
+            # Return the gateway WebSocket signaling URL so Android clients
+            # need only know the gateway address, not Node_95 directly.
+            gateway_url = os.getenv("GATEWAY_URL", "http://localhost:8000").rstrip("/")
+            ws_url = gateway_url.replace("https://", "wss://").replace("http://", "ws://")
+            return f"{ws_url}/ws/webrtc/{device_id}"
+
         base_url = self.nodes.get(method.value, "")
         
         if network == NetworkLayer.TAILSCALE and self.tailscale_domain:
