@@ -1097,7 +1097,6 @@ def main():
     # 运行配置向导
     if args.setup:
         from setup_wizard import SetupWizard
-from nodes.common.cors_config import get_cors_origins
         wizard = SetupWizard()
         wizard.run_interactive_setup()
         return
