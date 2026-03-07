@@ -1,0 +1,296 @@
+"""
+Wake Event Bus - 统一唤醒事件总线
+
+核心功能：
+- 事件收集：从所有设备的 WebSocket 连接收集 WAKE_EVENT 消息
+- 事件去重：同一时间窗口(500ms)内来自不同设备的相同唤醒词事件合并为一个
+- 事件分发：将去重后的唤醒事件发送给 WakeRouter 进行路由决策
+- 事件日志：记录所有唤醒事件用于分析和优化
+
+Author: UFO Galaxy Team
+Version: 1.0
+"""
+
+import asyncio
+import logging
+import time
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Dict, List, Optional, Callable, Any
+
+logger = logging.getLogger("UFO-Galaxy.WakeEventBus")
+
+# 导入 WakeRouter 类型（延迟导入避免循环引用）
+# from galaxy_gateway.wake_router import WakeEvent, WakeTaskType, wake_router
+
+
+# =============================================================================
+# 数据模型
+# =============================================================================
+
+@dataclass
+class RawWakeEvent:
+    """
+    从 WebSocket 或内部触发器收到的原始唤醒事件，
+    尚未经过去重处理。
+    """
+    source_device_id: str
+    wake_word: str
+    timestamp: float = field(default_factory=time.time)
+    task_type: str = "general"       # "voice" | "visual" | "general"
+    confidence: float = 1.0
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+
+# =============================================================================
+# 唤醒事件总线
+# =============================================================================
+
+class WakeEventBus:
+    """
+    统一唤醒事件总线
+
+    统一收集来自所有设备的唤醒事件，在 DEDUP_WINDOW_MS 毫秒内对相同唤醒词去重，
+    然后将唯一事件转发给 WakeRouter 进行路由决策。
+    """
+
+    # 去重时间窗口（毫秒）
+    DEDUP_WINDOW_MS: float = 500.0
+    # 最大事件日志条数
+    MAX_LOG_SIZE: int = 1000
+
+    def __init__(self):
+        # 去重缓冲区：wake_word -> (first_timestamp_ms, event_id)
+        self._dedup_buffer: Dict[str, tuple] = {}
+        # 原始事件日志（包括被去重的）
+        self._event_log: List[Dict] = []
+        # 去重后分发的事件日志
+        self._dispatched_log: List[Dict] = []
+        # 额外的订阅者回调（除 WakeRouter 外）
+        self._subscribers: List[Callable[[Any], Any]] = []
+
+        logger.info("WakeEventBus initialized")
+
+    # ------------------------------------------------------------------
+    # 事件提交接口
+    # ------------------------------------------------------------------
+
+    async def publish(self, raw_event: RawWakeEvent) -> bool:
+        """
+        发布原始唤醒事件
+
+        1. 记录到日志
+        2. 去重检查
+        3. 转换并转发给 WakeRouter
+
+        Args:
+            raw_event: 原始唤醒事件
+
+        Returns:
+            True 表示事件已分发（未被去重），False 表示被去重丢弃
+        """
+        # 记录原始事件
+        self._log_raw(raw_event)
+
+        # 去重检查
+        now_ms = time.time() * 1000
+        key = raw_event.wake_word.strip().lower()
+
+        if key in self._dedup_buffer:
+            last_ts_ms, existing_event_id = self._dedup_buffer[key]
+            if now_ms - last_ts_ms < self.DEDUP_WINDOW_MS:
+                logger.debug(
+                    f"[WakeEventBus] 事件去重: wake_word='{raw_event.wake_word}' "
+                    f"from device={raw_event.source_device_id} "
+                    f"elapsed_ms={now_ms - last_ts_ms:.1f}"
+                )
+                return False
+
+        # 记录去重时间戳
+        event_id = str(uuid.uuid4())[:8]
+        self._dedup_buffer[key] = (now_ms, event_id)
+
+        # 转换为 WakeEvent 并路由
+        wake_event = self._to_wake_event(raw_event, event_id)
+        await self._dispatch(wake_event)
+        return True
+
+    def publish_sync(self, raw_event: RawWakeEvent):
+        """
+        同步接口（兼容非异步调用方），内部使用 asyncio.create_task 异步处理
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.publish(raw_event))
+            else:
+                loop.run_until_complete(self.publish(raw_event))
+        except RuntimeError:
+            # 没有 event loop，直接在新的 loop 中运行
+            asyncio.run(self.publish(raw_event))
+
+    # ------------------------------------------------------------------
+    # 从 WebSocket 消息解析并发布
+    # ------------------------------------------------------------------
+
+    async def handle_websocket_message(
+        self,
+        device_id: str,
+        message: Dict[str, Any],
+    ) -> bool:
+        """
+        处理来自 WebSocket 的消息，若为 WAKE_EVENT 类型则发布到总线
+
+        Args:
+            device_id: 发送消息的设备 ID
+            message: 解析后的消息字典
+
+        Returns:
+            True 表示是 WAKE_EVENT 且已处理
+        """
+        msg_type = message.get("type", "")
+        if msg_type not in ("WAKE_EVENT", "wake_event"):
+            return False
+
+        payload = message.get("payload", {})
+        wake_word = payload.get("wake_word", "")
+        if not wake_word:
+            logger.warning(f"[WakeEventBus] WAKE_EVENT 缺少 wake_word: device={device_id}")
+            return False
+
+        raw = RawWakeEvent(
+            source_device_id=device_id,
+            wake_word=wake_word,
+            timestamp=message.get("timestamp", time.time()),
+            task_type=payload.get("task_type", "general"),
+            confidence=payload.get("confidence", 1.0),
+            extra=payload.get("extra", {}),
+        )
+        await self.publish(raw)
+        return True
+
+    # ------------------------------------------------------------------
+    # 订阅者管理
+    # ------------------------------------------------------------------
+
+    def subscribe(self, callback: Callable[[Any], Any]):
+        """
+        添加订阅者，在每次分发唤醒事件时调用
+
+        callback 签名: (wake_event: WakeEvent) -> Any
+        """
+        self._subscribers.append(callback)
+
+    def unsubscribe(self, callback: Callable[[Any], Any]):
+        """移除订阅者"""
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
+
+    # ------------------------------------------------------------------
+    # 内部方法
+    # ------------------------------------------------------------------
+
+    def _to_wake_event(self, raw: RawWakeEvent, event_id: str) -> Any:
+        """将 RawWakeEvent 转换为 WakeEvent"""
+        try:
+            from galaxy_gateway.wake_router import WakeEvent, WakeTaskType
+            task_type_map = {
+                "voice": WakeTaskType.VOICE,
+                "visual": WakeTaskType.VISUAL,
+                "general": WakeTaskType.GENERAL,
+            }
+            task_type = task_type_map.get(raw.task_type, WakeTaskType.GENERAL)
+            return WakeEvent(
+                event_id=event_id,
+                source_device_id=raw.source_device_id,
+                wake_word=raw.wake_word,
+                timestamp=raw.timestamp,
+                task_type=task_type,
+                confidence=raw.confidence,
+                extra=raw.extra,
+            )
+        except ImportError:
+            # Fallback：返回 RawWakeEvent 本身
+            return raw
+
+    async def _dispatch(self, wake_event: Any):
+        """将唤醒事件分发给 WakeRouter 和其他订阅者"""
+        # 记录分发日志
+        event_dict = (
+            wake_event.to_dict()
+            if hasattr(wake_event, "to_dict")
+            else {"source_device_id": getattr(wake_event, "source_device_id", "unknown")}
+        )
+        self._dispatched_log.append(event_dict)
+        if len(self._dispatched_log) > self.MAX_LOG_SIZE:
+            self._dispatched_log = self._dispatched_log[-self.MAX_LOG_SIZE:]
+
+        logger.info(
+            f"[WakeEventBus] 分发唤醒事件: wake_word='{getattr(wake_event, 'wake_word', '?')}' "
+            f"from device={getattr(wake_event, 'source_device_id', '?')}"
+        )
+
+        # 转发给 WakeRouter
+        try:
+            from galaxy_gateway.wake_router import wake_router
+            await wake_router.route(wake_event)
+        except Exception as e:
+            logger.error(f"[WakeEventBus] WakeRouter 路由失败: {e}")
+
+        # 通知其他订阅者
+        for subscriber in self._subscribers:
+            try:
+                result = subscriber(wake_event)
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception as e:
+                logger.error(f"[WakeEventBus] 订阅者回调异常: {e}")
+
+    def _log_raw(self, raw: RawWakeEvent):
+        """记录原始事件到日志"""
+        entry = {
+            "source_device_id": raw.source_device_id,
+            "wake_word": raw.wake_word,
+            "timestamp": raw.timestamp,
+            "task_type": raw.task_type,
+            "confidence": raw.confidence,
+        }
+        self._event_log.append(entry)
+        if len(self._event_log) > self.MAX_LOG_SIZE:
+            self._event_log = self._event_log[-self.MAX_LOG_SIZE:]
+
+    # ------------------------------------------------------------------
+    # 查询接口
+    # ------------------------------------------------------------------
+
+    def get_event_log(self, limit: int = 100) -> List[Dict]:
+        """获取原始事件日志（包含被去重的）"""
+        return self._event_log[-limit:]
+
+    def get_dispatched_log(self, limit: int = 100) -> List[Dict]:
+        """获取已分发事件日志（去重后）"""
+        return self._dispatched_log[-limit:]
+
+    def clear_dedup_buffer(self):
+        """手动清除去重缓冲区"""
+        self._dedup_buffer.clear()
+
+    def get_stats(self) -> Dict:
+        """获取统计信息"""
+        return {
+            "total_received": len(self._event_log),
+            "total_dispatched": len(self._dispatched_log),
+            "total_deduplicated": len(self._event_log) - len(self._dispatched_log),
+            "dedup_buffer_size": len(self._dedup_buffer),
+        }
+
+
+# 模块级单例
+wake_event_bus = WakeEventBus()
+
+__all__ = [
+    "WakeEventBus",
+    "RawWakeEvent",
+    "wake_event_bus",
+]

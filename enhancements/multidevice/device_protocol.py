@@ -78,6 +78,12 @@ class MessageType(IntEnum):
     ANDROID_INPUT = 0x61
     ANDROID_INSTALL = 0x62
 
+    # Wake & Session (唤醒与会话漫游)
+    WAKE_EVENT = 0x70          # 设备发出的唤醒事件
+    WAKE_ROUTE_RESULT = 0x71   # 唤醒路由决策结果
+    SESSION_MIGRATE = 0x72     # 会话迁移请求
+    SESSION_RESTORE = 0x73     # 目标设备恢复会话
+
 
 class DeviceType(IntEnum):
     """Device Types supported by UFO Galaxy"""

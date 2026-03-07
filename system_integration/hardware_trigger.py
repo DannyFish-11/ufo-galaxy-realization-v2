@@ -1792,12 +1792,49 @@ class IntegratedSystemController:
         
         # Set up trigger callback
         self.trigger_manager.on_trigger = self._on_trigger_received
-        
+        # 集成多模态融合唤醒决策
+        self._setup_fused_wake_decision()
         # Set up state callbacks
         self._setup_state_callbacks()
         
         logger.info("IntegratedSystemController initialized")
     
+    def _setup_fused_wake_decision(self):
+        """初始化多模态融合唤醒决策，并将其接入触发器回调链"""
+        try:
+            from system_integration.fused_wake_decision import FusedWakeDecision
+            self._fused_wake: Optional[FusedWakeDecision] = FusedWakeDecision()
+
+            async def _on_fused_wake(result):
+                """融合决策回调：置信度足够时将事件转发到 WakeEventBus"""
+                if not result.should_wake:
+                    return
+                # 取第一个 VOICE 事件的唤醒词（如有）
+                wake_word = ""
+                for ev in result.trigger_events:
+                    data = getattr(ev, "data", {}) or {}
+                    if data.get("wake_word"):
+                        wake_word = data["wake_word"]
+                        break
+                if not wake_word:
+                    wake_word = "hey_ufo"
+                try:
+                    from galaxy_gateway.wake_event_bus import wake_event_bus, RawWakeEvent
+                    raw = RawWakeEvent(
+                        source_device_id="local",
+                        wake_word=wake_word,
+                        confidence=result.confidence,
+                    )
+                    await wake_event_bus.publish(raw)
+                except Exception as e:
+                    logger.warning(f"FusedWakeDecision -> WakeEventBus 转发失败: {e}")
+
+            self._fused_wake.set_wake_callback(_on_fused_wake)
+            logger.info("FusedWakeDecision 集成成功")
+        except Exception as e:
+            self._fused_wake = None
+            logger.warning(f"FusedWakeDecision 初始化失败（降级为直接触发）: {e}")
+
     def _setup_state_callbacks(self):
         """Set up state machine callbacks"""
         # Enter DORMANT
@@ -1851,8 +1888,22 @@ class IntegratedSystemController:
     
     def _on_trigger_received(self, event: TriggerEvent):
         """Handle trigger event from manager"""
-        # Add to processing queue
+        # Add to processing queue for state machine
         self._trigger_queue.append(event)
+
+        # 同时将事件送入多模态融合唤醒决策器（异步处理，不阻塞当前线程）
+        fused = getattr(self, "_fused_wake", None)
+        if fused is not None:
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(fused.process_event(event))
+                else:
+                    fused.on_trigger_event(event)
+            except Exception:
+                # 无法获取 event loop，使用同步队列方式
+                fused.on_trigger_event(event)
     
     def _process_triggers(self):
         """Main trigger processing loop"""
