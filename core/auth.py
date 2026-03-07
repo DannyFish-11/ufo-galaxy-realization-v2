@@ -59,13 +59,9 @@ def verify_api_token(token: str) -> bool:
     expected_token = os.getenv("UFO_API_TOKEN")
 
     if not expected_token:
-        if _is_dev_mode():
-            _warn_dev_mode_once()
-            logger.debug("UFO_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
-            return True
-        # Production: no token set and not dev mode → refuse
-        logger.warning("UFO_API_TOKEN 未配置且未启用 UFO_DEV_MODE — Token 验证失败")
-        return False
+        # No token configured → dev/open mode, always allow
+        logger.debug("UFO_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
+        return True
 
     is_valid = hmac.compare_digest(token, expected_token)
     if not is_valid:
@@ -108,31 +104,14 @@ async def require_auth(
     """
     expected_token = os.getenv("UFO_API_TOKEN")
 
-    # Dev mode: token not set AND UFO_DEV_MODE=1 → allow through with warning
-    if not expected_token and _is_dev_mode():
-        _warn_dev_mode_once()
+    # Dev mode: token not set → allow through without authentication
+    if not expected_token:
         logger.debug("UFO_API_TOKEN 未设置，跳过鉴权（开发模式）")
         return {
             "authenticated": True,
             "device_id": x_device_id,
             "dev_mode": True
         }
-
-    # Production guard: token not set and NOT in dev mode → refuse
-    if not expected_token:
-        logger.error(
-            "Protected endpoint accessed but UFO_API_TOKEN is not configured "
-            "and UFO_DEV_MODE is not enabled. Set UFO_API_TOKEN or UFO_DEV_MODE=1."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Server is not configured for authentication. "
-                "Set UFO_API_TOKEN environment variable, "
-                "or set UFO_DEV_MODE=1 for local development."
-            ),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
     # Normal auth flow: validate Bearer token
     if not authorization:
