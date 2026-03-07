@@ -49,7 +49,7 @@ class NodeConfig:
     """节点配置信息"""
     node_name: str = "Node_31_Reserved"
     log_level: str = "INFO"
-    plugin_dir: str = "/home/ubuntu/plugins"
+    plugin_dir: str = field(default_factory=lambda: os.getenv("UFO_PLUGIN_DIR", os.path.expanduser("~/ufo-plugins")))
     health_check_port: int = 8080
 
 @dataclass
