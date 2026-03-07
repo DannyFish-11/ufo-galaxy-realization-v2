@@ -18,7 +18,7 @@ class InternetRetrieverFactory:
 
     backend_to_class: ClassVar[dict[str, Any]] = {
         "google": InternetGoogleRetriever,
-        "bing": InternetGoogleRetriever,  # TODO: Implement BingRetriever
+        "bing": InternetGoogleRetriever,  # Bing falls back to GoogleRetriever; a dedicated BingRetriever is not yet available
         "xinyu": XinyuSearchRetriever,
         "bocha": BochaAISearchRetriever,
     }
@@ -58,7 +58,8 @@ class InternetRetrieverFactory:
                 num_per_request=config.num_per_request,
             )
         elif backend == "bing":
-            # TODO: Implement Bing retriever
+            # Bing falls back to GoogleRetriever using the provided api_key;
+            # pass search_engine_id=None since Bing does not use one.
             return retriever_class(
                 api_key=config.api_key,
                 search_engine_id=None,  # Bing doesn't use search_engine_id

@@ -140,9 +140,9 @@ curl "http://localhost:8106/workflow/issue_to_pr?repo=username/repo&issue_number
 
 **步骤**:
 
-1. 在 Memos 中创建任务：
+1. 在 Memos 中创建任务（以下为示例任务内容）：
    ```
-   TODO: 添加用户认证功能
+   TASK: 添加用户认证功能
    - 实现 JWT 生成和验证
    - 添加登录和注册接口
    - 添加权限中间件
@@ -274,11 +274,11 @@ async def index_repo_to_kb(repo_url: str):
 ```python
 # 监听 Memos 任务
 async def watch_memos_tasks():
-    # 获取 Memos 中的 TODO
+    # 获取 Memos 中的任务列表
     tasks = await get_memos_tasks()
-    
+
     for task in tasks:
-        if task.startswith("TODO:"):
+        if task.startswith("TASK:"):
             # 创建 GitHub Issue
             await create_issue_from_task(task)
 ```

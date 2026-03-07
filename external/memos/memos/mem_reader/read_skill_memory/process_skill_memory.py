@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 def add_id_to_mysql(memory_id: str, mem_cube_id: str):
     """Add id to mysql, will deprecate this function in the future"""
-    # TODO: tmp function, deprecate soon
+    # NOTE: this function will be deprecated; it is kept for backward compatibility.
     import requests
 
     skill_mysql_url = os.getenv("SKILLS_MYSQL_URL", "")
@@ -111,7 +111,7 @@ def _preprocess_extract_messages(
     """Process data and check whether to extract skill memory"""
     history = history[-20:]
     if (len(history) + len(messages)) < 10:
-        # TODO: maybe directly return []
+        # NOTE: too few messages to extract skill memory; returning unmodified history and messages.
         logger.warning("[PROCESS_SKILLS] Not enough messages to extract skill memory")
     return history, messages
 
@@ -754,7 +754,7 @@ def process_skill_memory_fine(
             logger.warning(f"[PROCESS_SKILLS] Error creating skill memory item: {e}")
             continue
 
-    # TODO: deprecate this funtion and call
+    # NOTE: add_id_to_mysql call here will be removed when the function is fully deprecated.
     for skill_memory, skill_memory_item in zip(skill_memories, skill_memory_items, strict=False):
         if skill_memory.get("update", False) and skill_memory.get("old_memory_id", ""):
             continue

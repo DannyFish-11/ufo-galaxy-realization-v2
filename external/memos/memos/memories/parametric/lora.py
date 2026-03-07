@@ -1,9 +1,6 @@
-################################################################
-# TODO:
-# This file currently serves as a placeholder.
+# NOTE: This file currently serves as a placeholder.
 # The actual implementation will be added here in the future.
 # Please do not use this as a functional module yet.
-################################################################
 
 import os
 

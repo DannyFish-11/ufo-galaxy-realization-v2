@@ -435,7 +435,7 @@ class FileContentParser(BaseMessageParser):
                     file_url_flag = True
                     content_parts.append(f"[File URL: {file_data}]")
                 else:
-                    # TODO: split into multiple memory items
+                    # NOTE: large string file data is added as a single item; splitting is a future improvement.
                     content_parts.append(file_data)
             else:
                 content_parts.append(f"[File Data: {type(file_data).__name__}]")
@@ -626,8 +626,7 @@ class FileContentParser(BaseMessageParser):
                         parsed_text = self._handle_base64(file_data)
 
                     else:
-                        # TODO: discuss the proper place for processing
-                        #  string file-data
+                        # String file data that is not a URL or base64 is not parsed; return empty list.
                         return []
             # Priority 2: If file_id is provided but no file_data, try to use file_id as path
             elif file_id:

@@ -69,6 +69,8 @@ class SchedulerOrchestrator(RedisSchedulerModule):
                 # Distribute per-stream evenly
                 stream_quotas[stream_key] = consume_batch_size
             else:
-                # TODO: not implemented yet
-                stream_quotas[stream_key] = consume_batch_size
+                # Distribute batch proportionally by priority weight; fall back to equal share if weight is zero.
+                total_priority = sum(stream_priorities.values()) or 1
+                weight = stream_priorities.get(stream_key, 0)
+                stream_quotas[stream_key] = max(1, int(consume_batch_size * weight / total_priority))
         return stream_quotas

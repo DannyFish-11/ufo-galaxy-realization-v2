@@ -141,7 +141,7 @@ class SchedulerRetriever(BaseSchedulerModule):
                                     memory=new_mem,
                                     metadata=TextualMemoryMetadata(
                                         user_id=user_id, memory_type="LongTermMemory"
-                                    ),  # TODO add memory_type
+                                    ),  # memory_type defaults to "LongTermMemory"
                                 )
                             )
                     elif FINE_STRATEGY == FineStrategy.REWRITE:

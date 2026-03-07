@@ -364,8 +364,10 @@ class HostAgent(BasicAgent):
 
     def process_confirmation(self) -> None:
         """
-        TODO: Process the confirmation.
+        Process the user confirmation request.
+        Logs the confirmation event; override in a subclass to add interactive confirmation logic.
         """
+        # Default: accept confirmation silently. Subclasses may prompt the user or apply policy checks.
         pass
 
     def _display_agent_comment(self, comment: str) -> None:

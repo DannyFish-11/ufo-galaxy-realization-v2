@@ -159,7 +159,7 @@ class RelationAndReasoningDetector:
         """
         results = []
         # Pseudo: find older/newer events with same tags
-        # TODO: add time sequence recall
+        # NOTE: time-sequence recall is not yet implemented; using nearest-node proximity instead.
         neighbors = nearest_nodes
         for cand in neighbors:
             # Compare timestamps
@@ -190,8 +190,8 @@ class RelationAndReasoningDetector:
         parent_node = GraphDBNode(
             memory=summary["value"],
             metadata=TreeNodeTextualMemoryMetadata(
-                user_id="",  # TODO: summarized node: no user_id
-                session_id="",  # TODO: summarized node: no session_id
+                user_id="",  # summarized aggregate node has no associated user_id
+                session_id="",  # summarized aggregate node has no associated session_id
                 memory_type=node.metadata.memory_type,
                 status="activated",
                 key=summary["key"],

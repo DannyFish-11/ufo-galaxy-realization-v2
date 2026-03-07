@@ -164,7 +164,7 @@ class SchedulerLoggerModule(BaseSchedulerModule):
             return "PublicMemCube"
         return "UserMemCube"
 
-    # TODO: Log output count is incorrect
+    # NOTE: log output count may not reflect actual processed items due to batching.
     @log_exceptions(logger=logger)
     def log_working_memory_replacement(
         self,

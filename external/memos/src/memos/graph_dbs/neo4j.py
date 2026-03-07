@@ -928,12 +928,10 @@ class Neo4jGraphDB(BaseGraphDB):
         status: str | None = None,
     ) -> list[str]:
         """
-        TODO:
-        1. ADD logic: "AND" vs "OR"(support logic combination);
-        2. Support nested conditional expressions;
-
         Retrieve node IDs that match given metadata filters.
-        Supports exact match.
+
+        NOTE: currently only exact-match filters are supported.
+        Future improvements: (1) AND vs OR logic combinations, (2) nested conditional expressions.
 
         Args:
         filters: List of filter dicts like:

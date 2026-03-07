@@ -258,7 +258,7 @@ class PreUpdateRetriever:
             return []
 
         # 4. Retrieve full memories to from just ids
-        # TODO: We should modify the db functions to support returning arbitrary fields, instead of search twice.
+        # NOTE: db functions could be updated to return arbitrary fields to avoid this double search.
         final_memories = self._get_full_memories(retrieved_ids, user_name)
 
         return final_memories

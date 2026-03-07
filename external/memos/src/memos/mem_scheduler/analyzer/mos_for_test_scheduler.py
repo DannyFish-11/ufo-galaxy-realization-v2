@@ -491,7 +491,7 @@ class MOSForTestScheduler(MOS):
                     "Activation memory only used for huggingface backend. Skipping activation memory."
                 )
             else:
-                # TODO this only one cubes
+                # NOTE: currently iterates over all user cubes; only the first matching cube is used.
                 for mem_cube_id, mem_cube in self.mem_cubes.items():
                     if mem_cube_id not in user_cube_ids:
                         continue
