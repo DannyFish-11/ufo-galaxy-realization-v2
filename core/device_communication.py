@@ -66,6 +66,11 @@ class MessageType(str, Enum):
     STREAM_DATA = "stream_data"
     STREAM_END = "stream_end"
 
+    # 唤醒与会话漫游
+    WAKE_EVENT = "wake_event"           # 设备唤醒事件
+    SESSION_MIGRATE = "session_migrate" # 会话迁移请求
+    SESSION_RESTORE = "session_restore" # 会话恢复
+
 
 @dataclass
 class DeviceMessage:
@@ -532,6 +537,28 @@ class DeviceCommunication:
         event_type = message.payload.get("event_type", "")
         event_data = message.payload.get("data", {})
         logger.info(f"设备事件: {device_id} - {event_type}")
+
+        # 处理 WAKE_EVENT：转发到统一唤醒事件总线
+        wake_event_value = MessageType.WAKE_EVENT.value
+        if event_type == wake_event_value or message.action == wake_event_value:
+            wake_payload = message.payload if "wake_word" in message.payload else event_data
+            await self._handle_wake_event(device_id, wake_payload)
+
+    async def _handle_wake_event(self, device_id: str, payload: dict):
+        """将唤醒事件转发到 WakeEventBus"""
+        try:
+            from galaxy_gateway.wake_event_bus import wake_event_bus, RawWakeEvent
+            raw = RawWakeEvent(
+                source_device_id=device_id,
+                wake_word=payload.get("wake_word", ""),
+                timestamp=payload.get("timestamp", time.time()),
+                task_type=payload.get("task_type", "general"),
+                confidence=payload.get("confidence", 1.0),
+                extra=payload.get("extra", {}),
+            )
+            await wake_event_bus.publish(raw)
+        except Exception as e:
+            logger.warning(f"转发唤醒事件失败: {device_id} - {e}")
     
     # ========================================================================
     # 心跳

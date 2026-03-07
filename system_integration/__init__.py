@@ -8,9 +8,15 @@ from .hardware_trigger import (
     IntegratedSystemController,
     TriggerType,
     SystemState,
-    GestureType,
     TriggerEvent,
     StateTransition
+)
+
+from .fused_wake_decision import (
+    FusedWakeDecision,
+    FusedWakeResult,
+    FusionRule,
+    fused_wake_decision,
 )
 
 __all__ = [
@@ -19,7 +25,11 @@ __all__ = [
     'IntegratedSystemController',
     'TriggerType',
     'SystemState',
-    'GestureType',
     'TriggerEvent',
-    'StateTransition'
+    'StateTransition',
+    # 多模态融合唤醒决策
+    'FusedWakeDecision',
+    'FusedWakeResult',
+    'FusionRule',
+    'fused_wake_decision',
 ]
