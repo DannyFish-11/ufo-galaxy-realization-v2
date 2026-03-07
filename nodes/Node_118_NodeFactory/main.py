@@ -16,6 +16,7 @@ from pydantic import BaseModel
 import uuid
 import importlib
 import subprocess
+from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -144,6 +145,22 @@ class NodeFactory:
         """注册节点模板"""
         self.templates[template.template_id] = template
         logger.info(f"Registered template: {template.template_id}")
+        return True
+
+    def register_node(self, node_name: str, main_file: str, **kwargs) -> bool:
+        """动态注册新节点（供 AutonomousCoder 自动扩展使用）"""
+        template_id = node_name
+        template = NodeTemplate(
+            template_id=template_id,
+            name=node_name,
+            node_type=NodeType.SERVICE,
+            description=kwargs.get("description", f"Auto-registered node: {node_name}"),
+            version="1.0.0",
+            entry_point=main_file,
+            capabilities=kwargs.get("capabilities", []),
+        )
+        self.templates[template_id] = template
+        logger.info(f"Dynamically registered node: {node_name} from {main_file}")
         return True
     
     def create_instance(self, template_id: str, name: str,
@@ -446,6 +463,11 @@ if __name__ == "__main__":
 
 # 全局实例
 node_factory = NodeFactory()
+
+
+def get_node_factory() -> NodeFactory:
+    """获取全局节点工厂实例"""
+    return node_factory
 
 
 # API 模型

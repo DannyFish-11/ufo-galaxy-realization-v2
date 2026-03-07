@@ -332,44 +332,158 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     command_router.set_executor(_command_node_executor)
 
     @router.post("/api/v1/command")
-    async def dispatch_command(req: CommandDispatchRequest):
+    async def dispatch_command(
+        req: UnifiedCommandRequest,
+        auth: dict = Depends(require_auth),
+    ):
         """
-        命令分发接口
+        统一命令分发接口（支持多目标 sync/async 模式，兼容 UnifiedCommandRequest 格式）
 
-        支持模式：
-          - sync: 同步等待所有目标返回
-          - async: 立即返回 request_id，后台执行
-          - parallel: 多目标并行执行
-          - serial: 多目标串行执行
-
-        WebSocket 实时推送：当 notify_ws=true 时，结果通过 /ws/status 推送
+        - sync: 同步等待所有目标返回
+        - async: 立即返回 request_id，后台执行
         """
-        cmd_request = CommandRequest(
-            source=req.source,
-            targets=req.targets if req.targets else ["system"],
-            command=req.command,
-            params=req.params,
-            mode=CommandMode(req.mode),
-            timeout=req.timeout,
-            max_retries=req.max_retries,
-            notify_ws=req.notify_ws,
-            priority=req.priority,
-            metadata=req.metadata,
+        if req.mode not in ("sync", "async"):
+            raise HTTPException(status_code=400, detail="Invalid mode. Must be 'sync' or 'async'")
+
+        if not req.targets:
+            raise HTTPException(status_code=400, detail="Targets list cannot be empty")
+
+        request_id = req.request_id or str(uuid.uuid4())
+        created_at = datetime.now(timezone.utc).isoformat()
+
+        logger.info(
+            "收到命令: request_id=%s command=%s targets=%s mode=%s",
+            request_id, req.command, req.targets, req.mode,
         )
 
-        try:
-            result = await command_router.dispatch(cmd_request)
+        command_results[request_id] = {
+            "request_id": request_id,
+            "command": req.command,
+            "targets": req.targets,
+            "params": req.params,
+            "mode": req.mode,
+            "status": CommandStatus.QUEUED,
+            "created_at": created_at,
+            "completed_at": None,
+            "results": {},
+        }
+
+        if req.mode == "sync":
+            command_results[request_id]["status"] = CommandStatus.RUNNING
+
+            tasks = [
+                execute_command_on_target(target, req.command, req.params, req.timeout)
+                for target in req.targets
+            ]
+
+            try:
+                target_results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=req.timeout,
+                )
+
+                results = {}
+                for target, result in zip(req.targets, target_results):
+                    if isinstance(result, Exception):
+                        results[target] = TargetResult(
+                            status=CommandStatus.FAILED,
+                            output=None,
+                            error=str(result),
+                            started_at=created_at,
+                            completed_at=datetime.now(timezone.utc).isoformat(),
+                        )
+                    else:
+                        results[target] = result
+
+                completed_at = datetime.now(timezone.utc).isoformat()
+                command_results[request_id]["status"] = CommandStatus.DONE
+                command_results[request_id]["completed_at"] = completed_at
+                command_results[request_id]["results"] = {k: v.model_dump() for k, v in results.items()}
+
+                return JSONResponse({
+                    "request_id": request_id,
+                    "status": CommandStatus.DONE,
+                    "created_at": created_at,
+                    "completed_at": completed_at,
+                    "results": command_results[request_id]["results"],
+                })
+
+            except asyncio.TimeoutError:
+                completed_at = datetime.now(timezone.utc).isoformat()
+                command_results[request_id]["status"] = CommandStatus.FAILED
+                command_results[request_id]["completed_at"] = completed_at
+                command_results[request_id]["results"] = {
+                    target: TargetResult(
+                        status=CommandStatus.FAILED,
+                        output=None,
+                        error="Execution timeout",
+                        started_at=created_at,
+                        completed_at=completed_at,
+                    ).model_dump()
+                    for target in req.targets
+                }
+                raise HTTPException(status_code=408, detail="Command execution timeout")
+
+        else:  # async mode
+            async def _execute_async():
+                try:
+                    command_results[request_id]["status"] = CommandStatus.RUNNING
+                    tasks = [
+                        execute_command_on_target(target, req.command, req.params, req.timeout)
+                        for target in req.targets
+                    ]
+                    target_results = await asyncio.gather(*tasks, return_exceptions=True)
+                    results = {}
+                    for target, result in zip(req.targets, target_results):
+                        if isinstance(result, Exception):
+                            results[target] = TargetResult(
+                                status=CommandStatus.FAILED,
+                                output=None,
+                                error=str(result),
+                                started_at=created_at,
+                                completed_at=datetime.now(timezone.utc).isoformat(),
+                            )
+                        else:
+                            results[target] = result
+                    completed_at = datetime.now(timezone.utc).isoformat()
+                    command_results[request_id]["status"] = CommandStatus.DONE
+                    command_results[request_id]["completed_at"] = completed_at
+                    command_results[request_id]["results"] = {k: v.model_dump() for k, v in results.items()}
+                except Exception as e:
+                    logger.error(f"异步命令执行失败: {e}")
+                    completed_at = datetime.now(timezone.utc).isoformat()
+                    command_results[request_id]["status"] = CommandStatus.FAILED
+                    command_results[request_id]["completed_at"] = completed_at
+
+            asyncio.create_task(_execute_async())
+
             return JSONResponse({
-                "success": result.status.value in ("success", "partial"),
-                **result.to_dict(),
+                "request_id": request_id,
+                "status": CommandStatus.QUEUED,
+                "created_at": created_at,
+                "message": f"Command queued. Use GET /api/v1/command/{request_id}/status to check status.",
             })
-        except Exception as e:
-            logger.error(f"Command dispatch failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/command/{request_id}/status")
+    async def get_command_unified_status(
+        request_id: str,
+        auth: dict = Depends(require_auth),
+    ):
+        """查询统一命令执行状态（支持 async 提交后的状态轮询）"""
+        if request_id not in command_results:
+            raise HTTPException(status_code=404, detail=f"Command {request_id} not found")
+        result = command_results[request_id]
+        return JSONResponse({
+            "request_id": result["request_id"],
+            "status": result["status"],
+            "created_at": result["created_at"],
+            "completed_at": result.get("completed_at"),
+            "results": result.get("results", {}),
+        })
 
     @router.get("/api/v1/command/{request_id}")
     async def get_command_status(request_id: str):
-        """查询命令执行状态和聚合结果"""
+        """查询命令执行状态和聚合结果（命令路由引擎）"""
         result = await command_router.get_result(request_id)
         if not result:
             raise HTTPException(status_code=404, detail=f"Command {request_id} not found")
