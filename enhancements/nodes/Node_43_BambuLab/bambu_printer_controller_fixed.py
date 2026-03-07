@@ -201,7 +201,7 @@ class BambuLabDriver(PrinterDriver):
         try:
             # 尝试使用bambulab-api
             try:
-                from bambulabs import Printer
+                from bambulabs_api import Printer
                 
                 self._host = connection_params.get("host")
                 self._access_code = connection_params.get("access_code")
@@ -230,7 +230,7 @@ class BambuLabDriver(PrinterDriver):
                 return True
                 
             except ImportError:
-                logger.warning("bambulabs库未安装，尝试使用MQTT直接连接")
+                logger.warning("bambulabs_api库未安装，尝试使用MQTT直接连接")
                 return await self._connect_mqtt(connection_params)
                 
         except Exception as e:

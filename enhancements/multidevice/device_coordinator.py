@@ -41,10 +41,10 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from enhancements.multidevice.device_protocol import (
-from nodes.common.cors_config import get_cors_origins
     AIPMessage, MessageType, DeviceInfo, DeviceStatus, ErrorCode,
     MessageBuilder, ProtocolValidator, ProtocolHandler, MessageRouter
 )
+from nodes.common.cors_config import get_cors_origins
 
 # Configure logging
 logging.basicConfig(

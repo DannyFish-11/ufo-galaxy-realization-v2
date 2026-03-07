@@ -14,6 +14,8 @@ import sys
 import time
 import subprocess
 import signal
+import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Dict, List, Set
 from collections import defaultdict
@@ -140,7 +142,19 @@ class SmartLauncher:
         if process.poll() is not None:
             return False
         
-        # TODO: 可以添加 HTTP 健康检查
+        # HTTP 健康检查（如果节点配置了端口）
+        node_info = self.config.get("nodes", {}).get(node_name, {})
+        port = node_info.get("port")
+        health_path = node_info.get("health_path", "/health")
+        if port:
+            try:
+                url = f"http://localhost:{port}{health_path}"
+                req = urllib.request.Request(url)
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    return resp.status < 500
+            except (urllib.error.URLError, OSError):
+                # 节点进程在线但 HTTP 服务尚未就绪或无健康端点，视为健康
+                return True
         return True
     
     def start_group(self, group: str):

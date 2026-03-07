@@ -42,22 +42,49 @@ pip install -r requirements.txt
 python main.py
 ```
 
-后端将在 `http://localhost:3000` 启动
+后端将在 `http://localhost:8080` 启动。
 
 ### 2. 访问前端
 
 直接在浏览器中打开：
 ```
-dashboard/frontend/public/index.html
+http://localhost:8080/
 ```
 
-或者使用简单的 HTTP 服务器：
+前端 `index.html` 由后端静态文件路由直接提供服务，无需单独的 HTTP 服务器。
+
+> 如果仅需本地预览，也可通过简单 HTTP 服务器：
+> ```bash
+> cd dashboard/frontend/public
+> python -m http.server 8081
+> ```
+> 然后访问 `http://localhost:8081`（此模式下 API 调用需后端同时运行）。
+
+### 3. 构建 TypeScript 前端（可选）
+
+TypeScript 源码位于 `dashboard/frontend/ts/`，编译产物输出到 `dist/`。
+
 ```bash
-cd dashboard/frontend/public
-python -m http.server 8080
+cd dashboard/frontend
+npm install       # 安装依赖（vue、axios、typescript 等）
+npm run build     # 编译 TypeScript
 ```
 
-然后访问 `http://localhost:8080`
+## WebSocket 实时连接
+
+后端 WebSocket 端点：`ws://localhost:8080/ws`
+
+前端 TypeScript 客户端示例（`dashboard/frontend/ts/api.ts`）：
+
+```typescript
+import { GalaxyAPI } from './api';
+
+const api = new GalaxyAPI('http://localhost:8080');
+api.connectWebSocket((msg) => {
+  console.log('WS message:', msg);
+});
+api.sendWSMessage({ type: 'ping' });
+```
 
 ## 配置
 
@@ -74,39 +101,36 @@ NODE_PORT_START=8000
 LOG_LEVEL=INFO
 ```
 
-### 节点端口映射
-
-Dashboard 会自动计算节点端口：
-- Node 00: 8000
-- Node 01: 8001
-- Node 79: 8079
-- Node 80: 8080
-- Node 81: 8081
-- ...
-
 ## API 文档
 
-### 系统概览
+### 系统信息
 ```
-GET /api/overview
-```
-
-### 节点管理
-```
-GET /api/nodes              # 获取所有节点
-GET /api/nodes/{id}         # 获取单个节点
-POST /api/nodes/{id}/restart # 重启节点
+GET /api/v1/system/info
+GET /api/v1/ascii
 ```
 
-### 日志查看
+### 设备管理
 ```
-GET /api/logs?limit=100
+GET  /api/v1/devices              # 获取设备列表
+POST /api/v1/devices/register     # 注册设备
+POST /api/v1/devices/{id}/command # 发送设备命令
 ```
 
-### 任务管理
+### Agent 管理
 ```
-GET /api/tasks              # 获取任务列表
-POST /api/tasks             # 创建任务
+GET /api/v1/agents                # 获取 Agent 列表
+GET /api/v1/llm/providers         # 获取 LLM 提供商列表
+```
+
+### 聊天
+```
+POST /api/v1/chat                 # 统一聊天入口
+POST /api/v1/dashboard/chat       # 仪表盘聊天（与上同功能）
+```
+
+### 多设备并行执行
+```
+POST /api/v1/execute/parallel     # 并行执行多设备命令
 ```
 
 ### WebSocket 实时更新
@@ -114,36 +138,36 @@ POST /api/tasks             # 创建任务
 WS /ws
 ```
 
+消息格式：
+```json
+{ "type": "ping" }                         // 心跳
+{ "type": "chat", "content": "你好" }      // 发送聊天
+{ "type": "chat_response", "content": "..." } // 聊天回复（服务端推送）
+{ "type": "status_update", "data": {} }    // 状态更新（服务端推送）
+```
+
 ## 技术栈
 
 ### 后端
-- FastAPI - Web 框架
+- FastAPI - Web 框架（端口 8080）
 - httpx - HTTP 客户端
 - WebSocket - 实时通信
 
 ### 前端
-- Vue 3 - 前端框架
-- Tailwind CSS - UI 样式
-- Axios - HTTP 客户端
-
-## 截图
-
-### 系统概览
-![Overview](screenshots/overview.png)
-
-### 节点状态
-![Nodes](screenshots/nodes.png)
-
-### 日志查看
-![Logs](screenshots/logs.png)
+- Vue 3 - 前端框架（CDN 加载）
+- Tailwind CSS - UI 样式（CDN 加载）
+- Axios - HTTP 客户端（CDN 加载）
+- TypeScript - 类型安全客户端（`ts/` 目录）
 
 ## 开发
 
 ### 添加新功能
 
 1. 在 `backend/main.py` 添加 API 端点
-2. 在 `frontend/public/index.html` 添加 UI 组件
-3. 测试并提交
+2. 在 `frontend/ts/types.ts` 更新类型定义
+3. 在 `frontend/ts/api.ts` 更新客户端方法
+4. 在 `frontend/public/index.html` 添加 UI 组件
+5. 测试并提交
 
 ### 调试
 
@@ -165,14 +189,14 @@ tail -f dashboard.log
 docker build -t ufo-galaxy-dashboard .
 
 # 运行容器
-docker run -d -p 3000:3000 ufo-galaxy-dashboard
+docker run -d -p 8080:8080 ufo-galaxy-dashboard
 ```
 
 ### 生产环境
 
 ```bash
-# 使用 Gunicorn
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.main:app
+# 使用 Gunicorn + Uvicorn workers
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker dashboard.backend.main:app --bind 0.0.0.0:8080
 ```
 
 ## 故障排查
@@ -190,3 +214,4 @@ gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.main:app
 ## 许可证
 
 MIT License
+
