@@ -528,14 +528,14 @@ class BambuLabDriver(PrinterDriver):
     
     async def get_files(self) -> List[Dict[str, Any]]:
         """获取文件列表"""
-        # Bambu Lab打印机文件列表需要通过FTP获取
-        logger.warning("Bambu Lab文件列表需要通过FTP获取，暂未实现")
+        # Bambu Lab打印机文件列表需要通过FTP获取；当前驱动仅实现MQTT控制，不包含FTP支持
+        logger.warning("Bambu Lab文件列表暂不可用（需要FTP连接）")
         return []
     
     async def upload_file(self, file_path: str, content: bytes) -> bool:
         """上传文件"""
-        # Bambu Lab打印机文件上传需要通过FTP
-        logger.warning("Bambu Lab文件上传需要通过FTP，暂未实现")
+        # Bambu Lab打印机文件上传需要FTP；当前驱动仅实现MQTT控制，不包含FTP支持
+        logger.warning("Bambu Lab文件上传暂不可用（需要FTP连接）")
         return False
 
 

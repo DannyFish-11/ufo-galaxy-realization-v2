@@ -249,8 +249,11 @@ class SearchIntegrator:
         query: str,
         max_results: int
     ) -> List[SearchResult]:
-        """Simulate web search results."""
-        # This is a placeholder - replace with actual API integration
+        """Return stub search results when no live web-search API is configured.
+
+        Production deployments should replace calls to this method with a real
+        search API (e.g. Google Custom Search or Bing Web Search API).
+        """
         simulated_results = [
             {
                 'title': f"Result {i+1} for '{query}'",
