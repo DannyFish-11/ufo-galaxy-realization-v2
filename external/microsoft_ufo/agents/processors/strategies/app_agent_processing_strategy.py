@@ -439,7 +439,7 @@ class AppControlInfoStrategy(BaseProcessingStrategy):
                 grounding_control_list = await self._collect_grounding_controls(
                     clean_screenshot_path, application_window_info
                 )
-                # TODO: Push added control info to client.
+                # NOTE: grounding_controls_info is stored locally; pushing to a remote client is not yet implemented.
                 self.control_recorder.grounding_controls_info = grounding_control_list
                 self.logger.info(
                     f"Collected {len(grounding_control_list)} controls from OmniParser."

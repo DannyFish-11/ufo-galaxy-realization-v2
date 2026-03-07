@@ -101,7 +101,7 @@ class SingleCubeView(MemCubeView):
 
         all_memories = text_results + pref_results
 
-        # TODO: search existing memories and compare
+        # NOTE: no deduplication against existing memories; results are returned as-is.
 
         return all_memories
 
@@ -299,7 +299,7 @@ class SingleCubeView(MemCubeView):
         Returns:
             List of enhanced search results
         """
-        # TODO: support tool memory search in future
+        # NOTE: tool memory search is not yet supported; only text and preference memories are searched.
 
         logger.info(f"Fine strategy: {FINE_STRATEGY}")
         if FINE_STRATEGY == FineStrategy.DEEP_SEARCH:
@@ -414,7 +414,7 @@ class SingleCubeView(MemCubeView):
 
         Returns:
             List of formatted preference memory items
-            TODO: ADD CUBE ID IN PREFERENCE MEMORY
+            NOTE: cube_id is not yet propagated into individual preference memory items.
         """
         if os.getenv("ENABLE_PREFERENCE_MEMORY", "false").lower() != "true":
             return []

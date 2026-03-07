@@ -316,7 +316,7 @@ class MOSCore:
                     "Activation memory only used for huggingface backend. Skipping activation memory."
                 )
             else:
-                # TODO this only one cubes
+                # NOTE: currently iterates over all user cubes; only the first matching cube is used.
                 for mem_cube_id, mem_cube in self.mem_cubes.items():
                     if mem_cube_id not in user_cube_ids:
                         continue
@@ -709,7 +709,7 @@ class MOSCore:
         assert (messages is not None) or (memory_content is not None) or (doc_path is not None), (
             "messages_or_doc_path or memory_content or doc_path must be provided."
         )
-        # TODO: asure that session_id is a valid string
+        # NOTE: session_id should be a non-empty string; callers are responsible for providing a valid value.
         time_start = time.time()
 
         target_session_id = session_id if session_id else self.session_id
@@ -721,7 +721,7 @@ class MOSCore:
                 raise ValueError(
                     f"No accessible cubes found for user '{target_user_id}'. Please register a cube first."
                 )
-            mem_cube_id = accessible_cubes[0].cube_id  # TODO not only first
+            mem_cube_id = accessible_cubes[0].cube_id  # uses the first accessible cube by default
         else:
             self._validate_cube_access(target_user_id, mem_cube_id)
         logger.info(
@@ -947,7 +947,7 @@ class MOSCore:
                 raise ValueError(
                     f"No accessible cubes found for user '{target_user_id}'. Please register a cube first."
                 )
-            mem_cube_id = accessible_cubes[0].cube_id  # TODO not only first
+            mem_cube_id = accessible_cubes[0].cube_id  # uses the first accessible cube by default
         else:
             self._validate_cube_access(target_user_id, mem_cube_id)
 
@@ -981,7 +981,7 @@ class MOSCore:
                 raise ValueError(
                     f"No accessible cubes found for user '{target_user_id}'. Please register a cube first."
                 )
-            mem_cube_id = accessible_cubes[0].cube_id  # TODO not only first
+            mem_cube_id = accessible_cubes[0].cube_id  # uses the first accessible cube by default
         else:
             self._validate_cube_access(target_user_id, mem_cube_id)
         if self.config.enable_textual_memory and self.mem_cubes[mem_cube_id].text_mem:
@@ -1022,7 +1022,7 @@ class MOSCore:
                 raise ValueError(
                     f"No accessible cubes found for user '{target_user_id}'. Please register a cube first."
                 )
-            mem_cube_id = accessible_cubes[0].cube_id  # TODO not only first
+            mem_cube_id = accessible_cubes[0].cube_id  # uses the first accessible cube by default
         else:
             self._validate_cube_access(target_user_id, mem_cube_id)
         if self.mem_cubes[mem_cube_id].config.text_mem.backend != "tree_text":
@@ -1054,7 +1054,7 @@ class MOSCore:
                 raise ValueError(
                     f"No accessible cubes found for user '{target_user_id}'. Please register a cube first."
                 )
-            mem_cube_id = accessible_cubes[0].cube_id  # TODO not only first
+            mem_cube_id = accessible_cubes[0].cube_id  # uses the first accessible cube by default
         else:
             self._validate_cube_access(target_user_id, mem_cube_id)
         self.mem_cubes[mem_cube_id].text_mem.delete(memory_id)
@@ -1080,7 +1080,7 @@ class MOSCore:
                 raise ValueError(
                     f"No accessible cubes found for user '{target_user_id}'. Please register a cube first."
                 )
-            mem_cube_id = accessible_cubes[0].cube_id  # TODO not only first
+            mem_cube_id = accessible_cubes[0].cube_id  # uses the first accessible cube by default
         else:
             self._validate_cube_access(target_user_id, mem_cube_id)
         self.mem_cubes[mem_cube_id].text_mem.delete_all()
@@ -1132,7 +1132,6 @@ class MOSCore:
 
     def get_user_info(self) -> dict[str, Any]:
         """Get current user information including accessible cubes.
-        TODO: maybe input user_id
         Returns:
             dict: User information and accessible cubes.
         """

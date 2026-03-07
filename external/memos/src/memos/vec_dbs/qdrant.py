@@ -165,7 +165,7 @@ class QdrantVecDB(BaseVecDB):
 
         for field, value in filter_dict.items():
             # Simple exact match for now
-            # TODO: Extend this to support more complex conditions
+            # NOTE: only exact-match (MatchValue) conditions are supported; range/nested filters are not yet implemented.
             conditions.append(
                 models.FieldCondition(key=field, match=models.MatchValue(value=value))
             )

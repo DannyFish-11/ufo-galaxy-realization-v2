@@ -566,7 +566,7 @@ class MOSProduct(MOSCore):
     def _extract_struct_data_from_history(self, chat_data: list[dict]) -> dict:
         """
         get struct message from chat-history
-        # TODO: @xcy make this more general
+        # NOTE: this extraction is currently specific to the current message schema and should be generalised.
         """
         system_content = ""
         memory_content = ""

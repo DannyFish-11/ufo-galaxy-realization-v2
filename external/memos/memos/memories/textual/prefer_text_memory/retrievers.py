@@ -87,7 +87,7 @@ class NaiveRetriever(BaseRetriever):
         search_filter: dict[str, Any] | None = None,
     ) -> list[TextualMemoryItem]:
         """Retrieve memories from the naive retriever."""
-        # TODO: un-support rewrite query and session filter now
+        # Rewrite query and session filter are not supported; chat_history and session_id are stripped.
         if info:
             info = info.copy()  # Create a copy to avoid modifying the original
             info.pop("chat_history", None)

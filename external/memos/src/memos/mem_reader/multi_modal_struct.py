@@ -980,7 +980,7 @@ class MultiModalStructMemReader(SimpleStructMemReader):
         Returns:
             List of scene data info
         """
-        # TODO: split messages
+        # NOTE: scene_data is returned as-is; message splitting is a future improvement.
         return scene_data
 
     def _read_memory(

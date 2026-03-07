@@ -333,7 +333,7 @@ class GraphMemoryRetriever:
     ) -> list[TextualMemoryItem]:
         """
         Perform vector-based similarity retrieval using query embedding.
-        # TODO: tackle with post-filter and pre-filter(5.18+) better.
+        # NOTE: post-filter and pre-filter handling can be improved in a future version (5.18+).
         """
         if not query_embedding:
             return []

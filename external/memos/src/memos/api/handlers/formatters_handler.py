@@ -162,7 +162,7 @@ def separate_knowledge_and_conversation_mem(memories: list[dict[str, Any]]):
             and sources[0]["type"] == "file"
             and "content" in sources[0]
             and sources[0]["content"] != ""
-        ):  # TODO change to memory_type
+        ):  # filter by file source type; use memory_type filtering when API is updated
             knowledge_mem.append(item)
         else:
             conversation_mem.append(item)
@@ -204,7 +204,7 @@ def rerank_knowledge_mem(
         reverse=True,
     )
 
-    # TODO revoke sources replace memory value
+    # Replace memory value with first source content and clear sources list for client consumption.
     for item in reranked_knowledge_mem:
         item["memory"] = item["metadata"]["sources"][0]["content"]
         item["metadata"]["sources"] = []

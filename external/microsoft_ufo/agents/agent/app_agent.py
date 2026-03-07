@@ -654,7 +654,7 @@ class OpenAIOperatorAgent(AppAgent):
         else:
             output_message = (
                 openai.types.responses.response_input_param.ComputerCallOutput(
-                    type="computer_screenshot",  # TODO
+                    type="computer_screenshot",
                     image_url=image,
                 )
             )

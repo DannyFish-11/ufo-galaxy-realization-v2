@@ -371,7 +371,7 @@ class APISearchRequest(BaseRequest):
     )
 
     # ==== Filter conditions ====
-    # TODO: maybe add detailed description later
+    # Filter supports nested logical operators; see MemOS filter documentation for the full schema.
     filter: dict[str, Any] | None = Field(
         None,
         description="""

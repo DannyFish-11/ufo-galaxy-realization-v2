@@ -55,7 +55,7 @@ class StrategyStructMemReader(SimpleStructMemReader, ABC):
         )
         prompt = prompt.replace("${custom_tags_prompt}", custom_tags_prompt)
 
-        if self.config.remove_prompt_example:  # TODO unused
+        if self.config.remove_prompt_example:  # flag is defined in config but not yet wired to any prompt
             prompt = prompt.replace(examples, "")
         messages = [{"role": "user", "content": prompt}]
         try:

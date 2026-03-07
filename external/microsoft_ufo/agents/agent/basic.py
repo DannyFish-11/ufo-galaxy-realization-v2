@@ -231,9 +231,10 @@ class BasicAgent(ABC):
 
     def reflection(self) -> None:
         """
-        TODO:
-        Reflect on the action.
+        Reflect on the most recent action taken by the agent.
+        Override in a subclass to implement memory updates, self-critique, or strategy adjustments.
         """
+        # Default: no-op. Subclasses should override to perform meaningful reflection.
         pass
 
     def set_state(self, state: AgentState) -> None:
