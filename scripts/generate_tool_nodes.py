@@ -139,10 +139,16 @@ class {name}Tools:
     def _init_client(self):
         """初始化客户端"""
         try:
-            # TODO: 初始化 {library} 客户端
+            import importlib
+            # Attempt to import the underlying library to verify it is installed.
+            # Package names may use hyphens (e.g. "qdrant-client") while Python
+            # module names use underscores; strip any extras-bracket suffix too.
+            _mod_name = "{library}".replace("-", "_").split("[")[0]
+            self._lib = importlib.import_module(_mod_name)
             self.initialized = True
-        except Exception as e:
+        except ImportError as e:
             print(f"Warning: Failed to initialize {name}: {{e}}")
+            print(f"Install the required library with: pip install {library}")
             
     def get_tools(self) -> List[Dict[str, Any]]:
         """获取可用工具列表"""

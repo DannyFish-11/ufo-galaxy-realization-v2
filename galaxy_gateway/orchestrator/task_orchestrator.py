@@ -78,6 +78,8 @@ class TaskOrchestrator:
         self.task_queue: asyncio.Queue = asyncio.Queue()
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
+        # Round-robin index for distributing tasks across connected devices.
+        self._device_rr_index: int = -1
         
     async def start(self):
         """启动编排器"""
@@ -184,9 +186,9 @@ class TaskOrchestrator:
         if not connected_devices:
             return None
         
-        # 简单策略：选择第一个在线设备
-        # TODO: 可以扩展为更复杂的负载均衡策略
-        return connected_devices[0]
+        # Round-robin selection: distribute tasks evenly across connected devices.
+        self._device_rr_index = (self._device_rr_index + 1) % len(connected_devices)
+        return connected_devices[self._device_rr_index]
     
     async def _decompose_task(self, task: Task) -> List[Command]:
         """分解任务为命令序列"""

@@ -8,8 +8,11 @@ NOTE: Node_33 (ADB) 和 Node_34 (Scrcpy) 功能有较大重叠——两者都封
 命令实现 tap/swipe/shell/screenshot/input/keyevent。区别在于:
   - Node_33: 异步 (asyncio), 有安全中间件, 自动重连, 通用 /execute 入口
   - Node_34: 同步 (subprocess), 有 MCP 接口, 额外支持 install/packages/device_info
-TODO: 未来应将 Node_34 的独有功能 (install, packages, device_info, mcp/call)
-      迁移到 Node_33, 并让 Node_34 专注于真正的 scrcpy 屏幕镜像/投射。
+
+Architectural decision: Node_34's unique ADB features (install, packages, device_info,
+mcp/call) are intentionally kept here so Node_34 remains self-contained and can be
+deployed independently.  If consolidation is ever needed, those endpoints should be
+ported to Node_33 first, and Node_34 refocused exclusively on scrcpy screen mirroring.
 """
 import os
 import subprocess
