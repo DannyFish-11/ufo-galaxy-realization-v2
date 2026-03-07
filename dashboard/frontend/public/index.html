@@ -231,7 +231,8 @@
                 <!-- Tab 导航 -->
                 <div class="island-tabs">
                     <div class="island-tab" :class="{ active: tab === 'chat' }" @click="tab = 'chat'">💬 对话</div>
-                    <div class="island-tab" :class="{ active: tab === 'llm' }" @click="tab = 'llm'">🤖 LLM</div>
+                    <div class="island-tab" :class="{ active: tab === 'agents' }" @click="tab = 'agents'; loadAgents()">🤖 Agent</div>
+                    <div class="island-tab" :class="{ active: tab === 'llm' }" @click="tab = 'llm'">⚙️ LLM</div>
                     <div class="island-tab" :class="{ active: tab === 'tools' }" @click="tab = 'tools'">🔧 工具</div>
                     <div class="island-tab" :class="{ active: tab === 'nodes' }" @click="tab = 'nodes'">🌐 节点</div>
                 </div>
@@ -272,6 +273,62 @@
                             <div class="flex space-x-2 items-center">
                                 <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="island-input flex-1 px-4 py-2.5" style="font-size: 13px;">
                                 <button @click="sendMessage" class="send-btn px-5 py-2.5" style="font-size: 13px;">发送</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 工厂页 -->
+                    <div v-show="tab === 'agents'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <!-- 统计概览 -->
+                        <div class="glass-card p-4">
+                            <div class="grid grid-cols-3 gap-3 text-center">
+                                <div><div style="font-size: 22px; font-weight: 700; color: #7c5cfc;">{{ agents.filter(a => a.state === 'working').length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">活跃</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #0a84ff;">{{ agents.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">总数</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #30d158;">{{ agentTemplates.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">模板</div></div>
+                            </div>
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🏭 创建 Agent</div>
+                            <!-- 从模板创建 -->
+                            <div class="flex space-x-2 items-center mb-3">
+                                <select v-model="selectedTemplate" class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px; appearance: none;">
+                                    <option value="">选择模板...</option>
+                                    <option v-for="t in agentTemplates" :key="t.name" :value="t.name">{{ t.display_name }} ({{ t.role }})</option>
+                                </select>
+                                <button @click="createAgentFromTemplate" class="btn-sm btn-purple" :disabled="!selectedTemplate">从模板创建</button>
+                            </div>
+                            <!-- 智能创建 -->
+                            <div class="flex space-x-2 items-center">
+                                <input v-model="agentTaskDesc" type="text" placeholder="描述任务，LLM 自动生成 Agent..." class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;" @keypress.enter="createAgentDynamic">
+                                <button @click="createAgentDynamic" class="btn-sm btn-blue" :disabled="!agentTaskDesc.trim()">智能创建</button>
+                            </div>
+                            <div v-if="agentCreateStatus" class="mt-2" style="font-size: 11px;" :class="agentCreateStatus.success ? 'valid' : 'invalid'">{{ agentCreateStatus.message }}</div>
+                        </div>
+
+                        <!-- Agent 列表 -->
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">📋 Agent 列表</span>
+                                <button @click="loadAgents" class="btn-sm btn-blue">刷新</button>
+                            </div>
+                            <div v-if="agents.length === 0" style="text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 20px 0;">暂无 Agent，从上方创建</div>
+                            <div class="space-y-2">
+                                <div v-for="agent in agents" :key="agent.id" class="provider-chip flex items-center justify-between">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="status-dot" :class="agent.state === 'working' ? 'online' : (agent.state === 'error' || agent.state === 'terminated' ? 'offline' : '')"></span>
+                                            <span style="font-size: 12px; font-weight: 600;">{{ agent.name }}</span>
+                                            <span style="font-size: 10px; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 6px;">{{ agent.role }}</span>
+                                        </div>
+                                        <div style="font-size: 10px; color: rgba(255,255,255,0.25); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ agent.description }}</div>
+                                    </div>
+                                    <div class="flex space-x-1.5 ml-2">
+                                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px;" :style="{ background: agent.state === 'working' ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.05)', color: agent.state === 'working' ? '#30d158' : 'rgba(255,255,255,0.35)' }">{{ agent.state }}</span>
+                                        <button @click="deleteAgent(agent.id)" class="btn-sm" style="background: rgba(255,69,58,0.15); color: #ff453a; padding: 2px 8px; font-size: 10px;">删除</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -430,6 +487,12 @@
                     qwen: { name: '通义千问', apiKey: '', valid: false }
                 });
 
+                const agents = ref([]);
+                const agentTemplates = ref([]);
+                const selectedTemplate = ref('');
+                const agentTaskDesc = ref('');
+                const agentCreateStatus = ref(null);
+
                 const tools = ref([]);
                 const nodes = ref([]);
                 const testMessage = ref('Hello');
@@ -453,6 +516,36 @@
                 };
                 const loadNodes = async () => {
                     try { nodes.value = (await axios.get('/api/v1/config/nodes')).data.nodes || []; } catch (e) { console.error(e); }
+                };
+
+                const loadAgents = async () => {
+                    try { agents.value = (await axios.get('/api/v1/agents')).data.agents || []; } catch (e) { console.error(e); }
+                };
+                const loadAgentTemplates = async () => {
+                    try { agentTemplates.value = (await axios.get('/api/v1/agents/templates')).data.templates || []; } catch (e) { console.error(e); }
+                };
+                const createAgentFromTemplate = async () => {
+                    if (!selectedTemplate.value) return;
+                    agentCreateStatus.value = null;
+                    try {
+                        const r = await axios.post('/api/v1/agents/create', { template: selectedTemplate.value });
+                        agentCreateStatus.value = { success: true, message: `Agent "${r.data.agent.name}" 创建成功` };
+                        selectedTemplate.value = '';
+                        loadAgents();
+                    } catch (e) { agentCreateStatus.value = { success: false, message: '创建失败: ' + (e.response?.data?.error || e.message) }; }
+                };
+                const createAgentDynamic = async () => {
+                    if (!agentTaskDesc.value.trim()) return;
+                    agentCreateStatus.value = { success: true, message: '智能生成中...' };
+                    try {
+                        const r = await axios.post('/api/v1/agents/create/dynamic', { task_description: agentTaskDesc.value.trim() });
+                        agentCreateStatus.value = { success: true, message: `Agent "${r.data.agent.name}" 智能生成成功` };
+                        agentTaskDesc.value = '';
+                        loadAgents();
+                    } catch (e) { agentCreateStatus.value = { success: false, message: '生成失败: ' + (e.response?.data?.error || e.message) }; }
+                };
+                const deleteAgent = async (agentId) => {
+                    try { await axios.delete('/api/v1/agents/' + agentId); loadAgents(); } catch (e) { alert('删除失败: ' + (e.response?.data?.error || e.message)); }
                 };
 
                 const saveOneAPI = async () => {
@@ -511,13 +604,15 @@
 
                 onMounted(() => {
                     updateTime(); setInterval(updateTime, 1000);
-                    loadConfigStatus(); loadTools(); loadNodes();
+                    loadConfigStatus(); loadTools(); loadNodes(); loadAgentTemplates();
                 });
 
                 return {
                     isExpanded, tab, messages, inputMessage, isLoading, currentTime, chatContainer,
                     configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes,
                     testMessage, testResult, configuredCount,
+                    agents, agentTemplates, selectedTemplate, agentTaskDesc, agentCreateStatus,
+                    loadAgents, createAgentFromTemplate, createAgentDynamic, deleteAgent,
                     saveOneAPI, validateOneAPI, saveProvider, validateProvider,
                     saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage, formatTime
                 };
