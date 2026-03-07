@@ -28,6 +28,7 @@ UFO Galaxy - 系统启动引导
 import asyncio
 import logging
 import os
+import signal
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -106,6 +107,45 @@ def _validate_startup_deps() -> List[str]:
     return errors
 
 
+def _check_pip_dependencies() -> dict:
+    """检查关键 pip 依赖是否已安装"""
+    import importlib.metadata as _meta
+
+    core_packages = ["fastapi", "uvicorn", "pydantic"]
+    optional_packages = [
+        "aiohttp", "psutil", "python-multipart", "cryptography",
+        "Pillow", "feedparser", "bleak", "asyncssh",
+    ]
+
+    missing_core = []
+    missing_optional = []
+
+    for pkg in core_packages:
+        try:
+            _meta.version(pkg)
+        except _meta.PackageNotFoundError:
+            missing_core.append(pkg)
+
+    for pkg in optional_packages:
+        try:
+            _meta.version(pkg)
+        except _meta.PackageNotFoundError:
+            missing_optional.append(pkg)
+
+    return {
+        "status": "ok" if not missing_core else "degraded",
+        "missing_core": missing_core,
+        "missing_optional": missing_optional,
+    }
+
+
+async def _handle_signal(sig):
+    """处理 SIGTERM/SIGINT 信号，优雅关闭"""
+    logger.info(f"收到信号 {sig.name}，开始优雅关闭...")
+    await shutdown_subsystems()
+    logger.info("优雅关闭完成")
+
+
 async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     """
     启动所有核心子系统并挂载中间件
@@ -124,6 +164,28 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     """
     results = {}
     t0 = time.monotonic()
+
+    # Step 0: pip 依赖可用性检查
+    try:
+        dep_report = _check_pip_dependencies()
+        if dep_report["missing_core"]:
+            logger.error(f"缺少核心依赖: {dep_report['missing_core']}")
+            logger.error("安装命令: pip install " + " ".join(dep_report['missing_core']))
+        for pkg in dep_report.get("missing_optional", []):
+            logger.warning(f"可选依赖未安装: {pkg}")
+        results["dependency_check"] = dep_report
+    except Exception as e:
+        logger.warning(f"依赖检查跳过: {e}")
+        results["dependency_check"] = {"status": "skipped", "error": str(e)}
+
+    # 注册信号处理器
+    try:
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_handle_signal(s)))
+        logger.info("已注册 SIGTERM/SIGINT 信号处理器")
+    except (RuntimeError, NotImplementedError):
+        logger.warning("无法注册信号处理器（可能在非主线程或 Windows 环境）")
 
     # 启动前校验依赖图
     dep_errors = _validate_startup_deps()

@@ -17,6 +17,11 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
 
+try:
+    from core.monitoring import CircuitBreaker
+except ImportError:
+    CircuitBreaker = None
+
 logger = logging.getLogger("UFO-Galaxy.AgentFactory")
 
 
@@ -341,6 +346,11 @@ class AgentFactory:
         self.message_bus = get_message_bus()
         self._cleanup_task: Optional[asyncio.Task] = None
         self._creation_timestamps: List[float] = []  # 速率限制追踪
+        # LLM 调用熔断器
+        self._llm_circuit_breaker = (
+            CircuitBreaker(name="agent_llm", failure_threshold=5, recovery_timeout=30.0)
+            if CircuitBreaker else None
+        )
         self._load_state()
         logger.info("AgentFactory 已初始化")
 
@@ -673,15 +683,22 @@ class AgentFactory:
 
             try:
                 if self.llm_router:
-                    # 用 LLM 执行
+                    # 用 LLM 执行（带熔断器保护）
                     messages = [
                         {"role": "system", "content": agent.config.system_prompt},
                         {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
                     ]
-                    resp = await self.llm_router.chat(
-                        messages=messages,
-                        task_type="agent_control",
-                    )
+
+                    async def _llm_call():
+                        return await self.llm_router.chat(
+                            messages=messages,
+                            task_type="agent_control",
+                        )
+
+                    if self._llm_circuit_breaker:
+                        resp = await self._llm_circuit_breaker.execute(_llm_call)
+                    else:
+                        resp = await _llm_call()
                     result = {"task": task, "output": resp.content, "provider": resp.provider}
                 else:
                     # 无 LLM，模拟执行
