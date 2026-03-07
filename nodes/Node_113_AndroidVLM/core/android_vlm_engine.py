@@ -3,17 +3,20 @@ Node 113: AndroidVLM - Android GUI 理解引擎
 
 功能：
 1. 调用 Android 无障碍服务截图
-2. 使用 VLM（Gemini/Qwen）分析截图
+2. 使用 VLM（Gemini/Qwen/Claude/GPT-4V）分析截图
 3. 智能查找元素
 4. 生成操作建议
+5. 长按 / 双击操作
+6. 步骤验证机制
+7. 错误恢复机制
+8. 多 VLM 支持（Gemini、Qwen、Claude、GPT-4V）
 
 依赖节点：
 - Node_90_MultimodalVision: VLM 分析
 - Node_33 (Android): 截图和操作
 
-版本：1.0.0
-日期：2026-01-24
-作者：Manus AI
+版本：1.1.0
+日期：2026-03-07
 """
 
 import os
@@ -24,29 +27,46 @@ import httpx
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+# 支持的 VLM 提供商列表
+SUPPORTED_VLM_PROVIDERS = ["auto", "gemini", "qwen", "claude", "gpt4v"]
+
+
 class AndroidVLMEngine:
     def __init__(self):
         # 节点地址
         self.node_90_url = os.getenv("NODE_90_MULTIMODAL_VISION_URL", "http://localhost:8090")
         self.android_agent_url = os.getenv("ANDROID_AGENT_URL", "http://192.168.1.100:8033")
         
-        # VLM 提供商
-        self.vlm_provider = os.getenv("VLM_PROVIDER", "auto")  # auto, gemini, qwen
-        
+        # VLM 提供商（支持 auto, gemini, qwen, claude, gpt4v）
+        self.vlm_provider = os.getenv("VLM_PROVIDER", "auto")
+
+        # Claude / GPT-4V 直连配置（当 Node_90 不可用时的后备）
+        self.claude_api_key = os.getenv("CLAUDE_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+
+        # 错误恢复：最大重试次数和重试间隔（秒）
+        self.max_retries = int(os.getenv("VLM_MAX_RETRIES", "3"))
+        self.retry_delay = float(os.getenv("VLM_RETRY_DELAY", "1.0"))
+
         # 缓存
         self.last_screenshot = None
         self.last_screenshot_time = None
         self.screenshot_cache_ttl = 2  # 秒
         
     async def _call_node(self, url: str, endpoint: str, data: dict, timeout: float = 30.0) -> dict:
-        """调用其他节点"""
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(f"{url}{endpoint}", json=data)
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        """调用其他节点（带重试 / 错误恢复）"""
+        last_error = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(f"{url}{endpoint}", json=data)
+                    response.raise_for_status()
+                    return response.json()
+            except Exception as e:
+                last_error = e
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay)
+        return {"success": False, "error": str(last_error), "retries": self.max_retries}
     
     async def capture_android_screen(self, use_cache: bool = True) -> Dict[str, Any]:
         """
@@ -94,12 +114,12 @@ class AndroidVLMEngine:
         provider: str = "auto"
     ) -> Dict[str, Any]:
         """
-        使用 VLM 分析屏幕
+        使用 VLM 分析屏幕（支持 Gemini / Qwen / Claude / GPT-4V）
         
         Args:
             query: 分析查询
             image_base64: 图片 Base64（如果为 None，自动截图）
-            provider: VLM 提供商（auto, gemini, qwen）
+            provider: VLM 提供商（auto, gemini, qwen, claude, gpt4v）
         
         Returns:
             {
@@ -115,19 +135,108 @@ class AndroidVLMEngine:
             if not screenshot_result.get("success"):
                 return screenshot_result
             image_base64 = screenshot_result["image"]
-        
-        # 调用 Node_90 分析
+
+        resolved_provider = provider if provider != "auto" else self.vlm_provider
+
+        # Claude 直连（绕过 Node_90）
+        if resolved_provider == "claude" and self.claude_api_key:
+            return await self._analyze_with_claude(query, image_base64)
+
+        # GPT-4V 直连（绕过 Node_90）
+        if resolved_provider == "gpt4v" and self.openai_api_key:
+            return await self._analyze_with_gpt4v(query, image_base64)
+
+        # 默认：调用 Node_90 分析（支持 gemini / qwen）
         result = await self._call_node(
             self.node_90_url,
             "/analyze_screen",
             {
                 "query": query,
                 "image_base64": image_base64,
-                "provider": provider if provider != "auto" else self.vlm_provider
+                "provider": resolved_provider
             }
         )
         
         return result
+
+    async def _analyze_with_claude(self, query: str, image_base64: str) -> Dict[str, Any]:
+        """使用 Claude (claude-3-5-sonnet) 直接分析截图"""
+        try:
+            headers = {
+                "x-api-key": self.claude_api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            payload = {
+                "model": "claude-3-5-sonnet-20241022",
+                "max_tokens": 1024,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": image_base64
+                                }
+                            },
+                            {"type": "text", "text": query}
+                        ]
+                    }
+                ]
+            }
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers=headers,
+                    json=payload
+                )
+                resp.raise_for_status()
+            data = resp.json()
+            analysis = data["content"][0]["text"]
+            return {"success": True, "analysis": analysis, "provider": "claude", "model": data.get("model", "claude-3-5-sonnet")}
+        except Exception as e:
+            return {"success": False, "error": str(e), "provider": "claude"}
+
+    async def _analyze_with_gpt4v(self, query: str, image_base64: str) -> Dict[str, Any]:
+        """使用 GPT-4V (gpt-4o) 直接分析截图"""
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.openai_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "gpt-4o",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image_base64}"
+                                }
+                            },
+                            {"type": "text", "text": query}
+                        ]
+                    }
+                ],
+                "max_tokens": 1024
+            }
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers=headers,
+                    json=payload
+                )
+                resp.raise_for_status()
+            data = resp.json()
+            analysis = data["choices"][0]["message"]["content"]
+            return {"success": True, "analysis": analysis, "provider": "gpt4v", "model": data.get("model", "gpt-4o")}
+        except Exception as e:
+            return {"success": False, "error": str(e), "provider": "gpt4v"}
     
     async def find_element_with_vlm(
         self,
@@ -229,6 +338,134 @@ class AndroidVLMEngine:
             }
         else:
             return click_result
+
+    async def long_press(
+        self,
+        description: str,
+        duration_ms: int = 1000,
+        confidence: float = 0.8
+    ) -> Dict[str, Any]:
+        """
+        长按操作（截图 -> VLM 查找 -> 长按）
+
+        Args:
+            description: 元素描述
+            duration_ms: 长按持续时间（毫秒，默认 1000ms）
+            confidence: 置信度阈值
+
+        Returns:
+            {"success": bool, "long_pressed": bool, "element": str, "position": {...}}
+        """
+        find_result = await self.find_element_with_vlm(description, confidence=confidence)
+
+        if not find_result.get("success"):
+            return find_result
+
+        if not find_result.get("found"):
+            return {"success": True, "long_pressed": False, "reason": "Element not found"}
+
+        position = find_result["position"]
+        result = await self._call_node(
+            self.android_agent_url,
+            "/node/33",
+            {
+                "action": "long_press",
+                "x": position["x"],
+                "y": position["y"],
+                "duration": duration_ms
+            }
+        )
+
+        if result.get("success"):
+            return {
+                "success": True,
+                "long_pressed": True,
+                "element": find_result["element"],
+                "position": position,
+                "duration_ms": duration_ms,
+                "confidence": find_result["confidence"]
+            }
+        return result
+
+    async def double_click(
+        self,
+        description: str,
+        interval_ms: int = 100,
+        confidence: float = 0.8
+    ) -> Dict[str, Any]:
+        """
+        双击操作（截图 -> VLM 查找 -> 双击）
+
+        Args:
+            description: 元素描述
+            interval_ms: 两次点击的间隔（毫秒，默认 100ms）
+            confidence: 置信度阈值
+
+        Returns:
+            {"success": bool, "double_clicked": bool, "element": str, "position": {...}}
+        """
+        find_result = await self.find_element_with_vlm(description, confidence=confidence)
+
+        if not find_result.get("success"):
+            return find_result
+
+        if not find_result.get("found"):
+            return {"success": True, "double_clicked": False, "reason": "Element not found"}
+
+        position = find_result["position"]
+        result = await self._call_node(
+            self.android_agent_url,
+            "/node/33",
+            {
+                "action": "double_click",
+                "x": position["x"],
+                "y": position["y"],
+                "interval": interval_ms
+            }
+        )
+
+        if result.get("success"):
+            return {
+                "success": True,
+                "double_clicked": True,
+                "element": find_result["element"],
+                "position": position,
+                "confidence": find_result["confidence"]
+            }
+        return result
+
+    async def execute_with_recovery(
+        self,
+        action_fn,
+        *args,
+        max_retries: int = 3,
+        recovery_wait: float = 1.0,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        带错误恢复的操作执行器
+
+        Args:
+            action_fn: 要执行的异步动作函数
+            *args: 传递给 action_fn 的位置参数
+            max_retries: 最大重试次数
+            recovery_wait: 每次重试前等待时间（秒）
+            **kwargs: 传递给 action_fn 的关键字参数
+
+        Returns:
+            action_fn 的返回值，或最后一次失败的错误信息
+        """
+        last_result = None
+        for attempt in range(1, max_retries + 1):
+            last_result = await action_fn(*args, **kwargs)
+            if last_result.get("success"):
+                return last_result
+            if attempt < max_retries:
+                await asyncio.sleep(recovery_wait)
+                # 重新截图以刷新视图缓存
+                self.last_screenshot = None
+        last_result["recovery_attempts"] = max_retries
+        return last_result
     
     async def smart_swipe(
         self,
@@ -422,9 +659,13 @@ class AndroidVLMEngine:
   "steps": [
     {{
       "step": 1,
-      "action": "click" / "swipe" / "input" / "wait",
+      "action": "click" / "long_press" / "double_click" / "swipe" / "input" / "wait",
       "target": "目标元素描述",
-      "description": "步骤描述"
+      "description": "步骤描述",
+      "duration_ms": 1000,
+      "interval_ms": 100,
+      "text": "（input 时填写）",
+      "direction": "up/down/left/right（swipe 时填写）"
     }}
   ]
 }}
@@ -433,6 +674,7 @@ class AndroidVLMEngine:
 1. 最多 {max_steps} 步
 2. 每一步都要基于当前界面的实际内容
 3. 如果当前界面无法完成任务，请说明原因
+4. 支持 long_press（长按）和 double_click（双击）操作
 """
         
         analysis_result = await self.analyze_screen(
@@ -475,14 +717,16 @@ class AndroidVLMEngine:
     async def execute_action_plan(
         self,
         steps: List[Dict[str, Any]],
-        verify_each_step: bool = True
+        verify_each_step: bool = True,
+        use_recovery: bool = True
     ) -> Dict[str, Any]:
         """
-        执行操作计划
+        执行操作计划（支持长按、双击、错误恢复）
         
         Args:
             steps: 步骤列表
             verify_each_step: 是否在每步后验证结果
+            use_recovery: 是否启用错误恢复（自动重试失败步骤）
         
         Returns:
             {
@@ -499,25 +743,40 @@ class AndroidVLMEngine:
             action = step.get("action")
             target = step.get("target")
             
-            # 执行步骤
-            if action == "click":
-                result = await self.smart_click(target)
-            elif action == "swipe":
-                result = await self.smart_swipe(
-                    direction=step.get("direction", "up"),
-                    target=target
-                )
-            elif action == "input":
-                result = await self.smart_input(
-                    text=step.get("text", ""),
-                    target=target
-                )
-            elif action == "wait":
-                # 等待
-                await asyncio.sleep(1)
-                result = {"success": True, "action": "wait"}
+            # 执行步骤（支持 long_press / double_click）
+            async def _execute_step():
+                if action == "click":
+                    return await self.smart_click(target)
+                elif action == "long_press":
+                    return await self.long_press(
+                        target,
+                        duration_ms=step.get("duration_ms", 1000)
+                    )
+                elif action == "double_click":
+                    return await self.double_click(
+                        target,
+                        interval_ms=step.get("interval_ms", 100)
+                    )
+                elif action == "swipe":
+                    return await self.smart_swipe(
+                        direction=step.get("direction", "up"),
+                        target=target
+                    )
+                elif action == "input":
+                    return await self.smart_input(
+                        text=step.get("text", ""),
+                        target=target
+                    )
+                elif action == "wait":
+                    await asyncio.sleep(step.get("seconds", 1))
+                    return {"success": True, "action": "wait"}
+                else:
+                    return {"success": False, "error": f"Unknown action: {action}"}
+
+            if use_recovery:
+                result = await self.execute_with_recovery(_execute_step)
             else:
-                result = {"success": False, "error": f"Unknown action: {action}"}
+                result = await _execute_step()
             
             results.append({
                 "step": step_num,
@@ -543,8 +802,7 @@ class AndroidVLMEngine:
                     target=target,
                     expected_outcome=step.get("expected_outcome", "")
                 )
-                if not verification.get("verified", True):
-                    results[-1]["verification"] = verification
+                results[-1]["verification"] = verification
         
         return {
             "success": True,

@@ -311,10 +311,10 @@ export MEMOS_TOKEN=your_access_token
 ## 未来计划
 
 - [ ] 添加 Google Scholar 支持
-- [ ] 添加 IEEE Xplore 支持
+- [x] 添加 IEEE Xplore 支持
 - [ ] 实现论文全文下载
-- [ ] 实现引用网络可视化
-- [ ] 集成 AgentCPM 进行深度分析
+- [x] 实现引用网络可视化
+- [x] 集成 AgentCPM 进行深度分析
 
 ---
 

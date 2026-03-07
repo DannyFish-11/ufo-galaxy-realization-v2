@@ -855,3 +855,64 @@ async def export_academic_bibtex(paper_ids: List[str]):
         "count": len(paper_ids),
         "bibtex": bibtex
     }
+
+
+@app.get("/academic/keywords/{paper_id:path}")
+async def extract_paper_keywords(paper_id: str, top_n: int = Query(default=10, ge=1, le=30)):
+    """自动提取论文关键词"""
+    memos = await academic_manager.search_paper_notes(paper_id)
+    if not memos:
+        raise HTTPException(status_code=404, detail="未找到该论文笔记")
+    keywords = await academic_manager.extract_keywords_from_memo(memos[0], top_n)
+    return {
+        "paper_id": paper_id,
+        "keywords": keywords,
+        "count": len(keywords)
+    }
+
+
+@app.get("/academic/similarity")
+async def compute_paper_similarity(
+    paper_id_a: str = Query(..., description="第一篇论文 ID"),
+    paper_id_b: str = Query(..., description="第二篇论文 ID")
+):
+    """计算两篇论文的相似度（基于关键词 Jaccard 相似度）"""
+    similarity = await academic_manager.compute_similarity(paper_id_a, paper_id_b)
+    return {
+        "paper_id_a": paper_id_a,
+        "paper_id_b": paper_id_b,
+        "similarity": similarity
+    }
+
+
+@app.get("/academic/recommend/{paper_id:path}")
+async def recommend_related_papers(
+    paper_id: str,
+    top_n: int = Query(default=5, ge=1, le=20)
+):
+    """推荐与目标论文相关的论文（基于关键词相似度）"""
+    recommendations = await academic_manager.recommend_related_papers(paper_id, top_n)
+    return {
+        "paper_id": paper_id,
+        "recommendations": recommendations,
+        "count": len(recommendations)
+    }
+
+
+class LiteratureReviewRequest(BaseModel):
+    paper_ids: List[str]
+    topic: Optional[str] = ""
+
+
+@app.post("/academic/literature_review")
+async def generate_literature_review(request: LiteratureReviewRequest):
+    """自动生成文献综述（Markdown 格式）"""
+    review = await academic_manager.generate_literature_review(
+        request.paper_ids,
+        request.topic or ""
+    )
+    return {
+        "topic": request.topic,
+        "paper_count": len(request.paper_ids),
+        "review": review
+    }

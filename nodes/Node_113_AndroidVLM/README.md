@@ -378,12 +378,12 @@ curl -X POST http://localhost:8113/analyze_screen \
 
 ## 未来计划
 
-- [ ] 支持更多 VLM 模型（Claude, GPT-4V）
+- [x] 支持更多 VLM 模型（Claude, GPT-4V）
 - [ ] 添加本地 VLM（ScreenAI, Ferret-UI）
 - [ ] 优化截图缓存策略
-- [ ] 添加步骤验证机制
-- [ ] 支持更复杂的操作（长按、双击）
-- [ ] 添加错误恢复机制
+- [x] 添加步骤验证机制
+- [x] 支持更复杂的操作（长按、双击）
+- [x] 添加错误恢复机制
 
 ---
 
