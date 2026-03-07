@@ -165,6 +165,48 @@ async def run_demo():
     finally:
         await system.stop()
 
+async def run_interactive():
+    """运行交互模式：读取用户输入的任务描述并执行"""
+    import uuid
+    system = FusionSystem(str(PROJECT_ROOT / "config"))
+
+    try:
+        await system.start_gateway()
+        await system.initialize()
+
+        logger.info("="*80)
+        logger.info("🎛️  UFO Galaxy Fusion — Interactive Mode")
+        logger.info("Type a task description and press Enter. Type 'quit' to exit.")
+        logger.info("="*80)
+
+        loop = asyncio.get_event_loop()
+        while True:
+            try:
+                description = await loop.run_in_executor(None, lambda: input("task> "))
+                description = description.strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+
+            if not description or description.lower() in {"quit", "exit", "q"}:
+                break
+
+            task = Task(
+                task_id=f"interactive_{uuid.uuid4().hex[:8]}",
+                description=description,
+                task_type=TaskType.HYBRID,
+                priority=TaskPriority.NORMAL,
+                required_capabilities=["analysis"],
+            )
+
+            result = await system.execute_task(task)
+            logger.info("✅ Result: %s", result)
+
+    except Exception as e:
+        logger.error("❌ Interactive mode error: %s", e, exc_info=True)
+    finally:
+        await system.stop()
+
+
 def main():
     """主入口"""
     import argparse
@@ -176,7 +218,7 @@ def main():
         if args.mode == "demo":
             asyncio.run(run_demo())
         else:
-            logger.info("Interactive mode not implemented in reinforced version yet.")
+            asyncio.run(run_interactive())
     except KeyboardInterrupt:
         logger.info("\n🛑 Interrupted by user")
     except Exception as e:

@@ -383,8 +383,8 @@ class SidebarUI(QWidget):
     
     def _start_voice_input(self):
         """开始语音输入"""
-        self.add_message("系统", "语音输入功能开发中...")
-        logger.info("语音输入功能待实现")
+        self.add_message("系统", "语音输入功能暂不可用（需要安装 speech_recognition 库）")
+        logger.info("语音输入功能不可用：未安装 speech_recognition 库")
     
     def add_message(self, sender: str, message: str):
         """添加消息到历史"""

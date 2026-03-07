@@ -104,15 +104,12 @@ class HomeKitAdapter:
     async def discover(self) -> List[SmartDevice]:
         """Discover HomeKit devices"""
         try:
-            # Use HAP-python or similar library
-            # This is a placeholder implementation
+            # HAP-python (pyhap) or a compatible library is required for real discovery.
+            # When available, replace this with:
+            #   from pyhap.accessory_driver import AccessoryDriver
+            #   driver = AccessoryDriver()
+            #   discovered = driver.discover()
             logger.info("Discovering HomeKit devices...")
-            
-            # In real implementation, use:
-            # from pyhap.accessory_driver import AccessoryDriver
-            # driver = AccessoryDriver()
-            # discovered = driver.discover()
-            
             return []
             
         except Exception as e:

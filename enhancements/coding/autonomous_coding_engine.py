@@ -3,6 +3,7 @@
 L4 系统根据自身实际情况自主利用工具编写代码
 """
 
+import io
 import logging
 import os
 import subprocess
@@ -78,6 +79,14 @@ class AutonomousCodingEngine:
         # 加载历史记录
         self._load_coding_history()
 
+        # 每个实例使用独立的日志缓冲区，在 autonomous_code() 期间临时挂载到模块 logger
+        self._exec_log_buffer = io.StringIO()
+        self._exec_log_handler = logging.StreamHandler(self._exec_log_buffer)
+        self._exec_log_handler.setLevel(logging.DEBUG)
+        self._exec_log_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        )
+
         logger.info(f"AutonomousCodingEngine 初始化完成，工作空间: {self.workspace_root}")
         logger.info(f"可用工具: {', '.join(self.available_tools)}")
 
@@ -144,6 +153,11 @@ class AutonomousCodingEngine:
         Returns:
             编程结果
         """
+        # 将执行日志 handler 临时挂载到 module logger，确保本次调用的所有日志均被捕获
+        self._exec_log_buffer.truncate(0)
+        self._exec_log_buffer.seek(0)
+        logger.addHandler(self._exec_log_handler)
+
         logger.info(f"开始自主编程: {context.description}")
         logger.info(f"任务类型: {context.task_type.value}")
         
@@ -196,6 +210,9 @@ class AutonomousCodingEngine:
                 execution_log=self._get_execution_log(),
                 error=str(e)
             )
+        finally:
+            # 卸载 handler，避免影响其他调用或其他实例
+            logger.removeHandler(self._exec_log_handler)
     
     def _analyze_task(self, context: CodingContext) -> Dict:
         """分析任务"""
@@ -478,9 +495,8 @@ def test_edge_cases():
             json.dump(self.coding_history, f, indent=2)
     
     def _get_execution_log(self) -> str:
-        """获取执行日志"""
-        # 简化版本：返回最近的日志
-        return "Execution log placeholder"
+        """获取执行日志（返回本次 autonomous_code 调用期间记录的日志条目）"""
+        return self._exec_log_buffer.getvalue() or "No log entries recorded."
     
     def _get_timestamp(self) -> str:
         """获取时间戳"""
