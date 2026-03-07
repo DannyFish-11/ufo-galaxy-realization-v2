@@ -345,9 +345,10 @@ class NodeRegistry:
 
         params = params or {}
         start_time = datetime.now()
+        _TIMEOUT_ERROR = "Node call timeout after 30s"
 
         try:
-            result = await node.execute(action, params)
+            result = await asyncio.wait_for(node.execute(action, params), timeout=30)
 
             # 更新统计
             node.metadata.call_count += 1
@@ -358,6 +359,16 @@ class NodeRegistry:
             )
 
             return {"success": True, "data": result}
+
+        except asyncio.TimeoutError:
+            node.metadata.call_count += 1
+            node.metadata.status = NodeStatus.ERROR
+            node.metadata.error_message = _TIMEOUT_ERROR
+            logger.error(f"节点调用超时 {node_id}.{action}: 超过 30 秒")
+
+            if allow_failover:
+                return await self._failover_call(node_id, action, params, _TIMEOUT_ERROR)
+            return {"success": False, "error": _TIMEOUT_ERROR}
 
         except Exception as e:
             node.metadata.call_count += 1

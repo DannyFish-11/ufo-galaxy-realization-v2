@@ -14,6 +14,7 @@ import sys
 import time
 import subprocess
 import signal
+import threading
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -36,6 +37,7 @@ class SmartLauncher:
         self.startup_times = {}  # node_name -> timestamp
         self.retry_counts = defaultdict(int)  # node_name -> retry_count
         self.max_retries = 3
+        self._stop_event = threading.Event()
         
     def _load_config(self) -> Dict:
         """加载配置文件"""
@@ -234,8 +236,8 @@ class SmartLauncher:
         print(f"{CYAN}按 Ctrl+C 停止监控{RESET}\n")
         
         try:
-            while True:
-                time.sleep(10)  # 每 10 秒检查一次
+            while not self._stop_event.is_set():
+                self._stop_event.wait(timeout=10)  # 每 10 秒检查一次，支持立即响应信号
                 
                 for node_name in list(self.processes.keys()):
                     if not self._check_node_health(node_name):
@@ -257,6 +259,7 @@ class SmartLauncher:
                             print(f"{RED}{node_name} 已达到最大重试次数，放弃重启{RESET}")
         
         except KeyboardInterrupt:
+            self._stop_event.set()
             print(f"\n{YELLOW}监控已停止{RESET}")
     
     def status(self):

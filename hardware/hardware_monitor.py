@@ -123,6 +123,7 @@ class HardwareMonitor:
         """
         self.config = config or {}
         self._running = False
+        self._stop_event = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
         self._watchdog_thread: Optional[threading.Thread] = None
         
@@ -152,6 +153,7 @@ class HardwareMonitor:
             return
         
         self._running = True
+        self._stop_event.clear()
         
         # Start monitoring thread
         self._monitor_thread = threading.Thread(
@@ -174,6 +176,7 @@ class HardwareMonitor:
     def stop_monitoring(self):
         """Stop hardware monitoring"""
         self._running = False
+        self._stop_event.set()
         
         if self._monitor_thread:
             self._monitor_thread.join(timeout=5)
@@ -462,7 +465,9 @@ class HardwareMonitor:
     def _watchdog_loop(self):
         """Hardware watchdog loop"""
         while self._running:
-            time.sleep(1)
+            self._stop_event.wait(timeout=1)  # 支持外部事件立即中断等待
+            if not self._running:
+                break
             
             # Check if watchdog has been pet recently
             elapsed = time.time() - self._last_pet
