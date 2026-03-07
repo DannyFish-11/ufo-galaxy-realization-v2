@@ -7,4 +7,5 @@ pydantic>=2.5.0
 httpx>=0.25.0
 
 # AI/LLM Integration (if needed by nodes)
-openai>=2.0.0
+# Aligned with root requirements.txt: openai>=1.0.0 (was >=2.0.0, which conflicted)
+openai>=1.0.0

@@ -2,21 +2,22 @@
 line-length = 120
 target-version = ["py311"]
 include = "\\.pyi?$"
-exclude = """
-/(\
-  \.git\
-| \.venv\
-| venv\
-| build\
-| dist\
-| node_modules\
-| __pycache__\
-| \.mypy_cache\
-| \.pytest_cache\
-| \.tox\
-| external\
-| chroma_db\
-)////"""
+exclude = '''
+/(
+  \.git
+| \.venv
+| venv
+| build
+| dist
+| node_modules
+| __pycache__
+| \.mypy_cache
+| \.pytest_cache
+| \.tox
+| external
+| chroma_db
+)/
+'''
 
 [tool.isort]
 profile = "black"
