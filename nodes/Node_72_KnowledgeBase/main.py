@@ -257,12 +257,12 @@ async def main():
     # --- 模拟一些操作 ---
     try:
         # 1. 添加一些知识
-        await service.add_knowledge("UFO Galaxy 是一个面向未来的分布式智能操作系统。", {"source": "official_doc"})
+        await service.add_knowledge("Galaxy 是一个面向未来的分布式智能操作系统。", {"source": "official_doc"})
         await service.add_knowledge("知识库节点使用向量数据库存储和检索信息。", {"source": "tech_spec"})
         await service.add_knowledge("Python 是世界上最受欢迎的编程语言之一。", {"source": "survey_2024"})
 
         # 2. 进行一次检索
-        query = "UFO Galaxy 是什么"
+        query = "Galaxy 是什么"
         search_results = await service.search_knowledge(query)
         logger.info(f"对 '{query}' 的检索结果:")
         for entry_id, score, content in search_results:

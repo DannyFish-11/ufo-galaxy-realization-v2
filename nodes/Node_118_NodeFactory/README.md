@@ -213,7 +213,7 @@ engine = NodeFactoryEngine(output_dir="/path/to/output")
 ## 启动节点
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes/nodes/node_115_node_factory
+cd /path/to/galaxy-enhanced-nodes/nodes/node_115_node_factory
 python server.py
 ```
 
@@ -224,7 +224,7 @@ python server.py
 ## 测试
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes
+cd /path/to/galaxy-enhanced-nodes
 python -m pytest tests/test_node_115.py -v
 ```
 

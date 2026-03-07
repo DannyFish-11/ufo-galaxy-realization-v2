@@ -236,7 +236,7 @@ async def save_to_memos(paper: Dict) -> bool:
 {' '.join(['#' + tag.replace(' ', '_') for tag in paper['tags']])}
 
 ---
-*由 UFO³ Galaxy Node_97 自动保存于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+*由 Galaxy Node_97 自动保存于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
 """
         
         # 调用 Memos API

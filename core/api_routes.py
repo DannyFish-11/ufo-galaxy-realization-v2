@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 完整 API 路由模块
+Galaxy - 完整 API 路由模块
 ================================
 
 提供 Android 端和 Web UI 需要的所有 REST API 和 WebSocket 端点。
@@ -48,7 +48,7 @@ except ImportError:
     async def require_auth():
         return {"authenticated": True, "dev_mode": True}
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 # ---------------------------------------------------------------------------
 # Re-export shared state and models for backward compatibility
@@ -136,7 +136,7 @@ async def _chat_with_gemini(req: ChatRequest, api_key: str) -> JSONResponse:
             json={
                 "contents": contents,
                 "systemInstruction": {
-                    "parts": [{"text": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
+                    "parts": [{"text": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
                 }
             }
         )
@@ -155,7 +155,7 @@ async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
     """使用 OpenRouter API 进行对话"""
     import httpx
 
-    messages = [{"role": "system", "content": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
+    messages = [{"role": "system", "content": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
     for ctx in req.context[-10:]:
         messages.append(ctx)
     messages.append({"role": "user", "content": req.message})

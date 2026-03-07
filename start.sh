@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# UFO Galaxy - L4 级自主性智能系统
+# Galaxy - L4 级自主性智能系统
 # 一键启动脚本 (Linux/Mac)
 #
 
@@ -19,7 +19,7 @@ print_banner() {
     echo -e "${CYAN}"
     echo "  ╔═══════════════════════════════════════════════════════════╗"
     echo "  ║                                                           ║"
-    echo "  ║              UFO Galaxy 启动器                            ║"
+    echo "  ║              Galaxy 启动器                            ║"
     echo "  ║              L4 级自主性智能系统                          ║"
     echo "  ║                                                           ║"
     echo "  ╚═══════════════════════════════════════════════════════════╝"
@@ -90,7 +90,7 @@ pip install -q -r requirements.txt 2>/dev/null || pip install -r requirements.tx
 
 # 启动系统
 echo ""
-print_status "info" "启动 UFO Galaxy..."
+print_status "info" "启动 Galaxy..."
 print_status "info" "控制面板: http://localhost:${WEB_UI_PORT:-8080}"
 print_status "info" "API 文档: http://localhost:${WEB_UI_PORT:-8080}/docs"
 print_status "info" "健康检查: http://localhost:${WEB_UI_PORT:-8080}/api/health"

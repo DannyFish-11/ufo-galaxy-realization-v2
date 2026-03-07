@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Node Execution Helpers
+Galaxy - Node Execution Helpers
 =====================================
 
 Shared helpers for loading and executing node fusion_entry.py modules.
@@ -11,7 +11,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 # Root path to the nodes/ directory
 nodes_root: str = os.path.join(

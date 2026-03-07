@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 自主调度器 (Autonomous Scheduler)
+Galaxy - 自主调度器 (Autonomous Scheduler)
 ==============================================
 
 核心 ReAct Loop:
@@ -360,7 +360,7 @@ class AutonomousScheduler:
         except Exception as e:
             logger.debug(f"RAG enhancement skipped: {e}")
 
-        system_prompt = f"""You are the central AI scheduler of UFO Galaxy, a multi-device agent operating system.
+        system_prompt = f"""You are the central AI scheduler of Galaxy, a multi-device agent operating system.
 Your goal: satisfy the user's request by calling the available tools.
 You operate in a ReAct loop: Think → Act (call tools) → Observe results → Think again.
 

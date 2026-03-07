@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - SKILL.md 测试
+Galaxy - SKILL.md 测试
 =========================
 
 测试 SKILL.md 格式加载器
@@ -81,7 +81,7 @@ async def test_cli():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy SKILL.md 测试")
+    print("Galaxy SKILL.md 测试")
     print("=" * 60)
     
     results = []

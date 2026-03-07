@@ -1,8 +1,8 @@
-# UFO Galaxy 核心逻辑层修复报告
+# Galaxy 核心逻辑层修复报告
 
 ## 修复概述
 
-本次修复针对UFO Galaxy系统的4个P0级核心模块进行了全面重构，将模拟实现替换为真实可用的代码。
+本次修复针对Galaxy系统的4个P0级核心模块进行了全面重构，将模拟实现替换为真实可用的代码。
 
 ---
 
@@ -478,8 +478,8 @@ assert "temperatures" in status
 
 ```bash
 # 克隆仓库
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/galaxy-realization.git
+cd galaxy-realization
 
 # 复制修复文件
 cp /mnt/okcomputer/output/enhancements/reasoning/autonomous_coder_fixed.py enhancements/reasoning/

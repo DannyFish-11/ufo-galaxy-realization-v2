@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Chat Routes
+Galaxy - Chat Routes
 ==========================
 
 Routes:
@@ -18,7 +18,7 @@ from core.routes._helpers import nodes_root, _load_node, _execute_node
 from core.routes._models import ChatRequest
 from core.unified_response import UnifiedChatResponse
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 # 操作意图关键词 — 命中时走 ReAct Agent 调度而非纯聊天
 _ACTION_KEYWORDS_ZH = [
@@ -226,7 +226,7 @@ async def _handle_pure_chat(
         try:
             messages = [
                 {"role": "system", "content": (
-                    "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。\n"
+                    "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。\n"
                     "当用户想要操作设备时，请告诉他们直接描述操作指令即可，"
                     "系统会自动调度 Agent 执行。例如: '帮我打开手机上的微信'。"
                 )},

@@ -1,5 +1,5 @@
 """
-UFO Galaxy v5.0 - Android Bridge Module
+Galaxy v5.0 - Android Bridge Module
 Android Device Integration System
 
 This module provides Android device integration through ADB commands,
@@ -14,7 +14,7 @@ Features:
 - Logcat monitoring
 - File transfer
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -294,7 +294,7 @@ class ADBCommandExecutor:
 
 class AndroidBridge:
     """
-    Android Bridge for UFO Galaxy
+    Android Bridge for Galaxy
     
     Provides Android device integration through ADB commands,
     screen capture, device control, and app management.

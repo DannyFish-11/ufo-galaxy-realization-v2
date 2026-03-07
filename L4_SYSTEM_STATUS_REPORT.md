@@ -1,4 +1,4 @@
-# UFO Galaxy L4 级自主性智能系统 - 完整状态报告
+# Galaxy L4 级自主性智能系统 - 完整状态报告
 
 **生成时间**: 2025-02-05  
 **系统版本**: v1.0.0-L4  
@@ -8,7 +8,7 @@
 
 ## 🎯 执行摘要
 
-UFO Galaxy 系统已成功达到 **L4 级自主性智能**，能够通过自然语言理解用户意图，自主分解复杂目标，智能匹配物理设备资源，生成可执行的跨设备协同计划。系统已通过完整的端到端测试，包括环境感知、目标分解、自主规划、世界模型、元认知服务、自主编程和物理设备控制等七大核心模块。
+Galaxy 系统已成功达到 **L4 级自主性智能**，能够通过自然语言理解用户意图，自主分解复杂目标，智能匹配物理设备资源，生成可执行的跨设备协同计划。系统已通过完整的端到端测试，包括环境感知、目标分解、自主规划、世界模型、元认知服务、自主编程和物理设备控制等七大核心模块。
 
 ---
 
@@ -199,23 +199,23 @@ nodes/
 ### 启动脚本
 
 - **L4 启动**: `start_l4.py`
-- **系统服务**: `deployment/ufo-galaxy-l4.service`
+- **系统服务**: `deployment/galaxy-l4.service`
 - **配置文件**: `config/l4_config.json`
 
 ### 自动启动
 
 ```bash
 # 复制服务文件
-sudo cp deployment/ufo-galaxy-l4.service /etc/systemd/system/
+sudo cp deployment/galaxy-l4.service /etc/systemd/system/
 
 # 启用自动启动
-sudo systemctl enable ufo-galaxy-l4
+sudo systemctl enable galaxy-l4
 
 # 启动服务
-sudo systemctl start ufo-galaxy-l4
+sudo systemctl start galaxy-l4
 
 # 查看状态
-sudo systemctl status ufo-galaxy-l4
+sudo systemctl status galaxy-l4
 ```
 
 ---
@@ -368,13 +368,13 @@ sudo systemctl status ufo-galaxy-l4
 
 ## 📞 联系方式
 
-- **GitHub**: https://github.com/DannyFish-11/ufo-galaxy-realization
-- **Android**: https://github.com/DannyFish-11/ufo-galaxy-android
+- **GitHub**: https://github.com/DannyFish-11/galaxy-realization
+- **Android**: https://github.com/DannyFish-11/galaxy-android
 - **Commit**: 8aa4bc8 (server), 75237fd (android)
 
 ---
 
-**报告生成**: UFO Galaxy L4 System Status Reporter  
+**报告生成**: Galaxy L4 System Status Reporter  
 **版本**: v1.0.0  
 **日期**: 2025-02-05  
 **状态**: ✅ L4 级自主性智能系统已就绪！

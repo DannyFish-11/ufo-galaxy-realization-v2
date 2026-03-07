@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Node Executor (Gateway Optimized & Reinforced)
+Galaxy Fusion - Node Executor (Gateway Optimized & Reinforced)
 
 节点执行器 - 提供高级节点执行接口
 

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Shared Route State
+Galaxy - Shared Route State
 ================================
 
 Module-level singletons shared across all route modules:
@@ -18,7 +18,7 @@ from typing import Any, Dict, Set
 
 from fastapi import WebSocket
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 # ============================================================================

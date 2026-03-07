@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 自主编程引擎 V2
+Galaxy - 自主编程引擎 V2
 =============================
 
 增强版自主编程引擎，集成真实的 LLM 代码生成
@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 # 添加项目路径
-sys.path.insert(0, '/home/ubuntu/code_audit/ufo-galaxy-realization')
+sys.path.insert(0, '/home/ubuntu/code_audit/galaxy-realization')
 
 from enhancements.coding.llm_code_generator import (
     LLMCodeGenerator,

@@ -107,8 +107,8 @@ class AutoGitUpdater:
         """创建默认配置"""
         default_repos = [
             {
-                'name': 'ufo-galaxy-realization',
-                'path': '/home/ubuntu/code_audit/ufo-galaxy-realization',
+                'name': 'galaxy-realization',
+                'path': '/home/ubuntu/code_audit/galaxy-realization',
                 'remote': 'origin',
                 'branch': 'main',
                 'auto_update': True,

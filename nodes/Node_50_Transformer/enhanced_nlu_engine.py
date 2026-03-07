@@ -19,7 +19,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.NLU")
+logger = logging.getLogger("Galaxy.NLU")
 
 class IntentType(Enum):
     """意图类型"""

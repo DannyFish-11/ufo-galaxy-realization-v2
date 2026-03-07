@@ -1,5 +1,5 @@
 """
-Physical Device NLU Module for UFO Galaxy Realization.
+Physical Device NLU Module for Galaxy Realization.
 
 This module provides natural language understanding for physical device control,
 mapping user commands like "让无人机起飞" to specific node operations.

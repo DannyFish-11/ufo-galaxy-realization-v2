@@ -2,7 +2,7 @@
 Windows AIP v3.0 客户端
 =======================
 
-将 Windows 主机作为设备注册到 UFO Galaxy 服务端，
+将 Windows 主机作为设备注册到 Galaxy 服务端，
 使其与 Android 端一致可被 ReAct Agent 调度。
 
 功能:
@@ -15,7 +15,7 @@ Windows AIP v3.0 客户端
 启动方式:
     python windows_client/windows_aip_client.py --host 127.0.0.1 --port 8000
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 1.0.0
 """
 

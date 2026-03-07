@@ -1,6 +1,6 @@
 # Android Integration Protocol (AIP) v3.0 对齐文档
 
-本文档描述 `ufo-galaxy-realization-v2`（服务端）与独立仓库 `DannyFish-11/ufo-galaxy-android`（Android APK）之间的 WebSocket 通信协议规范。
+本文档描述 `galaxy-realization-v2`（服务端）与独立仓库 `DannyFish-11/galaxy-android`（Android APK）之间的 WebSocket 通信协议规范。
 
 ---
 
@@ -138,7 +138,7 @@
 ### 调用链路
 
 ```
-Android APK (ufo-galaxy-android)
+Android APK (galaxy-android)
     │  WebSocket (AIP v3.0)
     ▼
 galaxy_gateway/android_bridge.py   ← 桥接层

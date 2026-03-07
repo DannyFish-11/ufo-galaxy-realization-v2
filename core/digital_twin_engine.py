@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import deque
 
-logger = logging.getLogger("UFO-Galaxy.DigitalTwin")
+logger = logging.getLogger("Galaxy.DigitalTwin")
 
 
 # ───────────────────── 数据模型 ─────────────────────

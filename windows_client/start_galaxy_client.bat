@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-REM --- UFO³ Galaxy Windows Client Starter ---
+REM --- Galaxy Windows Client Starter ---
 
 REM 设置 Node 50 的地址
 REM 本地连接 (Podman Desktop 端口映射)
@@ -30,7 +30,7 @@ if %errorlevel% neq 0 (
 )
 
 REM 启动客户端
-echo [INFO] Starting UFO³ Galaxy Windows Client...
+echo [INFO] Starting Galaxy Windows Client...
 echo [INFO] Connecting to Node 50 at %NODE50_URL%...
 
 python client.py --node50_url %NODE50_URL% --client_id %CLIENT_ID%

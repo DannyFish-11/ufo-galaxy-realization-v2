@@ -51,4 +51,4 @@ volumes:
 networks:
   ufo-network:
     external: true
-    name: ufo-galaxy-network
+    name: galaxy-network

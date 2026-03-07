@@ -1,5 +1,5 @@
 """
-UFO Galaxy Fusion - Topology-Aware Constellation Client
+Galaxy Fusion - Topology-Aware Constellation Client
 
 拓扑感知的 ConstellationClient
 

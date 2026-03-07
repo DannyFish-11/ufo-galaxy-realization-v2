@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Skill 系统
+Galaxy - Skill 系统
 =======================
 
 通用的技能管理系统
@@ -41,7 +41,7 @@ from pathlib import Path
 from enum import Enum
 import subprocess
 
-logger = logging.getLogger("UFO-Galaxy.Skill")
+logger = logging.getLogger("Galaxy.Skill")
 
 
 # ============================================================================

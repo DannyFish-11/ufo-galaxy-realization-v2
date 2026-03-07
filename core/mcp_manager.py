@@ -1,5 +1,5 @@
 """
-UFO Galaxy - MCP 管理器
+Galaxy - MCP 管理器
 =======================
 
 通用的 MCP (Model Context Protocol) 管理系统
@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.MCP")
+logger = logging.getLogger("Galaxy.MCP")
 
 
 # ============================================================================

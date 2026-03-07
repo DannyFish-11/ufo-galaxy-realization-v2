@@ -1,5 +1,5 @@
 """
-Node_15_OCR - UFO Galaxy OCR 服务节点
+Node_15_OCR - Galaxy OCR 服务节点
 =====================================
 
 主引擎: DeepSeek OCR 2 (Visual Causal Flow)

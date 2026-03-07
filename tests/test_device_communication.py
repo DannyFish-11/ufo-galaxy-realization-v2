@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 设备通信测试
+Galaxy - 设备通信测试
 ========================
 
 测试设备通信管理器
@@ -53,7 +53,7 @@ async def test_device_communication():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy 设备通信测试")
+    print("Galaxy 设备通信测试")
     print("=" * 60)
     
     result = await test_device_communication()

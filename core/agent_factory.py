@@ -17,7 +17,7 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.AgentFactory")
+logger = logging.getLogger("Galaxy.AgentFactory")
 
 
 # ───────────────────── Agent 消息通信 ─────────────────────

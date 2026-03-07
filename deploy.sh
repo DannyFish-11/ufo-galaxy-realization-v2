@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# UFO Galaxy — Production Deployment Script
+# Galaxy — Production Deployment Script
 # ============================================================
 
 set -euo pipefail
@@ -187,32 +187,32 @@ install_systemd() {
         exit 1
     fi
 
-    local INSTALL_DIR="${1:-/opt/ufo-galaxy}"
+    local INSTALL_DIR="${1:-/opt/galaxy}"
     info "Installing systemd service (install dir: $INSTALL_DIR)..."
 
     # Create system user
-    if ! id -u ufo-galaxy &>/dev/null; then
-        useradd -r -m -s /bin/bash ufo-galaxy
-        ok "Created system user: ufo-galaxy"
+    if ! id -u galaxy &>/dev/null; then
+        useradd -r -m -s /bin/bash galaxy
+        ok "Created system user: galaxy"
     fi
 
     # Copy files
     mkdir -p "$INSTALL_DIR"
     rsync -a --exclude='.git' --exclude='venv' --exclude='__pycache__' \
         "$SCRIPT_DIR/" "$INSTALL_DIR/"
-    chown -R ufo-galaxy:ufo-galaxy "$INSTALL_DIR"
+    chown -R galaxy:galaxy "$INSTALL_DIR"
 
     # Generate service file
-    cat > /etc/systemd/system/ufo-galaxy.service <<SVCEOF
+    cat > /etc/systemd/system/galaxy.service <<SVCEOF
 [Unit]
-Description=UFO Galaxy L4 Autonomous Intelligence System
+Description=Galaxy L4 Autonomous Intelligence System
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=ufo-galaxy
-Group=ufo-galaxy
+User=galaxy
+Group=galaxy
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$INSTALL_DIR/.env
 Environment=PYTHONPATH=$INSTALL_DIR
@@ -231,22 +231,22 @@ ReadWritePaths=$INSTALL_DIR/data $INSTALL_DIR/logs
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ufo-galaxy
+SyslogIdentifier=galaxy
 
 [Install]
 WantedBy=multi-user.target
 SVCEOF
 
     systemctl daemon-reload
-    systemctl enable ufo-galaxy
-    ok "Systemd service installed. Start with: systemctl start ufo-galaxy"
+    systemctl enable galaxy
+    ok "Systemd service installed. Start with: systemctl start galaxy"
 }
 
 # ── Print access info ──
 access_info() {
     echo ""
     echo -e "${CYAN}============================================================${NC}"
-    echo -e "${CYAN}  UFO Galaxy — Service Endpoints${NC}"
+    echo -e "${CYAN}  Galaxy — Service Endpoints${NC}"
     echo -e "${CYAN}============================================================${NC}"
     echo ""
     echo -e "  ${GREEN}Galaxy API:${NC}      http://localhost:8080"
@@ -263,7 +263,7 @@ access_info() {
 
 # ── Help ──
 show_help() {
-    echo "UFO Galaxy Deployment Script"
+    echo "Galaxy Deployment Script"
     echo ""
     echo "Usage: ./deploy.sh <command> [options]"
     echo ""
@@ -297,7 +297,7 @@ case "${1:-help}" in
     logs)            show_logs "${2:-}" ;;
     health)          preflight; health_check ;;
     info)            access_info ;;
-    install)         install_systemd "${2:-/opt/ufo-galaxy}" ;;
+    install)         install_systemd "${2:-/opt/galaxy}" ;;
     help|--help|-h)  show_help ;;
     *)               err "Unknown command: $1"; show_help; exit 1 ;;
 esac

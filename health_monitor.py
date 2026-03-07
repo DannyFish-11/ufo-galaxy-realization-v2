@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy 健康监控系统
+Galaxy 健康监控系统
 ========================
 
 实时监控所有节点的健康状态，自动重启失败的节点
@@ -29,7 +29,7 @@ from nodes.common.cors_config import get_cors_origins
 # 导入系统管理器
 from system_manager import SystemManager, NODES, NodeConfig
 
-app = FastAPI(title="UFO³ Galaxy Health Monitor", version="1.0.0")
+app = FastAPI(title="Galaxy Health Monitor", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
@@ -213,7 +213,7 @@ async def root():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>UFO³ Galaxy Health Monitor</title>
+        <title>Galaxy Health Monitor</title>
         <style>
             body {
                 font-family: 'Courier New', monospace;
@@ -292,7 +292,7 @@ async def root():
     </head>
     <body>
         <div class="container">
-            <h1>🛸 UFO³ Galaxy Health Monitor</h1>
+            <h1>🛸 Galaxy Health Monitor</h1>
             
             <div class="summary" id="summary">
                 <div class="card">

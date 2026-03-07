@@ -1,9 +1,9 @@
 """
-UFO³ Galaxy Bridge - 零破坏性桥接模块
+Galaxy Bridge - 零破坏性桥接模块
 
 功能：
 1. 作为独立的"外骨骼"模块，不修改任何现有代码
-2. 实现 ufo-galaxy 与微软 UFO 之间的双向互调
+2. 实现 galaxy 与微软 UFO 之间的双向互调
 3. 自动检测两个系统的存在并建立连接
 4. 提供统一的 API 接口供两个系统调用
 
@@ -25,41 +25,41 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "galaxy_gateway"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class UFOGalaxyBridge:
+class GalaxyBridge:
     """
     零破坏性桥接器
     
-    作为独立的"外骨骼"，连接 ufo-galaxy 和微软 UFO
+    作为独立的"外骨骼"，连接 galaxy 和微软 UFO
     """
     
     def __init__(self):
-        self.ufo_galaxy_available = False
+        self.galaxy_available = False
         self.microsoft_ufo_available = False
-        self.ufo_galaxy_client = None
+        self.galaxy_client = None
         self.microsoft_ufo_client = None
         
     async def initialize(self):
         """初始化桥接器，检测两个系统的可用性"""
-        logger.info("🌉 初始化 UFO Galaxy Bridge...")
+        logger.info("🌉 初始化 Galaxy Bridge...")
         
-        # 检测 ufo-galaxy
-        await self._detect_ufo_galaxy()
+        # 检测 galaxy
+        await self._detect_galaxy()
         
         # 检测微软 UFO
         await self._detect_microsoft_ufo()
         
-        if not self.ufo_galaxy_available and not self.microsoft_ufo_available:
+        if not self.galaxy_available and not self.microsoft_ufo_available:
             logger.warning("⚠️ 两个系统都不可用，桥接器将以离线模式运行")
-        elif self.ufo_galaxy_available and self.microsoft_ufo_available:
+        elif self.galaxy_available and self.microsoft_ufo_available:
             logger.info("✅ 两个系统都可用，桥接器已就绪")
         else:
-            available = "ufo-galaxy" if self.ufo_galaxy_available else "微软 UFO"
+            available = "galaxy" if self.galaxy_available else "微软 UFO"
             logger.info(f"ℹ️ 仅 {available} 可用")
     
-    async def _detect_ufo_galaxy(self):
-        """检测 ufo-galaxy 系统"""
+    async def _detect_galaxy(self):
+        """检测 galaxy 系统"""
         try:
-            # 尝试导入 ufo-galaxy 的模块
+            # 尝试导入 galaxy 的模块
             from aip_protocol_v2 import AIPMessage, MessageType
             
             # 尝试连接 Galaxy Gateway
@@ -67,13 +67,13 @@ class UFOGalaxyBridge:
             async with aiohttp.ClientSession() as session:
                 async with session.get("http://localhost:8000/health", timeout=2) as resp:
                     if resp.status == 200:
-                        self.ufo_galaxy_available = True
-                        logger.info("✅ ufo-galaxy 系统已检测到")
+                        self.galaxy_available = True
+                        logger.info("✅ galaxy 系统已检测到")
                         return
         except Exception as e:
-            logger.debug(f"ufo-galaxy 不可用: {e}")
+            logger.debug(f"galaxy 不可用: {e}")
         
-        self.ufo_galaxy_available = False
+        self.galaxy_available = False
     
     async def _detect_microsoft_ufo(self):
         """检测微软 UFO 系统"""
@@ -96,9 +96,9 @@ class UFOGalaxyBridge:
         
         self.microsoft_ufo_available = False
     
-    async def call_ufo_galaxy(self, node_id: int, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_galaxy(self, node_id: int, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        调用 ufo-galaxy 的节点
+        调用 galaxy 的节点
         
         Args:
             node_id: 节点 ID (如 90 表示 Node_90_MultimodalVision)
@@ -108,8 +108,8 @@ class UFOGalaxyBridge:
         Returns:
             执行结果
         """
-        if not self.ufo_galaxy_available:
-            return {"error": "ufo-galaxy 系统不可用"}
+        if not self.galaxy_available:
+            return {"error": "galaxy 系统不可用"}
         
         try:
             import aiohttp
@@ -118,10 +118,10 @@ class UFOGalaxyBridge:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=params) as resp:
                     result = await resp.json()
-                    logger.info(f"✅ 成功调用 ufo-galaxy Node_{node_id}.{action}")
+                    logger.info(f"✅ 成功调用 galaxy Node_{node_id}.{action}")
                     return result
         except Exception as e:
-            logger.error(f"❌ 调用 ufo-galaxy 失败: {e}")
+            logger.error(f"❌ 调用 galaxy 失败: {e}")
             return {"error": str(e)}
     
     async def call_microsoft_ufo(self, agent_name: str, task: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -161,7 +161,7 @@ class UFOGalaxyBridge:
         """
         统一的视觉分析接口
         
-        优先使用 ufo-galaxy 的 Node_90，回退到微软 UFO（如果可用）
+        优先使用 galaxy 的 Node_90，回退到微软 UFO（如果可用）
         
         Args:
             image_path: 图片路径
@@ -170,9 +170,9 @@ class UFOGalaxyBridge:
         Returns:
             分析结果
         """
-        # 优先使用 ufo-galaxy
-        if self.ufo_galaxy_available:
-            result = await self.call_ufo_galaxy(
+        # 优先使用 galaxy
+        if self.galaxy_available:
+            result = await self.call_galaxy(
                 node_id=90,
                 action="analyze_screen",
                 params={
@@ -201,13 +201,13 @@ class UFOGalaxyBridge:
 
 async def main():
     """示例：如何使用桥接器"""
-    bridge = UFOGalaxyBridge()
+    bridge = GalaxyBridge()
     await bridge.initialize()
     
-    # 示例 1: 调用 ufo-galaxy 的视觉节点
-    print("\n示例 1: 调用 ufo-galaxy Node_90")
+    # 示例 1: 调用 galaxy 的视觉节点
+    print("\n示例 1: 调用 galaxy Node_90")
     print("-" * 80)
-    result = await bridge.call_ufo_galaxy(
+    result = await bridge.call_galaxy(
         node_id=90,
         action="analyze_screen",
         params={

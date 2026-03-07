@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Test Configuration
+Galaxy - Test Configuration
 ================================
 
 Shared fixtures and configuration for all tests.
@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # Set test environment variables
-os.environ.setdefault("UFO_GALAXY_MODE", "test")
+os.environ.setdefault("GALAXY_MODE", "test")
 os.environ.setdefault("PYTHONPATH", str(PROJECT_ROOT))
 
 

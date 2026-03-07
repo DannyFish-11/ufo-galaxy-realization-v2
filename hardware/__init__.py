@@ -1,5 +1,5 @@
 """
-Hardware Module for UFO Galaxy
+Hardware Module for Galaxy
 
 Hardware-level monitoring and control for 24/7 operation:
 - Temperature monitoring

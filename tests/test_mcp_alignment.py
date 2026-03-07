@@ -2,7 +2,7 @@ import os
 import sys
 
 def test_mcp_alignment():
-    print("=== UFO Galaxy 24 MCP Alignment Verification ===")
+    print("=== Galaxy 24 MCP Alignment Verification ===")
     
     # 1. 检查关键节点代码是否包含新功能
     print("\n[1] Checking Node 14 (YouTube/FFmpeg)...")

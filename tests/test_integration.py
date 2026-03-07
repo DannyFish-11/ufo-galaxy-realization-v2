@@ -1,5 +1,5 @@
 """
-UFO Galaxy UI-L4集成测试
+Galaxy UI-L4集成测试
 测试4个集成点的完整数据流
 """
 
@@ -9,7 +9,7 @@ import sys
 import time
 from typing import List, Dict, Any
 
-sys.path.insert(0, '/mnt/okcomputer/output/ufo_galaxy_integration')
+sys.path.insert(0, '/mnt/okcomputer/output/galaxy_integration')
 
 from integration.event_bus import (
     EventBus, EventType, UIGalaxyEvent, 

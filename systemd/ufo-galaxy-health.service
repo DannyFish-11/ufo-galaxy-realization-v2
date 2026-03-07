@@ -1,22 +1,22 @@
 [Unit]
-Description=UFO Galaxy Health Monitor
-After=ufo-galaxy.service
-Wants=ufo-galaxy.service
+Description=Galaxy Health Monitor
+After=galaxy.service
+Wants=galaxy.service
 
 [Service]
 Type=simple
-User=ufo-galaxy
-Group=ufo-galaxy
-WorkingDirectory=/opt/ufo-galaxy
+User=galaxy
+Group=galaxy
+WorkingDirectory=/opt/galaxy
 
-ExecStart=/opt/ufo-galaxy/venv/bin/python -m health_monitor --watchdog --interval 30
+ExecStart=/opt/galaxy/venv/bin/python -m health_monitor --watchdog --interval 30
 
 Restart=always
 RestartSec=5
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ufo-galaxy-health
+SyslogIdentifier=galaxy-health
 
 [Install]
 WantedBy=multi-user.target

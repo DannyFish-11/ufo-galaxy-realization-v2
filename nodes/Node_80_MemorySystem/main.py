@@ -47,7 +47,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Redis 配置（短期记忆）
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-REDIS_PREFIX = os.getenv("REDIS_PREFIX", "ufo_galaxy:")
+REDIS_PREFIX = os.getenv("REDIS_PREFIX", "galaxy:")
 SHORT_TERM_TTL = int(os.getenv("SHORT_TERM_TTL", "3600"))  # 1 小时
 
 # Memos 配置（长期记忆）
@@ -56,7 +56,7 @@ MEMOS_TOKEN = os.getenv("MEMOS_TOKEN", "")
 
 # ChromaDB 配置（语义记忆）
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_db")
-CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "ufo_galaxy_memory")
+CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "galaxy_memory")
 
 # SQLite 配置（用户画像）
 SQLITE_PATH = os.getenv("SQLITE_PATH", "./user_profile.db")

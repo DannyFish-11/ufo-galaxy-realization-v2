@@ -1,5 +1,5 @@
 """
-UFO Galaxy Cross-Device Integration Tests
+Galaxy Cross-Device Integration Tests
 跨设备集成测试
 """
 
@@ -158,7 +158,7 @@ async def test_protocol_compatibility():
 
 async def main():
     print("=" * 60)
-    print("UFO Galaxy Cross-Device Integration Tests")
+    print("Galaxy Cross-Device Integration Tests")
     print("=" * 60)
     
     tests = [

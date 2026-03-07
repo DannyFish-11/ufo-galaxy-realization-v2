@@ -1,6 +1,6 @@
 {
   "system": {
-    "name": "UFO Galaxy L4",
+    "name": "Galaxy L4",
     "version": "4.0.0",
     "mode": "autonomous",
     "enable_l4": true

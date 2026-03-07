@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Phase 2 Integration Tests
+Galaxy Phase 2 Integration Tests
 =====================================
 Tests for Quantum Reasoning, Monitoring & Self-Healing layers.
 """
@@ -527,7 +527,7 @@ async def test_integration_backup_after_recovery(runner: TestRunner):
 
 async def main():
     print("=" * 60)
-    print("UFO Galaxy Phase 2 Integration Tests")
+    print("Galaxy Phase 2 Integration Tests")
     print("=" * 60)
     print()
     

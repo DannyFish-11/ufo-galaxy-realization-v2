@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to UFO Galaxy are documented here.
+All notable changes to Galaxy are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
@@ -10,7 +10,7 @@ Open pull requests pending review / merge:
 - **PR #4** – Wire `/ws/android` to `android_bridge`: integrates the Android stack with the
   V2 backend, enabling end-to-end AIP v3.0 message flow between the Android client and the server.
 - **PR #5** – Remove Android client duplication: canonical Android source moved to
-  [DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android);
+  [DannyFish-11/galaxy-android](https://github.com/DannyFish-11/galaxy-android);
   Kotlin/Gradle files removed from this repository.
 
 ---

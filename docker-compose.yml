@@ -1,5 +1,5 @@
 # ============================================================
-# UFO Galaxy — Development Docker Compose
+# Galaxy — Development Docker Compose
 # ============================================================
 #
 # Usage:
@@ -26,13 +26,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ufo-galaxy
+    container_name: galaxy
     ports:
       - "8080:8080"
     env_file: .env
     environment:
-      - UFO_GALAXY_MODE=development
-      - UFO_GALAXY_LOG_LEVEL=DEBUG
+      - GALAXY_MODE=development
+      - GALAXY_LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       - NEO4J_URI=bolt://neo4j:7687
       - QDRANT_URL=http://qdrant:6333
@@ -60,12 +60,12 @@ services:
       retries: 3
       start_period: 20s
 
-  # ============ UFO Gateway ============
+  # ============ Galaxy Gateway ============
   ufo-gateway:
     build:
       context: .
       dockerfile: Dockerfile.gateway
-    container_name: ufo-galaxy-gateway
+    container_name: galaxy-gateway
     ports:
       - "8000:8000"
     environment:
@@ -106,11 +106,11 @@ services:
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin123}
-      - MINIO_BUCKET=${MINIO_BUCKET:-ufo-galaxy}
+      - MINIO_BUCKET=${MINIO_BUCKET:-galaxy}
 
       # MongoDB 配置
       - MONGODB_URI=${MONGODB_URI:-mongodb://mongodb:27017}
-      - MONGODB_DB=${MONGODB_DB:-ufo-galaxy}
+      - MONGODB_DB=${MONGODB_DB:-galaxy}
 
     depends_on:
       ollama:
@@ -198,14 +198,14 @@ services:
       - "5349:5349/udp"
       - "49152-65535:49152-65535/udp"  # Relay ports
     environment:
-      - TURN_REALM=${TURN_REALM:-ufo-galaxy.local}
+      - TURN_REALM=${TURN_REALM:-galaxy.local}
       - TURN_USER=${TURN_USERNAME:-ufo}
       - TURN_PASSWORD=${TURN_CREDENTIAL:-ufo123}
       - TURN_MIN_PORT=49152
       - TURN_MAX_PORT=65535
     command: >
       -n -v
-      --realm=${TURN_REALM:-ufo-galaxy.local}
+      --realm=${TURN_REALM:-galaxy.local}
       --fingerprint
       --lt-cred-mech
       --user=${TURN_USERNAME:-ufo}:${TURN_CREDENTIAL:-ufo123}
@@ -255,7 +255,7 @@ services:
     environment:
       - SQL_DSN=${ONEAPI_SQL_DSN:-}
       - REDIS_CONN_STRING=${ONEAPI_REDIS:-}
-      - SESSION_SECRET=${ONEAPI_SESSION_SECRET:-ufo-galaxy-secret}
+      - SESSION_SECRET=${ONEAPI_SESSION_SECRET:-galaxy-secret}
       - TZ=Asia/Shanghai
     volumes:
       - oneapi-data:/data
@@ -334,7 +334,7 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER:-mongoadmin}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD:-mongoadmin123}
-      - MONGO_INITDB_DATABASE=${MONGODB_DB:-ufo-galaxy}
+      - MONGO_INITDB_DATABASE=${MONGODB_DB:-galaxy}
     volumes:
       - mongo-data:/data/db
     networks:

@@ -1,5 +1,5 @@
 # ============================================================
-# UFO Galaxy System - Docker Compose Configuration
+# Galaxy System - Docker Compose Configuration
 # 数据库和中间件服务部署配置
 # ============================================================
 
@@ -92,8 +92,8 @@ services:
       /bin/sh -c "
       sleep 10;
       /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin123};
-      /usr/bin/mc mb myminio/${MINIO_BUCKET:-ufo-galaxy} --ignore-existing;
-      /usr/bin/mc policy set public myminio/${MINIO_BUCKET:-ufo-galaxy};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET:-galaxy} --ignore-existing;
+      /usr/bin/mc policy set public myminio/${MINIO_BUCKET:-galaxy};
       exit 0;
       "
     networks:
@@ -229,7 +229,7 @@ services:
       --fingerprint
       --lt-cred-mech
       --user=${TURN_USERNAME:-turnuser}:${TURN_CREDENTIAL:-turnpass123}
-      --realm=ufo-galaxy
+      --realm=galaxy
       --cert=/etc/coturn/cert.pem
       --pkey=/etc/coturn/pkey.pem
     networks:

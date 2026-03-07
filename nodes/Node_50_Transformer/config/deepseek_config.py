@@ -30,7 +30,7 @@ def analyze_desktop_image(image_path: str, prompt: str) -> str:
         return json.dumps({
             "action": "type",
             "target": "search_bar",
-            "text": "极客松 UFO³ Galaxy"
+            "text": "极客松 Galaxy"
         })
 
     return json.dumps({"action": "none", "reason": "Could not identify target."})

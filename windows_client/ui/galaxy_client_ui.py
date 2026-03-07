@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy 客户端 - OPPO 光场设计风格
+Galaxy 客户端 - OPPO 光场设计风格
 =======================================
 
 混合模式：F12 唤出侧边栏，可展开为全功能窗口。
@@ -694,7 +694,7 @@ class GalaxyClientUI(QWidget):
         layout.addWidget(self.status_dot)
 
         # 标题
-        title = QLabel("UFO³ Galaxy")
+        title = QLabel("Galaxy")
         title.setStyleSheet(f"""
             color: {COLORS['text']};
             font-size: 14px;

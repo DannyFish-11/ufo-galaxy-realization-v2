@@ -129,7 +129,7 @@ class AcademicMemoryManager:
         
         content += f"""---
 *保存时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
-*由 UFO³ Galaxy Node_80 (Academic Extension) 管理*
+*由 Galaxy Node_80 (Academic Extension) 管理*
 """
         
         return content

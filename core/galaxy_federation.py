@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 多实例联邦协作模块（Galaxy Federation）
+Galaxy - 多实例联邦协作模块（Galaxy Federation）
 ===================================================
 
 功能：
@@ -32,7 +32,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.Federation")
+logger = logging.getLogger("Galaxy.Federation")
 
 try:
     import aiohttp

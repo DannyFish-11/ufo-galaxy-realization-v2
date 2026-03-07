@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - 复杂任务分解和跨设备协同模块
+Galaxy - 复杂任务分解和跨设备协同模块
 
 功能：
 1. 复杂任务分解 - 将复杂任务分解为多个子任务
@@ -428,7 +428,7 @@ class IntelligentTaskPlanner:
             })
         
         # 构建 Prompt
-        system_prompt = """你是 UFO³ Galaxy 的任务规划专家。你的任务是将用户的复杂指令分解为多个可执行的子任务。
+        system_prompt = """你是 Galaxy 的任务规划专家。你的任务是将用户的复杂指令分解为多个可执行的子任务。
 
 请严格按照以下 JSON 格式输出：
 {
@@ -526,7 +526,7 @@ async def main():
     decomposer = TaskDecomposer(device_registry)
     
     print("="*80)
-    print("UFO³ Galaxy - 复杂任务分解测试")
+    print("Galaxy - 复杂任务分解测试")
     print("="*80)
     
     # 测试 1: 文件传输

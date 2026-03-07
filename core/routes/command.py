@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Command Routes
+Galaxy - Command Routes
 =============================
 
 Routes:
@@ -39,7 +39,7 @@ except ImportError:
     async def require_auth():
         return {"authenticated": True, "dev_mode": True}
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

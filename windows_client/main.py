@@ -135,7 +135,7 @@ class CommandProcessor(QThread):
                 payload = json.dumps({
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": "你是 UFO Galaxy 智能助手。"},
+                        {"role": "system", "content": "你是 Galaxy 智能助手。"},
                         {"role": "user", "content": message}
                     ],
                     "max_tokens": 2048
@@ -166,7 +166,7 @@ class CommandProcessor(QThread):
                 return "无法获取屏幕对象"
             screenshot = screen.grabWindow(0)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            save_dir = os.path.join(tempfile.gettempdir(), "ufo_galaxy_screenshots")
+            save_dir = os.path.join(tempfile.gettempdir(), "galaxy_screenshots")
             os.makedirs(save_dir, exist_ok=True)
             save_path = os.path.join(save_dir, f"screenshot_{timestamp}.png")
             screenshot.save(save_path, "PNG")

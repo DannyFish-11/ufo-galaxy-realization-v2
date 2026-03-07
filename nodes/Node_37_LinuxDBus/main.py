@@ -47,7 +47,7 @@ class NodeStatus(Enum):
 class DBusConfig:
     """D-Bus 连接配置"""
     bus_type: BusType = BusType.SYSTEM
-    node_name: str = "io.github.ufo_galaxy.Node37"
+    node_name: str = "io.github.galaxy.Node37"
 
 @dataclass
 class ServiceConfig:

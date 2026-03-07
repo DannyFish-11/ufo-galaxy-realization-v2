@@ -23,7 +23,7 @@ Windows 本地 MCP Server
     标准 MCP JSON-RPC 2.0 over stdio
     兼容 core/mcp_loader.py 的 MCPLoader
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 1.0.0
 """
 

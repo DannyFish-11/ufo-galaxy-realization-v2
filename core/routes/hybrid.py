@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Hybrid, RAG, Code & Mesh Routes (Phases 3-5)
+Galaxy - Hybrid, RAG, Code & Mesh Routes (Phases 3-5)
 ===========================================================
 
 Routes:
@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from core.routes._shared import connection_manager
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

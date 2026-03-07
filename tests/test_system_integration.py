@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 系统集成测试
+Galaxy - 系统集成测试
 ========================
 
 测试系统集成层
@@ -82,7 +82,7 @@ async def test_system_integration():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy 系统集成测试")
+    print("Galaxy 系统集成测试")
     print("=" * 60)
     
     result = await test_system_integration()

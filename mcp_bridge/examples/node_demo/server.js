@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * UFO Galaxy - Node.js MCP Server Demo
+ * Galaxy - Node.js MCP Server Demo
  * ======================================
  *
  * 这是一个完全符合 MCP 标准协议（JSON-RPC over stdio）的 Node.js 演示服务器。
@@ -13,7 +13,7 @@
  * 启动方式：
  *   node server.js
  *
- * 加载方式（通过 UFO Galaxy API）：
+ * 加载方式（通过 Galaxy API）：
  *   POST /api/v1/mcp/load
  *   {"server_id": "node-demo", "command": "node /path/to/server.js"}
  */
@@ -111,7 +111,7 @@ function handleMessage(line) {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
           serverInfo: {
-            name: "ufo-galaxy-node-demo",
+            name: "galaxy-node-demo",
             version: "1.0.0",
           },
         },

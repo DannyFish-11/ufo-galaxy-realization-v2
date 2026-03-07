@@ -1,14 +1,14 @@
 """
-UFO Galaxy - 统一鉴权模块
+Galaxy - 统一鉴权模块
 ========================
 
 提供 API Token 和 Device ID 鉴权机制。
 
 Production safety:
-  - UFO_API_TOKEN must be set in production.
-  - UFO_DEV_MODE=1 explicitly enables permissive dev-mode behaviour
+  - GALAXY_API_TOKEN must be set in production.
+  - GALAXY_DEV_MODE=1 explicitly enables permissive dev-mode behaviour
     (no token required). A prominent warning is logged at startup.
-  - If neither UFO_API_TOKEN nor UFO_DEV_MODE=1 is set, protected
+  - If neither GALAXY_API_TOKEN nor GALAXY_DEV_MODE=1 is set, protected
     endpoints raise HTTP 401 to prevent accidental open access.
 
 Author: Copilot
@@ -21,7 +21,7 @@ import logging
 from typing import Optional
 from fastapi import Header, HTTPException, status
 
-logger = logging.getLogger("UFO-Galaxy.Auth")
+logger = logging.getLogger("Galaxy.Auth")
 
 # Module-level flag: dev-mode warning has been issued at most once per process
 _dev_mode_warning_issued: bool = False
@@ -31,8 +31,8 @@ _dev_mode_warning_issued: bool = False
 # ---------------------------------------------------------------------------
 
 def _is_dev_mode() -> bool:
-    """Return True when UFO_DEV_MODE=1 is explicitly set."""
-    return os.getenv("UFO_DEV_MODE", "").strip() == "1"
+    """Return True when GALAXY_DEV_MODE=1 is explicitly set."""
+    return os.getenv("GALAXY_DEV_MODE", "").strip() == "1"
 
 
 def _warn_dev_mode_once():
@@ -41,7 +41,7 @@ def _warn_dev_mode_once():
     if not _dev_mode_warning_issued:
         _dev_mode_warning_issued = True
         logger.warning(
-            "⚠️  UFO Galaxy is running in DEV MODE (UFO_DEV_MODE=1). "
+            "⚠️  Galaxy is running in DEV MODE (GALAXY_DEV_MODE=1). "
             "Authentication is DISABLED. Do NOT use this mode in production."
         )
 
@@ -56,15 +56,15 @@ def verify_api_token(token: str) -> bool:
     Returns:
         bool: Token 是否有效
     """
-    expected_token = os.getenv("UFO_API_TOKEN")
+    expected_token = os.getenv("GALAXY_API_TOKEN")
 
     if not expected_token:
         if _is_dev_mode():
             _warn_dev_mode_once()
-            logger.debug("UFO_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
+            logger.debug("GALAXY_API_TOKEN 未设置，跳过 Token 鉴权（开发模式）")
             return True
         # Production: no token set and not dev mode → refuse
-        logger.warning("UFO_API_TOKEN 未配置且未启用 UFO_DEV_MODE — Token 验证失败")
+        logger.warning("GALAXY_API_TOKEN 未配置且未启用 GALAXY_DEV_MODE — Token 验证失败")
         return False
 
     is_valid = hmac.compare_digest(token, expected_token)
@@ -106,12 +106,12 @@ async def require_auth(
     Raises:
         HTTPException: 鉴权失败时抛出 401 异常
     """
-    expected_token = os.getenv("UFO_API_TOKEN")
+    expected_token = os.getenv("GALAXY_API_TOKEN")
 
-    # Dev mode: token not set AND UFO_DEV_MODE=1 → allow through with warning
+    # Dev mode: token not set AND GALAXY_DEV_MODE=1 → allow through with warning
     if not expected_token and _is_dev_mode():
         _warn_dev_mode_once()
-        logger.debug("UFO_API_TOKEN 未设置，跳过鉴权（开发模式）")
+        logger.debug("GALAXY_API_TOKEN 未设置，跳过鉴权（开发模式）")
         return {
             "authenticated": True,
             "device_id": x_device_id,
@@ -121,15 +121,15 @@ async def require_auth(
     # Production guard: token not set and NOT in dev mode → refuse
     if not expected_token:
         logger.error(
-            "Protected endpoint accessed but UFO_API_TOKEN is not configured "
-            "and UFO_DEV_MODE is not enabled. Set UFO_API_TOKEN or UFO_DEV_MODE=1."
+            "Protected endpoint accessed but GALAXY_API_TOKEN is not configured "
+            "and GALAXY_DEV_MODE is not enabled. Set GALAXY_API_TOKEN or GALAXY_DEV_MODE=1."
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
                 "Server is not configured for authentication. "
-                "Set UFO_API_TOKEN environment variable, "
-                "or set UFO_DEV_MODE=1 for local development."
+                "Set GALAXY_API_TOKEN environment variable, "
+                "or set GALAXY_DEV_MODE=1 for local development."
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )

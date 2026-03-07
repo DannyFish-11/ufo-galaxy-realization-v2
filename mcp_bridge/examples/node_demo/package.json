@@ -1,7 +1,7 @@
 {
-  "name": "ufo-galaxy-node-demo-mcp",
+  "name": "galaxy-node-demo-mcp",
   "version": "1.0.0",
-  "description": "UFO Galaxy Node.js MCP Server Demo",
+  "description": "Galaxy Node.js MCP Server Demo",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

@@ -1,11 +1,11 @@
-# UFO Galaxy - AI Agent 知识索引
+# Galaxy - AI Agent 知识索引
 
 > 本文件为 AI Agent 提供系统知识索引，每轮对话自动加载。
 > 基于 Vercel 研究：被动上下文比主动调用更可靠。
 
 ## 系统概述
 
-UFO Galaxy 是一个 L4 级自主性智能系统，支持：
+Galaxy 是一个 L4 级自主性智能系统，支持：
 - 跨设备控制（手机、平板、电脑）
 - 自然语言驱动
 - MCP/Skill 扩展

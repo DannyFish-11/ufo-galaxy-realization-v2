@@ -91,7 +91,7 @@ class NodeMetadata:
     version: str = "1.0.0"
     category: NodeCategory = NodeCategory.UTILITY
     description: str = ""
-    author: str = "UFO Galaxy"
+    author: str = "Galaxy"
     
     # 依赖
     dependencies: List[str] = field(default_factory=list)

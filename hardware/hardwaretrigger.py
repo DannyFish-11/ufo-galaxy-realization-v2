@@ -1,5 +1,5 @@
 """
-Hardware Trigger Module for UFO Galaxy
+Hardware Trigger Module for Galaxy
 
 Handles hardware-level triggers and integrates with UI state machine:
 - Hardware key triggers

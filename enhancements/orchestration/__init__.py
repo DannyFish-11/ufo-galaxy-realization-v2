@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 编排模块
+Galaxy - 编排模块
 """
 from .dynamic_weight_manager import (
     DynamicWeightManager,

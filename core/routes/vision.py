@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Vision Routes
+Galaxy - Vision Routes
 ============================
 
 Routes:
@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from core.routes._models import VisionRequest, OCRRequest
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

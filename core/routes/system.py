@@ -1,5 +1,5 @@
 """
-UFO Galaxy - System & Config Routes
+Galaxy - System & Config Routes
 =====================================
 
 Routes:
@@ -24,7 +24,7 @@ from core.routes._shared import (
     task_queue,
 )
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 # 支持的 API Key 白名单
 ALLOWED_CONFIG_KEYS = {
@@ -169,7 +169,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             # 写回 .env
             with open(env_path, "w", encoding="utf-8") as f:
-                f.write("# UFO Galaxy - Environment Configuration\n")
+                f.write("# Galaxy - Environment Configuration\n")
                 f.write(f"# Updated: {datetime.now().isoformat()}\n\n")
                 for key, val in sorted(current_env.items()):
                     f.write(f"{key}={val}\n")

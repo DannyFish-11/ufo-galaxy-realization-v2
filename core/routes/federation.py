@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Federation Routes
+Galaxy - Federation Routes
 ================================
 
 Routes:
@@ -21,7 +21,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

@@ -170,7 +170,7 @@ async def deep_search(task_id: str, query: str, max_turns: int, tools: List[str]
 - 交叉验证: 5 次
 
 ---
-*由 UFO³ Galaxy Node_104 生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+*由 Galaxy Node_104 生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
 """
                         }
                     }
@@ -348,7 +348,7 @@ async def generate_research_report(task_id: str, topic: str, depth: str, output_
 **注意**: 这是 Mock 模式的演示报告。要获得真实的深度研究能力，请配置 AgentCPM API。
 
 ---
-*由 UFO³ Galaxy Node_104 (AgentCPM-Report) 生成*
+*由 Galaxy Node_104 (AgentCPM-Report) 生成*
 """
                         }
                     }
