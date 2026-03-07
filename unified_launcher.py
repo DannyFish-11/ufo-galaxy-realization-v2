@@ -1393,7 +1393,6 @@ class UFOGalaxyUnified:
         """异步关闭核心子系统"""
         try:
             from core.startup import shutdown_subsystems
-from nodes.common.cors_config import get_cors_origins
             await shutdown_subsystems()
         except Exception as e:
             logger.warning(f"子系统关闭异常: {e}")

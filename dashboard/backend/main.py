@@ -723,7 +723,7 @@ async def get_config():
     """获取完整配置"""
     if API_MANAGER_AVAILABLE and api_manager:
         return api_manager.get_config()
-    return {"error": "API manager not available"}
+    return {"status": "standalone", "api_manager_available": False, "config": {}}
 
 
 @app.post("/api/v1/config")
@@ -791,7 +791,13 @@ async def get_config_status():
     """获取配置状态"""
     if API_MANAGER_AVAILABLE and api_manager:
         return api_manager.get_status()
-    return {"error": "API manager not available"}
+    return {
+        "status": "standalone",
+        "api_manager_available": False,
+        "models_configured": False,
+        "nodes_active": 0,
+        "message": "Running in standalone mode - core API manager not loaded"
+    }
 
 
 @app.post("/api/v1/config/test-llm")

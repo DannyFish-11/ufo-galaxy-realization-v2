@@ -6,6 +6,7 @@ UFO Galaxy 主循环入口
 import asyncio
 import logging
 import signal
+import sys
 import time
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field
@@ -276,11 +277,15 @@ class GalaxyMainLoop:
 
     def _setup_signal_handlers(self):
         """设置信号处理器"""
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            asyncio.get_event_loop().add_signal_handler(
-                sig, 
-                lambda: asyncio.create_task(self.stop())
-            )
+        if sys.platform != "win32":
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                asyncio.get_event_loop().add_signal_handler(
+                    sig,
+                    lambda: asyncio.create_task(self.stop())
+                )
+        else:
+            # Windows does not support asyncio signal handlers
+            signal.signal(signal.SIGINT, lambda s, f: asyncio.ensure_future(self.stop()))
 
     def _on_health_change(self, metrics: HealthMetrics):
         """健康状态变化回调"""

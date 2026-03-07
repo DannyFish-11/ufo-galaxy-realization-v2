@@ -450,8 +450,7 @@ async def get_patterns(
     """
     try:
         from autonomous_learning_engine import PatternType
-from nodes.common.cors_config import get_cors_origins
-        
+
         type_filter = None
         if pattern_type:
             type_filter = PatternType(pattern_type)
