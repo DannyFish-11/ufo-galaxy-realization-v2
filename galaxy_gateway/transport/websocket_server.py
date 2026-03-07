@@ -17,7 +17,8 @@ from datetime import datetime, timedelta
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from ..protocol import AIPMessage, MessageType, parse_message, create_error_message
+from ..protocol import AIPMessage, MessageType, create_error_message
+from ..protocol.compat import parse_message_compat
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ class WebSocketManager:
     async def _handle_message(self, device_id: str, data: str):
         """处理接收到的消息"""
         try:
-            message = parse_message(data)
+            message = parse_message_compat(data)
             
             # 更新心跳时间
             if device_id in self.connections:

@@ -128,6 +128,34 @@ async def websocket_endpoint_auto(websocket: WebSocket, device_id: str = Query(N
     await websocket_manager.handle_connection(websocket, device_id)
 
 
+# ---------------------------------------------------------------------------
+# Legacy / backward-compatible WebSocket paths
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/ufo3/{device_id}")
+async def websocket_ufo3(websocket: WebSocket, device_id: str):
+    """Legacy UFO3 WebSocket path — routed to the same connection handler."""
+    logger.info("Legacy path /ws/ufo3/ used for device %s", device_id)
+    await websocket_manager.handle_connection(websocket, device_id)
+
+
+@app.websocket("/ws/device/{device_id}")
+async def websocket_device(websocket: WebSocket, device_id: str):
+    """Android device WebSocket path — routed to the same connection handler."""
+    logger.info("Path /ws/device/ used for device %s", device_id)
+    await websocket_manager.handle_connection(websocket, device_id)
+
+
+@app.websocket("/ws/android")
+async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
+    """Android broadcast WebSocket path — auto-assigns device_id when absent."""
+    if not device_id:
+        import uuid
+        device_id = str(uuid.uuid4())
+    logger.info("Path /ws/android used, device_id=%s", device_id)
+    await websocket_manager.handle_connection(websocket, device_id)
+
+
 # ============================================================================
 # REST API 端点
 # ============================================================================
@@ -311,6 +339,95 @@ async def send_command(request: CommandRequest):
         raise HTTPException(status_code=500, detail="Failed to send command")
     
     return {"status": "sent", "message_id": message.message_id}
+
+
+# ============================================================================
+# Legacy HTTP device API compatibility shim
+# Maps old /api/devices/* paths → current /api/v1/devices/* behaviour
+# ============================================================================
+
+class _LegacyRegisterRequest(BaseModel):
+    device_id: str
+    device_type: str = "android"
+    device_name: str = ""
+    capabilities: list = []
+    os_version: str = ""
+    app_version: str = ""
+
+
+class _LegacyHeartbeatRequest(BaseModel):
+    device_id: str
+    status: dict = {}
+
+
+class _LegacyUnregisterRequest(BaseModel):
+    device_id: str
+
+
+@app.post("/api/devices/register")
+async def legacy_register_device(req: _LegacyRegisterRequest):
+    """
+    Legacy registration endpoint — maps to current device-manager logic.
+    Android clients calling ``/api/devices/register`` are served here.
+    """
+    logger.info(
+        "Legacy /api/devices/register called for device %s", req.device_id
+    )
+    if not device_manager:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    device_info = DeviceInfo(
+        device_id=req.device_id,
+        device_type=DeviceType(req.device_type) if req.device_type in [dt.value for dt in DeviceType] else DeviceType.UNKNOWN,
+        name=req.device_name or req.device_id,
+        os_version=req.os_version,
+        metadata={"app_version": req.app_version, "capabilities": req.capabilities},
+    )
+    device_manager.register_device(device_info)
+    return {
+        "success": True,
+        "device_id": req.device_id,
+        "message": "设备注册成功",
+        "server_version": "3.0.0",
+    }
+
+
+@app.get("/api/devices/list")
+async def legacy_list_devices():
+    """
+    Legacy device-list endpoint — maps to current ``GET /api/devices``.
+    """
+    logger.info("Legacy /api/devices/list called")
+    if not device_manager:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    devices = device_manager.to_dict()
+    return {"devices": devices, "total": len(devices) if isinstance(devices, list) else 0}
+
+
+@app.post("/api/devices/heartbeat")
+async def legacy_device_heartbeat(req: _LegacyHeartbeatRequest):
+    """
+    Legacy heartbeat endpoint — maps to current device status-update logic.
+    """
+    logger.info(
+        "Legacy /api/devices/heartbeat called for device %s", req.device_id
+    )
+    if not device_manager:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    device_manager.update_device_status(req.device_id, "online")
+    return {"success": True, "device_id": req.device_id}
+
+
+@app.post("/api/devices/unregister")
+async def legacy_unregister_device(req: _LegacyUnregisterRequest):
+    """
+    Legacy unregister endpoint — safely unregisters the device when possible.
+    """
+    logger.info(
+        "Legacy /api/devices/unregister called for device %s", req.device_id
+    )
+    if device_manager:
+        device_manager.update_device_status(req.device_id, "offline")
+    return {"success": True, "device_id": req.device_id}
 
 
 # ============================================================================

@@ -91,6 +91,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
     from core.routes import system, devices, nodes, vision, tasks, command as cmd_routes
     from core.routes import chat, ai, monitoring, relay, hybrid, vault, cost, channels, federation
+    from core.routes import compat
 
     router = APIRouter()
 
@@ -110,6 +111,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(cost.create_router(service_manager=service_manager, config=config))
     router.include_router(channels.create_router(service_manager=service_manager, config=config))
     router.include_router(federation.create_router(service_manager=service_manager, config=config))
+    router.include_router(compat.create_router(service_manager=service_manager, config=config))
 
     return router
 
