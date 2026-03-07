@@ -162,7 +162,7 @@ services:
       dockerfile: Dockerfile
     container_name: galaxy-watchdog
     restart: unless-stopped
-    command: ["python", "-m", "daemon.ufogalaxy_daemon"]
+    command: ["python", "-m", "daemon.galaxy_daemon"]
 
     deploy:
       resources:

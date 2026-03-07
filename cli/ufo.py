@@ -6,14 +6,14 @@ Galaxy CLI
 命令行工具，提供便捷的技能和 MCP 管理
 
 使用方法:
-    ufo skill install <name>      # 安装技能
-    ufo skill search <query>      # 搜索技能
-    ufo skill list               # 列出已安装技能
-    ufo skill create <name>      # 创建新技能
+    galaxy skill install <name>      # 安装技能
+    galaxy skill search <query>      # 搜索技能
+    galaxy skill list               # 列出已安装技能
+    galaxy skill create <name>      # 创建新技能
     
-    ufo mcp load <command>       # 加载 MCP 服务器
-    ufo mcp list                 # 列出已加载服务器
-    ufo mcp tools <server_id>    # 列出服务器工具
+    galaxy mcp load <command>       # 加载 MCP 服务器
+    galaxy mcp list                 # 列出已加载服务器
+    galaxy mcp tools <server_id>    # 列出服务器工具
     
     ufo onboard                  # 安装向导
     ufo status                   # 系统状态

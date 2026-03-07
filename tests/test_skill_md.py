@@ -66,7 +66,7 @@ async def test_cli():
     
     try:
         # 测试 skill list
-        print("测试: ufo skill list")
+        print("测试: galaxy skill list")
         # 这里只是验证 CLI 可以导入
         from cli.ufo import skill_list
         await skill_list()

@@ -11,7 +11,7 @@ services:
   # ============================================================
   neo4j:
     image: neo4j:5.15-community
-    container_name: ufo-neo4j
+    container_name: galaxy-neo4j
     restart: unless-stopped
     ports:
       - "7474:7474"  # HTTP端口 (Web界面)
@@ -28,7 +28,7 @@ services:
       - neo4j_import:/var/lib/neo4j/import
       - neo4j_plugins:/plugins
     networks:
-      - ufo-network
+      - galaxy-network
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
       interval: 30s
@@ -40,7 +40,7 @@ services:
   # ============================================================
   qdrant:
     image: qdrant/qdrant:v1.7.4
-    container_name: ufo-qdrant
+    container_name: galaxy-qdrant
     restart: unless-stopped
     ports:
       - "6333:6333"  # REST API端口
@@ -51,7 +51,7 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
     networks:
-      - ufo-network
+      - galaxy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 30s
@@ -63,7 +63,7 @@ services:
   # ============================================================
   minio:
     image: minio/minio:RELEASE.2024-01-13T07-53-03Z
-    container_name: ufo-minio
+    container_name: galaxy-minio
     restart: unless-stopped
     ports:
       - "9000:9000"   # API端口
@@ -75,7 +75,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     networks:
-      - ufo-network
+      - galaxy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -85,7 +85,7 @@ services:
   # MinIO初始化 - 创建默认bucket
   minio-init:
     image: minio/mc:RELEASE.2024-01-13T08-44-48Z
-    container_name: ufo-minio-init
+    container_name: galaxy-minio-init
     depends_on:
       - minio
     entrypoint: >
@@ -97,21 +97,21 @@ services:
       exit 0;
       "
     networks:
-      - ufo-network
+      - galaxy-network
 
   # ============================================================
   # 4. Redis 缓存和消息队列
   # ============================================================
   redis:
     image: redis:7.2-alpine
-    container_name: ufo-redis
+    container_name: galaxy-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - ufo-network
+      - galaxy-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -123,14 +123,14 @@ services:
   # ============================================================
   ollama:
     image: ollama/ollama:0.1.20
-    container_name: ufo-ollama
+    container_name: galaxy-ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     networks:
-      - ufo-network
+      - galaxy-network
     # GPU支持 (需要nvidia-docker)
     # deploy:
     #   resources:
@@ -152,7 +152,7 @@ services:
   # Prometheus - 指标收集
   prometheus:
     image: prom/prometheus:v2.48.0
-    container_name: ufo-prometheus
+    container_name: galaxy-prometheus
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -167,12 +167,12 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - ufo-network
+      - galaxy-network
 
   # Grafana - 可视化仪表板
   grafana:
     image: grafana/grafana:10.2.3
-    container_name: ufo-grafana
+    container_name: galaxy-grafana
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -185,14 +185,14 @@ services:
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     networks:
-      - ufo-network
+      - galaxy-network
     depends_on:
       - prometheus
 
   # Jaeger - 分布式链路追踪
   jaeger:
     image: jaegertracing/all-in-one:1.50
-    container_name: ufo-jaeger
+    container_name: galaxy-jaeger
     restart: unless-stopped
     ports:
       - "16686:16686"  # UI端口
@@ -200,14 +200,14 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
-      - ufo-network
+      - galaxy-network
 
   # ============================================================
   # 7. WebRTC TURN服务器 (可选 - coturn)
   # ============================================================
   turn:
     image: coturn/coturn:4.6.2
-    container_name: ufo-turn
+    container_name: galaxy-turn
     restart: unless-stopped
     ports:
       - "3478:3478"   # TURN/STUN端口
@@ -233,7 +233,7 @@ services:
       --cert=/etc/coturn/cert.pem
       --pkey=/etc/coturn/pkey.pem
     networks:
-      - ufo-network
+      - galaxy-network
 
 # ============================================================
 # 数据卷定义
@@ -264,7 +264,7 @@ volumes:
 # 网络定义
 # ============================================================
 networks:
-  ufo-network:
+  galaxy-network:
     driver: bridge
     ipam:
       config:

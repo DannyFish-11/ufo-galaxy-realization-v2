@@ -108,7 +108,7 @@ def test_ui_files():
     # 安卓端 UI (需要检查安卓仓库)
     android_root = os.path.abspath(os.path.join(project_root, '..', 'galaxy-android'))
     android_ui_layout = os.path.join(android_root, 'app', 'src', 'main', 'res', 'layout', 'floating_window_dynamic_island.xml')
-    android_ui_code = os.path.join(android_root, 'app', 'src', 'main', 'java', 'com', 'ufo', 'galaxy', 'ui', 'DynamicIslandFloatingWindow.kt')
+    android_ui_code = os.path.join(android_root, 'app', 'src', 'main', 'java', 'com', 'galaxy', 'app', 'ui', 'DynamicIslandFloatingWindow.kt')
     
     if os.path.exists(android_ui_layout) and os.path.exists(android_ui_code):
         layout_size = os.path.getsize(android_ui_layout)

@@ -257,7 +257,7 @@ async def main():
     await asyncio.sleep(1)
 
     # 尝试创建一个新频道
-    new_channel_name = f"ufo-node-test-{int(asyncio.get_event_loop().time())}"
+    new_channel_name = f"galaxy-node-test-{int(asyncio.get_event_loop().time())}"
     await service.create_channel(channel_name=new_channel_name)
     await asyncio.sleep(1)
 

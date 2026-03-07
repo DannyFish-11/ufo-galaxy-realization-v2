@@ -8,7 +8,7 @@
 #
 # Services:
 #   galaxy        — Main Galaxy application (API + scheduler)
-#   ufo-gateway   — Lightweight API gateway
+#   galaxy-gateway   — Lightweight API gateway
 #   neo4j         — Graph database (MemOS)
 #   qdrant        — Vector database (semantic search)
 #   redis         — Cache & message broker
@@ -51,7 +51,7 @@ services:
       - galaxy-data:/app/data
       - galaxy-logs:/app/logs
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
@@ -61,7 +61,7 @@ services:
       start_period: 20s
 
   # ============ Galaxy Gateway ============
-  ufo-gateway:
+  galaxy-gateway:
     build:
       context: .
       dockerfile: Dockerfile.gateway
@@ -122,7 +122,7 @@ services:
       mongodb:
         condition: service_healthy
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -152,7 +152,7 @@ services:
       - neo4j-import:/var/lib/neo4j/import
       - neo4j-plugins:/plugins
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
@@ -178,7 +178,7 @@ services:
       - qdrant-storage:/qdrant/storage
       - qdrant-snapshots:/qdrant/snapshots
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
@@ -199,8 +199,8 @@ services:
       - "49152-65535:49152-65535/udp"  # Relay ports
     environment:
       - TURN_REALM=${TURN_REALM:-galaxy.local}
-      - TURN_USER=${TURN_USERNAME:-ufo}
-      - TURN_PASSWORD=${TURN_CREDENTIAL:-ufo123}
+      - TURN_USER=${TURN_USERNAME:-galaxy}
+      - TURN_PASSWORD=${TURN_CREDENTIAL:-galaxy123}
       - TURN_MIN_PORT=49152
       - TURN_MAX_PORT=65535
     command: >
@@ -208,7 +208,7 @@ services:
       --realm=${TURN_REALM:-galaxy.local}
       --fingerprint
       --lt-cred-mech
-      --user=${TURN_USERNAME:-ufo}:${TURN_CREDENTIAL:-ufo123}
+      --user=${TURN_USERNAME:-galaxy}:${TURN_CREDENTIAL:-galaxy123}
       --external-ip=${EXTERNAL_IP:-$(detect-external-ip)}
       --listening-port=3478
       --tls-listening-port=5349
@@ -217,7 +217,7 @@ services:
       --log-file=stdout
       --no-cli
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     profiles:
       - full
@@ -238,7 +238,7 @@ services:
       - minio-data:/data
     command: server /data --console-address ":9001"
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -260,7 +260,7 @@ services:
     volumes:
       - oneapi-data:/data
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     profiles:
       - full
@@ -274,7 +274,7 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     deploy:
       resources:
@@ -303,7 +303,7 @@ services:
       - neo4j
       - qdrant
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     profiles:
       - full
@@ -317,7 +317,7 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -338,7 +338,7 @@ services:
     volumes:
       - mongo-data:/data/db
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
@@ -360,7 +360,7 @@ services:
     volumes:
       - agentcpm-models:/models
     networks:
-      - ufo-network
+      - galaxy-network
     restart: unless-stopped
     profiles:
       - full
@@ -373,7 +373,7 @@ services:
               capabilities: [gpu]
 
 networks:
-  ufo-network:
+  galaxy-network:
     driver: bridge
     ipam:
       config:
