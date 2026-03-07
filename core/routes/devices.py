@@ -3,16 +3,19 @@ UFO Galaxy - Device Routes
 ============================
 
 Routes:
-  POST /api/v1/devices/register       - 注册设备
-  POST /api/v1/devices/status         - 更新设备状态
-  GET  /api/v1/devices                - 列出所有设备
-  GET  /api/v1/devices/{device_id}    - 获取设备详情
+  POST /api/v1/devices/register            - 注册设备
+  POST /api/v1/devices/status              - 更新设备状态
+  GET  /api/v1/devices                     - 列出所有设备
+  GET  /api/v1/devices/discover            - 按条件发现设备
+  GET  /api/v1/devices/{device_id}         - 获取设备详情
+  POST /api/v1/devices/{device_id}/heartbeat - 设备心跳
 """
 
 import logging
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from core.routes._shared import (
@@ -50,7 +53,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "success": True,
             "device_id": req.device_id,
             "message": "设备注册成功",
-            "server_version": "2.0.0",
+            "server_version": "3.0.0",
             "available_nodes": list(node_status_cache.keys())[:20]
         })
 
@@ -83,6 +86,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             })
         return JSONResponse({"devices": devices, "total": len(devices)})
 
+    @router.get("/api/v1/devices/discover")
+    async def discover_devices(
+        device_type: Optional[str] = Query(None, description="按设备类型过滤（如 android_phone）"),
+        capability: Optional[str] = Query(None, description="按能力过滤（如 GUI_SCREENSHOT）"),
+        status: Optional[str] = Query(None, description="按状态过滤（registered / online / offline）"),
+    ):
+        """发现设备（按类型、能力、状态过滤）"""
+        devices = []
+        for did, info in registered_devices.items():
+            is_online = did in connection_manager.active_devices
+            # 类型过滤
+            if device_type and info.get("device_type") != device_type:
+                continue
+            # 状态过滤
+            effective_status = "online" if is_online else info.get("status", "registered")
+            if status and effective_status != status:
+                continue
+            # 能力过滤
+            if capability:
+                caps = info.get("capabilities", [])
+                if capability not in caps:
+                    continue
+            devices.append({**info, "online": is_online})
+        return JSONResponse({"devices": devices, "total": len(devices)})
+
     @router.get("/api/v1/devices/{device_id}")
     async def get_device(device_id: str):
         """获取设备详情"""
@@ -91,5 +119,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             info["online"] = device_id in connection_manager.active_devices
             return JSONResponse(info)
         raise HTTPException(status_code=404, detail="设备未找到")
+
+    @router.post("/api/v1/devices/{device_id}/heartbeat")
+    async def device_heartbeat(device_id: str):
+        """设备心跳接口（REST 方式）
+
+        Android 客户端可通过此端点上报心跳，服务端更新 ``last_seen`` 并广播在线状态。
+        WebSocket 心跳由 ``/ws/device/{device_id}`` 通道处理（推荐）。
+        """
+        if device_id not in registered_devices:
+            raise HTTPException(status_code=404, detail="设备未注册")
+
+        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
+        registered_devices[device_id]["status"] = "registered"
+
+        await connection_manager.broadcast_status({
+            "type": "device_heartbeat",
+            "device_id": device_id,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+        return JSONResponse({"success": True, "device_id": device_id})
 
     return router

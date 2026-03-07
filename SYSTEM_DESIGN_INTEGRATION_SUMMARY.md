@@ -444,4 +444,46 @@ python unified_launcher.py
 
 ---
 
+## Android 设备接入标准
+
+### 协议标准
+
+| 层次 | 标准 |
+|------|------|
+| 消息格式 | **AIP v3.0**（`galaxy_gateway/protocol/aip_v3.py` — 单一事实来源） |
+| WebSocket 主通道 | `ws://<host>:8765/ws/device/{device_id}` |
+| WebSocket 初始通道 | `ws://<host>:8765/ws/android` |
+| REST 设备注册 | `POST /api/v1/devices/register` |
+| REST 设备发现 | `GET /api/v1/devices/discover` |
+| REST 设备心跳 | `POST /api/v1/devices/{device_id}/heartbeat` |
+
+### 多版本兼容处理
+
+服务端通过 `galaxy_gateway/protocol/compat.py` 兼容层接受旧版格式，**内部统一转换为 AIP v3 后再处理**：
+
+```
+客户端 (AIP/1.0 / 2.0 / 3.0)
+    │
+    ▼
+parse_message_compat()   ← 版本自动检测与字段规范化
+    │
+    ▼
+AIPMessage (v3)          ← 内部唯一处理格式
+    │
+    ▼
+MessageHandler / DeviceManager / DeviceRouter
+```
+
+### device_id 规范
+
+- 由客户端在首次连接时生成，推荐使用 UUID v4
+- 服务端以此为键维护设备状态，不重新生成
+- 同一 device_id 跨 WebSocket 和 REST 共享
+
+### 向后兼容端点
+
+旧版 Android APK 使用 `/api/devices/*` 路径，服务端通过 `core/routes/compat.py` 透明转发到 `/api/v1/devices/*` 处理逻辑，无需客户端升级。
+
+---
+
 *UFO Galaxy v2.0 - L4 级自主性智能系统*

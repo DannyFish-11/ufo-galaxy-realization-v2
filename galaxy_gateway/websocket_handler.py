@@ -1,12 +1,15 @@
 """
 WebSocket Handler - WebSocket 连接处理器
 
-处理与 Android Agent 和其他设备的 WebSocket 连接
-实现 AIP/1.0 协议通信
+处理与 Android Agent 和其他设备的 WebSocket 连接。
+所有 incoming 消息通过 :func:`parse_message_compat` 规范化为 AIP v3
+格式后再分发给各处理器。响应消息也使用 AIP v3 字段。
+
+支持的 incoming 协议版本：AIP/1.0、AIP/2.0、AIP/3.0（向后兼容）。
 
 Author: Manus AI
-Version: 1.0
-Date: 2026-01-22
+Version: 2.0
+Date: 2026-03-07
 """
 
 import asyncio
@@ -14,8 +17,11 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Set
+import uuid
 from fastapi import WebSocket, WebSocketDisconnect
-from galaxy_gateway.device_router import device_router
+from galaxy_gateway.device_router import device_router, map_device_type_to_platform
+from galaxy_gateway.protocol.compat import parse_message_compat
+from galaxy_gateway.protocol.aip_v3 import MessageType
 
 logger = logging.getLogger(__name__)
 
@@ -98,62 +104,61 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
 
 
 async def handle_message(connection_id: str, message: Dict, websocket: WebSocket):
-    """处理接收到的消息"""
+    """处理接收到的消息。
+
+    使用 :func:`parse_message_compat` 将 AIP/1.0、AIP/2.0、AIP/3.0 消息统一
+    规范化为 v3 格式后再路由到具体处理器。
+    """
     try:
-        # 验证 AIP/1.0 协议
-        if not validate_aip_message(message):
-            logger.warning(f"⚠️ 无效的 AIP/1.0 消息")
+        if "type" not in message:
+            logger.warning("⚠️ 收到缺少 type 字段的消息，已忽略")
             return
-        
-        message_type = message.get("type")
-        message_id = message.get("message_id")
-        
-        logger.info(f"📨 收到消息: type={message_type}, id={message_id}")
-        
-        # 根据消息类型处理
-        if message_type in ("register", "agent_register", "device_register"):
-            await handle_register(connection_id, message, websocket)
-        elif message_type in ("heartbeat", "agent_heartbeat", "device_heartbeat"):
-            await handle_heartbeat(connection_id, message)
-        elif message_type == "response":
-            await handle_response(connection_id, message)
-        elif message_type == "command":
-            await handle_command(connection_id, message)
-        elif message_type == "status":
-            await handle_status(connection_id, message)
+
+        # 规范化为 AIP v3
+        try:
+            aip_msg = parse_message_compat(message)
+        except Exception as parse_err:
+            logger.warning(f"⚠️ 消息解析失败（type={message.get('type')}）: {parse_err}")
+            return
+
+        logger.info(
+            f"📨 收到消息: type={aip_msg.type.value}, "
+            f"device={aip_msg.device_id}, id={aip_msg.message_id}"
+        )
+
+        # 根据规范化后的 v3 MessageType 路由
+        if aip_msg.type == MessageType.DEVICE_REGISTER:
+            await handle_register(connection_id, aip_msg, websocket)
+        elif aip_msg.type == MessageType.DEVICE_HEARTBEAT:
+            await handle_heartbeat(connection_id, aip_msg)
+        elif aip_msg.type in (MessageType.TASK_RESULT, MessageType.COMMAND_RESULT):
+            await handle_response(connection_id, aip_msg)
+        elif aip_msg.type == MessageType.COMMAND:
+            await handle_command(connection_id, aip_msg)
+        elif aip_msg.type == MessageType.DEVICE_STATUS:
+            await handle_status(connection_id, aip_msg)
         else:
-            logger.warning(f"⚠️ 未知消息类型: {message_type}")
-    
+            logger.debug(f"ℹ️ 未处理的消息类型: {aip_msg.type.value}")
+
     except Exception as e:
         logger.error(f"❌ 消息处理失败: {e}")
 
 
-def validate_aip_message(message: Dict) -> bool:
-    """验证 AIP/1.0 消息格式 — 至少需要 type 字段，其余字段宽容处理"""
-    if "type" not in message:
-        return False
-    # 严格模式要求全部字段，但为了兼容旧客户端，仅警告
-    recommended = ["protocol", "message_id", "timestamp", "from", "to"]
-    missing = [f for f in recommended if f not in message]
-    if missing:
-        logger.debug(f"AIP 消息缺少推荐字段: {missing} (type={message.get('type')})")
-    return True
-
-
-async def handle_register(connection_id: str, message: Dict, websocket: WebSocket):
-    """处理设备注册 (兼容 type=register 和 type=agent_register)"""
+async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
+    """处理设备注册（接受 AIPMessage 对象）"""
     try:
-        payload = message.get("payload", {})
-        # 兼容两种格式: payload.device_id 或 message root 的 device_id
-        device_id = payload.get("device_id") or message.get("from") or message.get("device_id")
-        device_type = payload.get("device_type") or payload.get("platform", "unknown")
-        capabilities = payload.get("capabilities", [])
-        agent_id = payload.get("agent_id", device_id)
+        device_id = aip_msg.device_id
+        device_info = aip_msg.payload.get("device_info", {})
+        device_type_raw = (aip_msg.device_type.value if aip_msg.device_type else None) or device_info.get("device_type", "unknown")
+        capabilities = device_info.get("capabilities", [])
+
+        # 映射为路由层平台大类
+        platform = map_device_type_to_platform(device_type_raw)
 
         # 注册设备
         success = device_router.register_device(
             device_id=device_id,
-            device_type=device_type,
+            device_type=platform,
             capabilities=capabilities,
             websocket=websocket
         )
@@ -161,130 +166,108 @@ async def handle_register(connection_id: str, message: Dict, websocket: WebSocke
         if success:
             connection_manager.device_connections[device_id] = connection_id
 
-        # 生成简单 token (后续可替换为 JWT)
-        import hashlib
-        token = hashlib.sha256(
-            f"{device_id}:{agent_id}:{datetime.now().isoformat()}".encode()
-        ).hexdigest()[:48]
-
-        # 发送注册响应
+        # 发送 AIP v3 注册确认响应
         response = {
-            "protocol": "AIP/1.0",
-            "message_id": f"node50_{int(datetime.now().timestamp() * 1000)}",
-            "timestamp": datetime.now().isoformat() + "Z",
-            "from": "Node_50",
-            "to": device_id,
-            "type": "response",
+            "version": "3.0",
+            "message_id": str(uuid.uuid4()),
+            "correlation_id": aip_msg.message_id,
+            "type": MessageType.DEVICE_REGISTER_ACK.value,
+            "device_id": device_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
             "payload": {
-                "success": success,
-                "token": token,
+                "status": "registered" if success else "failed",
                 "message": "设备注册成功" if success else "设备注册失败",
-                "registered_at": datetime.now().isoformat()
-            }
+                "registered_at": datetime.utcnow().isoformat(),
+            },
         }
 
         await websocket.send_json(response)
-        logger.info(f"✅ 设备注册完成: {device_id} (agent={agent_id}, type={device_type})")
+        logger.info(f"✅ 设备注册完成: {device_id} (type={device_type_raw})")
 
     except Exception as e:
         logger.error(f"❌ 处理注册失败: {e}")
 
 
-async def handle_heartbeat(connection_id: str, message: Dict):
-    """处理心跳"""
+async def handle_heartbeat(connection_id: str, aip_msg):
+    """处理心跳（接受 AIPMessage 对象）"""
     try:
-        device_id = message.get("from")
-        
+        device_id = aip_msg.device_id
+
         # 更新设备最后活跃时间
         device = device_router.get_device(device_id)
         if device:
             device.last_seen = datetime.now()
             device.status = "online"
-        
-        # 发送心跳响应
+
+        # 发送 AIP v3 心跳确认响应
         response = {
-            "protocol": "AIP/1.0",
-            "message_id": f"node50_{int(datetime.now().timestamp() * 1000)}",
-            "timestamp": datetime.now().isoformat() + "Z",
-            "from": "Node_50",
-            "to": device_id,
-            "type": "heartbeat",
-            "payload": {
-                "status": "ok"
-            }
+            "version": "3.0",
+            "message_id": str(uuid.uuid4()),
+            "correlation_id": aip_msg.message_id,
+            "type": MessageType.DEVICE_HEARTBEAT_ACK.value,
+            "device_id": device_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": {"status": "ok"},
         }
-        
+
         await connection_manager.send_message(connection_id, response)
-        
+
     except Exception as e:
         logger.error(f"❌ 处理心跳失败: {e}")
 
 
-async def handle_response(connection_id: str, message: Dict):
-    """处理任务执行结果"""
+async def handle_response(connection_id: str, aip_msg):
+    """处理任务/命令执行结果（接受 AIPMessage 对象）"""
     try:
-        payload = message.get("payload", {})
-        
-        # 提取任务 ID（从原始消息 ID 中）
-        original_message_id = message.get("message_id", "")
-        
-        # 记录任务结果
-        await device_router.handle_task_result(original_message_id, payload)
-        
-        logger.info(f"✅ 任务结果已处理")
-        
+        task_id = aip_msg.task_id or aip_msg.correlation_id or aip_msg.message_id
+        payload = {"results": [r.model_dump() for r in aip_msg.results], **aip_msg.payload}
+        await device_router.handle_task_result(task_id, payload)
+        logger.info(f"✅ 任务结果已处理: {task_id}")
+
     except Exception as e:
         logger.error(f"❌ 处理响应失败: {e}")
 
 
-async def handle_command(connection_id: str, message: Dict):
-    """处理命令（从设备发起的命令）"""
+async def handle_command(connection_id: str, aip_msg):
+    """处理命令（设备发起的命令，接受 AIPMessage 对象）"""
     try:
-        payload = message.get("payload", {})
-        command = payload.get("command", "")
-        
-        # 路由命令
-        result = await device_router.route_task(command)
-        
-        # 发送响应
-        device_id = message.get("from")
+        command_text = aip_msg.payload.get("command", "")
+        result = await device_router.route_task(command_text)
+
+        # 发送 AIP v3 命令结果响应
         response = {
-            "protocol": "AIP/1.0",
-            "message_id": f"node50_{int(datetime.now().timestamp() * 1000)}",
-            "timestamp": datetime.now().isoformat() + "Z",
-            "from": "Node_50",
-            "to": device_id,
-            "type": "response",
-            "payload": result
+            "version": "3.0",
+            "message_id": str(uuid.uuid4()),
+            "correlation_id": aip_msg.message_id,
+            "type": MessageType.COMMAND_RESULT.value,
+            "device_id": aip_msg.device_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": result,
         }
-        
+
         await connection_manager.send_message(connection_id, response)
-        
+
     except Exception as e:
         logger.error(f"❌ 处理命令失败: {e}")
 
 
-async def handle_status(connection_id: str, message: Dict):
-    """处理状态查询"""
+async def handle_status(connection_id: str, aip_msg):
+    """处理状态查询（接受 AIPMessage 对象）"""
     try:
-        device_id = message.get("from")
-        
-        # 获取设备状态
         status = device_router.get_device_status()
-        
-        # 发送响应
+
         response = {
-            "protocol": "AIP/1.0",
-            "message_id": f"node50_{int(datetime.now().timestamp() * 1000)}",
-            "timestamp": datetime.now().isoformat() + "Z",
-            "from": "Node_50",
-            "to": device_id,
-            "type": "response",
-            "payload": status
+            "version": "3.0",
+            "message_id": str(uuid.uuid4()),
+            "correlation_id": aip_msg.message_id,
+            "type": MessageType.DEVICE_STATUS.value,
+            "device_id": aip_msg.device_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": status,
         }
-        
+
         await connection_manager.send_message(connection_id, response)
-        
+
     except Exception as e:
         logger.error(f"❌ 处理状态查询失败: {e}")
 

@@ -1,12 +1,26 @@
 """
 Device Router - 设备路由和任务分发模块
 
-负责将用户命令路由到正确的设备执行
-支持多设备协同任务
+负责将用户命令路由到正确的设备执行，支持多设备协同任务。
+
+数据流说明
+----------
+此模块是 ``galaxy_gateway/main.py`` 和 ``websocket_handler.py`` 使用的路由层。
+设备注册状态由 :class:`DeviceRouter` 维护（运行时 WebSocket 连接表），
+仅在连接活跃期间有效。
+
+内部消息处理使用 AIP v3 标准字段；向设备发送的命令也使用 AIP v3 格式。
+接入层（``websocket_handler.py``）负责通过 compat 层将所有 incoming 消息
+规范化为 v3 格式后再传入此模块。
+
+标准端点（参见 galaxy_gateway/app.py）
+--------------------------------------
+- WebSocket : ``/ws/device/{device_id}`` (primary), ``/ws/android`` (initial)
+- REST      : ``/api/v1/devices/*``
 
 Author: Manus AI
-Version: 1.0
-Date: 2026-01-22
+Version: 2.0
+Date: 2026-03-07
 """
 
 import asyncio
@@ -29,13 +43,54 @@ def get_cross_device_coordinator():
     return cross_device_coordinator
 
 
-class DeviceType:
-    """设备类型"""
+class _RouterDeviceType:
+    """路由层内部设备平台大类（仅供命令路由决策使用）。
+
+    对外部协议的精细类型（如 android_phone / android_tablet）请使用
+    ``galaxy_gateway.protocol.aip_v3.DeviceType``。
+    """
     WINDOWS = "windows"
     ANDROID = "android"
     IOS = "ios"
     WEB = "web"
     UNKNOWN = "unknown"
+
+    # AIP v3 DeviceType 前缀 → 内部平台大类映射
+    _PREFIX_MAP = {
+        "android": ANDROID,
+        "ios": IOS,
+        "windows": WINDOWS,
+        "macos": WINDOWS,  # 桌面端归一
+        "linux": WINDOWS,
+        "web": WEB,
+    }
+
+    @classmethod
+    def from_aip_v3(cls, aip_device_type: str) -> str:
+        """将 AIP v3 DeviceType 值映射为路由层平台大类。"""
+        if not aip_device_type:
+            return cls.UNKNOWN
+        prefix = aip_device_type.split("_")[0].lower()
+        return cls._PREFIX_MAP.get(prefix, cls.UNKNOWN)
+
+
+def map_device_type_to_platform(aip_device_type: str) -> str:
+    """将 AIP v3 DeviceType 字符串映射为路由层平台大类（公共接口）。
+
+    Example::
+
+        >>> map_device_type_to_platform("android_phone")
+        'android'
+        >>> map_device_type_to_platform("windows_desktop")
+        'windows'
+    """
+    return _RouterDeviceType.from_aip_v3(aip_device_type)
+
+
+# ---------------------------------------------------------------------------
+# 向后兼容别名（保持旧代码中 DeviceType.ANDROID 等调用不出错）
+# ---------------------------------------------------------------------------
+DeviceType = _RouterDeviceType
 
 
 class TaskType:
@@ -268,19 +323,19 @@ class DeviceRouter:
         return payload
     
     async def _dispatch_single_device_task(self, task: Dict, device: Device) -> Dict:
-        """分发单设备任务"""
+        """分发单设备任务（使用 AIP v3 消息格式）"""
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
-            
-            # 构建 AIP/1.0 消息
+
+            # 构建 AIP v3.0 消息
             message = {
-                "protocol": "AIP/1.0",
-                "message_id": f"node50_{int(datetime.now().timestamp() * 1000)}",
-                "timestamp": datetime.now().isoformat() + "Z",
-                "from": "Node_50",
-                "to": device.device_id,
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
                 "type": "command",
-                "payload": task["payload"]
+                "device_id": device.device_id,
+                "task_id": task["task_id"],
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "payload": task["payload"],
             }
             
             # 发送到设备
