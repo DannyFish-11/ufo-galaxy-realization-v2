@@ -622,7 +622,8 @@ class AgentFactoryPanel(QWidget):
         self.stat_active = QLabel("0")
         self.stat_total = QLabel("0")
         self.stat_teams = QLabel("0")
-        for label, title in [(self.stat_active, "活跃 Agent"), (self.stat_total, "总 Agent"), (self.stat_teams, "Team")]:
+        self.stat_twins = QLabel("0")
+        for label, title in [(self.stat_active, "活跃"), (self.stat_total, "Agent"), (self.stat_teams, "Team"), (self.stat_twins, "孪生")]:
             col = QVBoxLayout()
             label.setStyleSheet(f"color: {COLORS['primary']}; font-size: 18px; font-weight: 700;")
             label.setAlignment(Qt.AlignCenter)
@@ -775,6 +776,7 @@ class AgentFactoryPanel(QWidget):
     def _refresh_all(self):
         self._refresh_agents()
         self._refresh_teams()
+        self._refresh_twins()
 
     def _refresh_agents(self):
         worker = AsyncWorker(self.api.get, "/api/v1/agents")
@@ -801,11 +803,26 @@ class AgentFactoryPanel(QWidget):
             return
         for a in agents:
             state_color = COLORS['success'] if a.get('state') == 'working' else COLORS['text_dim']
+            # 检查是否有孪生体信息（Team 的 to_dict 会包含 twin_status）
+            twin_info = ""
+            twin_status = a.get("twin_status", {})
+            if twin_status:
+                t_state = twin_status.get("state", "")
+                t_mode = twin_status.get("coupling_mode", "")
+                t_div = twin_status.get("divergence", 0)
+                twin_color = COLORS['success'] if t_state == "synced" else (
+                    COLORS['warning'] if t_state == "diverged" else COLORS['text_muted']
+                )
+                twin_info = (
+                    f'<br/><span style="color: {twin_color}; font-size: 9px;">'
+                    f'Twin: {_safe(t_state)} ({_safe(t_mode)}) div={t_div:.2f}</span>'
+                )
             self.agent_list.append(
                 f'<div style="background: rgba(255,255,255,0.03); border-radius: 10px; padding: 6px; margin-bottom: 4px;">'
                 f'<span style="font-weight: 600; color: {COLORS["text"]}; font-size: 12px;">{_safe(a.get("name", a.get("id", "?")))}</span> '
                 f'<span style="color: {COLORS["text_muted"]}; font-size: 10px;">({_safe(a.get("role", "?"))})</span>'
                 f'<span style="color: {state_color}; font-size: 10px; margin-left: 6px;">● {_safe(a.get("state", "?"))}</span>'
+                f'{twin_info}'
                 f'</div>'
             )
 
@@ -822,6 +839,32 @@ class AgentFactoryPanel(QWidget):
             strategy = t.get("strategy", "?")
             count = t.get("member_count", 0)
             self.team_select_combo.addItem(f"{tid} ({strategy}, {count}人)", tid)
+
+    def _refresh_twins(self):
+        worker = AsyncWorker(self.api.get, "/api/v1/twins")
+        worker.finished.connect(self._on_twins_loaded)
+        self._workers.append(worker)
+        worker.start()
+
+    @pyqtSlot(dict)
+    def _on_twins_loaded(self, data: dict):
+        twins = data.get("twins", [])
+        self.stat_twins.setText(str(len(twins)))
+
+        # 在 Team 结果区显示孪生状态概览
+        if twins:
+            synced = sum(1 for t in twins if t.get("state") == "synced")
+            diverged = sum(1 for t in twins if t.get("state") == "diverged")
+            detached = sum(1 for t in twins if t.get("state") == "detached")
+            self.team_result_area.append(
+                f'<div style="background: rgba(255,107,157,0.05); border-radius: 8px; '
+                f'padding: 6px 8px; margin: 4px 0; font-size: 11px;">'
+                f'<span style="color: {COLORS["accent"]}; font-weight: 600;">孪生状态:</span> '
+                f'<span style="color: {COLORS["success"]};">{synced} synced</span> | '
+                f'<span style="color: {COLORS["warning"]};">{diverged} diverged</span> | '
+                f'<span style="color: {COLORS["text_dim"]};">{detached} detached</span>'
+                f'</div>'
+            )
 
     def _create_from_template(self):
         template = self.template_combo.currentText()
@@ -1099,6 +1142,31 @@ class DevicePanel(QWidget):
         self._workers.append(worker)
         worker.start()
 
+        # 同时获取设备孪生状态
+        twin_worker = AsyncWorker(self.api.get, "/api/v1/device-twins")
+        twin_worker.finished.connect(self._on_device_twins)
+        self._workers.append(twin_worker)
+        twin_worker.start()
+
+    @pyqtSlot(dict)
+    def _on_device_twins(self, data: dict):
+        """显示设备孪生概览"""
+        twins_data = data.get("twins", {})
+        if not twins_data or not twins_data.get("total_twins", 0):
+            return
+        total = twins_data.get("total_twins", 0)
+        by_status = twins_data.get("by_status", {})
+        by_coupling = twins_data.get("by_coupling", {})
+        self.cmd_result.append(
+            f'<div style="background: rgba(255,107,157,0.05); border-radius: 8px; '
+            f'padding: 6px 8px; margin: 4px 0; font-size: 11px;">'
+            f'<span style="color: {COLORS["accent"]}; font-weight: 600;">设备孪生:</span> '
+            f'{total} 个 | '
+            f'状态: {", ".join(f"{k}:{v}" for k, v in by_status.items())} | '
+            f'耦合: {", ".join(f"{k}:{v}" for k, v in by_coupling.items())}'
+            f'</div>'
+        )
+
     @pyqtSlot(dict)
     def _on_devices(self, data: dict):
         devices = data.get("devices", [])
@@ -1115,12 +1183,23 @@ class DevicePanel(QWidget):
             dot = COLORS['success'] if online else COLORS['text_muted']
             did = d.get("device_id", "?")
             dtype = d.get("type", "?")
+            # 检查是否有孪生体
+            twin_info = ""
+            if d.get("twin_id"):
+                t_status = d.get("twin_status", "unknown")
+                t_mode = d.get("twin_coupling", "unknown")
+                twin_color = COLORS['success'] if t_status == "synced" else COLORS['text_dim']
+                twin_info = (
+                    f'<br/><span style="color: {twin_color}; font-size: 9px;">'
+                    f'Twin: {_safe(t_status)} ({_safe(t_mode)})</span>'
+                )
             self.device_text.append(
                 f'<div style="background: rgba(255,255,255,0.03); border-radius: 10px; '
                 f'padding: 8px; margin-bottom: 4px;">'
                 f'<span style="color: {dot};">●</span> '
                 f'<span style="font-weight: 600;">{_safe(did)}</span> '
                 f'<span style="color: {COLORS["text_dim"]};">({_safe(dtype)})</span>'
+                f'{twin_info}'
                 f'</div>'
             )
             self.device_select.addItem(f"{did} ({dtype})", did)
@@ -1233,6 +1312,63 @@ class StatusPanel(QWidget):
         w3.finished.connect(self._on_nodes)
         self._workers.append(w3)
         w3.start()
+
+        w4 = AsyncWorker(self.api.get, "/api/v1/twins")
+        w4.finished.connect(self._on_twin_status)
+        self._workers.append(w4)
+        w4.start()
+
+        w5 = AsyncWorker(self.api.get, "/api/v1/device-twins")
+        w5.finished.connect(self._on_device_twin_status)
+        self._workers.append(w5)
+        w5.start()
+
+    @pyqtSlot(dict)
+    def _on_twin_status(self, data: dict):
+        twins = data.get("twins", [])
+        if not twins:
+            return
+        self.status_text.append(
+            f'<div style="font-size: 13px; font-weight: 600; margin: 10px 0 6px; '
+            f'color: {COLORS["accent"]};">Agent 孪生模型</div>'
+        )
+        for t in twins:
+            state = t.get("state", "?")
+            mode = t.get("coupling_mode", "?")
+            div = t.get("current_divergence", 0)
+            state_color = COLORS['success'] if state == "synced" else (
+                COLORS['warning'] if state == "diverged" else COLORS['text_muted']
+            )
+            self.status_text.append(
+                f'<div style="padding: 2px 0; font-size: 11px;">'
+                f'<span style="color: {state_color};">●</span> '
+                f'<span style="color: {COLORS["text"]};">{_safe(t.get("name", t.get("twin_id", "?")))}</span> '
+                f'<span style="color: {COLORS["text_dim"]};">({_safe(mode)} | div={div:.2f})</span></div>'
+            )
+
+    @pyqtSlot(dict)
+    def _on_device_twin_status(self, data: dict):
+        twins_data = data.get("twins", {})
+        total = twins_data.get("total_twins", 0)
+        if not total:
+            return
+        by_status = twins_data.get("by_status", {})
+        by_coupling = twins_data.get("by_coupling", {})
+        self.status_text.append(
+            f'<div style="font-size: 13px; font-weight: 600; margin: 10px 0 6px; '
+            f'color: {COLORS["accent"]};">设备数字孪生</div>'
+        )
+        self.status_text.append(
+            f'<div style="padding: 2px 0; font-size: 11px;">'
+            f'<span style="color: {COLORS["text_dim"]};">总计:</span> '
+            f'<span style="color: {COLORS["text"]};">{total}</span></div>'
+        )
+        for status, count in by_status.items():
+            color = COLORS['success'] if status == "synced" else COLORS['text_dim']
+            self.status_text.append(
+                f'<div style="padding: 1px 0; font-size: 10px;">'
+                f'<span style="color: {color};">●</span> {_safe(status)}: {count}</div>'
+            )
 
     @pyqtSlot(dict)
     def _on_config(self, data: dict):

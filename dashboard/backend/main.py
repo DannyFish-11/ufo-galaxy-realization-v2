@@ -93,10 +93,31 @@ except ImportError:
     LLM_ROUTER_AVAILABLE = False
     llm_router = None
 
-# 导入 Agent Team 管理器
+# 导入孪生模型管理器
+try:
+    from enhancements.agent_factory.twin_model import (
+        TwinModelManager, CouplingMode as TwinCouplingMode, twin_manager as _twin_mgr
+    )
+    twin_manager = _twin_mgr  # 全局单例
+    TWIN_AVAILABLE = True
+except ImportError:
+    TWIN_AVAILABLE = False
+    twin_manager = None
+    TwinCouplingMode = None
+
+# 导入设备数字孪生引擎
+try:
+    from core.digital_twin_engine import get_digital_twin_engine
+    device_twin_engine = get_digital_twin_engine()
+    DEVICE_TWIN_AVAILABLE = True
+except ImportError:
+    DEVICE_TWIN_AVAILABLE = False
+    device_twin_engine = None
+
+# 导入 Agent Team 管理器（注入 twin_manager）
 try:
     from core.agent_team import TeamManager
-    team_manager = TeamManager(agent_factory, llm_router)
+    team_manager = TeamManager(agent_factory, llm_router, twin_manager=twin_manager)
     TEAM_MANAGER_AVAILABLE = True
 except ImportError:
     TEAM_MANAGER_AVAILABLE = False
@@ -431,6 +452,187 @@ async def disband_team(team_id: str):
     if success:
         return {"success": True, "message": f"Team {team_id} disbanded"}
     return JSONResponse(status_code=404, content={"error": f"Team {team_id} not found"})
+
+
+# ============================================================================
+# 孪生模型 API (Agent Twin + Device Twin)
+# ============================================================================
+
+# ── Agent 孪生 ──
+
+@app.get("/api/v1/twins")
+async def list_twins():
+    """列出所有 Agent 孪生模型"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return {"twins": [], "available": False}
+    return {"twins": twin_manager.list_twins(), "available": True}
+
+
+@app.post("/api/v1/twins/create")
+async def create_twin(request: dict):
+    """为 Agent 创建孪生体"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    source_id = request.get("source_id", "")
+    name = request.get("name", f"twin_{source_id[:8]}")
+    coupling_mode = request.get("coupling_mode", "loose")
+    snapshot = request.get("snapshot", {})
+
+    if not source_id:
+        return JSONResponse(status_code=400, content={"error": "source_id is required"})
+
+    try:
+        mode = TwinCouplingMode(coupling_mode)
+        twin = await twin_manager.create_twin(source_id, name, mode, snapshot)
+        return {
+            "success": True,
+            "twin_id": twin.twin_id,
+            "source_id": twin.source_id,
+            "coupling_mode": twin.coupling_mode.value,
+            "state": twin.state.value,
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/v1/twins/{twin_id}/couple")
+async def couple_twin(twin_id: str, request: dict):
+    """耦合孪生体"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    mode = request.get("mode", "loose")
+    try:
+        twin_manager.couple(twin_id, TwinCouplingMode(mode))
+        twin = twin_manager.get_twin(twin_id)
+        return {
+            "success": True,
+            "twin_id": twin_id,
+            "coupling_mode": twin.coupling_mode.value if twin else mode,
+            "state": twin.state.value if twin else "unknown",
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/v1/twins/{twin_id}/decouple")
+async def decouple_twin(twin_id: str):
+    """解耦孪生体"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    twin_manager.decouple(twin_id)
+    twin = twin_manager.get_twin(twin_id)
+    return {
+        "success": True,
+        "twin_id": twin_id,
+        "coupling_mode": twin.coupling_mode.value if twin else "decoupled",
+        "state": twin.state.value if twin else "detached",
+    }
+
+
+@app.get("/api/v1/twins/{twin_id}/predict")
+async def predict_twin(twin_id: str, horizon: int = 5):
+    """预测孪生体行为"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    predictions = await twin_manager.predict_behavior(twin_id, horizon)
+    return {"twin_id": twin_id, "predictions": predictions}
+
+
+@app.post("/api/v1/twins/{twin_id}/simulate")
+async def simulate_twin(twin_id: str, request: dict):
+    """孪生体场景模拟"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    scenario = request.get("scenario", {})
+    result = await twin_manager.simulate(twin_id, scenario)
+    return {"twin_id": twin_id, "simulation": result}
+
+
+# ── 设备数字孪生 ──
+
+@app.get("/api/v1/device-twins")
+async def list_device_twins():
+    """列出设备数字孪生"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return {"twins": {}, "available": False}
+    return {"twins": device_twin_engine.get_global_state(), "available": True}
+
+
+@app.post("/api/v1/device-twins/create")
+async def create_device_twin(request: dict):
+    """创建设备数字孪生"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return JSONResponse(status_code=503, content={"error": "Device twin engine not available"})
+
+    device_id = request.get("device_id", "")
+    device_type = request.get("device_type", "generic")
+    initial_state = request.get("initial_state", {})
+    drift_threshold = request.get("drift_threshold", 0.1)
+
+    if not device_id:
+        return JSONResponse(status_code=400, content={"error": "device_id is required"})
+
+    twin = device_twin_engine.create_twin(device_id, device_type, initial_state, drift_threshold)
+    return {
+        "success": True,
+        "twin_id": twin.twin_id,
+        "device_id": twin.device_id,
+        "coupling_mode": twin.coupling_mode.value,
+        "status": twin.status.value,
+    }
+
+
+@app.get("/api/v1/device-twins/{twin_id}/state")
+async def get_device_twin_state(twin_id: str):
+    """获取设备孪生状态（含漂移检测）"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return JSONResponse(status_code=503, content={"error": "Device twin engine not available"})
+
+    twin = device_twin_engine.get_twin(twin_id)
+    if not twin:
+        return JSONResponse(status_code=404, content={"error": f"Device twin {twin_id} not found"})
+
+    state = twin.get_state()
+    # 附加漂移报告
+    drift = twin.detect_drift()
+    if drift:
+        state["drift"] = {
+            "max_drift": drift.max_drift,
+            "severity": drift.severity,
+            "drifted_properties": drift.drifted_properties,
+        }
+    return state
+
+
+@app.post("/api/v1/device-twins/{twin_id}/simulate")
+async def simulate_device_twin(twin_id: str, request: dict):
+    """设备孪生操作模拟"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return JSONResponse(status_code=503, content={"error": "Device twin engine not available"})
+
+    twin = device_twin_engine.get_twin(twin_id)
+    if not twin:
+        return JSONResponse(status_code=404, content={"error": f"Device twin {twin_id} not found"})
+
+    action = request.get("action", "")
+    params = request.get("params", {})
+    if not action:
+        return JSONResponse(status_code=400, content={"error": "action is required"})
+
+    result = await twin.simulate_action(action, params)
+    return {
+        "twin_id": twin_id,
+        "action": action,
+        "predicted_state": result.predicted_state,
+        "success_probability": result.success_probability,
+        "risks": result.risks,
+        "side_effects": result.side_effects,
+    }
 
 
 # ============================================================================

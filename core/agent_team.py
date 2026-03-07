@@ -7,9 +7,15 @@ Agent Team 协作引擎
 2. SPECIALIZED (特种部队分工) — LLM 分解子任务，每个匹配最优 Agent+LLM
 3. SWARM (群体智能) — 批量同类 Agent 并行执行，投票/合并
 
+孪生模型集成:
+- 每个 Team 成员自动创建数字孪生（默认 LOOSE 耦合）
+- 支持随时解耦/耦合切换：TIGHT → LOOSE → DECOUPLED → SHADOW
+- 执行时同步更新孪生状态快照 + 偏差检测
+
 复用:
 - core.agent_factory (AgentFactory, TaskAgent, AGENT_TEMPLATES, AgentMessageBus)
 - core.multi_llm_router (MultiLLMRouter, TaskType, RoutingDecision)
+- enhancements.agent_factory.twin_model (TwinModelManager, CouplingMode)
 """
 
 import asyncio
@@ -22,6 +28,18 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 logger = logging.getLogger("Galaxy.AgentTeam")
+
+# 孪生模型管理器（可选依赖）
+try:
+    from enhancements.agent_factory.twin_model import (
+        TwinModelManager, CouplingMode as TwinCouplingMode, TwinState
+    )
+    TWIN_AVAILABLE = True
+except ImportError:
+    TWIN_AVAILABLE = False
+    TwinModelManager = None
+    TwinCouplingMode = None
+    TwinState = None
 
 
 # ───────────────────── 数据模型 ─────────────────────
@@ -123,11 +141,16 @@ TASK_TYPE_TO_TEMPLATE = {
 # ───────────────────── AgentTeam ─────────────────────
 
 class AgentTeam:
-    """一个 Agent 团队实例"""
+    """一个 Agent 团队实例
+
+    支持孪生模型：每个成员可以有数字孪生体，
+    通过 couple/decouple 随时切换耦合模式。
+    """
 
     def __init__(self, team_id: str, strategy: TeamStrategy,
                  members: List[TeamMember],
-                 agent_factory, llm_router):
+                 agent_factory, llm_router,
+                 twin_manager=None):
         self.team_id = team_id
         self.strategy = strategy
         self.members = members
@@ -135,20 +158,117 @@ class AgentTeam:
         self._factory = agent_factory
         self._router = llm_router
         self._results: Optional[TeamResult] = None
+        # 孪生模型
+        self._twin_manager = twin_manager
+        # agent_id → twin_id 映射
+        self._member_twins: Dict[str, str] = {}
+
+    async def init_twins(self, coupling_mode: str = "loose"):
+        """为所有团队成员创建数字孪生体
+
+        Args:
+            coupling_mode: "tight" | "loose" | "decoupled" | "shadow"
+        """
+        if not self._twin_manager or not TWIN_AVAILABLE:
+            logger.debug("TwinModelManager 不可用，跳过孪生创建")
+            return
+
+        mode = TwinCouplingMode(coupling_mode)
+        for member in self.members:
+            if member.agent_id in self._member_twins:
+                continue
+            initial_snapshot = {
+                "agent_id": member.agent_id,
+                "provider": member.provider,
+                "model": member.model,
+                "role": member.role_in_team,
+                "team_id": self.team_id,
+                "status": "idle",
+                "task_count": 0,
+                "last_result": None,
+            }
+            twin = await self._twin_manager.create_twin(
+                source_id=member.agent_id,
+                name=f"twin_{member.agent_name}",
+                coupling_mode=mode,
+                initial_snapshot=initial_snapshot,
+            )
+            self._member_twins[member.agent_id] = twin.twin_id
+            logger.info(f"成员 {member.agent_name} 创建孪生: {twin.twin_id} (模式: {coupling_mode})")
+
+    async def couple_member(self, agent_id: str, mode: str = "loose"):
+        """切换成员的耦合模式"""
+        if not self._twin_manager or not TWIN_AVAILABLE:
+            return
+        twin_id = self._member_twins.get(agent_id)
+        if twin_id:
+            self._twin_manager.couple(twin_id, TwinCouplingMode(mode))
+
+    async def decouple_member(self, agent_id: str):
+        """解耦成员"""
+        if not self._twin_manager or not TWIN_AVAILABLE:
+            return
+        twin_id = self._member_twins.get(agent_id)
+        if twin_id:
+            self._twin_manager.decouple(twin_id)
+
+    def get_twin_status(self) -> List[Dict]:
+        """获取所有成员的孪生状态"""
+        if not self._twin_manager or not TWIN_AVAILABLE:
+            return []
+        statuses = []
+        for member in self.members:
+            twin_id = self._member_twins.get(member.agent_id)
+            if twin_id:
+                twin = self._twin_manager.get_twin(twin_id)
+                if twin:
+                    statuses.append({
+                        "agent_id": member.agent_id,
+                        "agent_name": member.agent_name,
+                        "twin_id": twin.twin_id,
+                        "state": twin.state.value,
+                        "coupling_mode": twin.coupling_mode.value,
+                        "divergence": twin.current_divergence,
+                        "sync_count": twin.sync_count,
+                    })
+        return statuses
+
+    async def _update_member_twin(self, agent_id: str, snapshot_update: Dict):
+        """执行后更新成员孪生体的状态快照"""
+        if not self._twin_manager or not TWIN_AVAILABLE:
+            return
+        twin_id = self._member_twins.get(agent_id)
+        if twin_id:
+            twin = self._twin_manager.get_twin(twin_id)
+            if twin:
+                merged = {**twin.snapshot, **snapshot_update}
+                await self._twin_manager.update_snapshot(twin_id, merged)
 
     def to_dict(self) -> Dict:
-        return {
+        result = {
             "team_id": self.team_id,
             "strategy": self.strategy.value,
             "status": self.status.value,
             "member_count": len(self.members),
             "members": [m.to_dict() for m in self.members],
         }
+        # 附加孪生状态
+        twin_status = self.get_twin_status()
+        if twin_status:
+            result["twin_status"] = twin_status
+        return result
 
     async def execute(self, task: str, context: Optional[Dict] = None) -> TeamResult:
-        """根据策略执行团队任务"""
+        """根据策略执行团队任务
+
+        执行过程中自动更新每个成员的孪生体状态快照。
+        """
         self.status = TeamStatus.EXECUTING
         t0 = time.monotonic()
+
+        # 初始化孪生体（如果尚未创建）
+        if self._twin_manager and not self._member_twins:
+            await self.init_twins()
 
         try:
             if self.strategy == TeamStrategy.PARALLEL:
@@ -164,6 +284,18 @@ class AgentTeam:
             result.total_tokens = sum(mr.tokens for mr in result.member_results)
             self.status = TeamStatus.COMPLETED
             self._results = result
+
+            # 更新所有成员孪生体
+            for mr in result.member_results:
+                await self._update_member_twin(mr.member.agent_id, {
+                    "status": "completed" if mr.success else "error",
+                    "last_task": task[:100],
+                    "last_result": mr.result[:200] if mr.result else None,
+                    "last_latency_ms": mr.latency_ms,
+                    "task_count": 1,  # will be merged with existing
+                    "success": mr.success,
+                })
+
             return result
 
         except Exception as e:
@@ -448,13 +580,18 @@ class AgentTeam:
 # ───────────────────── TeamManager ─────────────────────
 
 class TeamManager:
-    """管理所有 Agent Team 的生命周期"""
+    """管理所有 Agent Team 的生命周期
 
-    def __init__(self, agent_factory=None, llm_router=None):
+    支持孪生模型：创建 Team 时自动为成员建立数字孪生，
+    可通过 API 随时切换 TIGHT/LOOSE/DECOUPLED/SHADOW 模式。
+    """
+
+    def __init__(self, agent_factory=None, llm_router=None, twin_manager=None):
         self._factory = agent_factory
         self._router = llm_router
+        self._twin_manager = twin_manager
         self.teams: Dict[str, AgentTeam] = {}
-        logger.info("TeamManager 已初始化")
+        logger.info(f"TeamManager 已初始化 (twin={TWIN_AVAILABLE and twin_manager is not None})")
 
     async def create_team(self, strategy: str, task_hint: str = "") -> AgentTeam:
         """创建一个 Agent 团队"""
@@ -474,6 +611,7 @@ class TeamManager:
             members=members,
             agent_factory=self._factory,
             llm_router=self._router,
+            twin_manager=self._twin_manager,
         )
 
         self.teams[team_id] = team
@@ -603,15 +741,27 @@ class TeamManager:
         return self.teams.get(team_id)
 
     def disband_team(self, team_id: str) -> bool:
-        """解散团队"""
+        """解散团队（同时清理成员孪生体）"""
         team = self.teams.pop(team_id, None)
         if team:
+            # 清理孪生体
+            if team._twin_manager and TWIN_AVAILABLE:
+                for agent_id, twin_id in team._member_twins.items():
+                    try:
+                        asyncio.get_event_loop().create_task(
+                            team._twin_manager.delete_twin(twin_id)
+                        )
+                    except RuntimeError:
+                        # 没有事件循环时直接跳过
+                        pass
+                team._member_twins.clear()
+
             # 清理 factory 中的 agent
             if self._factory:
                 for member in team.members:
                     agent = self._factory.agents.pop(member.agent_id, None)
                     if agent:
                         self._factory.message_bus.unregister(member.agent_id)
-            logger.info(f"Team {team_id} 已解散")
+            logger.info(f"Team {team_id} 已解散（含孪生清理）")
             return True
         return False
