@@ -4,6 +4,7 @@ AIP v3.0 协议模块
 导出所有协议相关的类和函数
 """
 
+from .compat import parse_message_compat
 from .aip_v3 import (
     # 枚举类型
     DeviceType,
@@ -55,4 +56,5 @@ __all__ = [
     "create_error_message",
     "parse_message",
     "validate_message",
+    "parse_message_compat",
 ]
