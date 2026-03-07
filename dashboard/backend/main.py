@@ -81,6 +81,27 @@ except ImportError:
     AGENT_FACTORY_AVAILABLE = False
     agent_factory = None
 
+# 导入 LLM 路由器
+try:
+    from core.multi_llm_router import MultiLLMRouter
+    llm_router = MultiLLMRouter()
+    LLM_ROUTER_AVAILABLE = True
+    # 将路由器注入 AgentFactory
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent_factory.llm_router = llm_router
+except ImportError:
+    LLM_ROUTER_AVAILABLE = False
+    llm_router = None
+
+# 导入 Agent Team 管理器
+try:
+    from core.agent_team import TeamManager
+    team_manager = TeamManager(agent_factory, llm_router)
+    TEAM_MANAGER_AVAILABLE = True
+except ImportError:
+    TEAM_MANAGER_AVAILABLE = False
+    team_manager = None
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -353,6 +374,192 @@ async def assign_agent_task(agent_id: str, request: dict):
             agent.state = AgentState.WORKING
         return {"success": True, "queue_length": len(agent.task_queue)}
     return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+# ============================================================================
+# Agent Team API
+# ============================================================================
+
+@app.post("/api/v1/agents/team/create")
+async def create_team(request: dict):
+    """创建 Agent Team"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return JSONResponse(status_code=503, content={"error": "Team manager not available"})
+    strategy = request.get("strategy", "parallel")
+    task_hint = request.get("task_hint", "")
+    try:
+        team = await team_manager.create_team(strategy, task_hint)
+        return {"success": True, "team": team.to_dict()}
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/v1/agents/teams")
+async def list_teams():
+    """列出所有 Team"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return {"teams": []}
+    return {"teams": team_manager.list_teams()}
+
+
+@app.post("/api/v1/agents/team/{team_id}/execute")
+async def execute_team(team_id: str, request: dict):
+    """执行 Team 任务"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return JSONResponse(status_code=503, content={"error": "Team manager not available"})
+    task = request.get("task", "")
+    context = request.get("context", None)
+    if not task:
+        return JSONResponse(status_code=400, content={"error": "task is required"})
+    try:
+        result = await team_manager.execute_team(team_id, task, context)
+        return {"success": True, "result": result.to_dict()}
+    except ValueError as e:
+        return JSONResponse(status_code=404, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.delete("/api/v1/agents/team/{team_id}")
+async def disband_team(team_id: str):
+    """解散 Team"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return JSONResponse(status_code=503, content={"error": "Team manager not available"})
+    success = team_manager.disband_team(team_id)
+    if success:
+        return {"success": True, "message": f"Team {team_id} disbanded"}
+    return JSONResponse(status_code=404, content={"error": f"Team {team_id} not found"})
+
+
+# ============================================================================
+# 节点 API 配置
+# ============================================================================
+
+# 节点 → 所需 API Key 映射
+NODE_API_REQUIREMENTS = {
+    "01": {"name": "OneAPI 聚合器", "category": "llm", "keys": [
+        {"env_var": "OPENROUTER_API_KEY", "label": "OpenRouter"},
+        {"env_var": "ZHIPU_API_KEY", "label": "智谱"},
+        {"env_var": "TOGETHER_API_KEY", "label": "Together"},
+        {"env_var": "PERPLEXITY_API_KEY", "label": "Perplexity"},
+        {"env_var": "XAI_API_KEY", "label": "xAI"},
+    ]},
+    "11": {"name": "GitHub", "category": "code", "keys": [
+        {"env_var": "GITHUB_TOKEN", "label": "GitHub Token"},
+    ]},
+    "15": {"name": "OCR", "category": "vision", "keys": [
+        {"env_var": "DEEPSEEK_OCR2_API_KEY", "label": "DeepSeek OCR"},
+    ]},
+    "18": {"name": "DeepL 翻译", "category": "translation", "keys": [
+        {"env_var": "DEEPL_API_KEY", "label": "DeepL"},
+    ]},
+    "20": {"name": "Qdrant 向量数据库", "category": "data", "keys": [
+        {"env_var": "QDRANT_URL", "label": "Qdrant URL"},
+        {"env_var": "QDRANT_API_KEY", "label": "Qdrant Key"},
+    ]},
+    "21": {"name": "Notion", "category": "data", "keys": [
+        {"env_var": "NOTION_API_KEY", "label": "Notion"},
+    ]},
+    "22": {"name": "Brave Search", "category": "search", "keys": [
+        {"env_var": "BRAVE_API_KEY", "label": "Brave Search"},
+    ]},
+    "24": {"name": "天气", "category": "search", "keys": [
+        {"env_var": "OPENWEATHER_API_KEY", "label": "OpenWeather"},
+    ]},
+    "49": {"name": "OctoPrint 3D打印", "category": "hardware", "keys": [
+        {"env_var": "OCTOPRINT_URL", "label": "OctoPrint URL"},
+        {"env_var": "OCTOPRINT_API_KEY", "label": "OctoPrint Key"},
+    ]},
+    "79": {"name": "本地 LLM", "category": "local_llm", "keys": [
+        {"env_var": "OLLAMA_URL", "label": "Ollama URL"},
+        {"env_var": "VLLM_API_BASE", "label": "vLLM URL"},
+        {"env_var": "VLLM_API_KEY", "label": "vLLM Key"},
+    ]},
+    "90": {"name": "多模态视觉", "category": "vision", "keys": [
+        {"env_var": "GEMINI_API_KEY", "label": "Gemini"},
+    ]},
+    "106": {"name": "GitHub Flow", "category": "code", "keys": [
+        {"env_var": "GITHUB_TOKEN", "label": "GitHub Token"},
+        {"env_var": "GEMINI_API_KEY", "label": "Gemini"},
+    ]},
+    "128": {"name": "媒体生成", "category": "media", "keys": [
+        {"env_var": "PIXVERSE_API_KEY", "label": "PixVerse"},
+    ]},
+}
+
+
+@app.get("/api/v1/config/node-apis")
+async def get_node_apis():
+    """获取所有节点的 API 配置需求和当前状态"""
+    node_apis = []
+    for node_id, info in NODE_API_REQUIREMENTS.items():
+        keys = []
+        for k in info["keys"]:
+            value = os.environ.get(k["env_var"], "")
+            # 也检查 CredentialVault
+            if not value:
+                try:
+                    from core.credential_vault import get_vault
+                    value = get_vault().get_credential(k["env_var"], actor="dashboard") or ""
+                except Exception:
+                    pass
+            keys.append({
+                "env_var": k["env_var"],
+                "label": k["label"],
+                "configured": bool(value),
+                "masked": value[:6] + "..." if len(value) > 6 else "",
+            })
+        node_apis.append({
+            "node_id": node_id,
+            "name": info["name"],
+            "category": info["category"],
+            "keys": keys,
+            "all_configured": all(k["configured"] for k in keys),
+        })
+    return {"node_apis": node_apis}
+
+
+@app.post("/api/v1/config/node-api-key")
+async def set_node_api_key(request: dict):
+    """设置节点 API Key（写入环境变量 + CredentialVault + .env）"""
+    env_var = request.get("env_var", "")
+    value = request.get("value", "")
+    if not env_var or not value:
+        return JSONResponse(status_code=400, content={"error": "env_var and value required"})
+
+    # 1. 写入环境变量
+    os.environ[env_var] = value
+
+    # 2. 写入 CredentialVault
+    try:
+        from core.credential_vault import get_vault
+        get_vault().set_credential(env_var, value, actor="dashboard")
+    except Exception as e:
+        logger.debug(f"CredentialVault write failed: {e}")
+
+    # 3. 持久化到 .env
+    env_path = os.path.join(PROJECT_ROOT, ".env")
+    try:
+        lines = []
+        replaced = False
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith(f"{env_var}="):
+                        lines.append(f"{env_var}={value}\n")
+                        replaced = True
+                    else:
+                        lines.append(line)
+        if not replaced:
+            lines.append(f"{env_var}={value}\n")
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+    except Exception as e:
+        logger.warning(f".env write failed: {e}")
+
+    return {"success": True, "env_var": env_var}
 
 
 # ============================================================================

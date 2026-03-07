@@ -31,7 +31,11 @@ DASHBOARD_API_BASE = os.environ.get("DASHBOARD_API_BASE", "http://localhost:3000
 
 
 class CommandProcessor(QThread):
-    """命令处理线程 - 支持 LLM 对话和本地操作"""
+    """命令处理线程 - 支持 LLM 对话和本地操作
+
+    返回结构化 JSON 响应（包含 routing, agent_steps, tool_calls），
+    ChatPanel 解析并分层渲染。
+    """
 
     response_ready = pyqtSignal(str)
 
@@ -39,6 +43,7 @@ class CommandProcessor(QThread):
         super().__init__()
         self.autonomy_manager = autonomy_manager
         self.command = None
+        self._conversation_history: list = []
 
     def set_command(self, command: str):
         self.command = command
@@ -82,20 +87,34 @@ class CommandProcessor(QThread):
     # LLM 对话（核心功能）
     # ================================================================
 
+    def add_to_history(self, role: str, content: str):
+        """添加消息到对话历史"""
+        self._conversation_history.append({"role": role, "content": content})
+        # 保留最近 20 条
+        if len(self._conversation_history) > 20:
+            self._conversation_history = self._conversation_history[-20:]
+
     def _handle_llm_chat(self, command: str) -> str:
-        """通过后端智能分流 - 自动区分聊天/操作"""
+        """通过后端智能分流 - 自动区分聊天/操作
+
+        返回结构化 JSON 字符串（包含 routing, agent_steps, tool_calls），
+        ChatPanel.handle_structured_response() 解析并分层渲染。
+        """
         # 策略 1：主系统 /api/v1/chat (自动分流到 ReAct Agent 或纯聊天)
         result = self._call_api(
             "/api/v1/chat",
-            {"message": command, "device_id": "windows_client"},
+            {
+                "message": command,
+                "device_id": "windows_client",
+                "history": self._conversation_history[-10:],
+            },
             base_url=GALAXY_API_BASE
         )
         if result and result.get("success") and result.get("reply"):
-            mode = result.get("mode", "chat")
-            model = result.get("model", "")
-            reply = result["reply"]
-            prefix = f"[Agent:{model}]" if mode == "agent_react" else (f"[{model}]" if model else "")
-            return f"{prefix} {reply}" if prefix else reply
+            # 保存到历史
+            self.add_to_history("assistant", result["reply"])
+            # 返回完整结构化 JSON
+            return json.dumps(result, ensure_ascii=False)
 
         # 策略 2：Dashboard /api/chat
         result = self._call_api(
@@ -336,14 +355,16 @@ class WindowsClient:
 
     def _on_command(self, command: str):
         logger.info(f"收到命令: {command}")
-        self.ui.chat_panel._add_message("你", command, "#7C5CFC")
+        # 添加用户消息到 CommandProcessor 历史
+        self.command_processor.add_to_history("user", command)
         self.ui.update_status("处理中", "#ffd60a")
         self.command_processor.set_command(command)
         self.command_processor.start()
 
     def _on_response(self, response: str):
         logger.info(f"收到响应: {response[:100]}...")
-        self.ui.chat_panel._add_message("Galaxy", response, "#00D4AA")
+        # ChatPanel 处理结构化 JSON 或纯文本
+        self.ui.chat_panel.handle_structured_response(response)
         self.ui.update_status("在线")
 
     def run(self):
