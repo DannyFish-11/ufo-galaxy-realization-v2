@@ -72,6 +72,15 @@ try:
 except ImportError:
     DEVICE_PROTOCOL_AVAILABLE = False
 
+# 导入 Agent 工厂
+try:
+    from core.agent_factory import AgentFactory, AGENT_TEMPLATES
+    agent_factory = AgentFactory()
+    AGENT_FACTORY_AVAILABLE = True
+except ImportError:
+    AGENT_FACTORY_AVAILABLE = False
+    agent_factory = None
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -226,10 +235,125 @@ async def send_device_command(device_id: str, request: dict):
 @app.get("/api/v1/agents")
 async def list_agents():
     """列出所有 Agent"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        return {"agents": [a.to_dict() for a in agent_factory.agents.values()]}
     if GALAXY_CORE_AVAILABLE and galaxy_core:
         agents = galaxy_core.agents if hasattr(galaxy_core, "agents") else {}
         return {"agents": list(agents.values()) if isinstance(agents, dict) else agents}
     return {"agents": []}
+
+
+@app.get("/api/v1/agents/templates")
+async def list_agent_templates():
+    """获取可用的 Agent 模板列表"""
+    if AGENT_FACTORY_AVAILABLE:
+        from core.agent_factory import AGENT_TEMPLATES
+        templates = []
+        for name, config in AGENT_TEMPLATES.items():
+            templates.append({
+                "name": name,
+                "role": config.role.value,
+                "display_name": config.name,
+                "description": config.description,
+                "capabilities": [{"name": c.name, "description": c.description} for c in config.capabilities],
+            })
+        return {"templates": templates}
+    return {"templates": []}
+
+
+@app.get("/api/v1/agents/tree")
+async def get_agent_tree():
+    """获取 Agent 层级树"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        tree = {}
+        for agent_id, agent in agent_factory.agents.items():
+            tree[agent_id] = {
+                "name": agent.config.name,
+                "role": agent.config.role.value,
+                "state": agent.state.value,
+                "parent_id": agent.parent_id,
+                "children": agent.children_ids,
+                "depth": agent.depth,
+            }
+        return {"tree": tree}
+    return {"tree": {}}
+
+
+@app.post("/api/v1/agents/create")
+async def create_agent_from_template(request: dict):
+    """从模板创建 Agent"""
+    if not AGENT_FACTORY_AVAILABLE or not agent_factory:
+        return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+    template_name = request.get("template", "")
+    overrides = request.get("overrides", None)
+    parent_id = request.get("parent_id", None)
+    try:
+        agent = agent_factory.create_from_template(template_name, parent_id=parent_id, overrides=overrides)
+        return {"success": True, "agent": agent.to_dict()}
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/v1/agents/create/dynamic")
+async def create_agent_dynamic(request: dict):
+    """LLM 动态生成 Agent"""
+    if not AGENT_FACTORY_AVAILABLE or not agent_factory:
+        return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+    task_description = request.get("task_description", "")
+    if not task_description:
+        return JSONResponse(status_code=400, content={"error": "task_description is required"})
+    try:
+        agent = await agent_factory.create_from_llm(task_description, context=request.get("context"))
+        return {"success": True, "agent": agent.to_dict()}
+    except RuntimeError as e:
+        return JSONResponse(status_code=503, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/v1/agents/{agent_id}")
+async def get_agent_detail(agent_id: str):
+    """获取单个 Agent 详情"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent = agent_factory.agents.get(agent_id)
+        if agent:
+            return {"agent": agent.to_dict()}
+        return JSONResponse(status_code=404, content={"error": f"Agent {agent_id} not found"})
+    return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+@app.delete("/api/v1/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    """停止并删除 Agent"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent = agent_factory.agents.get(agent_id)
+        if not agent:
+            return JSONResponse(status_code=404, content={"error": f"Agent {agent_id} not found"})
+        from core.agent_factory import AgentState
+        agent.state = AgentState.TERMINATED
+        agent_factory.message_bus.unregister(agent_id)
+        del agent_factory.agents[agent_id]
+        return {"success": True, "message": f"Agent {agent_id} terminated"}
+    return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+@app.post("/api/v1/agents/{agent_id}/task")
+async def assign_agent_task(agent_id: str, request: dict):
+    """给 Agent 分配任务"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent = agent_factory.agents.get(agent_id)
+        if not agent:
+            return JSONResponse(status_code=404, content={"error": f"Agent {agent_id} not found"})
+        task = request.get("task", {})
+        agent.task_queue.append(task)
+        from core.agent_factory import AgentState
+        if agent.state == AgentState.IDLE:
+            agent.state = AgentState.WORKING
+        return {"success": True, "queue_length": len(agent.task_queue)}
+    return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
 
 # ============================================================================
 # LLM 提供商 API

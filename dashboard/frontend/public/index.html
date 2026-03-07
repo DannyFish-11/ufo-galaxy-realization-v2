@@ -8,254 +8,417 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
-        
-        * { font-family: 'Rajdhani', sans-serif; }
-        body { background: #000000; overflow: hidden; }
-        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700;900&display=swap');
+
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { background: #000000; overflow: hidden; user-select: none; }
+
+        /* ── Galaxy 背景 ── */
         .galaxy-bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(ellipse at center, #0a0a20 0%, #000000 70%),
-                        radial-gradient(circle at 20% 80%, rgba(120, 0, 255, 0.15) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 20%, rgba(0, 150, 255, 0.15) 0%, transparent 50%);
+            background: radial-gradient(ellipse at 50% 50%, #0a0a1a 0%, #000000 70%),
+                        radial-gradient(circle at 25% 75%, rgba(100, 60, 255, 0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 75% 25%, rgba(0, 180, 255, 0.08) 0%, transparent 50%);
             z-index: -2;
         }
-        
         .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
         .star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; }
-        @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.2; } }
-        
-        .galaxy-title {
-            font-family: 'Orbitron', monospace;
-            background: linear-gradient(135deg, #00d4ff, #7b2fff, #ff006e, #00d4ff);
-            background-size: 300% 300%;
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            animation: gradient-shift 5s ease infinite;
+        @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.1; } }
+
+        /* ── 灵动岛核心 ── */
+        .dynamic-island {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 44px;
+            height: 44px;
+            min-width: 200px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
         }
-        @keyframes gradient-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-        
-        .status-card { background: rgba(10, 10, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .galaxy-input { background: rgba(10, 10, 30, 0.8); border: 1px solid rgba(0, 212, 255, 0.3); transition: all 0.3s ease; }
-        .galaxy-input:focus { border-color: rgba(0, 212, 255, 0.6); box-shadow: 0 0 20px rgba(0, 212, 255, 0.2); }
-        
-        .tab-active { background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 47, 255, 0.2)); border-bottom: 2px solid #00d4ff; }
-        
-        .valid { color: #00ff88; }
-        .invalid { color: #ff4444; }
-        .pending { color: #ffaa00; }
-        
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
-        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7b2fff); border-radius: 3px; }
+        .dynamic-island:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 40px rgba(0, 0, 0, 0.6), inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+        }
+        .dynamic-island.expanded {
+            top: 12px;
+            width: calc(100% - 80px);
+            max-width: 960px;
+            height: calc(100vh - 24px);
+            border-radius: 28px;
+            padding: 0;
+            cursor: default;
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        /* ── 岛内 Tab 指示器 ── */
+        .island-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 18px;
+            margin: 12px 16px 0;
+        }
+        .island-tab {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.45);
+            text-align: center;
+            transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+            cursor: pointer;
+        }
+        .island-tab:hover { color: rgba(255, 255, 255, 0.7); }
+        .island-tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        /* ── 毛玻璃卡片 ── */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 18px;
+            backdrop-filter: blur(20px);
+            transition: all 0.3s ease;
+        }
+        .glass-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* ── 输入框 ── */
+        .island-input {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 22px;
+            color: #fff;
+            transition: all 0.3s ease;
+        }
+        .island-input:focus {
+            border-color: rgba(0, 212, 255, 0.4);
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.08);
+            outline: none;
+        }
+        .island-input::placeholder { color: rgba(255, 255, 255, 0.25); }
+
+        /* ── 发送按钮 ── */
+        .send-btn {
+            background: linear-gradient(135deg, #0a84ff, #7c5cfc);
+            border-radius: 20px;
+            border: none;
+            color: white;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .send-btn:hover { opacity: 0.9; transform: scale(1.02); }
+        .send-btn:active { transform: scale(0.98); }
+
+        /* ── 聊天气泡 ── */
+        .msg-user {
+            background: rgba(10, 132, 255, 0.15);
+            border: 1px solid rgba(10, 132, 255, 0.2);
+            border-radius: 18px 18px 4px 18px;
+        }
+        .msg-ai {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 18px 18px 18px 4px;
+        }
+
+        /* ── 状态指示灯 ── */
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.online { background: #30d158; box-shadow: 0 0 6px rgba(48, 209, 88, 0.5); }
+        .status-dot.offline { background: #ff453a; }
+
+        .valid { color: #30d158; }
+        .invalid { color: #ff453a; }
+        .pending { color: #ffd60a; }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+        /* ── 动画加载 ── */
+        .loading-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+
+        /* ── 关闭按钮 ── */
+        .close-pill {
+            width: 36px; height: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            margin: 8px auto 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .close-pill:hover { background: rgba(255, 255, 255, 0.4); width: 48px; }
+
+        /* ── Provider 格子 ── */
+        .provider-chip {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 12px;
+            transition: all 0.2s;
+        }
+        .provider-chip:hover { background: rgba(255, 255, 255, 0.07); }
+
+        .btn-sm {
+            padding: 5px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-blue { background: rgba(10, 132, 255, 0.2); color: #0a84ff; }
+        .btn-blue:hover { background: rgba(10, 132, 255, 0.3); }
+        .btn-green { background: rgba(48, 209, 88, 0.2); color: #30d158; }
+        .btn-green:hover { background: rgba(48, 209, 88, 0.3); }
+        .btn-purple { background: rgba(124, 92, 252, 0.2); color: #7c5cfc; }
+        .btn-purple:hover { background: rgba(124, 92, 252, 0.3); }
     </style>
 </head>
 <body class="text-white min-h-screen">
     <div class="galaxy-bg"></div>
-    <div class="stars" ref="starsContainer"></div>
-    
-    <div id="app" class="h-screen flex flex-col relative z-10">
-        
-        <!-- 顶部导航 -->
-        <header class="px-6 py-3 border-b border-white/10 bg-black/30 backdrop-blur-md">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center">
-                            <span class="text-sm font-bold">G</span>
-                        </div>
-                        <h1 class="galaxy-title text-xl font-bold tracking-wider">GALAXY</h1>
-                    </div>
-                    <span class="text-xs text-gray-500 font-mono">v2.3.25</span>
-                </div>
-                
-                <!-- 标签页 -->
-                <div class="flex space-x-1 text-sm">
-                    <button @click="currentTab = 'chat'" :class="currentTab === 'chat' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">💬 对话</button>
-                    <button @click="currentTab = 'llm'" :class="currentTab === 'llm' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🤖 LLM</button>
-                    <button @click="currentTab = 'tools'" :class="currentTab === 'tools' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🔧 工具</button>
-                    <button @click="currentTab = 'nodes'" :class="currentTab === 'nodes' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🌐 节点</button>
-                </div>
-                
-                <div class="flex items-center space-x-3 text-xs">
-                    <span class="text-green-400" v-if="configuredCount > 0">✓ {{ configuredCount }} 已配置</span>
-                    <span class="text-gray-600 font-mono">{{ currentTime }}</span>
-                </div>
+    <div class="stars" id="starsContainer"></div>
+
+    <div id="app">
+        <!-- 灵动岛 -->
+        <div class="dynamic-island" :class="{ expanded: isExpanded }">
+
+            <!-- 收缩状态: 胶囊 -->
+            <div v-if="!isExpanded" @click="isExpanded = true" class="flex items-center space-x-3 w-full justify-center">
+                <div class="status-dot" :class="configuredCount > 0 ? 'online' : 'offline'"></div>
+                <span style="font-family: 'Orbitron', monospace; font-size: 13px; font-weight: 600; letter-spacing: 2px; background: linear-gradient(135deg, #0a84ff, #7c5cfc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">GALAXY</span>
+                <span style="font-size: 11px; color: rgba(255,255,255,0.3); font-variant-numeric: tabular-nums;">{{ currentTime }}</span>
+                <span v-if="configuredCount > 0" style="font-size: 11px; color: rgba(48,209,88,0.7);">{{ configuredCount }} ✓</span>
             </div>
-        </header>
-        
-        <!-- 主内容区 -->
-        <main class="flex-1 overflow-hidden">
-            
-            <!-- 对话页面 -->
-            <div v-show="currentTab === 'chat'" class="h-full flex flex-col">
-                <div class="flex-1 overflow-auto p-4 space-y-3" ref="chatContainer">
-                    <div v-if="messages.length === 0" class="text-center py-16">
-                        <div class="galaxy-title text-3xl font-bold mb-3">GALAXY</div>
-                        <div class="text-gray-500 mb-2">L4 级自主性智能系统</div>
-                        <div class="text-gray-600 text-sm">请先配置 API Key</div>
-                    </div>
-                    
-                    <div v-for="msg in messages" :key="msg.id" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                        <div class="max-w-2xl rounded-xl p-3 text-sm" :class="msg.role === 'user' ? 'bg-cyan-900/30 border border-cyan-500/30' : 'bg-purple-900/30 border border-purple-500/30'">
-                            <div class="whitespace-pre-wrap">{{ msg.content }}</div>
-                            <div class="text-xs mt-1 opacity-50">{{ formatTime(msg.timestamp) }}</div>
-                        </div>
-                    </div>
-                    
-                    <div v-if="isLoading" class="flex justify-start">
-                        <div class="bg-purple-900/30 rounded-xl p-3">
-                            <div class="flex space-x-1">
-                                <div class="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
-                                <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                                <div class="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                            </div>
-                        </div>
-                    </div>
+
+            <!-- 展开状态: 全面板 -->
+            <template v-if="isExpanded">
+                <!-- 顶部拖动条 + 关闭 -->
+                <div class="close-pill" @click="isExpanded = false"></div>
+
+                <!-- Tab 导航 -->
+                <div class="island-tabs">
+                    <div class="island-tab" :class="{ active: tab === 'chat' }" @click="tab = 'chat'">💬 对话</div>
+                    <div class="island-tab" :class="{ active: tab === 'llm' }" @click="tab = 'llm'">🤖 LLM</div>
+                    <div class="island-tab" :class="{ active: tab === 'tools' }" @click="tab = 'tools'">🔧 工具</div>
+                    <div class="island-tab" :class="{ active: tab === 'nodes' }" @click="tab = 'nodes'">🌐 节点</div>
                 </div>
-                
-                <div class="p-3 border-t border-white/10 bg-black/30">
-                    <div class="flex space-x-2">
-                        <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="galaxy-input flex-1 rounded-lg px-3 py-2 text-sm outline-none">
-                        <button @click="sendMessage" class="px-4 py-2 rounded-lg text-sm bg-gradient-to-r from-cyan-500 to-purple-600">发送</button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- LLM 配置页面 -->
-            <div v-show="currentTab === 'llm'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto space-y-4">
-                    
-                    <!-- 状态 -->
-                    <div class="status-card rounded-xl p-3">
-                        <div class="grid grid-cols-5 gap-3 text-center text-sm">
-                            <div><div class="text-xl font-bold text-cyan-400">{{ configStatus.total_models || 0 }}</div><div class="text-xs text-gray-500">总模型</div></div>
-                            <div><div class="text-xl font-bold text-green-400">{{ configStatus.configured_models || 0 }}</div><div class="text-xs text-gray-500">已配置</div></div>
-                            <div><div class="text-xl font-bold text-purple-400">{{ configStatus.total_tools || 0 }}</div><div class="text-xs text-gray-500">工具</div></div>
-                            <div><div class="text-xl font-bold text-pink-400">{{ configStatus.configured_tools || 0 }}</div><div class="text-xs text-gray-500">工具已配</div></div>
-                            <div><div class="text-xl font-bold" :class="configStatus.oneapi_configured ? 'text-green-400' : 'text-red-400'">{{ configStatus.oneapi_configured ? '✓' : '✗' }}</div><div class="text-xs text-gray-500">OneAPI</div></div>
-                        </div>
-                    </div>
-                    
-                    <!-- OneAPI -->
-                    <div class="status-card rounded-xl p-3">
-                        <h3 class="font-semibold mb-2">🔗 OneAPI 聚合器 (核心)</h3>
-                        <div class="grid grid-cols-3 gap-2">
-                            <input v-model="oneapiUrl" type="text" placeholder="Base URL" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
-                            <input v-model="oneapiKey" type="password" placeholder="API Key" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
-                            <div class="flex space-x-1">
-                                <button @click="saveOneAPI" class="flex-1 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">保存</button>
-                                <button @click="validateOneAPI" class="flex-1 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
+
+                <!-- 内容区 -->
+                <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 16px;">
+
+                    <!-- 对话页 -->
+                    <div v-show="tab === 'chat'" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                        <div ref="chatContainer" style="flex: 1; overflow-y: auto; padding: 8px 0;" class="space-y-3">
+                            <!-- 空状态 -->
+                            <div v-if="messages.length === 0" class="text-center" style="padding-top: 20vh;">
+                                <div style="font-family: 'Orbitron'; font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #0a84ff, #7c5cfc, #ff375f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">GALAXY</div>
+                                <div style="color: rgba(255,255,255,0.3); font-size: 13px;">L4 级自主性智能系统</div>
+                                <div style="color: rgba(255,255,255,0.15); font-size: 12px; margin-top: 4px;">配置 API Key 后开始对话</div>
                             </div>
-                        </div>
-                        <div v-if="oneapiStatus" class="mt-2 text-xs" :class="oneapiStatus.valid ? 'valid' : 'invalid'">{{ oneapiStatus.message || oneapiStatus.error }}</div>
-                    </div>
-                    
-                    <!-- 直接模型 -->
-                    <div class="status-card rounded-xl p-3">
-                        <h3 class="font-semibold mb-2">🤖 直接模型 (细节)</h3>
-                        <div class="grid grid-cols-3 gap-2">
-                            <div v-for="(provider, name) in directProviders" :key="name" class="bg-black/30 rounded p-2">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs font-medium">{{ provider.name }}</span>
-                                    <span :class="provider.valid ? 'valid' : (provider.apiKey ? 'pending' : 'text-gray-500')" class="text-xs">
-                                        {{ provider.valid ? '✓' : (provider.apiKey ? '?' : '✗') }}
-                                    </span>
+
+                            <!-- 消息列表 -->
+                            <div v-for="msg in messages" :key="msg.id" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+                                <div class="max-w-lg p-3" :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'" style="font-size: 13px;">
+                                    <div style="white-space: pre-wrap; line-height: 1.5;">{{ msg.content }}</div>
+                                    <div style="font-size: 10px; opacity: 0.35; margin-top: 4px;">{{ formatTime(msg.timestamp) }}</div>
                                 </div>
-                                <input v-model="provider.apiKey" type="password" placeholder="API Key" class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-1">
-                                <div class="flex space-x-1">
-                                    <button @click="saveProvider(name, provider.apiKey)" class="flex-1 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-xs">保存</button>
-                                    <button @click="validateProvider(name)" class="flex-1 py-0.5 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
+                            </div>
+
+                            <!-- 加载动画 -->
+                            <div v-if="isLoading" class="flex justify-start">
+                                <div class="msg-ai p-3 flex space-x-1.5">
+                                    <div class="loading-dot" style="background: #0a84ff;"></div>
+                                    <div class="loading-dot" style="background: #7c5cfc; animation-delay: 0.15s;"></div>
+                                    <div class="loading-dot" style="background: #ff375f; animation-delay: 0.3s;"></div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- 测试 -->
-                    <div class="status-card rounded-xl p-3">
-                        <h3 class="font-semibold mb-2">🧪 测试 LLM</h3>
-                        <div class="flex space-x-2">
-                            <input v-model="testMessage" type="text" placeholder="测试消息" class="galaxy-input flex-1 rounded px-2 py-1 text-sm outline-none">
-                            <button @click="testLLM" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-sm">测试</button>
-                        </div>
-                        <div v-if="testResult" class="mt-2 p-2 bg-black/30 rounded text-xs">
-                            <pre class="whitespace-pre-wrap">{{ testResult }}</pre>
-                        </div>
-                    </div>
-                    
-                </div>
-            </div>
-            
-            <!-- 工具配置页面 -->
-            <div v-show="currentTab === 'tools'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto">
-                    <div class="status-card rounded-xl p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold">🔧 工具 API 配置</h3>
-                            <button @click="validateAllTools" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证全部</button>
-                        </div>
-                        
-                        <div class="grid grid-cols-3 gap-2">
-                            <div v-for="tool in tools" :key="tool.tool_id" class="bg-black/30 rounded p-2">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs font-medium">{{ tool.name }}</span>
-                                    <span :class="tool.valid ? 'valid' : (tool.apiKey ? 'pending' : 'text-gray-500')" class="text-xs">
-                                        {{ tool.valid ? '✓ 有效' : (tool.apiKey ? '? 待验证' : '✗ 未配置') }}
-                                    </span>
-                                </div>
-                                <div class="text-xs text-gray-500 mb-1">{{ tool.description }}</div>
-                                <input v-model="tool.apiKey" type="password" placeholder="API Key" class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-1">
-                                <div class="flex space-x-1">
-                                    <button @click="saveTool(tool.tool_id, tool.apiKey)" class="flex-1 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">保存</button>
-                                    <button @click="validateTool(tool.tool_id)" class="flex-1 py-0.5 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
-                                </div>
-                                <div v-if="tool.status" class="mt-1 text-xs" :class="tool.valid ? 'valid' : 'invalid'">{{ tool.status }}</div>
+
+                        <!-- 输入区 -->
+                        <div style="padding-top: 8px;">
+                            <div class="flex space-x-2 items-center">
+                                <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="island-input flex-1 px-4 py-2.5" style="font-size: 13px;">
+                                <button @click="sendMessage" class="send-btn px-5 py-2.5" style="font-size: 13px;">发送</button>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            
-            <!-- 节点页面 -->
-            <div v-show="currentTab === 'nodes'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto">
-                    <div class="status-card rounded-xl p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold">🌐 节点状态</h3>
-                            <button @click="checkNodes" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">检查全部</button>
+
+                    <!-- LLM 配置页 -->
+                    <div v-show="tab === 'llm'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <!-- 状态概览 -->
+                        <div class="glass-card p-4">
+                            <div class="grid grid-cols-5 gap-3 text-center">
+                                <div><div style="font-size: 22px; font-weight: 700; color: #0a84ff;">{{ configStatus.total_models || 0 }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">总模型</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #30d158;">{{ configStatus.configured_models || 0 }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">已配置</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #7c5cfc;">{{ configStatus.total_tools || 0 }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">工具</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #ff375f;">{{ configStatus.configured_tools || 0 }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">工具已配</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700;" :style="{ color: configStatus.oneapi_configured ? '#30d158' : '#ff453a' }">{{ configStatus.oneapi_configured ? '✓' : '✗' }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">OneAPI</div></div>
+                            </div>
                         </div>
-                        
-                        <div class="grid grid-cols-6 gap-1">
-                            <div v-for="node in nodes" :key="node.node_id" class="bg-black/30 rounded p-1 text-center cursor-pointer hover:bg-black/50">
-                                <div class="text-xs text-gray-500">{{ node.node_id }}</div>
-                                <div class="text-xs truncate">{{ node.name }}</div>
-                                <div class="text-xs" :class="node.status === 'healthy' ? 'valid' : 'text-gray-500'">{{ node.status || '?' }}</div>
+
+                        <!-- OneAPI -->
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🔗 OneAPI 聚合器</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <input v-model="oneapiUrl" type="text" placeholder="Base URL" class="island-input px-3 py-2" style="font-size: 12px; border-radius: 12px;">
+                                <input v-model="oneapiKey" type="password" placeholder="API Key" class="island-input px-3 py-2" style="font-size: 12px; border-radius: 12px;">
+                                <div class="flex space-x-1.5">
+                                    <button @click="saveOneAPI" class="btn-sm btn-blue flex-1">保存</button>
+                                    <button @click="validateOneAPI" class="btn-sm btn-green flex-1">验证</button>
+                                </div>
+                            </div>
+                            <div v-if="oneapiStatus" class="mt-2" style="font-size: 11px;" :class="oneapiStatus.valid ? 'valid' : 'invalid'">{{ oneapiStatus.message || oneapiStatus.error }}</div>
+                        </div>
+
+                        <!-- 直接模型 -->
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🤖 模型提供商</div>
+                            <div class="grid grid-cols-4 gap-2">
+                                <div v-for="(provider, name) in directProviders" :key="name" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span style="font-size: 12px; font-weight: 500;">{{ provider.name }}</span>
+                                        <span :class="provider.valid ? 'valid' : (provider.apiKey ? 'pending' : '')" style="font-size: 11px; opacity: 0.6;">
+                                            {{ provider.valid ? '✓' : (provider.apiKey ? '?' : '✗') }}
+                                        </span>
+                                    </div>
+                                    <input v-model="provider.apiKey" type="password" placeholder="API Key" class="island-input w-full px-2.5 py-1.5 mb-1.5" style="font-size: 11px; border-radius: 10px;">
+                                    <div class="flex space-x-1">
+                                        <button @click="saveProvider(name, provider.apiKey)" class="btn-sm btn-purple flex-1">保存</button>
+                                        <button @click="validateProvider(name)" class="btn-sm btn-green flex-1">验证</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 测试 LLM -->
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🧪 测试 LLM</div>
+                            <div class="flex space-x-2">
+                                <input v-model="testMessage" type="text" placeholder="测试消息" class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;">
+                                <button @click="testLLM" class="btn-sm btn-green">测试</button>
+                            </div>
+                            <div v-if="testResult" class="mt-2 p-3" style="background: rgba(0,0,0,0.3); border-radius: 12px; font-size: 11px; font-family: 'SF Mono', monospace;">
+                                <pre style="white-space: pre-wrap; color: rgba(255,255,255,0.7);">{{ testResult }}</pre>
                             </div>
                         </div>
                     </div>
+
+                    <!-- 工具配置页 -->
+                    <div v-show="tab === 'tools'" style="flex: 1; overflow-y: auto;">
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">🔧 工具 API 配置</span>
+                                <button @click="validateAllTools" class="btn-sm btn-green">验证全部</button>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div v-for="tool in tools" :key="tool.tool_id" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span style="font-size: 12px; font-weight: 500;">{{ tool.name }}</span>
+                                        <span :class="tool.valid ? 'valid' : (tool.apiKey ? 'pending' : '')" style="font-size: 10px;">
+                                            {{ tool.valid ? '✓' : (tool.apiKey ? '?' : '✗') }}
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 10px; color: rgba(255,255,255,0.25); margin-bottom: 6px;">{{ tool.description }}</div>
+                                    <input v-model="tool.apiKey" type="password" placeholder="API Key" class="island-input w-full px-2.5 py-1.5 mb-1.5" style="font-size: 11px; border-radius: 10px;">
+                                    <div class="flex space-x-1">
+                                        <button @click="saveTool(tool.tool_id, tool.apiKey)" class="btn-sm btn-blue flex-1">保存</button>
+                                        <button @click="validateTool(tool.tool_id)" class="btn-sm btn-green flex-1">验证</button>
+                                    </div>
+                                    <div v-if="tool.status" class="mt-1" style="font-size: 10px;" :class="tool.valid ? 'valid' : 'invalid'">{{ tool.status }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 节点页 -->
+                    <div v-show="tab === 'nodes'" style="flex: 1; overflow-y: auto;">
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">🌐 节点状态</span>
+                                <button @click="checkNodes" class="btn-sm btn-blue">检查全部</button>
+                            </div>
+                            <div class="grid grid-cols-6 gap-1.5">
+                                <div v-for="node in nodes" :key="node.node_id" class="provider-chip text-center cursor-pointer" style="padding: 8px;">
+                                    <div style="font-size: 10px; color: rgba(255,255,255,0.25);">{{ node.node_id }}</div>
+                                    <div style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ node.name }}</div>
+                                    <div style="font-size: 10px;" :class="node.status === 'healthy' ? 'valid' : ''">{{ node.status || '—' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-            </div>
-            
-        </main>
+            </template>
+        </div>
     </div>
-    
+
     <script>
-        const { createApp, ref, onMounted, computed } = Vue;
-        
+        // 生成星星
+        (() => {
+            const c = document.getElementById('starsContainer');
+            for (let i = 0; i < 60; i++) {
+                const s = document.createElement('div');
+                s.className = 'star';
+                s.style.left = Math.random() * 100 + '%';
+                s.style.top = Math.random() * 100 + '%';
+                const size = Math.random() * 1.5 + 0.5 + 'px';
+                s.style.width = size; s.style.height = size;
+                s.style.setProperty('--duration', (Math.random() * 4 + 3) + 's');
+                s.style.setProperty('--opacity', Math.random() * 0.4 + 0.2);
+                c.appendChild(s);
+            }
+        })();
+
+        const { createApp, ref, onMounted, computed, nextTick } = Vue;
+
         createApp({
             setup() {
-                const currentTab = ref('llm');
+                const isExpanded = ref(false);
+                const tab = ref('chat');
                 const messages = ref([]);
                 const inputMessage = ref('');
                 const isLoading = ref(false);
                 const currentTime = ref('');
                 const chatContainer = ref(null);
-                const starsContainer = ref(null);
-                
+
                 const configStatus = ref({});
                 const oneapiUrl = ref('http://localhost:8001/v1');
                 const oneapiKey = ref('');
                 const oneapiStatus = ref(null);
-                
+
                 const directProviders = ref({
                     openai: { name: 'OpenAI', apiKey: '', valid: false },
                     anthropic: { name: 'Anthropic', apiKey: '', valid: false },
@@ -266,166 +429,96 @@
                     gemini: { name: 'Gemini', apiKey: '', valid: false },
                     qwen: { name: '通义千问', apiKey: '', valid: false }
                 });
-                
+
                 const tools = ref([]);
                 const nodes = ref([]);
                 const testMessage = ref('Hello');
                 const testResult = ref('');
-                
+
                 const configuredCount = computed(() => {
                     let count = 0;
                     if (oneapiKey.value) count++;
-                    for (const p of Object.values(directProviders.value)) {
-                        if (p.apiKey) count++;
-                    }
-                    for (const t of tools.value) {
-                        if (t.apiKey) count++;
-                    }
+                    for (const p of Object.values(directProviders.value)) { if (p.apiKey) count++; }
+                    for (const t of tools.value) { if (t.apiKey) count++; }
                     return count;
                 });
-                
-                const generateStars = () => {
-                    if (!starsContainer.value) return;
-                    for (let i = 0; i < 80; i++) {
-                        const star = document.createElement('div');
-                        star.className = 'star';
-                        star.style.left = Math.random() * 100 + '%';
-                        star.style.top = Math.random() * 100 + '%';
-                        star.style.width = Math.random() * 2 + 1 + 'px';
-                        star.style.height = star.style.width;
-                        star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
-                        star.style.setProperty('--opacity', Math.random() * 0.5 + 0.3);
-                        starsContainer.value.appendChild(star);
-                    }
-                };
-                
+
                 const updateTime = () => { currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); };
-                
+
                 const loadConfigStatus = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/config/status');
-                        configStatus.value = response.data;
-                    } catch (error) { console.error('Failed to load config status:', error); }
+                    try { configStatus.value = (await axios.get('/api/v1/config/status')).data; } catch (e) { console.error(e); }
                 };
-                
                 const loadTools = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/config/tools');
-                        tools.value = (response.data.tools || []).map(t => ({ ...t, status: '' }));
-                    } catch (error) { console.error('Failed to load tools:', error); }
+                    try { tools.value = ((await axios.get('/api/v1/config/tools')).data.tools || []).map(t => ({ ...t, status: '' })); } catch (e) { console.error(e); }
                 };
-                
                 const loadNodes = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/config/nodes');
-                        nodes.value = response.data.nodes || [];
-                    } catch (error) { console.error('Failed to load nodes:', error); }
+                    try { nodes.value = (await axios.get('/api/v1/config/nodes')).data.nodes || []; } catch (e) { console.error(e); }
                 };
-                
+
                 const saveOneAPI = async () => {
-                    try {
-                        await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
+                    try { await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value }); loadConfigStatus(); } catch (e) { alert('保存失败: ' + e.message); }
                 };
-                
                 const validateOneAPI = async () => {
                     oneapiStatus.value = { valid: false, message: '验证中...' };
-                    try {
-                        const response = await axios.post('/api/v1/config/validate', { category: 'oneapi', key_name: '' });
-                        oneapiStatus.value = response.data;
-                    } catch (error) { oneapiStatus.value = { valid: false, error: error.message }; }
+                    try { oneapiStatus.value = (await axios.post('/api/v1/config/validate', { category: 'oneapi', key_name: '' })).data; } catch (e) { oneapiStatus.value = { valid: false, error: e.message }; }
                 };
-                
                 const saveProvider = async (name, apiKey) => {
-                    try {
-                        await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
+                    try { await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey }); loadConfigStatus(); } catch (e) { alert('保存失败: ' + e.message); }
                 };
-                
                 const validateProvider = async (name) => {
                     directProviders.value[name].valid = false;
-                    try {
-                        const response = await axios.post('/api/v1/config/validate', { category: 'direct_models', key_name: name });
-                        directProviders.value[name].valid = response.data.valid;
-                    } catch (error) { directProviders.value[name].valid = false; }
+                    try { directProviders.value[name].valid = (await axios.post('/api/v1/config/validate', { category: 'direct_models', key_name: name })).data.valid; } catch (e) {}
                 };
-                
                 const saveTool = async (toolId, apiKey) => {
-                    try {
-                        await axios.post('/api/v1/config/tools/api-key', { tool_id: toolId, api_key: apiKey });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
+                    try { await axios.post('/api/v1/config/tools/api-key', { tool_id: toolId, api_key: apiKey }); loadConfigStatus(); } catch (e) { alert('保存失败: ' + e.message); }
                 };
-                
                 const validateTool = async (toolId) => {
                     const tool = tools.value.find(t => t.tool_id === toolId);
                     if (tool) {
                         tool.status = '验证中...';
-                        try {
-                            const response = await axios.post('/api/v1/config/validate', { category: 'tools', key_name: toolId });
-                            tool.valid = response.data.valid;
-                            tool.status = response.data.valid ? '有效' : response.data.error;
-                        } catch (error) { tool.status = error.message; }
+                        try { const r = (await axios.post('/api/v1/config/validate', { category: 'tools', key_name: toolId })).data; tool.valid = r.valid; tool.status = r.valid ? '有效' : r.error; } catch (e) { tool.status = e.message; }
                     }
                 };
-                
-                const validateAllTools = async () => {
-                    for (const tool of tools.value) {
-                        if (tool.apiKey) {
-                            await validateTool(tool.tool_id);
-                        }
-                    }
-                };
-                
+                const validateAllTools = async () => { for (const t of tools.value) { if (t.apiKey) await validateTool(t.tool_id); } };
                 const testLLM = async () => {
                     testResult.value = '测试中...';
-                    try {
-                        const response = await axios.post('/api/v1/config/test-llm', { message: testMessage.value });
-                        testResult.value = JSON.stringify(response.data, null, 2);
-                    } catch (error) { testResult.value = '测试失败: ' + error.message; }
+                    try { testResult.value = JSON.stringify((await axios.post('/api/v1/config/test-llm', { message: testMessage.value })).data, null, 2); } catch (e) { testResult.value = '失败: ' + e.message; }
                 };
-                
                 const checkNodes = async () => {
-                    try {
-                        const response = await axios.post('/api/v1/config/nodes/check');
-                        const results = response.data.results;
-                        nodes.value.forEach(node => { node.status = results[node.node_id]?.success ? 'healthy' : 'error'; });
-                    } catch (error) { console.error('Failed to check nodes:', error); }
+                    try { const r = (await axios.post('/api/v1/config/nodes/check')).data.results; nodes.value.forEach(n => { n.status = r[n.node_id]?.success ? 'healthy' : 'error'; }); } catch (e) { console.error(e); }
                 };
-                
+
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim() || isLoading.value) return;
-                    const message = inputMessage.value.trim();
+                    const msg = inputMessage.value.trim();
                     inputMessage.value = '';
-                    messages.value.push({ id: Date.now(), role: 'user', content: message, timestamp: new Date() });
+                    messages.value.push({ id: Date.now(), role: 'user', content: msg, timestamp: new Date() });
                     isLoading.value = true;
+                    await nextTick();
+                    if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
                     try {
-                        const response = await axios.post('/api/v1/chat', { message });
-                        messages.value.push({ id: Date.now() + 1, role: 'assistant', content: response.data.response || '处理完成', timestamp: new Date() });
-                    } catch (error) {
-                        messages.value.push({ id: Date.now() + 1, role: 'assistant', content: '❌ 连接失败: ' + error.message, timestamp: new Date() });
+                        const r = await axios.post('/api/v1/chat', { message: msg });
+                        messages.value.push({ id: Date.now() + 1, role: 'assistant', content: r.data.response || '处理完成', timestamp: new Date() });
+                    } catch (e) {
+                        messages.value.push({ id: Date.now() + 1, role: 'assistant', content: '连接失败: ' + e.message, timestamp: new Date() });
                     }
                     isLoading.value = false;
+                    await nextTick();
+                    if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
                 };
-                
-                const formatTime = (date) => new Date(date).toLocaleTimeString('zh-CN', { hour12: false });
-                
+
+                const formatTime = (d) => new Date(d).toLocaleTimeString('zh-CN', { hour12: false });
+
                 onMounted(() => {
-                    generateStars();
-                    updateTime();
-                    setInterval(updateTime, 1000);
-                    loadConfigStatus();
-                    loadTools();
-                    loadNodes();
+                    updateTime(); setInterval(updateTime, 1000);
+                    loadConfigStatus(); loadTools(); loadNodes();
                 });
-                
+
                 return {
-                    currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
+                    isExpanded, tab, messages, inputMessage, isLoading, currentTime, chatContainer,
                     configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes,
                     testMessage, testResult, configuredCount,
-                    loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
+                    saveOneAPI, validateOneAPI, saveProvider, validateProvider,
                     saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage, formatTime
                 };
             }

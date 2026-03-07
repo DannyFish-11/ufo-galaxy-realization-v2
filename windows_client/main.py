@@ -18,7 +18,8 @@ from typing import Dict, Any, Optional
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer
 
-from ui.sidebar_ui import SidebarUI
+from ui.galaxy_client_ui import GalaxyClientUI
+from ui.sidebar_ui import SidebarUI  # legacy fallback
 from autonomy.autonomy_manager import WindowsAutonomyManager
 
 logger = logging.getLogger(__name__)
@@ -296,7 +297,9 @@ class WindowsClient:
         self.command_processor = CommandProcessor(self.autonomy_manager)
         self.command_processor.response_ready.connect(self._on_response)
 
-        self.ui = SidebarUI(on_command=self._on_command)
+        # OPPO 光场设计客户端 (混合模式: 侧边栏 + 全功能窗口)
+        api_base = os.environ.get("DASHBOARD_API_BASE", "http://localhost:8080")
+        self.ui = GalaxyClientUI(api_base=api_base, on_command=self._on_command)
 
         # 全局 F12 热键
         self.hotkey_thread = GlobalHotkeyThread(
@@ -333,15 +336,15 @@ class WindowsClient:
 
     def _on_command(self, command: str):
         logger.info(f"收到命令: {command}")
-        self.ui.add_message("用户", command)
-        self.ui.update_status("处理中", "#ffff00")
+        self.ui.chat_panel._add_message("你", command, "#7C5CFC")
+        self.ui.update_status("处理中", "#ffd60a")
         self.command_processor.set_command(command)
         self.command_processor.start()
 
     def _on_response(self, response: str):
         logger.info(f"收到响应: {response[:100]}...")
-        self.ui.add_message("AI", response)
-        self.ui.update_status("在线", "#00ff00")
+        self.ui.chat_panel._add_message("Galaxy", response, "#00D4AA")
+        self.ui.update_status("在线")
 
     def run(self):
         self.ui.show_sidebar()
