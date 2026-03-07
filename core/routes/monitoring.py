@@ -28,9 +28,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-import time
-
-_startup_time = time.time()
+_startup_time = _time.time()
 
 logger = logging.getLogger("UFO-Galaxy.API")
 

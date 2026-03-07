@@ -23,6 +23,9 @@ from fastapi import Header, HTTPException, status
 
 logger = logging.getLogger("UFO-Galaxy.Auth")
 
+# Module-level flag: dev-mode warning has been issued at most once per process
+_dev_mode_warning_issued: bool = False
+
 # ---------------------------------------------------------------------------
 # Dev-mode detection & startup warning
 # ---------------------------------------------------------------------------
@@ -34,12 +37,13 @@ def _is_dev_mode() -> bool:
 
 def _warn_dev_mode_once():
     """Emit a one-time warning when the server runs in dev mode."""
-    if not getattr(_warn_dev_mode_once, "_warned", False):
+    global _dev_mode_warning_issued
+    if not _dev_mode_warning_issued:
+        _dev_mode_warning_issued = True
         logger.warning(
             "⚠️  UFO Galaxy is running in DEV MODE (UFO_DEV_MODE=1). "
             "Authentication is DISABLED. Do NOT use this mode in production."
         )
-        _warn_dev_mode_once._warned = True  # type: ignore[attr-defined]
 
 
 def verify_api_token(token: str) -> bool:
