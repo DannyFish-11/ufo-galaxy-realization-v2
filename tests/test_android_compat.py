@@ -329,6 +329,71 @@ class TestProtocolCompat:
         msg = self.parse(payload)
         assert msg.type == self.MessageType.DEVICE_HEARTBEAT
 
+    # --- New legacy mappings ---
+
+    def test_v1_task_execute_maps_to_task_submit(self):
+        """AIP/1.0 'task_execute' maps to MessageType.TASK_SUBMIT."""
+        msg = self.parse({"type": "task_execute", "device_id": "dev-te"})
+        assert msg.type == self.MessageType.TASK_SUBMIT
+
+    def test_v1_status_update_maps_to_device_status(self):
+        """AIP/1.0 'status_update' maps to MessageType.DEVICE_STATUS."""
+        msg = self.parse({"type": "status_update", "device_id": "dev-su"})
+        assert msg.type == self.MessageType.DEVICE_STATUS
+
+    def test_v1_update_status_maps_to_device_status(self):
+        """AIP/1.0 'update_status' maps to MessageType.DEVICE_STATUS."""
+        msg = self.parse({"type": "update_status", "device_id": "dev-us"})
+        assert msg.type == self.MessageType.DEVICE_STATUS
+
+
+# ============================================================================
+# 4. New v1 device endpoints  (core/routes/devices.py)
+# ============================================================================
+
+class TestDeviceEndpoints:
+    """Tests for /api/v1/devices/* endpoints including the new DELETE."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def _client(self, request):
+        from core.api_routes import create_api_routes
+        from fastapi import FastAPI
+        app = FastAPI()
+        router = create_api_routes()
+        app.include_router(router)
+        from fastapi.testclient import TestClient
+        request.cls.client = TestClient(app)
+
+    def test_delete_device(self):
+        """DELETE /api/v1/devices/{device_id} should unregister a device."""
+        device_id = f"del-{uuid.uuid4().hex[:8]}"
+        # Register first
+        r = self.client.post(
+            "/api/v1/devices/register",
+            json={"device_id": device_id},
+        )
+        assert r.status_code == 200
+
+        # Then delete
+        r = self.client.delete(f"/api/v1/devices/{device_id}")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert data["device_id"] == device_id
+
+    def test_delete_unknown_device_returns_404(self):
+        """DELETE /api/v1/devices/{device_id} for unknown device returns 404."""
+        r = self.client.delete("/api/v1/devices/totally-unknown-xyz")
+        assert r.status_code == 404
+
+    def test_get_device_after_delete_returns_404(self):
+        """After DELETE, GET /api/v1/devices/{device_id} should return 404."""
+        device_id = f"gdel-{uuid.uuid4().hex[:8]}"
+        self.client.post("/api/v1/devices/register", json={"device_id": device_id})
+        self.client.delete(f"/api/v1/devices/{device_id}")
+        r = self.client.get(f"/api/v1/devices/{device_id}")
+        assert r.status_code == 404
+
 
 # ============================================================================
 # Entry point

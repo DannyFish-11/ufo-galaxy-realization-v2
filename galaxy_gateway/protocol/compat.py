@@ -17,6 +17,8 @@ Protocol detection rules
   ============================================================  ==============================
   ``register`` / ``agent_register`` / ``device_register``      ``device_register``
   ``heartbeat`` / ``agent_heartbeat`` / ``device_heartbeat``   ``heartbeat``
+  ``task_execute``                                              ``task_submit``
+  ``status_update`` / ``update_status``                        ``device_status``
   ============================================================  ==============================
 
 * **AIP/2.0**  – ``version == "2.0"``.  Field names are the same as v3;
@@ -52,6 +54,12 @@ _LEGACY_TYPE_MAP: dict = {
     "heartbeat": MessageType.DEVICE_HEARTBEAT,
     "agent_heartbeat": MessageType.DEVICE_HEARTBEAT,
     "device_heartbeat": MessageType.DEVICE_HEARTBEAT,
+    # task aliases – Android clients historically send "task_execute"
+    # which maps to the v3 standard "task_submit"
+    "task_execute": MessageType.TASK_SUBMIT,
+    # status aliases
+    "status_update": MessageType.DEVICE_STATUS,
+    "update_status": MessageType.DEVICE_STATUS,
 }
 
 

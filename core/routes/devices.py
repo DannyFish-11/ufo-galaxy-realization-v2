@@ -3,12 +3,13 @@ UFO Galaxy - Device Routes
 ============================
 
 Routes:
-  POST /api/v1/devices/register            - 注册设备
-  POST /api/v1/devices/status              - 更新设备状态
-  GET  /api/v1/devices                     - 列出所有设备
-  GET  /api/v1/devices/discover            - 按条件发现设备
-  GET  /api/v1/devices/{device_id}         - 获取设备详情
-  POST /api/v1/devices/{device_id}/heartbeat - 设备心跳
+  POST   /api/v1/devices/register              - 注册设备
+  POST   /api/v1/devices/status                - 更新设备状态
+  GET    /api/v1/devices                       - 列出所有设备
+  GET    /api/v1/devices/discover              - 按条件发现设备
+  GET    /api/v1/devices/{device_id}           - 获取设备详情
+  POST   /api/v1/devices/{device_id}/heartbeat - 设备心跳
+  DELETE /api/v1/devices/{device_id}           - 注销设备
 """
 
 import logging
@@ -139,6 +140,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "timestamp": datetime.now().isoformat(),
         })
 
+        return JSONResponse({"success": True, "device_id": device_id})
+
+    @router.delete("/api/v1/devices/{device_id}")
+    async def unregister_device(device_id: str):
+        """注销设备（从注册表中移除）
+
+        设备断开后可调用此端点彻底注销。若设备仍有活跃 WebSocket 连接，
+        该连接不会被强制关闭；重连时设备需重新注册。
+        """
+        if device_id not in registered_devices:
+            raise HTTPException(status_code=404, detail="设备未注册")
+
+        del registered_devices[device_id]
+
+        await connection_manager.broadcast_status({
+            "type": "device_unregistered",
+            "device_id": device_id,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+        logger.info(f"设备注销: {device_id}")
         return JSONResponse({"success": True, "device_id": device_id})
 
     return router
