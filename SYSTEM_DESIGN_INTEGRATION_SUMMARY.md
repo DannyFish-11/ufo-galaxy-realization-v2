@@ -456,6 +456,7 @@ python unified_launcher.py
 | REST 设备注册 | `POST /api/v1/devices/register` |
 | REST 设备发现 | `GET /api/v1/devices/discover` |
 | REST 设备心跳 | `POST /api/v1/devices/{device_id}/heartbeat` |
+| REST 设备注销 | `DELETE /api/v1/devices/{device_id}` |
 
 ### 多版本兼容处理
 
@@ -474,11 +475,29 @@ AIPMessage (v3)          ← 内部唯一处理格式
 MessageHandler / DeviceManager / DeviceRouter
 ```
 
+**Legacy type 映射（AIP/1.0）：**
+
+| 旧 type 字符串 | 规范化后 v3 MessageType |
+|----------------|------------------------|
+| `register` / `agent_register` / `device_register` | `device_register` |
+| `heartbeat` / `agent_heartbeat` / `device_heartbeat` | `heartbeat` |
+| `task_execute` | `task_submit` |
+| `status_update` / `update_status` | `device_status` |
+
 ### device_id 规范
 
 - 由客户端在首次连接时生成，推荐使用 UUID v4
 - 服务端以此为键维护设备状态，不重新生成
 - 同一 device_id 跨 WebSocket 和 REST 共享
+
+### 设备数据流
+
+系统有两个服务入口，各自维护运行时设备状态，均使用 AIP v3 协议：
+
+- **`galaxy_gateway/app.py`（port 8765）**：WebSocket 入口，设备通过 `/ws/device/{id}` 连接。`DeviceRouter` 维护 WebSocket 连接表（仅活跃连接）。
+- **`core/api_routes.py`（port 8000）**：REST 入口，设备通过 `/api/v1/devices/register` 注册。`registered_devices` 字典维护注册设备表（持久化）。
+
+两个入口使用相同的 `device_id` 键空间，设备应通过 REST 注册后再通过 WebSocket 建立实时通道。
 
 ### 向后兼容端点
 

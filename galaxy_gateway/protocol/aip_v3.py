@@ -185,6 +185,31 @@ class MessageType(str, Enum):
     COORD_LOCK = "coord_lock"
     COORD_UNLOCK = "coord_unlock"
     
+    # === Agent 控制（与 AgentMessageHandler.kt 对齐）===
+    AGENT_PING = "agent_ping"
+    AGENT_CONFIG_UPDATE = "agent_config_update"
+    AGENT_RESTART = "agent_restart"
+
+    # === UI 树操作（与 AgentMessageHandler.kt 对齐）===
+    UI_TREE_REQUEST = "ui_tree_request"
+    ACTION_EXECUTE = "action_execute"
+    ACTION_SEQUENCE_EXECUTE = "action_sequence_execute"
+
+    # === 应用/系统控制（与 AgentMessageHandler.kt 对齐）===
+    APP_START = "app_start"
+    APP_STOP = "app_stop"
+    SYSTEM_COMMAND = "system_command"
+
+    # === 能力/诊断上报 ===
+    CAPABILITY_REPORT = "capability_report"
+    CAPABILITY_REPORT_ACK = "capability_report_ack"
+    DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
+    DIAGNOSTICS_PAYLOAD_ACK = "diagnostics_payload_ack"
+
+    # === 视觉请求 ===
+    VISION_REQUEST = "vision_request"
+    VISION_RESULT = "vision_result"
+
     # === 错误处理 ===
     ERROR = "error"
     ERROR_RECOVERY = "error_recovery"
