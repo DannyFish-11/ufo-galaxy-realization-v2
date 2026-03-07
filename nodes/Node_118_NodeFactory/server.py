@@ -15,11 +15,11 @@ import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.node_factory_engine import (
-from nodes.common.cors_config import get_cors_origins
     NodeFactoryEngine,
     NodeSpecification,
     NodeType
 )
+from nodes.common.cors_config import get_cors_origins
 
 # ========== 配置 ==========
 NODE_PORT = int(os.getenv("NODE_115_PORT", "9104"))

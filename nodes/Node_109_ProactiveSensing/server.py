@@ -15,13 +15,13 @@ import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.proactive_sensing_engine import (
-from nodes.common.cors_config import get_cors_origins
     ProactiveSensingEngine,
     AlertLevel,
     OpportunityType,
     AnomalyType,
     EnvironmentState
 )
+from nodes.common.cors_config import get_cors_origins
 
 # ========== 配置 ==========
 NODE_PORT = int(os.getenv("NODE_109_PORT", "9101"))
