@@ -34,7 +34,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 import httpx
-import redis.asyncio as redis
+
+try:
+    import redis.asyncio as redis
+    HAS_REDIS = True
+except ImportError:
+    redis = None
+    HAS_REDIS = False
+    logging.getLogger("Node_80_MemorySystem").warning("redis 未安装，短期记忆功能降级")
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
 
 # =============================================================================
 # Configuration

@@ -17,6 +17,12 @@ import uuid
 import importlib
 import subprocess
 
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

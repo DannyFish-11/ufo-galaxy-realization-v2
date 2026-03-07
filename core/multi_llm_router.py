@@ -144,8 +144,88 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
 
 # ───────────────────── 提供商适配器 ─────────────────────
 
+class ProviderCircuitBreaker:
+    """
+    提供商级别断路器
+
+    状态：CLOSED → OPEN → HALF_OPEN → CLOSED
+    - CLOSED: 正常调用
+    - OPEN: 连续失败达到阈值，拒绝调用，等待恢复
+    - HALF_OPEN: 恢复期，允许少量试探性调用
+    """
+
+    def __init__(self, name: str, failure_threshold: int = 5,
+                 recovery_timeout: float = 60.0, half_open_max_calls: int = 2):
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_max_calls = half_open_max_calls
+
+        self._consecutive_failures = 0
+        self._state = "closed"  # closed, open, half_open
+        self._last_failure_time = 0.0
+        self._half_open_calls = 0
+
+    @property
+    def state(self) -> str:
+        if self._state == "open":
+            # 检查是否应该进入半开状态
+            if time.time() - self._last_failure_time >= self.recovery_timeout:
+                self._state = "half_open"
+                self._half_open_calls = 0
+                logger.info(f"断路器 [{self.name}] OPEN → HALF_OPEN (尝试恢复)")
+        return self._state
+
+    def allow_request(self) -> bool:
+        """是否允许请求通过"""
+        s = self.state
+        if s == "closed":
+            return True
+        if s == "half_open":
+            return self._half_open_calls < self.half_open_max_calls
+        return False  # open
+
+    def record_success(self):
+        """记录成功调用"""
+        if self._state == "half_open":
+            self._consecutive_failures = 0
+            self._state = "closed"
+            logger.info(f"断路器 [{self.name}] HALF_OPEN → CLOSED (恢复成功)")
+        else:
+            self._consecutive_failures = 0
+
+    def record_failure(self):
+        """记录失败调用"""
+        self._consecutive_failures += 1
+        self._last_failure_time = time.time()
+
+        if self._state == "half_open":
+            self._half_open_calls += 1
+            if self._half_open_calls >= self.half_open_max_calls:
+                self._state = "open"
+                logger.warning(f"断路器 [{self.name}] HALF_OPEN → OPEN (恢复失败)")
+        elif self._consecutive_failures >= self.failure_threshold:
+            self._state = "open"
+            logger.warning(
+                f"断路器 [{self.name}] CLOSED → OPEN "
+                f"(连续 {self._consecutive_failures} 次失败)"
+            )
+
+    def to_dict(self) -> Dict:
+        return {
+            "state": self.state,
+            "consecutive_failures": self._consecutive_failures,
+            "failure_threshold": self.failure_threshold,
+            "recovery_timeout": self.recovery_timeout,
+        }
+
+
 class BaseProviderAdapter:
     """提供商适配器基类"""
+
+    DEFAULT_TIMEOUT = 30.0    # 默认请求超时
+    MAX_RETRIES = 2           # 最大重试次数
+    RETRY_BASE_DELAY = 1.0    # 重试基础延迟
 
     def __init__(self, config: ProviderConfig):
         self.config = config
@@ -153,7 +233,7 @@ class BaseProviderAdapter:
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=60.0)
+            self._client = httpx.AsyncClient(timeout=self.DEFAULT_TIMEOUT)
         return self._client
 
     async def chat(self, messages: List[Dict], model: str,
@@ -376,9 +456,13 @@ class MultiLLMRouter:
     def __init__(self):
         self.providers: Dict[str, ProviderConfig] = {}
         self.adapters: Dict[str, BaseProviderAdapter] = {}
+        self.circuit_breakers: Dict[str, ProviderCircuitBreaker] = {}
         self.call_history: List[Dict] = []
         self._lock = asyncio.Lock()
         self._discover_providers()
+        # 为每个提供商创建断路器
+        for name in self.providers:
+            self.circuit_breakers[name] = ProviderCircuitBreaker(name)
 
     def _get_key(self, key_name: str) -> str:
         """优先从 CredentialVault 获取密钥，若不可用则回退环境变量"""
@@ -700,6 +784,12 @@ class MultiLLMRouter:
             adapter = self.adapters[prov_name]
             tried_providers.append(prov_name)
 
+            # 断路器检查
+            cb = self.circuit_breakers.get(prov_name)
+            if cb and not cb.allow_request():
+                logger.info(f"断路器拒绝: {prov_name} (状态: {cb.state})")
+                continue
+
             try:
                 response = await adapter.chat(
                     messages=messages, model=mdl, tools=tools,
@@ -707,7 +797,7 @@ class MultiLLMRouter:
                     response_format=response_format, **kwargs,
                 )
 
-                # 更新状态
+                # 更新状态 + 断路器
                 self.providers[prov_name].success_count += 1
                 self.providers[prov_name].last_used = time.time()
                 self.providers[prov_name].latency_avg_ms = (
@@ -716,6 +806,8 @@ class MultiLLMRouter:
                 )
                 if self.providers[prov_name].status == ProviderStatus.DEGRADED:
                     self.providers[prov_name].status = ProviderStatus.HEALTHY
+                if cb:
+                    cb.record_success()
 
                 # 记录成本（非阻塞，失败不影响主流程）
                 try:
@@ -758,6 +850,8 @@ class MultiLLMRouter:
             except Exception as e:
                 self.providers[prov_name].error_count += 1
                 self.providers[prov_name].last_error = str(e)
+                if cb:
+                    cb.record_failure()
                 if self.providers[prov_name].error_count >= 5:
                     self.providers[prov_name].status = ProviderStatus.DOWN
                 else:
@@ -810,6 +904,7 @@ class MultiLLMRouter:
         """获取路由器状态"""
         providers_status = {}
         for name, prov in self.providers.items():
+            cb = self.circuit_breakers.get(name)
             providers_status[name] = {
                 "status": prov.status.value,
                 "models": prov.models,
@@ -818,6 +913,7 @@ class MultiLLMRouter:
                 "error_count": prov.error_count,
                 "latency_avg_ms": round(prov.latency_avg_ms, 1),
                 "last_error": prov.last_error,
+                "circuit_breaker": cb.to_dict() if cb else None,
             }
 
         recent = self.call_history[-20:]

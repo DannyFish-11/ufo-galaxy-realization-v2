@@ -438,3 +438,75 @@ def get_node_discovery(node_id: str = "master",
     if _discovery_instance is None:
         _discovery_instance = NodeDiscoveryService(node_id=node_id, **kwargs)
     return _discovery_instance
+
+
+# ───────────────────── 本地节点扫描 ─────────────────────
+
+async def safe_scan_nodes_dir(nodes_dir: str = "nodes") -> Dict:
+    """
+    安全扫描本地 nodes/ 目录，返回可加载的节点列表
+
+    每个节点独立 try/except，不会因为单个节点失败影响其他节点。
+    可与 NodeRegistry.load_all_nodes() 配合使用。
+
+    Returns:
+        {
+            "available": [{"node_id": ..., "has_main": True, "has_fusion": ...}, ...],
+            "errors": {"Node_XX": "error message", ...},
+            "total": int,
+            "available_count": int,
+        }
+    """
+    import os
+    import importlib
+    import sys
+
+    report = {"available": [], "errors": {}, "total": 0, "available_count": 0}
+
+    if not os.path.isdir(nodes_dir):
+        logger.warning(f"节点目录不存在: {nodes_dir}")
+        return report
+
+    node_dirs = sorted([
+        d for d in os.listdir(nodes_dir)
+        if os.path.isdir(os.path.join(nodes_dir, d)) and d.startswith("Node_")
+    ])
+
+    report["total"] = len(node_dirs)
+
+    for nd in node_dirs:
+        nd_path = os.path.join(nodes_dir, nd)
+        main_py = os.path.join(nd_path, "main.py")
+        fusion_py = os.path.join(nd_path, "fusion_entry.py")
+
+        info = {
+            "node_id": nd,
+            "has_main": os.path.exists(main_py),
+            "has_fusion": os.path.exists(fusion_py),
+        }
+
+        if not info["has_main"]:
+            report["available"].append(info)
+            continue
+
+        # 尝试导入以验证可用性
+        module_name = f"nodes.{nd}.main"
+        try:
+            if module_name in sys.modules:
+                info["importable"] = True
+            else:
+                importlib.import_module(module_name)
+                info["importable"] = True
+            report["available"].append(info)
+            report["available_count"] += 1
+        except BaseException as e:
+            info["importable"] = False
+            info["error"] = f"[{type(e).__name__}] {str(e)[:100]}"
+            report["errors"][nd] = info["error"]
+            report["available"].append(info)
+
+    logger.info(
+        f"节点扫描完成: {report['available_count']}/{report['total']} 可加载, "
+        f"{len(report['errors'])} 失败"
+    )
+    return report

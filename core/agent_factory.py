@@ -45,6 +45,8 @@ class AgentMessageBus:
     - 请求-回复模式（request / reply）
     """
 
+    MAX_QUEUE_SIZE = 1000  # 每个 Agent 队列的最大消息数
+
     def __init__(self):
         self._queues: Dict[str, asyncio.Queue] = {}
         self._pending_acks: Dict[str, asyncio.Event] = {}
@@ -53,7 +55,7 @@ class AgentMessageBus:
     def register(self, agent_id: str):
         """为 Agent 注册一个消息队列"""
         if agent_id not in self._queues:
-            self._queues[agent_id] = asyncio.Queue()
+            self._queues[agent_id] = asyncio.Queue(maxsize=self.MAX_QUEUE_SIZE)
 
     def unregister(self, agent_id: str):
         if agent_id in self._queues:
@@ -325,12 +327,21 @@ class AgentFactory:
     3. split_agent() - 现有 Agent 根据负载分裂为多个子 Agent
     """
 
+    # 生产可用性配置
+    MAX_AGENTS = 500              # 最大 Agent 数
+    CLEANUP_INTERVAL = 60         # TTL 清理间隔（秒）
+    MAX_CREATES_PER_MINUTE = 50   # 每分钟最大创建数
+    STATE_FILE = "data/agent_state.json"
+
     def __init__(self, llm_router=None):
         self.llm_router = llm_router
         self.agents: Dict[str, TaskAgent] = {}
         self.agent_tree: Dict[str, List[str]] = {}  # parent_id → [child_ids]
         self._task_handlers: Dict[str, Callable] = {}
         self.message_bus = get_message_bus()
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._creation_timestamps: List[float] = []  # 速率限制追踪
+        self._load_state()
         logger.info("AgentFactory 已初始化")
 
     # ─────── 模式 1: 模板创建 ─────────
@@ -596,11 +607,20 @@ class AgentFactory:
                     *[self._run_agent(c.id) for c in children],
                     return_exceptions=True,
                 )
-                # 收集执行结果并通过消息总线通知父 Agent
+                # 收集执行结果，区分成功和失败
                 child_results = []
+                success_count = 0
+                fail_count = 0
                 for i, child in enumerate(children):
                     r = results[i]
-                    result_payload = r if not isinstance(r, Exception) else {"error": str(r)}
+                    if isinstance(r, BaseException):
+                        result_payload = {"error": str(r), "error_type": type(r).__name__}
+                        fail_count += 1
+                        agent.metrics["tasks_failed"] += 1
+                        logger.warning(f"子 Agent {child.id} 执行失败: {r}")
+                    else:
+                        result_payload = r if isinstance(r, dict) else {"result": r}
+                        success_count += 1
                     child_results.append(result_payload)
                     # 发送结果消息给父 Agent
                     result_msg = AgentMessage(
@@ -611,10 +631,26 @@ class AgentFactory:
                         payload=result_payload if isinstance(result_payload, dict) else {},
                     )
                     await self.message_bus.send(result_msg)
+
+                # 如果所有子 Agent 都失败，回退到父 Agent 串行执行
+                if fail_count == len(children) and agent.task_queue:
+                    logger.warning(
+                        f"所有子 Agent 均失败，回退到父 Agent {agent_id} 串行执行"
+                    )
+                    agent.state = AgentState.WORKING
+                    fallback_result = await self._run_agent(agent_id)
+                    return {
+                        "strategy": "split_fallback_serial",
+                        "children_failed": [c.id for c in children],
+                        "fallback_result": fallback_result,
+                    }
+
                 agent.state = AgentState.IDLE
                 return {
                     "strategy": "split_and_parallel",
                     "children": [c.id for c in children],
+                    "success_count": success_count,
+                    "fail_count": fail_count,
                     "results": child_results,
                 }
 
@@ -672,13 +708,28 @@ class AgentFactory:
 
     # ─────── 内部工具 ─────────
 
+    def _check_rate_limit(self):
+        """检查 Agent 创建速率限制"""
+        now = time.time()
+        # 清理 1 分钟前的记录
+        self._creation_timestamps = [t for t in self._creation_timestamps if now - t < 60]
+        if len(self._creation_timestamps) >= self.MAX_CREATES_PER_MINUTE:
+            raise RuntimeError(
+                f"Agent 创建速率超限: {len(self._creation_timestamps)}/{self.MAX_CREATES_PER_MINUTE} per minute"
+            )
+        if len(self.agents) >= self.MAX_AGENTS:
+            raise RuntimeError(f"Agent 数量超限: {len(self.agents)}/{self.MAX_AGENTS}")
+
     def _register_agent(self, agent: TaskAgent):
+        self._check_rate_limit()
         self.agents[agent.id] = agent
         self.message_bus.register(agent.id)
+        self._creation_timestamps.append(time.time())
         if agent.parent_id:
             if agent.parent_id not in self.agent_tree:
                 self.agent_tree[agent.parent_id] = []
             self.agent_tree[agent.parent_id].append(agent.id)
+        self._persist_state()
 
     def _get_depth(self, parent_id: Optional[str]) -> int:
         if parent_id and parent_id in self.agents:
@@ -736,9 +787,148 @@ class AgentFactory:
             and now - a.created_at > a.config.ttl
         ]
         for aid in expired:
+            self.message_bus.unregister(aid)
             del self.agents[aid]
+            # 从 agent_tree 中清理
+            for parent_id in list(self.agent_tree.keys()):
+                if aid in self.agent_tree[parent_id]:
+                    self.agent_tree[parent_id].remove(aid)
         if expired:
             logger.info(f"清理了 {len(expired)} 个过期 Agent")
+            self._persist_state()
+
+    # ─────── 生命周期管理 ─────────
+
+    async def start_cleanup_loop(self):
+        """启动定期清理任务"""
+        if self._cleanup_task is not None:
+            return
+
+        async def _loop():
+            while True:
+                await asyncio.sleep(self.CLEANUP_INTERVAL)
+                try:
+                    self.cleanup_expired()
+                except Exception as e:
+                    logger.error(f"Agent 清理循环异常: {e}")
+
+        self._cleanup_task = asyncio.create_task(_loop())
+        logger.info(f"Agent TTL 清理循环已启动 (间隔 {self.CLEANUP_INTERVAL}s)")
+
+    async def stop_cleanup_loop(self):
+        """停止清理任务"""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+            logger.info("Agent TTL 清理循环已停止")
+
+    # ─────── 状态持久化 ─────────
+
+    def _persist_state(self):
+        """持久化 Agent 状态到磁盘"""
+        import os as _os
+        state_dir = _os.path.dirname(self.STATE_FILE)
+        if state_dir:
+            _os.makedirs(state_dir, exist_ok=True)
+        try:
+            state = {
+                "agents": {},
+                "agent_tree": self.agent_tree,
+                "timestamp": time.time(),
+            }
+            for aid, agent in self.agents.items():
+                if agent.state in (AgentState.TERMINATED, AgentState.COMPLETED):
+                    continue  # 不持久化已终止的 Agent
+                state["agents"][aid] = {
+                    "id": agent.id,
+                    "config": {
+                        "role": agent.config.role.value,
+                        "name": agent.config.name,
+                        "description": agent.config.description,
+                        "system_prompt": agent.config.system_prompt,
+                        "max_subtasks": agent.config.max_subtasks,
+                        "max_depth": agent.config.max_depth,
+                        "split_threshold": agent.config.split_threshold,
+                        "ttl": agent.config.ttl,
+                    },
+                    "state": agent.state.value,
+                    "parent_id": agent.parent_id,
+                    "children_ids": agent.children_ids,
+                    "creation_mode": agent.creation_mode.value,
+                    "depth": agent.depth,
+                    "created_at": agent.created_at,
+                    "last_active": agent.last_active,
+                    "metrics": agent.metrics,
+                }
+            with open(self.STATE_FILE, "w") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"Agent 状态持久化失败: {e}")
+
+    def _load_state(self):
+        """从磁盘恢复 Agent 状态"""
+        import os as _os
+        if not _os.path.exists(self.STATE_FILE):
+            return
+        try:
+            with open(self.STATE_FILE) as f:
+                state = json.load(f)
+
+            self.agent_tree = state.get("agent_tree", {})
+            loaded = 0
+            for aid, adata in state.get("agents", {}).items():
+                cfg_data = adata.get("config", {})
+                try:
+                    role = AgentRole(cfg_data.get("role", "executor"))
+                except ValueError:
+                    role = AgentRole.EXECUTOR
+
+                config = AgentConfig(
+                    role=role,
+                    name=cfg_data.get("name", "restored_agent"),
+                    description=cfg_data.get("description", ""),
+                    capabilities=[],
+                    system_prompt=cfg_data.get("system_prompt", ""),
+                    max_subtasks=cfg_data.get("max_subtasks", 5),
+                    max_depth=cfg_data.get("max_depth", 3),
+                    split_threshold=cfg_data.get("split_threshold", 3),
+                    ttl=cfg_data.get("ttl", 3600),
+                )
+
+                try:
+                    agent_state = AgentState(adata.get("state", "idle"))
+                except ValueError:
+                    agent_state = AgentState.IDLE
+
+                try:
+                    creation_mode = CreationMode(adata.get("creation_mode", "template"))
+                except ValueError:
+                    creation_mode = CreationMode.TEMPLATE
+
+                agent = TaskAgent(
+                    id=aid,
+                    config=config,
+                    state=agent_state,
+                    parent_id=adata.get("parent_id"),
+                    children_ids=adata.get("children_ids", []),
+                    creation_mode=creation_mode,
+                    depth=adata.get("depth", 0),
+                    created_at=adata.get("created_at", time.time()),
+                    last_active=adata.get("last_active", time.time()),
+                    metrics=adata.get("metrics", {}),
+                )
+                self.agents[aid] = agent
+                self.message_bus.register(aid)
+                loaded += 1
+
+            if loaded:
+                logger.info(f"从磁盘恢复了 {loaded} 个 Agent")
+        except Exception as e:
+            logger.warning(f"Agent 状态恢复失败: {e}")
 
     def get_status(self) -> Dict:
         by_state = {}

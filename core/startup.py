@@ -399,10 +399,17 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         fractal_executor = get_fractal_executor(
             llm_router=llm_router, agent_factory=agent_factory
         )
-        results["agent_system"] = {"status": "ok", "llm_enabled": llm_router is not None}
+        # 启动 Agent TTL 清理循环
+        await agent_factory.start_cleanup_loop()
+        results["agent_system"] = {
+            "status": "ok",
+            "llm_enabled": llm_router is not None,
+            "restored_agents": len(agent_factory.agents),
+        }
         logger.info(
             f"Agent 系统已初始化 (工厂 + 分形执行器, "
-            f"LLM: {'启用' if llm_router else '降级'})"
+            f"LLM: {'启用' if llm_router else '降级'}, "
+            f"恢复 {len(agent_factory.agents)} 个 Agent)"
         )
     except Exception as e:
         results["agent_system"] = {"status": "degraded", "error": str(e)}
@@ -516,23 +523,60 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         if status in ("degraded", "skipped", "error"):
             logger.warning(f"  ⚠ {name}: {status} - {result.get('error', result.get('reason', ''))}")
 
+    # 结构化启动摘要（便于 ELK/Loki 等日志系统收集）
+    import json as _json
+    startup_summary = {
+        "event": "bootstrap_complete",
+        "elapsed_s": round(elapsed, 3),
+        "ok": ok_count,
+        "degraded": degraded_count,
+        "skipped": skipped_count,
+        "total": total,
+        "subsystems": {
+            k: v.get("status", "unknown")
+            for k, v in results.items()
+            if not k.startswith("_")
+        },
+    }
+    logger.info(f"STARTUP_SUMMARY: {_json.dumps(startup_summary, ensure_ascii=False)}")
+
     return results
+
+
+async def _shutdown_with_timeout(name: str, coro, timeout: float = 5.0):
+    """带超时的子系统关闭"""
+    try:
+        await asyncio.wait_for(coro, timeout=timeout)
+        logger.info(f"{name}已停止")
+    except asyncio.TimeoutError:
+        logger.warning(f"{name}关闭超时 ({timeout}s)")
+    except Exception as e:
+        logger.warning(f"{name}关闭失败: {e}")
 
 
 async def shutdown_subsystems():
     """
     优雅关闭所有核心子系统
 
-    调用顺序与启动相反。
+    调用顺序与启动相反。每个子系统最多等待 5 秒。
     """
     logger.info("开始关闭核心子系统...")
+    t0 = time.monotonic()
+
+    # 0. Agent 清理循环
+    try:
+        from core.agent_factory import get_agent_factory
+        factory = get_agent_factory()
+        await _shutdown_with_timeout("Agent 清理循环", factory.stop_cleanup_loop())
+        factory._persist_state()  # 关闭前持久化状态
+    except Exception as e:
+        logger.warning(f"Agent 系统关闭失败: {e}")
 
     # 0a. 健康检查整合层
     try:
         from core.health_integration import get_unified_health_manager
         uhm = get_unified_health_manager()
-        await uhm.stop()
-        logger.info("健康检查整合层已停止")
+        await _shutdown_with_timeout("健康检查整合层", uhm.stop())
     except Exception as e:
         logger.warning(f"健康检查整合层停止失败: {e}")
 
@@ -540,8 +584,7 @@ async def shutdown_subsystems():
     try:
         from core.node_discovery import get_node_discovery
         discovery = get_node_discovery()
-        await discovery.stop()
-        logger.info("节点发现服务已停止")
+        await _shutdown_with_timeout("节点发现服务", discovery.stop())
     except Exception as e:
         logger.warning(f"节点发现服务停止失败: {e}")
 
@@ -549,17 +592,15 @@ async def shutdown_subsystems():
     try:
         from core.digital_twin_engine import get_digital_twin_engine
         twin_engine = get_digital_twin_engine()
-        await twin_engine.shutdown()
-        logger.info("数字孪生引擎已关闭")
+        await _shutdown_with_timeout("数字孪生引擎", twin_engine.shutdown())
     except Exception as e:
         logger.warning(f"数字孪生引擎关闭失败: {e}")
 
-    # 0b. LLM 路由器
+    # 0d. LLM 路由器
     try:
         from core.multi_llm_router import get_llm_router
         router = get_llm_router()
-        await router.close()
-        logger.info("LLM 路由器已关闭")
+        await _shutdown_with_timeout("LLM 路由器", router.close())
     except Exception as e:
         logger.warning(f"LLM 路由器关闭失败: {e}")
 
@@ -567,17 +608,15 @@ async def shutdown_subsystems():
     try:
         from core.event_bridge import get_event_bridge
         bridge = get_event_bridge()
-        await bridge.shutdown()
-        logger.info("事件桥接已关闭")
+        await _shutdown_with_timeout("事件桥接", bridge.shutdown())
     except Exception as e:
         logger.warning(f"事件桥接关闭失败: {e}")
 
     # 2. 命令路由清理
     try:
         from core.command_router import get_command_router
-        router = get_command_router()
-        await router.cleanup(max_age_seconds=0)
-        logger.info("命令路由已清理")
+        cmd_router = get_command_router()
+        await _shutdown_with_timeout("命令路由", cmd_router.cleanup(max_age_seconds=0))
     except Exception:
         pass
 
@@ -585,8 +624,7 @@ async def shutdown_subsystems():
     try:
         from core.monitoring import get_monitoring_manager
         monitoring = get_monitoring_manager()
-        await monitoring.stop()
-        logger.info("监控系统已停止")
+        await _shutdown_with_timeout("监控系统", monitoring.stop())
     except Exception as e:
         logger.warning(f"监控系统关闭失败: {e}")
 
@@ -594,8 +632,7 @@ async def shutdown_subsystems():
     try:
         from core.concurrency_manager import get_concurrency_manager
         concurrency = get_concurrency_manager()
-        await concurrency.stop()
-        logger.info("并发管理器已停止")
+        await _shutdown_with_timeout("并发管理器", concurrency.stop())
     except Exception as e:
         logger.warning(f"并发管理器停止失败: {e}")
 
@@ -603,21 +640,18 @@ async def shutdown_subsystems():
     try:
         from core.config_hot_reload import get_config_manager
         config_mgr = get_config_manager()
-        await config_mgr.stop_watching()
-        logger.info("配置热更新已停止")
+        await _shutdown_with_timeout("配置热更新", config_mgr.stop_watching())
     except Exception as e:
         logger.warning(f"配置热更新停止失败: {e}")
 
     # 4. 缓存
     try:
-        from core.cache import get_cache as _get_cache_ref
-        # 通过模块级变量安全获取已初始化的实例
         import core.cache as _cache_mod
         instance = getattr(_cache_mod, '_cache_instance', None)
         if instance:
-            await instance.close()
-            logger.info("缓存连接已关闭")
+            await _shutdown_with_timeout("缓存连接", instance.close())
     except Exception as e:
         logger.warning(f"缓存关闭失败: {e}")
 
-    logger.info("核心子系统已全部关闭")
+    elapsed = time.monotonic() - t0
+    logger.info(f"核心子系统已全部关闭 (耗时 {elapsed:.2f}s)")

@@ -1,4 +1,3 @@
-'''
 # -*- coding: utf-8 -*-
 
 """
@@ -318,5 +317,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("程序被用户中断。")
-
-'''

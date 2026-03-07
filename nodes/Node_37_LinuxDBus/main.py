@@ -21,9 +21,19 @@ try:
     from dbus_next.aio import MessageBus
     from dbus_next.constants import BusType
     from dbus_next.errors import DBusError
+    HAS_DBUS = True
 except ImportError:
-    print("错误: dbus-next 库未安装。请运行 'pip install dbus-next' 进行安装。", file=sys.stderr)
-    sys.exit(1)
+    HAS_DBUS = False
+    # 提供占位类型，避免引用错误
+    class BusType(Enum):
+        SYSTEM = "system"
+        SESSION = "session"
+    class DBusError(Exception):
+        pass
+    MessageBus = None
+    logging.getLogger("Node_37_LinuxDBus").warning(
+        "dbus-next 未安装，D-Bus 功能不可用。请运行 'pip install dbus-next' 安装。"
+    )
 
 # 配置日志记录器
 logging.basicConfig(
