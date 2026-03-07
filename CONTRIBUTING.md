@@ -2,6 +2,25 @@
 
 Thank you for contributing!
 
+## Setting Up the Dev Environment
+
+1. **Python 3.11+** is required.
+2. Clone the repository and create a virtual environment:
+   ```bash
+   git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
+   cd ufo-galaxy-realization-v2
+   python3.11 -m venv .venv
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
+   ```
+3. Install all dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Install dev-only tools (linters, test runner):
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
 ## Adding a New Node
 
 1. Create a directory under `nodes/` following the naming convention `Node_XX_Name/`.

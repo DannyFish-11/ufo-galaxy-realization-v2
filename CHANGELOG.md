@@ -1,45 +1,65 @@
 # Changelog
 
 All notable changes to UFO Galaxy are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Added
-- CI workflow (`.github/workflows/ci.yml`) – runs pytest (including dev dependencies) on push/PR to `main`
-- Cross-platform integration tests (`tests/test_cross_platform_integration.py`) covering AIP v3.0 protocol messages
-- Cross-device integration tests (`tests/test_cross_device_integration.py`) – full Android ↔ Server handshake
-- `CHANGELOG.md` and `CONTRIBUTING.md` documentation
-- `vision_request` handler in `android_bridge.py`: Android screenshot → VisionPipeline analysis → `task_assign` reply (断链2/3)
-- OneAPI dynamic model discovery in `multi_llm_router.py` via `config/api_config.json` + `/v1/models` (断链4)
-- `capability_report` handler persists `supported_actions` into `AndroidDevice` (断链5)
-- `MessageBuilder.capability_report_ack`, `MessageBuilder.diagnostics_payload_ack`, `MessageBuilder.vision_result` factory methods
+Open pull requests pending review / merge:
 
-### Removed
-- Duplicate Android client source code under `enhancements/clients/android_client/` (Kotlin, Gradle, scripts, extra docs); canonical source lives at [DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android)
+- **PR #4** – Wire `/ws/android` to `android_bridge`: integrates the Android stack with the
+  V2 backend, enabling end-to-end AIP v3.0 message flow between the Android client and the server.
+- **PR #5** – Remove Android client duplication: canonical Android source moved to
+  [DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android);
+  Kotlin/Gradle files removed from this repository.
 
 ---
 
-## [v2.1]
+## [v2.0] – Milestone: Core Infrastructure + Autonomous Loops + Android Bridge
 
-### Added – PR #5: Remove Android client duplication
-- Removed Android client source (Kotlin, Gradle, scripts) from this repository to eliminate duplication.
-- Redirected contributors to [DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) as the sole canonical source for the Android client.
+### Added – PR #1: Initial nodes and project structure
+- Core node implementations: Tasker, Auth, SecretVault, Filesystem, databases, tools,
+  search, and more
+- Base `core/` framework with async task execution and LLM routing
 
-### Added – PR #4: Wire `/ws/android` to `android_bridge`
-- Integrated the Android stack with the V2 backend by wiring the `/ws/android` WebSocket endpoint to `android_bridge`.
-- Enables end-to-end AIP v3.0 message flow between the Android client and the server.
+### Added – PR #2: Capability registry and discovery
+- `core/capability_manager.py` — OpenClaw-style central capability index
+- Capability registration at node startup with status tracking (online / offline / error)
+- Persistent storage in `config/capabilities.json`
+- Discovery API: query by name, category, node ID, or keyword
 
----
+### Added – PR #3: Connection manager with heartbeat and auto-reconnect
+- `core/connection_manager.py` — stable connection manager (Sunflower-style)
+- Automatic heartbeat with configurable interval and exponential back-off reconnect
+- Real-time health monitoring and fault recovery
 
-## [v2.0]
+### Added – PR #6: Self-heal loop (Loop 1 — Self-Heal → Code-Fix → Verify)
+- `Node_112_SelfHealing` — anomaly detection and automated diagnosis
+- `AutoFixer._code_fix()` calls `AutonomousCoder.generate_and_execute()` for sandboxed repairs
+- `FixAction.CODE_FIX` keyword-driven action routing; optional `psutil` import
 
-### Added
-- Initial system with node implementations: Tasker, Auth, SecretVault, Filesystem, databases, tools, search, and more
-- Capability registration & discovery system (OpenClaw style)
-- Connection manager with heartbeat and auto-reconnect
-- Three autonomous loops
-  - **Loop 1** – Self-heal: detects and attempts automated code fixes (`Node_112_SelfHealing`)
-  - **Loop 2** – Learning: updates planner strategy from execution history (`galaxy_main_loop_l4` + `autonomous_planner`)
-  - **Loop 3** – Auto-expand: detects capability gaps and deploys new nodes (`autonomous_coder._deploy_as_node`)
-- Android bridge integration (AIP v3.0 protocol, `Node_113_AndroidVLM`)
-- Dashboard – Vue 3 + FastAPI monitoring UI (`dashboard/`)
+### Added – PR #7: Learning loop (Loop 2 — Learn → Weight Update → Routing)
+- `LearningOptimizer` — extracts performance insights from execution history
+- `AutonomousPlanner.update_decision_weights()` adjusts routing strategy weights
+- Feedback loop: learn → update weights → optimised routing on next invocation
+
+### Added – PR #8: Auto-expand loop (Loop 3 — Capability Gap → Deploy New Node)
+- `AutonomousCoder._deploy_as_node()` — generates new node code to fill detected gaps
+- Auto-registers new nodes in `NodeFactory` and `CapabilityManager`
+- Capability index updated immediately so new nodes are available for routing
+
+### Added – PR #9: Android bridge and AIP v3.0 protocol alignment
+- `galaxy_gateway/android_bridge.py` — full WebSocket bridge for Android ↔ Server
+- AIP v3.0 message types: `device_register`, `heartbeat`, `task_result`,
+  `capability_report`, `diagnostics_payload`, `vision_request`
+- `MessageBuilder` factory methods for all server → device responses
+  (`register_ack`, `heartbeat_ack`, `capability_report_ack`, `diagnostics_payload_ack`,
+  `vision_result`, etc.)
+
+### Added – PR #10: Dashboard (Vue 3 + FastAPI)
+- `dashboard/` — real-time monitoring and management UI
+- Node health, capability browser, and device list panels
+
+### Added – PR #11: `Node_113_AndroidVLM` + vision integration
+- Android screenshot → `VisionPipeline` analysis → `task_assign` reply
+- `MessageBuilder.vision_result()` factory method for vision responses
