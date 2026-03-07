@@ -484,16 +484,18 @@ class MinimalistWindow(QMainWindow):
                 # 尝试主系统
                 result = self._api_call(f"{api_base}/api/v1/chat",
                                         {"message": message, "device_id": "windows_integrated"})
-                if result and result.get("success") and result.get("reply"):
+                reply_text = (result.get("response") or result.get("reply")) if result else None
+                if result and result.get("success") and reply_text:
                     model = result.get("model", "")
-                    return f"[{model}] {result['reply']}" if model else result["reply"]
+                    return f"[{model}] {reply_text}" if model else reply_text
 
                 # 尝试 Dashboard
-                result = self._api_call(f"{dashboard_base}/api/chat",
+                result = self._api_call(f"{dashboard_base}/api/v1/dashboard/chat",
                                         {"message": message, "session_id": "windows_integrated"})
-                if result and result.get("success") and result.get("reply"):
+                reply_text = (result.get("response") or result.get("reply")) if result else None
+                if result and result.get("success") and reply_text:
                     model = result.get("model", "")
-                    return f"[{model}] {result['reply']}" if model else result["reply"]
+                    return f"[{model}] {reply_text}" if model else reply_text
 
                 # 直接调用 LLM
                 for key_name, base_url, model in [

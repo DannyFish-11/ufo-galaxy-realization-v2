@@ -574,7 +574,7 @@ class ChatPanel(QWidget):
             self._on_response(data)
         except (json.JSONDecodeError, TypeError):
             # 纯文本响应 fallback
-            self._on_response({"reply": json_str})
+            self._on_response({"response": json_str})
 
     def _scroll_to_bottom(self):
         scrollbar = self.messages_area.verticalScrollBar()

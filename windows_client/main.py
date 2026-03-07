@@ -110,21 +110,25 @@ class CommandProcessor(QThread):
             },
             base_url=GALAXY_API_BASE
         )
-        if result and result.get("success") and result.get("reply"):
+        reply_text = result.get("response") or result.get("reply") if result else None
+        if result and result.get("success") and reply_text:
             # 保存到历史
-            self.add_to_history("assistant", result["reply"])
+            self.add_to_history("assistant", reply_text)
+            # 确保响应里有 reply 字段（UI 兼容）
+            result["reply"] = reply_text
             # 返回完整结构化 JSON
             return json.dumps(result, ensure_ascii=False)
 
-        # 策略 2：Dashboard /api/chat
+        # 策略 2：Dashboard /api/v1/dashboard/chat
         result = self._call_api(
-            "/api/chat",
+            "/api/v1/dashboard/chat",
             {"message": command, "session_id": "windows_client"},
             base_url=DASHBOARD_API_BASE
         )
-        if result and result.get("success") and result.get("reply"):
+        reply_text = result.get("response") or result.get("reply") if result else None
+        if result and result.get("success") and reply_text:
             model = result.get("model", "")
-            reply = result["reply"]
+            reply = reply_text
             return f"[{model}] {reply}" if model else reply
 
         # 策略 3：直接调用 LLM

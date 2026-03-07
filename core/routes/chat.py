@@ -191,17 +191,32 @@ async def _handle_agent_action(
         except Exception:
             pass
 
+        model_name = llm_manager.get_default_model()
         resp = UnifiedChatResponse(
             success=plan_result.get("success", True),
             response=full_reply,
             intent="action",
             confidence=0.9,
             mode="agent_react",
-            model=llm_manager.get_default_model(),
+            model=model_name,
             data={"steps": steps},
             session_id=session_id,
         )
-        return JSONResponse(resp.to_json_response())
+        # 增强响应：添加 reply 别名 + agent_steps + routing（Windows 客户端 UI 需要）
+        resp_dict = resp.to_json_response()
+        resp_dict["reply"] = full_reply
+        resp_dict["agent_steps"] = [
+            {"type": "action", "tool": s.get("action", ""), "content": s.get("node_id", ""),
+             "input": s.get("params", {})}
+            for s in steps
+        ] if steps else []
+        resp_dict["routing"] = {
+            "task_type": "action",
+            "provider": "",
+            "model": model_name,
+            "reason": "操作指令 → ReAct Agent 调度",
+        }
+        return JSONResponse(resp_dict)
 
     except ValueError as ve:
         logger.warning(f"Agent 调度失败 (LLM 不可用): {ve}, 降级到纯聊天")
@@ -255,7 +270,16 @@ async def _handle_pure_chat(
                 model=model_name,
                 session_id=session_id,
             )
-            return JSONResponse(resp.to_json_response())
+            # 增强响应：添加 reply 别名 + routing（Windows 客户端 UI 需要）
+            resp_dict = resp.to_json_response()
+            resp_dict["reply"] = reply
+            resp_dict["routing"] = {
+                "task_type": "chat",
+                "provider": "",
+                "model": model_name,
+                "reason": "纯聊天 → LLM 对话",
+            }
+            return JSONResponse(resp_dict)
         except Exception as e:
             logger.warning(f"LLMManager chat failed: {e}")
 

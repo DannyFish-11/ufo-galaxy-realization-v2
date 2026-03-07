@@ -937,7 +937,8 @@ async def chat(request: dict):
     suggestions = intent.get("suggestions", [])
 
     def _make_response(response_text: str, success: bool = True, mode: str = "chat",
-                       extra_data: Dict = None, error: str = "") -> JSONResponse:
+                       extra_data: Dict = None, error: str = "",
+                       routing: Dict = None, agent_steps: List = None) -> JSONResponse:
         resp = UnifiedChatResponse(
             success=success,
             response=response_text,
@@ -949,7 +950,14 @@ async def chat(request: dict):
             error=error,
             session_id=session_id,
         )
-        return JSONResponse(resp.to_json_response())
+        # 增强响应：添加 reply 别名 + routing + agent_steps（Windows 客户端 UI 需要）
+        resp_dict = resp.to_json_response()
+        resp_dict["reply"] = response_text
+        if routing:
+            resp_dict["routing"] = routing
+        if agent_steps:
+            resp_dict["agent_steps"] = agent_steps
+        return JSONResponse(resp_dict)
 
     async def _save_assistant_reply(reply_text: str):
         if memory:
