@@ -31,6 +31,7 @@ from enum import Enum
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from nodes.common.cors_config import get_cors_origins
 from pydantic import BaseModel, Field
 import uvicorn
 import httpx
@@ -794,7 +795,6 @@ if __name__ == "__main__":
 # =============================================================================
 
 from academic_extension import academic_manager, PaperNote, CitationNetwork
-from nodes.common.cors_config import get_cors_origins
 
 @app.post("/academic/paper_note")
 async def save_academic_paper_note(paper: PaperNote):

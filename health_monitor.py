@@ -24,6 +24,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from nodes.common.cors_config import get_cors_origins
 
 # 导入系统管理器
 from system_manager import SystemManager, NODES, NodeConfig

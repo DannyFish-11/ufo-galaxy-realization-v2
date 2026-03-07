@@ -35,6 +35,7 @@ from datetime import datetime
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
+from nodes.common.cors_config import get_cors_origins
 
 # ── Quick delegation: if no --legacy flag, delegate to unified_launcher ──
 if __name__ == "__main__" and "--legacy" not in sys.argv and "--setup" not in sys.argv:

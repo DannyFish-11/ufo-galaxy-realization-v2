@@ -33,6 +33,7 @@ from datetime import datetime
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
+from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
 logging.basicConfig(

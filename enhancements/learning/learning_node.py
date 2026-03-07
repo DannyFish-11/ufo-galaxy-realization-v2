@@ -24,6 +24,7 @@ from dataclasses import asdict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
+from nodes.common.cors_config import get_cors_origins
 from pydantic import BaseModel, Field
 import uvicorn
 

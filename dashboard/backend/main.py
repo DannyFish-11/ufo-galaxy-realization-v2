@@ -22,7 +22,21 @@ from typing import Dict, List, Optional, Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
-from core.unified_response import UnifiedChatResponse
+try:
+    from core.unified_response import UnifiedChatResponse
+except ImportError:
+    # Fallback: define a minimal UnifiedChatResponse for standalone mode
+    from pydantic import BaseModel as _BaseModel
+    class UnifiedChatResponse(_BaseModel):
+        success: bool = True
+        response: str = ""
+        intent: str = ""
+        confidence: float = 0.0
+        mode: str = "chat"
+        suggestions: list = []
+        data: dict = {}
+        error: str = ""
+        session_id: str = ""
 from nodes.common.cors_config import get_cors_origins
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
