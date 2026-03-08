@@ -3,15 +3,18 @@ UFO Galaxy - System & Config Routes
 =====================================
 
 Routes:
-  GET  /api/v1/system/status   - 系统完整状态
-  GET  /api/v1/system/health   - 健康检查
-  GET  /api/v1/system/config   - 系统配置(脱敏)
-  GET  /api/config             - 前端配置
-  POST /api/config/update      - 更新 API Key 配置
+  GET  /api/v1/system/status       - 系统完整状态（含子系统详情）
+  GET  /api/v1/system/health       - 健康检查
+  GET  /api/v1/system/config       - 系统配置(脱敏)
+  GET  /api/v1/agents/status       - 所有活跃 Agent 状态
+  GET  /api/v1/nodes/status        - 所有节点注册状态
+  GET  /api/config                 - 前端配置
+  POST /api/config/update          - 更新 API Key 配置
 """
 
 import logging
 import os
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -83,6 +86,146 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "completed": sum(1 for t in task_queue.values() if t.get("status") == "completed")
             }
         })
+
+    @router.get("/api/v1/system/subsystems")
+    async def system_subsystems():
+        """获取所有子系统详细状态"""
+        subsystems = {}
+
+        # Agent Factory
+        try:
+            from core.agent_factory import get_agent_factory
+            factory = get_agent_factory()
+            agents = factory.list_agents() if hasattr(factory, 'list_agents') else {}
+            subsystems["agent_factory"] = {
+                "status": "running",
+                "agent_count": len(agents),
+                "max_agents": getattr(factory, 'MAX_AGENTS', None),
+            }
+        except Exception as e:
+            subsystems["agent_factory"] = {"status": "error", "error": str(e)}
+
+        # LLM Router
+        try:
+            from core.multi_llm_router import get_llm_router
+            router_inst = get_llm_router()
+            router_status = router_inst.get_status() if hasattr(router_inst, 'get_status') else {}
+            subsystems["llm_router"] = {
+                "status": "running",
+                "details": router_status,
+            }
+        except Exception as e:
+            subsystems["llm_router"] = {"status": "error", "error": str(e)}
+
+        # Node Registry
+        try:
+            from core.node_registry import get_node_registry
+            registry = get_node_registry()
+            meta = registry.metadata if hasattr(registry, 'metadata') else {}
+            subsystems["node_registry"] = {
+                "status": "running",
+                "registered_nodes": len(meta),
+            }
+        except Exception as e:
+            subsystems["node_registry"] = {"status": "error", "error": str(e)}
+
+        # Monitoring
+        try:
+            from core.monitoring import get_monitoring_manager
+            mon = get_monitoring_manager()
+            subsystems["monitoring"] = {
+                "status": "running",
+                "details": mon.get_status() if hasattr(mon, 'get_status') else {},
+            }
+        except Exception as e:
+            subsystems["monitoring"] = {"status": "error", "error": str(e)}
+
+        # Cache
+        try:
+            import core.cache as _cache_mod
+            instance = getattr(_cache_mod, '_cache_instance', None)
+            subsystems["cache"] = {
+                "status": "running" if instance else "not_initialized",
+            }
+        except Exception as e:
+            subsystems["cache"] = {"status": "error", "error": str(e)}
+
+        return JSONResponse({
+            "timestamp": datetime.now().isoformat(),
+            "subsystems": subsystems,
+        })
+
+    @router.get("/api/v1/agents/status")
+    async def agents_status():
+        """获取所有活跃 Agent 状态"""
+        try:
+            from core.agent_factory import get_agent_factory
+            factory = get_agent_factory()
+            agents = factory.list_agents() if hasattr(factory, 'list_agents') else {}
+            agent_list = []
+            for agent_id, agent in agents.items():
+                agent_info = {
+                    "agent_id": agent_id,
+                    "state": agent.state.value if hasattr(agent.state, 'value') else str(agent.state),
+                    "role": getattr(agent, 'role', None),
+                    "parent_id": getattr(agent, 'parent_id', None),
+                    "created_at": getattr(agent, 'created_at', None),
+                }
+                if hasattr(agent, 'metrics') and agent.metrics:
+                    agent_info["metrics"] = {
+                        k: v for k, v in agent.metrics.items()
+                        if isinstance(v, (int, float, str, bool))
+                    }
+                agent_list.append(agent_info)
+            return JSONResponse({
+                "timestamp": datetime.now().isoformat(),
+                "total": len(agent_list),
+                "agents": agent_list,
+            })
+        except Exception as e:
+            return JSONResponse({
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e),
+                "agents": [],
+            }, status_code=500)
+
+    @router.get("/api/v1/nodes/status")
+    async def nodes_status():
+        """获取所有节点注册状态"""
+        try:
+            from core.node_registry import get_node_registry
+            registry = get_node_registry()
+            meta = registry.metadata if hasattr(registry, 'metadata') else {}
+            node_list = []
+            for node_id, m in meta.items():
+                node_list.append({
+                    "node_id": node_id,
+                    "name": getattr(m, 'name', node_id),
+                    "status": m.status.value if hasattr(m.status, 'value') else str(getattr(m, 'status', 'unknown')),
+                    "error_message": getattr(m, 'error_message', None),
+                    "version": getattr(m, 'version', None),
+                })
+            # Sort: ERROR nodes first, then READY
+            node_list.sort(key=lambda n: (0 if n["status"] == "error" else 1, n["node_id"]))
+            return JSONResponse({
+                "timestamp": datetime.now().isoformat(),
+                "total": len(node_list),
+                "by_status": _count_by_status(node_list),
+                "nodes": node_list,
+            })
+        except Exception as e:
+            return JSONResponse({
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e),
+                "nodes": [],
+            }, status_code=500)
+
+    def _count_by_status(node_list):
+        counts = {}
+        for n in node_list:
+            s = n.get("status", "unknown")
+            counts[s] = counts.get(s, 0) + 1
+        return counts
 
     @router.get("/api/v1/system/health")
     async def system_health():

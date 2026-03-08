@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Type
@@ -68,7 +69,7 @@ class CANFrame:
     data: bytes                          # 数据负载 (0-8 bytes)
     is_extended_id: bool = False         # 是否为扩展帧
     is_remote_frame: bool = False        # 是否为远程帧
-    timestamp: float = field(default_factory=asyncio.get_running_loop().time) # 报文时间戳
+    timestamp: float = field(default_factory=time.time) # 报文时间戳
 
     def to_dict(self) -> Dict[str, Any]:
         """将 CAN 报文转换为字典格式，便于序列化"""
@@ -232,7 +233,7 @@ class CANbusService:
             "service": "Node_42_CANbus",
             "status": self.status.value,
             "config": self.config.__dict__,
-            "timestamp": asyncio.get_running_loop().time()
+            "timestamp": time.time()
         }
 
     async def _handle_http_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

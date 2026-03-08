@@ -7,38 +7,71 @@ import os
 import json
 import base64
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
-from fastapi import FastAPI, HTTPException, Header
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from nodes.common.cors_config import get_cors_origins
 
-app = FastAPI(title="Node 03 - SecretVault", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+logger = logging.getLogger("Node_03_SecretVault")
+
+# 可选依赖：优雅降级
+try:
+    from fastapi import FastAPI, HTTPException, Header
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
+    logger.warning("fastapi/pydantic 未安装，HTTP API 不可用")
+
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    HAS_CRYPTO = True
+except BaseException as e:
+    HAS_CRYPTO = False
+    Fernet = None
+    logger.warning(f"cryptography 不可用: {e}，加密功能将降级")
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
+
+if HAS_FASTAPI:
+    app = FastAPI(title="Node 03 - SecretVault", version="2.0.0")
+    app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+else:
+    app = None
 
 # 主密钥（从环境变量读取）
-MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", Fernet.generate_key().decode())
+if HAS_CRYPTO:
+    MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", Fernet.generate_key().decode())
+else:
+    MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", secrets.token_urlsafe(32))
 
-class Secret(BaseModel):
-    key: str
-    value: str
-    encrypted: bool = True
-    created_at: datetime
-    expires_at: Optional[datetime] = None
-    metadata: Dict[str, Any] = {}
+if HAS_FASTAPI:
+    class Secret(BaseModel):
+        key: str
+        value: str
+        encrypted: bool = True
+        created_at: datetime
+        expires_at: Optional[datetime] = None
+        metadata: Dict[str, Any] = {}
+else:
+    Secret = None
 
 class SecretVault:
     def __init__(self):
         self._master_key = MASTER_KEY.encode() if isinstance(MASTER_KEY, str) else MASTER_KEY
-        self._fernet = Fernet(self._master_key)
-        self._secrets: Dict[str, Secret] = {}
+        self._fernet = Fernet(self._master_key) if HAS_CRYPTO and Fernet else None
+        self._secrets: Dict[str, Any] = {}
         self._access_log: List[Dict] = []
         self._load_secrets()
+        if not HAS_CRYPTO:
+            logger.warning("SecretVault 以降级模式运行（无加密支持）")
 
     def _load_secrets(self):
         """加载持久化的密钥"""

@@ -74,9 +74,9 @@ class MediaGenConfig:
 @dataclass
 class GenerationTask:
     """媒体生成任务的数据结构"""
-    task_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     media_type: MediaType
     prompt: str
+    task_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     params: Dict[str, Any] = field(default_factory=dict)
     status: GenerationStatus = GenerationStatus.PENDING
     result_path: Optional[str] = None

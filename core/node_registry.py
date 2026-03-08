@@ -428,18 +428,30 @@ class NodeRegistry:
     # 健康检查
     # ========================================================================
     
+    # 连续健康检查失败次数达到此阈值时标记 ERROR
+    HEALTH_FAIL_THRESHOLD = 3
+
     async def check_node_health(self, node_id: str) -> Dict[str, Any]:
-        """检查单个节点健康"""
+        """检查单个节点健康，连续 N 次失败自动标记 ERROR"""
         node = self.get_node(node_id)
         if not node:
             return {"healthy": False, "error": "节点不存在"}
-            
+
         try:
             result = await asyncio.wait_for(node.health_check(), timeout=5.0)
             node.metadata.last_health_check = datetime.now()
             node.metadata.health_score = result.get("score", 1.0)
             node.metadata.error_message = None
-            
+
+            # 重置连续失败计数
+            if hasattr(node.metadata, '_consecutive_health_failures'):
+                node.metadata._consecutive_health_failures = 0
+
+            # 如果之前是 ERROR 状态，恢复为 RUNNING
+            if node.metadata.status == NodeStatus.ERROR:
+                node.metadata.status = NodeStatus.RUNNING
+                logger.info(f"节点 {node_id} 健康恢复: ERROR → RUNNING")
+
             # ===== 集成：更新能力状态 =====
             try:
                 capability_manager, CapabilityStatus = _get_capability_manager()
@@ -447,32 +459,45 @@ class NodeRegistry:
                 await capability_manager.update_node_status(node_id, status)
             except Exception as e:
                 logger.debug(f"能力状态更新失败 (非致命): {e}")
-            
+
             return {"healthy": True, **result}
         except asyncio.TimeoutError:
-            node.metadata.health_score = 0.0
-            node.metadata.error_message = "健康检查超时"
-            
-            # ===== 集成：标记能力离线 =====
-            try:
-                capability_manager, CapabilityStatus = _get_capability_manager()
-                await capability_manager.update_node_status(node_id, CapabilityStatus.OFFLINE)
-            except Exception as e:
-                logger.debug(f"能力状态更新失败 (非致命): {e}")
-            
-            return {"healthy": False, "error": "超时"}
+            return self._handle_health_failure(node, node_id, "健康检查超时")
         except Exception as e:
-            node.metadata.health_score = 0.0
-            node.metadata.error_message = str(e)
-            
-            # ===== 集成：标记能力错误 =====
-            try:
-                capability_manager, CapabilityStatus = _get_capability_manager()
-                await capability_manager.update_node_status(node_id, CapabilityStatus.ERROR)
-            except Exception as e:
-                logger.debug(f"能力状态更新失败 (非致命): {e}")
-            
-            return {"healthy": False, "error": str(e)}
+            return self._handle_health_failure(node, node_id, str(e))
+
+    def _handle_health_failure(self, node, node_id: str, error: str) -> Dict[str, Any]:
+        """处理健康检查失败，追踪连续失败次数"""
+        node.metadata.health_score = 0.0
+        node.metadata.error_message = error
+
+        # 追踪连续失败
+        if not hasattr(node.metadata, '_consecutive_health_failures'):
+            node.metadata._consecutive_health_failures = 0
+        node.metadata._consecutive_health_failures += 1
+
+        # 连续失败达到阈值，标记 ERROR
+        if node.metadata._consecutive_health_failures >= self.HEALTH_FAIL_THRESHOLD:
+            if node.metadata.status != NodeStatus.ERROR:
+                node.metadata.status = NodeStatus.ERROR
+                logger.warning(
+                    f"节点 {node_id} 连续 {node.metadata._consecutive_health_failures} "
+                    f"次健康检查失败，标记为 ERROR"
+                )
+
+        # ===== 集成：标记能力状态 =====
+        try:
+            capability_manager, CapabilityStatus = _get_capability_manager()
+            cap_status = CapabilityStatus.OFFLINE if "超时" in error else CapabilityStatus.ERROR
+            # 使用 fire-and-forget 模式，不 await
+            import asyncio as _asyncio
+            loop = _asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(capability_manager.update_node_status(node_id, cap_status))
+        except Exception as e:
+            logger.debug(f"能力状态更新失败 (非致命): {e}")
+
+        return {"healthy": False, "error": error}
             
     async def check_all_health(self) -> Dict[str, Dict[str, Any]]:
         """检查所有节点健康"""
@@ -505,29 +530,29 @@ class NodeRegistry:
     # ========================================================================
     
     async def load_node_from_path(self, node_path: Path) -> Optional[BaseNode]:
-        """从路径加载节点"""
+        """从路径加载节点（安全导入，任何异常都不会影响其他节点）"""
         main_py = node_path / "main.py"
         if not main_py.exists():
             return None
-            
+
         node_id = node_path.name
-        
+
         try:
             # 动态加载模块
             spec = importlib.util.spec_from_file_location(f"node_{node_id}", main_py)
             module = importlib.util.module_from_spec(spec)
             sys.modules[f"node_{node_id}"] = module
             spec.loader.exec_module(module)
-            
+
             # 查找节点类
             node_class = None
             for name, obj in vars(module).items():
-                if (isinstance(obj, type) and 
-                    issubclass(obj, BaseNode) and 
+                if (isinstance(obj, type) and
+                    issubclass(obj, BaseNode) and
                     obj is not BaseNode):
                     node_class = obj
                     break
-                    
+
             if node_class:
                 node = node_class(node_id, node_id)
                 await self.register_node(node)
@@ -537,9 +562,17 @@ class NodeRegistry:
                 wrapper = self._create_wrapper_node(node_id, module)
                 await self.register_node(wrapper)
                 return wrapper
-                
-        except Exception as e:
-            logger.error(f"加载节点失败 {node_id}: {e}")
+
+        except BaseException as e:
+            # 捕获所有异常（包括 SystemExit、KeyboardInterrupt 之外的底层异常）
+            # 确保单个节点的导入失败不会影响整个系统
+            error_type = type(e).__name__
+            logger.error(f"加载节点失败 {node_id}: [{error_type}] {e}")
+            # 记录失败节点到元数据中，便于后续诊断
+            failed_meta = NodeMetadata(node_id=node_id, name=node_id)
+            failed_meta.status = NodeStatus.ERROR
+            failed_meta.error_message = f"[{error_type}] {str(e)[:200]}"
+            self.metadata[node_id] = failed_meta
             return None
             
     def _create_wrapper_node(self, node_id: str, module) -> BaseNode:
@@ -581,21 +614,58 @@ class NodeRegistry:
                 
         return WrapperNode(node_id, node_id, module)
         
-    async def load_all_nodes(self, nodes_dir: Path) -> Dict[str, bool]:
-        """加载所有节点"""
-        results = {}
-        
+    async def load_all_nodes(self, nodes_dir: Path) -> Dict[str, Any]:
+        """
+        加载所有节点，返回详细的加载报告
+
+        Returns:
+            {
+                "loaded": ["Node_01", "Node_02", ...],
+                "failed": {"Node_03": "error message", ...},
+                "skipped": ["Node_XX_NoMain", ...],
+                "total": 108,
+                "success_count": 100,
+                "fail_count": 5,
+                "skip_count": 3
+            }
+        """
+        report = {"loaded": [], "failed": {}, "skipped": []}
+
         if not nodes_dir.exists():
             logger.warning(f"节点目录不存在: {nodes_dir}")
-            return results
-            
+            return report
+
         for node_path in sorted(nodes_dir.iterdir()):
-            if node_path.is_dir() and node_path.name.startswith("Node_"):
-                node = await self.load_node_from_path(node_path)
-                results[node_path.name] = node is not None
-                
-        logger.info(f"已加载 {sum(results.values())}/{len(results)} 个节点")
-        return results
+            if not (node_path.is_dir() and node_path.name.startswith("Node_")):
+                continue
+
+            main_py = node_path / "main.py"
+            if not main_py.exists():
+                report["skipped"].append(node_path.name)
+                continue
+
+            node = await self.load_node_from_path(node_path)
+            if node is not None:
+                report["loaded"].append(node_path.name)
+            else:
+                # 获取失败原因
+                failed_meta = self.metadata.get(node_path.name)
+                error_msg = failed_meta.error_message if failed_meta else "未知错误"
+                report["failed"][node_path.name] = error_msg
+
+        report["total"] = len(report["loaded"]) + len(report["failed"]) + len(report["skipped"])
+        report["success_count"] = len(report["loaded"])
+        report["fail_count"] = len(report["failed"])
+        report["skip_count"] = len(report["skipped"])
+
+        logger.info(
+            f"节点加载完成: {report['success_count']}/{report['total']} 成功, "
+            f"{report['fail_count']} 失败, {report['skip_count']} 跳过"
+        )
+        for node_id, error in report["failed"].items():
+            logger.warning(f"  ⚠ {node_id}: {error}")
+
+        return report
         
     # ========================================================================
     # 状态导出

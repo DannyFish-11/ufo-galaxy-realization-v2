@@ -1393,7 +1393,6 @@ class UFOGalaxyUnified:
         """异步关闭核心子系统"""
         try:
             from core.startup import shutdown_subsystems
-from nodes.common.cors_config import get_cors_origins
             await shutdown_subsystems()
         except Exception as e:
             logger.warning(f"子系统关闭异常: {e}")
@@ -1426,6 +1425,97 @@ from nodes.common.cors_config import get_cors_origins
 # 主函数
 # ============================================================================
 
+async def _run_check_only(galaxy: 'UFOGalaxyUnified'):
+    """仅检查依赖和配置，输出完整系统状态表，不启动服务"""
+    print_banner()
+    print_section("系统检查模式 (--check-only)")
+
+    # 1. 依赖检查
+    print_section("依赖检查")
+    try:
+        from scripts.check_dependencies import CORE_DEPS, OPTIONAL_DEPS, check_dep as check_dependency
+        missing_core = []
+        missing_optional = []
+        for dep in CORE_DEPS:
+            if not check_dependency(dep):
+                missing_core.append(dep)
+        for dep in OPTIONAL_DEPS:
+            if not check_dependency(dep):
+                missing_optional.append(dep)
+        print_status(f"核心依赖: {len(CORE_DEPS) - len(missing_core)}/{len(CORE_DEPS)} 已安装",
+                     "success" if not missing_core else "error")
+        if missing_core:
+            for d in missing_core:
+                print_status(f"  缺失: {d}", "error")
+        print_status(f"可选依赖: {len(OPTIONAL_DEPS) - len(missing_optional)}/{len(OPTIONAL_DEPS)} 已安装",
+                     "success" if not missing_optional else "warning")
+        if missing_optional:
+            for d in missing_optional:
+                print_status(f"  缺失: {d}", "warning")
+    except Exception as e:
+        print_status(f"依赖检查脚本加载失败: {e}", "error")
+
+    # 2. 配置检查
+    print_section("配置检查")
+    status = galaxy.config.get_status_dict()
+    llm_count = sum(1 for v in status["llm_apis"].values() if v)
+    print_status(f"LLM API: {llm_count} 个已配置", "success" if llm_count > 0 else "warning")
+
+    # 3. 核心模块导入检查
+    print_section("核心模块导入")
+    core_modules = [
+        "core.startup", "core.agent_factory", "core.multi_llm_router",
+        "core.node_registry", "core.node_discovery", "core.monitoring",
+        "core.health_check", "core.cache", "core.error_framework",
+        "core.event_bridge", "core.command_router", "core.concurrency_manager",
+        "core.config_hot_reload", "core.digital_twin_engine",
+        "core.health_integration", "core.api_routes",
+    ]
+    ok_count = 0
+    for mod_name in core_modules:
+        try:
+            __import__(mod_name)
+            ok_count += 1
+        except BaseException as e:
+            print_status(f"  {mod_name}: {type(e).__name__}: {e}", "error")
+    print_status(f"核心模块: {ok_count}/{len(core_modules)} 可导入",
+                 "success" if ok_count == len(core_modules) else "warning")
+
+    # 4. 节点导入检查
+    print_section("节点导入检查")
+    nodes_dir = PROJECT_ROOT / "nodes"
+    loaded = 0
+    failed = 0
+    failed_names = []
+    if nodes_dir.exists():
+        for node_dir in sorted(nodes_dir.iterdir()):
+            main_py = node_dir / "main.py"
+            if not main_py.exists():
+                continue
+            mod_path = f"nodes.{node_dir.name}.main"
+            try:
+                __import__(mod_path)
+                loaded += 1
+            except BaseException as e:
+                failed += 1
+                failed_names.append((node_dir.name, f"{type(e).__name__}: {str(e)[:80]}"))
+    print_status(f"节点: {loaded}/{loaded + failed} 可导入",
+                 "success" if failed == 0 else "warning")
+    if failed_names:
+        for name, err in failed_names:
+            print_status(f"  {name}: {err}", "warning")
+
+    # 汇总
+    print_section("检查完成")
+    has_core_issues = bool(missing_core) if 'missing_core' in locals() else False
+    all_ok = (not has_core_issues) and ok_count == len(core_modules)
+    if all_ok:
+        print_status("系统就绪，可以启动", "success")
+    else:
+        print_status("存在问题，请检查上方输出", "warning")
+    sys.stdout.flush()
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -1444,6 +1534,7 @@ def main():
     parser.add_argument("--no-l4", action="store_true", help="不启动 L4 增强模块")
     parser.add_argument("--no-nodes", action="store_true", help="不启动节点系统")
     parser.add_argument("--status", action="store_true", help="查看系统状态")
+    parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--port", "-p", type=int, default=8080, help="Web UI 端口")
     
     args = parser.parse_args()
@@ -1462,7 +1553,12 @@ def main():
     if args.status:
         galaxy.show_status()
         return
-        
+
+    # 仅检查依赖和配置
+    if args.check_only:
+        asyncio.run(_run_check_only(galaxy))
+        return
+
     # 设置信号处理
     def signal_handler(sig, frame):
         galaxy.stop()
