@@ -153,6 +153,59 @@ eval(condition, {"__builtins__": {}}, context)
 - 有 `shlex.quote()` 保护 args，但 `request.command` 本身未过滤
 - 无认证保护
 
+### 3.5 认证系统深度分析 — Dev模式自动绕过
+
+**`core/auth.py:105-114`** — `require_auth()` 函数有致命的开发模式绕过：
+- 如果 `UFO_API_TOKEN` 环境变量未设置，**自动允许所有请求**
+- 仅打印一次警告日志，无其他保护
+- 整个仓库仅 **7个端点** 使用了 `Depends(require_auth)`
+- 绝大多数端点完全无认证
+
+### 3.6 完整安全漏洞清单（补充API层审计）
+
+| 风险等级 | 漏洞类型 | 位置 | 详情 |
+|----------|----------|------|------|
+| **致命** | 命令注入 | `windows_client/client.py:60` | `shell=True` 直接执行WebSocket消息中的路径 |
+| **致命** | 认证绕过 | `core/auth.py:108-114` | Dev模式允许所有未认证请求 |
+| **致命** | 任意文件写入 | `core/routes/system.py:132` | `/api/config/update` 无认证可修改 `.env` 文件 |
+| **致命** | 动态代码加载 | `core/routes/_helpers.py:40` | `exec_module()` 加载用户提供的路径 |
+| **致命** | 无认证敏感操作 | `core/routes/nodes.py:118` | `/api/v1/agent/deploy` 可部署任意agent |
+| **高危** | 命令注入 | `nodes/Node_117_OpenCode/*` | 多处 `shell=True` |
+| **高危** | 联邦劫持 | `core/routes/federation.py:49` | `/api/v1/federation/peers` POST无认证 |
+| **高危** | 设备ID伪造 | `core/auth.py:72` | `verify_device_id()` 仅检查长度>3 |
+| **中危** | 竞态条件 | `core/routes/command.py:120` | 并发dict更新无锁 |
+| **中危** | 竞态条件 | `core/routes/tasks.py:42` | 任务队列无同步 |
+| **中危** | DoS攻击 | `core/routes/vision.py:42` | base64图片无大小限制 |
+| **中危** | SSRF风险 | `core/proxy_relay.py` | 任意设备间代理转发 |
+| **中危** | 凭证丢失 | `core/credential_vault.py:134` | Token仅内存存储，重启即丢 |
+| **中危** | 信息泄露 | 多处 | `str(e)` 直接返回异常信息 |
+| **低危** | API侦察 | `core/routes/system.py:118` | `/api/config` 暴露已配置的API密钥列表 |
+
+### 3.7 完整API路由统计
+
+经逐文件审计，系统共有 **100+ API端点**，分布于17个路由模块：
+
+| 路由模块 | 前缀 | 端点数 | 认证？ |
+|----------|------|--------|--------|
+| system | `/api/v1/system/*` | 4 | ❌ |
+| devices | `/api/v1/devices/*` | 7 | ❌ |
+| command | `/api/v1/command/*` | 7 | ⚠️ 部分(2/7) |
+| nodes | `/api/v1/nodes/*` | 4 | ❌ |
+| vision | `/api/v1/vision/*` | 2 | ❌ |
+| chat | `/api/v1/chat` | 1 | ❌ |
+| ai/intent | `/api/v1/ai/*` | 5 | ❌ |
+| vault | `/api/v1/vault/*` | 10 | ❌ |
+| relay | `/api/v1/relay/*` | 4 | ❌ |
+| tasks | `/api/v1/tasks/*` | 4 | ❌ |
+| federation | `/api/v1/federation/*` | 5+ | ❌ |
+| monitoring | `/api/v1/monitoring/*` | 3+ | ❌ |
+| hybrid/mesh/rag | `/api/v1/hybrid/*` 等 | 5+ | ❌ |
+| WebSocket | `/ws/device/*`, `/ws/status` | 2 | ❌ |
+| Gateway(体系A) | `/api/llm/*`, `/api/node/*` | ~16 | ❌ |
+| Unified Launcher(体系D) | `/api/stats` 等 | ~5 | ❌ |
+
+**结论：100+端点中仅2个有认证保护，且认证本身可被Dev模式绕过。**
+
 ---
 
 ## 四、六套Dashboard详情
