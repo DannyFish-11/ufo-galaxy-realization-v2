@@ -75,6 +75,8 @@
                     <button @click="currentTab = 'tools'" :class="currentTab === 'tools' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🔧 工具</button>
                     <button @click="currentTab = 'nodes'" :class="currentTab === 'nodes' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🌐 节点</button>
                     <button @click="currentTab = 'devices'" :class="currentTab === 'devices' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">📱 设备</button>
+                    <button @click="currentTab = 'agents'" :class="currentTab === 'agents' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🤖 Agent</button>
+                    <button @click="currentTab = 'twins'" :class="currentTab === 'twins' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🪞 孪生</button>
                 </div>
                 
                 <div class="flex items-center space-x-3 text-xs">
@@ -269,9 +271,100 @@
                 </div>
             </div>
 
+            <!-- Agent 管理页面 -->
+            <div v-show="currentTab === 'agents'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto space-y-4">
+                    <!-- Agent 工厂状态 -->
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">🤖 Agent 工厂</h3>
+                            <button @click="loadAgentStatus" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3 text-center text-sm mb-3">
+                            <div><div class="text-xl font-bold text-cyan-400">{{ agentStatus.total_agents || 0 }}</div><div class="text-xs text-gray-500">活跃 Agent</div></div>
+                            <div><div class="text-xl font-bold text-green-400">{{ Object.keys(agentStatus.by_state || {}).length }}</div><div class="text-xs text-gray-500">状态类型</div></div>
+                            <div><div class="text-xl font-bold text-purple-400">{{ Object.keys(agentStatus.by_creation_mode || {}).length }}</div><div class="text-xs text-gray-500">创建模式</div></div>
+                            <div><div class="text-xl font-bold text-pink-400">{{ (agentStatus.templates || []).length }}</div><div class="text-xs text-gray-500">模板数</div></div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 模板列表 -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">📋 可用模板</h3>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div v-for="tpl in agentTemplates" :key="tpl.name" class="bg-black/30 rounded p-2">
+                                <div class="text-sm font-medium text-cyan-300">{{ tpl.name }}</div>
+                                <div class="text-xs text-gray-400">{{ tpl.role }} | {{ tpl.description }}</div>
+                                <div class="text-xs text-gray-500 mt-1">能力: {{ (tpl.capabilities || []).join(', ') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 树 -->
+                    <div class="status-card rounded-xl p-3" v-if="agentStatus.agent_tree">
+                        <h3 class="font-semibold mb-2">🌳 Agent 层级树</h3>
+                        <div class="text-xs text-gray-400">
+                            <div>最大深度: {{ agentStatus.agent_tree.max_depth || 0 }}</div>
+                            <div>根节点: {{ (agentStatus.agent_tree.roots || []).length }}</div>
+                        </div>
+                        <div v-for="root in (agentStatus.agent_tree || {}).roots || []" :key="root.id" class="mt-2 bg-black/30 rounded p-2">
+                            <div class="text-sm text-cyan-300">{{ root.name }} ({{ root.role }})</div>
+                            <div class="text-xs text-gray-500">状态: {{ root.state }} | 队列: {{ root.queue_length }} | 完成: {{ root.completed }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数字孪生页面 -->
+            <div v-show="currentTab === 'twins'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto space-y-4">
+                    <!-- 孪生引擎状态 -->
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">🪞 数字孪生引擎</h3>
+                            <button @click="loadTwinStatus" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 text-center text-sm mb-3">
+                            <div><div class="text-xl font-bold text-cyan-400">{{ twinStatus.total_twins || 0 }}</div><div class="text-xs text-gray-500">孪生体总数</div></div>
+                            <div>
+                                <div class="text-xs text-gray-400" v-for="(count, status) in (twinStatus.by_status || {})" :key="status">{{ status }}: {{ count }}</div>
+                                <div class="text-xs text-gray-500">按状态</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-400" v-for="(count, mode) in (twinStatus.by_coupling || {})" :key="mode">{{ mode }}: {{ count }}</div>
+                                <div class="text-xs text-gray-500">按耦合模式</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 孪生体列表 -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">🔗 孪生体列表</h3>
+                        <div v-if="Object.keys(twinStatus.twins || {}).length === 0" class="text-center py-4 text-gray-500 text-sm">
+                            暂无孪生体，设备注册后可通过 API 创建
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div v-for="(twin, twinId) in (twinStatus.twins || {})" :key="twinId" class="bg-black/30 rounded-lg p-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-sm font-medium text-cyan-300">{{ twinId }}</span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full" :class="twin.status === 'synced' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'">
+                                        {{ twin.status || '?' }}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-gray-400 space-y-0.5">
+                                    <div>设备: {{ twin.device_id || '-' }}</div>
+                                    <div>类型: {{ twin.device_type || '-' }}</div>
+                                    <div>耦合: {{ twin.coupling_mode || '-' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
-    
+
     <script>
         const { createApp, ref, onMounted, computed, watch } = Vue;
         
@@ -307,6 +400,11 @@
                 const devicesTimer = ref(null);
                 const testMessage = ref('Hello');
                 const testResult = ref('');
+
+                // Agent & Twin state
+                const agentStatus = ref({});
+                const agentTemplates = ref([]);
+                const twinStatus = ref({});
                 
                 const configuredCount = computed(() => {
                     let count = 0;
@@ -363,6 +461,24 @@
                         const response = await axios.get('/api/v1/devices');
                         devices.value = response.data.devices || [];
                     } catch (error) { console.error('Failed to load devices:', error); }
+                };
+
+                const loadAgentStatus = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/agent/status');
+                        agentStatus.value = response.data;
+                    } catch (error) { console.error('Failed to load agent status:', error); }
+                    try {
+                        const response = await axios.get('/api/v1/agent/templates');
+                        agentTemplates.value = response.data.templates || [];
+                    } catch (error) { console.error('Failed to load agent templates:', error); }
+                };
+
+                const loadTwinStatus = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/twin/status');
+                        twinStatus.value = response.data;
+                    } catch (error) { console.error('Failed to load twin status:', error); }
                 };
 
                 const saveOneAPI = async () => {
@@ -463,6 +579,8 @@
                         clearInterval(devicesTimer.value);
                         devicesTimer.value = null;
                     }
+                    if (newTab === 'agents') { loadAgentStatus(); }
+                    if (newTab === 'twins') { loadTwinStatus(); }
                 });
 
                 onMounted(() => {
@@ -478,8 +596,10 @@
                     currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
                     configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes, devices,
                     testMessage, testResult, configuredCount,
+                    agentStatus, agentTemplates, twinStatus,
                     loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
-                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices, sendMessage, formatTime
+                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices,
+                    loadAgentStatus, loadTwinStatus, sendMessage, formatTime
                 };
             }
         }).mount('#app');
