@@ -143,11 +143,14 @@ class AutonomousLearningEngine:
         pattern = self._extract_pattern(experience)
         if pattern:
             self._update_pattern(pattern)
-        
+
         # 更新知识
         knowledge = self._extract_knowledge(experience)
         if knowledge:
             self._update_knowledge(knowledge)
+            # 同步到外部知识系统
+            await self._push_to_rag_memory(knowledge)
+            await self._push_to_knowledge_base(knowledge)
     
     def _extract_pattern(self, experience: Experience) -> Optional[Pattern]:
         """从经验中提取模式"""
@@ -197,9 +200,51 @@ class AutonomousLearningEngine:
                 existing.updated_at = datetime.now()
                 existing.related_experiences.extend(knowledge.related_experiences)
                 return
-        
+
         # 添加新知识
         self.knowledge_base[knowledge.knowledge_id] = knowledge
+
+    async def _push_to_rag_memory(self, knowledge: KnowledgeItem):
+        """Push extracted knowledge to RAGMemory for cross-node retrieval"""
+        try:
+            from core.rag_memory import get_rag_memory
+            rag = get_rag_memory()
+            rag.log_experience(
+                agent_name="autonomous_learning",
+                instruction=f"Knowledge extracted: {knowledge.category}",
+                steps=[{
+                    "thought": "Extracted knowledge from experience",
+                    "action": "extract_knowledge",
+                    "observation": knowledge.content,
+                }],
+                final_output=knowledge.content,
+                success=True,
+                tags=["knowledge", knowledge.category, f"confidence:{knowledge.confidence:.2f}"],
+            )
+            logger.info(f"Pushed knowledge {knowledge.knowledge_id} to RAGMemory")
+        except Exception as e:
+            logger.debug(f"RAGMemory push skipped: {e}")
+
+    async def _push_to_knowledge_base(self, knowledge: KnowledgeItem):
+        """Push to Node_105 UnifiedKnowledgeBase if available"""
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "http://localhost:8105/api/knowledge",
+                    json={
+                        "title": f"Learned: {knowledge.category}",
+                        "content": knowledge.content,
+                        "source": knowledge.source,
+                        "tags": [knowledge.category, "auto_learned"],
+                        "confidence": knowledge.confidence,
+                    },
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    if resp.status == 200:
+                        logger.info(f"Pushed knowledge to Node_105: {knowledge.knowledge_id}")
+        except Exception as e:
+            logger.debug(f"Node_105 push skipped: {e}")
     
     def _similarity(self, text1: str, text2: str) -> float:
         """简单的文本相似度计算"""

@@ -76,7 +76,7 @@ class ReflectionRecord:
 
 class MetaCognitionEngine:
     """元认知引擎"""
-    
+
     def __init__(self):
         self.cognitive_state = CognitiveState(
             level=CognitionLevel.PERCEPTION,
@@ -89,6 +89,29 @@ class MetaCognitionEngine:
         self.performance_history: Dict[str, List[float]] = {}
         self.learning_goals: List[Dict[str, Any]] = []
         self.meta_knowledge: Dict[str, Any] = {}
+        self._llm_manager = None  # Lazy init
+
+    def _get_llm(self):
+        """Get LLM manager, lazy init, returns None if unavailable"""
+        if self._llm_manager is None:
+            try:
+                from core.llm_manager import LLMManager
+                self._llm_manager = LLMManager()
+            except Exception:
+                self._llm_manager = False  # Mark as unavailable
+        return self._llm_manager if self._llm_manager is not False else None
+
+    async def _llm_analyze(self, prompt: str, fallback: Any = None) -> Any:
+        """Call LLM for analysis, return fallback on any failure"""
+        llm = self._get_llm()
+        if not llm:
+            return fallback
+        try:
+            result = await llm.simple_chat(prompt)
+            parsed = json.loads(result.strip())
+            return parsed
+        except Exception:
+            return fallback
         
     async def perceive(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """感知层 - 收集和处理输入信息"""
@@ -255,11 +278,31 @@ class MetaCognitionEngine:
         return "general"
     
     def _assess_relevance(self, data: Dict) -> float:
-        # 简化的相关性评估
+        """Assess relevance - rule-based with optional LLM enhancement"""
         keywords = ["urgent", "important", "critical", "error", "success"]
         text = str(data).lower()
-        score = sum(1 for k in keywords if k in text) / max(len(keywords), 1)
-        return min(1.0, score + 0.3)
+        rule_score = sum(1 for k in keywords if k in text) / max(len(keywords), 1)
+        rule_score = min(1.0, rule_score + 0.3)
+
+        # Try LLM enhancement (non-blocking best-effort)
+        llm = self._get_llm()
+        if llm:
+            try:
+                import asyncio
+                prompt = (
+                    f"Rate the relevance/urgency of this input on 0.0-1.0. "
+                    f"Reply with ONLY a JSON object: {{\"score\": 0.X}}\n\n"
+                    f"Input: {text[:500]}"
+                )
+                loop = asyncio.get_event_loop()
+                if not loop.is_running():
+                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                    if result and "score" in result:
+                        llm_score = float(result["score"])
+                        return max(0.0, min(1.0, (rule_score + llm_score) / 2))
+            except Exception:
+                pass
+        return rule_score
     
     def _determine_attention(self, data: Dict) -> bool:
         relevance = self._assess_relevance(data)
@@ -285,10 +328,28 @@ class MetaCognitionEngine:
         return (base_confidence + history_factor) / 2
     
     def _generate_predictions(self, comprehension: Dict) -> List[Dict]:
-        return [
+        """Generate predictions - try LLM, fallback to templates"""
+        default = [
             {"prediction": "task_success", "probability": comprehension.get("confidence", 0.5)},
             {"prediction": "resource_sufficient", "probability": 0.8}
         ]
+        llm = self._get_llm()
+        if llm:
+            try:
+                import asyncio
+                prompt = (
+                    f"Based on this context, generate 2-3 predictions as JSON array. "
+                    f"Each item: {{\"prediction\": \"...\", \"probability\": 0.X}}\n\n"
+                    f"Context: {json.dumps(comprehension)[:800]}\n\nJSON array:"
+                )
+                loop = asyncio.get_event_loop()
+                if not loop.is_running():
+                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                    if isinstance(result, list) and len(result) > 0:
+                        return result
+            except Exception:
+                pass
+        return default
     
     def _create_scenarios(self, comprehension: Dict) -> List[Dict]:
         return [
@@ -317,22 +378,60 @@ class MetaCognitionEngine:
         return observations
     
     def _derive_insights(self, observations: List[str]) -> List[str]:
-        insights = []
+        """Derive insights - try LLM, fallback to pattern matching"""
+        # Rule-based fallback
+        rule_insights = []
         for obs in observations:
             if "successfully" in obs:
-                insights.append("Current approach is effective")
+                rule_insights.append("Current approach is effective")
             elif "issues" in obs:
-                insights.append("Need to investigate failure patterns")
-        return insights
-    
+                rule_insights.append("Need to investigate failure patterns")
+
+        llm = self._get_llm()
+        if llm:
+            try:
+                import asyncio
+                prompt = (
+                    f"Given these observations, derive 2-3 actionable insights. "
+                    f"Reply as JSON: {{\"insights\": [\"...\", ...]}}\n\n"
+                    f"Observations: {json.dumps(observations)[:500]}"
+                )
+                loop = asyncio.get_event_loop()
+                if not loop.is_running():
+                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                    if result and "insights" in result and len(result["insights"]) > 0:
+                        return result["insights"]
+            except Exception:
+                pass
+        return rule_insights if rule_insights else ["Continue monitoring"]
+
     def _generate_action_items(self, insights: List[str]) -> List[str]:
-        actions = []
+        """Generate action items - try LLM, fallback to pattern matching"""
+        # Rule-based fallback
+        rule_actions = []
         for insight in insights:
             if "effective" in insight:
-                actions.append("Document successful pattern")
+                rule_actions.append("Document successful pattern")
             elif "investigate" in insight:
-                actions.append("Analyze error logs")
-        return actions
+                rule_actions.append("Analyze error logs")
+
+        llm = self._get_llm()
+        if llm:
+            try:
+                import asyncio
+                prompt = (
+                    f"Given these insights, generate 2-3 concrete action items. "
+                    f"Reply as JSON: {{\"actions\": [\"...\", ...]}}\n\n"
+                    f"Insights: {json.dumps(insights)[:500]}"
+                )
+                loop = asyncio.get_event_loop()
+                if not loop.is_running():
+                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                    if result and "actions" in result and len(result["actions"]) > 0:
+                        return result["actions"]
+            except Exception:
+                pass
+        return rule_actions if rule_actions else ["Continue monitoring"]
     
     def _update_meta_knowledge(self, reflection: ReflectionRecord):
         self.meta_knowledge["last_reflection"] = reflection.reflection_id

@@ -741,7 +741,11 @@ CROSS-DEVICE:
                 score += 20
             if any(k in inst_lower for k in ["截图", "screenshot", "ocr"]) and ("ocr" in func_name or "vision" in func_name):
                 score += 20
-            if any(k in inst_lower for k in ["代码", "code", "编程"]) and "code" in func_name:
+            if any(k in inst_lower for k in ["代码", "code", "编程", "bug", "测试", "test", "重构", "refactor"]) and ("code" in func_name or "coding" in func_name):
+                score += 20
+            if any(k in inst_lower for k in ["学习", "learn", "经验", "experience", "知识", "knowledge", "pattern", "模式"]) and ("learning" in func_name or "knowledge" in func_name):
+                score += 20
+            if any(k in inst_lower for k in ["反思", "reflect", "评估", "assess", "认知", "cognition", "优化", "optimize", "分析", "analyze"]) and ("metacognition" in func_name or "cognit" in desc):
                 score += 20
             if any(k in inst_lower for k in ["手机", "android", "安卓", "adb"]) and "adb" in func_name:
                 score += 20
