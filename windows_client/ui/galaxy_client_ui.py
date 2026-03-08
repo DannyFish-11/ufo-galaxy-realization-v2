@@ -284,6 +284,10 @@ class ChatPanel(QWidget):
         self.conversation_history: List[Dict] = []
         self._current_model = ""
         self._current_mode = "chat"
+        # 跨设备统一会话支持
+        self._session_id = ""
+        self._user_id = "windows_user"
+        self._device_id = "windows_client"
         self._init_ui()
 
     def _init_ui(self):
@@ -406,11 +410,13 @@ class ChatPanel(QWidget):
         # 显示等待状态
         self._render_thinking()
 
-        # 调用后端
+        # 调用后端（带统一会话支持）
         payload = {
             "message": text,
-            "device_id": "windows_client",
-            "history": self.conversation_history[-10:],
+            "device_id": self._device_id,
+            "user_id": self._user_id,
+            "session_id": self._session_id,
+            "context": self.conversation_history[-10:],
         }
         worker = AsyncWorker(self.api.post, "/api/v1/chat", payload)
         worker.finished.connect(self._on_response)
@@ -455,6 +461,10 @@ class ChatPanel(QWidget):
         if data.get("error"):
             self._render_error(data["error"])
             return
+
+        # 捕获 session_id（跨设备统一会话）
+        if data.get("session_id"):
+            self._session_id = data["session_id"]
 
         # 检查是否是增强响应格式
         mode = data.get("mode", "chat")

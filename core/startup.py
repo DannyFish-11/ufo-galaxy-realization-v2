@@ -495,6 +495,35 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"Agent 系统初始化失败: {e}")
 
     # ====================================================================
+    # 9a. 统一会话管理 + 全链路编排器
+    # ====================================================================
+    try:
+        from core.session_manager import get_session_manager
+        from core.e2e_pipeline import init_pipeline
+        from core.routes._shared import connection_manager as _conn_mgr
+
+        session_mgr = get_session_manager()
+        pipeline = init_pipeline(
+            session_manager=session_mgr,
+            llm_router=llm_router,
+            agent_factory=agent_factory if 'agent_factory' in dir() else None,
+            connection_manager=_conn_mgr,
+        )
+        results["session_manager"] = {
+            "status": "ok",
+            "sessions_restored": len(session_mgr._sessions),
+        }
+        results["e2e_pipeline"] = {"status": "ok"}
+        logger.info(
+            f"统一会话管理器已初始化 (恢复 {len(session_mgr._sessions)} 个会话), "
+            f"全链路编排器就绪"
+        )
+    except Exception as e:
+        results["session_manager"] = {"status": "degraded", "error": str(e)}
+        results["e2e_pipeline"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"会话管理/全链路编排器初始化失败: {e}")
+
+    # ====================================================================
     # 9b. MCP 工具加载（从 config/mcp_servers.json 读取并加载）
     # ====================================================================
     try:

@@ -94,8 +94,28 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         3. 纯聊天 → LLM 对话回复
 
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
+        跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
-        session_id = req.device_id or "default"
+        # ── 统一会话管理 ──
+        try:
+            from core.session_manager import get_session_manager
+            sm = get_session_manager()
+            user_id = req.user_id or req.device_id or "default"
+            if req.session_id:
+                session = sm.get_session(req.session_id)
+                if session and req.device_id:
+                    sm.join_session(req.session_id, req.device_id)
+            else:
+                session = sm.get_or_create_session(user_id, req.device_id)
+            session_id = session.id if session else (req.device_id or "default")
+            # 记录用户消息
+            sm.add_message(session_id, "user", req.message, req.device_id)
+            # 从会话历史补充 context（如果客户端没传）
+            if not req.context and session:
+                req.context = sm.get_history(session_id, max_turns=10)
+        except Exception as e:
+            logger.debug(f"SessionManager 不可用，降级到 device_id 模式: {e}")
+            session_id = req.device_id or "default"
 
         try:
             # === 融合对话记忆 ===
