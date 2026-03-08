@@ -74,6 +74,7 @@
                     <button @click="currentTab = 'llm'" :class="currentTab === 'llm' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🤖 LLM</button>
                     <button @click="currentTab = 'tools'" :class="currentTab === 'tools' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🔧 工具</button>
                     <button @click="currentTab = 'nodes'" :class="currentTab === 'nodes' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🌐 节点</button>
+                    <button @click="currentTab = 'devices'" :class="currentTab === 'devices' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">📱 设备</button>
                 </div>
                 
                 <div class="flex items-center space-x-3 text-xs">
@@ -223,7 +224,7 @@
                             <h3 class="font-semibold">🌐 节点状态</h3>
                             <button @click="checkNodes" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">检查全部</button>
                         </div>
-                        
+
                         <div class="grid grid-cols-6 gap-1">
                             <div v-for="node in nodes" :key="node.node_id" class="bg-black/30 rounded p-1 text-center cursor-pointer hover:bg-black/50">
                                 <div class="text-xs text-gray-500">{{ node.node_id }}</div>
@@ -234,12 +235,45 @@
                     </div>
                 </div>
             </div>
-            
+
+            <!-- 设备页面 -->
+            <div v-show="currentTab === 'devices'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto">
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">📱 设备状态</h3>
+                            <button @click="loadDevices" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
+                        </div>
+
+                        <div v-if="devices.length === 0" class="text-center py-8">
+                            <div class="text-gray-500 text-sm">暂无已注册设备</div>
+                            <div class="text-gray-600 text-xs mt-1">设备注册后将自动显示在此处</div>
+                        </div>
+
+                        <div v-else class="grid grid-cols-3 gap-3">
+                            <div v-for="device in devices" :key="device.device_id || device.id" class="bg-black/30 rounded-lg p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium">{{ device.name || device.device_name || device.device_id || 'Unknown' }}</span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full" :class="(device.status === 'online' || device.status === 'healthy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'">
+                                        {{ device.status || 'offline' }}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-gray-400 space-y-1">
+                                    <div>类型: {{ device.device_type || device.type || '-' }}</div>
+                                    <div v-if="device.capabilities">能力: {{ Array.isArray(device.capabilities) ? device.capabilities.join(', ') : device.capabilities }}</div>
+                                    <div v-if="device.last_seen">最后活跃: {{ formatTime(device.last_seen) }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
     
     <script>
-        const { createApp, ref, onMounted, computed } = Vue;
+        const { createApp, ref, onMounted, computed, watch } = Vue;
         
         createApp({
             setup() {
@@ -269,6 +303,8 @@
                 
                 const tools = ref([]);
                 const nodes = ref([]);
+                const devices = ref([]);
+                const devicesTimer = ref(null);
                 const testMessage = ref('Hello');
                 const testResult = ref('');
                 
@@ -321,7 +357,14 @@
                         nodes.value = response.data.nodes || [];
                     } catch (error) { console.error('Failed to load nodes:', error); }
                 };
-                
+
+                const loadDevices = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/devices');
+                        devices.value = response.data.devices || [];
+                    } catch (error) { console.error('Failed to load devices:', error); }
+                };
+
                 const saveOneAPI = async () => {
                     try {
                         await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value });
@@ -412,6 +455,16 @@
                 
                 const formatTime = (date) => new Date(date).toLocaleTimeString('zh-CN', { hour12: false });
                 
+                watch(currentTab, (newTab, oldTab) => {
+                    if (newTab === 'devices') {
+                        loadDevices();
+                        devicesTimer.value = setInterval(loadDevices, 5000);
+                    } else if (oldTab === 'devices' && devicesTimer.value) {
+                        clearInterval(devicesTimer.value);
+                        devicesTimer.value = null;
+                    }
+                });
+
                 onMounted(() => {
                     generateStars();
                     updateTime();
@@ -423,10 +476,10 @@
                 
                 return {
                     currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
-                    configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes,
+                    configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes, devices,
                     testMessage, testResult, configuredCount,
                     loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
-                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage, formatTime
+                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices, sendMessage, formatTime
                 };
             }
         }).mount('#app');

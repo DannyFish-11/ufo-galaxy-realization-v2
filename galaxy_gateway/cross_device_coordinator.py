@@ -18,7 +18,8 @@ import hashlib
 import tempfile
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from galaxy_gateway.device_router import device_router, DeviceType
+from galaxy_gateway.device_router import device_router
+from core.device_types import DeviceType
 
 logger = logging.getLogger(__name__)
 

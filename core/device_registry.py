@@ -42,7 +42,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 
@@ -53,25 +53,7 @@ logger = logging.getLogger("UFO-Galaxy.DeviceRegistry")
 # 数据模型
 # ============================================================================
 
-class DeviceType(str, Enum):
-    """设备类型"""
-    ANDROID = "android"
-    IOS = "ios"
-    WINDOWS = "windows"
-    MACOS = "macos"
-    LINUX = "linux"
-    IOT = "iot"
-    BROWSER = "browser"
-    CUSTOM = "custom"
-
-
-class DeviceStatus(str, Enum):
-    """设备状态"""
-    OFFLINE = "offline"
-    ONLINE = "online"
-    BUSY = "busy"
-    ERROR = "error"
-    UNKNOWN = "unknown"
+from core.device_types import DeviceType, DeviceStatus  # noqa: E402 — 单一事实来源
 
 
 @dataclass

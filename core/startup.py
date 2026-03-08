@@ -58,6 +58,8 @@ _SUBSYSTEM_DEPS: Dict[str, List[str]] = {
     "node_discovery": [],
     "health_integration": ["monitoring", "concurrency_manager", "node_discovery"],
     "galaxy_gateway": [],
+    "device_router": ["command_router", "event_bridge"],
+    "orchestrator": ["device_router", "ai_intent"],
 }
 
 
@@ -309,6 +311,19 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             cache_backend=cache,
             max_concurrent=int(os.environ.get("CMD_MAX_CONCURRENT", "20")),
         )
+
+        # 设置默认执行器 — 通过 DeviceCommunication 发送命令到目标设备
+        try:
+            from core.device_communication import device_comm
+
+            async def _default_executor(target: str, command: str, params: dict):
+                return await device_comm.send_command(target, command, params)
+
+            cmd_router.set_executor(_default_executor)
+            logger.info("命令路由引擎执行器已绑定 DeviceCommunication")
+        except Exception as exec_err:
+            logger.warning(f"命令路由引擎执行器绑定失败（降级）: {exec_err}")
+
         results["command_router"] = {"status": "ok"}
         logger.info("命令路由引擎已初始化")
     except Exception as e:

@@ -64,12 +64,23 @@ async def test_goal_decomposition():
     return decomposition
 
 
-async def test_autonomous_planning(decomposition):
+async def test_autonomous_planning():
     """测试自主规划"""
     print("\n" + "=" * 60)
     print("测试 3: 自主规划")
     print("=" * 60)
-    
+
+    # Generate decomposition inline instead of relying on a fixture
+    decomposer = GoalDecomposer()
+    goal = Goal(
+        description="用 3D 打印机打印一个无人机支架，然后让无人机飞到阳台拍照",
+        type=GoalType.TASK_EXECUTION,
+        constraints=[],
+        success_criteria=["支架打印完成", "照片已保存"],
+        deadline=None
+    )
+    decomposition = decomposer.decompose(goal)
+
     planner = AutonomousPlanner()
     
     # 添加可用资源

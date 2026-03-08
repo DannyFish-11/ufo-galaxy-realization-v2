@@ -91,6 +91,10 @@ class TestEnhancedNLUEngine:
 class TestLearningPersistence:
     """测试学习系统 SQLite 持久化"""
 
+    @pytest.fixture(autouse=True)
+    def _skip_without_sklearn(self):
+        pytest.importorskip("sklearn")
+
     def _make_persistence(self, tmp_dir):
         from enhancements.learning.autonomous_learning_engine import LearningPersistence
         db_path = os.path.join(tmp_dir, "test_learning.db")
@@ -168,7 +172,7 @@ class TestLearningPersistence:
                 examples=["example1"],
             )
 
-            stats = asyncio.get_event_loop().run_until_complete(
+            stats = asyncio.run(
                 acc.accumulate([pattern], "test_source")
             )
             assert stats["added"] == 1
@@ -203,12 +207,10 @@ class TestAgentMessageBus:
             msg_type="task_assign",
             payload={"task": "test"},
         )
-
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(bus.send(msg))
+        result = asyncio.run(bus.send(msg))
         assert result is True
 
-        received = loop.run_until_complete(bus.receive("agent_b", timeout=1.0))
+        received = asyncio.run(bus.receive("agent_b", timeout=1.0))
         assert received is not None
         assert received.id == "msg_001"
         assert received.payload["task"] == "test"
@@ -224,9 +226,7 @@ class TestAgentMessageBus:
             msg_type="task_assign",
             payload={},
         )
-
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(bus.send(msg))
+        result = asyncio.run(bus.send(msg))
         assert result is False
 
     def test_broadcast(self):
@@ -234,12 +234,10 @@ class TestAgentMessageBus:
         bus.register("sender")
         bus.register("recv_1")
         bus.register("recv_2")
+        asyncio.run(bus.broadcast("sender", "status_query", {"check": True}))
 
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(bus.broadcast("sender", "status_query", {"check": True}))
-
-        msg1 = loop.run_until_complete(bus.receive("recv_1", timeout=1.0))
-        msg2 = loop.run_until_complete(bus.receive("recv_2", timeout=1.0))
+        msg1 = asyncio.run(bus.receive("recv_1", timeout=1.0))
+        msg2 = asyncio.run(bus.receive("recv_2", timeout=1.0))
         assert msg1 is not None
         assert msg2 is not None
         assert msg1.msg_type == "status_query"
@@ -247,9 +245,7 @@ class TestAgentMessageBus:
     def test_receive_timeout(self):
         bus = self._make_bus()
         bus.register("empty_agent")
-
-        loop = asyncio.get_event_loop()
-        received = loop.run_until_complete(bus.receive("empty_agent", timeout=0.1))
+        received = asyncio.run(bus.receive("empty_agent", timeout=0.1))
         assert received is None
 
     def test_unregister(self):
@@ -265,8 +261,7 @@ class TestAgentMessageBus:
             msg_type="task_assign",
             payload={},
         )
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(bus.send(msg))
+        result = asyncio.run(bus.send(msg))
         assert result is False
 
 
@@ -485,9 +480,7 @@ class TestAndroidBridge:
             "model": "Pixel 7",
             "os_version": "14",
         }
-
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
+        result = asyncio.run(
             bridge.handle_message(MockWebSocket(), msg)
         )
         assert result is not None

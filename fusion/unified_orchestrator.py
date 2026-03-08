@@ -2,6 +2,11 @@
 """
 UFO Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 
+.. deprecated::
+    此模块已废弃。请使用 ``galaxy_gateway.orchestrator.GalaxyOrchestrator`` 作为
+    唯一的顶层编排器。本模块保留仅为向后兼容，``execute_task()`` 将委托给
+    GalaxyOrchestrator。
+
 统一编排引擎 - 系统级涌现的核心（加固版）
 
 核心职责:
@@ -13,8 +18,15 @@ UFO Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 
 作者: Manus AI
 日期: 2026-01-26
-版本: 1.3.0 (生产级加固)
+版本: 1.3.0 (生产级加固) → DEPRECATED in favor of galaxy_gateway.orchestrator
 """
+
+import warnings as _warnings
+_warnings.warn(
+    "fusion.unified_orchestrator 已废弃，请迁移到 galaxy_gateway.orchestrator.GalaxyOrchestrator",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import asyncio
 import logging

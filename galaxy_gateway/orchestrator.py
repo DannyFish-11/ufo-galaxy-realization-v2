@@ -507,6 +507,16 @@ class GalaxyOrchestrator:
         self.is_running = False
         logger.info("GalaxyOrchestrator 已停止")
 
+    def _publish_event(self, event_type, data: dict):
+        """发布事件到 EventBus（容错）"""
+        try:
+            from integration.event_bus import event_bus, EventType as ET
+            et = getattr(ET, event_type, None)
+            if et:
+                event_bus.publish_sync(et, source="orchestrator", data=data)
+        except Exception:
+            pass
+
     async def process_request(self, request: str, context: Dict = None) -> Dict:
         """
         处理用户请求的主入口
@@ -531,6 +541,11 @@ class GalaxyOrchestrator:
         self.task_history[task_id] = task
         self.stats["total_tasks"] += 1
 
+        # 发布编排开始事件
+        self._publish_event("ORCHESTRATION_STARTED", {
+            "task_id": task_id, "request": request,
+        })
+
         try:
             # 1. 意图理解
             logger.info(f"[{task_id}] 步骤1: 意图理解")
@@ -541,6 +556,11 @@ class GalaxyOrchestrator:
             logger.info(f"[{task_id}] 步骤2: 任务分解")
             subtasks = await self.gateway.decompose_task(intent)
             task.subtasks = subtasks
+
+            self._publish_event("ORCHESTRATION_PROGRESS", {
+                "task_id": task_id, "phase": "subtasks_ready",
+                "subtask_count": len(subtasks),
+            })
 
             # 3. 节点调度与执行
             logger.info(f"[{task_id}] 步骤3: 节点调度")
@@ -556,6 +576,11 @@ class GalaxyOrchestrator:
 
             logger.info(f"[{task_id}] 请求处理完成")
 
+            self._publish_event("ORCHESTRATION_COMPLETED", {
+                "task_id": task_id, "success": True,
+                "execution_time": task.completed_at - task.created_at,
+            })
+
             return {
                 "success": True,
                 "task_id": task_id,
@@ -569,6 +594,10 @@ class GalaxyOrchestrator:
             task.status = TaskStatus.FAILED
             task.result = {"error": str(e)}
             self.stats["failed_tasks"] += 1
+
+            self._publish_event("ORCHESTRATION_COMPLETED", {
+                "task_id": task_id, "success": False, "error": str(e),
+            })
 
             return {
                 "success": False,

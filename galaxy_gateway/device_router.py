@@ -43,35 +43,7 @@ def get_cross_device_coordinator():
     return cross_device_coordinator
 
 
-class _RouterDeviceType:
-    """路由层内部设备平台大类（仅供命令路由决策使用）。
-
-    对外部协议的精细类型（如 android_phone / android_tablet）请使用
-    ``galaxy_gateway.protocol.aip_v3.DeviceType``。
-    """
-    WINDOWS = "windows"
-    ANDROID = "android"
-    IOS = "ios"
-    WEB = "web"
-    UNKNOWN = "unknown"
-
-    # AIP v3 DeviceType 前缀 → 内部平台大类映射
-    _PREFIX_MAP = {
-        "android": ANDROID,
-        "ios": IOS,
-        "windows": WINDOWS,
-        "macos": WINDOWS,  # 桌面端归一
-        "linux": WINDOWS,
-        "web": WEB,
-    }
-
-    @classmethod
-    def from_aip_v3(cls, aip_device_type: str) -> str:
-        """将 AIP v3 DeviceType 值映射为路由层平台大类。"""
-        if not aip_device_type:
-            return cls.UNKNOWN
-        prefix = aip_device_type.split("_")[0].lower()
-        return cls._PREFIX_MAP.get(prefix, cls.UNKNOWN)
+from core.device_types import DeviceType, resolve_device_type  # noqa: E402
 
 
 def map_device_type_to_platform(aip_device_type: str) -> str:
@@ -84,13 +56,7 @@ def map_device_type_to_platform(aip_device_type: str) -> str:
         >>> map_device_type_to_platform("windows_desktop")
         'windows'
     """
-    return _RouterDeviceType.from_aip_v3(aip_device_type)
-
-
-# ---------------------------------------------------------------------------
-# 向后兼容别名（保持旧代码中 DeviceType.ANDROID 等调用不出错）
-# ---------------------------------------------------------------------------
-DeviceType = _RouterDeviceType
+    return resolve_device_type(aip_device_type).value
 
 
 class TaskType:
@@ -323,52 +289,62 @@ class DeviceRouter:
         return payload
     
     async def _dispatch_single_device_task(self, task: Dict, device: Device) -> Dict:
-        """分发单设备任务（使用 AIP v3 消息格式）"""
+        """分发单设备任务 — 委托给 core.command_router 或直接 WebSocket"""
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
 
-            # 构建 AIP v3.0 消息
-            message = {
-                "version": "3.0",
-                "message_id": str(uuid.uuid4()),
-                "type": "command",
-                "device_id": device.device_id,
-                "task_id": task["task_id"],
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "payload": task["payload"],
-            }
-            
-            # 发送到设备
+            # 优先通过统一命令路由器分发（已绑定 DeviceCommunication executor）
+            try:
+                from core.command_router import get_command_router, CommandRequest, CommandMode
+                cmd_router = get_command_router()
+                if cmd_router._executor is not None:
+                    cmd_req = CommandRequest(
+                        source="device_router",
+                        targets=[device.device_id],
+                        command=task["payload"].get("action", task["payload"].get("task_type", "")),
+                        params=task["payload"].get("params", task["payload"]),
+                        mode=CommandMode.SYNC,
+                        timeout=30.0,
+                    )
+                    cmd_result = await cmd_router.dispatch(cmd_req)
+                    target_result = cmd_result.targets.get(device.device_id)
+                    if target_result:
+                        return {
+                            "success": target_result.status.value == "success",
+                            "result": target_result.result,
+                            "error": target_result.error,
+                        }
+            except Exception as route_err:
+                logger.debug(f"CommandRouter 分发失败，回退 WebSocket: {route_err}")
+
+            # 回退：直接通过 WebSocket 发送 AIP v3.0 消息
             if device.websocket:
+                message = {
+                    "version": "3.0",
+                    "message_id": str(uuid.uuid4()),
+                    "type": "command",
+                    "device_id": device.device_id,
+                    "task_id": task["task_id"],
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "payload": task["payload"],
+                }
                 await device.websocket.send(json.dumps(message))
-                
-                # 等待结果（简化版本，实际应该有超时和重试机制）
+
                 task_id = task["task_id"]
-                
-                # 等待最多 30 秒
                 for _ in range(30):
                     if task_id in self.task_results:
                         result = self.task_results[task_id]
                         del self.task_results[task_id]
                         return result
                     await asyncio.sleep(1)
-                
-                return {
-                    "success": False,
-                    "error": "任务执行超时"
-                }
+
+                return {"success": False, "error": "任务执行超时"}
             else:
-                return {
-                    "success": False,
-                    "error": "设备未连接"
-                }
-                
+                return {"success": False, "error": "设备未连接"}
+
         except Exception as e:
             logger.error(f"❌ 任务分发失败: {e}")
-            return {
-                "success": False,
-                "error": f"任务分发失败: {str(e)}"
-            }
+            return {"success": False, "error": f"任务分发失败: {str(e)}"}
     
     async def _dispatch_cross_device_task(self, task: Dict, devices: List[Device]) -> Dict:
         """分发跨设备协同任务"""

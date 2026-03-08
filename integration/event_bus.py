@@ -56,6 +56,23 @@ class EventType(Enum):
     ANIMATION_COMPLETED = auto()          # 动画完成
     UI_STATE_CHANGED = auto()             # UI状态改变
 
+    # 设备生命周期事件
+    DEVICE_CONNECTED = auto()             # 设备连接
+    DEVICE_DISCONNECTED = auto()          # 设备断开
+    DEVICE_HEARTBEAT = auto()             # 设备心跳
+    DEVICE_REGISTERED = auto()            # 设备注册
+    DEVICE_UNREGISTERED = auto()          # 设备注销
+
+    # 编排事件
+    ORCHESTRATION_STARTED = auto()        # 编排任务开始
+    ORCHESTRATION_PROGRESS = auto()       # 编排任务进度
+    ORCHESTRATION_COMPLETED = auto()      # 编排任务完成
+
+    # 会话事件
+    SESSION_MIGRATED = auto()             # 会话迁移
+    SESSION_CREATED = auto()              # 会话创建
+    SESSION_CLOSED = auto()               # 会话关闭
+
 
 @dataclass
 class UIGalaxyEvent:
