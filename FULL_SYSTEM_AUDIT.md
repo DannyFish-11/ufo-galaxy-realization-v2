@@ -77,6 +77,58 @@
 4. `daemon/ufogalaxy_daemon.py` — 守护进程配置
 5. `unified_launcher.py` — 又一个配置管理
 
+### 1.5 LLM系统 — 双重实现
+
+| 系统 | 文件 | 用途 | 状态 |
+|------|------|------|------|
+| `llm_manager.py` | `core/llm_manager.py` (100行) | 简单provider chain | **仅测试引用** — 实质死代码 |
+| `multi_llm_router.py` | `core/multi_llm_router.py` (32K) | 任务感知路由+成本追踪 | **活跃** — 6个文件import |
+
+另外还有 `enhancements/agent_factory/llm_provider.py` (396行) — 第三套provider管理。
+
+**LLM Provider Chain**（`llm_manager.py:41-50`）：
+- OpenAI (gpt-4o) / DeepSeek (deepseek-chat) / OpenRouter / Groq (llama-3.3-70b) / XAI (grok-2) / Anthropic (claude-sonnet) / Zhipu (glm-4-flash)
+- Anthropic 使用不同API格式但被放在同一个 OpenAI-compatible chain 中 — 潜在问题
+
+**Multi-LLM Router 优势：**
+- 任务类型感知路由（REASONING → Anthropic/OpenAI, FAST_RESPONSE → Groq/DeepSeek）
+- 成本追踪
+- 但无实际 fallback 触发逻辑 — 主provider失败时不会自动切换
+
+### 1.6 数字孪生引擎 — 25K行完全未使用
+
+**`core/digital_twin_engine.py`** (25K行) 包含：
+- `DigitalTwin` 类 — 设备状态跟踪
+- `CouplingMode` 枚举 — COUPLED/DECOUPLED/HYBRID
+- `DriftReport` — 状态漂移检测
+- `SimulationResult` — 动作预测+风险评估
+
+**但整个仓库零import** — 这是一个精心设计但从未集成的25K行废弃模块。
+
+### 1.7 三套设备管理系统 — 无共识机制
+
+| 系统 | 文件 | 模型 |
+|------|------|------|
+| Core Registry | `core/device_registry.py` (27K) | `Device` + `DeviceCapability` |
+| Agent Manager | `core/device_agent_manager.py` (29K) | `DeviceInfo` + `DeviceType` |
+| Node_71 | `nodes/Node_71_MultiDeviceCoordination/models/device.py` | 独立设备模型 |
+
+**致命场景：**
+1. 设备连接 → `device_registry` 注册
+2. Agent发命令 → `agent_manager` 获取响应
+3. 设备断开 → Node_71 获悉
+4. 三个系统的设备状态不一致，无共识协议
+
+### 1.8 代码质量问题
+
+| 问题 | 数量 | 示例位置 |
+|------|------|----------|
+| 裸 `except Exception + pass` | 15+ | `ai_intent.py:704`, `cache.py:85,161` |
+| `print()` 代替 `logger` | 45处 | 分散于core各模块 |
+| 动态import避免循环依赖 | 4处 | `scheduler.py:316,380,487,510` |
+| Error Framework定义但不使用 | 80行定义 | `core/error_framework.py` 几乎无人调用 |
+| 空pass语句（未完成重构残留） | 15+ | `command_router.py:452,460`, `concurrency_manager.py:423,535` |
+
 ---
 
 ## 二、API架构分析
