@@ -1,4 +1,7 @@
 """
+LEGACY: 此节点已被 Node_100_MemorySystem 取代，请优先使用 Node_100。
+保留仅为向后兼容。
+
 Node 80: Memory System
 多层记忆系统 - 短期/长期/语义/用户画像
 

@@ -1,4 +1,6 @@
 """
+LEGACY: 请使用 unified_launcher.py 作为主入口。
+
 Galaxy 主循环 L4 版本
 集成了所有 L4 级自主性智能组件
 """

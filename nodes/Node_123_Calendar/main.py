@@ -220,4 +220,4 @@ async def check_conflicts(start: datetime, end: datetime, exclude_id: Optional[s
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8123)
+    uvicorn.run(app, host="0.0.0.0", port=8223)

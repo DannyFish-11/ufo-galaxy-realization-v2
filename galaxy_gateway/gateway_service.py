@@ -1,4 +1,6 @@
 """
+LEGACY: 请使用 galaxy_gateway/app.py 作为主 Gateway。
+
 Galaxy Gateway v5.0 - 自主学习和编程版本
 
 集成模块：

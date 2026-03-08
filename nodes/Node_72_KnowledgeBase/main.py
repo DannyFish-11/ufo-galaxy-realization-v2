@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# LEGACY: 此节点已被 Node_105_UnifiedKnowledgeBase 取代，请优先使用 Node_105。
 
 """
 Node_72_KnowledgeBase: 知识库管理节点

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+LEGACY: 请使用 unified_launcher.py 作为主入口。
+
 UFO³ Galaxy 智能启动器
 支持按需启动、分组管理、健康检查
 

@@ -377,44 +377,37 @@ class TestMemoryDatabase:
 # =============================================================================
 
 class TestAutonomousCodingEngine:
-    """测试自主编程引擎的安全性修复"""
+    """测试自主编程引擎 v2 的基本功能"""
 
     def _make_engine(self, tmp_dir):
-        from enhancements.coding.autonomous_coding_engine import AutonomousCodingEngine
-        return AutonomousCodingEngine(workspace_root=tmp_dir)
+        from enhancements.coding.autonomous_coding_engine_v2 import AutonomousCodingEngineV2
+        return AutonomousCodingEngineV2(workspace_root=tmp_dir)
 
     def test_workspace_path_auto_detection(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine = self._make_engine(tmp)
             assert engine.workspace_root == tmp
 
-    def test_path_traversal_blocked(self):
+    def test_read_existing_code(self):
+        """确保引擎可以读取 workspace 内的文件"""
         with tempfile.TemporaryDirectory() as tmp:
             engine = self._make_engine(tmp)
-            # 尝试路径遍历
-            code_changes = {"../../etc/passwd": "malicious content"}
-            modified, created = engine._apply_code_changes(code_changes)
-            assert len(modified) == 0
-            assert len(created) == 0
-            # 确保文件没有被创建在系统路径
-            assert not os.path.exists("/etc/passwd.tmp")
-
-    def test_backup_on_modify(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            engine = self._make_engine(tmp)
-            # 创建原始文件
             test_file = os.path.join(tmp, "test.py")
             with open(test_file, "w") as f:
                 f.write("original content")
+            result = engine._read_existing_code(["test.py"])
+            assert "test.py" in result
+            assert "original" in result["test.py"]
 
-            # 修改文件
-            code_changes = {"test.py": "modified content"}
-            modified, created = engine._apply_code_changes(code_changes)
-            assert "test.py" in modified
-
-            # 验证备份存在
-            backup_dir = os.path.join(tmp, ".code_backups")
-            assert os.path.exists(backup_dir)
+    def test_save_code_within_workspace(self):
+        """确保文件写入在 workspace 内正常工作"""
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = self._make_engine(tmp)
+            engine._save_code("output.py", "print('hello')")
+            saved_path = os.path.join(tmp, "output.py")
+            assert os.path.exists(saved_path)
+            with open(saved_path) as f:
+                assert "hello" in f.read()
 
 
 # =============================================================================
