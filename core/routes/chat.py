@@ -64,6 +64,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     scheduler = AutonomousScheduler(nodes_root)
     llm_router = get_llm_router()  # 统一使用 MultiLLMRouter（任务感知路由+成本追踪+故障转移）
 
+    # 注入 Skill 和 MCP 工具到 scheduler
+    try:
+        scheduler.inject_skill_tools()
+        logger.info("Scheduler: Skill 工具已注入")
+    except Exception as e:
+        logger.debug(f"Scheduler skill injection skipped: {e}")
+    try:
+        scheduler.inject_mcp_tools()
+        logger.info("Scheduler: MCP 工具已注入")
+    except Exception as e:
+        logger.debug(f"Scheduler MCP tool injection skipped: {e}")
+
     # 意图解析器 — 注入 LLM 路由器以支持深度意图理解
     try:
         from core.ai_intent import IntentParser
