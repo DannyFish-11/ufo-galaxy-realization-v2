@@ -1,59 +1,7 @@
 {
   "agents": {
-    "agent_6686d34189a0": {
-      "id": "agent_6686d34189a0",
-      "config": {
-        "role": "coordinator",
-        "name": "协调 Agent",
-        "description": "负责接收复杂任务，分解为子任务并分配给子 Agent",
-        "system_prompt": "你是一个协调 Agent。你的职责是：\n1. 接收用户的复杂任务\n2. 将任务分解为可独立执行的子任务\n3. 为每个子任务分配合适的执行 Agent\n4. 监控执行进度并汇总结果\n\n返回 JSON 格式的任务分解方案。",
-        "max_subtasks": 10,
-        "max_depth": 3,
-        "split_threshold": 3,
-        "ttl": 3600
-      },
-      "state": "idle",
-      "parent_id": null,
-      "children_ids": [],
-      "creation_mode": "template",
-      "depth": 0,
-      "created_at": 1772874274.0880747,
-      "last_active": 1772874274.0880756,
-      "metrics": {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0
-      }
-    },
-    "agent_b420179c218e": {
-      "id": "agent_b420179c218e",
-      "config": {
-        "role": "coordinator",
-        "name": "协调 Agent",
-        "description": "负责接收复杂任务，分解为子任务并分配给子 Agent",
-        "system_prompt": "你是一个协调 Agent。你的职责是：\n1. 接收用户的复杂任务\n2. 将任务分解为可独立执行的子任务\n3. 为每个子任务分配合适的执行 Agent\n4. 监控执行进度并汇总结果\n\n返回 JSON 格式的任务分解方案。",
-        "max_subtasks": 10,
-        "max_depth": 3,
-        "split_threshold": 3,
-        "ttl": 3600
-      },
-      "state": "idle",
-      "parent_id": null,
-      "children_ids": [],
-      "creation_mode": "template",
-      "depth": 0,
-      "created_at": 1772874282.5844874,
-      "last_active": 1772874282.5844877,
-      "metrics": {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0
-      }
-    },
-    "agent_1c4b25a434db": {
-      "id": "agent_1c4b25a434db",
+    "agent_3c8b8bfdabea": {
+      "id": "agent_3c8b8bfdabea",
       "config": {
         "role": "analyst",
         "name": "数据分析 Agent",
@@ -69,112 +17,8 @@
       "children_ids": [],
       "creation_mode": "template",
       "depth": 0,
-      "created_at": 1772874282.5853515,
-      "last_active": 1772874282.5853517,
-      "metrics": {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0
-      }
-    },
-    "agent_a54485d82678": {
-      "id": "agent_a54485d82678",
-      "config": {
-        "role": "executor",
-        "name": "代码执行 Agent",
-        "description": "负责生成和执行代码",
-        "system_prompt": "你是一个代码执行 Agent。根据需求生成代码并执行。\n返回 JSON: {\"code\": ..., \"language\": ..., \"explanation\": ...}",
-        "max_subtasks": 5,
-        "max_depth": 3,
-        "split_threshold": 3,
-        "ttl": 3600
-      },
-      "state": "idle",
-      "parent_id": null,
-      "children_ids": [],
-      "creation_mode": "template",
-      "depth": 0,
-      "created_at": 1772874282.5857952,
-      "last_active": 1772874282.5857956,
-      "metrics": {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0
-      }
-    },
-    "agent_3d799f602042": {
-      "id": "agent_3d799f602042",
-      "config": {
-        "role": "analyst",
-        "name": "调研 Agent",
-        "description": "负责信息收集和研究",
-        "system_prompt": "你是一个调研 Agent。负责收集和整理信息。\n返回 JSON: {\"findings\": [...], \"sources\": [...], \"summary\": ...}",
-        "max_subtasks": 5,
-        "max_depth": 3,
-        "split_threshold": 3,
-        "ttl": 3600
-      },
-      "state": "idle",
-      "parent_id": null,
-      "children_ids": [],
-      "creation_mode": "template",
-      "depth": 0,
-      "created_at": 1772874282.586397,
-      "last_active": 1772874282.5863974,
-      "metrics": {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0
-      }
-    },
-    "agent_4caaacf5e049": {
-      "id": "agent_4caaacf5e049",
-      "config": {
-        "role": "planner",
-        "name": "规划 Agent",
-        "description": "负责制定执行计划和策略",
-        "system_prompt": "你是一个规划 Agent。根据目标制定详细的执行计划。\n返回 JSON: {\"plan\": {\"steps\": [...], \"resources\": [...], \"risks\": [...]}}",
-        "max_subtasks": 5,
-        "max_depth": 3,
-        "split_threshold": 3,
-        "ttl": 3600
-      },
-      "state": "idle",
-      "parent_id": null,
-      "children_ids": [],
-      "creation_mode": "template",
-      "depth": 0,
-      "created_at": 1772874282.5871599,
-      "last_active": 1772874282.58716,
-      "metrics": {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0
-      }
-    },
-    "agent_4e1f6d6f68bc": {
-      "id": "agent_4e1f6d6f68bc",
-      "config": {
-        "role": "executor",
-        "name": "设备控制 Agent",
-        "description": "负责与物理设备交互",
-        "system_prompt": "你是一个设备控制 Agent。负责安全地控制物理设备。\n在执行任何操作前，先进行安全检查。\n返回 JSON: {\"action\": ..., \"device\": ..., \"safety_check\": ..., \"result\": ...}",
-        "max_subtasks": 5,
-        "max_depth": 3,
-        "split_threshold": 3,
-        "ttl": 3600
-      },
-      "state": "idle",
-      "parent_id": null,
-      "children_ids": [],
-      "creation_mode": "template",
-      "depth": 0,
-      "created_at": 1772874282.5876133,
-      "last_active": 1772874282.5876133,
+      "created_at": 1772991110.9223711,
+      "last_active": 1772991110.9223714,
       "metrics": {
         "tasks_completed": 0,
         "tasks_failed": 0,
@@ -184,5 +28,5 @@
     }
   },
   "agent_tree": {},
-  "timestamp": 1772874282.5885592
+  "timestamp": 1772991110.9224055
 }
