@@ -18,7 +18,9 @@ Routes:
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from core.auth import require_auth
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("UFO-Galaxy.API")
@@ -47,7 +49,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/v1/federation/peers")
-    async def federation_register_peer(request: Request):
+    async def federation_register_peer(request: Request, auth: dict = Depends(require_auth)):
         """手动注册一个 peer 实例"""
         body = await request.json()
         url = body.get("url", "")
@@ -63,7 +65,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.delete("/api/v1/federation/peers/{instance_id}")
-    async def federation_unregister_peer(instance_id: str):
+    async def federation_unregister_peer(instance_id: str, auth: dict = Depends(require_auth)):
         """注销指定 peer 实例"""
         try:
             from core.galaxy_federation import get_federation
@@ -98,7 +100,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/v1/federation/task")
-    async def federation_receive_task(request: Request):
+    async def federation_receive_task(request: Request, auth: dict = Depends(require_auth)):
         """接收来自其他实例的转发任务（简单 echo 处理）"""
         body = await request.json()
         from_instance = body.get("from_instance", "unknown")
@@ -111,7 +113,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         })
 
     @router.post("/api/v1/federation/forward")
-    async def federation_forward_task(request: Request):
+    async def federation_forward_task(request: Request, auth: dict = Depends(require_auth)):
         """将任务转发给指定 peer 实例"""
         body = await request.json()
         target = body.get("target", "")

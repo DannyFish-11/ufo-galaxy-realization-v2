@@ -740,6 +740,35 @@ class AgentFactory:
         if expired:
             logger.info(f"清理了 {len(expired)} 个过期 Agent")
 
+    # ─────── 分形任务 ─────────
+
+    async def create_fractal_task(
+        self, task_description: str, context: Optional[Dict] = None
+    ) -> Dict:
+        """
+        通过 FractalExecutor 执行分形递归任务分解。
+
+        适用于复杂多步骤任务 — FractalAgent 会自动评估复杂度，
+        递归分解子任务，并行执行后合并结果。
+        """
+        from core.fractal_agent import get_fractal_executor
+
+        executor = get_fractal_executor(
+            llm_router=self.llm_router,
+            agent_factory=self,
+        )
+        result = await executor.run(task_description, context)
+
+        return {
+            "success": result.success,
+            "reply": result.summary if hasattr(result, "summary") else str(result),
+            "data": {
+                "total_agents": result.total_agents if hasattr(result, "total_agents") else 0,
+                "latency_ms": result.latency_ms if hasattr(result, "latency_ms") else 0,
+                "mode": "fractal",
+            },
+        }
+
     def get_status(self) -> Dict:
         by_state = {}
         by_mode = {}

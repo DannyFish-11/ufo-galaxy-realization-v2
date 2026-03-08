@@ -17,7 +17,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.auth import require_auth
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -114,7 +116,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         })
 
     @router.post("/api/v1/agent/deploy")
-    async def deploy_agent(req: AgentDeployRequest):
+    async def deploy_agent(req: AgentDeployRequest, auth: dict = Depends(require_auth)):
         """
         部署 Agent 到端侧设备
 
@@ -169,7 +171,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/v1/agent/autonomous")
-    async def autonomous_execute(req: AutonomousRequest):
+    async def autonomous_execute(req: AutonomousRequest, auth: dict = Depends(require_auth)):
         """自主调度接口：接收自然语言指令，自动规划并执行节点任务 (ReAct Loop)"""
         try:
             async def node_executor(node_id: str, action: str, params: dict):

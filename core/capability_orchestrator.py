@@ -205,6 +205,14 @@ class CapabilityOrchestrator:
                 tags=["device", "control"],
                 priority=8,
             ),
+            Capability(
+                id="builtin_simulate",
+                name="模拟执行",
+                description="通过数字孪生引擎模拟操作效果",
+                type=CapabilityType.BUILTIN,
+                tags=["simulate", "twin", "predict"],
+                priority=6,
+            ),
         ]
         
         for cap in builtins:
@@ -370,7 +378,19 @@ class CapabilityOrchestrator:
             device_id = params.get("device_id")
             action = params.get("action")
             return await device_control.execute_action(device_id, action)
-        
+
+        elif cap.id == "builtin_simulate":
+            # 数字孪生模拟
+            from core.digital_twin_engine import get_digital_twin_engine
+            engine = get_digital_twin_engine()
+            action = params.get("action", params.get("message", ""))
+            result = await engine.simulate_action(action, params)
+            return {
+                "success": result.success if hasattr(result, "success") else True,
+                "reply": result.description if hasattr(result, "description") else str(result),
+                "predicted_state": result.predicted_state if hasattr(result, "predicted_state") else {},
+            }
+
         return None
     
     # ========================================================================

@@ -199,4 +199,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
+    @router.get("/api/v1/system/twin/status")
+    async def twin_engine_status():
+        """数字孪生引擎状态"""
+        try:
+            from core.digital_twin_engine import get_digital_twin_engine
+            engine = get_digital_twin_engine()
+            return JSONResponse(engine.get_global_state())
+        except Exception as e:
+            return JSONResponse({"error": str(e), "twins": {}})
+
     return router
