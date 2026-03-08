@@ -226,8 +226,9 @@ class AudioService:
 
     async def convert_format(self, input_path: str, output_path: str, target_format: AudioFormat) -> bool:
         """
-        转换音频格式 (模拟功能)
-        实际实现需要 pydub, ffmpeg 等库
+        转换音频格式
+
+        优先使用 pydub (需要 ffmpeg)，回退到 wave 库处理 WAV。
 
         :param input_path: 输入文件路径
         :param output_path: 输出文件路径
@@ -237,17 +238,59 @@ class AudioService:
         if not os.path.exists(input_path):
             logger.error(f"输入文件不存在: {input_path}")
             return False
-        
+
         logger.info(f"请求转换 {input_path} 到 {target_format.value} 格式，输出至 {output_path}")
-        logger.warning("格式转换功能为模拟实现，仅复制文件。")
 
         try:
-            # 模拟转换过程
-            await asyncio.sleep(2)
-            with open(input_path, 'rb') as f_in, open(output_path, 'wb') as f_out:
-                f_out.write(f_in.read())
-            logger.info(f"文件已'转换'并保存至 {output_path}")
-            return True
+            # 方式1: 尝试使用 pydub (支持所有格式, 需要 ffmpeg)
+            try:
+                from pydub import AudioSegment
+                audio = await asyncio.get_event_loop().run_in_executor(
+                    None, AudioSegment.from_file, input_path
+                )
+                fmt = target_format.value.lower()
+                if fmt == "wav":
+                    export_fmt = "wav"
+                elif fmt == "mp3":
+                    export_fmt = "mp3"
+                elif fmt == "raw":
+                    export_fmt = "raw"
+                else:
+                    export_fmt = fmt
+                await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: audio.export(output_path, format=export_fmt)
+                )
+                logger.info(f"使用 pydub 转换完成: {output_path}")
+                return True
+            except ImportError:
+                logger.info("pydub 不可用，尝试 ffmpeg 直接调用")
+
+            # 方式2: 尝试直接调用 ffmpeg
+            import subprocess
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-i", input_path, output_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            if proc.returncode == 0:
+                logger.info(f"使用 ffmpeg 转换完成: {output_path}")
+                return True
+            else:
+                logger.warning(f"ffmpeg 返回非零: {stderr.decode()[:200]}")
+
+            # 方式3: 如果目标是 WAV 且源也是 WAV，直接复制
+            if target_format == AudioFormat.WAV and input_path.lower().endswith(".wav"):
+                import shutil
+                await asyncio.get_event_loop().run_in_executor(
+                    None, shutil.copy2, input_path, output_path
+                )
+                logger.info(f"WAV→WAV 直接复制: {output_path}")
+                return True
+
+            logger.error("无可用的音频转换后端 (需要 pydub 或 ffmpeg)")
+            return False
+
         except Exception as e:
             logger.error(f"格式转换过程中发生错误: {e}", exc_info=True)
             self.status = NodeStatus.ERROR

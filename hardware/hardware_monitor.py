@@ -177,10 +177,9 @@ class HardwareMonitor:
         """Stop hardware monitoring"""
         self._running = False
         self._stop_event.set()
-        
         if self._monitor_thread:
             self._monitor_thread.join(timeout=5)
-        
+
         if self._watchdog_thread:
             self._watchdog_thread.join(timeout=5)
         
@@ -207,11 +206,8 @@ class HardwareMonitor:
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
             
-            # Wait for next interval
-            for _ in range(interval):
-                if not self._running:
-                    break
-                time.sleep(1)
+            # Wait for next interval (immediately interruptible via stop_event)
+            self._stop_event.wait(interval)
     
     def _collect_metrics(self) -> HardwareMetrics:
         """Collect hardware metrics"""

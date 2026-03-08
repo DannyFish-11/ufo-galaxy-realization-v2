@@ -140,35 +140,36 @@ class GalaxyCore:
         try:
             client = await self._get_http_client()
 
-            # 方式一：使用 /mcp/call 接口
+            # 使用 /mcp/call 接口 (已有)
+            logger.info(f"调用节点 {node_id} ({node.get('name', '?')}): action={action}, endpoint={endpoint}/mcp/call")
             response = await client.post(
                 f"{endpoint}/mcp/call",
                 json={"tool": action, "params": params},
-                timeout=10.0,
+                timeout=10.0
             )
 
             if response.status_code == 200:
                 return response.json()
 
-            logger.warning(
-                f"节点 {node_id} /mcp/call 返回 {response.status_code}, "
-                f"尝试直接调用 /{action}"
-            )
-
-            # 方式二：直接调用
+            # 第一种方式失败，尝试直接调用
+            logger.info(f"节点 {node_id} /mcp/call 返回 {response.status_code}，尝试直接调用 /{action}")
             response = await client.post(
                 f"{endpoint}/{action}",
                 json=params,
-                timeout=10.0,
+                timeout=10.0
             )
             response.raise_for_status()
+
             return response.json()
 
+        except httpx.TimeoutException:
+            logger.error(f"调用节点 {node_id} ({node.get('name', '?')}) 超时: endpoint={endpoint}, action={action}")
+            return {"success": False, "error": f"Node {node_id} request timeout"}
+        except httpx.HTTPStatusError as e:
+            logger.error(f"调用节点 {node_id} ({node.get('name', '?')}) HTTP错误: status={e.response.status_code}, action={action}")
+            return {"success": False, "error": f"Node {node_id} returned HTTP {e.response.status_code}"}
         except Exception as e:
-            logger.error(
-                f"调用节点 {node_id} 失败: action={action}, "
-                f"endpoint={endpoint}, error={e}"
-            )
+            logger.error(f"调用节点 {node_id} ({node.get('name', '?')}) 失败: {type(e).__name__}: {e}")
             return {"success": False, "error": str(e)}
     
     async def call_node_with_protocol(

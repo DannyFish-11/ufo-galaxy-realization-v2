@@ -65,7 +65,7 @@ class MediaGenConfig:
         "audio_gen_api_key": os.getenv("AUDIO_GEN_API_KEY", ""),
         "video_gen_api_key": os.getenv("VIDEO_GEN_API_KEY", ""),
     })
-    output_directory: str = field(default_factory=lambda: os.getenv("MEDIA_OUTPUT_DIR", str(Path.home() / "media_output")))
+    output_directory: str = os.getenv("MEDIA_OUTPUT_DIR", "./media_output")
     max_concurrent_tasks: int = 10
     default_image_model: str = "stable-diffusion-v1.5"
     default_audio_model: str = "tts-1"
@@ -177,9 +177,6 @@ class MediaGenService:
                 task.status = GenerationStatus.PROCESSING
                 logger.info(f"任务 {task_id} 开始处理... Prompt: {task.prompt[:50]}...")
 
-                # 模拟调用外部API或模型
-                await asyncio.sleep(5)  # 模拟耗时操作
-
                 handler_map: Dict[MediaType, Type[BaseMediaHandler]] = {
                     MediaType.IMAGE: ImageHandler,
                     MediaType.AUDIO: AudioHandler,
@@ -215,36 +212,126 @@ class BaseMediaHandler:
         raise NotImplementedError
 
 class ImageHandler(BaseMediaHandler):
-    """图片生成处理器"""
+    """图片生成处理器 — 通过 OpenAI DALL-E / 兼容 API 生成图片"""
     async def generate(self, task: GenerationTask) -> str:
         logger.info(f"使用模型 {self.config.default_image_model} 生成图片...")
-        # 实际应用中会调用类似 DALL-E, Stable Diffusion 的 API
-        # 此处仅为模拟
         file_path = os.path.join(self.config.output_directory, f"{task.task_id}.png")
-        with open(file_path, 'w') as f:
-            f.write(f"Generated image for prompt: '{task.prompt}'")
+
+        api_key = self.config.api_keys.get("image_gen_api_key", "")
+        if api_key and not api_key.startswith("dummy"):
+            try:
+                import httpx
+                api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.post(
+                        f"{api_base}/images/generations",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={
+                            "model": self.config.default_image_model,
+                            "prompt": task.prompt,
+                            "size": task.params.get("size", "1024x1024"),
+                            "n": 1,
+                            "response_format": "b64_json",
+                        },
+                    )
+                    resp.raise_for_status()
+                    import base64
+                    b64 = resp.json()["data"][0]["b64_json"]
+                    with open(file_path, "wb") as f:
+                        f.write(base64.b64decode(b64))
+                    return file_path
+            except Exception as e:
+                logger.warning(f"图片 API 调用失败，使用占位图: {e}")
+
+        # Fallback: 生成带提示信息的占位 SVG
+        import xml.sax.saxutils
+        safe_prompt = xml.sax.saxutils.escape(task.prompt[:60])
+        svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect fill="#f0f0f0" width="512" height="512"/><text x="50%" y="50%" text-anchor="middle" font-size="16">{safe_prompt}</text></svg>'
+        with open(file_path, "w") as f:
+            f.write(svg)
         return file_path
 
 class AudioHandler(BaseMediaHandler):
-    """音频生成处理器"""
+    """音频生成处理器 — 通过 OpenAI TTS / 兼容 API 生成音频"""
     async def generate(self, task: GenerationTask) -> str:
         logger.info(f"使用模型 {self.config.default_audio_model} 生成音频...")
-        # 实际应用中会调用类似 TTS 的 API
-        # 此处仅为模拟
         file_path = os.path.join(self.config.output_directory, f"{task.task_id}.mp3")
-        with open(file_path, 'w') as f:
-            f.write(f"Generated audio for prompt: '{task.prompt}'")
-        return file_path
+
+        api_key = self.config.api_keys.get("audio_gen_api_key", "")
+        if api_key and not api_key.startswith("dummy"):
+            try:
+                import httpx
+                api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.post(
+                        f"{api_base}/audio/speech",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={
+                            "model": self.config.default_audio_model,
+                            "input": task.prompt,
+                            "voice": task.params.get("voice", "alloy"),
+                        },
+                    )
+                    resp.raise_for_status()
+                    with open(file_path, "wb") as f:
+                        f.write(resp.content)
+                    return file_path
+            except Exception as e:
+                logger.warning(f"音频 API 调用失败，使用占位文件: {e}")
+
+        # Fallback: 生成静音 WAV
+        import wave, struct
+        wav_path = file_path.replace(".mp3", ".wav") if file_path.endswith(".mp3") else file_path
+        with wave.open(wav_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            silence = struct.pack("<h", 0) * 16000  # 1 second silence
+            wf.writeframes(silence)
+        return wav_path
 
 class VideoHandler(BaseMediaHandler):
-    """视频生成处理器"""
+    """视频生成处理器 — 通过 PixVerse / 兼容 API 生成视频"""
     async def generate(self, task: GenerationTask) -> str:
         logger.info(f"使用模型 {self.config.default_video_model} 生成视频...")
-        # 实际应用中会调用类似 Sora, Gen-1 的 API
-        # 此处仅为模拟
         file_path = os.path.join(self.config.output_directory, f"{task.task_id}.mp4")
-        with open(file_path, 'w') as f:
-            f.write(f"Generated video for prompt: '{task.prompt}'")
+
+        # 尝试 PixVerse API
+        pixverse_key = os.getenv("PIXVERSE_API_KEY", "")
+        if pixverse_key:
+            try:
+                from nodes.Node_125_MediaGen.pixverse_adapter import PixVerseAdapter
+                adapter = PixVerseAdapter()
+                result = adapter.text_to_video(
+                    prompt=task.prompt,
+                    duration=task.params.get("duration", 4),
+                )
+                if result.get("status") == "COMPLETED" and result.get("video_path"):
+                    import shutil
+                    shutil.move(str(result["video_path"]), file_path)
+                    return file_path
+            except Exception as e:
+                logger.warning(f"PixVerse 调用失败: {e}")
+
+        # Fallback: 使用 ffmpeg 生成带文字的占位视频
+        try:
+            import asyncio as _asyncio
+            proc = await _asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-f", "lavfi", "-i",
+                f"color=c=gray:s=640x480:d=3",
+                "-vf", f"drawtext=text='{task.prompt[:40]}':fontsize=24:fontcolor=white:x=(w-tw)/2:y=(h-th)/2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", file_path,
+                stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.PIPE,
+            )
+            await _asyncio.wait_for(proc.communicate(), timeout=30)
+            if proc.returncode == 0:
+                return file_path
+        except Exception as e:
+            logger.warning(f"ffmpeg 视频占位生成失败: {e}")
+
+        # Last fallback: 文本文件
+        with open(file_path, "w") as f:
+            f.write(f"Video placeholder for: {task.prompt}")
         return file_path
 
 # 6. 主执行函数

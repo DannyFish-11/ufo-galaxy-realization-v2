@@ -11,17 +11,61 @@ API 端点:
 - POST /api/v1/market/publish        - 发布技能
 """
 
+import json
 import logging
 import re
 from datetime import datetime
+import os
+import time
+import hashlib
 from typing import Dict, List, Optional, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("UFO-Galaxy.MarketAPI")
 
 router = APIRouter()
+
+
+# ============================================================================
+# 技能存储 (JSON 文件持久化)
+# ============================================================================
+
+_MARKET_STORE_DIR = os.getenv("UFO_MARKET_STORE_DIR", "./data/market")
+_MARKET_STORE_FILE = os.path.join(_MARKET_STORE_DIR, "published_skills.json")
+
+
+def _load_published_skills() -> List[Dict[str, Any]]:
+    """从持久化文件加载已发布技能"""
+    if os.path.exists(_MARKET_STORE_FILE):
+        try:
+            with open(_MARKET_STORE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"加载技能存储失败: {e}")
+    return []
+
+
+def _save_published_skills(skills: List[Dict[str, Any]]):
+    """持久化已发布技能到文件"""
+    os.makedirs(_MARKET_STORE_DIR, exist_ok=True)
+    with open(_MARKET_STORE_FILE, "w", encoding="utf-8") as f:
+        json.dump(skills, f, ensure_ascii=False, indent=2)
+
+
+# 运行时缓存
+_published_skills: List[Dict[str, Any]] = _load_published_skills()
+
+
+def _verify_publish_token(token: str) -> bool:
+    """验证发布令牌 (基于 UFO_API_TOKEN)"""
+    expected = os.getenv("UFO_API_TOKEN", "")
+    if not expected:
+        # 未设置令牌时，只允许本地开发环境
+        logger.warning("UFO_API_TOKEN 未设置，技能发布仅允许本地访问")
+        return True
+    return hashlib.sha256(token.encode()).hexdigest() == hashlib.sha256(expected.encode()).hexdigest()
 
 
 # ============================================================================
@@ -136,7 +180,7 @@ async def list_market_skills(
 @router.get("/api/v1/market/skills/{skill_id}")
 async def get_market_skill(skill_id: str):
     """获取技能详情"""
-    for skill in BUILTIN_SKILLS:
+    for skill in BUILTIN_SKILLS + _published_skills:
         if skill["id"] == skill_id:
             # 返回完整信息
             return JSONResponse({
@@ -160,7 +204,7 @@ async def search_market_skills(q: str, limit: int = 10):
     q = q.lower()
     
     results = []
-    for skill in BUILTIN_SKILLS:
+    for skill in BUILTIN_SKILLS + _published_skills:
         # 搜索名称、描述、标签
         if (q in skill["name"].lower() or
             q in skill["description"].lower() or
@@ -176,8 +220,19 @@ async def search_market_skills(q: str, limit: int = 10):
 
 
 @router.post("/api/v1/market/publish")
-async def publish_skill(req: SkillPublishRequest):
-    """发布技能"""
+async def publish_skill(
+    req: SkillPublishRequest,
+    authorization: str = Header(default=""),
+):
+    """发布技能 (需要认证)"""
+    # 认证: 验证 Bearer token
+    token = authorization.replace("Bearer ", "").strip()
+    if not _verify_publish_token(token):
+        return JSONResponse(
+            {"success": False, "error": "认证失败: 无效的 API Token"},
+            status_code=401,
+        )
+
     # 输入校验
     if not req.name or not req.name.strip():
         raise HTTPException(status_code=400, detail="技能名称不能为空")
@@ -188,12 +243,18 @@ async def publish_skill(req: SkillPublishRequest):
 
     skill_id = re.sub(r'-+', '-', re.sub(r'[^a-z0-9-]', '-', req.name.lower().strip())).strip('-')
 
-    # 检查是否与内置技能或已发布技能重名
-    all_ids = [s["id"] for s in BUILTIN_SKILLS + _published_skills]
-    if skill_id in all_ids:
-        raise HTTPException(status_code=409, detail=f"技能 '{skill_id}' 已存在")
+    # 检查是否已存在（同名更新）
+    existing_idx = None
+    for i, s in enumerate(_published_skills):
+        if s["id"] == skill_id:
+            existing_idx = i
+            break
 
-    skill_entry: Dict[str, Any] = {
+    # 检查是否与内置技能重名
+    if skill_id in [s["id"] for s in BUILTIN_SKILLS] and existing_idx is None:
+        raise HTTPException(status_code=409, detail=f"技能 '{skill_id}' 与内置技能冲突")
+
+    skill_data: Dict[str, Any] = {
         "id": skill_id,
         "name": req.name.strip(),
         "description": req.description.strip(),
@@ -205,13 +266,23 @@ async def publish_skill(req: SkillPublishRequest):
         "rating": 0.0,
         "published_at": datetime.utcnow().isoformat() + "Z",
     }
-    _published_skills.append(skill_entry)
-    logger.info(f"技能已发布: {skill_id} v{req.version} by {skill_entry['author']}")
+
+    if existing_idx is not None:
+        skill_data["downloads"] = _published_skills[existing_idx].get("downloads", 0)
+        skill_data["rating"] = _published_skills[existing_idx].get("rating", 0.0)
+        _published_skills[existing_idx] = skill_data
+        action = "updated"
+    else:
+        _published_skills.append(skill_data)
+        action = "published"
+
+    _save_published_skills(_published_skills)
+    logger.info(f"技能 {action}: {skill_id} v{req.version} by {skill_data['author']}")
 
     return JSONResponse({
         "success": True,
-        "message": f"技能 '{req.name}' 发布成功",
-        "skill": {k: v for k, v in skill_entry.items() if k != "content"},
+        "message": f"技能已{action}",
+        "skill": {k: v for k, v in skill_data.items() if k != "content"},
     }, status_code=201)
 
 
@@ -232,10 +303,6 @@ async def list_tags():
 async def market_stats():
     """市场统计"""
     all_skills = BUILTIN_SKILLS + _published_skills
-    avg_rating = (
-        sum(s["rating"] for s in all_skills) / len(all_skills)
-        if all_skills else 0.0
-    )
     return JSONResponse({
         "success": True,
         "stats": {
@@ -243,7 +310,7 @@ async def market_stats():
             "builtin_skills": len(BUILTIN_SKILLS),
             "published_skills": len(_published_skills),
             "total_downloads": sum(s["downloads"] for s in all_skills),
-            "avg_rating": avg_rating,
+            "avg_rating": sum(s["rating"] for s in all_skills) / max(len(all_skills), 1),
         },
     })
 

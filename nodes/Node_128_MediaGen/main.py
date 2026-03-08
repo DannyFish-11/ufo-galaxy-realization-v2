@@ -28,7 +28,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 
 # --- 常量定义 ---
-DEFAULT_OUTPUT_DIR = "/tmp/media_gen_output"
+DEFAULT_OUTPUT_DIR = os.getenv("MEDIA_GEN_OUTPUT_DIR", "./media_gen_output")
 DEFAULT_LOG_LEVEL = "INFO"
 
 # --- 枚举定义 ---
@@ -154,28 +154,81 @@ class MediaGenService:
             task.updated_at = time.time()
 
     async def _simulate_image_generation(self, task_id: str) -> str:
-        """模拟图片生成过程"""
-        delay = random.randint(self.config.image_min_delay_ms, self.config.image_max_delay_ms) / 1000.0
-        await asyncio.sleep(delay)
+        """图片生成 — 优先调用 API，回退到占位文件"""
         file_path = os.path.join(self.config.output_dir, f"{task_id}.png")
+
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if api_key:
+            try:
+                import httpx
+                api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.post(
+                        f"{api_base}/images/generations",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={"model": "dall-e-3", "prompt": f"Task {task_id}", "size": "1024x1024", "n": 1, "response_format": "b64_json"},
+                    )
+                    resp.raise_for_status()
+                    import base64
+                    with open(file_path, "wb") as f:
+                        f.write(base64.b64decode(resp.json()["data"][0]["b64_json"]))
+                    return file_path
+            except Exception as e:
+                self.logger.warning(f"图片 API 调用失败: {e}")
+
+        # Fallback
         with open(file_path, "w") as f:
-            f.write(f"Simulated PNG image for task {task_id}")
+            f.write(f"Placeholder image for task {task_id}")
         return file_path
 
     async def _simulate_audio_generation(self, task_id: str) -> str:
-        """模拟音频生成过程"""
-        delay = random.randint(self.config.audio_min_delay_ms, self.config.audio_max_delay_ms) / 1000.0
-        await asyncio.sleep(delay)
+        """音频生成 — 优先调用 TTS API，回退到静音 WAV"""
         file_path = os.path.join(self.config.output_dir, f"{task_id}.mp3")
-        with open(file_path, "w") as f:
-            f.write(f"Simulated MP3 audio for task {task_id}")
-        return file_path
+
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if api_key:
+            try:
+                import httpx
+                api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.post(
+                        f"{api_base}/audio/speech",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={"model": "tts-1", "input": f"Audio for task {task_id}", "voice": "alloy"},
+                    )
+                    resp.raise_for_status()
+                    with open(file_path, "wb") as f:
+                        f.write(resp.content)
+                    return file_path
+            except Exception as e:
+                self.logger.warning(f"音频 API 调用失败: {e}")
+
+        # Fallback: 静音 WAV
+        import wave, struct
+        wav_path = file_path.replace(".mp3", ".wav")
+        with wave.open(wav_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(struct.pack("<h", 0) * 16000)
+        return wav_path
 
     async def _simulate_video_generation(self, task_id: str) -> str:
-        """模拟视频生成过程"""
-        delay = random.randint(self.config.video_min_delay_ms, self.config.video_max_delay_ms) / 1000.0
-        await asyncio.sleep(delay)
+        """视频生成 — 优先调用 ffmpeg，回退到占位文件"""
         file_path = os.path.join(self.config.output_dir, f"{task_id}.mp4")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=gray:s=640x480:d=2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", file_path,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(proc.communicate(), timeout=30)
+            if proc.returncode == 0:
+                return file_path
+        except Exception as e:
+            self.logger.warning(f"ffmpeg 视频生成失败: {e}")
+
         with open(file_path, "w") as f:
             f.write(f"Simulated MP4 video for task {task_id}")
         return file_path

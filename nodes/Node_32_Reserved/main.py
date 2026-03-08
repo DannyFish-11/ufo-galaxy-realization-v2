@@ -46,7 +46,7 @@ class PluginConfig:
 class ServiceConfig:
     """服务配置"""
     node_name: str = "Node_32_Reserved"
-    plugin_dir: str = field(default_factory=lambda: os.getenv("UFO_PLUGIN_DIR", os.path.expanduser("~/ufo-plugins")))
+    plugin_dir: str = os.getenv("UFO_PLUGIN_DIR", "./plugins")
     health_check_port: int = 8080
     plugins: Dict[str, PluginConfig] = field(default_factory=dict)
 
@@ -252,7 +252,7 @@ class ReservedNodeService:
 
 def create_dummy_plugin():
     """创建一个用于演示的虚拟插件文件"""
-    plugin_dir = "/home/ubuntu/plugins"
+    plugin_dir = os.getenv("UFO_PLUGIN_DIR", "./plugins")
     if not os.path.exists(plugin_dir):
         os.makedirs(plugin_dir)
 
