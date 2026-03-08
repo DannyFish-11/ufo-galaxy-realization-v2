@@ -20,7 +20,10 @@ def test_1_core_modules_import():
         from enhancements.learning.autonomous_learning_engine import AutonomousLearningEngine
         from enhancements.multidevice.cross_device_scheduler import CrossDeviceScheduler
         from enhancements.multidevice.failover_manager import FailoverManager
-        from fusion.unified_orchestrator import UnifiedOrchestrator
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            from fusion.unified_orchestrator import UnifiedOrchestrator
         from galaxy_gateway.android_bridge import AndroidBridge
         print("✅ 所有核心模块导入成功")
         return True

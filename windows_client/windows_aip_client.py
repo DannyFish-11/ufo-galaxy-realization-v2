@@ -130,6 +130,11 @@ class WindowsAIPClient:
         self.device_id = device_id or f"windows_{socket.gethostname()}_{uuid.uuid4().hex[:6]}"
         self._ws = None
         self._running = False
+        self._on_event_stream = None
+
+    def set_event_stream_callback(self, callback):
+        """Set callback for event_stream messages from the EventBus."""
+        self._on_event_stream = callback
 
     # ------------------------------------------------------------------
     # 消息构建
@@ -192,6 +197,17 @@ class WindowsAIPClient:
 
     async def _handle_message(self, data: Dict[str, Any]):
         msg_type = data.get("type", "")
+
+        if msg_type == "event_stream":
+            # Log events from the unified EventBus
+            event_type = data.get("event_type", "")
+            source = data.get("source", "")
+            event_data = data.get("data", {})
+            logger.info(f"[EventStream] {event_type} from {source}: {json.dumps(event_data, ensure_ascii=False)[:200]}")
+            # Invoke callback if set
+            if self._on_event_stream:
+                self._on_event_stream(data)
+            return
 
         if msg_type in ("device_register_ack", "heartbeat_ack", "capability_report_ack"):
             logger.debug(f"收到 ACK: {msg_type}")

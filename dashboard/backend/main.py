@@ -206,6 +206,26 @@ async def send_device_command(device_id: str, request: dict):
     return {"success": False, "error": "Galaxy core not available"}
 
 # ============================================================================
+# 事件 API
+# ============================================================================
+
+@app.get("/api/v1/events/recent")
+async def get_recent_events(limit: int = 50, event_type: str = None):
+    """获取最近事件 - 从 EventBus 历史读取"""
+    try:
+        from integration.event_bus import event_bus, EventType as ET
+        et = None
+        if event_type:
+            try:
+                et = ET[event_type]
+            except KeyError:
+                pass
+        events = event_bus.get_event_history(event_type=et, limit=limit)
+        return {"success": True, "events": [e.to_dict() for e in events], "total": len(events)}
+    except Exception as e:
+        return {"success": True, "events": [], "total": 0, "note": str(e)}
+
+# ============================================================================
 # Agent API
 # ============================================================================
 

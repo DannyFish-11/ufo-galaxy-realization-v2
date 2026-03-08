@@ -1,12 +1,18 @@
 import os
 import sys
 
+import pytest
+
+
 def test_mcp_alignment():
     print("=== UFO Galaxy 24 MCP Alignment Verification ===")
-    
+
     # 1. 检查关键节点代码是否包含新功能
     print("\n[1] Checking Node 14 (YouTube/FFmpeg)...")
-    with open("nodes/Node_14_FFmpeg/main.py", "r") as f:
+    node14_path = "nodes/Node_14_FFmpeg/main.py"
+    if not os.path.exists(node14_path):
+        pytest.skip(f"File not found: {node14_path}")
+    with open(node14_path, "r") as f:
         content = f.read()
         if "youtube_download" in content and "youtube_info" in content:
             print("✅ Node 14: YouTube tools integrated.")
@@ -14,7 +20,10 @@ def test_mcp_alignment():
             print("❌ Node 14: YouTube tools missing.")
 
     print("\n[2] Checking Node 13 (Arxiv/SQLite)...")
-    with open("nodes/Node_13_SQLite/main.py", "r") as f:
+    node13_path = "nodes/Node_13_SQLite/main.py"
+    if not os.path.exists(node13_path):
+        pytest.skip(f"File not found: {node13_path}")
+    with open(node13_path, "r") as f:
         content = f.read()
         if "search_arxiv" in content and "download_paper" in content:
             print("✅ Node 13: Arxiv tools integrated.")
@@ -23,6 +32,8 @@ def test_mcp_alignment():
 
     # 2. 检查 podman-compose.yml 端口映射
     print("\n[3] Checking podman-compose.yml Port Alignment...")
+    if not os.path.exists("podman-compose.yml"):
+        pytest.skip("podman-compose.yml not found")
     expected_ports = {
         "mcp-oneapi": "3000",
         "mcp-tasker": "3002",

@@ -11,6 +11,7 @@ Module-level singletons shared across all route modules:
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -49,6 +50,7 @@ class ConnectionManager:
         logger.info(f"设备已断开: {device_id}")
 
     async def send_to_device(self, device_id: str, message: dict) -> bool:
+        # 1. 先查本地 active_devices（REST API 注册的设备）
         ws = self.active_devices.get(device_id)
         if ws:
             try:
@@ -57,7 +59,69 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"发送消息到设备 {device_id} 失败: {e}")
                 self.disconnect_device(device_id)
+
+        # 2. 查 gateway 的 WebSocketManager（WebSocket 注册的设备）
+        try:
+            from galaxy_gateway.app import websocket_manager as gw_ws_manager
+            if gw_ws_manager and gw_ws_manager.is_device_connected(device_id):
+                from galaxy_gateway.protocol import AIPMessage, MessageType
+                aip_msg = AIPMessage(
+                    type=MessageType.COMMAND,
+                    device_id=device_id,
+                    payload=message,
+                )
+                return await gw_ws_manager.send_message(device_id, aip_msg)
+        except Exception as e:
+            logger.debug(f"Gateway WebSocketManager 不可用: {e}")
+
+        # 3. 查 gateway 的 device_router（保底）
+        try:
+            from galaxy_gateway.device_router import device_router
+            device = device_router.get_device(device_id)
+            if device and device.websocket:
+                await device.websocket.send_json(message)
+                return True
+        except Exception as e:
+            logger.debug(f"DeviceRouter 发送失败: {e}")
+
         return False
+
+    def get_all_devices(self) -> Dict[str, Dict[str, Any]]:
+        """合并所有来源的设备信息（REST + gateway WebSocket + device_router）"""
+        all_devices = dict(registered_devices)
+
+        # 合并 gateway WebSocketManager 的连接设备
+        try:
+            from galaxy_gateway.app import websocket_manager as gw_ws_manager
+            if gw_ws_manager:
+                for did in gw_ws_manager.get_connected_devices():
+                    if did not in all_devices:
+                        all_devices[did] = {
+                            "device_id": did,
+                            "device_type": "unknown",
+                            "status": "online",
+                            "online": True,
+                            "source": "gateway_ws",
+                        }
+        except Exception:
+            pass
+
+        # 合并 device_router 的设备
+        try:
+            from galaxy_gateway.device_router import device_router
+            for did, device in device_router.devices.items():
+                if did not in all_devices:
+                    all_devices[did] = device.to_dict()
+                    all_devices[did]["online"] = True
+                else:
+                    all_devices[did]["online"] = True
+                    all_devices[did]["status"] = "online"
+                    if device.device_type:
+                        all_devices[did]["device_type"] = device.device_type
+        except Exception:
+            pass
+
+        return all_devices
 
     async def broadcast_to_devices(self, message: dict):
         disconnected = []

@@ -58,6 +58,8 @@ _SUBSYSTEM_DEPS: Dict[str, List[str]] = {
     "node_discovery": [],
     "health_integration": ["monitoring", "concurrency_manager", "node_discovery"],
     "galaxy_gateway": [],
+    "device_router": ["command_router", "event_bridge"],
+    "orchestrator": ["device_router", "ai_intent"],
 }
 
 
@@ -309,6 +311,19 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             cache_backend=cache,
             max_concurrent=int(os.environ.get("CMD_MAX_CONCURRENT", "20")),
         )
+
+        # 设置默认执行器 — 通过 DeviceCommunication 发送命令到目标设备
+        try:
+            from core.device_communication import device_comm
+
+            async def _default_executor(target: str, command: str, params: dict):
+                return await device_comm.send_command(target, command, params)
+
+            cmd_router.set_executor(_default_executor)
+            logger.info("命令路由引擎执行器已绑定 DeviceCommunication")
+        except Exception as exec_err:
+            logger.warning(f"命令路由引擎执行器绑定失败（降级）: {exec_err}")
+
         results["command_router"] = {"status": "ok"}
         logger.info("命令路由引擎已初始化")
     except Exception as e:
@@ -493,6 +508,30 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     except Exception as e:
         results["galaxy_gateway"] = {"status": "not_available", "error": str(e)}
         logger.info(f"Galaxy Gateway 未加载: {e}")
+
+    # ====================================================================
+    # 17. 设备路由器
+    # ====================================================================
+    if _deps_ok("device_router"):
+        try:
+            from galaxy_gateway.device_router import device_router
+            results["device_router"] = {"status": "ok", "instance": "device_router"}
+            logger.info("设备路由器就绪")
+        except Exception as e:
+            results["device_router"] = {"status": "degraded", "error": str(e)}
+            logger.warning(f"设备路由器降级: {e}")
+
+    # ====================================================================
+    # 18. 编排器
+    # ====================================================================
+    if _deps_ok("orchestrator"):
+        try:
+            from galaxy_gateway.orchestrator import GalaxyOrchestrator
+            results["orchestrator"] = {"status": "ok"}
+            logger.info("GalaxyOrchestrator 就绪")
+        except Exception as e:
+            results["orchestrator"] = {"status": "degraded", "error": str(e)}
+            logger.warning(f"编排器降级: {e}")
 
     # ====================================================================
     # 汇总

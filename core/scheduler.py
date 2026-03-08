@@ -180,6 +180,31 @@ _BUILTIN_TOOLS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_device",
+            "description": (
+                "Find a connected device by type or name. Returns the device_id and info. "
+                "Use this when the user refers to a device by type (手机/phone, 电脑/PC, 平板/tablet) "
+                "instead of exact device_id. "
+                "Types: android, windows, ios, linux, macos."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_type": {
+                        "type": "string",
+                        "description": "Device type to search: android, windows, ios, linux, macos"
+                    },
+                    "device_name": {
+                        "type": "string",
+                        "description": "Device name or alias to search for"
+                    }
+                }
+            }
+        }
+    },
 ]
 
 
@@ -360,6 +385,15 @@ class AutonomousScheduler:
         except Exception as e:
             logger.debug(f"RAG enhancement skipped: {e}")
 
+        # 来源设备信息
+        source_device_id = context.get("device_id", "") if context else ""
+        source_device_info = ""
+        if source_device_id:
+            source_device_info = (
+                f"SOURCE DEVICE: You are currently talking to the user on device: {source_device_id}\n"
+                f"If the user says '本机/this device/当前设备/本设备', target this device_id.\n"
+            )
+
         system_prompt = f"""You are the central AI scheduler of UFO Galaxy, a multi-device agent operating system.
 Your goal: satisfy the user's request by calling the available tools.
 You operate in a ReAct loop: Think → Act (call tools) → Observe results → Think again.
@@ -373,7 +407,7 @@ RULES:
 
 DEVICE CONTEXT:
 {device_context}
-
+{source_device_info}
 COMMON DEVICE OPERATIONS:
 - open_app: {{"app_name": "微信"}} or {{"package": "com.tencent.mm"}}
 - click: {{"x": 500, "y": 800}}
@@ -515,6 +549,10 @@ CROSS-DEVICE:
             if function_name == "execute_code":
                 return await self._exec_code(args)
 
+            # 内置工具: find_device
+            if function_name == "find_device":
+                return await self._exec_find_device(args, context)
+
             # 内置工具: mesh_send (Phase 5)
             if function_name == "mesh_send":
                 return await self._exec_mesh_send(args)
@@ -635,6 +673,27 @@ CROSS-DEVICE:
             return json.dumps(result.to_dict(), ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": f"Mesh send failed: {e}"})
+
+    async def _exec_find_device(self, args: Dict, context: Dict) -> str:
+        """按类型或名称查找在线设备"""
+        device_type = args.get("device_type", "").lower()
+        device_name = args.get("device_name", "").lower()
+
+        devices = context.get("devices", {}) if context else {}
+        for did, info in devices.items():
+            if not isinstance(info, dict):
+                continue
+            dt = (info.get("device_type", "") or "").lower()
+            dn = (info.get("device_name", "") or info.get("name", "") or "").lower()
+            online = info.get("online", info.get("status") == "online")
+            if not online:
+                continue
+            if device_type and device_type in dt:
+                return json.dumps({"device_id": did, **info}, ensure_ascii=False)
+            if device_name and device_name in dn:
+                return json.dumps({"device_id": did, **info}, ensure_ascii=False)
+
+        return json.dumps({"error": f"No online device found matching type={device_type} name={device_name}"})
 
     async def _exec_mcp_tool(self, function_name: str, args: Dict) -> str:
         """调用 MCP 工具 — 格式: mcp_{server_id}_{tool_name}

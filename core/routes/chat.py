@@ -160,9 +160,10 @@ async def _handle_agent_action(
             return {"success": False, "error": f"Device {device_id} not connected"}
 
         execution_context = {
-            "devices": registered_devices,
+            "devices": connection_manager.get_all_devices(),
             "executor": node_executor,
             "ws_sender": ws_sender,
+            "device_id": req.device_id or "",
         }
 
         plan_result = await scheduler.plan_and_execute(

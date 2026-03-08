@@ -254,7 +254,7 @@ def test_4_react_loop_data_flow():
         assert "微信" in result["reply"] or "打开" in result["reply"], "回复应该包含操作描述"
         print("  ✅ ReAct Loop 数据流正确")
 
-    asyncio.get_event_loop().run_until_complete(_test())
+    asyncio.run(_test())
 
 
 def test_5_api_routes_import():

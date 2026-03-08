@@ -56,6 +56,11 @@ except ImportError:
         TASK_SUBMITTED = "task_submitted"
         TASK_COMPLETED = "task_completed"
         STATUS_UPDATE = "status_update"
+        DEVICE_CONNECTED = "device_connected"
+        DEVICE_DISCONNECTED = "device_disconnected"
+        ORCHESTRATION_STARTED = "orchestration_started"
+        ORCHESTRATION_COMPLETED = "orchestration_completed"
+        ORCHESTRATION_PROGRESS = "orchestration_progress"
 
     class EventBus:
         def __init__(self):
@@ -129,19 +134,38 @@ class L4WorkerThread(QThread):
     def run(self):
         """运行L4主循环"""
         self._running = True
-        
+
         try:
             # 创建新的事件循环
             asyncio.set_event_loop(asyncio.new_event_loop())
-            
+
             # 获取L4主循环实例
             self.loop = get_galaxy_loop(self.config)
-            
+
+            # Subscribe to EventBus events and forward via status_update signal
+            self._subscribe_event_bus()
+
             # 启动L4主循环
             asyncio.get_event_loop().run_until_complete(self.loop.start())
-            
+
         except Exception as e:
             logger.error(f"L4工作线程错误: {e}")
+
+    def _subscribe_event_bus(self):
+        """Subscribe to EventBus events and emit them through status_update signal."""
+        event_types_to_subscribe = [
+            EventType.DEVICE_CONNECTED,
+            EventType.DEVICE_DISCONNECTED,
+            EventType.ORCHESTRATION_STARTED,
+            EventType.ORCHESTRATION_COMPLETED,
+            EventType.ORCHESTRATION_PROGRESS,
+        ]
+        for evt_type in event_types_to_subscribe:
+            event_bus.subscribe(evt_type, lambda data, et=evt_type: self.status_update.emit({
+                "event_type": et.value if hasattr(et, 'value') else str(et),
+                "source": "event_bus",
+                "data": data if isinstance(data, dict) else {"detail": str(data)},
+            }))
     
     def submit_goal(self, goal_description: str) -> str:
         """提交目标到L4主循环"""
@@ -399,9 +423,49 @@ class MinimalistWindow(QMainWindow):
     
     def _subscribe_events(self):
         """订阅事件总线事件"""
-        # 使用Qt的信号槽机制需要在主线程中处理
-        # 这里我们使用定时器轮询事件历史
-        pass
+        # Connect L4 worker thread status_update signal to UI handler
+        if self.l4_thread:
+            self.l4_thread.status_update.connect(self._on_event_stream_update)
+
+        # Also subscribe directly on the event_bus for events emitted in the main thread
+        event_types_to_subscribe = [
+            EventType.DEVICE_CONNECTED,
+            EventType.DEVICE_DISCONNECTED,
+            EventType.ORCHESTRATION_STARTED,
+            EventType.ORCHESTRATION_COMPLETED,
+            EventType.ORCHESTRATION_PROGRESS,
+        ]
+        for evt_type in event_types_to_subscribe:
+            event_bus.subscribe(evt_type, lambda data, et=evt_type: self._on_event_bus_event(et, data))
+
+    def _on_event_stream_update(self, event_data: Dict[str, Any]):
+        """Handle event_stream updates forwarded from L4WorkerThread via signal."""
+        event_type = event_data.get("event_type", "")
+        detail = event_data.get("data", {})
+
+        label_map = {
+            "device_connected": "● 设备已连接",
+            "device_disconnected": "● 设备已断开",
+            "orchestration_started": "● 编排任务进行中...",
+            "orchestration_completed": "● 编排任务已完成",
+            "orchestration_progress": "● 编排执行中...",
+        }
+
+        label_text = label_map.get(event_type)
+        if label_text:
+            extra = detail.get("device_id", "") or detail.get("message", "")
+            if extra:
+                label_text = f"{label_text} ({extra})"
+            self.status_label.setText(label_text)
+
+        self._append_output(f"[EventStream] {event_type}: {json.dumps(detail, ensure_ascii=False)[:200]}\n")
+
+    def _on_event_bus_event(self, event_type: EventType, data):
+        """Handle events received directly from the EventBus."""
+        self._on_event_stream_update({
+            "event_type": event_type.value if hasattr(event_type, 'value') else str(event_type),
+            "data": data if isinstance(data, dict) else {"detail": str(data)},
+        })
     
     def _setup_status_timer(self):
         """设置状态更新定时器"""

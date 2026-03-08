@@ -5,11 +5,14 @@ UFO Galaxy - 事件桥接层
 将独立的核心子系统通过事件总线连接成一个有机整体。
 
 连接：
-  EventBus <─────> CommandRouter
-  EventBus <─────> Monitoring (Alerts / CircuitBreaker)
-  EventBus <─────> AI Intent Parser
-  EventBus <─────> PerformanceMonitor
-  EventBus <─────> WebSocket ConnectionManager
+  EventBus <─────> CommandRouter        (命令结果)
+  EventBus <─────> Monitoring           (告警 / 熔断)
+  EventBus <─────> AI Intent Parser     (目标 → 意图解析)
+  EventBus <─────> PerformanceMonitor   (慢请求告警)
+  EventBus <─────> DeviceRegistry       (设备注册/上线/离线)
+  EventBus <─────> DeviceCommunication  (设备连接/断开)
+  EventBus <─────> SessionRoaming       (会话迁移)
+  EventBus <─────> WebSocket            (事件流 → 前端推送)
 
 每个子系统既是事件发布者、也是事件订阅者。
 """
@@ -44,6 +47,8 @@ class EventBridge:
         if self._wired:
             return
         self._wired = True
+        _wired_count = 0
+        _total_connections = 9  # 连接 #1 ~ #9
 
         try:
             from integration.event_bus import event_bus, EventType, UIGalaxyEvent
@@ -91,6 +96,7 @@ class EventBridge:
                         logger.warning(f"EventBridge: 原始回调执行失败: {cb_err}")
 
             cmd_router._on_status_change = _cmd_to_event_bus
+            _wired_count += 1
             logger.info("EventBridge: CommandRouter → EventBus 已连接")
         except Exception as e:
             logger.warning(f"EventBridge: CommandRouter 连接失败: {e}")
@@ -131,6 +137,7 @@ class EventBridge:
                         logger.warning(f"EventBridge: 原始告警回调失败: {cb_err}")
 
             monitoring.alerts._on_alert = _alert_to_event_bus
+            _wired_count += 1
             logger.info("EventBridge: Monitoring Alerts → EventBus 已连接")
         except Exception as e:
             logger.warning(f"EventBridge: Monitoring 连接失败: {e}")
@@ -160,6 +167,7 @@ class EventBridge:
                 await router.dispatch(cmd_req)
 
             event_bus.subscribe(EventType.COMMAND_RECEIVED, _event_to_command, async_callback=True)
+            _wired_count += 1
             logger.info("EventBridge: EventBus COMMAND_RECEIVED → CommandRouter 已连接")
         except Exception as e:
             logger.warning(f"EventBridge: COMMAND_RECEIVED 连接失败: {e}")
@@ -187,6 +195,7 @@ class EventBridge:
                 )
 
             event_bus.subscribe(EventType.GOAL_SUBMITTED, _goal_to_intent, async_callback=True)
+            _wired_count += 1
             logger.info("EventBridge: EventBus GOAL_SUBMITTED → AI Intent 已连接")
         except Exception as e:
             logger.warning(f"EventBridge: GOAL_SUBMITTED 连接失败: {e}")
@@ -207,16 +216,167 @@ class EventBridge:
                 )
 
             event_bus.subscribe(EventType.PERFORMANCE_ALERT, _perf_alert_handler, async_callback=True)
+            _wired_count += 1
         except Exception:
             pass
 
         # ====================================================================
-        # 6. 启动事件总线 + 周期清理任务
+        # 6. DeviceRegistry → EventBus (设备注册/上线/离线)
+        # ====================================================================
+        try:
+            from core.device_registry import device_registry
+
+            def _on_device_registered(device):
+                event_bus.publish_sync(
+                    EventType.DEVICE_REGISTERED,
+                    source="device_registry",
+                    data={"device_id": device.device_id, "device_type": device.device_type.value,
+                          "name": device.name},
+                )
+
+            def _on_device_online(device):
+                event_bus.publish_sync(
+                    EventType.DEVICE_CONNECTED,
+                    source="device_registry",
+                    data={"device_id": device.device_id, "device_type": device.device_type.value},
+                )
+
+            def _on_device_offline(device):
+                event_bus.publish_sync(
+                    EventType.DEVICE_DISCONNECTED,
+                    source="device_registry",
+                    data={"device_id": device.device_id, "device_type": device.device_type.value},
+                )
+
+            device_registry.on_device_registered(_on_device_registered)
+            device_registry.on_device_online(_on_device_online)
+            device_registry.on_device_offline(_on_device_offline)
+            _wired_count += 1
+            logger.info("EventBridge: DeviceRegistry → EventBus 已连接")
+        except Exception as e:
+            logger.warning(f"EventBridge: DeviceRegistry 连接失败: {e}")
+
+        # ====================================================================
+        # 7. DeviceCommunication → EventBus (设备连接/断开)
+        # ====================================================================
+        try:
+            from core.device_communication import device_comm
+
+            _orig_on_connected = getattr(device_comm, '_on_device_connected', None)
+            _orig_on_disconnected = getattr(device_comm, '_on_device_disconnected', None)
+
+            async def _comm_device_connected(device_id: str, device_info: dict = None):
+                event_bus.publish_sync(
+                    EventType.DEVICE_CONNECTED,
+                    source="device_communication",
+                    data={"device_id": device_id, **(device_info or {})},
+                )
+                if _orig_on_connected:
+                    try:
+                        if asyncio.iscoroutinefunction(_orig_on_connected):
+                            await _orig_on_connected(device_id, device_info)
+                        else:
+                            _orig_on_connected(device_id, device_info)
+                    except Exception:
+                        pass
+
+            async def _comm_device_disconnected(device_id: str):
+                event_bus.publish_sync(
+                    EventType.DEVICE_DISCONNECTED,
+                    source="device_communication",
+                    data={"device_id": device_id},
+                )
+                if _orig_on_disconnected:
+                    try:
+                        if asyncio.iscoroutinefunction(_orig_on_disconnected):
+                            await _orig_on_disconnected(device_id)
+                        else:
+                            _orig_on_disconnected(device_id)
+                    except Exception:
+                        pass
+
+            device_comm._on_device_connected = _comm_device_connected
+            device_comm._on_device_disconnected = _comm_device_disconnected
+            _wired_count += 1
+            logger.info("EventBridge: DeviceCommunication → EventBus 已连接")
+        except Exception as e:
+            logger.warning(f"EventBridge: DeviceCommunication 连接失败: {e}")
+
+        # ====================================================================
+        # 8. SessionRoaming → EventBus (会话迁移)
+        # ====================================================================
+        try:
+            from galaxy_gateway.session_roaming import session_roaming
+
+            _orig_on_migrate = getattr(session_roaming, '_on_session_migrated', None)
+
+            async def _session_migrated_handler(session_id: str, from_device: str, to_device: str):
+                event_bus.publish_sync(
+                    EventType.SESSION_MIGRATED,
+                    source="session_roaming",
+                    data={"session_id": session_id, "from_device": from_device, "to_device": to_device},
+                )
+                if _orig_on_migrate:
+                    try:
+                        if asyncio.iscoroutinefunction(_orig_on_migrate):
+                            await _orig_on_migrate(session_id, from_device, to_device)
+                        else:
+                            _orig_on_migrate(session_id, from_device, to_device)
+                    except Exception:
+                        pass
+
+            session_roaming._on_session_migrated = _session_migrated_handler
+            _wired_count += 1
+            logger.info("EventBridge: SessionRoaming → EventBus 已连接")
+        except Exception as e:
+            logger.warning(f"EventBridge: SessionRoaming 连接失败: {e}")
+
+        # ====================================================================
+        # 9. EventBus → WebSocket (关键事件 → 前端推送)
+        # ====================================================================
+        try:
+            from core.routes._shared import connection_manager
+
+            async def _event_to_ws(event: UIGalaxyEvent):
+                """将事件推送给所有 WebSocket 订阅者"""
+                try:
+                    await connection_manager.broadcast_status({
+                        "type": "event_stream",
+                        "event_type": event.event_type.name,
+                        "source": event.source,
+                        "data": event.data,
+                        "timestamp": event.timestamp.isoformat(),
+                    })
+                except Exception:
+                    pass  # WebSocket 推送失败不影响主流程
+
+            _ws_event_types = [
+                EventType.DEVICE_CONNECTED, EventType.DEVICE_DISCONNECTED,
+                EventType.DEVICE_REGISTERED, EventType.DEVICE_UNREGISTERED,
+                EventType.COMMAND_RESULT, EventType.COMMAND_PROGRESS,
+                EventType.ORCHESTRATION_STARTED, EventType.ORCHESTRATION_COMPLETED,
+                EventType.ORCHESTRATION_PROGRESS,
+                EventType.TASK_COMPLETED, EventType.ERROR_OCCURRED,
+                EventType.SESSION_MIGRATED,
+            ]
+            for et in _ws_event_types:
+                event_bus.subscribe(et, _event_to_ws, async_callback=True)
+
+            _wired_count += 1
+            logger.info("EventBridge: EventBus → WebSocket 已连接 (%d 事件类型)", len(_ws_event_types))
+        except Exception as e:
+            logger.warning(f"EventBridge: WebSocket 连接失败: {e}")
+
+        # ====================================================================
+        # 10. 启动事件总线 + 周期清理任务
         # ====================================================================
         await event_bus.start()
         self._cleanup_task = create_tracked_task(self._periodic_cleanup(), name="event_bridge_cleanup")
 
-        logger.info("EventBridge: 所有连接已建立，事件总线已启动")
+        logger.info(
+            "EventBridge: 连接完成 %d/%d 成功，事件总线已启动",
+            _wired_count, _total_connections,
+        )
 
     async def _periodic_cleanup(self):
         """周期性清理任务：命令结果 + 缓存过期条目 + 限流窗口"""
