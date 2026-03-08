@@ -30,6 +30,7 @@ import uvicorn
 # --- 常量定义 ---
 DEFAULT_OUTPUT_DIR = os.getenv("MEDIA_GEN_OUTPUT_DIR", "./media_gen_output")
 DEFAULT_LOG_LEVEL = "INFO"
+VIDEO_GEN_TIMEOUT = int(os.getenv("VIDEO_GEN_TIMEOUT", "30"))
 
 # --- 枚举定义 ---
 
@@ -223,7 +224,7 @@ class MediaGenService:
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", file_path,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
-            await asyncio.wait_for(proc.communicate(), timeout=30)
+            await asyncio.wait_for(proc.communicate(), timeout=VIDEO_GEN_TIMEOUT)
             if proc.returncode == 0:
                 return file_path
         except Exception as e:

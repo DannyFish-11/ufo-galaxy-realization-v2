@@ -156,6 +156,9 @@ class TestConversationMemory:
 # 3. GalaxyCore call_node 错误处理测试
 # ============================================================================
 
+_TEST_NODE_ID = "04"  # Test node ID used across call_node error-handling tests
+
+
 class TestGalaxyCoreCallNode:
     """测试 call_node 的错误处理"""
 
@@ -180,7 +183,7 @@ class TestGalaxyCoreCallNode:
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
         core._http_client = mock_client
 
-        result = await core.call_node("04", "test", {})
+        result = await core.call_node(_TEST_NODE_ID, "test", {})
         assert result["success"] is False
         assert "timeout" in result["error"].lower()
 
@@ -206,7 +209,7 @@ class TestGalaxyCoreCallNode:
         mock_client.post = AsyncMock(side_effect=[mock_response_mcp, mock_response_direct])
         core._http_client = mock_client
 
-        result = await core.call_node("04", "test", {})
+        result = await core.call_node(_TEST_NODE_ID, "test", {})
         assert result["success"] is False
         assert "HTTP" in result["error"]
 

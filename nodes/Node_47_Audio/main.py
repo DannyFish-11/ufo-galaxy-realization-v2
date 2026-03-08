@@ -29,6 +29,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Configurable timeout for ffmpeg audio conversion (seconds)
+AUDIO_CONVERSION_TIMEOUT = int(os.getenv("AUDIO_CONVERSION_TIMEOUT", "60"))
+
 class NodeStatus(Enum):
     """
     节点运行状态枚举
@@ -272,7 +275,7 @@ class AudioService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=AUDIO_CONVERSION_TIMEOUT)
             if proc.returncode == 0:
                 logger.info(f"使用 ffmpeg 转换完成: {output_path}")
                 return True
