@@ -1,0 +1,33 @@
+{
+  "sessions": {
+    "session_6b978ec2693f": {
+      "id": "session_6b978ec2693f",
+      "user_id": "user_001",
+      "devices": [
+        "phone_01",
+        "pc_01"
+      ],
+      "active_device": "pc_01",
+      "history": [],
+      "created_at": 1773008482.3415356,
+      "updated_at": 1773008482.3417034,
+      "metadata": {}
+    },
+    "session_c5eddaad4d25": {
+      "id": "session_c5eddaad4d25",
+      "user_id": "user_002",
+      "devices": [
+        "pc_01"
+      ],
+      "active_device": "pc_01",
+      "history": [],
+      "created_at": 1773008482.3419504,
+      "updated_at": 1773008482.3419507,
+      "metadata": {}
+    }
+  },
+  "user_active_session": {
+    "user_001": "session_6b978ec2693f",
+    "user_002": "session_c5eddaad4d25"
+  }
+}
