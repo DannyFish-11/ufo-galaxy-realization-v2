@@ -69,11 +69,11 @@ class CameraConfig:
     node_name: str = "Node_46_Camera"
     camera_index: int = 0
     resolution: Tuple[int, int] = (1920, 1080)
-    output_dir: str = "/home/ubuntu/camera_output"
+    output_dir: str = os.path.join(os.path.expanduser("~"), "camera_output")
     photo_format: str = "jpg"
     video_format: str = "mp4"
     video_fps: int = 30
-    config_file_path: str = "/home/ubuntu/node_46_config.json"
+    config_file_path: str = os.path.join(os.path.expanduser("~"), "node_46_config.json")
 
 # --- 模拟摄像头硬件 ---
 

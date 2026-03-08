@@ -37,7 +37,12 @@ PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # ── Quick delegation: if no --legacy flag, delegate to unified_launcher ──
-if __name__ == "__main__" and "--legacy" not in sys.argv and "--setup" not in sys.argv:
+if __name__ == "__main__" and "--legacy" not in sys.argv:
+    if "--setup" in sys.argv:
+        # --setup: run the setup wizard directly
+        _wizard = PROJECT_ROOT / "setup_wizard.py"
+        if _wizard.exists():
+            sys.exit(subprocess.call([sys.executable, str(_wizard)]))
     # Pass all args through to unified_launcher
     _launcher = PROJECT_ROOT / "unified_launcher.py"
     if _launcher.exists():
@@ -480,6 +485,7 @@ class WebUIServer:
             from pydantic import BaseModel
             import uvicorn
 
+            from nodes.common.cors_config import get_cors_origins
             self.app = FastAPI(title="UFO Galaxy", version="2.0",
                                description="L4 级自主性智能系统")
             self.app.add_middleware(

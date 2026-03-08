@@ -128,8 +128,8 @@ class ConfigManager:
                 NodeConfig("06", "Filesystem", 8006, "core", True, critical=True),
             ],
             "monitoring": [
-                NodeConfig("65", "LoggerCentral", 8064, "monitoring", True, critical=True),
-                NodeConfig("67", "HealthMonitor", 8066, "monitoring", True, critical=True),
+                NodeConfig("65", "LoggerCentral", 8065, "monitoring", True, critical=True),
+                NodeConfig("67", "HealthMonitor", 8067, "monitoring", True, critical=True),
             ]
         }
 

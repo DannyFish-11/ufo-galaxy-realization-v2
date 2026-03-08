@@ -151,6 +151,7 @@ class SystemConfig:
     qdrant_url: str = ""
     
     # 服务配置
+    host: str = "0.0.0.0"
     web_ui_port: int = 8080
     device_api_port: int = 8766
     ufo_api_port: int = 8767
@@ -176,6 +177,11 @@ class SystemConfig:
                     if line and not line.startswith('#') and '=' in line:
                         key, value = line.split('=', 1)
                         os.environ[key.strip()] = value.strip()
+        else:
+            logger.warning(
+                ".env file not found. Copy .env.example to .env and configure: "
+                "cp .env.example .env"
+            )
         
         # 从环境变量读取
         config.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -621,6 +627,7 @@ class UnifiedWebUI:
                 version="2.0"
             )
             
+            from nodes.common.cors_config import get_cors_origins
             self.app.add_middleware(
                 CORSMiddleware,
                 allow_origins=get_cors_origins(),
@@ -730,12 +737,12 @@ class UnifiedWebUI:
                 
             config = uvicorn.Config(
                 self.app,
-                host="0.0.0.0",
+                host=self.config.host,
                 port=self.config.web_ui_port,
                 log_level="warning"
             )
             server = uvicorn.Server(config)
-            logger.info(f"API 服务启动: http://0.0.0.0:{self.config.web_ui_port}")
+            logger.info(f"API 服务启动: http://{self.config.host}:{self.config.web_ui_port}")
             logger.info(f"API 文档: http://localhost:{self.config.web_ui_port}/docs")
             await server.serve()
             
@@ -1535,6 +1542,7 @@ def main():
     parser.add_argument("--no-nodes", action="store_true", help="不启动节点系统")
     parser.add_argument("--status", action="store_true", help="查看系统状态")
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
+    parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
     parser.add_argument("--port", "-p", type=int, default=8080, help="Web UI 端口")
     
     args = parser.parse_args()
@@ -1547,6 +1555,7 @@ def main():
     galaxy.config.enable_web_ui = not args.no_ui
     galaxy.config.enable_l4 = not args.no_l4
     galaxy.config.enable_nodes = not args.no_nodes
+    galaxy.config.host = args.host
     galaxy.config.web_ui_port = args.port
     
     # 查看状态

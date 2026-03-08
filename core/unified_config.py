@@ -84,13 +84,26 @@ class UnifiedConfig:
         self._initialized = True
         logger.info("统一配置管理器初始化完成")
     
+    @staticmethod
+    def _is_placeholder(value: Any) -> bool:
+        """检查值是否为占位符（如 'sk-YOUR_OPENAI_KEY_HERE'）"""
+        if not isinstance(value, str):
+            return False
+        return "YOUR" in value.upper() and "KEY" in value.upper()
+
     def _load_config(self):
-        """加载 config.json"""
+        """加载 config.json，跳过占位符 API Key"""
         if self.config_file.exists():
             try:
                 with open(self.config_file, encoding="utf-8") as f:
                     data = json.load(f)
-                    self._config.update(self._flatten_dict(data))
+                    flat = self._flatten_dict(data)
+                    # 过滤掉占位符值（如 sk-YOUR_OPENAI_KEY_HERE）
+                    for k, v in flat.items():
+                        if self._is_placeholder(v):
+                            logger.debug(f"跳过占位符配置: {k}")
+                            continue
+                        self._config[k] = v
                 logger.info(f"加载配置文件: {self.config_file}")
             except Exception as e:
                 logger.error(f"加载配置文件失败: {e}")

@@ -174,7 +174,10 @@ class IntentParser:
 
         if best_intent and best_score > 0:
             pattern = self.RULE_PATTERNS[best_intent]
-            confidence = min(0.3 + best_score * 0.2, 0.9)
+            # Normalized confidence: score / total keywords in pattern, capped at 0.85
+            # (rule engine cap allows LLM path to provide higher confidence)
+            total_keywords = len(pattern["keywords"])
+            confidence = min(best_score / max(total_keywords, 1), 1.0) * 0.85
             return ParsedIntent(
                 intent=best_intent,
                 command=pattern["command"],

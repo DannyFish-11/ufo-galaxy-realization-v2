@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # 导入系统管理器
 from system_manager import SystemManager, NODES, NodeConfig
+from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="UFO³ Galaxy Health Monitor", version="1.0.0")
 app.add_middleware(

@@ -41,6 +41,14 @@ except ImportError:
         def delete(self, url, **kwargs):
             return self._mock_request("DELETE", url, **kwargs)
 
+        def request(self, method, url, **kwargs):
+            """Generic request method — delegates to _mock_request"""
+            return self._mock_request(method, url, **kwargs)
+
+        async def close(self):
+            """Close the mock session (no-op)"""
+            pass
+
         def _mock_request(self, method, url, **kwargs):
             class MockResponse:
                 def __init__(self, method, url, kwargs):

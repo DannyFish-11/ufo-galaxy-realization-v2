@@ -208,10 +208,31 @@ class AutonomousPlanner:
         return contingency
     
     def _generate_fallback_action(self, action: Action) -> Optional[Action]:
-        """生成备用动作"""
-        # 简单策略：使用相同命令但不同资源
-        # 实际实现中应该更复杂
-        return None
+        """生成备用动作：使用相同命令但增加 retry 标记和降低超时"""
+        fallback_params = dict(action.parameters)
+        fallback_params["retry"] = True
+        fallback_params["fallback_source"] = action.id
+
+        # 尝试找到同 capability 的替代节点
+        alt_node_id = action.node_id
+        if action.node_id:
+            for resource in self.available_resources:
+                if (resource.id != action.node_id
+                        and action.command in resource.capabilities
+                        and resource.availability > 0.3):
+                    alt_node_id = resource.id
+                    break
+
+        return Action(
+            id=f"{action.id}_fallback",
+            subtask_id=action.subtask_id,
+            node_id=alt_node_id,
+            device_id=action.device_id,
+            command=action.command,
+            parameters=fallback_params,
+            expected_duration=min(action.expected_duration * 2, 300),
+            fallback_actions=[],
+        )
     
     def update_decision_weights(self, performance_metrics: Dict) -> None:
         """根据学习/优化输出更新规划器的决策权重"""

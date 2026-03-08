@@ -17,16 +17,91 @@ from enum import Enum, auto
 import os as _os
 sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 
-# L4 组件 —— 核心模块
-from enhancements.perception.environment_scanner import EnvironmentScanner
-from enhancements.reasoning.goal_decomposer import GoalDecomposer, Goal, GoalType
-from enhancements.reasoning.autonomous_planner import AutonomousPlanner, Resource, ResourceType
-from enhancements.reasoning.world_model import WorldModel, Entity, EntityType, EntityState
-from enhancements.reasoning.metacognition_service import MetaCognitionService
-from enhancements.reasoning.autonomous_coder import AutonomousCoder
-from enhancements.execution.action_executor import ActionExecutor, ExecutionStatus
-from enhancements.monitoring.status_monitor import StatusMonitor, FeedbackCollector, MonitorLevel
-from enhancements.safety.safety_manager import SafetyManager, ErrorHandler
+# L4 组件 —— 核心模块（每个模块独立降级，缺少任一不影响其他模块）
+_logger = logging.getLogger(__name__)
+
+try:
+    from enhancements.perception.environment_scanner import EnvironmentScanner
+    _PERCEPTION_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"感知模块不可用: {_e}")
+    EnvironmentScanner = None  # type: ignore
+    _PERCEPTION_AVAILABLE = False
+
+try:
+    from enhancements.reasoning.goal_decomposer import GoalDecomposer, Goal, GoalType
+    _GOAL_DECOMPOSER_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"目标分解模块不可用: {_e}")
+    GoalDecomposer = None  # type: ignore
+    Goal = None  # type: ignore
+    GoalType = None  # type: ignore
+    _GOAL_DECOMPOSER_AVAILABLE = False
+
+try:
+    from enhancements.reasoning.autonomous_planner import AutonomousPlanner, Resource, ResourceType
+    _PLANNER_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"规划模块不可用: {_e}")
+    AutonomousPlanner = None  # type: ignore
+    Resource = None  # type: ignore
+    ResourceType = None  # type: ignore
+    _PLANNER_AVAILABLE = False
+
+try:
+    from enhancements.reasoning.world_model import WorldModel, Entity, EntityType, EntityState
+    _WORLD_MODEL_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"世界模型不可用: {_e}")
+    WorldModel = None  # type: ignore
+    Entity = None  # type: ignore
+    EntityType = None  # type: ignore
+    EntityState = None  # type: ignore
+    _WORLD_MODEL_AVAILABLE = False
+
+try:
+    from enhancements.reasoning.metacognition_service import MetaCognitionService
+    _METACOGNITION_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"元认知模块不可用: {_e}")
+    MetaCognitionService = None  # type: ignore
+    _METACOGNITION_AVAILABLE = False
+
+try:
+    from enhancements.reasoning.autonomous_coder import AutonomousCoder
+    _CODER_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"自主编码模块不可用: {_e}")
+    AutonomousCoder = None  # type: ignore
+    _CODER_AVAILABLE = False
+
+try:
+    from enhancements.execution.action_executor import ActionExecutor, ExecutionStatus
+    _EXECUTOR_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"执行器不可用: {_e}")
+    ActionExecutor = None  # type: ignore
+    ExecutionStatus = None  # type: ignore
+    _EXECUTOR_AVAILABLE = False
+
+try:
+    from enhancements.monitoring.status_monitor import StatusMonitor, FeedbackCollector, MonitorLevel
+    _MONITOR_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"状态监控不可用: {_e}")
+    StatusMonitor = None  # type: ignore
+    FeedbackCollector = None  # type: ignore
+    MonitorLevel = None  # type: ignore
+    _MONITOR_AVAILABLE = False
+
+try:
+    from enhancements.safety.safety_manager import SafetyManager, ErrorHandler
+    _SAFETY_AVAILABLE = True
+except ImportError as _e:
+    _logger.warning(f"安全管理器不可用: {_e}")
+    SafetyManager = None  # type: ignore
+    ErrorHandler = None  # type: ignore
+    _SAFETY_AVAILABLE = False
 
 # L4 组件 —— 学习模块（依赖 numpy/sklearn，允许降级）
 try:
@@ -77,23 +152,23 @@ class GalaxyMainLoopL4:
     
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
-        
-        # L4 核心组件
-        self.env_scanner = EnvironmentScanner()
-        self.goal_decomposer = GoalDecomposer()
-        self.planner = AutonomousPlanner()
-        self.world_model = WorldModel()
-        self.metacog = MetaCognitionService()
-        self.auto_coder = AutonomousCoder()
+
+        # L4 核心组件（每个模块可独立降级）
+        self.env_scanner = EnvironmentScanner() if _PERCEPTION_AVAILABLE else None
+        self.goal_decomposer = GoalDecomposer() if _GOAL_DECOMPOSER_AVAILABLE else None
+        self.planner = AutonomousPlanner() if _PLANNER_AVAILABLE else None
+        self.world_model = WorldModel() if _WORLD_MODEL_AVAILABLE else None
+        self.metacog = MetaCognitionService() if _METACOGNITION_AVAILABLE else None
+        self.auto_coder = AutonomousCoder() if _CODER_AVAILABLE else None
         self.learning_engine = AutonomousLearningEngine() if _LEARNING_AVAILABLE else None
         self.learning_optimizer = LearningOptimizer() if _LEARNING_AVAILABLE else None
-        
+
         # 执行和监控组件
-        self.action_executor = ActionExecutor()
-        self.status_monitor = StatusMonitor()
-        self.feedback_collector = FeedbackCollector(self.status_monitor)
-        self.safety_manager = SafetyManager()
-        self.error_handler = ErrorHandler(self.safety_manager)
+        self.action_executor = ActionExecutor() if _EXECUTOR_AVAILABLE else None
+        self.status_monitor = StatusMonitor() if _MONITOR_AVAILABLE else None
+        self.feedback_collector = FeedbackCollector(self.status_monitor) if (_MONITOR_AVAILABLE and self.status_monitor) else None
+        self.safety_manager = SafetyManager() if _SAFETY_AVAILABLE else None
+        self.error_handler = ErrorHandler(self.safety_manager) if (_SAFETY_AVAILABLE and self.safety_manager) else None
         
         # 状态
         self.running = False
@@ -104,6 +179,8 @@ class GalaxyMainLoopL4:
         self._max_task_history = 500  # 限制历史长度防止内存泄漏
         self._shutdown_event = asyncio.Event()
         self._main_task: Optional[asyncio.Task] = None
+
+        _logger.info(f"L4 模块状态: {self._module_status()}")
 
         # 目标队列 —— 接收来自 API / WebSocket / 定时任务的目标
         self._goal_queue: asyncio.Queue = asyncio.Queue()
@@ -126,6 +203,21 @@ class GalaxyMainLoopL4:
         )
         self.logger = logging.getLogger("GalaxyL4")
     
+    def _module_status(self) -> Dict[str, bool]:
+        """返回每个增强模块的可用性状态"""
+        return {
+            "perception": _PERCEPTION_AVAILABLE,
+            "goal_decomposer": _GOAL_DECOMPOSER_AVAILABLE,
+            "planner": _PLANNER_AVAILABLE,
+            "world_model": _WORLD_MODEL_AVAILABLE,
+            "metacognition": _METACOGNITION_AVAILABLE,
+            "autonomous_coder": _CODER_AVAILABLE,
+            "executor": _EXECUTOR_AVAILABLE,
+            "monitor": _MONITOR_AVAILABLE,
+            "safety": _SAFETY_AVAILABLE,
+            "learning": _LEARNING_AVAILABLE,
+        }
+
     async def start(self):
         """启动主循环"""
         self.logger.info("=" * 60)

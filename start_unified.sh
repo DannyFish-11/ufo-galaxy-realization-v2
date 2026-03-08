@@ -102,20 +102,36 @@ check_python() {
 
 check_dependencies() {
     log_step "检测依赖..."
-    
-    # 检查核心依赖
-    MISSING_DEPS=""
-    
+
+    # 创建虚拟环境（如果不存在）
+    if [ ! -d "venv" ]; then
+        log_step "创建虚拟环境..."
+        $PYTHON_CMD -m venv venv || {
+            log_error "虚拟环境创建失败"
+            exit 1
+        }
+        log_success "虚拟环境已创建 ✓"
+    fi
+
+    # 激活虚拟环境
+    source venv/bin/activate 2>/dev/null || . venv/bin/activate
+    # 更新 PYTHON_CMD 为虚拟环境中的 python
+    PYTHON_CMD="python"
+
+    # 快速检查核心依赖
+    MISSING_CORE=false
     for pkg in aiohttp fastapi uvicorn pydantic; do
         if ! $PYTHON_CMD -c "import $pkg" 2>/dev/null; then
-            MISSING_DEPS="$MISSING_DEPS $pkg"
+            MISSING_CORE=true
+            break
         fi
     done
-    
-    if [ -n "$MISSING_DEPS" ]; then
-        log_warning "缺失依赖:$MISSING_DEPS"
-        log_step "安装依赖..."
-        $PYTHON_CMD -m pip install --quiet $MISSING_DEPS || {
+
+    # 如果核心依赖缺失，执行完整安装
+    if [ "$MISSING_CORE" = true ] && [ -f "requirements.txt" ]; then
+        log_warning "缺失核心依赖，执行完整安装..."
+        log_step "安装依赖（首次运行可能需要几分钟）..."
+        $PYTHON_CMD -m pip install --quiet -r requirements.txt || {
             log_error "依赖安装失败"
             exit 1
         }
@@ -273,8 +289,9 @@ main() {
     # 启动统一系统
     log_step "启动 UFO Galaxy 统一系统..."
     echo ""
-    
+
     # 传递所有参数给 Python
+    export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
     $PYTHON_CMD unified_launcher.py "$@"
 }
 

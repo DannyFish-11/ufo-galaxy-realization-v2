@@ -40,6 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
+from nodes.common.cors_config import get_cors_origins
 from enhancements.multidevice.device_protocol import (
     AIPMessage, MessageType, DeviceInfo, DeviceStatus, ErrorCode,
     MessageBuilder, ProtocolValidator, ProtocolHandler, MessageRouter

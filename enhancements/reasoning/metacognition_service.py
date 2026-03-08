@@ -54,11 +54,30 @@ class LearningInsight:
 
 class MetaCognitionService:
     """元认知服务"""
-    
-    def __init__(self):
+
+    # 默认评估规则（可通过 config 覆盖）
+    DEFAULT_RULES = {
+        "strengths": [
+            {"condition": "success_rate >= 0.9", "label": "高成功率"},
+            {"condition": "user_satisfaction >= 0.8", "label": "用户满意度高"},
+            {"condition": "resource_utilization >= 0.7 and resource_utilization <= 0.9", "label": "资源利用率优秀"},
+            {"condition": "error_rate <= 0.05", "label": "错误率极低"},
+        ],
+        "weaknesses": [
+            {"condition": "success_rate < 0.7", "label": "成功率偏低"},
+            {"condition": "error_rate > 0.2", "label": "错误率过高"},
+            {"condition": "user_satisfaction < 0.6", "label": "用户满意度低"},
+            {"condition": "resource_utilization < 0.4", "label": "资源利用率不足"},
+            {"condition": "resource_utilization > 0.95", "label": "资源过度使用"},
+            {"condition": "average_duration > 300", "label": "任务执行时间过长"},
+        ],
+    }
+
+    def __init__(self, rules: Optional[Dict] = None):
         self.assessments: List[SelfAssessment] = []
         self.insights: List[LearningInsight] = []
         self.performance_history: List[Dict] = []
+        self.rules = rules or self.DEFAULT_RULES
         logger.info("MetaCognitionService initialized")
     
     def assess_performance(self, recent_tasks: List[Dict]) -> SelfAssessment:

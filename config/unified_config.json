@@ -381,7 +381,7 @@
       "health_endpoint": "/health"
     },
     "Node_23_Time": {
-      "port": 8123,
+      "port": 8023,
       "group": "tools",
       "priority": 2,
       "dependencies": [
@@ -393,7 +393,7 @@
       "health_endpoint": "/health"
     },
     "Node_24_Weather": {
-      "port": 8025,
+      "port": 8024,
       "group": "tools",
       "priority": 2,
       "dependencies": [
@@ -705,7 +705,7 @@
       "health_endpoint": "/health"
     },
     "Node_49_OctoPrint": {
-      "port": 8050,
+      "port": 8049,
       "group": "physical",
       "priority": 3,
       "dependencies": [
@@ -717,7 +717,7 @@
       "health_endpoint": "/health"
     },
     "Node_50_Transformer": {
-      "port": 8051,
+      "port": 8050,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -729,7 +729,7 @@
       "health_endpoint": "/health"
     },
     "Node_51_QuantumDispatcher": {
-      "port": 8052,
+      "port": 8051,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -741,7 +741,7 @@
       "health_endpoint": "/health"
     },
     "Node_52_QiskitSimulator": {
-      "port": 8053,
+      "port": 8052,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -753,7 +753,7 @@
       "health_endpoint": "/health"
     },
     "Node_53_GraphLogic": {
-      "port": 8054,
+      "port": 8053,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -765,7 +765,7 @@
       "health_endpoint": "/health"
     },
     "Node_54_SymbolicMath": {
-      "port": 8055,
+      "port": 8054,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -789,7 +789,7 @@
       "health_endpoint": "/health"
     },
     "Node_56_Planning": {
-      "port": 8205,
+      "port": 8056,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -801,7 +801,7 @@
       "health_endpoint": "/health"
     },
     "Node_57_QuantumCloud": {
-      "port": 8058,
+      "port": 8057,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -813,7 +813,7 @@
       "health_endpoint": "/health"
     },
     "Node_58_ModelRouter": {
-      "port": 8059,
+      "port": 8058,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -825,7 +825,7 @@
       "health_endpoint": "/health"
     },
     "Node_59_CausalInference": {
-      "port": 8060,
+      "port": 8059,
       "group": "intelligence",
       "priority": 4,
       "dependencies": [
@@ -861,7 +861,7 @@
       "health_endpoint": "/health"
     },
     "Node_64_Telemetry": {
-      "port": 8063,
+      "port": 8064,
       "group": "monitoring",
       "priority": 5,
       "dependencies": [
@@ -873,7 +873,7 @@
       "health_endpoint": "/health"
     },
     "Node_65_LoggerCentral": {
-      "port": 8064,
+      "port": 8065,
       "group": "monitoring",
       "priority": 5,
       "dependencies": [],
@@ -883,7 +883,7 @@
       "health_endpoint": "/health"
     },
     "Node_66_ConfigManager": {
-      "port": 8065,
+      "port": 8066,
       "group": "monitoring",
       "priority": 5,
       "dependencies": [
@@ -895,7 +895,7 @@
       "health_endpoint": "/health"
     },
     "Node_67_HealthMonitor": {
-      "port": 8066,
+      "port": 8067,
       "group": "monitoring",
       "priority": 5,
       "dependencies": [
@@ -907,7 +907,7 @@
       "health_endpoint": "/health"
     },
     "Node_68_Security": {
-      "port": 8067,
+      "port": 8068,
       "group": "monitoring",
       "priority": 5,
       "dependencies": [
@@ -919,7 +919,7 @@
       "health_endpoint": "/health"
     },
     "Node_69_BackupRestore": {
-      "port": 8068,
+      "port": 8069,
       "group": "monitoring",
       "priority": 5,
       "dependencies": [],
@@ -941,7 +941,7 @@
       "health_endpoint": "/health"
     },
     "Node_70_AutonomousLearning": {
-      "port": 8206,
+      "port": 8070,
       "group": "advanced",
       "priority": 6,
       "dependencies": [
@@ -965,7 +965,7 @@
       "health_endpoint": "/health"
     },
     "Node_71_MultiDeviceCoordination": {
-      "port": 8207,
+      "port": 8071,
       "group": "advanced",
       "priority": 6,
       "dependencies": [

@@ -86,7 +86,7 @@ source venv/bin/activate
 
 # 安装依赖
 print_status "info" "检查依赖..."
-pip install -q -r requirements.txt 2>/dev/null || pip install -r requirements.txt
+pip install -q -r requirements.txt || { print_status "error" "依赖安装失败"; exit 1; }
 
 # 启动系统
 echo ""
