@@ -13,7 +13,7 @@ from .aip_v3 import (
     MessageType,
     TaskStatus,
     ResultStatus,
-    
+
     # 数据结构
     Rect,
     UIElement,
@@ -21,7 +21,7 @@ from .aip_v3 import (
     Command,
     CommandResult,
     AIPMessage,
-    
+
     # 工具函数
     create_register_message,
     create_heartbeat_message,
@@ -32,6 +32,9 @@ from .aip_v3 import (
     create_error_message,
     parse_message,
     validate_message,
+
+    # Unified protocol bridge
+    UnifiedMessageTypes,
 )
 
 __all__ = [
@@ -57,4 +60,5 @@ __all__ = [
     "parse_message",
     "validate_message",
     "parse_message_compat",
+    "UnifiedMessageTypes",
 ]

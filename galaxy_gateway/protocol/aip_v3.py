@@ -463,3 +463,61 @@ def validate_message(message: AIPMessage) -> bool:
     if not message.type:
         return False
     return True
+
+
+# ============================================================================
+# Unified Protocol Bridge - AIP v2.0 ↔ v3.0
+# ============================================================================
+
+_V2_AVAILABLE = False
+_V2ExtendedMessageType = None
+_V2MessageTypeRegistry = None
+
+try:
+    from galaxy_gateway.aip_protocol_v2 import (
+        ExtendedMessageType as _V2ExtendedMessageType,
+        MessageTypeRegistry as _V2MessageTypeRegistry,
+    )
+    _V2_AVAILABLE = True
+except ImportError:
+    pass
+
+
+class UnifiedMessageTypes:
+    """
+    Single access point for all AIP message types across v2.0 and v3.0.
+
+    Usage:
+        from galaxy_gateway.protocol.aip_v3 import UnifiedMessageTypes
+        all_types = UnifiedMessageTypes.get_all_types()
+        is_valid = UnifiedMessageTypes.is_valid("peer_announce")
+    """
+
+    @classmethod
+    def get_all_types(cls) -> list:
+        """Return all valid message type strings from v2 and v3 (de-duplicated)"""
+        v3_types = [t.value for t in MessageType]
+        if _V2_AVAILABLE and _V2ExtendedMessageType is not None:
+            v2_ext_types = [t.value for t in _V2ExtendedMessageType]
+            return list(dict.fromkeys(v3_types + v2_ext_types))
+        return v3_types
+
+    @classmethod
+    def is_valid(cls, msg_type: str) -> bool:
+        """Check if a message type string is valid across any protocol version"""
+        return msg_type in cls.get_all_types()
+
+    @classmethod
+    def get_v2_extended(cls):
+        """Get v2.0 ExtendedMessageType enum (or None if unavailable)"""
+        return _V2ExtendedMessageType if _V2_AVAILABLE else None
+
+    @classmethod
+    def get_v3_message_type(cls):
+        """Get v3.0 MessageType enum"""
+        return MessageType
+
+    @classmethod
+    def get_registry(cls):
+        """Get v2.0 MessageTypeRegistry (or None if unavailable)"""
+        return _V2MessageTypeRegistry if _V2_AVAILABLE else None

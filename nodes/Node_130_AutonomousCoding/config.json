@@ -1,0 +1,6 @@
+{
+    "node_name": "Node_130_AutonomousCoding",
+    "description": "Autonomous coding engine. Generate code, fix bugs, write tests, optimize code, refactor code, and analyze code quality. Supports Python, JavaScript, and more. Use for: code generation, bug fixing, test writing, code optimization, code refactoring, documentation generation.",
+    "port": 8130,
+    "actions": ["generate_code", "fix_bug", "write_tests", "optimize", "refactor", "analyze", "status"]
+}

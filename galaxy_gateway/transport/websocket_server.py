@@ -169,26 +169,67 @@ class WebSocketManager:
     async def _handle_message(self, device_id: str, data: str):
         """处理接收到的消息"""
         try:
+            # Pre-dispatch: handle P2P mesh messages before AIP parsing
+            # (mesh types may not exist in v3 MessageType enum)
+            raw = json.loads(data)
+            msg_type = raw.get("type", "")
+
+            if msg_type in ("peer_announce", "peer_exchange", "mesh_topology"):
+                await self._handle_mesh_message(device_id, msg_type, raw)
+                return
+
             message = parse_message_compat(data)
-            
+
             # 更新心跳时间
             if device_id in self.connections:
                 self.connections[device_id].last_heartbeat = datetime.utcnow()
-            
+
             # 处理心跳消息
             if message.type == MessageType.DEVICE_HEARTBEAT:
                 await self._handle_heartbeat(device_id, message)
                 return
-            
+
             # 调用外部消息处理器
             if self.on_message:
                 await self._safe_callback(self.on_message, device_id, message)
-                
+
         except Exception as e:
             logger.error(f"Failed to handle message from {device_id}: {e}")
             error_msg = create_error_message(device_id, str(e))
             await self.send_message(device_id, error_msg)
-    
+
+    async def _handle_mesh_message(self, device_id: str, msg_type: str, raw: dict):
+        """Handle P2P mesh overlay messages (peer_announce / peer_exchange / mesh_topology)"""
+        try:
+            from core.mesh_coordinator import get_mesh_coordinator
+            mesh = get_mesh_coordinator()
+
+            if msg_type == "peer_announce":
+                peer = mesh.handle_peer_announce(device_id, raw)
+                peer_list = mesh.build_peer_exchange(exclude_device=device_id)
+                response = {
+                    "type": "peer_exchange",
+                    "peers": peer_list,
+                    "your_peer": peer.to_dict() if hasattr(peer, "to_dict") else str(peer),
+                }
+            elif msg_type == "peer_exchange":
+                peer_list = mesh.build_peer_exchange(exclude_device=device_id)
+                response = {"type": "peer_exchange", "peers": peer_list}
+            elif msg_type == "mesh_topology":
+                topology = mesh.get_topology()
+                response = {"type": "mesh_topology", "topology": topology}
+            else:
+                response = {"type": "error", "error": f"Unknown mesh type: {msg_type}"}
+
+            # Send raw JSON (not AIPMessage) since mesh types are v2 extended
+            if device_id in self.connections:
+                conn = self.connections[device_id]
+                await conn.websocket.send_text(json.dumps(response))
+        except ImportError:
+            logger.debug("mesh_coordinator not available, ignoring mesh message")
+        except Exception as e:
+            logger.error(f"Failed to handle mesh message from {device_id}: {e}")
+
     async def _handle_heartbeat(self, device_id: str, message: AIPMessage):
         """处理心跳消息"""
         ack = AIPMessage(

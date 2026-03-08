@@ -1,0 +1,6 @@
+{
+    "node_name": "Node_70_AutonomousLearning",
+    "description": "Autonomous learning and experience management. Record experiences (success/failure/observation), start learning sessions (reinforcement/incremental), query learned knowledge, detect patterns, predict outcomes, and get learning recommendations. Use for: learning from experience, knowledge extraction, pattern recognition, outcome prediction, self-improvement.",
+    "port": 8070,
+    "actions": ["record_experience", "start_learning_session", "query_knowledge", "predict_outcome", "get_recommendations", "get_status"]
+}

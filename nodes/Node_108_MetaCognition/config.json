@@ -1,0 +1,6 @@
+{
+    "node_name": "Node_108_MetaCognition",
+    "description": "MetaCognition engine for self-awareness and reflection. Perceive and analyze inputs, assess task performance, reflect on outcomes to derive insights, track cognitive state, monitor performance trends, detect cognitive biases. Use for: self-assessment, reflection, performance analysis, strategy optimization, decision quality evaluation.",
+    "port": 8108,
+    "actions": ["perceive", "comprehend", "project", "reflect", "self_assess", "adapt", "get_cognitive_state", "get_performance_trend"]
+}
