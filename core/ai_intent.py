@@ -199,7 +199,7 @@ class IntentParser:
         )
 
     async def _parse_by_llm(self, text: str, context: Optional[Dict]) -> Optional[ParsedIntent]:
-        """LLM 意图解析"""
+        """LLM 意图解析 — 通过 MultiLLMRouter 路由"""
         available_intents = list(self.RULE_PATTERNS.keys()) + ["chat"]
 
         system_prompt = f"""你是 UFO Galaxy 意图解析器。用户会输入自然语言，你需要：
@@ -219,50 +219,34 @@ class IntentParser:
         messages.append({"role": "user", "content": text})
 
         try:
-            import httpx
+            # 通过统一 LLM 路由器调用（任务类型: REASONING 以获得最佳意图解析）
+            from core.multi_llm_router import get_llm_router
+            router = get_llm_router()
 
-            # 尝试不同的 LLM 提供商
-            api_key = os.environ.get("OPENAI_API_KEY", "")
-            api_base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
-
-            if not api_key:
-                api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-                api_base = "https://api.deepseek.com/v1"
-
-            if not api_key:
-                logger.info(
-                    "LLM intent parsing skipped: no API key configured "
-                    "(set OPENAI_API_KEY or DEEPSEEK_API_KEY to enable)"
-                )
+            if not router.is_available():
+                logger.info("LLM intent parsing skipped: no provider available")
                 return None
 
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(
-                    f"{api_base}/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json={
-                        "model": "gpt-4o-mini",
-                        "messages": messages,
-                        "response_format": {"type": "json_object"},
-                        "max_tokens": 256,
-                        "temperature": 0.1,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                content = data["choices"][0]["message"]["content"]
-                parsed = json.loads(content)
+            resp = await router.chat(
+                messages=messages,
+                task_type="FAST_RESPONSE",
+                temperature=0.1,
+                max_tokens=256,
+                response_format={"type": "json_object"},
+            )
+            content = resp.content
+            parsed = json.loads(content)
 
-                return ParsedIntent(
-                    intent=parsed.get("intent", "chat"),
-                    command=parsed.get("command", "chat"),
-                    targets=parsed.get("targets", ["llm"]),
-                    params=parsed.get("params", {"message": text}),
-                    confidence=float(parsed.get("confidence", 0.8)),
-                    raw_text=text,
-                    context_used=True,
-                    suggestions=[],
-                )
+            return ParsedIntent(
+                intent=parsed.get("intent", "chat"),
+                command=parsed.get("command", "chat"),
+                targets=parsed.get("targets", ["llm"]),
+                params=parsed.get("params", {"message": text}),
+                confidence=float(parsed.get("confidence", 0.8)),
+                raw_text=text,
+                context_used=True,
+                suggestions=[],
+            )
         except Exception as e:
             logger.warning(f"LLM intent parse failed: {e}")
             return None

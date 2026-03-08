@@ -190,10 +190,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
     from core.routes.chat import _handle_agent_action, _handle_pure_chat
     from core.scheduler import AutonomousScheduler
-    from core.llm_manager import LLMManager
+    from core.multi_llm_router import get_llm_router
 
     _scheduler = AutonomousScheduler(nodes_root)
-    _llm_manager = LLMManager(os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json"))
+    _llm_router = get_llm_router()
 
     @app.websocket("/ws/device/{device_id}")
     async def device_websocket(websocket: WebSocket, device_id: str):
@@ -280,8 +280,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             context=data.get("context", [])
                         )
 
-                        if _is_action_intent(chat_req.message) and _llm_manager.is_available():
-                            result = await _handle_agent_action(chat_req, device_id, _scheduler, _llm_manager)
+                        if _is_action_intent(chat_req.message) and _llm_router.is_available():
+                            result = await _handle_agent_action(chat_req, device_id, _scheduler, _llm_router)
                             import json as _json
                             body = _json.loads(result.body.decode())
                             await websocket.send_json({
@@ -292,7 +292,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 "steps": body.get("steps", []),
                             })
                         else:
-                            result = await _handle_pure_chat(chat_req, device_id, _llm_manager)
+                            result = await _handle_pure_chat(chat_req, device_id, _llm_router)
                             import json as _json
                             body = _json.loads(result.body.decode())
                             await websocket.send_json({

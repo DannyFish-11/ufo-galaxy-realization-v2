@@ -14,8 +14,10 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+
+from core.auth import require_auth
 
 from core.routes._shared import (
     connection_manager,
@@ -130,7 +132,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(config_data)
 
     @router.post("/api/config/update")
-    async def update_config(request: Request):
+    async def update_config(request: Request, auth: dict = Depends(require_auth)):
         """
         更新配置 - 支持所有 LLM API Key
         写入 .env 文件并即时热更新到 os.environ
@@ -174,17 +176,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 for key, val in sorted(current_env.items()):
                     f.write(f"{key}={val}\n")
 
-            # 热重载 LLM Manager 以拾取新 API Key
+            # 热重载 LLM Router 以拾取新 API Key
             if updated_keys and any("API_KEY" in k or "URL" in k for k in updated_keys):
                 try:
-                    from core.llm_manager import LLMManager
-                    _llm = LLMManager(os.path.join(
-                        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.json"
-                    ))
-                    _llm.reload()
-                    logger.info(f"LLM Manager 已热重载 (更新: {updated_keys})")
+                    from core.multi_llm_router import get_llm_router
+                    router = get_llm_router()
+                    router._discover_providers()  # 重新发现 providers
+                    logger.info(f"LLM Router 已热重载 (更新: {updated_keys})")
                 except Exception as e:
-                    logger.warning(f"LLM Manager 热重载失败: {e}")
+                    logger.warning(f"LLM Router 热重载失败: {e}")
+
+                # 同步刷新能力编排器
+                try:
+                    from core.capability_orchestrator import capability_orchestrator
+                    import asyncio
+                    await capability_orchestrator.reinitialize()
+                    logger.info("CapabilityOrchestrator 已重新加载")
+                except Exception as e:
+                    logger.debug(f"CapabilityOrchestrator 重载跳过: {e}")
 
             return {"status": "success", "message": "Configuration updated", "updated": updated_keys}
         except Exception as e:

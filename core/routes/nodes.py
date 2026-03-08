@@ -38,12 +38,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
 
     from core.scheduler import AutonomousScheduler
-    from core.llm_manager import LLMManager
+    from core.multi_llm_router import get_llm_router
 
     scheduler = AutonomousScheduler(nodes_root)
-    llm_manager = LLMManager(os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.json"
-    ))
+    llm_router = get_llm_router()
 
     class AutonomousRequest(BaseModel):
         instruction: str
@@ -208,7 +206,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 plan_result = await scheduler.plan_and_execute(
                     req.instruction,
-                    llm_manager,
+                    llm_router,
                     execution_context
                 )
                 return plan_result

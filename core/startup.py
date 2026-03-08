@@ -53,6 +53,8 @@ _SUBSYSTEM_DEPS: Dict[str, List[str]] = {
     "event_bridge": ["command_router"],    # 事件桥接依赖命令路由
     "llm_router": [],
     "agent_system": ["llm_router"],       # Agent 依赖 LLM 路由
+    "mcp_loader": [],
+    "capability_orchestrator": ["mcp_loader"],  # 能力编排需要 MCP 工具
     "digital_twin": [],
     "world_model": [],
     "node_discovery": [],
@@ -422,6 +424,70 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     except Exception as e:
         results["agent_system"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"Agent 系统初始化失败: {e}")
+
+    # ====================================================================
+    # 9b. MCP 工具加载（从 config/mcp_servers.json 读取并加载）
+    # ====================================================================
+    try:
+        from core.mcp_loader import mcp_loader
+        import json as _json
+
+        mcp_config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "config", "mcp_servers.json"
+        )
+        auto_started = 0
+        if os.path.exists(mcp_config_path):
+            with open(mcp_config_path, "r", encoding="utf-8") as f:
+                mcp_config = _json.load(f)
+            for srv in mcp_config.get("servers", []):
+                if not srv.get("auto_start", False):
+                    continue
+                try:
+                    # 解析环境变量引用 (${VAR_NAME} → os.environ)
+                    env = {}
+                    for k, v in (srv.get("env") or {}).items():
+                        if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
+                            env[k] = os.environ.get(v[2:-1], "")
+                        else:
+                            env[k] = v
+                    await mcp_loader.load(
+                        name=srv["name"],
+                        command=srv["command"],
+                        env=env if env else None,
+                        auto_start=True,
+                    )
+                    auto_started += 1
+                except Exception as e:
+                    logger.debug(f"MCP server '{srv['name']}' 跳过: {e}")
+
+        results["mcp_loader"] = {
+            "status": "ok",
+            "servers_loaded": len(mcp_loader.servers),
+            "auto_started": auto_started,
+        }
+        logger.info(
+            f"MCP 工具加载器就绪: {len(mcp_loader.servers)} 服务器, "
+            f"{auto_started} 个自动启动"
+        )
+    except Exception as e:
+        results["mcp_loader"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"MCP 加载器初始化失败: {e}")
+
+    # ====================================================================
+    # 9c. 能力编排器（统一 MCP + Skill + Node 能力注册表）
+    # ====================================================================
+    try:
+        from core.capability_orchestrator import capability_orchestrator
+        await capability_orchestrator.initialize()
+        cap_count = len(capability_orchestrator.capabilities)
+        results["capability_orchestrator"] = {
+            "status": "ok",
+            "capabilities_loaded": cap_count,
+        }
+        logger.info(f"能力编排器就绪: {cap_count} 个能力已注册")
+    except Exception as e:
+        results["capability_orchestrator"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"能力编排器初始化失败: {e}")
 
     # ====================================================================
     # 10. 数字孪生引擎

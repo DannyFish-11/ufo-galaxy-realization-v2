@@ -37,6 +37,43 @@ import uvicorn
 import httpx
 from nodes.common.cors_config import get_cors_origins
 
+
+def _safe_condition(condition: str, context: dict) -> bool:
+    """Safely evaluate a simple condition string without eval().
+
+    Supports: ``key == value``, ``key != value``, ``key > value``,
+    ``key in list_val``, plain key truthiness check.
+    Falls back to True if the condition cannot be parsed.
+    """
+    import ast as _ast
+    import operator
+    import re
+
+    condition = condition.strip()
+    if not condition:
+        return True
+
+    ops = {"==": operator.eq, "!=": operator.ne, ">=": operator.ge,
+           "<=": operator.le, ">": operator.gt, "<": operator.lt}
+
+    for op_str, op_func in sorted(ops.items(), key=lambda x: -len(x[0])):
+        if op_str in condition:
+            left, right = condition.split(op_str, 1)
+            left, right = left.strip(), right.strip()
+            lval = context.get(left, left)
+            try:
+                rval = _ast.literal_eval(right)
+            except (ValueError, SyntaxError):
+                rval = context.get(right, right)
+            try:
+                return op_func(lval, rval)
+            except TypeError:
+                return False
+
+    # Simple truthiness: check if context[condition] is truthy
+    return bool(context.get(condition, True))
+
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -298,8 +335,8 @@ class OrchestratorService:
         # 检查条件
         if task.condition and context:
             try:
-                # 简单的条件评估
-                if not eval(task.condition, {"__builtins__": {}}, context):
+                # 安全条件评估（不使用 eval）
+                if not _safe_condition(task.condition, context):
                     logger.info(f"Task {task.task_id} skipped (condition not met)")
                     return TaskResult(
                         task_id=task.task_id,
