@@ -17,5 +17,43 @@
       }
     },
     "timestamp": "2026-03-08T13:31:17.837239"
+  },
+  "session_snapshot:464839dd-80b": {
+    "value": {
+      "session_id": "464839dd-80b",
+      "created_at": 1772978576.7243402,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772978576.7245793
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T14:02:56.725939"
+  },
+  "session_snapshot:2fd12095-1d8": {
+    "value": {
+      "session_id": "2fd12095-1d8",
+      "created_at": 1772978589.5077457,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772978589.5078642
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T14:03:09.509076"
   }
 }
