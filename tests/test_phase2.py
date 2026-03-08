@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager
 import threading
 
+import pytest
+
 # Simulated node implementations for local testing
 # In production, these would connect to actual services
 
@@ -54,6 +56,13 @@ class TestRunner:
         print("=" * 60)
         
         return passed == total
+
+
+@pytest.fixture
+def runner():
+    """Pytest fixture that provides a fresh TestRunner instance."""
+    return TestRunner()
+
 
 # =============================================================================
 # Simulated Nodes for Local Testing

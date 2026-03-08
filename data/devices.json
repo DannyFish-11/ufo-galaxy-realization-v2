@@ -39,9 +39,9 @@
       "port": 0,
       "mac_address": "",
       "metadata": {},
-      "registered_at": 1772877882.6731825,
-      "last_seen": 1772877882.6731827,
-      "last_heartbeat": 1772877882.673183,
+      "registered_at": 1772898916.9124045,
+      "last_seen": 1772898916.9124048,
+      "last_heartbeat": 1772898916.9124048,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
@@ -73,5 +73,5 @@
     ],
     "touch": []
   },
-  "saved_at": 1772877882.6738021
+  "saved_at": 1772898916.912975
 }

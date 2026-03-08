@@ -70,6 +70,20 @@ class PlatformType(Enum):
     MACOS = "macos"
     UNKNOWN = "unknown"
 
+
+class GestureType(Enum):
+    """Touch / gesture types recognised by hardware trigger listeners"""
+    SWIPE_UP = "swipe_up"
+    SWIPE_DOWN = "swipe_down"
+    SWIPE_LEFT = "swipe_left"
+    SWIPE_RIGHT = "swipe_right"
+    TAP = "tap"
+    DOUBLE_TAP = "double_tap"
+    LONG_PRESS = "long_press"
+    PINCH_IN = "pinch_in"
+    PINCH_OUT = "pinch_out"
+    UNKNOWN = "unknown"
+
 # =============================================================================
 # Data Models
 # =============================================================================
