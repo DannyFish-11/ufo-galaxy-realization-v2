@@ -25,11 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 class CrossDeviceCoordinator:
-    """跨设备协同协调器"""
-    
+    """跨设备协同协调器 — 共享数据持久化到 data/shared_data.json"""
+
+    _SHARED_DATA_PATH = os.path.join("data", "shared_data.json")
+
     def __init__(self):
         self.shared_clipboard: Dict[str, Any] = {}
         self.device_states: Dict[str, Dict] = {}
+        self._load_shared_data()
     
     async def execute_cross_device_task(self, command: str, context: Dict = None) -> Dict:
         """
@@ -417,30 +420,51 @@ class CrossDeviceCoordinator:
             return "pause_media"
     
     def set_shared_data(self, key: str, value: Any):
-        """设置共享数据"""
+        """设置共享数据（自动持久化）"""
         self.shared_clipboard[key] = {
             "value": value,
             "timestamp": datetime.now().isoformat()
         }
-        logger.info(f"✅ 共享数据已设置: {key}")
-    
+        self._save_shared_data()
+        logger.info(f"共享数据已设置: {key}")
+
     def get_shared_data(self, key: str) -> Optional[Any]:
         """获取共享数据"""
         data = self.shared_clipboard.get(key)
         if data:
             return data.get("value")
         return None
-    
+
     def update_device_state(self, device_id: str, state: Dict):
         """更新设备状态"""
         self.device_states[device_id] = {
             **state,
             "updated_at": datetime.now().isoformat()
         }
-    
+
     def get_device_state(self, device_id: str) -> Optional[Dict]:
         """获取设备状态"""
         return self.device_states.get(device_id)
+
+    # === 持久化 ===
+
+    def _load_shared_data(self):
+        """从文件加载共享数据"""
+        try:
+            if os.path.exists(self._SHARED_DATA_PATH):
+                with open(self._SHARED_DATA_PATH, encoding="utf-8") as f:
+                    self.shared_clipboard = json.load(f)
+        except Exception as e:
+            logger.warning(f"加载共享数据失败: {e}")
+
+    def _save_shared_data(self):
+        """保存共享数据到文件"""
+        try:
+            os.makedirs(os.path.dirname(self._SHARED_DATA_PATH), exist_ok=True)
+            with open(self._SHARED_DATA_PATH, "w", encoding="utf-8") as f:
+                json.dump(self.shared_clipboard, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"保存共享数据失败: {e}")
 
 
 # 全局跨设备协调器实例

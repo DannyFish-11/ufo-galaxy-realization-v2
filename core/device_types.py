@@ -30,7 +30,11 @@ from galaxy_gateway.protocol.aip_v3 import (
 # ============================================================================
 
 class DeviceType(str, Enum):
-    """设备类型大类 — 所有模块统一使用"""
+    """设备类型大类 — 所有模块统一使用
+
+    核心平台类型 + 物理设备类型（来自 Node_71 IoT 场景）。
+    """
+    # === 核心平台 ===
     ANDROID = "android"
     IOS = "ios"
     WINDOWS = "windows"
@@ -39,16 +43,34 @@ class DeviceType(str, Enum):
     IOT = "iot"
     BROWSER = "browser"
     CLOUD = "cloud"
+
+    # === 物理/IoT 设备（来自 Node_71）===
+    DRONE = "drone"
+    PRINTER_3D = "printer_3d"
+    ROBOT = "robot"
+    CAMERA = "camera"
+    SENSOR = "sensor"
+    ACTUATOR = "actuator"
+    DISPLAY = "display"
+    SPEAKER = "speaker"
+    EMBEDDED = "embedded"
+
+    # === 通用 ===
     CUSTOM = "custom"
     UNKNOWN = "unknown"
 
 
 class DeviceStatus(str, Enum):
-    """设备状态"""
+    """设备状态 — 合并所有子系统的状态定义"""
     OFFLINE = "offline"
     ONLINE = "online"
     BUSY = "busy"
+    IDLE = "idle"
     ERROR = "error"
+    MAINTENANCE = "maintenance"
+    DISCOVERING = "discovering"
+    REGISTERING = "registering"
+    DEGRADED = "degraded"
     UNKNOWN = "unknown"
 
 
@@ -88,6 +110,10 @@ DEVICE_TYPE_TO_AIP: dict[DeviceType, list[AIPDeviceType]] = {
         AIPDeviceType.EMBEDDED_ARDUINO,
         AIPDeviceType.IOT_GENERIC,
     ],
+    DeviceType.EMBEDDED: [
+        AIPDeviceType.EMBEDDED_ESP32,
+        AIPDeviceType.EMBEDDED_ARDUINO,
+    ],
     DeviceType.CLOUD: [
         AIPDeviceType.CLOUD_HUAWEI,
         AIPDeviceType.CLOUD_ALIYUN,
@@ -111,12 +137,20 @@ _PREFIX_TO_DEVICE_TYPE: dict[str, DeviceType] = {
     "macos": DeviceType.MACOS,
     "linux": DeviceType.LINUX,
     "cloud": DeviceType.CLOUD,
-    "embedded": DeviceType.IOT,
+    "embedded": DeviceType.EMBEDDED,
     "iot": DeviceType.IOT,
     "web": DeviceType.BROWSER,
     "browser": DeviceType.BROWSER,
     "container": DeviceType.CUSTOM,
     "virtual": DeviceType.CUSTOM,
+    "drone": DeviceType.DRONE,
+    "printer": DeviceType.PRINTER_3D,
+    "robot": DeviceType.ROBOT,
+    "camera": DeviceType.CAMERA,
+    "sensor": DeviceType.SENSOR,
+    "actuator": DeviceType.ACTUATOR,
+    "display": DeviceType.DISPLAY,
+    "speaker": DeviceType.SPEAKER,
 }
 
 

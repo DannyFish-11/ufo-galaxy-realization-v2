@@ -14,11 +14,13 @@ Version: 1.0
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable
 
 logger = logging.getLogger("UFO-Galaxy.SessionRoaming")
@@ -128,6 +130,8 @@ class SessionRoamingManager:
     IDLE_TIMEOUT: float = 300.0
     # 快照存储键前缀
     SNAPSHOT_KEY_PREFIX: str = "session_snapshot:"
+    # 持久化存储路径
+    SESSIONS_FILE: str = os.path.join("data", "sessions.json")
 
     def __init__(self):
         self._sessions: Dict[str, Session] = {}
@@ -136,7 +140,11 @@ class SessionRoamingManager:
         # 注意力焦点变化回调（device_id -> session_id 迁移）
         self._on_migrated: Optional[Callable[[str, str, str], Any]] = None
 
-        logger.info("SessionRoamingManager initialized")
+        # 从文件恢复会话
+        self._load_sessions()
+        logger.info(
+            f"SessionRoamingManager initialized, restored {len(self._sessions)} sessions"
+        )
 
     # ------------------------------------------------------------------
     # 会话生命周期
@@ -171,6 +179,7 @@ class SessionRoamingManager:
         )
         self._sessions[session_id] = session
         self._device_session_map[device_id] = session_id
+        self._save_sessions()
         logger.info(f"[SessionRoaming] 会话创建: session_id={session_id} device={device_id}")
         return session
 
@@ -193,6 +202,7 @@ class SessionRoamingManager:
             return
         session.context.history.append(ConversationTurn(role=role, content=content))
         session.last_active = time.time()
+        self._save_sessions()
 
     def update_task_state(self, session_id: str, task_state: Dict):
         """更新会话的任务状态"""
@@ -211,6 +221,7 @@ class SessionRoamingManager:
         # 移除设备映射
         if self._device_session_map.get(session.device_id) == session_id:
             del self._device_session_map[session.device_id]
+        self._save_sessions()
         logger.info(f"[SessionRoaming] 会话关闭: session_id={session_id}")
 
     # ------------------------------------------------------------------
@@ -338,32 +349,77 @@ class SessionRoamingManager:
         self._on_migrated = callback
 
     # ------------------------------------------------------------------
-    # 持久化
+    # 持久化 — 文件级 JSON 存储（跨重启恢复）
     # ------------------------------------------------------------------
 
-    def _persist_snapshot(self, session_id: str, snapshot: Dict):
-        """将会话快照存储到 cross_device_coordinator 共享数据"""
+    def _save_sessions(self):
+        """将所有活跃会话保存到 JSON 文件"""
         try:
-            from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
-            if not hasattr(SessionRoamingManager, "_coordinator"):
-                SessionRoamingManager._coordinator = CrossDeviceCoordinator()
+            os.makedirs(os.path.dirname(self.SESSIONS_FILE), exist_ok=True)
+            data = {
+                "sessions": {
+                    sid: s.to_dict() for sid, s in self._sessions.items()
+                    if s.state != SessionState.CLOSED
+                },
+                "device_session_map": dict(self._device_session_map),
+                "saved_at": time.time(),
+            }
+            with open(self.SESSIONS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 保存会话失败: {e}")
+
+    def _load_sessions(self):
+        """从 JSON 文件恢复会话"""
+        try:
+            if not os.path.exists(self.SESSIONS_FILE):
+                return
+            with open(self.SESSIONS_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+            for sid, sdata in data.get("sessions", {}).items():
+                ctx = SessionContext.from_dict(sdata.get("context", {"session_id": sid}))
+                session = Session(
+                    session_id=sid,
+                    device_id=sdata.get("device_id", ""),
+                    state=SessionState(sdata.get("state", "idle")),
+                    context=ctx,
+                    created_at=sdata.get("created_at", time.time()),
+                    last_active=sdata.get("last_active", time.time()),
+                )
+                self._sessions[sid] = session
+            self._device_session_map = data.get("device_session_map", {})
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 加载会话失败: {e}")
+
+    def _persist_snapshot(self, session_id: str, snapshot: Dict):
+        """将会话快照存储到文件 + cross_device_coordinator（双写）"""
+        # 1. 本地文件持久化
+        self._save_sessions()
+        # 2. 共享数据存储（跨设备可访问）
+        try:
+            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
             key = f"{self.SNAPSHOT_KEY_PREFIX}{session_id}"
-            SessionRoamingManager._coordinator.set_shared_data(key, snapshot)
+            cross_device_coordinator.set_shared_data(key, snapshot)
             logger.debug(f"[SessionRoaming] 快照持久化: key={key}")
         except Exception as e:
-            logger.warning(f"[SessionRoaming] 快照持久化失败: {e}")
+            logger.warning(f"[SessionRoaming] 共享数据快照失败（本地文件已保存）: {e}")
 
     def load_snapshot(self, session_id: str) -> Optional[Dict]:
-        """从共享数据加载会话快照"""
+        """从共享数据或本地文件加载会话快照"""
+        # 先尝试共享数据
         try:
-            coordinator = getattr(SessionRoamingManager, "_coordinator", None)
-            if coordinator is None:
-                return None
+            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
             key = f"{self.SNAPSHOT_KEY_PREFIX}{session_id}"
-            return coordinator.get_shared_data(key)
-        except Exception as e:
-            logger.warning(f"[SessionRoaming] 加载快照失败: {e}")
-            return None
+            result = cross_device_coordinator.get_shared_data(key)
+            if result:
+                return result
+        except Exception:
+            pass
+        # 回退到本地 session 存储
+        session = self._sessions.get(session_id)
+        if session:
+            return session.context.to_dict()
+        return None
 
     # ------------------------------------------------------------------
     # 推送上下文到目标设备

@@ -30,6 +30,7 @@ from .webrtc_proxy import (
     proxy_webrtc_signaling,
 )
 from nodes.common.cors_config import get_cors_origins
+from .unified_device_api import router as unified_device_router
 
 # 配置日志
 logging.basicConfig(
@@ -112,6 +113,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 统一设备 & 会话管理 API
+app.include_router(unified_device_router, prefix="/api/v1")
 
 
 # ============================================================================

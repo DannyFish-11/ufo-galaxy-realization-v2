@@ -70,8 +70,8 @@ class TaskType:
 
 
 class Device:
-    """设备信息"""
-    
+    """设备信息 — 路由层运行时视图（WebSocket 连接 + 核心注册表同步）"""
+
     def __init__(self, device_id: str, device_type: str, capabilities: List[str]):
         self.device_id = device_id
         self.device_type = device_type
@@ -79,7 +79,7 @@ class Device:
         self.status = "online"
         self.last_seen = datetime.now()
         self.websocket = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "device_id": self.device_id,
@@ -90,50 +90,89 @@ class Device:
         }
 
 
+def _get_registry():
+    """延迟获取全局设备注册表单例"""
+    from core.device_registry import device_registry
+    return device_registry
+
+
 class DeviceRouter:
-    """设备路由器"""
-    
+    """设备路由器 — 委托设备注册/注销到 core.device_registry"""
+
     def __init__(self):
         self.devices: Dict[str, Device] = {}
         self.task_queue: Dict[str, Dict] = {}
         self.task_results: Dict[str, Dict] = {}
-    
-    def register_device(self, device_id: str, device_type: str, 
-                       capabilities: List[str], websocket=None) -> bool:
-        """注册设备"""
+
+    def register_device(self, device_id: str, device_type: str,
+                        capabilities: List[str], websocket=None) -> bool:
+        """注册设备 — 同时写入本地运行时表和统一注册表"""
         try:
             device = Device(device_id, device_type, capabilities)
             device.websocket = websocket
             self.devices[device_id] = device
-            
-            logger.info(f"✅ 设备注册成功: {device_id} ({device_type})")
+
+            # 同步到统一注册表（持久化 + 全局索引）
+            try:
+                registry = _get_registry()
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.ensure_future(registry.register(
+                        device_id=device_id,
+                        device_type=device_type,
+                        name=f"Device-{device_id[:8]}",
+                        capabilities=capabilities,
+                    ))
+                else:
+                    loop.run_until_complete(registry.register(
+                        device_id=device_id,
+                        device_type=device_type,
+                        name=f"Device-{device_id[:8]}",
+                        capabilities=capabilities,
+                    ))
+            except Exception as e:
+                logger.debug(f"同步到统一注册表失败（非致命）: {e}")
+
+            logger.info(f"设备注册成功: {device_id} ({device_type})")
             return True
-            
+
         except Exception as e:
-            logger.error(f"❌ 设备注册失败: {e}")
+            logger.error(f"设备注册失败: {e}")
             return False
-    
+
     def unregister_device(self, device_id: str) -> bool:
         """注销设备"""
         try:
             if device_id in self.devices:
                 del self.devices[device_id]
-                logger.info(f"✅ 设备注销成功: {device_id}")
+
+                # 同步到统一注册表
+                try:
+                    registry = _get_registry()
+                    import asyncio
+                    asyncio.ensure_future(registry.unregister(device_id))
+                except Exception:
+                    pass
+
+                logger.info(f"设备注销成功: {device_id}")
                 return True
             return False
-            
+
         except Exception as e:
-            logger.error(f"❌ 设备注销失败: {e}")
+            logger.error(f"设备注销失败: {e}")
             return False
-    
+
     def get_device(self, device_id: str) -> Optional[Device]:
         """获取设备"""
         return self.devices.get(device_id)
-    
-    def get_devices_by_type(self, device_type: str) -> List[Device]:
+
+    def get_devices_by_type(self, device_type) -> List[Device]:
         """根据类型获取设备列表"""
-        return [d for d in self.devices.values() if d.device_type == device_type]
-    
+        type_val = device_type.value if hasattr(device_type, 'value') else str(device_type)
+        return [d for d in self.devices.values()
+                if (d.device_type.value if hasattr(d.device_type, 'value') else d.device_type) == type_val]
+
     def get_devices_by_capability(self, capability: str) -> List[Device]:
         """根据能力获取设备列表"""
         return [d for d in self.devices.values() if capability in d.capabilities]

@@ -85,8 +85,19 @@ class MessageType(IntEnum):
     SESSION_RESTORE = 0x73     # 目标设备恢复会话
 
 
+from core.device_types import (
+    DeviceType as UnifiedDeviceType,
+    DeviceStatus as UnifiedDeviceStatus,
+    resolve_device_type,
+)
+
+
 class DeviceType(IntEnum):
-    """Device Types supported by UFO Galaxy"""
+    """AIP v2.0 Binary Device Types (wire format only).
+
+    For business logic, convert to ``core.device_types.DeviceType`` via
+    :func:`to_unified_device_type`.
+    """
     UNKNOWN = 0
     LINUX_SERVER = 1
     LINUX_DESKTOP = 2
@@ -96,6 +107,38 @@ class DeviceType(IntEnum):
     EMBEDDED = 6
     CONTAINER = 7
     VIRTUAL = 8
+
+
+# === AIP v2 IntEnum ↔ Unified str Enum 转换表 ===
+_V2_TO_UNIFIED: dict[int, UnifiedDeviceType] = {
+    DeviceType.UNKNOWN: UnifiedDeviceType.UNKNOWN,
+    DeviceType.LINUX_SERVER: UnifiedDeviceType.LINUX,
+    DeviceType.LINUX_DESKTOP: UnifiedDeviceType.LINUX,
+    DeviceType.ANDROID_PHONE: UnifiedDeviceType.ANDROID,
+    DeviceType.ANDROID_TABLET: UnifiedDeviceType.ANDROID,
+    DeviceType.ANDROID_TV: UnifiedDeviceType.ANDROID,
+    DeviceType.EMBEDDED: UnifiedDeviceType.EMBEDDED,
+    DeviceType.CONTAINER: UnifiedDeviceType.CUSTOM,
+    DeviceType.VIRTUAL: UnifiedDeviceType.CUSTOM,
+}
+
+_UNIFIED_TO_V2: dict[str, int] = {
+    UnifiedDeviceType.LINUX.value: DeviceType.LINUX_SERVER,
+    UnifiedDeviceType.ANDROID.value: DeviceType.ANDROID_PHONE,
+    UnifiedDeviceType.EMBEDDED.value: DeviceType.EMBEDDED,
+    UnifiedDeviceType.CUSTOM.value: DeviceType.CONTAINER,
+    UnifiedDeviceType.UNKNOWN.value: DeviceType.UNKNOWN,
+}
+
+
+def to_unified_device_type(v2_type: "DeviceType") -> UnifiedDeviceType:
+    """将 AIP v2 IntEnum 转换为统一 DeviceType。"""
+    return _V2_TO_UNIFIED.get(int(v2_type), UnifiedDeviceType.UNKNOWN)
+
+
+def from_unified_device_type(unified: UnifiedDeviceType) -> "DeviceType":
+    """将统一 DeviceType 转换为 AIP v2 IntEnum。"""
+    return DeviceType(_UNIFIED_TO_V2.get(unified.value, DeviceType.UNKNOWN))
 
 
 class DeviceStatus(IntEnum):

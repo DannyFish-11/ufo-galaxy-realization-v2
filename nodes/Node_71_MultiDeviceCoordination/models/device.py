@@ -10,35 +10,20 @@ from enum import Enum, auto
 from datetime import datetime
 
 
-class DeviceType(str, Enum):
-    """设备类型枚举"""
-    DRONE = "drone"
-    PRINTER_3D = "printer_3d"
-    ROBOT = "robot"
-    CAMERA = "camera"
-    SENSOR = "sensor"
-    ACTUATOR = "actuator"
-    DISPLAY = "display"
-    SPEAKER = "speaker"
-    ANDROID = "android"
-    IOS = "ios"
-    WINDOWS = "windows"
-    LINUX = "linux"
-    EMBEDDED = "embedded"
-    CLOUD = "cloud"
-    UNKNOWN = "unknown"
+# 统一导入：使用 core.device_types 作为单一事实来源
+from core.device_types import DeviceType, DeviceStatus  # noqa: E402
 
 
 class DeviceState(str, Enum):
-    """设备状态枚举"""
+    """设备状态枚举 — 值与 core.device_types.DeviceStatus 对齐"""
     ONLINE = "online"
     OFFLINE = "offline"
     BUSY = "busy"
     IDLE = "idle"
     ERROR = "error"
     MAINTENANCE = "maintenance"
-    DISCOVERING = "discovering"  # 正在发现中
-    REGISTERING = "registering"  # 正在注册中
+    DISCOVERING = "discovering"
+    REGISTERING = "registering"
 
 
 class DiscoveryProtocol(str, Enum):
