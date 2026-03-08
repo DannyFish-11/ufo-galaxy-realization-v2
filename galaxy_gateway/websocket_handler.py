@@ -54,7 +54,16 @@ class ConnectionManager:
             if device_id:
                 device_router.unregister_device(device_id)
                 del self.device_connections[device_id]
-            
+
+                # 同步到 core 的 registered_devices
+                try:
+                    from core.routes._shared import registered_devices as core_registered_devices
+                    if device_id in core_registered_devices:
+                        core_registered_devices[device_id]["status"] = "offline"
+                        core_registered_devices[device_id]["online"] = False
+                except Exception:
+                    pass
+
             logger.info(f"✅ WebSocket 连接断开: {connection_id}")
     
     async def send_message(self, connection_id: str, message: Dict):
@@ -182,6 +191,26 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
         }
 
         await websocket.send_json(response)
+
+        # 同步到 core 的 registered_devices，打通 chat→device 链路
+        if success:
+            try:
+                from core.routes._shared import registered_devices as core_registered_devices
+                core_registered_devices[device_id] = {
+                    "device_id": device_id,
+                    "device_type": device_type_raw,
+                    "device_name": device_info.get("name", device_info.get("model", f"Device-{device_id[:8]}")),
+                    "capabilities": capabilities,
+                    "os_version": device_info.get("os_version", ""),
+                    "registered_at": datetime.utcnow().isoformat(),
+                    "last_seen": datetime.utcnow().isoformat(),
+                    "status": "online",
+                    "online": True,
+                    "source": "gateway_ws",
+                }
+            except Exception as sync_err:
+                logger.debug(f"同步设备到 core registered_devices 失败: {sync_err}")
+
         logger.info(f"✅ 设备注册完成: {device_id} (type={device_type_raw})")
 
     except Exception as e:
