@@ -524,6 +524,29 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"会话管理/全链路编排器初始化失败: {e}")
 
     # ====================================================================
+    # 9a-2. SessionRoaming + WakeEventBus + WakeRouter 初始化
+    # ====================================================================
+    try:
+        from galaxy_gateway.session_roaming import session_roaming
+        from galaxy_gateway.wake_event_bus import wake_event_bus
+        from galaxy_gateway.wake_router import wake_router
+
+        results["session_roaming"] = {
+            "status": "ok",
+            "active_sessions": len(session_roaming._sessions),
+        }
+        results["wake_event_bus"] = {"status": "ok"}
+        results["wake_router"] = {"status": "ok"}
+        logger.info(
+            "SessionRoaming + WakeEventBus + WakeRouter 已初始化 "
+            f"(活跃会话: {len(session_roaming._sessions)})"
+        )
+    except Exception as e:
+        results["session_roaming"] = {"status": "degraded", "error": str(e)}
+        results["wake_event_bus"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"SessionRoaming/WakeEventBus 初始化失败: {e}")
+
+    # ====================================================================
     # 9b. MCP 工具加载（从 config/mcp_servers.json 读取并加载）
     # ====================================================================
     try:

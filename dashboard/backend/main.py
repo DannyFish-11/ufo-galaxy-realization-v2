@@ -964,7 +964,8 @@ async def dashboard_chat(request: dict):
     message = request.get("message", "")
     device_id = request.get("device_id", "")
     context = request.get("context", [])
-    session_id = device_id or "default"
+    session_id = request.get("session_id", "") or device_id or "default"
+    user_id = request.get("user_id", "default")
 
     logger.info(f"Dashboard Chat: {message[:50]}...")
 
