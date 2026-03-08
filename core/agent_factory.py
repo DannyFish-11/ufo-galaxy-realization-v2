@@ -136,6 +136,8 @@ class AgentRole(Enum):
     MONITOR = "monitor"              # 监控者 - 监控执行过程
     COMMUNICATOR = "communicator"    # 通信者 - 处理外部通信
     SPECIALIST = "specialist"        # 专家 - 特定领域专家
+    SWARM_MEMBER = "swarm_member"    # 蜂群成员 - 并行执行
+    COMMANDER = "commander"          # 指挥官 - 双决策系统
 
 
 class AgentState(Enum):
@@ -154,6 +156,9 @@ class CreationMode(Enum):
     TEMPLATE = "template"
     LLM_GENERATED = "llm_generated"
     SPLIT = "split"
+    SWARM = "swarm"
+    TEAM = "team"
+    TWIN_COMMAND = "twin_command"
 
 
 @dataclass
@@ -308,6 +313,50 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
         system_prompt=(
             "你是一个规划 Agent。根据目标制定详细的执行计划。\n"
             "返回 JSON: {\"plan\": {\"steps\": [...], \"resources\": [...], \"risks\": [...]}}"
+        ),
+    ),
+    "swarm_coordinator": AgentConfig(
+        role=AgentRole.COORDINATOR,
+        name="蜂群协调 Agent",
+        description="管理并行 Agent 蜂群的协调者",
+        capabilities=[
+            AgentCapability("parallel_coordination", "协调多个并行 Agent"),
+            AgentCapability("result_aggregation", "聚合并行结果"),
+        ],
+        system_prompt=(
+            "你是蜂群协调 Agent。你的职责是：\n"
+            "1. 将任务分配给多个并行 Agent\n"
+            "2. 监控并行执行进度\n"
+            "3. 聚合多个 Agent 的结果\n"
+            "返回 JSON: {\"aggregated_result\": ..., \"agent_count\": ..., \"strategy\": ...}"
+        ),
+        max_subtasks=10,
+    ),
+    "special_forces_member": AgentConfig(
+        role=AgentRole.SPECIALIST,
+        name="特种部队成员 Agent",
+        description="多模型特种部队的专家成员",
+        capabilities=[
+            AgentCapability("specialized_execution", "使用特定模型执行专项任务"),
+            AgentCapability("cross_model_collaboration", "跨模型协作"),
+        ],
+        system_prompt=(
+            "你是特种部队专家 Agent。根据你的专长完成分配的任务。\n"
+            "返回 JSON: {\"result\": ..., \"confidence\": 0.0-1.0, \"specialty_used\": ...}"
+        ),
+    ),
+    "twin_commander": AgentConfig(
+        role=AgentRole.COMMANDER,
+        name="孪生指挥官 Agent",
+        description="双指挥官决策系统的一方",
+        capabilities=[
+            AgentCapability("strategic_analysis", "战略分析和计划制定"),
+            AgentCapability("cross_validation", "交叉验证和共识达成"),
+        ],
+        system_prompt=(
+            "你是孪生指挥官系统的决策者。独立分析任务并给出方案。\n"
+            "返回 JSON: {\"plan\": {...}, \"confidence\": 0.0-1.0, "
+            "\"risks\": [...], \"reasoning\": ...}"
         ),
     ),
 }

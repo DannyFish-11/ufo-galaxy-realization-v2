@@ -195,6 +195,30 @@ class CapabilityOrchestrator:
                 tags=["device", "control"],
                 priority=8,
             ),
+            Capability(
+                id="builtin_swarm_execute",
+                name="蜂群执行",
+                description="使用 Agent 蜂群并行执行任务",
+                type=CapabilityType.BUILTIN,
+                tags=["agent", "swarm", "parallel"],
+                priority=6,
+            ),
+            Capability(
+                id="builtin_team_execute",
+                name="特种部队执行",
+                description="使用多模型特种部队团队执行任务",
+                type=CapabilityType.BUILTIN,
+                tags=["agent", "team", "multi-model"],
+                priority=6,
+            ),
+            Capability(
+                id="builtin_twin_decide",
+                name="孪生指挥官决策",
+                description="使用双指挥官交叉验证决策",
+                type=CapabilityType.BUILTIN,
+                tags=["agent", "twin", "decision"],
+                priority=7,
+            ),
         ]
         
         for cap in builtins:
@@ -345,7 +369,25 @@ class CapabilityOrchestrator:
             device_id = params.get("device_id")
             action = params.get("action")
             return await device_control.execute_action(device_id, action)
-        
+
+        elif cap.id == "builtin_swarm_execute":
+            from core.agent_swarm import get_agent_swarm
+            swarm = get_agent_swarm()
+            result = await swarm.execute(params.get("task", ""), params.get("context"))
+            return result.to_dict()
+
+        elif cap.id == "builtin_team_execute":
+            from core.special_forces_team import get_special_forces_team
+            team = get_special_forces_team()
+            result = await team.execute(params.get("task", ""), params.get("context"))
+            return result.to_dict()
+
+        elif cap.id == "builtin_twin_decide":
+            from core.twin_commander import get_twin_commander
+            commander = get_twin_commander()
+            result = await commander.analyze(params.get("task", ""), params.get("context"))
+            return result.to_dict()
+
         return None
     
     # ========================================================================

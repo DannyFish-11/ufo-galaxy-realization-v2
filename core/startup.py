@@ -424,6 +424,28 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"Agent 系统初始化失败: {e}")
 
     # ====================================================================
+    # 9b. 高级 Agent 模式（蜂群 + 特种部队 + 孪生指挥官）
+    # ====================================================================
+    try:
+        from core.agent_swarm import get_agent_swarm
+        from core.special_forces_team import get_special_forces_team
+        from core.twin_commander import get_twin_commander
+
+        _llm = llm_router if "llm_router" in dir() else None
+        _af = agent_factory if "agent_factory" in dir() else None
+        swarm = get_agent_swarm(llm_router=_llm, agent_factory=_af)
+        sf_team = get_special_forces_team(llm_router=_llm, agent_factory=_af)
+        twin_cmd = get_twin_commander(llm_router=_llm, agent_factory=_af)
+        results["advanced_agents"] = {
+            "status": "ok",
+            "swarm": True, "special_forces": True, "twin_commander": True,
+        }
+        logger.info("高级 Agent 模式已初始化 (蜂群 + 特种部队 + 孪生指挥官)")
+    except Exception as e:
+        results["advanced_agents"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"高级 Agent 模式初始化失败（非致命）: {e}")
+
+    # ====================================================================
     # 10. 数字孪生引擎
     # ====================================================================
     try:
