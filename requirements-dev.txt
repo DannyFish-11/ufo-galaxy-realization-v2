@@ -1,4 +1,4 @@
-# UFO Galaxy - Development Dependencies
+# Galaxy - Development Dependencies
 # =====================================
 
 # ============================================================================

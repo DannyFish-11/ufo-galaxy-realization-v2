@@ -145,6 +145,13 @@ class {name}Tools:
             # module names use underscores; strip any extras-bracket suffix too.
             _mod_name = "{library}".replace("-", "_").split("[")[0]
             self._lib = importlib.import_module(_mod_name)
+            # 如果库提供了 Client 类，尝试自动初始化
+            client_cls = getattr(self._lib, "Client", None)
+            if client_cls:
+                api_key = os.getenv("{name_upper}_API_KEY", "")
+                self.client = client_cls(api_key) if api_key else client_cls()
+            else:
+                self.client = self._lib
             self.initialized = True
         except ImportError as e:
             print(f"Warning: Failed to initialize {name}: {{e}}")

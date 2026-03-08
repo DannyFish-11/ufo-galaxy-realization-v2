@@ -157,7 +157,7 @@ curl http://localhost:8079/models
 curl -X POST http://localhost:8079/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "介绍一下 UFO³ Galaxy 系统",
+    "prompt": "介绍一下 Galaxy 系统",
     "model": "qwen2.5:7b-instruct-q4_K_M",
     "temperature": 0.7,
     "max_tokens": 500
@@ -178,7 +178,7 @@ curl -X POST http://localhost:8079/generate \
 curl -X POST http://localhost:8079/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Analyze the architecture of UFO³ Galaxy and suggest optimizations",
+    "prompt": "Analyze the architecture of Galaxy and suggest optimizations",
     "task_type": "complex"
   }'
 
@@ -195,7 +195,7 @@ curl -X POST http://localhost:8079/generate \
 ```json
 {
   "model": "qwen2.5:7b-instruct-q4_K_M",
-  "response": "UFO³ Galaxy 是一个分布式 AI 代理系统...",
+  "response": "Galaxy 是一个分布式 AI 代理系统...",
   "done": true,
   "total_duration": 1234567890,
   "eval_duration": 987654321

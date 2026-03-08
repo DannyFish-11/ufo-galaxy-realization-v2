@@ -3,7 +3,7 @@
   "name": "示例问候",
   "description": "一个简单的示例技能",
   "version": "1.0.0",
-  "author": "UFO Galaxy Team",
+  "author": "Galaxy Team",
   "type": "action",
   "tags": ["example", "demo"],
   "parameters": [

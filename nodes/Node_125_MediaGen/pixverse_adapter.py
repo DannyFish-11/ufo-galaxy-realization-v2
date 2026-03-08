@@ -21,7 +21,7 @@ PIXVERSE_API_KEY = os.getenv("PIXVERSE_API_KEY", "")
 PIXVERSE_API_BASE = "https://api.pixverse.ai/v1"
 
 # 下载目录
-DOWNLOAD_DIR = Path(os.getenv("PIXVERSE_DOWNLOAD_DIR", "/app/downloads"))
+DOWNLOAD_DIR = Path(os.getenv("PIXVERSE_DOWNLOAD_DIR", "./downloads"))
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 class PixVerseAdapter:
@@ -225,8 +225,8 @@ class PixVerseAdapter:
     def _wait_for_completion(
         self,
         task_id: str,
-        max_wait_time: int = 300,
-        poll_interval: int = 5
+        max_wait_time: int = int(os.getenv("PIXVERSE_MAX_WAIT", "300")),
+        poll_interval: int = int(os.getenv("PIXVERSE_POLL_INTERVAL", "5"))
     ) -> Dict[str, Any]:
         """
         等待任务完成
@@ -367,7 +367,7 @@ if __name__ == "__main__":
         "payload": {
             "action": "generate_video",
             "parameters": {
-                "prompt": "A beautiful animation of the UFO³ Galaxy system: quantum computers, 3D printers, and AI agents working together in harmony",
+                "prompt": "A beautiful animation of the Galaxy system: quantum computers, 3D printers, and AI agents working together in harmony",
                 "style": "cinematic",
                 "duration": 5,
                 "aspect_ratio": "16:9"

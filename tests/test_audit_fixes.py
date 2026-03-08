@@ -154,18 +154,18 @@ class TestErrorFramework(unittest.TestCase):
         self.assertEqual(ErrorCode.CONFIG_INVALID, "E7001")
 
     def test_ufo_error_to_dict(self):
-        from core.error_framework import UFOError, ErrorCategory
-        err = UFOError("test error", category=ErrorCategory.NETWORK)
+        from core.error_framework import GalaxyError, ErrorCategory
+        err = GalaxyError("test error", category=ErrorCategory.NETWORK)
         d = err.to_dict()
         self.assertIn("error_id", d)
         self.assertEqual(d["category"], "network")
         self.assertEqual(d["message"], "test error")
 
     def test_error_tracker_recording(self):
-        from core.error_framework import ErrorTracker, UFOError, ErrorCategory
+        from core.error_framework import ErrorTracker, GalaxyError, ErrorCategory
         tracker = ErrorTracker(max_records=50)
         for i in range(60):
-            tracker.record(UFOError(f"err {i}", category=ErrorCategory.INTERNAL))
+            tracker.record(GalaxyError(f"err {i}", category=ErrorCategory.INTERNAL))
         summary = tracker.get_summary()
         self.assertEqual(summary["total_errors"], 50)  # bounded by maxlen
 
@@ -357,7 +357,7 @@ class TestImports(unittest.TestCase):
 
     def test_import_error_framework(self):
         from core.error_framework import (
-            UFOError, ErrorCategory, ErrorSeverity, ErrorCode,
+            GalaxyError, ErrorCategory, ErrorSeverity, ErrorCode,
             api_response, create_error_handlers, get_error_tracker,
         )
 

@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Gateway - 超级网关
+Galaxy Gateway - 超级网关
 统一调用 One-API、本地 LLM 和所有节点功能
 """
 
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
-    title="UFO³ Galaxy Gateway",
+    title="Galaxy Gateway",
     description="统一调用 One-API、本地 LLM 和所有节点功能的超级网关",
     version="1.0.0"
 )
@@ -97,7 +97,7 @@ class SmartTaskRequest(BaseModel):
 async def root():
     """根路径"""
     return {
-        "service": "UFO³ Galaxy Gateway",
+        "service": "Galaxy Gateway",
         "version": "1.0.0",
         "status": "online",
         "endpoints": {

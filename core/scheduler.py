@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 自主调度器 (Autonomous Scheduler)
+Galaxy - 自主调度器 (Autonomous Scheduler)
 ==============================================
 
 核心 ReAct Loop:

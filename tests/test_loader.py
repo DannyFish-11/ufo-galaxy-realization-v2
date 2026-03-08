@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 加载器测试
+Galaxy - 加载器测试
 ======================
 
 测试 MCP 和 Skill 的加载/卸载功能
@@ -85,7 +85,7 @@ async def test_mcp_loader():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy 加载器测试")
+    print("Galaxy 加载器测试")
     print("=" * 60)
     
     results = []

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 系统集成层
+Galaxy - 系统集成层
 ======================
 
 统一协调 Agent、MCP、Skill 和设备系统
@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Callable
 
-logger = logging.getLogger("UFO-Galaxy.SystemIntegration")
+logger = logging.getLogger("Galaxy.SystemIntegration")
 
 
 # ============================================================================

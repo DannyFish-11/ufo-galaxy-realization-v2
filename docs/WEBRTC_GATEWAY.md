@@ -1,7 +1,7 @@
 # WebRTC Gateway Proxy
 
 This document describes the WebRTC signaling gateway integration added to the
-UFO Galaxy Gateway (server repo `DannyFish-11/ufo-galaxy-realization-v2`).
+Galaxy Gateway (server repo `DannyFish-11/galaxy-realization-v2`).
 
 ## Overview
 
@@ -20,7 +20,7 @@ Android Client
     │
     │  ws://GATEWAY_HOST/ws/webrtc/{device_id}
     ▼
-UFO Galaxy Gateway  ──────────────────────────►  Node_95_WebRTC_Receiver
+Galaxy Gateway  ──────────────────────────►  Node_95_WebRTC_Receiver
 (galaxy_gateway/app.py)                           ws://NODE_95_HOST/signaling/{device_id}
 ```
 
@@ -138,7 +138,7 @@ Android Client
     │
     │  2. WS connect to ws://GATEWAY/ws/webrtc/{device_id}
     ▼
-UFO Galaxy Gateway
+Galaxy Gateway
     │
     │  3. Gateway opens WS to ws://NODE_95/signaling/{device_id}
     ▼

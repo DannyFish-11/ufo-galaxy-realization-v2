@@ -1,9 +1,9 @@
 """
-Feedback Loop Module for UFO Galaxy v5.0
+Feedback Loop Module for Galaxy v5.0
 
 This module implements feedback loop mechanisms for the learning system.
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 

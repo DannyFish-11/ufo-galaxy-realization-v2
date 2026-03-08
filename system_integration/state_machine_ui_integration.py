@@ -1,5 +1,5 @@
 """
-UFO Galaxy 状态机与UI集成模块
+Galaxy 状态机与UI集成模块
 实现硬件触发 → UI 和 UI状态 → 硬件触发 的双向集成
 """
 
@@ -12,7 +12,7 @@ from enum import Enum, auto
 
 # 导入事件总线
 import sys
-sys.path.insert(0, '/mnt/okcomputer/output/ufo_galaxy_integration')
+sys.path.insert(0, '/mnt/okcomputer/output/galaxy_integration')
 from integration.event_bus import (
     EventBus, EventType, UIGalaxyEvent, event_bus
 )
@@ -62,7 +62,7 @@ class AnimationState:
 
 class SystemStateMachine:
     """
-    UFO Galaxy 系统状态机
+    Galaxy 系统状态机
     管理UI状态和硬件触发的集成
     """
     

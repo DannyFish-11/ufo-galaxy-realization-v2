@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Unified Startup Script (Reinforced)
+Galaxy Fusion - Unified Startup Script (Reinforced)
 
 统一启动脚本（加固版）
 
@@ -175,7 +175,7 @@ async def run_interactive():
         await system.initialize()
 
         logger.info("="*80)
-        logger.info("🎛️  UFO Galaxy Fusion — Interactive Mode")
+        logger.info("🎛️  Galaxy Fusion — Interactive Mode")
         logger.info("Type a task description and press Enter. Type 'quit' to exit.")
         logger.info("="*80)
 
@@ -210,7 +210,7 @@ async def run_interactive():
 def main():
     """主入口"""
     import argparse
-    parser = argparse.ArgumentParser(description="UFO Galaxy Fusion System")
+    parser = argparse.ArgumentParser(description="Galaxy Fusion System")
     parser.add_argument("--mode", choices=["demo", "interactive"], default="demo")
     args = parser.parse_args()
     

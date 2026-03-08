@@ -1,8 +1,8 @@
-# UFO Galaxy - 两端接口颗粒度对齐文档
+# Galaxy - 两端接口颗粒度对齐文档
 
 ## 概述
 
-本文档定义了服务端（ufo-galaxy-realization）和 Android 端（ufo-galaxy-android）之间的接口规范，确保两端颗粒度完全对齐。
+本文档定义了服务端（galaxy-realization）和 Android 端（galaxy-android）之间的接口规范，确保两端颗粒度完全对齐。
 
 ## 1. 通信协议对齐
 

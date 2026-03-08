@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Chat Routes
+Galaxy - Chat Routes
 ==========================
 
 Routes:
@@ -18,7 +18,7 @@ from core.routes._helpers import nodes_root, _load_node, _execute_node
 from core.routes._models import ChatRequest
 from core.unified_response import UnifiedChatResponse
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 # 操作意图关键词 — 命中时走 ReAct Agent 调度而非纯聊天
 _ACTION_KEYWORDS_ZH = [
@@ -467,7 +467,7 @@ async def _handle_pure_chat(
         try:
             messages = [
                 {"role": "system", "content": (
-                    "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。\n"
+                    "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。\n"
                     "当用户想要操作设备时，请告诉他们直接描述操作指令即可，"
                     "系统会自动调度 Agent 执行。例如: '帮我打开手机上的微信'。"
                 )},
@@ -496,7 +496,16 @@ async def _handle_pure_chat(
                 model=model_name,
                 session_id=session_id,
             )
-            return JSONResponse(resp.to_json_response())
+            # 增强响应：添加 reply 别名 + routing（Windows 客户端 UI 需要）
+            resp_dict = resp.to_json_response()
+            resp_dict["reply"] = reply
+            resp_dict["routing"] = {
+                "task_type": "chat",
+                "provider": "",
+                "model": model_name,
+                "reason": "纯聊天 → LLM 对话",
+            }
+            return JSONResponse(resp_dict)
         except Exception as e:
             logger.warning(f"LLM chat failed: {e}")
 

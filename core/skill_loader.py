@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 标准 Skill 加载器
+Galaxy - 标准 Skill 加载器
 ==============================
 
 支持动态加载任何技能
@@ -37,7 +37,7 @@ from pathlib import Path
 from enum import Enum
 import uuid
 
-logger = logging.getLogger("UFO-Galaxy.Skill")
+logger = logging.getLogger("Galaxy.Skill")
 
 
 # ============================================================================

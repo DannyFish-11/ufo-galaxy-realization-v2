@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Android HTTP Compatibility Shim
+Galaxy - Android HTTP Compatibility Shim
 =============================================
 
 Backward-compatible REST endpoints that map legacy Android client calls to
@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from core.routes._shared import connection_manager, registered_devices, node_status_cache
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 # ---------------------------------------------------------------------------

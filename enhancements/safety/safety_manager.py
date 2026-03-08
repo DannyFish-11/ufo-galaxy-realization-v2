@@ -63,19 +63,40 @@ class RecoveryAction:
     retry_delay: float = 1.0
 
 
+@dataclass
+class SafetyThresholds:
+    """可配置的安全阈值"""
+    max_bed_temperature: float = 120.0      # °C
+    max_nozzle_temperature: float = 300.0   # °C
+    max_altitude: float = 120.0             # meters
+    min_battery: float = 20.0               # percent
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> 'SafetyThresholds':
+        """从配置字典创建阈值"""
+        thresholds = config.get("safety_thresholds", {})
+        return cls(
+            max_bed_temperature=thresholds.get("max_bed_temperature", cls.max_bed_temperature),
+            max_nozzle_temperature=thresholds.get("max_nozzle_temperature", cls.max_nozzle_temperature),
+            max_altitude=thresholds.get("max_altitude", cls.max_altitude),
+            min_battery=thresholds.get("min_battery", cls.min_battery),
+        )
+
+
 class SafetyManager:
     """安全管理器"""
-    
-    def __init__(self):
+
+    def __init__(self, thresholds: Optional[SafetyThresholds] = None):
         """初始化安全管理器"""
+        self.thresholds = thresholds or SafetyThresholds()
         self.safety_rules: Dict[str, SafetyRule] = {}
         self.recovery_actions: Dict[str, RecoveryAction] = {}
         self.violations: List[SafetyViolation] = []
         self.recovery_history: List[Dict] = []
-        
+
         # 初始化默认安全规则
         self._initialize_default_rules()
-        
+
         logger.info("SafetyManager 初始化完成")
     
     def _initialize_default_rules(self):
@@ -223,12 +244,12 @@ class SafetyManager:
         bed_temp = temperature.get("bed", {}).get("actual", 25.0)
         nozzle_temp = temperature.get("nozzle", {}).get("actual", 25.0)
         
-        # 检查是否过热
-        if bed_temp > 120.0:
-            return False, f"热床温度过高: {bed_temp}°C"
-        
-        if nozzle_temp > 300.0:
-            return False, f"喷嘴温度过高: {nozzle_temp}°C"
+        # 检查是否过热（使用可配置阈值）
+        if bed_temp > self.thresholds.max_bed_temperature:
+            return False, f"热床温度过高: {bed_temp}°C (上限: {self.thresholds.max_bed_temperature}°C)"
+
+        if nozzle_temp > self.thresholds.max_nozzle_temperature:
+            return False, f"喷嘴温度过高: {nozzle_temp}°C (上限: {self.thresholds.max_nozzle_temperature}°C)"
         
         return True, "温度正常"
     
@@ -247,7 +268,7 @@ class SafetyManager:
         device_state = context.get("device_state", {})
         altitude = device_state.get("altitude", 0.0)
         
-        max_altitude = context.get("max_altitude", 120.0)  # 默认最大高度 120 米
+        max_altitude = context.get("max_altitude", self.thresholds.max_altitude)
         
         if altitude > max_altitude:
             return False, f"飞行高度超限: {altitude}m (最大允许: {max_altitude}m)"

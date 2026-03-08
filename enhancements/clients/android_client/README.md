@@ -1,4 +1,4 @@
-# UFO³ Galaxy Android Client
+# Galaxy Android Client
 
 > ⚠️ **已迁移通知**：Android 客户端已迁移至独立仓库，本目录不再维护 Android 源码。本目录中的源码已废弃，仅作历史存档。
 
@@ -6,14 +6,14 @@
 
 Android 客户端 APK 的唯一来源：
 
-👉 **https://github.com/DannyFish-11/ufo-galaxy-android**
+👉 **https://github.com/DannyFish-11/galaxy-android**
 
 ## 如何克隆和构建 APK
 
 ```bash
 # 1. 克隆独立仓库
-git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
-cd ufo-galaxy-android
+git clone https://github.com/DannyFish-11/galaxy-android.git
+cd galaxy-android
 
 # 2. 配置服务端地址（编辑 app/build.gradle）
 #    buildConfigField "String", "GALAXY_SERVER_URL", '"ws://YOUR_SERVER_IP:8765"'
@@ -27,7 +27,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## 服务端 WebSocket 端点（AIP v3.0）
 
-本仓库 (`ufo-galaxy-realization-v2`) 为服务端 + 桥接 + VLM，接收 APK 的连接。
+本仓库 (`galaxy-realization-v2`) 为服务端 + 桥接 + VLM，接收 APK 的连接。
 
 | 端点 | 说明 |
 |------|------|
@@ -40,7 +40,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ```
 独立仓库(APK)
-  DannyFish-11/ufo-galaxy-android
+  DannyFish-11/galaxy-android
         │
         │  WebSocket (AIP v3.0)
         │  ws://<host>:8765/ws/android
@@ -65,7 +65,7 @@ Node_113_AndroidVLM                ← VLM 分析节点（本仓库）
 
 ## 📱 项目简介（已废弃）
 
-UFO³ Galaxy Android Client 是 Microsoft UFO³ Galaxy 系统的移动端子代理（Sub-Agent），为用户提供了一个便携、高效、美观的方式来访问和控制整个 Galaxy 系统。
+Galaxy Android Client 是 Microsoft Galaxy 系统的移动端子代理（Sub-Agent），为用户提供了一个便携、高效、美观的方式来访问和控制整个 Galaxy 系统。
 
 本客户端采用原生 Android 开发，使用 Jetpack Compose 构建现代化的 UI，融合了"灵动岛"交互设计和"极简极客"视觉风格，为用户带来独特而精致的使用体验。
 
@@ -218,14 +218,14 @@ android_client/
 ### **前提条件**
 1.  安装最新版的 **Android Studio**。
 2.  确保 JDK 版本为 **17** 或更高。
-3.  您的 UFO³ Galaxy 后端服务正在运行。
+3.  您的 Galaxy 后端服务正在运行。
 
 ### **步骤**
 
 1.  **克隆仓库**
     ```bash
-    git clone https://github.com/DannyFish-11/ufo-galaxy.git
-    cd ufo-galaxy/enhancements/clients/android_client
+    git clone https://github.com/DannyFish-11/galaxy.git
+    cd galaxy/enhancements/clients/android_client
     ```
 
 2.  **打开项目**

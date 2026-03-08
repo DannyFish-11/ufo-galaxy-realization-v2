@@ -2,7 +2,7 @@
 MCP Adapter Base Class
 ======================
 存量工具的通用适配器基类。
-将现有 MCP 服务器封装为 UFO Galaxy 节点。
+将现有 MCP 服务器封装为 Galaxy 节点。
 
 功能：
 - 统一的 MCP 工具调用接口

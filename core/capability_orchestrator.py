@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 能力编排器
+Galaxy - 能力编排器
 =======================
 
 统一管理 MCP 工具和 Skill，提供智能的能力发现和调用
@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.Capability")
+logger = logging.getLogger("Galaxy.Capability")
 
 
 # ============================================================================

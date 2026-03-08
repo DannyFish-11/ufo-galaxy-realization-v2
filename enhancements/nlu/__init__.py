@@ -1,5 +1,5 @@
 """
-Natural Language Understanding Module for UFO Galaxy Realization.
+Natural Language Understanding Module for Galaxy Realization.
 
 This module provides natural language processing capabilities for
 mapping user commands to physical device nodes.

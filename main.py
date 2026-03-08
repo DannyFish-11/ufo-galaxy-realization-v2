@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 主启动入口
+Galaxy - 主启动入口
 ========================
-一键启动整个 UFO Galaxy 系统。
+一键启动整个 Galaxy 系统。
 
 启动入口统一:
     python main.py              → 代理到 unified_launcher.py (推荐)
@@ -35,9 +35,15 @@ from datetime import datetime
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
+from nodes.common.cors_config import get_cors_origins
 
 # ── Quick delegation: if no --legacy flag, delegate to unified_launcher ──
-if __name__ == "__main__" and "--legacy" not in sys.argv and "--setup" not in sys.argv:
+if __name__ == "__main__" and "--legacy" not in sys.argv:
+    if "--setup" in sys.argv:
+        # --setup: run the setup wizard directly
+        _wizard = PROJECT_ROOT / "setup_wizard.py"
+        if _wizard.exists():
+            sys.exit(subprocess.call([sys.executable, str(_wizard)]))
     # Pass all args through to unified_launcher
     _launcher = PROJECT_ROOT / "unified_launcher.py"
     if _launcher.exists():
@@ -51,7 +57,7 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("UFO-Galaxy")
+logger = logging.getLogger("Galaxy")
 
 
 class Colors:
@@ -465,7 +471,7 @@ class WebUIServer:
         self.host = host
         self.port = port
         self.app = None
-        self.galaxy_ref = None          # 引用 UFOGalaxy 实例
+        self.galaxy_ref = None          # 引用 Galaxy 实例
 
     def set_galaxy(self, galaxy):
         """设置 Galaxy 实例引用，用于访问集成服务"""
@@ -480,6 +486,7 @@ class WebUIServer:
             from pydantic import BaseModel
             import uvicorn
 
+            from nodes.common.cors_config import get_cors_origins
             self.app = FastAPI(title="UFO Galaxy", version="2.0",
                                description="L4 级自主性智能系统")
             self.app.add_middleware(
@@ -793,7 +800,7 @@ class WebUIServer:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO Galaxy - 后台管理面板</title>
+    <title>Galaxy - 后台管理面板</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -832,7 +839,7 @@ class WebUIServer:
 <body>
 <div class="wrap">
     <div class="hdr">
-        <h1>UFO Galaxy</h1>
+        <h1>Galaxy</h1>
         <p>L4 级自主性智能系统 - 后台管理面板</p>
     </div>
     <div class="grid">
@@ -965,8 +972,8 @@ refresh();setInterval(refresh,5000);
         """
 
 
-class UFOGalaxy:
-    """UFO Galaxy 主系统"""
+class Galaxy:
+    """Galaxy 主系统"""
 
     def __init__(self):
         self.config_manager = ConfigManager()
@@ -1027,7 +1034,7 @@ class UFOGalaxy:
         self.running = True
         print()
         print_status("=" * 50, "info")
-        print_status("UFO Galaxy 系统已启动！", "success")
+        print_status("Galaxy 系统已启动！", "success")
         print_status("=" * 50, "info")
         print()
         print_status("访问 http://localhost:8080 查看控制面板", "info")
@@ -1076,7 +1083,7 @@ class UFOGalaxy:
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="UFO Galaxy - L4 级自主性智能系统",
+        description="Galaxy - L4 级自主性智能系统",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -1097,13 +1104,12 @@ def main():
     # 运行配置向导
     if args.setup:
         from setup_wizard import SetupWizard
-from nodes.common.cors_config import get_cors_origins
         wizard = SetupWizard()
         wizard.run_interactive_setup()
         return
         
     # 创建系统实例
-    galaxy = UFOGalaxy()
+    galaxy = Galaxy()
     
     # 查看状态
     if args.status:

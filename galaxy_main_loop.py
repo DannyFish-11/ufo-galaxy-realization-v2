@@ -1,11 +1,12 @@
 """
-UFO Galaxy 主循环入口
+Galaxy 主循环入口
 全天候运行模式 - 接收目标、规划、执行、自我反思
 """
 
 import asyncio
 import logging
 import signal
+import sys
 import time
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field
@@ -212,7 +213,7 @@ class HealthMonitor:
 
 
 class GalaxyMainLoop:
-    """UFO Galaxy 主循环 - 全天候运行模式"""
+    """Galaxy 主循环 - 全天候运行模式"""
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config or {}
@@ -243,7 +244,7 @@ class GalaxyMainLoop:
 
     async def start(self):
         """启动主循环"""
-        self.logger.info("Starting UFO Galaxy Main Loop...")
+        self.logger.info("Starting Galaxy Main Loop...")
 
         # 初始化组件
         await self._initialize()
@@ -276,11 +277,15 @@ class GalaxyMainLoop:
 
     def _setup_signal_handlers(self):
         """设置信号处理器"""
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            asyncio.get_event_loop().add_signal_handler(
-                sig, 
-                lambda: asyncio.create_task(self.stop())
-            )
+        if sys.platform != "win32":
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                asyncio.get_event_loop().add_signal_handler(
+                    sig,
+                    lambda: asyncio.create_task(self.stop())
+                )
+        else:
+            # Windows does not support asyncio signal handlers
+            signal.signal(signal.SIGINT, lambda s, f: asyncio.ensure_future(self.stop()))
 
     def _on_health_change(self, metrics: HealthMetrics):
         """健康状态变化回调"""

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy 70-Node Complete Test Suite
+Galaxy 70-Node Complete Test Suite
 ======================================
 测试所有 70 个节点的基本功能
 """
@@ -209,7 +209,7 @@ class NodeTester:
 async def run_tests():
     """运行完整测试"""
     print("╔" + "═" * 60 + "╗")
-    print("║" + " UFO Galaxy 70-Node Complete Test Suite ".center(60) + "║")
+    print("║" + " Galaxy 70-Node Complete Test Suite ".center(60) + "║")
     print("╚" + "═" * 60 + "╝")
     print()
     
@@ -398,7 +398,7 @@ async def run_tests():
     
     print(f"""
   ┌─────────────────────────────────────────┐
-  │  UFO Galaxy 70-Node Test Results        │
+  │  Galaxy 70-Node Test Results        │
   ├─────────────────────────────────────────┤
   │  Total Nodes:        {total:>3}                │
   │  File Check Passed:  {file_passed:>3} / {total:<3}           │

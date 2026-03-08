@@ -1,8 +1,8 @@
-# UFO Galaxy L4 级自主性智能系统部署指南
+# Galaxy L4 级自主性智能系统部署指南
 
 ## 系统概述
 
-UFO Galaxy L4 是一个完全自主的智能系统，具备以下能力：
+Galaxy L4 是一个完全自主的智能系统，具备以下能力：
 
 - ✅ **自主发现工具和资源** - 自动扫描环境中的编程语言、IDE、数据库等
 - ✅ **自主编写代码** - 根据需求生成代码、测试、修复并部署
@@ -17,8 +17,8 @@ UFO Galaxy L4 是一个完全自主的智能系统，具备以下能力：
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/galaxy-realization.git
+cd galaxy-realization
 ```
 
 ### 2. 安装依赖
@@ -67,38 +67,38 @@ python3 start_l4.py
 
 ```bash
 # 复制服务文件
-sudo cp deployment/ufo-galaxy-l4.service /etc/systemd/system/
+sudo cp deployment/galaxy-l4.service /etc/systemd/system/
 
 # 重新加载 systemd
 sudo systemctl daemon-reload
 
 # 启用服务
-sudo systemctl enable ufo-galaxy-l4.service
+sudo systemctl enable galaxy-l4.service
 
 # 启动服务
-sudo systemctl start ufo-galaxy-l4.service
+sudo systemctl start galaxy-l4.service
 
 # 查看状态
-sudo systemctl status ufo-galaxy-l4.service
+sudo systemctl status galaxy-l4.service
 
 # 查看日志
-sudo journalctl -u ufo-galaxy-l4.service -f
+sudo journalctl -u galaxy-l4.service -f
 ```
 
 #### 方式三：Docker（推荐用于生产环境）
 
 ```bash
 # 构建镜像
-docker build -t ufo-galaxy-l4 -f Dockerfile.l4 .
+docker build -t galaxy-l4 -f Dockerfile.l4 .
 
 # 运行容器
 docker run -d \
-  --name ufo-galaxy-l4 \
+  --name galaxy-l4 \
   --restart always \
   -p 8765:8765 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/logs:/app/logs \
-  ufo-galaxy-l4
+  galaxy-l4
 ```
 
 ---
@@ -257,7 +257,7 @@ curl http://localhost:8765/metrics
 ### 3. 重启服务
 
 ```bash
-sudo systemctl restart ufo-galaxy-l4.service
+sudo systemctl restart galaxy-l4.service
 ```
 
 ### 4. 查看错误日志
@@ -312,7 +312,7 @@ top -p $(pgrep -f start_l4.py)
 find logs/ -name "*.log" -mtime +7 -delete
 
 # 重启服务
-sudo systemctl restart ufo-galaxy-l4.service
+sudo systemctl restart galaxy-l4.service
 ```
 
 ---
@@ -366,5 +366,5 @@ sudo systemctl restart ufo-galaxy-l4.service
 
 ## 支持
 
-- GitHub: https://github.com/DannyFish-11/ufo-galaxy-realization
-- Issues: https://github.com/DannyFish-11/ufo-galaxy-realization/issues
+- GitHub: https://github.com/DannyFish-11/galaxy-realization
+- Issues: https://github.com/DannyFish-11/galaxy-realization/issues

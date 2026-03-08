@@ -30,7 +30,7 @@ from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.ProxyRelay")
+logger = logging.getLogger("Galaxy.ProxyRelay")
 
 
 class RelayStatus(str, Enum):

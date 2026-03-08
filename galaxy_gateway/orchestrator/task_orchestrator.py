@@ -185,10 +185,40 @@ class TaskOrchestrator:
         connected_devices = self.websocket_manager.get_connected_devices()
         if not connected_devices:
             return None
-        
-        # Round-robin selection: distribute tasks evenly across connected devices.
-        self._device_rr_index = (self._device_rr_index + 1) % len(connected_devices)
-        return connected_devices[self._device_rr_index]
+
+        # 负载均衡策略
+        # 1. 类型匹配: 优先选择与任务类型匹配的设备
+        request_lower = (task.user_request or "").lower()
+        preferred_type = None
+        if any(kw in request_lower for kw in ("安卓", "手机", "android", "app")):
+            preferred_type = "android"
+        elif any(kw in request_lower for kw in ("windows", "电脑", "桌面", "desktop")):
+            preferred_type = "windows"
+
+        if preferred_type and hasattr(self.websocket_manager, "get_device_type"):
+            typed_devices = [
+                d for d in connected_devices
+                if self.websocket_manager.get_device_type(d) == preferred_type
+            ]
+            if typed_devices:
+                connected_devices = typed_devices
+
+        # 2. 最少任务优先: 选择当前负载最低的设备
+        if not hasattr(self, "_device_task_counts"):
+            self._device_task_counts = {}
+            self._rr_index = 0
+
+        connected_devices_sorted = sorted(
+            connected_devices,
+            key=lambda d: self._device_task_counts.get(d, 0)
+        )
+
+        # 3. 轮询 (在同等负载中轮询)
+        selected = connected_devices_sorted[self._rr_index % len(connected_devices_sorted)]
+        self._rr_index += 1
+        self._device_task_counts[selected] = self._device_task_counts.get(selected, 0) + 1
+
+        return selected
     
     async def _decompose_task(self, task: Task) -> List[Command]:
         """分解任务为命令序列"""

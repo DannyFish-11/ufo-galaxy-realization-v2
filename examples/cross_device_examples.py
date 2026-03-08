@@ -1,5 +1,5 @@
 """
-UFO Galaxy Cross-Device Collaboration Examples
+Galaxy Cross-Device Collaboration Examples
 跨设备协同示例
 """
 
@@ -69,7 +69,7 @@ async def example_android_trigger_pc_tool():
                 "task_description": "用 OpenCode 打开项目文件",
                 "context": {
                     "source": "android_agent",
-                    "file_path": "C:\\Projects\\ufo-galaxy\\README.md"
+                    "file_path": "C:\\Projects\\galaxy\\README.md"
                 }
             }
         )
@@ -131,7 +131,7 @@ async def example_collaborative_workflow():
         code_gen_response = await client.post(
             f"{PC_AGENT_URL}/tools/invoke",
             json={
-                "task_description": "生成一个简单的 Python 脚本，输出 Hello UFO Galaxy",
+                "task_description": "生成一个简单的 Python 脚本，输出 Hello Galaxy",
                 "context": {"output_format": "python"}
             }
         )
@@ -142,7 +142,7 @@ async def example_collaborative_workflow():
         # Step 2: 传输到安卓
         print("\n[Step 2] 传输脚本到安卓...")
         # 这里简化处理，实际需要通过 ADB 或 MQTT
-        script_content = "print('Hello UFO Galaxy')"
+        script_content = "print('Hello Galaxy')"
         
         # Step 3: 安卓在 Termux 中运行
         print("\n[Step 3] 安卓执行脚本...")
@@ -207,7 +207,7 @@ async def example_tool_selection_comparison():
 # ============================================================================
 
 async def main():
-    print("\n🛸 UFO Galaxy Cross-Device Collaboration Examples\n")
+    print("\n🛸 Galaxy Cross-Device Collaboration Examples\n")
     
     examples = [
         ("PC 触发安卓拍照", example_pc_trigger_android_camera),

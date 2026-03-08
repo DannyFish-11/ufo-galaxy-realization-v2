@@ -1,8 +1,8 @@
-# UFO Galaxy Realization v2 - Dependency Management
+# Galaxy Realization v2 - Dependency Management
 
 ## Overview
 
-This document describes the dependency management strategy for the UFO Galaxy Realization v2 project.
+This document describes the dependency management strategy for the Galaxy Realization v2 project.
 
 ## Python Version
 

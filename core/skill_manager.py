@@ -4,8 +4,7 @@ DEPRECATED — 请使用 core.skill_loader (skill_loader 单例) 替代。
 此模块保留但不再是主 Skill 运行时。所有生产代码已迁移至 skill_loader.py。
 
 UFO Galaxy - Skill 系统（旧版）
-================================
-
+=========================
 通用的技能管理系统
 
 功能：
@@ -45,7 +44,7 @@ from pathlib import Path
 from enum import Enum
 import subprocess
 
-logger = logging.getLogger("UFO-Galaxy.Skill")
+logger = logging.getLogger("Galaxy.Skill")
 
 
 # ============================================================================
@@ -649,51 +648,55 @@ class SkillManager:
     # ========================================================================
     
     def register_builtin_skills(self):
-        """注册内置技能"""
-        
+        """注册内置技能（含实际 handler）"""
+
         # 网页搜索
         self.register_skill(
             id="web_search",
             name="网页搜索",
             description="搜索网页内容",
             type=SkillType.ACTION,
+            handler=self._builtin_web_search,
             parameters=[
                 {"name": "query", "type": "string", "description": "搜索关键词", "required": True},
                 {"name": "num_results", "type": "integer", "description": "结果数量", "default": 5},
             ],
             tags=["search", "web"],
         )
-        
+
         # 文件操作
         self.register_skill(
             id="file_read",
             name="读取文件",
             description="读取文件内容",
             type=SkillType.ACTION,
+            handler=self._builtin_file_read,
             parameters=[
                 {"name": "path", "type": "string", "description": "文件路径", "required": True},
             ],
             tags=["file", "io"],
         )
-        
+
         # 代码执行
         self.register_skill(
             id="code_execute",
             name="执行代码",
             description="执行 Python 代码",
             type=SkillType.ACTION,
+            handler=self._builtin_code_execute,
             parameters=[
                 {"name": "code", "type": "string", "description": "Python 代码", "required": True},
             ],
             tags=["code", "execute"],
         )
-        
+
         # 设备控制
         self.register_skill(
             id="device_control",
             name="设备控制",
             description="控制设备执行操作",
             type=SkillType.ACTION,
+            handler=self._builtin_device_control,
             parameters=[
                 {"name": "device_id", "type": "string", "description": "设备 ID", "required": True},
                 {"name": "action", "type": "string", "description": "操作", "required": True},
@@ -701,8 +704,68 @@ class SkillManager:
             ],
             tags=["device", "control"],
         )
-        
-        logger.info("已注册内置技能")
+
+        logger.info("已注册内置技能（含 handler）")
+
+    # ── 内置技能 handler ────────────────────────────────────
+
+    async def _builtin_web_search(self, query: str, num_results: int = 5, **kwargs) -> Dict:
+        """网页搜索：委托给 httpx GET 请求（简单实现）"""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    "https://api.duckduckgo.com/",
+                    params={"q": query, "format": "json", "no_html": 1},
+                )
+                data = resp.json()
+                results = []
+                for item in (data.get("RelatedTopics") or [])[:num_results]:
+                    if isinstance(item, dict) and "Text" in item:
+                        results.append({"text": item["Text"], "url": item.get("FirstURL", "")})
+                return {"success": True, "query": query, "results": results}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _builtin_file_read(self, path: str, **kwargs) -> Dict:
+        """读取文件"""
+        import os
+        if not os.path.isfile(path):
+            return {"success": False, "error": f"File not found: {path}"}
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(1_000_000)  # 1 MB 上限
+            return {"success": True, "path": path, "content": content, "size": len(content)}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _builtin_code_execute(self, code: str, **kwargs) -> Dict:
+        """在受限环境中执行 Python 代码"""
+        import io, contextlib
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        local_ns: Dict = {}
+        try:
+            with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+                exec(compile(code, "<skill_code_execute>", "exec"), {"__builtins__": __builtins__}, local_ns)
+            return {
+                "success": True,
+                "stdout": stdout_buf.getvalue(),
+                "stderr": stderr_buf.getvalue(),
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e), "stderr": stderr_buf.getvalue()}
+
+    async def _builtin_device_control(self, device_id: str, action: str, params: Dict = None, **kwargs) -> Dict:
+        """设备控制：委托给 DeviceAgentManager"""
+        try:
+            from core.device_agent_manager import DeviceAgentManager
+            manager = DeviceAgentManager.instance() if hasattr(DeviceAgentManager, 'instance') else None
+            if manager:
+                return await manager.execute_on_device(device_id, action, params or {})
+            return {"success": False, "error": "DeviceAgentManager not available"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     async def load_from_config(self):
         """从配置文件加载技能包；若文件不存在则创建默认模板"""

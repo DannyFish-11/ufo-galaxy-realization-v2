@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Channel Plugin Routes
+Galaxy - Channel Plugin Routes
 =====================================
 
 Routes:
@@ -16,7 +16,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

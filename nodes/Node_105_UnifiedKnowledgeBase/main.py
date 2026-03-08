@@ -28,7 +28,7 @@ from pydantic import BaseModel
 import subprocess
 from nodes.common.cors_config import get_cors_origins
 
-logger = logging.getLogger("UFO-Galaxy.Node105KB")
+logger = logging.getLogger("Galaxy.Node105KB")
 
 app = FastAPI(title="Node 105 - Unified Knowledge Base", version="1.0.0")
 app.add_middleware(

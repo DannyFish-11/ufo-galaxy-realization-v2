@@ -1,12 +1,12 @@
-# UFO Galaxy 节点实现
+# Galaxy 节点实现
 
-本目录包含UFO Galaxy系统的P0级优先节点实现。
+本目录包含Galaxy系统的P0级优先节点实现。
 
 ## 🎯 系统架构 (Round 2 - R-4)
 
 ### 能力注册与发现系统 (OpenClaw 风格)
 
-UFO Galaxy 现已集成**统一能力注册和发现系统**，提供：
+Galaxy 现已集成**统一能力注册和发现系统**，提供：
 
 - **能力注册**：节点启动时自动注册能力到中央索引
 - **能力发现**：通过名称、分类或节点查询可用能力
@@ -70,7 +70,7 @@ python tests/test_capability_integration.py
 
 ## 🔄 三大自主循环 (Three Autonomous Loops)
 
-UFO Galaxy 内置三条端到端自主循环，实现系统自愈、持续学习和能力扩展：
+Galaxy 内置三条端到端自主循环，实现系统自愈、持续学习和能力扩展：
 
 ### Loop 1 — 自愈 → 代码修复 → 验证 (Self-Heal → Code-Fix → Verify)
 
@@ -291,14 +291,14 @@ Node_XX_Name/
 
 | 仓库 | 职责 | 说明 |
 |------|------|------|
-| [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) | **唯一 Android 真相源** | 打包 APK，实现 Android 客户端 UI 和 Agent |
-| ufo-galaxy-realization-v2（本仓库） | **服务端 + 桥接 + VLM** | 接收 APK 连接，提供 AI 推理和节点调度 |
+| [galaxy-android](https://github.com/DannyFish-11/galaxy-android) | **唯一 Android 真相源** | 打包 APK，实现 Android 客户端 UI 和 Agent |
+| galaxy-realization-v2（本仓库） | **服务端 + 桥接 + VLM** | 接收 APK 连接，提供 AI 推理和节点调度 |
 
 ### 架构示意图
 
 ```
 独立仓库(APK)
-  DannyFish-11/ufo-galaxy-android
+  DannyFish-11/galaxy-android
         │
         │  WebSocket (AIP v3.0)
         │  ws://<host>:8765/ws/android

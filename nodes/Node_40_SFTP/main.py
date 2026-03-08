@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Node_40_SFTP: UFO Galaxy 系统中的 SFTP 文件传输节点
+Node_40_SFTP: Galaxy 系统中的 SFTP 文件传输节点
 
 该节点负责通过 SFTP (SSH File Transfer Protocol) 安全地进行文件上传、下载和管理。
 它支持异步操作，并提供了健康检查和状态查询接口。

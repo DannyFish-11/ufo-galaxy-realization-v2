@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 性能优化层
+Galaxy - 性能优化层
 ========================
 
 融合元气 AI Bot 精髓 - 极速响应：
@@ -30,7 +30,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
-logger = logging.getLogger("UFO-Galaxy.Performance")
+logger = logging.getLogger("Galaxy.Performance")
 
 
 # ============================================================================

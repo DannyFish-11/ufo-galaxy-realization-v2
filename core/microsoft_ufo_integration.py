@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 微软 UFO 深度集成模块
+Galaxy - 微软 UFO 深度集成模块
 ===================================
 
 功能：
 1. 深度集成微软 UFO 的 UI 自动化能力
 2. 统一的 UI 控制接口
 3. 支持 Windows、macOS 的 UI 自动化
-4. 与 UFO Galaxy 节点系统无缝对接
+4. 与 Galaxy 节点系统无缝对接
 
 作者：Manus AI
 日期：2026-02-06
@@ -462,12 +462,12 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
 
 
 # ============================================================================
-# UFO Galaxy 集成服务
+# Galaxy 集成服务
 # ============================================================================
 
-class UFOIntegrationService:
+class GalaxyIntegrationService:
     """
-    UFO Galaxy 与微软 UFO 的集成服务
+    Galaxy 与微软 UFO 的集成服务
     
     提供统一的 UI 自动化接口，供节点系统调用
     """
@@ -605,7 +605,7 @@ class UFOIntegrationService:
 # 全局实例
 # ============================================================================
 
-ufo_integration = UFOIntegrationService()
+ufo_integration = GalaxyIntegrationService()
 
 
 # ============================================================================
@@ -617,7 +617,7 @@ def create_ufo_api():
     from fastapi import FastAPI
     from pydantic import BaseModel
     
-    app = FastAPI(title="UFO Galaxy - Microsoft UFO Integration", version="2.0")
+    app = FastAPI(title="Galaxy - Microsoft UFO Integration", version="2.0")
     
     class ClickRequest(BaseModel):
         x: int

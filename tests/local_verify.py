@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Local Verification
+Galaxy Local Verification
 Tests the core logic without Podman/Docker
 
 This script:
@@ -270,7 +270,7 @@ async def run_tests():
 async def main():
     print("""
 ╔═══════════════════════════════════════════════════════════╗
-║         UFO Galaxy Local Verification                     ║
+║         Galaxy Local Verification                     ║
 ║         Testing without Podman/Docker                     ║
 ╚═══════════════════════════════════════════════════════════╝
     """)

@@ -1,5 +1,5 @@
 # ============================================================
-# UFO Galaxy L4 — Production Docker Image
+# Galaxy L4 — Production Docker Image
 # Multi-stage build for smaller, secure images
 # ============================================================
 
@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Stage 2: Runtime ──
 FROM python:3.11-slim
 
-LABEL maintainer="UFO Galaxy Team"
+LABEL maintainer="Galaxy Team"
 LABEL version="2.3.23"
 
 WORKDIR /app
@@ -40,8 +40,8 @@ COPY --from=builder /install /usr/local
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    UFO_GALAXY_HOME=/app \
-    UFO_GALAXY_MODE=production
+    GALAXY_HOME=/app \
+    GALAXY_MODE=production
 
 # Create non-root user before COPY
 RUN groupadd -r galaxy && useradd -r -g galaxy -m -u 1000 galaxy \

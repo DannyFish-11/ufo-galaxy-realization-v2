@@ -4,27 +4,60 @@ Node 05: Auth - 认证服务
 提供用户认证、JWT令牌管理、权限控制功能
 """
 import os
-import jwt
 import json
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
-from fastapi import FastAPI, HTTPException, Depends, Header
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
-from nodes.common.cors_config import get_cors_origins
 
-app = FastAPI(title="Node 05 - Auth", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+logger = logging.getLogger("Node_05_Auth")
+
+# 可选依赖：优雅降级
+try:
+    import jwt
+    HAS_JWT = True
+except BaseException as e:
+    HAS_JWT = False
+    jwt = None
+    logger.warning(f"jwt 不可用: {e}，JWT 认证将降级")
+
+try:
+    from fastapi import FastAPI, HTTPException, Depends, Header
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    from pydantic import BaseModel
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
+    logger.warning("fastapi/pydantic 未安装，HTTP API 不可用")
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
+
+if HAS_FASTAPI:
+    app = FastAPI(title="Node 05 - Auth", version="2.0.0")
+    app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+else:
+    app = None
 
 # JWT配置
 JWT_SECRET = os.getenv("AUTH_JWT_SECRET", secrets.token_urlsafe(32))
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = int(os.getenv("AUTH_JWT_EXPIRE_DAYS", "7"))
 
-security = HTTPBearer()
+security = HTTPBearer() if HAS_FASTAPI else None
+
+if not HAS_FASTAPI:
+    # 提供轻量级替代，使模块可导入
+    from dataclasses import dataclass as _dataclass
+    class _FakeBaseModel:
+        def __init_subclass__(cls, **kwargs):
+            pass
+    BaseModel = _FakeBaseModel
 
 class User(BaseModel):
     username: str

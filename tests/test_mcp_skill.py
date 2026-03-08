@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - MCP 和 Skill 系统测试
+Galaxy - MCP 和 Skill 系统测试
 ===================================
 
 测试 MCP 和 Skill 系统是否正常工作
@@ -90,7 +90,7 @@ async def test_capability_orchestrator():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy MCP 和 Skill 系统测试")
+    print("Galaxy MCP 和 Skill 系统测试")
     print("=" * 60)
     
     results = []
