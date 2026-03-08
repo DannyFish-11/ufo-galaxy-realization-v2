@@ -1,6 +1,6 @@
 """
 Node 14: Shell Operations
-UFO Galaxy 64-Core MCP Matrix - Core Tool Node
+Galaxy 64-Core MCP Matrix - Core Tool Node
 
 Provides comprehensive shell/command execution:
 - Command execution (sync and async)
@@ -10,7 +10,7 @@ Provides comprehensive shell/command execution:
 - Output streaming
 - Timeout handling
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -45,14 +45,25 @@ STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "300"))
 DEFAULT_SHELL = os.getenv("DEFAULT_SHELL", "/bin/bash")
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", str(Path.home()))
+WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~"))
 
-# Security: blocked commands
+# Security: blocked commands and patterns
 BLOCKED_COMMANDS = [
     "rm -rf /",
     "mkfs",
     "dd if=/dev/zero",
     ":(){:|:&};:",  # Fork bomb
+    "chmod 777",
+    "curl | sh", "curl | bash", "wget | sh", "wget | bash",
+    "shutdown", "reboot", "halt", "poweroff",
+    "passwd", "useradd", "userdel", "usermod",
+    "iptables -F", "ufw disable",
+]
+
+# Shell metacharacters that indicate injection when used in shell=True mode
+# without explicit args — block command chaining
+_DANGEROUS_SHELL_PATTERNS = [
+    "&&", "||", ";", "|", "`", "$(", "${", "\n", "\r",
 ]
 
 logging.basicConfig(
@@ -110,14 +121,30 @@ class ShellService:
         self._process_info: Dict[int, ProcessInfo] = {}
         logger.info(f"ShellService initialized with workspace: {self.workspace_root}")
     
-    def _is_command_safe(self, command: str) -> bool:
-        """Check if command is safe to execute."""
+    def _is_command_safe(self, command: str, shell_mode: bool = True) -> bool:
+        """Check if command is safe to execute.
+
+        Blocks:
+        1. Known dangerous commands (blocklist)
+        2. Shell metacharacters that enable command chaining/injection
+           when running in shell=True mode without explicit args
+        """
         command_lower = command.lower().strip()
-        
+
         for blocked in BLOCKED_COMMANDS:
             if blocked.lower() in command_lower:
                 return False
-        
+
+        # In shell mode, reject commands containing injection metacharacters
+        if shell_mode:
+            for pattern in _DANGEROUS_SHELL_PATTERNS:
+                if pattern in command:
+                    logger.warning(
+                        f"Blocked shell metacharacter '{pattern}' in command: "
+                        f"{command[:80]}..."
+                    )
+                    return False
+
         return True
     
     def _resolve_cwd(self, cwd: Optional[str]) -> str:
@@ -132,7 +159,7 @@ class ShellService:
     async def execute(self, request: ExecuteRequest) -> Dict[str, Any]:
         """Execute shell command."""
         # Security check
-        if not self._is_command_safe(request.command):
+        if not self._is_command_safe(request.command, shell_mode=request.shell):
             return {
                 "success": False,
                 "error": "Command blocked for security reasons",
@@ -434,7 +461,7 @@ class ShellService:
 
 app = FastAPI(
     title=f"Node {NODE_ID}: {NODE_NAME}",
-    description="Shell operations service for UFO Galaxy",
+    description="Shell operations service for Galaxy",
     version="5.0.0"
 )
 

@@ -1,5 +1,5 @@
 # ============================================================
-# UFO Galaxy — Production Docker Compose
+# Galaxy — Production Docker Compose
 # 24/7 continuous operation with monitoring stack
 #
 # Usage:
@@ -13,7 +13,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ufo-galaxy
+    container_name: galaxy
     restart: unless-stopped
 
     deploy:
@@ -39,8 +39,8 @@ services:
 
     env_file: .env
     environment:
-      - UFO_GALAXY_MODE=production
-      - UFO_GALAXY_LOG_LEVEL=INFO
+      - GALAXY_MODE=production
+      - GALAXY_LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
 
     ports:
@@ -66,7 +66,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.gateway
-    container_name: ufo-galaxy-gateway
+    container_name: galaxy-gateway
     restart: unless-stopped
 
     deploy:
@@ -87,7 +87,7 @@ services:
 
     env_file: .env
     environment:
-      - UFO_GALAXY_MODE=production
+      - GALAXY_MODE=production
       - GALAXY_UPSTREAM=http://galaxy:8080
 
     ports:
@@ -115,7 +115,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ufo-galaxy-dashboard
+    container_name: galaxy-dashboard
     restart: unless-stopped
     command: ["python", "start_galaxy.py", "--port", "8001"]
 
@@ -160,9 +160,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ufo-galaxy-watchdog
+    container_name: galaxy-watchdog
     restart: unless-stopped
-    command: ["python", "-m", "daemon.ufogalaxy_daemon"]
+    command: ["python", "-m", "daemon.galaxy_daemon"]
 
     deploy:
       resources:
@@ -198,7 +198,7 @@ services:
   # ── Monitoring: Prometheus ──
   prometheus:
     image: prom/prometheus:latest
-    container_name: ufo-galaxy-prometheus
+    container_name: galaxy-prometheus
     restart: unless-stopped
 
     command:
@@ -226,7 +226,7 @@ services:
   # ── Monitoring: Grafana Dashboard ──
   grafana:
     image: grafana/grafana:latest
-    container_name: ufo-galaxy-grafana
+    container_name: galaxy-grafana
     restart: unless-stopped
 
     environment:
@@ -256,7 +256,7 @@ services:
   # ── Log Aggregator: Fluent Bit ──
   fluent-bit:
     image: fluent/fluent-bit:latest
-    container_name: ufo-galaxy-logs
+    container_name: galaxy-logs
     restart: unless-stopped
 
     volumes:

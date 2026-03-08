@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph Module for UFO Galaxy v5.0
+Knowledge Graph Module for Galaxy v5.0
 
 Implements a NetworkX-based knowledge graph with:
 - 13 entity types
@@ -11,7 +11,7 @@ Implements a NetworkX-based knowledge graph with:
 The knowledge graph serves as the central repository for all learned
 knowledge, enabling complex reasoning and inference.
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -197,7 +197,7 @@ class Relationship:
 
 class KnowledgeGraph:
     """
-    NetworkX-based knowledge graph for UFO Galaxy.
+    NetworkX-based knowledge graph for Galaxy.
     
     Features:
     - Multi-entity type support (13 types)
@@ -831,7 +831,7 @@ def demo():
         print(f"  Community {i+1}: {', '.join(comm_names)}")
     
     # Export
-    kg.export_to_json("/mnt/okcomputer/output/ufo-galaxy-v5/enhancements/learning/demo_graph.json")
+    kg.export_to_json("/mnt/okcomputer/output/galaxy-v5/enhancements/learning/demo_graph.json")
     print("\nExported to demo_graph.json")
 
 

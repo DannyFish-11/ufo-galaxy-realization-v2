@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - API 配置向导
+Galaxy - API 配置向导
 ==========================
 便捷的交互式配置工具，帮助用户快速配置系统所需的 API 和服务。
 
@@ -319,7 +319,7 @@ class SetupWizard:
             
     def run_interactive_setup(self):
         """运行交互式配置"""
-        print_header("UFO Galaxy 配置向导")
+        print_header("Galaxy 配置向导")
         
         print_info("正在检测已有的 API 配置...")
         self.load_existing_config()
@@ -407,7 +407,7 @@ class SetupWizard:
     def _save_config(self):
         """保存配置到 .env 文件"""
         lines = [
-            "# UFO Galaxy - 环境变量配置",
+            "# Galaxy - 环境变量配置",
             "# 由配置向导自动生成",
             f"# 生成时间: {__import__('datetime').datetime.now().isoformat()}",
             "",
@@ -461,7 +461,7 @@ class SetupWizard:
 
 def quick_setup():
     """快速配置（非交互式）"""
-    print_header("UFO Galaxy 快速配置")
+    print_header("Galaxy 快速配置")
     
     project_root = Path(__file__).parent
     env_file = project_root / ".env"
@@ -477,7 +477,7 @@ def quick_setup():
         print_success(f"从环境变量检测到 {len(detected)} 个 API Key")
         
         # 生成 .env 文件
-        lines = ["# UFO Galaxy - 自动检测的配置", ""]
+        lines = ["# Galaxy - 自动检测的配置", ""]
         for key, value in detected.items():
             lines.append(f"{key}={value}")
             
@@ -503,7 +503,7 @@ def main():
     """主函数"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO Galaxy 配置向导")
+    parser = argparse.ArgumentParser(description="Galaxy 配置向导")
     parser.add_argument("--interactive", "-i", action="store_true", help="交互式配置")
     parser.add_argument("--quick", "-q", action="store_true", help="快速配置（自动检测）")
     parser.add_argument("--test", "-t", action="store_true", help="测试现有配置")

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - SKILL.md 格式加载器
+Galaxy - SKILL.md 格式加载器
 ================================
 
 兼容 OpenClaw 的 SKILL.md 格式
@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-logger = logging.getLogger("UFO-Galaxy.SkillMD")
+logger = logging.getLogger("Galaxy.SkillMD")
 
 # Strict allowlist of commands permitted in SKILL.md execution
 ALLOWED_COMMANDS = frozenset([

@@ -1,4 +1,4 @@
-# UFO Galaxy L4 级自主性智能系统 - 快速启动指南
+# Galaxy L4 级自主性智能系统 - 快速启动指南
 
 ## 🚀 5 分钟快速启动
 
@@ -23,11 +23,11 @@
 
 ```bash
 # 克隆服务端代码
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/galaxy-realization.git
+cd galaxy-realization
 
 # 克隆 Android 客户端（可选）
-git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
+git clone https://github.com/DannyFish-11/galaxy-android.git
 ```
 
 ---
@@ -60,7 +60,7 @@ nano config/l4_config.json
 ```json
 {
   "system": {
-    "name": "UFO Galaxy L4",
+    "name": "Galaxy L4",
     "version": "1.0.0",
     "log_level": "INFO"
   },
@@ -137,7 +137,7 @@ python3 tests/test_l4_e2e.py
 
 ```
 ============================================================
-UFO Galaxy L4 级自主性智能系统 - 端到端测试
+Galaxy L4 级自主性智能系统 - 端到端测试
 ============================================================
 ✓ 测试 1: 环境扫描器 - 通过
 ✓ 测试 2: 目标分解 - 通过
@@ -161,7 +161,7 @@ python3 tests/test_l4_physical_devices.py
 
 ```
 ============================================================
-UFO Galaxy L4 级物理设备控制测试
+Galaxy L4 级物理设备控制测试
 ============================================================
 ✓ 测试 1: 无人机控制 - 通过
 ✓ 测试 2: 3D 打印机控制 - 通过
@@ -199,7 +199,7 @@ python3 start_l4.py
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 
-[INFO] UFO Galaxy L4 系统启动中...
+[INFO] Galaxy L4 系统启动中...
 [INFO] 加载配置: config/l4_config.json
 [INFO] 初始化环境扫描器...
 [INFO] 初始化目标分解器...
@@ -215,22 +215,22 @@ python3 start_l4.py
 
 ```bash
 # 复制服务文件
-sudo cp deployment/ufo-galaxy-l4.service /etc/systemd/system/
+sudo cp deployment/galaxy-l4.service /etc/systemd/system/
 
 # 重新加载 systemd
 sudo systemctl daemon-reload
 
 # 启用自动启动
-sudo systemctl enable ufo-galaxy-l4
+sudo systemctl enable galaxy-l4
 
 # 启动服务
-sudo systemctl start ufo-galaxy-l4
+sudo systemctl start galaxy-l4
 
 # 查看状态
-sudo systemctl status ufo-galaxy-l4
+sudo systemctl status galaxy-l4
 
 # 查看日志
-sudo journalctl -u ufo-galaxy-l4 -f
+sudo journalctl -u galaxy-l4 -f
 ```
 
 ---
@@ -265,10 +265,10 @@ asyncio.run(test())
 
 ### 6.2 通过 Android 客户端测试（可选）
 
-1. 在 Android Studio 中打开 `ufo-galaxy-android` 项目
+1. 在 Android Studio 中打开 `galaxy-android` 项目
 2. 配置服务器地址（`app/src/main/res/values/strings.xml`）
 3. 编译并安装到 Android 设备
-4. 启用无障碍服务（设置 → 无障碍 → UFO Galaxy）
+4. 启用无障碍服务（设置 → 无障碍 → Galaxy）
 5. 打开应用，输入自然语言指令
 
 **示例指令**:
@@ -284,10 +284,10 @@ asyncio.run(test())
 
 ```bash
 # 实时查看日志
-tail -f logs/ufo_galaxy_l4.log
+tail -f logs/galaxy_l4.log
 
 # 查看特定模块日志
-grep "AutonomousPlanner" logs/ufo_galaxy_l4.log
+grep "AutonomousPlanner" logs/galaxy_l4.log
 ```
 
 ### 7.2 查看性能指标
@@ -316,14 +316,14 @@ print('性能评估:', metacog.assessments)
 
 ```bash
 # 确保在正确的目录
-cd ufo-galaxy-realization
+cd galaxy-realization
 
 # 添加到 Python 路径
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
 # 或在脚本开头添加
 import sys
-sys.path.insert(0, '/path/to/ufo-galaxy-realization')
+sys.path.insert(0, '/path/to/galaxy-realization')
 ```
 
 ### 问题 2: 资源匹配失败
@@ -407,8 +407,8 @@ class CustomNode:
 
 ## 🔗 相关链接
 
-- **GitHub 仓库**: https://github.com/DannyFish-11/ufo-galaxy-realization
-- **Android 客户端**: https://github.com/DannyFish-11/ufo-galaxy-android
+- **GitHub 仓库**: https://github.com/DannyFish-11/galaxy-realization
+- **Android 客户端**: https://github.com/DannyFish-11/galaxy-android
 - **完整状态报告**: `L4_SYSTEM_STATUS_REPORT.md`
 - **部署文档**: `deployment/L4_DEPLOYMENT.md`
 

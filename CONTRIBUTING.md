@@ -1,4 +1,4 @@
-# Contributing to UFO Galaxy
+# Contributing to Galaxy
 
 Thank you for contributing!
 
@@ -7,8 +7,8 @@ Thank you for contributing!
 1. **Python 3.11+** is required.
 2. Clone the repository and create a virtual environment:
    ```bash
-   git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
-   cd ufo-galaxy-realization-v2
+   git clone https://github.com/DannyFish-11/galaxy-realization-v2.git
+   cd galaxy-realization-v2
    python3.11 -m venv .venv
    source .venv/bin/activate   # Windows: .venv\Scripts\activate
    ```
@@ -64,7 +64,7 @@ python scripts/verify_capability_registry.py
 ## Android Client
 
 The Android client code belongs **exclusively** in the
-[DannyFish-11/ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android)
+[DannyFish-11/galaxy-android](https://github.com/DannyFish-11/galaxy-android)
 repository.  Do **not** add Kotlin, Gradle, or Android-specific build files to
 this repository.  The server-side AIP v3.0 bridge lives in
 `galaxy_gateway/android_bridge.py`.

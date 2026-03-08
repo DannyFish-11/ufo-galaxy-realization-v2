@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Monitoring & Infrastructure Routes
+Galaxy - Monitoring & Infrastructure Routes
 =================================================
 
 Routes:
@@ -30,7 +30,7 @@ from starlette.responses import Response
 
 _startup_time = _time.time()
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

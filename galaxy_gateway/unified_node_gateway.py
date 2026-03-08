@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Unified Node Gateway (Standardized)
+Galaxy Fusion - Unified Node Gateway (Standardized)
 
 统一节点网关（标准化版）
 
@@ -27,7 +27,7 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("UnifiedGateway")
 
-app = FastAPI(title="UFO Galaxy Unified Node Gateway")
+app = FastAPI(title="Galaxy Unified Node Gateway")
 
 # 节点实例缓存
 node_instances: Dict[str, Any] = {}

@@ -2,7 +2,7 @@
 
 ## 📋 概述
 
-Node_111_ContextManager 是 UFO³ Galaxy 系统的上下文管理引擎，提供跨会话持久化、用户画像学习和智能上下文检索功能。
+Node_111_ContextManager 是 Galaxy 系统的上下文管理引擎，提供跨会话持久化、用户画像学习和智能上下文检索功能。
 
 ### 核心功能
 

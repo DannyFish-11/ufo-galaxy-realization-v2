@@ -1,5 +1,5 @@
 """
-UFO Galaxy - AI Intent Routes
+Galaxy - AI Intent Routes
 ================================
 
 Routes:
@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from core.routes._shared import registered_devices, task_queue
 from core.routes._models import AIIntentRequest, ConversationRequest
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

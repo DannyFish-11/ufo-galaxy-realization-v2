@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 监控告警系统
+Galaxy - 监控告警系统
 =========================
 
 融合元气 AI Bot 精髓 - 可靠性 99.99%：
@@ -25,7 +25,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 
-logger = logging.getLogger("UFO-Galaxy.Monitoring")
+logger = logging.getLogger("Galaxy.Monitoring")
 
 
 # ============================================================================

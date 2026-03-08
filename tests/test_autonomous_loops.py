@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tests for the three autonomous loops added to UFO Galaxy:
+Tests for the three autonomous loops added to Galaxy:
 
 Loop 1: Self-healing -> code fix (Node_112_SelfHealing)
 Loop 2: Learning -> planner strategy (galaxy_main_loop_l4 + autonomous_planner)

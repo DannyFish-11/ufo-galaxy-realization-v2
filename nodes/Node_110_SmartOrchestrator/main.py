@@ -17,6 +17,41 @@ import uuid
 import heapq
 from nodes.common.cors_config import get_cors_origins
 
+
+def _safe_condition(condition: str, context: dict) -> bool:
+    """Safely evaluate a simple condition string without eval().
+
+    Supports: ``key == value``, ``key != value``, ``key > value``,
+    plain key truthiness check.
+    Falls back to True if the condition cannot be parsed.
+    """
+    import ast as _ast
+    import operator
+
+    condition = condition.strip()
+    if not condition:
+        return True
+
+    ops = {"==": operator.eq, "!=": operator.ne, ">=": operator.ge,
+           "<=": operator.le, ">": operator.gt, "<": operator.lt}
+
+    for op_str, op_func in sorted(ops.items(), key=lambda x: -len(x[0])):
+        if op_str in condition:
+            left, right = condition.split(op_str, 1)
+            left, right = left.strip(), right.strip()
+            lval = context.get(left, left)
+            try:
+                rval = _ast.literal_eval(right)
+            except (ValueError, SyntaxError):
+                rval = context.get(right, right)
+            try:
+                return op_func(lval, rval)
+            except TypeError:
+                return False
+
+    return bool(context.get(condition, True))
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -379,11 +414,8 @@ class SmartOrchestrator:
             logger.error(f"Workflow execution {execution.execution_id} failed: {e}")
     
     def _evaluate_condition(self, condition: str, context: Dict) -> bool:
-        """评估条件"""
-        try:
-            return eval(condition, {"__builtins__": {}}, context)
-        except Exception:
-            return True
+        """评估条件（安全，不使用 eval）"""
+        return _safe_condition(condition, context)
     
     async def start(self):
         """启动编排器"""

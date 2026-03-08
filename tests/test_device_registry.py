@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 设备注册系统测试
+Galaxy - 设备注册系统测试
 ============================
 
 测试设备注册管理器
@@ -102,7 +102,7 @@ async def test_device_registry():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy 设备注册系统测试")
+    print("Galaxy 设备注册系统测试")
     print("=" * 60)
     
     result = await test_device_registry()

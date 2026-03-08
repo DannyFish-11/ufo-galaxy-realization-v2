@@ -1,5 +1,5 @@
 """
-UFO Galaxy - SkillMDLoader allowlist unit tests
+Galaxy - SkillMDLoader allowlist unit tests
 ================================================
 
 Validates that the command allowlist in SkillMDLoader correctly blocks

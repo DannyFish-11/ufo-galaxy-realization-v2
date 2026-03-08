@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Node Adapter Base Class (Reinforced)
+Galaxy Fusion - Node Adapter Base Class (Reinforced)
 
 节点适配器基类（加固版）
 

@@ -2,7 +2,7 @@
 name: github
 description: "GitHub operations via gh CLI: issues, PRs, CI runs"
 version: "1.0.0"
-author: "UFO Galaxy"
+author: "Galaxy"
 tags: ["github", "git", "cli"]
 metadata:
   requires:

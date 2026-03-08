@@ -17,7 +17,7 @@ class QwenThinkRouter:
 
     async def plan_route(self, task_description: str, available_nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
         """利用 Qwen-Think-Max 进行深度思考并生成执行计划"""
-        prompt = f"""你是一个 UFO Galaxy 系统的首席架构师。
+        prompt = f"""你是一个 Galaxy 系统的首席架构师。
         当前任务: {task_description}
         可用节点拓扑: {json.dumps(available_nodes, ensure_ascii=False)}
 

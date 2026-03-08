@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Gateway v3.0 - 综合测试脚本
+Galaxy Gateway v3.0 - 综合测试脚本
 
 测试内容：
 1. AIP v2.0 协议
@@ -359,7 +359,7 @@ async def test_resumable_transfer(results: TestResults):
 async def run_all_tests():
     """运行所有测试"""
     print("="*80)
-    print("UFO³ Galaxy Gateway v3.0 - 综合测试")
+    print("Galaxy Gateway v3.0 - 综合测试")
     print("="*80)
     print(f"测试时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*80)

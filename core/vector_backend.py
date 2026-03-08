@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 统一向量后端
+Galaxy - 统一向量后端
 ==========================
 
 支持多种向量引擎，按优先级自动检测并降级：
@@ -14,7 +14,7 @@ UFO Galaxy - 统一向量后端
   KB_VECTOR_BACKEND   向量引擎选择：chroma | qdrant | local（默认 local）
   QDRANT_URL          Qdrant 服务器地址，例如 http://localhost:6333
   CHROMA_PERSIST_DIR  ChromaDB 持久化目录（默认 ./chroma_db）
-  KB_COLLECTION       向量集合名称（默认 ufo_galaxy_knowledge）
+  KB_COLLECTION       向量集合名称（默认 galaxy_knowledge）
   KB_VECTOR_SIZE      向量维度（默认 384）
 
 接口（所有后端统一）：
@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.VectorBackend")
+logger = logging.getLogger("Galaxy.VectorBackend")
 
 # ---------------------------------------------------------------------------
 # 结果数据类
@@ -362,7 +362,7 @@ def create_vector_backend(
         backend: 后端类型 chroma|qdrant|local（默认读 KB_VECTOR_BACKEND，fallback local）
         qdrant_url: Qdrant 服务器地址（默认读 QDRANT_URL）
         chroma_persist_dir: ChromaDB 持久化目录（默认读 CHROMA_PERSIST_DIR，fallback ./chroma_db）
-        collection_name: 集合/索引名（默认读 KB_COLLECTION，fallback ufo_galaxy_knowledge）
+        collection_name: 集合/索引名（默认读 KB_COLLECTION，fallback galaxy_knowledge）
         vector_size: 向量维度（默认读 KB_VECTOR_SIZE，fallback 384）
 
     Returns:
@@ -371,7 +371,7 @@ def create_vector_backend(
     _backend = (backend or os.environ.get("KB_VECTOR_BACKEND", "local")).strip().lower()
     _qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "")
     _chroma_dir = chroma_persist_dir or os.environ.get("CHROMA_PERSIST_DIR", "./chroma_db")
-    _collection = collection_name or os.environ.get("KB_COLLECTION", "ufo_galaxy_knowledge")
+    _collection = collection_name or os.environ.get("KB_COLLECTION", "galaxy_knowledge")
     _vsize = int(vector_size or os.environ.get("KB_VECTOR_SIZE", "384"))
 
     if _backend == "chroma":

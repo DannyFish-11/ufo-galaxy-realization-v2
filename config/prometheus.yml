@@ -1,4 +1,4 @@
-# UFO Galaxy — Prometheus Scrape Configuration
+# Galaxy — Prometheus Scrape Configuration
 # ==============================================
 
 global:
@@ -7,7 +7,7 @@ global:
   scrape_timeout: 10s
 
   external_labels:
-    cluster: 'ufo-galaxy'
+    cluster: 'galaxy'
     environment: 'production'
 
 # ── Alerting (optional — uncomment to enable) ──

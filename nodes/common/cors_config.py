@@ -1,5 +1,5 @@
 """
-UFO Galaxy - CORS 配置
+Galaxy - CORS 配置
 ======================
 
 从环境变量读取 CORS 允许的源，替代硬编码 allow_origins=["*"]。

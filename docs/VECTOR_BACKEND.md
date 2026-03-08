@@ -1,6 +1,6 @@
 # 向量知识库后端配置指南
 
-UFO Galaxy 的知识库节点（Node_72、Node_105、enhancements/Node_52）和 AI 意图引擎
+Galaxy 的知识库节点（Node_72、Node_105、enhancements/Node_52）和 AI 意图引擎
 均通过 `core/vector_backend.py` 统一向量后端对外提供知识检索能力。
 
 后端按优先级自动检测并降级：
@@ -20,7 +20,7 @@ KB_VECTOR_BACKEND=local   →  直接使用 Jaccard 关键词搜索（默认，�
 | `KB_VECTOR_BACKEND` | 向量引擎选择：`chroma` \| `qdrant` \| `local` | `local` |
 | `QDRANT_URL` | Qdrant 服务器地址（仅 `qdrant` 模式使用） | 空（不启用） |
 | `CHROMA_PERSIST_DIR` | ChromaDB 持久化目录（仅 `chroma` 模式使用） | `./chroma_db` |
-| `KB_COLLECTION` | 向量集合 / 索引名称 | `ufo_galaxy_knowledge` |
+| `KB_COLLECTION` | 向量集合 / 索引名称 | `galaxy_knowledge` |
 | `KB_VECTOR_SIZE` | 向量维度，需与 Embedding 模型匹配 | `384` |
 
 配置方式：在 `.env` 文件中设置（参见 `.env.example`）或直接设置系统环境变量。

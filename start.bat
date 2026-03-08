@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title UFO Galaxy - L4 级自主性智能系统
+title Galaxy - L4 级自主性智能系统
 
 echo.
 echo  ╔═══════════════════════════════════════════════════════════╗
 echo  ║                                                           ║
-echo  ║              UFO Galaxy 启动器                            ║
+echo  ║              Galaxy 启动器                            ║
 echo  ║              L4 级自主性智能系统                          ║
 echo  ║                                                           ║
 echo  ╚═══════════════════════════════════════════════════════════╝
@@ -51,9 +51,9 @@ pip install -q -r requirements.txt 2>nul
 
 :: 启动系统
 echo.
-echo [信息] 启动 UFO Galaxy...
+echo [信息] 启动 Galaxy...
 echo.
-python main.py %*
+python unified_launcher.py %*
 
 :: 退出
 deactivate

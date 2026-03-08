@@ -1,11 +1,11 @@
 """
-Emergence Detector for UFO Galaxy v5.0
+Emergence Detector for Galaxy v5.0
 
 This module detects emergent behaviors and patterns in the learning system.
 Emergent behaviors are complex patterns that arise from the interaction
 of simpler components.
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 

@@ -165,10 +165,10 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["ufo-galaxy"],
+  "tags": ["galaxy"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
-  "title": "UFO Galaxy — System Overview",
+  "title": "Galaxy — System Overview",
   "uid": "galaxy-overview",
   "version": 1
 }

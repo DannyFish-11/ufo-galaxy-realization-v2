@@ -17,8 +17,19 @@ from pydantic import BaseModel
 # 添加当前目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core.android_vlm_engine import AndroidVLMEngine, SUPPORTED_VLM_PROVIDERS
-from nodes.common.cors_config import get_cors_origins
+try:
+    from core.android_vlm_engine import AndroidVLMEngine, SUPPORTED_VLM_PROVIDERS
+    HAS_VLM_ENGINE = True
+except ImportError:
+    HAS_VLM_ENGINE = False
+    AndroidVLMEngine = None
+    SUPPORTED_VLM_PROVIDERS = []
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
 
 app = FastAPI(title="Node 113 - AndroidVLM", version="1.1.0")
 app.add_middleware(
@@ -30,7 +41,7 @@ app.add_middleware(
 )
 
 # 初始化引擎
-engine = AndroidVLMEngine()
+engine = AndroidVLMEngine() if AndroidVLMEngine else None
 
 # ============================================================================
 # 数据模型

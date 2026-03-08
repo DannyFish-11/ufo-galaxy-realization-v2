@@ -140,7 +140,7 @@ async def lifespan(app: FastAPI):
 ### 独立测试
 
 ```bash
-cd /home/ubuntu/ufo-galaxy-check/nodes/Node_00_StateMachine
+cd /home/ubuntu/galaxy-check/nodes/Node_00_StateMachine
 python3 stale_lock_reaper.py
 ```
 

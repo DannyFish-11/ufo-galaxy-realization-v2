@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy 完整系统端到端测试
+Galaxy 完整系统端到端测试
 """
 import sys
 sys.path.insert(0, '.')
@@ -8,7 +8,7 @@ sys.path.insert(0, '.')
 def test_all_modules():
     """测试所有核心模块"""
     print("=" * 60)
-    print("UFO Galaxy 完整系统测试")
+    print("Galaxy 完整系统测试")
     print("=" * 60)
     
     results = {

@@ -48,7 +48,7 @@ podman run -d --name redis -p 6379:6379 redis:alpine
 ### 2. 启动 Memos（Podman Desktop）
 
 ```powershell
-podman run -d --name memos -p 5230:5230 -v E:\ufo-galaxy\data\memos:/var/opt/memos neosmemo/memos:stable
+podman run -d --name memos -p 5230:5230 -v E:\galaxy\data\memos:/var/opt/memos neosmemo/memos:stable
 ```
 
 ### 3. 配置环境变量
@@ -58,7 +58,7 @@ podman run -d --name memos -p 5230:5230 -v E:\ufo-galaxy\data\memos:/var/opt/mem
 ```bash
 # Redis 配置
 REDIS_URL=redis://localhost:6379
-REDIS_PREFIX=ufo_galaxy:
+REDIS_PREFIX=galaxy:
 SHORT_TERM_TTL=3600  # 1 小时
 
 # Memos 配置
@@ -110,7 +110,7 @@ curl -X POST http://localhost:8080/memory \
 curl -X POST http://localhost:8080/memory \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "UFO³ Galaxy 是一个分布式 AI 代理系统",
+    "content": "Galaxy 是一个分布式 AI 代理系统",
     "memory_type": "long_term",
     "tags": ["ufo", "galaxy", "ai"],
     "metadata": {"source": "documentation"}
@@ -123,7 +123,7 @@ curl -X POST http://localhost:8080/memory \
 curl -X POST http://localhost:8080/memory/recall \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "UFO Galaxy",
+    "query": "Galaxy",
     "limit": 5
   }'
 ```

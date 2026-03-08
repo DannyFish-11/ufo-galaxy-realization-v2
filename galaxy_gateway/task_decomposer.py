@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - 复杂任务分解和跨设备协同模块
+Galaxy - 复杂任务分解和跨设备协同模块
 
 功能：
 1. 复杂任务分解 - 将复杂任务分解为多个子任务
@@ -299,89 +299,8 @@ class TaskDecomposer:
         
         return tasks, data_flows
 
-# ============================================================================
-# 跨设备协同管理器
-# ============================================================================
-
-class CrossDeviceCoordinator:
-    """跨设备协同管理器"""
-    
-    def __init__(self, device_registry):
-        """
-        初始化协同管理器
-        
-        Args:
-            device_registry: 设备注册表
-        """
-        self.device_registry = device_registry
-        self.decomposer = TaskDecomposer(device_registry)
-    
-    def plan_cross_device_task(
-        self,
-        task_description: str,
-        involved_devices: List[str]
-    ) -> tuple[List[Any], List[DataFlow]]:
-        """
-        规划跨设备任务
-        
-        Args:
-            task_description: 任务描述
-            involved_devices: 涉及的设备列表
-        
-        Returns:
-            (任务列表, 数据流列表)
-        """
-        # 这里可以使用 LLM 来理解任务描述并规划
-        # 目前返回空列表
-        return [], []
-    
-    def optimize_task_placement(
-        self,
-        tasks: List[Any]
-    ) -> List[Any]:
-        """
-        优化任务放置 - 根据设备能力和负载智能分配任务
-        
-        Args:
-            tasks: 任务列表
-        
-        Returns:
-            优化后的任务列表
-        """
-        optimized_tasks = []
-        
-        for task in tasks:
-            # 检查目标设备是否支持该任务
-            device = self.device_registry.get_device(task.device_id)
-            
-            if not device:
-                # 设备不存在，尝试找替代设备
-                alternative = self._find_alternative_device(task)
-                if alternative:
-                    task.device_id = alternative.device_id
-                    task.parameters["original_device"] = device
-            
-            elif task.target and task.target not in device.capabilities:
-                # 设备不支持该应用，尝试找替代设备
-                alternative = self._find_alternative_device(task)
-                if alternative:
-                    task.device_id = alternative.device_id
-                    task.parameters["original_device"] = device.device_id
-            
-            optimized_tasks.append(task)
-        
-        return optimized_tasks
-    
-    def _find_alternative_device(self, task: Any):
-        """查找替代设备"""
-        from enhanced_nlu_v2 import DeviceStatus
-        
-        # 查找支持该应用的在线设备
-        for device in self.device_registry.get_online_devices():
-            if task.target and task.target in device.capabilities:
-                return device
-        
-        return None
+# NOTE: CrossDeviceCoordinator moved to galaxy_gateway/cross_device_coordinator.py
+# (the duplicate stub that was here has been removed)
 
 # ============================================================================
 # 智能任务规划器
@@ -428,7 +347,7 @@ class IntelligentTaskPlanner:
             })
         
         # 构建 Prompt
-        system_prompt = """你是 UFO³ Galaxy 的任务规划专家。你的任务是将用户的复杂指令分解为多个可执行的子任务。
+        system_prompt = """你是 Galaxy 的任务规划专家。你的任务是将用户的复杂指令分解为多个可执行的子任务。
 
 请严格按照以下 JSON 格式输出：
 {
@@ -526,7 +445,7 @@ async def main():
     decomposer = TaskDecomposer(device_registry)
     
     print("="*80)
-    print("UFO³ Galaxy - 复杂任务分解测试")
+    print("Galaxy - 复杂任务分解测试")
     print("="*80)
     
     # 测试 1: 文件传输

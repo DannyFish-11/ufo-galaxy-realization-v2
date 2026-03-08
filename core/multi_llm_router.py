@@ -18,7 +18,7 @@ from enum import Enum
 
 import httpx
 
-logger = logging.getLogger("UFO-Galaxy.LLMRouter")
+logger = logging.getLogger("Galaxy.LLMRouter")
 
 
 # ───────────────────── 数据模型 ─────────────────────
@@ -54,6 +54,7 @@ class ProviderConfig:
     max_tokens: int = 4096
     supports_tools: bool = True
     supports_json_mode: bool = True
+    timeout: float = 60.0
     # 运行时状态
     status: ProviderStatus = ProviderStatus.HEALTHY
     latency_avg_ms: float = 0.0
@@ -144,8 +145,88 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
 
 # ───────────────────── 提供商适配器 ─────────────────────
 
+class ProviderCircuitBreaker:
+    """
+    提供商级别断路器
+
+    状态：CLOSED → OPEN → HALF_OPEN → CLOSED
+    - CLOSED: 正常调用
+    - OPEN: 连续失败达到阈值，拒绝调用，等待恢复
+    - HALF_OPEN: 恢复期，允许少量试探性调用
+    """
+
+    def __init__(self, name: str, failure_threshold: int = 5,
+                 recovery_timeout: float = 60.0, half_open_max_calls: int = 2):
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_max_calls = half_open_max_calls
+
+        self._consecutive_failures = 0
+        self._state = "closed"  # closed, open, half_open
+        self._last_failure_time = 0.0
+        self._half_open_calls = 0
+
+    @property
+    def state(self) -> str:
+        if self._state == "open":
+            # 检查是否应该进入半开状态
+            if time.time() - self._last_failure_time >= self.recovery_timeout:
+                self._state = "half_open"
+                self._half_open_calls = 0
+                logger.info(f"断路器 [{self.name}] OPEN → HALF_OPEN (尝试恢复)")
+        return self._state
+
+    def allow_request(self) -> bool:
+        """是否允许请求通过"""
+        s = self.state
+        if s == "closed":
+            return True
+        if s == "half_open":
+            return self._half_open_calls < self.half_open_max_calls
+        return False  # open
+
+    def record_success(self):
+        """记录成功调用"""
+        if self._state == "half_open":
+            self._consecutive_failures = 0
+            self._state = "closed"
+            logger.info(f"断路器 [{self.name}] HALF_OPEN → CLOSED (恢复成功)")
+        else:
+            self._consecutive_failures = 0
+
+    def record_failure(self):
+        """记录失败调用"""
+        self._consecutive_failures += 1
+        self._last_failure_time = time.time()
+
+        if self._state == "half_open":
+            self._half_open_calls += 1
+            if self._half_open_calls >= self.half_open_max_calls:
+                self._state = "open"
+                logger.warning(f"断路器 [{self.name}] HALF_OPEN → OPEN (恢复失败)")
+        elif self._consecutive_failures >= self.failure_threshold:
+            self._state = "open"
+            logger.warning(
+                f"断路器 [{self.name}] CLOSED → OPEN "
+                f"(连续 {self._consecutive_failures} 次失败)"
+            )
+
+    def to_dict(self) -> Dict:
+        return {
+            "state": self.state,
+            "consecutive_failures": self._consecutive_failures,
+            "failure_threshold": self.failure_threshold,
+            "recovery_timeout": self.recovery_timeout,
+        }
+
+
 class BaseProviderAdapter:
     """提供商适配器基类"""
+
+    DEFAULT_TIMEOUT = 30.0    # 默认请求超时
+    MAX_RETRIES = 2           # 最大重试次数
+    RETRY_BASE_DELAY = 1.0    # 重试基础延迟
 
     def __init__(self, config: ProviderConfig):
         self.config = config
@@ -153,7 +234,7 @@ class BaseProviderAdapter:
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=60.0)
+            self._client = httpx.AsyncClient(timeout=self.config.timeout)
         return self._client
 
     async def chat(self, messages: List[Dict], model: str,
@@ -376,9 +457,13 @@ class MultiLLMRouter:
     def __init__(self):
         self.providers: Dict[str, ProviderConfig] = {}
         self.adapters: Dict[str, BaseProviderAdapter] = {}
+        self.circuit_breakers: Dict[str, ProviderCircuitBreaker] = {}
         self.call_history: List[Dict] = []
         self._lock = asyncio.Lock()
         self._discover_providers()
+        # 为每个提供商创建断路器
+        for name in self.providers:
+            self.circuit_breakers[name] = ProviderCircuitBreaker(name)
 
     def _get_key(self, key_name: str) -> str:
         """优先从 CredentialVault 获取密钥，若不可用则回退环境变量"""
@@ -549,39 +634,47 @@ class MultiLLMRouter:
                 last_user_msg = m.get("content", "").lower()
                 break
 
-        # 关键词 → 任务类型
-        patterns = {
+        # 加权关键词 → 任务类型 (keyword, weight)
+        weighted_patterns: Dict[TaskType, List[tuple]] = {
             TaskType.CODING: [
-                "代码", "编程", "函数", "类", "bug", "code", "implement",
-                "debug", "function", "class", "api", "脚本", "script",
+                ("代码", 2), ("编程", 2), ("函数", 2), ("类", 1), ("bug", 3),
+                ("code", 3), ("implement", 3), ("debug", 3), ("function", 2),
+                ("class", 1), ("api", 2), ("脚本", 2), ("script", 2),
             ],
             TaskType.REASONING: [
-                "为什么", "推理", "解释", "分析原因", "why", "reason",
-                "explain", "思考", "逻辑", "论证",
+                ("为什么", 3), ("推理", 3), ("解释", 2), ("分析原因", 3),
+                ("why", 3), ("reason", 3), ("explain", 2), ("思考", 2),
+                ("逻辑", 3), ("论证", 2),
             ],
             TaskType.PLANNING: [
-                "计划", "规划", "步骤", "方案", "plan", "strategy",
-                "分解", "目标", "路线图", "roadmap",
+                ("计划", 3), ("规划", 3), ("步骤", 2), ("方案", 2),
+                ("plan", 3), ("strategy", 3), ("分解", 2), ("目标", 1),
+                ("路线图", 3), ("roadmap", 3),
             ],
             TaskType.CREATIVE: [
-                "创作", "写", "故事", "诗", "write", "create",
-                "creative", "设计", "文章", "作文",
+                ("创作", 3), ("写", 1), ("故事", 3), ("诗", 3),
+                ("write", 1), ("create", 2), ("creative", 3),
+                ("设计", 2), ("文章", 2), ("作文", 3),
             ],
             TaskType.ANALYSIS: [
-                "分析", "数据", "报告", "统计", "analyze", "data",
-                "report", "评估", "比较",
+                ("分析", 3), ("数据", 2), ("报告", 2), ("统计", 3),
+                ("analyze", 3), ("data", 2), ("report", 2),
+                ("评估", 2), ("比较", 2),
             ],
             TaskType.AGENT_CONTROL: [
-                "agent", "执行", "控制", "设备", "节点", "device",
-                "node", "命令", "command",
+                ("agent", 3), ("执行", 1), ("控制", 2), ("设备", 2),
+                ("节点", 2), ("device", 3), ("node", 2),
+                ("命令", 2), ("command", 2),
             ],
         }
 
-        scores: Dict[TaskType, int] = {}
-        for task_type, keywords in patterns.items():
-            score = sum(1 for kw in keywords if kw in last_user_msg)
+        scores: Dict[TaskType, float] = {}
+        for task_type, weighted_keywords in weighted_patterns.items():
+            total_weight = sum(w for _, w in weighted_keywords)
+            score = sum(w for kw, w in weighted_keywords if kw in last_user_msg)
             if score > 0:
-                scores[task_type] = score
+                # Normalize by total possible weight
+                scores[task_type] = score / max(total_weight, 1)
 
         if scores:
             return max(scores, key=scores.get)
@@ -700,6 +793,12 @@ class MultiLLMRouter:
             adapter = self.adapters[prov_name]
             tried_providers.append(prov_name)
 
+            # 断路器检查
+            cb = self.circuit_breakers.get(prov_name)
+            if cb and not cb.allow_request():
+                logger.info(f"断路器拒绝: {prov_name} (状态: {cb.state})")
+                continue
+
             try:
                 response = await adapter.chat(
                     messages=messages, model=mdl, tools=tools,
@@ -707,7 +806,7 @@ class MultiLLMRouter:
                     response_format=response_format, **kwargs,
                 )
 
-                # 更新状态
+                # 更新状态 + 断路器
                 self.providers[prov_name].success_count += 1
                 self.providers[prov_name].last_used = time.time()
                 self.providers[prov_name].latency_avg_ms = (
@@ -716,6 +815,8 @@ class MultiLLMRouter:
                 )
                 if self.providers[prov_name].status == ProviderStatus.DEGRADED:
                     self.providers[prov_name].status = ProviderStatus.HEALTHY
+                if cb:
+                    cb.record_success()
 
                 # 记录成本（非阻塞，失败不影响主流程）
                 try:
@@ -758,6 +859,8 @@ class MultiLLMRouter:
             except Exception as e:
                 self.providers[prov_name].error_count += 1
                 self.providers[prov_name].last_error = str(e)
+                if cb:
+                    cb.record_failure()
                 if self.providers[prov_name].error_count >= 5:
                     self.providers[prov_name].status = ProviderStatus.DOWN
                 else:
@@ -810,6 +913,7 @@ class MultiLLMRouter:
         """获取路由器状态"""
         providers_status = {}
         for name, prov in self.providers.items():
+            cb = self.circuit_breakers.get(name)
             providers_status[name] = {
                 "status": prov.status.value,
                 "models": prov.models,
@@ -818,6 +922,7 @@ class MultiLLMRouter:
                 "error_count": prov.error_count,
                 "latency_avg_ms": round(prov.latency_avg_ms, 1),
                 "last_error": prov.last_error,
+                "circuit_breaker": cb.to_dict() if cb else None,
             }
 
         recent = self.call_history[-20:]
@@ -850,9 +955,132 @@ class MultiLLMRouter:
                 self.providers[name].status = ProviderStatus.DOWN
         return results
 
+    # ───────── LLMManager 兼容接口 ─────────
+    # 使 MultiLLMRouter 可以作为 LLMManager 的替代品使用，
+    # 保持与 scheduler 和 chat.py 的接口兼容。
+
+    def is_available(self) -> bool:
+        """检查是否有可用的 LLM Provider"""
+        return len(self.providers) > 0
+
+    def get_default_model(self) -> str:
+        """获取默认模型名"""
+        if self.providers:
+            first = next(iter(self.providers.values()))
+            return first.default_model
+        return "gpt-4o"
+
+    def get_provider_status(self) -> list:
+        """获取所有 Provider 状态（兼容 LLMManager 格式）"""
+        result = []
+        for name, prov in self.providers.items():
+            result.append({
+                "provider": name,
+                "model": prov.default_model,
+                "source": "env/vault",
+                "active": prov.status != ProviderStatus.DOWN,
+                "supports_tools": prov.supports_tools,
+            })
+        return result
+
+    async def chat_completion(
+        self,
+        messages: list,
+        tools: list = None,
+        model_alias: str = None,
+        task_type: str = None,
+        **kwargs,
+    ):
+        """
+        OpenAI 兼容的 chat completion 接口。
+        内部调用 self.chat() 并将 LLMResponse 转为 OpenAI 格式，
+        使 scheduler 等依赖 .choices[0].message 格式的模块无需修改。
+        """
+        resp = await self.chat(
+            messages=messages,
+            tools=tools,
+            model=model_alias,
+            task_type=task_type,
+            **{k: v for k, v in kwargs.items() if k in (
+                "temperature", "max_tokens", "response_format",
+                "auto_failover", "provider", "tool_choice",
+            )},
+        )
+
+        # 如果 raw_response 存在且有标准 OpenAI 格式，直接用它
+        if resp.raw_response and "choices" in resp.raw_response:
+            return _OpenAICompatResponse(resp.raw_response, resp.model)
+
+        # 否则手动构建 OpenAI 兼容结构
+        message_dict = {"role": "assistant", "content": resp.content}
+        if resp.tool_calls:
+            message_dict["tool_calls"] = resp.tool_calls
+
+        return _OpenAICompatResponse({
+            "choices": [{"message": message_dict, "finish_reason": "stop"}],
+            "model": resp.model,
+            "usage": {
+                "prompt_tokens": resp.input_tokens,
+                "completion_tokens": resp.output_tokens,
+            },
+        }, resp.model)
+
     async def close(self):
         for adapter in self.adapters.values():
             await adapter.close()
+
+
+class _OpenAICompatResponse:
+    """
+    将 dict 包装为 OpenAI SDK 风格的响应对象，
+    支持 response.choices[0].message.content / .tool_calls 访问。
+    """
+
+    def __init__(self, data: dict, model: str = ""):
+        self._data = data
+        self.model = model or data.get("model", "")
+        self.choices = [_OpenAICompatChoice(c) for c in data.get("choices", [])]
+        usage = data.get("usage", {})
+        self.usage = _OpenAICompatUsage(usage) if usage else None
+
+
+class _OpenAICompatUsage:
+    def __init__(self, data: dict):
+        self.prompt_tokens = data.get("prompt_tokens", 0)
+        self.completion_tokens = data.get("completion_tokens", 0)
+        self.total_tokens = self.prompt_tokens + self.completion_tokens
+
+
+class _OpenAICompatChoice:
+    def __init__(self, data: dict):
+        msg = data.get("message", {})
+        self.message = _OpenAICompatMessage(msg)
+        self.finish_reason = data.get("finish_reason", "stop")
+
+
+class _OpenAICompatMessage:
+    def __init__(self, data: dict):
+        self.role = data.get("role", "assistant")
+        self.content = data.get("content", "")
+        raw_tool_calls = data.get("tool_calls")
+        if raw_tool_calls:
+            self.tool_calls = [_OpenAICompatToolCall(tc) for tc in raw_tool_calls]
+        else:
+            self.tool_calls = None
+
+
+class _OpenAICompatToolCall:
+    def __init__(self, data: dict):
+        self.id = data.get("id", "")
+        self.type = data.get("type", "function")
+        func = data.get("function", {})
+        self.function = _OpenAICompatFunction(func)
+
+
+class _OpenAICompatFunction:
+    def __init__(self, data: dict):
+        self.name = data.get("name", "")
+        self.arguments = data.get("arguments", "{}")
 
 
 # ───────────────────── 单例 ─────────────────────

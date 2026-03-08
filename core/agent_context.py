@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Agent 上下文管理
+Galaxy - Agent 上下文管理
 ============================
 
 基于 Vercel 研究：被动上下文比主动调用更可靠。
@@ -57,7 +57,7 @@ def get_system_prompt() -> str:
     """
     context = get_agent_context()
     
-    return f"""你是 UFO Galaxy 的 AI 助手。
+    return f"""你是 Galaxy 的 AI 助手。
 
 以下是系统的知识索引，请参考这些信息来回答问题和执行任务：
 

@@ -107,6 +107,11 @@ class DeviceRouter:
     def register_device(self, device_id: str, device_type: str,
                         capabilities: List[str], websocket=None) -> bool:
         """注册设备 — 同时写入本地运行时表和统一注册表"""
+        self._task_events: Dict[str, asyncio.Event] = {}
+    
+    def register_device(self, device_id: str, device_type: str, 
+                       capabilities: List[str], websocket=None) -> bool:
+        """注册设备"""
         try:
             device = Device(device_id, device_type, capabilities)
             device.websocket = websocket
@@ -215,7 +220,7 @@ class DeviceRouter:
             # 4. 分发任务
             if len(target_devices) == 1:
                 # 单设备任务
-                result = await self._dispatch_single_device_task(task, target_devices[0])
+                result = await self.dispatch_task(task, target_devices[0])
             else:
                 # 多设备协同任务
                 result = await self._dispatch_cross_device_task(task, target_devices)
@@ -327,8 +332,8 @@ class DeviceRouter:
         
         return payload
     
-    async def _dispatch_single_device_task(self, task: Dict, device: Device) -> Dict:
-        """分发单设备任务 — 委托给 core.command_router 或直接 WebSocket"""
+    async def dispatch_task(self, task: Dict, device: Device) -> Dict:
+        """分发单设备任务（公共 API，供跨模块调用）"""
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
 
@@ -368,16 +373,26 @@ class DeviceRouter:
                     "payload": task["payload"],
                 }
                 await device.websocket.send(json.dumps(message))
-
+                
+                # 等待结果，使用 asyncio.Event 避免阻塞轮询
                 task_id = task["task_id"]
-                for _ in range(30):
-                    if task_id in self.task_results:
-                        result = self.task_results[task_id]
-                        del self.task_results[task_id]
-                        return result
-                    await asyncio.sleep(1)
+                event = asyncio.Event()
+                self._task_events[task_id] = event
 
-                return {"success": False, "error": "任务执行超时"}
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=30.0)
+                    if task_id in self.task_results:
+                        result = self.task_results.pop(task_id)
+                        return result
+                except asyncio.TimeoutError:
+                    pass
+                finally:
+                    self._task_events.pop(task_id, None)
+                
+                return {
+                    "success": False,
+                    "error": "任务执行超时"
+                }
             else:
                 return {"success": False, "error": "设备未连接"}
 
@@ -395,7 +410,7 @@ class DeviceRouter:
             
             # 并行执行所有子任务
             results = await asyncio.gather(
-                *[self._dispatch_single_device_task(subtask, device) 
+                *[self.dispatch_task(subtask, device) 
                   for subtask, device in zip(subtasks, devices)],
                 return_exceptions=True
             )
@@ -426,18 +441,40 @@ class DeviceRouter:
         """处理任务执行结果"""
         try:
             self.task_results[task_id] = result
-            
+
+            # Signal the waiting event if any
+            event = self._task_events.get(task_id)
+            if event:
+                event.set()
+
             if task_id in self.task_queue:
                 task = self.task_queue[task_id]
                 task["status"] = "completed" if result.get("success") else "failed"
                 task["result"] = result
                 task["completed_at"] = datetime.now().isoformat()
-            
+
             logger.info(f"✅ 任务结果已记录: {task_id}")
             
         except Exception as e:
             logger.error(f"❌ 处理任务结果失败: {e}")
     
+    @staticmethod
+    def aggregate_results(results: List[Dict]) -> Dict:
+        """Aggregate multi-device task results into a unified summary."""
+        success_count = sum(1 for r in results if r.get("success"))
+        failure_count = len(results) - success_count
+        results_by_device = {}
+        for r in results:
+            device_id = r.get("device_id", "unknown")
+            results_by_device[device_id] = r
+        return {
+            "total": len(results),
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "overall_success": failure_count == 0 and len(results) > 0,
+            "results_by_device": results_by_device,
+        }
+
     def get_device_status(self) -> Dict:
         """获取所有设备状态"""
         return {

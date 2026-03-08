@@ -2,6 +2,7 @@
 LEGACY: 请使用 unified_launcher.py 作为主入口。
 
 UFO³ Galaxy - 智能节点启动器
+Galaxy - 智能节点启动器
 =============================
 
 根据依赖关系智能启动节点，支持故障恢复和自动重启
@@ -136,12 +137,12 @@ class SmartLauncher:
             return False
     
     def _check_node_health(self, node_name: str) -> bool:
-        """检查节点是否健康运行"""
+        """检查节点是否健康运行 (进程检查 + HTTP 健康检查)"""
         if node_name not in self.processes:
             return False
-        
+
         process = self.processes[node_name]
-        
+
         # 检查进程是否还在运行
         if process.poll() is not None:
             return False
@@ -287,7 +288,7 @@ def main():
     """主函数"""
     if len(sys.argv) < 2:
         print(f"""
-{BLUE}UFO³ Galaxy - 智能节点启动器{RESET}
+{BLUE}Galaxy - 智能节点启动器{RESET}
 
 用法:
   python smart_launcher.py <命令> [选项]
@@ -334,10 +335,11 @@ def main():
         print(f"停止所有节点: python smart_launcher.py stop")
         print()
         
-        # 保持运行
+        # 保持运行 (使用 Event 等待，支持快速退出)
+        stop_event = threading.Event()
         try:
-            while True:
-                time.sleep(1)
+            while not stop_event.is_set():
+                stop_event.wait(1)
         except KeyboardInterrupt:
             launcher.stop_all()
     

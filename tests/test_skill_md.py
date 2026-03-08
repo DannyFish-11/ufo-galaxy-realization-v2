@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - SKILL.md 测试
+Galaxy - SKILL.md 测试
 =========================
 
 测试 SKILL.md 格式加载器
@@ -66,7 +66,7 @@ async def test_cli():
     
     try:
         # 测试 skill list
-        print("测试: ufo skill list")
+        print("测试: galaxy skill list")
         # 这里只是验证 CLI 可以导入
         from cli.ufo import skill_list
         await skill_list()
@@ -81,7 +81,7 @@ async def test_cli():
 async def main():
     """主测试"""
     print("=" * 60)
-    print("UFO Galaxy SKILL.md 测试")
+    print("Galaxy SKILL.md 测试")
     print("=" * 60)
     
     results = []

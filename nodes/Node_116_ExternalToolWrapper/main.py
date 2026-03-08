@@ -149,8 +149,12 @@ class ExternalToolWrapper:
         for tool in common_tools:
             self.tools[tool.tool_id] = tool
         
-        # 检查工具可用性
-        asyncio.create_task(self._check_all_tools())
+        # 检查工具可用性（延迟到事件循环可用时）
+        try:
+            asyncio.get_running_loop()
+            asyncio.create_task(self._check_all_tools())
+        except RuntimeError:
+            pass  # 无事件循环时跳过，待服务器启动后手动调用
     
     async def _check_all_tools(self):
         """检查所有工具的可用性"""

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO³ Galaxy 系统管理器 v2.0 (修复版)
+Galaxy 系统管理器 v2.0 (修复版)
 =================================
 
 修复内容:
@@ -128,8 +128,8 @@ class ConfigManager:
                 NodeConfig("06", "Filesystem", 8006, "core", True, critical=True),
             ],
             "monitoring": [
-                NodeConfig("65", "LoggerCentral", 8064, "monitoring", True, critical=True),
-                NodeConfig("67", "HealthMonitor", 8066, "monitoring", True, critical=True),
+                NodeConfig("65", "LoggerCentral", 8065, "monitoring", True, critical=True),
+                NodeConfig("67", "HealthMonitor", 8067, "monitoring", True, critical=True),
             ]
         }
 
@@ -392,7 +392,7 @@ class SystemManager:
             groups = [g for g in priority_order if g in NODES]
         
         print(f"\n{CYAN}{'='*80}{RESET}")
-        print(f"{CYAN}UFO³ Galaxy 系统启动{RESET}")
+        print(f"{CYAN}Galaxy 系统启动{RESET}")
         print(f"{CYAN}{'='*80}{RESET}\n")
         
         for group in groups:
@@ -518,7 +518,7 @@ async def main():
     """主函数"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO³ Galaxy 系统管理器 v2.0")
+    parser = argparse.ArgumentParser(description="Galaxy 系统管理器 v2.0")
     parser.add_argument("command", choices=["start", "stop", "status", "monitor", "report"],
                        help="命令")
     parser.add_argument("--group", "-g", 
@@ -562,7 +562,7 @@ async def main():
 if __name__ == "__main__":
     print(f"""
 {CYAN}╔═══════════════════════════════════════════════════════════════╗
-║   UFO³ Galaxy System Manager v2.0                             ║
+║   Galaxy System Manager v2.0                             ║
 ║   102 Nodes | Unified Config | Port Conflict Fixed            ║
 ╚═══════════════════════════════════════════════════════════════╝{RESET}
 """)

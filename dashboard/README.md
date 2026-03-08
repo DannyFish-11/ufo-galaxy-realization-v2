@@ -1,6 +1,6 @@
-# UFO³ Galaxy Dashboard
+# Galaxy Dashboard
 
-可视化管理界面 - 监控、管理和控制整个 UFO³ Galaxy 系统
+可视化管理界面 - 监控、管理和控制整个 Galaxy 系统
 
 ## 功能特性
 
@@ -186,10 +186,10 @@ tail -f dashboard.log
 
 ```bash
 # 构建镜像
-docker build -t ufo-galaxy-dashboard .
+docker build -t galaxy-dashboard .
 
 # 运行容器
-docker run -d -p 8080:8080 ufo-galaxy-dashboard
+docker run -d -p 8080:8080 galaxy-dashboard
 ```
 
 ### 生产环境

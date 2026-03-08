@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy 自主学习系统 - Node 53
+Galaxy 自主学习系统 - Node 53
 
 功能：
 1. 用户行为分析

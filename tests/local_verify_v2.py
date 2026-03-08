@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy 64-Core System - Enhanced Local Verification Script
+Galaxy 64-Core System - Enhanced Local Verification Script
 Tests SQLite persistence, cost estimation, and multi-resource locking.
 """
 
@@ -262,7 +262,7 @@ async def test_full_routing_flow():
 async def main():
     """Run all tests."""
     print("="*60)
-    print("UFO Galaxy 64-Core System - Enhanced Verification")
+    print("Galaxy 64-Core System - Enhanced Verification")
     print("Testing: SQLite, Cost Estimation, Multi-Resource Locking")
     print("="*60)
     

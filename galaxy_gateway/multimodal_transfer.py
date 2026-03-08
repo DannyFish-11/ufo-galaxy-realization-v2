@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - 多模态传输模块
+Galaxy - 多模态传输模块
 
 功能：
 1. 图片传输（JPEG、PNG、WebP）

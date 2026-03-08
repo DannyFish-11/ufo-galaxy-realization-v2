@@ -22,7 +22,21 @@ from typing import Dict, List, Optional, Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
-from core.unified_response import UnifiedChatResponse
+try:
+    from core.unified_response import UnifiedChatResponse
+except ImportError:
+    # Fallback: define a minimal UnifiedChatResponse for standalone mode
+    from pydantic import BaseModel as _BaseModel
+    class UnifiedChatResponse(_BaseModel):
+        success: bool = True
+        response: str = ""
+        intent: str = ""
+        confidence: float = 0.0
+        mode: str = "chat"
+        suggestions: list = []
+        data: dict = {}
+        error: str = ""
+        session_id: str = ""
 from nodes.common.cors_config import get_cors_origins
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -44,6 +58,13 @@ try:
 except ImportError:
     GALAXY_CORE_AVAILABLE = False
     galaxy_core = None
+
+# 导入现代意图解析器和对话记忆
+try:
+    from core.ai_intent import get_intent_parser, get_conversation_memory
+    MODERN_INTENT_AVAILABLE = True
+except ImportError:
+    MODERN_INTENT_AVAILABLE = False
 
 # 导入已有协议
 try:
@@ -92,6 +113,56 @@ try:
     TWIN_COMMANDER_AVAILABLE = True
 except ImportError:
     TWIN_COMMANDER_AVAILABLE = False
+# 导入 Agent 工厂
+try:
+    from core.agent_factory import AgentFactory, AGENT_TEMPLATES
+    agent_factory = AgentFactory()
+    AGENT_FACTORY_AVAILABLE = True
+except ImportError:
+    AGENT_FACTORY_AVAILABLE = False
+    agent_factory = None
+
+# 导入 LLM 路由器
+try:
+    from core.multi_llm_router import MultiLLMRouter
+    llm_router = MultiLLMRouter()
+    LLM_ROUTER_AVAILABLE = True
+    # 将路由器注入 AgentFactory
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent_factory.llm_router = llm_router
+except ImportError:
+    LLM_ROUTER_AVAILABLE = False
+    llm_router = None
+
+# 导入孪生模型管理器
+try:
+    from enhancements.agent_factory.twin_model import (
+        TwinModelManager, CouplingMode as TwinCouplingMode, twin_manager as _twin_mgr
+    )
+    twin_manager = _twin_mgr  # 全局单例
+    TWIN_AVAILABLE = True
+except ImportError:
+    TWIN_AVAILABLE = False
+    twin_manager = None
+    TwinCouplingMode = None
+
+# 导入设备数字孪生引擎
+try:
+    from core.digital_twin_engine import get_digital_twin_engine
+    device_twin_engine = get_digital_twin_engine()
+    DEVICE_TWIN_AVAILABLE = True
+except ImportError:
+    DEVICE_TWIN_AVAILABLE = False
+    device_twin_engine = None
+
+# 导入 Agent Team 管理器（注入 twin_manager）
+try:
+    from core.agent_team import TeamManager
+    team_manager = TeamManager(agent_factory, llm_router, twin_manager=twin_manager)
+    TEAM_MANAGER_AVAILABLE = True
+except ImportError:
+    TEAM_MANAGER_AVAILABLE = False
+    team_manager = None
 
 # 配置日志
 logging.basicConfig(
@@ -267,10 +338,492 @@ async def get_recent_events(limit: int = 50, event_type: str = None):
 @app.get("/api/v1/agents")
 async def list_agents():
     """列出所有 Agent"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        return {"agents": [a.to_dict() for a in agent_factory.agents.values()]}
     if GALAXY_CORE_AVAILABLE and galaxy_core:
         agents = galaxy_core.agents if hasattr(galaxy_core, "agents") else {}
         return {"agents": list(agents.values()) if isinstance(agents, dict) else agents}
     return {"agents": []}
+
+
+@app.get("/api/v1/agents/templates")
+async def list_agent_templates():
+    """获取可用的 Agent 模板列表"""
+    if AGENT_FACTORY_AVAILABLE:
+        from core.agent_factory import AGENT_TEMPLATES
+        templates = []
+        for name, config in AGENT_TEMPLATES.items():
+            templates.append({
+                "name": name,
+                "role": config.role.value,
+                "display_name": config.name,
+                "description": config.description,
+                "capabilities": [{"name": c.name, "description": c.description} for c in config.capabilities],
+            })
+        return {"templates": templates}
+    return {"templates": []}
+
+
+@app.get("/api/v1/agents/tree")
+async def get_agent_tree():
+    """获取 Agent 层级树"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        tree = {}
+        for agent_id, agent in agent_factory.agents.items():
+            tree[agent_id] = {
+                "name": agent.config.name,
+                "role": agent.config.role.value,
+                "state": agent.state.value,
+                "parent_id": agent.parent_id,
+                "children": agent.children_ids,
+                "depth": agent.depth,
+            }
+        return {"tree": tree}
+    return {"tree": {}}
+
+
+@app.post("/api/v1/agents/create")
+async def create_agent_from_template(request: dict):
+    """从模板创建 Agent"""
+    if not AGENT_FACTORY_AVAILABLE or not agent_factory:
+        return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+    template_name = request.get("template", "")
+    overrides = request.get("overrides", None)
+    parent_id = request.get("parent_id", None)
+    try:
+        agent = agent_factory.create_from_template(template_name, parent_id=parent_id, overrides=overrides)
+        return {"success": True, "agent": agent.to_dict()}
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/v1/agents/create/dynamic")
+async def create_agent_dynamic(request: dict):
+    """LLM 动态生成 Agent"""
+    if not AGENT_FACTORY_AVAILABLE or not agent_factory:
+        return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+    task_description = request.get("task_description", "")
+    if not task_description:
+        return JSONResponse(status_code=400, content={"error": "task_description is required"})
+    try:
+        agent = await agent_factory.create_from_llm(task_description, context=request.get("context"))
+        return {"success": True, "agent": agent.to_dict()}
+    except RuntimeError as e:
+        return JSONResponse(status_code=503, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/v1/agents/{agent_id}")
+async def get_agent_detail(agent_id: str):
+    """获取单个 Agent 详情"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent = agent_factory.agents.get(agent_id)
+        if agent:
+            return {"agent": agent.to_dict()}
+        return JSONResponse(status_code=404, content={"error": f"Agent {agent_id} not found"})
+    return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+@app.delete("/api/v1/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    """停止并删除 Agent"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent = agent_factory.agents.get(agent_id)
+        if not agent:
+            return JSONResponse(status_code=404, content={"error": f"Agent {agent_id} not found"})
+        from core.agent_factory import AgentState
+        agent.state = AgentState.TERMINATED
+        agent_factory.message_bus.unregister(agent_id)
+        del agent_factory.agents[agent_id]
+        return {"success": True, "message": f"Agent {agent_id} terminated"}
+    return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+@app.post("/api/v1/agents/{agent_id}/task")
+async def assign_agent_task(agent_id: str, request: dict):
+    """给 Agent 分配任务"""
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        agent = agent_factory.agents.get(agent_id)
+        if not agent:
+            return JSONResponse(status_code=404, content={"error": f"Agent {agent_id} not found"})
+        task = request.get("task", {})
+        agent.task_queue.append(task)
+        from core.agent_factory import AgentState
+        if agent.state == AgentState.IDLE:
+            agent.state = AgentState.WORKING
+        return {"success": True, "queue_length": len(agent.task_queue)}
+    return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+# ============================================================================
+# Agent Team API
+# ============================================================================
+
+@app.post("/api/v1/agents/team/create")
+async def create_team(request: dict):
+    """创建 Agent Team"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return JSONResponse(status_code=503, content={"error": "Team manager not available"})
+    strategy = request.get("strategy", "parallel")
+    task_hint = request.get("task_hint", "")
+    try:
+        team = await team_manager.create_team(strategy, task_hint)
+        return {"success": True, "team": team.to_dict()}
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/v1/agents/teams")
+async def list_teams():
+    """列出所有 Team"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return {"teams": []}
+    return {"teams": team_manager.list_teams()}
+
+
+@app.post("/api/v1/agents/team/{team_id}/execute")
+async def execute_team(team_id: str, request: dict):
+    """执行 Team 任务"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return JSONResponse(status_code=503, content={"error": "Team manager not available"})
+    task = request.get("task", "")
+    context = request.get("context", None)
+    if not task:
+        return JSONResponse(status_code=400, content={"error": "task is required"})
+    try:
+        result = await team_manager.execute_team(team_id, task, context)
+        return {"success": True, "result": result.to_dict()}
+    except ValueError as e:
+        return JSONResponse(status_code=404, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.delete("/api/v1/agents/team/{team_id}")
+async def disband_team(team_id: str):
+    """解散 Team"""
+    if not TEAM_MANAGER_AVAILABLE or not team_manager:
+        return JSONResponse(status_code=503, content={"error": "Team manager not available"})
+    success = team_manager.disband_team(team_id)
+    if success:
+        return {"success": True, "message": f"Team {team_id} disbanded"}
+    return JSONResponse(status_code=404, content={"error": f"Team {team_id} not found"})
+
+
+# ============================================================================
+# 孪生模型 API (Agent Twin + Device Twin)
+# ============================================================================
+
+# ── Agent 孪生 ──
+
+@app.get("/api/v1/twins")
+async def list_twins():
+    """列出所有 Agent 孪生模型"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return {"twins": [], "available": False}
+    return {"twins": twin_manager.list_twins(), "available": True}
+
+
+@app.post("/api/v1/twins/create")
+async def create_twin(request: dict):
+    """为 Agent 创建孪生体"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    source_id = request.get("source_id", "")
+    name = request.get("name", f"twin_{source_id[:8]}")
+    coupling_mode = request.get("coupling_mode", "loose")
+    snapshot = request.get("snapshot", {})
+
+    if not source_id:
+        return JSONResponse(status_code=400, content={"error": "source_id is required"})
+
+    try:
+        mode = TwinCouplingMode(coupling_mode)
+        twin = await twin_manager.create_twin(source_id, name, mode, snapshot)
+        return {
+            "success": True,
+            "twin_id": twin.twin_id,
+            "source_id": twin.source_id,
+            "coupling_mode": twin.coupling_mode.value,
+            "state": twin.state.value,
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/v1/twins/{twin_id}/couple")
+async def couple_twin(twin_id: str, request: dict):
+    """耦合孪生体"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    mode = request.get("mode", "loose")
+    try:
+        twin_manager.couple(twin_id, TwinCouplingMode(mode))
+        twin = twin_manager.get_twin(twin_id)
+        return {
+            "success": True,
+            "twin_id": twin_id,
+            "coupling_mode": twin.coupling_mode.value if twin else mode,
+            "state": twin.state.value if twin else "unknown",
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/v1/twins/{twin_id}/decouple")
+async def decouple_twin(twin_id: str):
+    """解耦孪生体"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    twin_manager.decouple(twin_id)
+    twin = twin_manager.get_twin(twin_id)
+    return {
+        "success": True,
+        "twin_id": twin_id,
+        "coupling_mode": twin.coupling_mode.value if twin else "decoupled",
+        "state": twin.state.value if twin else "detached",
+    }
+
+
+@app.get("/api/v1/twins/{twin_id}/predict")
+async def predict_twin(twin_id: str, horizon: int = 5):
+    """预测孪生体行为"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    predictions = await twin_manager.predict_behavior(twin_id, horizon)
+    return {"twin_id": twin_id, "predictions": predictions}
+
+
+@app.post("/api/v1/twins/{twin_id}/simulate")
+async def simulate_twin(twin_id: str, request: dict):
+    """孪生体场景模拟"""
+    if not TWIN_AVAILABLE or not twin_manager:
+        return JSONResponse(status_code=503, content={"error": "Twin manager not available"})
+
+    scenario = request.get("scenario", {})
+    result = await twin_manager.simulate(twin_id, scenario)
+    return {"twin_id": twin_id, "simulation": result}
+
+
+# ── 设备数字孪生 ──
+
+@app.get("/api/v1/device-twins")
+async def list_device_twins():
+    """列出设备数字孪生"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return {"twins": {}, "available": False}
+    return {"twins": device_twin_engine.get_global_state(), "available": True}
+
+
+@app.post("/api/v1/device-twins/create")
+async def create_device_twin(request: dict):
+    """创建设备数字孪生"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return JSONResponse(status_code=503, content={"error": "Device twin engine not available"})
+
+    device_id = request.get("device_id", "")
+    device_type = request.get("device_type", "generic")
+    initial_state = request.get("initial_state", {})
+    drift_threshold = request.get("drift_threshold", 0.1)
+
+    if not device_id:
+        return JSONResponse(status_code=400, content={"error": "device_id is required"})
+
+    twin = device_twin_engine.create_twin(device_id, device_type, initial_state, drift_threshold)
+    return {
+        "success": True,
+        "twin_id": twin.twin_id,
+        "device_id": twin.device_id,
+        "coupling_mode": twin.coupling_mode.value,
+        "status": twin.status.value,
+    }
+
+
+@app.get("/api/v1/device-twins/{twin_id}/state")
+async def get_device_twin_state(twin_id: str):
+    """获取设备孪生状态（含漂移检测）"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return JSONResponse(status_code=503, content={"error": "Device twin engine not available"})
+
+    twin = device_twin_engine.get_twin(twin_id)
+    if not twin:
+        return JSONResponse(status_code=404, content={"error": f"Device twin {twin_id} not found"})
+
+    state = twin.get_state()
+    # 附加漂移报告
+    drift = twin.detect_drift()
+    if drift:
+        state["drift"] = {
+            "max_drift": drift.max_drift,
+            "severity": drift.severity,
+            "drifted_properties": drift.drifted_properties,
+        }
+    return state
+
+
+@app.post("/api/v1/device-twins/{twin_id}/simulate")
+async def simulate_device_twin(twin_id: str, request: dict):
+    """设备孪生操作模拟"""
+    if not DEVICE_TWIN_AVAILABLE or not device_twin_engine:
+        return JSONResponse(status_code=503, content={"error": "Device twin engine not available"})
+
+    twin = device_twin_engine.get_twin(twin_id)
+    if not twin:
+        return JSONResponse(status_code=404, content={"error": f"Device twin {twin_id} not found"})
+
+    action = request.get("action", "")
+    params = request.get("params", {})
+    if not action:
+        return JSONResponse(status_code=400, content={"error": "action is required"})
+
+    result = await twin.simulate_action(action, params)
+    return {
+        "twin_id": twin_id,
+        "action": action,
+        "predicted_state": result.predicted_state,
+        "success_probability": result.success_probability,
+        "risks": result.risks,
+        "side_effects": result.side_effects,
+    }
+
+
+# ============================================================================
+# 节点 API 配置
+# ============================================================================
+
+# 节点 → 所需 API Key 映射
+NODE_API_REQUIREMENTS = {
+    "01": {"name": "OneAPI 聚合器", "category": "llm", "keys": [
+        {"env_var": "OPENROUTER_API_KEY", "label": "OpenRouter"},
+        {"env_var": "ZHIPU_API_KEY", "label": "智谱"},
+        {"env_var": "TOGETHER_API_KEY", "label": "Together"},
+        {"env_var": "PERPLEXITY_API_KEY", "label": "Perplexity"},
+        {"env_var": "XAI_API_KEY", "label": "xAI"},
+    ]},
+    "11": {"name": "GitHub", "category": "code", "keys": [
+        {"env_var": "GITHUB_TOKEN", "label": "GitHub Token"},
+    ]},
+    "15": {"name": "OCR", "category": "vision", "keys": [
+        {"env_var": "DEEPSEEK_OCR2_API_KEY", "label": "DeepSeek OCR"},
+    ]},
+    "18": {"name": "DeepL 翻译", "category": "translation", "keys": [
+        {"env_var": "DEEPL_API_KEY", "label": "DeepL"},
+    ]},
+    "20": {"name": "Qdrant 向量数据库", "category": "data", "keys": [
+        {"env_var": "QDRANT_URL", "label": "Qdrant URL"},
+        {"env_var": "QDRANT_API_KEY", "label": "Qdrant Key"},
+    ]},
+    "21": {"name": "Notion", "category": "data", "keys": [
+        {"env_var": "NOTION_API_KEY", "label": "Notion"},
+    ]},
+    "22": {"name": "Brave Search", "category": "search", "keys": [
+        {"env_var": "BRAVE_API_KEY", "label": "Brave Search"},
+    ]},
+    "24": {"name": "天气", "category": "search", "keys": [
+        {"env_var": "OPENWEATHER_API_KEY", "label": "OpenWeather"},
+    ]},
+    "49": {"name": "OctoPrint 3D打印", "category": "hardware", "keys": [
+        {"env_var": "OCTOPRINT_URL", "label": "OctoPrint URL"},
+        {"env_var": "OCTOPRINT_API_KEY", "label": "OctoPrint Key"},
+    ]},
+    "79": {"name": "本地 LLM", "category": "local_llm", "keys": [
+        {"env_var": "OLLAMA_URL", "label": "Ollama URL"},
+        {"env_var": "VLLM_API_BASE", "label": "vLLM URL"},
+        {"env_var": "VLLM_API_KEY", "label": "vLLM Key"},
+    ]},
+    "90": {"name": "多模态视觉", "category": "vision", "keys": [
+        {"env_var": "GEMINI_API_KEY", "label": "Gemini"},
+    ]},
+    "106": {"name": "GitHub Flow", "category": "code", "keys": [
+        {"env_var": "GITHUB_TOKEN", "label": "GitHub Token"},
+        {"env_var": "GEMINI_API_KEY", "label": "Gemini"},
+    ]},
+    "128": {"name": "媒体生成", "category": "media", "keys": [
+        {"env_var": "PIXVERSE_API_KEY", "label": "PixVerse"},
+    ]},
+}
+
+
+@app.get("/api/v1/config/node-apis")
+async def get_node_apis():
+    """获取所有节点的 API 配置需求和当前状态"""
+    node_apis = []
+    for node_id, info in NODE_API_REQUIREMENTS.items():
+        keys = []
+        for k in info["keys"]:
+            value = os.environ.get(k["env_var"], "")
+            # 也检查 CredentialVault
+            if not value:
+                try:
+                    from core.credential_vault import get_vault
+                    value = get_vault().get_credential(k["env_var"], actor="dashboard") or ""
+                except Exception:
+                    pass
+            keys.append({
+                "env_var": k["env_var"],
+                "label": k["label"],
+                "configured": bool(value),
+                "masked": value[:6] + "..." if len(value) > 6 else "",
+            })
+        node_apis.append({
+            "node_id": node_id,
+            "name": info["name"],
+            "category": info["category"],
+            "keys": keys,
+            "all_configured": all(k["configured"] for k in keys),
+        })
+    return {"node_apis": node_apis}
+
+
+@app.post("/api/v1/config/node-api-key")
+async def set_node_api_key(request: dict):
+    """设置节点 API Key（写入环境变量 + CredentialVault + .env）"""
+    env_var = request.get("env_var", "")
+    value = request.get("value", "")
+    if not env_var or not value:
+        return JSONResponse(status_code=400, content={"error": "env_var and value required"})
+
+    # 1. 写入环境变量
+    os.environ[env_var] = value
+
+    # 2. 写入 CredentialVault
+    try:
+        from core.credential_vault import get_vault
+        get_vault().set_credential(env_var, value, actor="dashboard")
+    except Exception as e:
+        logger.debug(f"CredentialVault write failed: {e}")
+
+    # 3. 持久化到 .env
+    env_path = os.path.join(PROJECT_ROOT, ".env")
+    try:
+        lines = []
+        replaced = False
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith(f"{env_var}="):
+                        lines.append(f"{env_var}={value}\n")
+                        replaced = True
+                    else:
+                        lines.append(line)
+        if not replaced:
+            lines.append(f"{env_var}={value}\n")
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+    except Exception as e:
+        logger.warning(f".env write failed: {e}")
+
+    return {"success": True, "env_var": env_var}
+
 
 # ============================================================================
 # LLM 提供商 API
@@ -380,84 +933,115 @@ async def query_knowledge(request: dict):
 # 智能对话
 # ============================================================================
 
-async def get_parsed_intent_modern(message: str, context: Optional[List] = None) -> Optional[Dict[str, Any]]:
-    """
-    使用 core.ai_intent.IntentParser 进行意图解析（现代版）
+def _build_unified_response(
+    success: bool,
+    response: str,
+    intent: str = "chat",
+    confidence: float = 0.0,
+    suggestions: Optional[List[str]] = None,
+    data: Optional[Dict] = None,
+    error: Optional[str] = None,
+) -> Dict[str, Any]:
+    """构建统一的 API 响应格式 (UnifiedChatResponse)"""
+    return {
+        "success": success,
+        "response": response,
+        "intent": intent,
+        "confidence": confidence,
+        "suggestions": suggestions or [],
+        "data": data or {},
+        "error": error,
+        "timestamp": datetime.now().isoformat(),
+    }
 
-    返回与旧 parse_intent() 兼容的 dict 格式，失败时返回 None。
+
+async def get_parsed_intent_modern(message: str, session_id: str = "default"):
     """
-    try:
-        from core.ai_intent import get_intent_parser
-        parser = get_intent_parser()
-        ctx = {"history": context} if context else None
-        parsed = await parser.parse(message, ctx)
-        # 映射 ParsedIntent → 旧 dict 格式
-        intent_type = parsed.intent
-        action = parsed.command
-        params = parsed.params
-        # 保持旧代码分发可用的 type/action 结构
-        return {
-            "type": intent_type,
-            "action": action,
-            "params": params,
-            "confidence": parsed.confidence,
-            "suggestions": parsed.suggestions,
-            "targets": parsed.targets,
-        }
-    except Exception as e:
-        logger.debug(f"Modern intent parser failed, will fallback: {e}")
-        return None
+    使用现代 IntentParser 解析意图。
+
+    优先使用 core/ai_intent.IntentParser（规则引擎 + LLM），
+    如果不可用则回退到旧的 parse_intent()。
+    """
+    if MODERN_INTENT_AVAILABLE:
+        try:
+            parser = get_intent_parser()
+            memory = get_conversation_memory()
+            context = {"history": await memory.get_context(session_id, max_turns=5)}
+            parsed = await parser.parse(message, context=context)
+            return {
+                "type": parsed.intent,
+                "action": parsed.command,
+                "params": parsed.params,
+                "confidence": parsed.confidence,
+                "suggestions": parsed.suggestions,
+                "targets": parsed.targets,
+                "modern": True,
+            }
+        except Exception as e:
+            logger.warning(f"现代意图解析器失败，回退到旧版: {e}")
+    # 回退到旧版
+    result = parse_intent(message)
+    result["confidence"] = 0.3
+    result["suggestions"] = []
+    result["modern"] = False
+    return result
 
 
 @app.post("/api/v1/dashboard/chat")
-async def chat(request: dict):
+async def dashboard_chat(request: dict):
     """
-    Dashboard 智能对话入口
+    Dashboard 对话入口 (路由: /api/v1/dashboard/chat)
 
-    路由: /api/v1/dashboard/chat (避免与 core/api_routes.py 的 /api/v1/chat 冲突)
-    返回: UnifiedChatResponse 格式
+    注意: 主对话端点 /api/v1/chat 在 core/api_routes.py 中定义。
+    此端点是 Dashboard 专用的简化版本，转发到 core 的实现或本地处理。
     """
     message = request.get("message", "")
     device_id = request.get("device_id", "")
     context = request.get("context", [])
-    session_id = device_id or "dashboard-default"
+    session_id = device_id or "default"
 
-    logger.info(f"Dashboard chat: {message[:50]}...")
+    logger.info(f"Dashboard Chat: {message[:50]}...")
 
-    # === 对话记忆：记录用户消息 ===
-    memory = None
-    try:
-        from core.ai_intent import get_conversation_memory
-        memory = get_conversation_memory()
-        await memory.add_turn(session_id, "user", message)
-        if not context:
-            context = await memory.get_context(session_id, max_turns=10)
-    except Exception as e:
-        logger.debug(f"Conversation memory load failed: {e}")
+    # === 集成对话记忆: 记录用户消息 ===
+    if MODERN_INTENT_AVAILABLE:
+        try:
+            memory = get_conversation_memory()
+            await memory.add_turn(session_id, "user", message)
+        except Exception as e:
+            logger.warning(f"记录用户消息失败: {e}")
 
-    # === 意图解析：优先使用现代解析器 ===
-    intent = await get_parsed_intent_modern(message, context)
-    if intent is None:
-        intent = parse_intent(message)
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        # 使用现代意图解析器
+        intent = await get_parsed_intent_modern(message, session_id)
+        intent_type = intent["type"]
+        confidence = intent.get("confidence", 0.3)
+        suggestions = intent.get("suggestions", [])
 
-    intent_type = intent.get("type", "chat")
-    confidence = intent.get("confidence", 0.5)
-    suggestions = intent.get("suggestions", [])
+        response_text = ""
+        exec_success = False
+        result_data = {}
 
     def _make_response(response_text: str, success: bool = True, mode: str = "chat",
-                       extra_data: Dict = None, error: str = "") -> JSONResponse:
+                       extra_data: Dict = None, error: str = "",
+                       routing: Dict = None, agent_steps: List = None) -> JSONResponse:
         resp = UnifiedChatResponse(
             success=success,
             response=response_text,
             intent=intent_type,
             confidence=confidence,
-            mode=mode,
             suggestions=suggestions,
             data=extra_data or {},
             error=error,
             session_id=session_id,
         )
-        return JSONResponse(resp.to_json_response())
+        # 增强响应：添加 reply 别名 + routing + agent_steps（Windows 客户端 UI 需要）
+        resp_dict = resp.to_json_response()
+        resp_dict["reply"] = response_text
+        if routing:
+            resp_dict["routing"] = routing
+        if agent_steps:
+            resp_dict["agent_steps"] = agent_steps
+        return JSONResponse(resp_dict)
 
     async def _save_assistant_reply(reply_text: str):
         if memory:
@@ -522,19 +1106,36 @@ async def chat(request: dict):
             ])
             if result.get("success"):
                 reply = result.get("content", "处理完成")
-                await _save_assistant_reply(reply)
-                return _make_response(reply, mode="chat",
-                                      extra_data={"model": result.get("model", "")})
+                # 记录助手回复
+                if MODERN_INTENT_AVAILABLE:
+                    try:
+                        memory = get_conversation_memory()
+                        await memory.add_turn(session_id, "assistant", reply)
+                    except Exception:
+                        pass
+                return JSONResponse(_build_unified_response(
+                    success=True,
+                    response=reply,
+                    data={"provider": result.get("provider", ""), "model": result.get("model", "")},
+                ))
             else:
-                return _make_response(
-                    f"LLM 调用失败: {result.get('error', 'Unknown error')}",
-                    success=False, error=result.get("error", "Unknown error"))
+                return JSONResponse(_build_unified_response(
+                    success=False,
+                    response=f"LLM 调用失败: {result.get('error', 'Unknown error')}",
+                    error=result.get("error", "Unknown error"),
+                ))
         except Exception as e:
-            return _make_response(f"错误: {str(e)}", success=False, error=str(e))
+            return JSONResponse(_build_unified_response(
+                success=False,
+                response=f"错误: {str(e)}",
+                error=str(e),
+            ))
 
-    reply = f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。"
-    return _make_response(reply, success=False, mode="fallback",
-                          error="未配置 LLM API Key")
+    return JSONResponse(_build_unified_response(
+        success=False,
+        response=f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。",
+        error="Galaxy core and API manager not available",
+    ))
 
 
 def parse_intent(message: str) -> Dict[str, Any]:
@@ -778,7 +1379,7 @@ async def get_config():
     """获取完整配置"""
     if API_MANAGER_AVAILABLE and api_manager:
         return api_manager.get_config()
-    return {"error": "API manager not available"}
+    return {"status": "standalone", "api_manager_available": False, "config": {}}
 
 
 @app.post("/api/v1/config")
@@ -846,7 +1447,13 @@ async def get_config_status():
     """获取配置状态"""
     if API_MANAGER_AVAILABLE and api_manager:
         return api_manager.get_status()
-    return {"error": "API manager not available"}
+    return {
+        "status": "standalone",
+        "api_manager_available": False,
+        "models_configured": False,
+        "nodes_active": 0,
+        "message": "Running in standalone mode - core API manager not loaded"
+    }
 
 
 @app.post("/api/v1/config/test-llm")

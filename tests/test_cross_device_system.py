@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy 跨设备自动化系统 - 端到端集成测试
+Galaxy 跨设备自动化系统 - 端到端集成测试
 
 测试完整的工作流程：
 1. Android Agent 连接到 Node 50
@@ -281,7 +281,7 @@ async def test_voice_command():
 async def main():
     """主测试函数"""
     print("\n" + "=" * 60)
-    print("UFO³ Galaxy 跨设备自动化系统 - 端到端集成测试")
+    print("Galaxy 跨设备自动化系统 - 端到端集成测试")
     print("=" * 60)
     
     try:

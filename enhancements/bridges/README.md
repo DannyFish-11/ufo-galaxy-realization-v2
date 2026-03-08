@@ -1,10 +1,10 @@
-# UFO Galaxy Bridge - 零破坏性桥接模块
+# Galaxy Bridge - 零破坏性桥接模块
 
 ## 设计理念
 
 **核心原则：绝对不修改现有代码，只添加新的"外骨骼"模块。**
 
-这个桥接器作为独立的增强层，实现 `ufo-galaxy` 与微软 UFO 之间的双向互调，确保两个系统可以无缝协同工作。
+这个桥接器作为独立的增强层，实现 `galaxy` 与微软 UFO 之间的双向互调，确保两个系统可以无缝协同工作。
 
 ---
 
@@ -16,7 +16,7 @@
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌───────────────────┐         ┌───────────────────┐            │
-│  │ 微软 UFO          │         │ ufo-galaxy        │            │
+│  │ 微软 UFO          │         │ galaxy        │            │
 │  │ (localhost:9000)  │         │ (localhost:8000)  │            │
 │  │                   │         │                   │            │
 │  │ • galaxy/         │         │ • nodes/          │            │
@@ -24,7 +24,7 @@
 │  └─────────┬─────────┘         └─────────┬─────────┘            │
 │            │                             │                      │
 │            │    ┌─────────────────────┐  │                      │
-│            └────│ UFO Galaxy Bridge   │──┘                      │
+│            └────│ Galaxy Bridge   │──┘                      │
 │                 │ (零破坏性外骨骼)    │                         │
 │                 │                     │                         │
 │                 │ • 自动检测系统      │                         │
@@ -53,9 +53,9 @@
 
 ### 1. 启动两个系统
 
-**启动 ufo-galaxy**：
+**启动 galaxy**：
 ```bash
-cd E:\ufo-galaxy\galaxy_gateway
+cd E:\galaxy\galaxy_gateway
 python gateway_service.py
 ```
 
@@ -68,21 +68,21 @@ python -m galaxy
 ### 2. 运行桥接器
 
 ```bash
-cd E:\ufo-galaxy\enhancements\bridges
-python ufo_galaxy_bridge.py
+cd E:\galaxy\enhancements\bridges
+python galaxy_bridge.py
 ```
 
 ### 3. 使用示例
 
 ```python
-from ufo_galaxy_bridge import UFOGalaxyBridge
+from galaxy_bridge import GalaxyBridge
 
 # 初始化桥接器
-bridge = UFOGalaxyBridge()
+bridge = GalaxyBridge()
 await bridge.initialize()
 
-# 调用 ufo-galaxy 的视觉节点
-result = await bridge.call_ufo_galaxy(
+# 调用 galaxy 的视觉节点
+result = await bridge.call_galaxy(
     node_id=90,
     action="analyze_screen",
     params={"query": "这个屏幕上显示的是什么？"}
@@ -99,13 +99,13 @@ result = await bridge.unified_vision_analysis(
 
 ## API 参考
 
-### `UFOGalaxyBridge`
+### `GalaxyBridge`
 
 #### `initialize()`
 初始化桥接器，自动检测两个系统的可用性。
 
-#### `call_ufo_galaxy(node_id, action, params)`
-调用 ufo-galaxy 的指定节点。
+#### `call_galaxy(node_id, action, params)`
+调用 galaxy 的指定节点。
 
 **参数**：
 - `node_id` (int): 节点 ID，如 `90` 表示 Node_90_MultimodalVision
@@ -155,7 +155,7 @@ A: 桥接器会自动检测，只调用可用的系统。
 A: 桥接器会以离线模式运行，返回错误信息。
 
 **Q: 如何扩展桥接器？**
-A: 在 `ufo_galaxy_bridge.py` 中添加新的方法即可，无需修改任何现有代码。
+A: 在 `galaxy_bridge.py` 中添加新的方法即可，无需修改任何现有代码。
 
 ---
 

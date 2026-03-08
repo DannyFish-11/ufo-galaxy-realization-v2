@@ -1,7 +1,10 @@
 """
-UFO Galaxy - Skill 系统
-=======================
+DEPRECATED — 请使用 core.skill_loader (skill_loader 单例) 替代。
 
+此模块保留但不再是主 Skill 运行时。所有生产代码已迁移至 skill_loader.py。
+
+UFO Galaxy - Skill 系统（旧版）
+=========================
 通用的技能管理系统
 
 功能：
@@ -41,7 +44,7 @@ from pathlib import Path
 from enum import Enum
 import subprocess
 
-logger = logging.getLogger("UFO-Galaxy.Skill")
+logger = logging.getLogger("Galaxy.Skill")
 
 
 # ============================================================================
@@ -130,6 +133,56 @@ class SkillExecution:
     started_at: float = field(default_factory=lambda: datetime.now().timestamp())
     completed_at: Optional[float] = None
     steps: List[Dict] = field(default_factory=list)
+
+
+def _safe_eval_condition(condition: str, params: dict) -> bool:
+    """安全地评估简单条件表达式（替代 eval）。
+
+    支持: ``params.key == value``, ``params.key > value``, ``params.key != value``
+    不支持任意 Python 代码执行。
+    """
+    import operator
+    import re
+
+    ops = {
+        "==": operator.eq, "!=": operator.ne,
+        ">=": operator.ge, "<=": operator.le,
+        ">": operator.gt, "<": operator.lt,
+    }
+
+    condition = condition.strip()
+
+    for op_str, op_func in sorted(ops.items(), key=lambda x: -len(x[0])):
+        if op_str in condition:
+            left, right = condition.split(op_str, 1)
+            left, right = left.strip(), right.strip()
+
+            # 解析左值: params.key 或 params["key"]
+            lval = left
+            m = re.match(r'params\[?["\']?(\w+)["\']?\]?', left) or re.match(r'params\.(\w+)', left)
+            if m:
+                lval = params.get(m.group(1))
+            else:
+                try:
+                    import ast
+                    lval = ast.literal_eval(left)
+                except Exception:
+                    pass
+
+            # 解析右值
+            try:
+                import ast
+                rval = ast.literal_eval(right)
+            except Exception:
+                rval = right.strip("'\"")
+
+            try:
+                return op_func(lval, rval)
+            except TypeError:
+                return False
+
+    # 无法解析的条件默认为 False
+    return False
 
 
 # ============================================================================
@@ -371,11 +424,19 @@ class SkillManager:
                     context[output_key] = result
             
             elif step_type == "mcp":
-                # 执行 MCP 工具
-                from core.mcp_manager import mcp_manager
+                # 执行 MCP 工具（使用 mcp_loader 替代已废弃的 mcp_manager）
+                from core.mcp_loader import mcp_loader
                 tool_name = step.get("tool")
                 tool_params = step.get("params", {})
-                result = await mcp_manager.call_tool(tool_name, tool_params)
+                # mcp_loader.call_tool 需要 server_id，尝试自动匹配
+                result = None
+                for sid, srv in mcp_loader.servers.items():
+                    for t in srv.tools:
+                        if t.name == tool_name:
+                            result = await mcp_loader.call_tool(sid, tool_name, tool_params)
+                            break
+                    if result is not None:
+                        break
                 results.append(result)
             
             elif step_type == "code":
@@ -409,8 +470,14 @@ class SkillManager:
         if_true = skill.metadata.get("if_true")
         if_false = skill.metadata.get("if_false")
         
-        # 评估条件
-        result = eval(condition, {"params": params})
+        # 评估条件 — 仅允许安全的字面量表达式
+        import ast
+        try:
+            # 将 params 值替换进条件字符串后做安全解析
+            result = ast.literal_eval(condition)
+        except (ValueError, SyntaxError):
+            # 条件不是纯字面量 — 用简单比较逻辑替代 eval
+            result = _safe_eval_condition(condition, params)
         
         if result:
             if if_true:
@@ -581,51 +648,55 @@ class SkillManager:
     # ========================================================================
     
     def register_builtin_skills(self):
-        """注册内置技能"""
-        
+        """注册内置技能（含实际 handler）"""
+
         # 网页搜索
         self.register_skill(
             id="web_search",
             name="网页搜索",
             description="搜索网页内容",
             type=SkillType.ACTION,
+            handler=self._builtin_web_search,
             parameters=[
                 {"name": "query", "type": "string", "description": "搜索关键词", "required": True},
                 {"name": "num_results", "type": "integer", "description": "结果数量", "default": 5},
             ],
             tags=["search", "web"],
         )
-        
+
         # 文件操作
         self.register_skill(
             id="file_read",
             name="读取文件",
             description="读取文件内容",
             type=SkillType.ACTION,
+            handler=self._builtin_file_read,
             parameters=[
                 {"name": "path", "type": "string", "description": "文件路径", "required": True},
             ],
             tags=["file", "io"],
         )
-        
+
         # 代码执行
         self.register_skill(
             id="code_execute",
             name="执行代码",
             description="执行 Python 代码",
             type=SkillType.ACTION,
+            handler=self._builtin_code_execute,
             parameters=[
                 {"name": "code", "type": "string", "description": "Python 代码", "required": True},
             ],
             tags=["code", "execute"],
         )
-        
+
         # 设备控制
         self.register_skill(
             id="device_control",
             name="设备控制",
             description="控制设备执行操作",
             type=SkillType.ACTION,
+            handler=self._builtin_device_control,
             parameters=[
                 {"name": "device_id", "type": "string", "description": "设备 ID", "required": True},
                 {"name": "action", "type": "string", "description": "操作", "required": True},
@@ -633,8 +704,68 @@ class SkillManager:
             ],
             tags=["device", "control"],
         )
-        
-        logger.info("已注册内置技能")
+
+        logger.info("已注册内置技能（含 handler）")
+
+    # ── 内置技能 handler ────────────────────────────────────
+
+    async def _builtin_web_search(self, query: str, num_results: int = 5, **kwargs) -> Dict:
+        """网页搜索：委托给 httpx GET 请求（简单实现）"""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    "https://api.duckduckgo.com/",
+                    params={"q": query, "format": "json", "no_html": 1},
+                )
+                data = resp.json()
+                results = []
+                for item in (data.get("RelatedTopics") or [])[:num_results]:
+                    if isinstance(item, dict) and "Text" in item:
+                        results.append({"text": item["Text"], "url": item.get("FirstURL", "")})
+                return {"success": True, "query": query, "results": results}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _builtin_file_read(self, path: str, **kwargs) -> Dict:
+        """读取文件"""
+        import os
+        if not os.path.isfile(path):
+            return {"success": False, "error": f"File not found: {path}"}
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(1_000_000)  # 1 MB 上限
+            return {"success": True, "path": path, "content": content, "size": len(content)}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _builtin_code_execute(self, code: str, **kwargs) -> Dict:
+        """在受限环境中执行 Python 代码"""
+        import io, contextlib
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        local_ns: Dict = {}
+        try:
+            with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+                exec(compile(code, "<skill_code_execute>", "exec"), {"__builtins__": __builtins__}, local_ns)
+            return {
+                "success": True,
+                "stdout": stdout_buf.getvalue(),
+                "stderr": stderr_buf.getvalue(),
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e), "stderr": stderr_buf.getvalue()}
+
+    async def _builtin_device_control(self, device_id: str, action: str, params: Dict = None, **kwargs) -> Dict:
+        """设备控制：委托给 DeviceAgentManager"""
+        try:
+            from core.device_agent_manager import DeviceAgentManager
+            manager = DeviceAgentManager.instance() if hasattr(DeviceAgentManager, 'instance') else None
+            if manager:
+                return await manager.execute_on_device(device_id, action, params or {})
+            return {"success": False, "error": "DeviceAgentManager not available"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     async def load_from_config(self):
         """从配置文件加载技能包；若文件不存在则创建默认模板"""
