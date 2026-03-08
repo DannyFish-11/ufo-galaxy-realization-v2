@@ -97,6 +97,12 @@ class CapabilityOrchestrator:
             cls._instance = CapabilityOrchestrator()
         return cls._instance
     
+    async def reinitialize(self):
+        """重新加载所有能力（MCP/Skill 变更后调用）"""
+        self.capabilities.clear()
+        self._initialized = False
+        await self.initialize()
+
     async def initialize(self):
         """初始化 - 加载所有能力"""
         if self._initialized:

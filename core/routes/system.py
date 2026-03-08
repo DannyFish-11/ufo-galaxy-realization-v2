@@ -186,6 +186,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 except Exception as e:
                     logger.warning(f"LLM Router 热重载失败: {e}")
 
+                # 同步刷新能力编排器
+                try:
+                    from core.capability_orchestrator import capability_orchestrator
+                    import asyncio
+                    await capability_orchestrator.reinitialize()
+                    logger.info("CapabilityOrchestrator 已重新加载")
+                except Exception as e:
+                    logger.debug(f"CapabilityOrchestrator 重载跳过: {e}")
+
             return {"status": "success", "message": "Configuration updated", "updated": updated_keys}
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
