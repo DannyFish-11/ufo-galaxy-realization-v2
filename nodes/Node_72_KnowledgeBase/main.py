@@ -14,13 +14,15 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # --- 配置和常量 --- #
 
 LOG_LEVEL = logging.INFO
-DEFAULT_CONFIG_PATH = "/home/ubuntu/kb_config.json"
-DEFAULT_KB_PATH = "/home/ubuntu/knowledge_base.json"
+DEFAULT_CONFIG_PATH = os.getenv("KB_CONFIG_PATH", os.path.join(str(Path.home()), "kb_config.json"))
+DEFAULT_KB_PATH = os.getenv("KB_FILE_PATH", os.path.join(str(Path.home()), "knowledge_base.json"))
 
 # 配置日志记录器
 logging.basicConfig(
@@ -70,8 +72,8 @@ class KnowledgeEntry:
     metadata: Dict[str, Any]
     status: KnowledgeStatus = KnowledgeStatus.ACTIVE
     embedding: Optional[List[float]] = None  # 存储文本内容的向量表示
-    created_at: str = dataclasses.field(default_factory=lambda: asyncio.get_event_loop().time().__str__())
-    updated_at: str = dataclasses.field(default_factory=lambda: asyncio.get_event_loop().time().__str__())
+    created_at: str = dataclasses.field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = dataclasses.field(default_factory=lambda: datetime.now().isoformat())
 
 
 # --- 核心服务类 --- #
@@ -218,7 +220,7 @@ class KnowledgeBaseService:
         """更新知识条目的状态（如归档）"""
         if entry_id in self._knowledge_base:
             self._knowledge_base[entry_id].status = status
-            self._knowledge_base[entry_id].updated_at = str(asyncio.get_event_loop().time())
+            self._knowledge_base[entry_id].updated_at = datetime.now().isoformat()
             await self._save_knowledge_base()
             logger.info(f"知识条目 {entry_id} 状态已更新为 {status.value}")
             return True
@@ -229,7 +231,7 @@ class KnowledgeBaseService:
         return {
             "node_id": self.config.node_id,
             "service_status": self.status.value,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": datetime.now().isoformat(),
             "knowledge_count": len(self._knowledge_base),
             "kb_file_path": self.config.kb_file_path,
             "config_file_path": self.config_path

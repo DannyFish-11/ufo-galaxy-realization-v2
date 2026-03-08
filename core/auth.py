@@ -23,8 +23,9 @@ from fastapi import Header, HTTPException, status
 
 logger = logging.getLogger("UFO-Galaxy.Auth")
 
-# Module-level flag: dev-mode warning has been issued at most once per process
+# Module-level flags: warnings issued at most once per process
 _dev_mode_warning_issued: bool = False
+_no_token_warning_issued: bool = False
 
 # ---------------------------------------------------------------------------
 # Dev-mode detection & startup warning
@@ -43,6 +44,18 @@ def _warn_dev_mode_once():
         logger.warning(
             "⚠️  UFO Galaxy is running in DEV MODE (UFO_DEV_MODE=1). "
             "Authentication is DISABLED. Do NOT use this mode in production."
+        )
+
+
+def _warn_no_token_once():
+    """Emit a one-time warning when no API token is configured."""
+    global _no_token_warning_issued
+    if not _no_token_warning_issued:
+        _no_token_warning_issued = True
+        logger.warning(
+            "UFO_API_TOKEN is not set and UFO_DEV_MODE is not enabled. "
+            "Authentication is disabled. Set UFO_API_TOKEN for production "
+            "or UFO_DEV_MODE=1 to suppress this warning."
         )
 
 
@@ -106,7 +119,10 @@ async def require_auth(
 
     # Dev mode: token not set → allow through without authentication
     if not expected_token:
-        logger.debug("UFO_API_TOKEN 未设置，跳过鉴权（开发模式）")
+        if _is_dev_mode():
+            _warn_dev_mode_once()
+        else:
+            _warn_no_token_once()
         return {
             "authenticated": True,
             "device_id": x_device_id,

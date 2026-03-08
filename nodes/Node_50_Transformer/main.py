@@ -12,7 +12,10 @@ from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import logging
 from nodes.common.cors_config import get_cors_origins
+
+logger = logging.getLogger("Node_50_Transformer")
 
 app = FastAPI(title="Node 50 - Transformer NLU", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -52,9 +55,18 @@ def call_llm(messages: List[Dict], max_tokens: int = 1000) -> Optional[str]:
                 timeout=30
             )
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-        except: pass
-    
+                data = response.json()
+                choices = data.get("choices")
+                if choices and len(choices) > 0:
+                    content = choices[0].get("message", {}).get("content")
+                    if content:
+                        return content
+                logger.warning(f"Groq 返回格式异常: {response.status_code}")
+            else:
+                logger.warning(f"Groq API 返回 {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Groq API 调用失败: {e}")
+
     # 智谱 (中文好)
     if ZHIPU_API_KEY:
         try:
@@ -65,9 +77,18 @@ def call_llm(messages: List[Dict], max_tokens: int = 1000) -> Optional[str]:
                 timeout=30
             )
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-        except: pass
-    
+                data = response.json()
+                choices = data.get("choices")
+                if choices and len(choices) > 0:
+                    content = choices[0].get("message", {}).get("content")
+                    if content:
+                        return content
+                logger.warning(f"智谱 返回格式异常: {response.status_code}")
+            else:
+                logger.warning(f"智谱 API 返回 {response.status_code}")
+        except Exception as e:
+            logger.warning(f"智谱 API 调用失败: {e}")
+
     # OpenRouter
     if OPENROUTER_API_KEY:
         try:
@@ -78,9 +99,18 @@ def call_llm(messages: List[Dict], max_tokens: int = 1000) -> Optional[str]:
                 timeout=30
             )
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-        except: pass
-    
+                data = response.json()
+                choices = data.get("choices")
+                if choices and len(choices) > 0:
+                    content = choices[0].get("message", {}).get("content")
+                    if content:
+                        return content
+                logger.warning(f"OpenRouter 返回格式异常: {response.status_code}")
+            else:
+                logger.warning(f"OpenRouter API 返回 {response.status_code}")
+        except Exception as e:
+            logger.warning(f"OpenRouter API 调用失败: {e}")
+
     # OneAPI (本地)
     if ONEAPI_API_KEY:
         try:
@@ -91,9 +121,18 @@ def call_llm(messages: List[Dict], max_tokens: int = 1000) -> Optional[str]:
                 timeout=30
             )
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-        except: pass
-    
+                data = response.json()
+                choices = data.get("choices")
+                if choices and len(choices) > 0:
+                    content = choices[0].get("message", {}).get("content")
+                    if content:
+                        return content
+                logger.warning(f"OneAPI 返回格式异常: {response.status_code}")
+            else:
+                logger.warning(f"OneAPI API 返回 {response.status_code}")
+        except Exception as e:
+            logger.warning(f"OneAPI API 调用失败: {e}")
+
     return None
 
 def parse_json_response(result: str) -> Dict:

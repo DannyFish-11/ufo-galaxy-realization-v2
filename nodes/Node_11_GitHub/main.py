@@ -27,7 +27,7 @@ import aiohttp
 
 # --- 常量定义 ---
 NODE_NAME = "Node_11_GitHub"
-CONFIG_FILE_PATH = "config.json"
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # --- 枚举类型定义 ---

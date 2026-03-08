@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 # 添加项目路径
-sys.path.insert(0, '/home/ubuntu/code_audit/ufo-galaxy-realization')
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from enhancements.coding.llm_code_generator import (
     LLMCodeGenerator,

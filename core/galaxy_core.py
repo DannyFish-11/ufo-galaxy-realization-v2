@@ -71,6 +71,7 @@ class GalaxyCore:
         self.devices: Dict[str, Dict] = {}
         self._http_client: Optional[httpx.AsyncClient] = None
         self._protocol_client: Optional[NodeProtocolClient] = None
+        self._node_host = os.getenv("UFO_NODE_HOST", "localhost")
         
         # 加载节点注册表
         self._load_node_registry()
@@ -132,7 +133,7 @@ class GalaxyCore:
         
         node = self.nodes[node_id]
         port = node.get("port", 8000)
-        endpoint = f"http://localhost:{port}"
+        endpoint = f"http://{self._node_host}:{port}"
         
         params = params or {}
         
@@ -203,7 +204,7 @@ class GalaxyCore:
             client = await self._get_http_client()
             
             response = await client.post(
-                f"http://localhost:{port}/protocol/message",
+                f"http://{self._node_host}:{port}/protocol/message",
                 json=message.to_dict()
             )
             

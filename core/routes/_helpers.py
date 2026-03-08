@@ -86,4 +86,4 @@ async def _execute_node(node_info: dict, action: str, params: dict):
             return await asyncio.get_running_loop().run_in_executor(
                 None, lambda: method(action, **params)
             )
-    return None
+    raise ValueError(f"Unsupported node type: {node_info.get('type')}")
