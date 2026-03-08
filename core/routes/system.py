@@ -14,8 +14,10 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+
+from core.auth import require_auth
 
 from core.routes._shared import (
     connection_manager,
@@ -130,7 +132,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(config_data)
 
     @router.post("/api/config/update")
-    async def update_config(request: Request):
+    async def update_config(request: Request, auth: dict = Depends(require_auth)):
         """
         更新配置 - 支持所有 LLM API Key
         写入 .env 文件并即时热更新到 os.environ

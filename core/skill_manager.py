@@ -132,6 +132,56 @@ class SkillExecution:
     steps: List[Dict] = field(default_factory=list)
 
 
+def _safe_eval_condition(condition: str, params: dict) -> bool:
+    """安全地评估简单条件表达式（替代 eval）。
+
+    支持: ``params.key == value``, ``params.key > value``, ``params.key != value``
+    不支持任意 Python 代码执行。
+    """
+    import operator
+    import re
+
+    ops = {
+        "==": operator.eq, "!=": operator.ne,
+        ">=": operator.ge, "<=": operator.le,
+        ">": operator.gt, "<": operator.lt,
+    }
+
+    condition = condition.strip()
+
+    for op_str, op_func in sorted(ops.items(), key=lambda x: -len(x[0])):
+        if op_str in condition:
+            left, right = condition.split(op_str, 1)
+            left, right = left.strip(), right.strip()
+
+            # 解析左值: params.key 或 params["key"]
+            lval = left
+            m = re.match(r'params\[?["\']?(\w+)["\']?\]?', left) or re.match(r'params\.(\w+)', left)
+            if m:
+                lval = params.get(m.group(1))
+            else:
+                try:
+                    import ast
+                    lval = ast.literal_eval(left)
+                except Exception:
+                    pass
+
+            # 解析右值
+            try:
+                import ast
+                rval = ast.literal_eval(right)
+            except Exception:
+                rval = right.strip("'\"")
+
+            try:
+                return op_func(lval, rval)
+            except TypeError:
+                return False
+
+    # 无法解析的条件默认为 False
+    return False
+
+
 # ============================================================================
 # Skill 管理器
 # ============================================================================
@@ -409,8 +459,14 @@ class SkillManager:
         if_true = skill.metadata.get("if_true")
         if_false = skill.metadata.get("if_false")
         
-        # 评估条件
-        result = eval(condition, {"params": params})
+        # 评估条件 — 仅允许安全的字面量表达式
+        import ast
+        try:
+            # 将 params 值替换进条件字符串后做安全解析
+            result = ast.literal_eval(condition)
+        except (ValueError, SyntaxError):
+            # 条件不是纯字面量 — 用简单比较逻辑替代 eval
+            result = _safe_eval_condition(condition, params)
         
         if result:
             if if_true:
