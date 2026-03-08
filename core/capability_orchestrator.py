@@ -205,6 +205,22 @@ class CapabilityOrchestrator:
                 tags=["device", "control"],
                 priority=8,
             ),
+            Capability(
+                id="builtin_simulate",
+                name="模拟执行",
+                description="通过数字孪生引擎模拟操作效果",
+                type=CapabilityType.BUILTIN,
+                tags=["simulate", "twin", "predict"],
+                priority=6,
+            ),
+            Capability(
+                id="builtin_cross_device",
+                name="跨设备协同",
+                description="跨设备任务协调：剪贴板同步、文件传输、媒体控制、通知同步",
+                type=CapabilityType.BUILTIN,
+                tags=["cross_device", "sync", "transfer", "clipboard", "multi_device"],
+                priority=7,
+            ),
         ]
         
         for cap in builtins:
@@ -370,7 +386,43 @@ class CapabilityOrchestrator:
             device_id = params.get("device_id")
             action = params.get("action")
             return await device_control.execute_action(device_id, action)
-        
+
+        elif cap.id == "builtin_simulate":
+            # 数字孪生模拟 — 选择指定设备的孪生体或第一个可用孪生体
+            from core.digital_twin_engine import get_digital_twin_engine
+            engine = get_digital_twin_engine()
+            action = params.get("action", params.get("message", ""))
+            device_id = params.get("device_id", "")
+
+            twin = None
+            if device_id:
+                twin = engine.get_twin_by_device(device_id)
+            if not twin and engine.twins:
+                twin = next(iter(engine.twins.values()))
+
+            if not twin:
+                return {"success": False, "reply": "没有可用的数字孪生体", "predicted_state": {}}
+
+            result = await twin.simulate_action(action, params)
+            return {
+                "success": result.success_probability > 0.5 if hasattr(result, "success_probability") else True,
+                "reply": f"模拟完成: {result.action}" if hasattr(result, "action") else str(result),
+                "predicted_state": result.predicted_state if hasattr(result, "predicted_state") else {},
+                "risks": result.risks if hasattr(result, "risks") else [],
+            }
+
+        elif cap.id == "builtin_cross_device":
+            # 跨设备协同
+            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
+            command = params.get("message", params.get("command", ""))
+            context = {k: v for k, v in params.items() if k not in ("message", "command")}
+            result = await cross_device_coordinator.execute_cross_device_task(command, context)
+            return {
+                "success": result.get("success", False),
+                "reply": result.get("message", str(result)),
+                "data": result,
+            }
+
         return None
     
     # ========================================================================

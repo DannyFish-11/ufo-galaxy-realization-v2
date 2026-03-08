@@ -1,6 +1,10 @@
 """
-UFO Galaxy - Skill 系统
-=======================
+DEPRECATED — 请使用 core.skill_loader (skill_loader 单例) 替代。
+
+此模块保留但不再是主 Skill 运行时。所有生产代码已迁移至 skill_loader.py。
+
+UFO Galaxy - Skill 系统（旧版）
+================================
 
 通用的技能管理系统
 
@@ -421,11 +425,19 @@ class SkillManager:
                     context[output_key] = result
             
             elif step_type == "mcp":
-                # 执行 MCP 工具
-                from core.mcp_manager import mcp_manager
+                # 执行 MCP 工具（使用 mcp_loader 替代已废弃的 mcp_manager）
+                from core.mcp_loader import mcp_loader
                 tool_name = step.get("tool")
                 tool_params = step.get("params", {})
-                result = await mcp_manager.call_tool(tool_name, tool_params)
+                # mcp_loader.call_tool 需要 server_id，尝试自动匹配
+                result = None
+                for sid, srv in mcp_loader.servers.items():
+                    for t in srv.tools:
+                        if t.name == tool_name:
+                            result = await mcp_loader.call_tool(sid, tool_name, tool_params)
+                            break
+                    if result is not None:
+                        break
                 results.append(result)
             
             elif step_type == "code":

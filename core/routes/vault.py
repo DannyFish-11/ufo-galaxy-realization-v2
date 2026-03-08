@@ -17,7 +17,9 @@ Routes:
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from core.auth import require_auth
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("UFO-Galaxy.API")
@@ -35,7 +37,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         _vault_fetch_limiter = None
 
     @router.post("/api/v1/vault/credentials")
-    async def vault_set_credential(request: Request):
+    async def vault_set_credential(request: Request, auth: dict = Depends(require_auth)):
         """管理端写入/更新凭证"""
         body = await request.json()
         key_name = body.get("key_name", "")
@@ -59,7 +61,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.delete("/api/v1/vault/credentials/{key_name}")
-    async def vault_delete_credential(key_name: str):
+    async def vault_delete_credential(key_name: str, auth: dict = Depends(require_auth)):
         """删除 Vault 内的凭证"""
         try:
             from core.credential_vault import get_vault
@@ -73,7 +75,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/v1/vault/tokens")
-    async def vault_issue_token(request: Request):
+    async def vault_issue_token(request: Request, auth: dict = Depends(require_auth)):
         """为 Worker/Device 颁发短期 token"""
         body = await request.json()
         device_id = body.get("device_id", "")
@@ -121,7 +123,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/v1/vault/cleanup")
-    async def vault_cleanup_tokens():
+    async def vault_cleanup_tokens(auth: dict = Depends(require_auth)):
         """清理过期 token，返回清理数量"""
         try:
             from core.credential_vault import get_vault

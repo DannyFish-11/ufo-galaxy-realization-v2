@@ -3,265 +3,362 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galaxy - 星系智能体</title>
+    <title>Galaxy - 星系供给库</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
-        
-        * { font-family: 'Rajdhani', sans-serif; }
-        body { background: #000000; overflow: hidden; }
-        
-        .galaxy-bg {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(ellipse at center, #0a0a20 0%, #000000 70%),
-                        radial-gradient(circle at 20% 80%, rgba(120, 0, 255, 0.15) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 20%, rgba(0, 150, 255, 0.15) 0%, transparent 50%);
-            z-index: -2;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --island-bg: rgba(0, 0, 0, 0.92);
+            --island-border: rgba(255, 255, 255, 0.08);
+            --glass: rgba(18, 18, 24, 0.72);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --cyan: #00d4ff;
+            --purple: #a855f7;
+            --pink: #ec4899;
         }
-        
-        .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
-        .star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; }
-        @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.2; } }
-        
-        .galaxy-title {
-            font-family: 'Orbitron', monospace;
-            background: linear-gradient(135deg, #00d4ff, #7b2fff, #ff006e, #00d4ff);
-            background-size: 300% 300%;
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', -apple-system, sans-serif; }
+        body { background: #000; color: #fff; overflow: hidden; height: 100vh; }
+
+        /* ── Galaxy 星系背景 ── */
+        .galaxy-canvas {
+            position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(ellipse 80% 60% at 50% 45%, rgba(15, 10, 40, 1) 0%, transparent 70%),
+                radial-gradient(circle at 25% 75%, rgba(100, 60, 255, 0.12) 0%, transparent 45%),
+                radial-gradient(circle at 75% 25%, rgba(0, 180, 255, 0.08) 0%, transparent 45%),
+                #000;
+        }
+        .stars { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+        .star {
+            position: absolute; background: #fff; border-radius: 50%;
+            animation: twinkle var(--dur) ease-in-out infinite;
+        }
+        @keyframes twinkle { 0%,100% { opacity: var(--op); } 50% { opacity: 0.15; } }
+
+        /* ── Dynamic Island 灵动岛 ── */
+        .dynamic-island {
+            position: relative; margin: 14px auto 0;
+            width: 280px;
+            background: var(--island-bg);
+            border: 1px solid var(--island-border);
+            border-radius: 44px;
+            padding: 8px 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            transition: all 0.55s cubic-bezier(0.4, 0, 0.15, 1);
+            box-shadow: 0 4px 30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+            z-index: 100; cursor: pointer;
+        }
+        .dynamic-island.expanded {
+            width: min(94vw, 860px);
+            border-radius: 26px;
+            padding: 10px 22px;
+            cursor: default;
+        }
+        .island-left { display: flex; align-items: center; gap: 10px; }
+        .island-logo {
+            width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700;
+        }
+        .island-title {
+            font-size: 13px; font-weight: 600; letter-spacing: 0.06em;
+            background: linear-gradient(90deg, var(--cyan), var(--purple));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            animation: gradient-shift 5s ease infinite;
         }
-        @keyframes gradient-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-        
-        .status-card { background: rgba(10, 10, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .galaxy-input { background: rgba(10, 10, 30, 0.8); border: 1px solid rgba(0, 212, 255, 0.3); transition: all 0.3s ease; }
-        .galaxy-input:focus { border-color: rgba(0, 212, 255, 0.6); box-shadow: 0 0 20px rgba(0, 212, 255, 0.2); }
-        
-        .tab-active { background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 47, 255, 0.2)); border-bottom: 2px solid #00d4ff; }
-        
-        .valid { color: #00ff88; }
-        .invalid { color: #ff4444; }
-        .pending { color: #ffaa00; }
-        
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
-        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7b2fff); border-radius: 3px; }
+        .island-tabs {
+            display: flex; gap: 2px; overflow: hidden;
+            max-width: 0; opacity: 0;
+            transition: max-width 0.5s cubic-bezier(0.4,0,0.15,1), opacity 0.3s ease 0.12s;
+        }
+        .expanded .island-tabs { max-width: 620px; opacity: 1; }
+        .island-tab {
+            padding: 5px 13px; border-radius: 20px; font-size: 12px; font-weight: 500;
+            color: rgba(255,255,255,0.45); cursor: pointer; white-space: nowrap;
+            transition: all 0.2s; border: none; background: transparent;
+        }
+        .island-tab:hover { color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.05); }
+        .island-tab.active {
+            color: #fff; background: rgba(255,255,255,0.1);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+        }
+        .island-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .island-dot { width: 5px; height: 5px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+        .island-time { font-size: 10px; color: rgba(255,255,255,0.3); font-variant-numeric: tabular-nums; }
+
+        /* ── Glass 面板 ── */
+        .glass {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            backdrop-filter: blur(40px) saturate(1.4);
+            -webkit-backdrop-filter: blur(40px) saturate(1.4);
+        }
+        .card {
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 14px;
+            transition: all 0.2s;
+        }
+        .card:hover { background: rgba(255,255,255,0.045); border-color: rgba(255,255,255,0.09); }
+
+        /* ── 表单 ── */
+        .g-input {
+            width: 100%; padding: 9px 14px; border-radius: 12px;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+            color: #fff; font-size: 12px; outline: none; transition: all 0.2s;
+        }
+        .g-input:focus { border-color: rgba(0,212,255,0.35); box-shadow: 0 0 0 3px rgba(0,212,255,0.07); background: rgba(255,255,255,0.06); }
+        .g-input::placeholder { color: rgba(255,255,255,0.18); }
+        .g-btn {
+            padding: 7px 14px; border-radius: 10px; font-size: 11px; font-weight: 500;
+            border: none; cursor: pointer; transition: all 0.2s;
+        }
+        .g-btn-primary { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #fff; }
+        .g-btn-primary:hover { opacity: 0.85; }
+        .g-btn-ghost { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.08); }
+        .g-btn-ghost:hover { background: rgba(255,255,255,0.09); color: #fff; }
+
+        /* ── Badge ── */
+        .badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 500; }
+        .badge-ok { background: rgba(34,197,94,0.1); color: #4ade80; }
+        .badge-err { background: rgba(239,68,68,0.1); color: #f87171; }
+        .badge-warn { background: rgba(250,204,21,0.1); color: #fbbf24; }
+        .badge-info { background: rgba(0,212,255,0.1); color: var(--cyan); }
+
+        /* ── Stats ── */
+        .stat-val {
+            font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .stat-lbl { font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 1px; }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+        /* ── 过渡 ── */
+        .fade-up { animation: fadeUp 0.3s ease; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .section-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
     </style>
 </head>
-<body class="text-white min-h-screen">
-    <div class="galaxy-bg"></div>
-    <div class="stars" ref="starsContainer"></div>
-    
-    <div id="app" class="h-screen flex flex-col relative z-10">
-        
-        <!-- 顶部导航 -->
-        <header class="px-6 py-3 border-b border-white/10 bg-black/30 backdrop-blur-md">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center">
-                            <span class="text-sm font-bold">G</span>
-                        </div>
-                        <h1 class="galaxy-title text-xl font-bold tracking-wider">GALAXY</h1>
-                    </div>
-                    <span class="text-xs text-gray-500 font-mono">v2.3.25</span>
-                </div>
-                
-                <!-- 标签页 -->
-                <div class="flex space-x-1 text-sm">
-                    <button @click="currentTab = 'chat'" :class="currentTab === 'chat' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">💬 对话</button>
-                    <button @click="currentTab = 'llm'" :class="currentTab === 'llm' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🤖 LLM</button>
-                    <button @click="currentTab = 'tools'" :class="currentTab === 'tools' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🔧 工具</button>
-                    <button @click="currentTab = 'nodes'" :class="currentTab === 'nodes' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🌐 节点</button>
-                    <button @click="currentTab = 'devices'" :class="currentTab === 'devices' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">📱 设备</button>
-                </div>
-                
-                <div class="flex items-center space-x-3 text-xs">
-                    <span class="text-green-400" v-if="configuredCount > 0">✓ {{ configuredCount }} 已配置</span>
-                    <span class="text-gray-600 font-mono">{{ currentTime }}</span>
-                </div>
+<body>
+    <div class="galaxy-canvas"></div>
+    <div class="stars" id="starsEl"></div>
+
+    <div id="app" style="position:relative; z-index:1; height:100vh; display:flex; flex-direction:column;">
+
+        <!-- ═══ Dynamic Island ═══ -->
+        <div class="dynamic-island" :class="{ expanded: islandOpen }" @click="islandOpen = true">
+            <div class="island-left">
+                <div class="island-logo">G</div>
+                <span class="island-title">GALAXY</span>
             </div>
-        </header>
-        
-        <!-- 主内容区 -->
-        <main class="flex-1 overflow-hidden">
-            
-            <!-- 对话页面 -->
-            <div v-show="currentTab === 'chat'" class="h-full flex flex-col">
-                <div class="flex-1 overflow-auto p-4 space-y-3" ref="chatContainer">
-                    <div v-if="messages.length === 0" class="text-center py-16">
-                        <div class="galaxy-title text-3xl font-bold mb-3">GALAXY</div>
-                        <div class="text-gray-500 mb-2">L4 级自主性智能系统</div>
-                        <div class="text-gray-600 text-sm">请先配置 API Key</div>
-                    </div>
-                    
-                    <div v-for="msg in messages" :key="msg.id" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                        <div class="max-w-2xl rounded-xl p-3 text-sm" :class="msg.role === 'user' ? 'bg-cyan-900/30 border border-cyan-500/30' : 'bg-purple-900/30 border border-purple-500/30'">
-                            <div class="whitespace-pre-wrap">{{ msg.content }}</div>
-                            <div class="text-xs mt-1 opacity-50">{{ formatTime(msg.timestamp) }}</div>
-                        </div>
-                    </div>
-                    
-                    <div v-if="isLoading" class="flex justify-start">
-                        <div class="bg-purple-900/30 rounded-xl p-3">
-                            <div class="flex space-x-1">
-                                <div class="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
-                                <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                                <div class="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="p-3 border-t border-white/10 bg-black/30">
-                    <div class="flex space-x-2">
-                        <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="galaxy-input flex-1 rounded-lg px-3 py-2 text-sm outline-none">
-                        <button @click="sendMessage" class="px-4 py-2 rounded-lg text-sm bg-gradient-to-r from-cyan-500 to-purple-600">发送</button>
-                    </div>
-                </div>
+            <div class="island-tabs">
+                <button v-for="t in tabs" :key="t.key" class="island-tab"
+                    :class="{ active: tab === t.key }" @click.stop="tab = t.key">{{ t.label }}</button>
             </div>
-            
-            <!-- LLM 配置页面 -->
-            <div v-show="currentTab === 'llm'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto space-y-4">
-                    
-                    <!-- 状态 -->
-                    <div class="status-card rounded-xl p-3">
-                        <div class="grid grid-cols-5 gap-3 text-center text-sm">
-                            <div><div class="text-xl font-bold text-cyan-400">{{ configStatus.total_models || 0 }}</div><div class="text-xs text-gray-500">总模型</div></div>
-                            <div><div class="text-xl font-bold text-green-400">{{ configStatus.configured_models || 0 }}</div><div class="text-xs text-gray-500">已配置</div></div>
-                            <div><div class="text-xl font-bold text-purple-400">{{ configStatus.total_tools || 0 }}</div><div class="text-xs text-gray-500">工具</div></div>
-                            <div><div class="text-xl font-bold text-pink-400">{{ configStatus.configured_tools || 0 }}</div><div class="text-xs text-gray-500">工具已配</div></div>
-                            <div><div class="text-xl font-bold" :class="configStatus.oneapi_configured ? 'text-green-400' : 'text-red-400'">{{ configStatus.oneapi_configured ? '✓' : '✗' }}</div><div class="text-xs text-gray-500">OneAPI</div></div>
+            <div class="island-right">
+                <span class="badge badge-ok" v-if="cfgCount > 0" style="font-size:9px;">{{ cfgCount }} 已配</span>
+                <div class="island-dot"></div>
+                <span class="island-time">{{ clock }}</span>
+            </div>
+        </div>
+
+        <!-- ═══ 主内容 ═══ -->
+        <main style="flex:1; overflow:hidden; padding:10px 16px 16px;" @click="islandOpen = true">
+
+            <!-- ── LLM 配置 ── -->
+            <div v-show="tab === 'llm'" class="h-full overflow-auto fade-up">
+                <div style="max-width:940px; margin:0 auto;" class="space-y-3">
+                    <!-- 统计条 -->
+                    <div class="glass p-4">
+                        <div class="grid grid-cols-5 gap-4 text-center">
+                            <div><div class="stat-val">{{ cs.total_models || 0 }}</div><div class="stat-lbl">总模型</div></div>
+                            <div><div class="stat-val">{{ cs.configured_models || 0 }}</div><div class="stat-lbl">已配置</div></div>
+                            <div><div class="stat-val">{{ cs.total_tools || 0 }}</div><div class="stat-lbl">工具</div></div>
+                            <div><div class="stat-val">{{ cs.configured_tools || 0 }}</div><div class="stat-lbl">工具已配</div></div>
+                            <div><div class="stat-val">{{ cs.oneapi_configured ? '✓' : '—' }}</div><div class="stat-lbl">OneAPI</div></div>
                         </div>
                     </div>
-                    
                     <!-- OneAPI -->
-                    <div class="status-card rounded-xl p-3">
-                        <h3 class="font-semibold mb-2">🔗 OneAPI 聚合器 (核心)</h3>
+                    <div class="glass p-4">
+                        <div class="section-title">OneAPI 聚合器</div>
                         <div class="grid grid-cols-3 gap-2">
-                            <input v-model="oneapiUrl" type="text" placeholder="Base URL" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
-                            <input v-model="oneapiKey" type="password" placeholder="API Key" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
-                            <div class="flex space-x-1">
-                                <button @click="saveOneAPI" class="flex-1 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">保存</button>
-                                <button @click="validateOneAPI" class="flex-1 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
+                            <input v-model="oneapiUrl" type="text" placeholder="Base URL" class="g-input">
+                            <input v-model="oneapiKey" type="password" placeholder="API Key" class="g-input">
+                            <div class="flex gap-2">
+                                <button @click="saveOneAPI" class="g-btn g-btn-primary flex-1">保存</button>
+                                <button @click="validateOneAPI" class="g-btn g-btn-ghost flex-1">验证</button>
                             </div>
                         </div>
-                        <div v-if="oneapiStatus" class="mt-2 text-xs" :class="oneapiStatus.valid ? 'valid' : 'invalid'">{{ oneapiStatus.message || oneapiStatus.error }}</div>
+                        <div v-if="oneapiSt" style="margin-top:6px; font-size:11px;" :class="oneapiSt.valid ? 'text-green-400' : 'text-red-400'">{{ oneapiSt.message || oneapiSt.error }}</div>
                     </div>
-                    
-                    <!-- 直接模型 -->
-                    <div class="status-card rounded-xl p-3">
-                        <h3 class="font-semibold mb-2">🤖 直接模型 (细节)</h3>
-                        <div class="grid grid-cols-3 gap-2">
-                            <div v-for="(provider, name) in directProviders" :key="name" class="bg-black/30 rounded p-2">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs font-medium">{{ provider.name }}</span>
-                                    <span :class="provider.valid ? 'valid' : (provider.apiKey ? 'pending' : 'text-gray-500')" class="text-xs">
-                                        {{ provider.valid ? '✓' : (provider.apiKey ? '?' : '✗') }}
-                                    </span>
-                                </div>
-                                <input v-model="provider.apiKey" type="password" placeholder="API Key" class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-1">
-                                <div class="flex space-x-1">
-                                    <button @click="saveProvider(name, provider.apiKey)" class="flex-1 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-xs">保存</button>
-                                    <button @click="validateProvider(name)" class="flex-1 py-0.5 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 测试 -->
-                    <div class="status-card rounded-xl p-3">
-                        <h3 class="font-semibold mb-2">🧪 测试 LLM</h3>
-                        <div class="flex space-x-2">
-                            <input v-model="testMessage" type="text" placeholder="测试消息" class="galaxy-input flex-1 rounded px-2 py-1 text-sm outline-none">
-                            <button @click="testLLM" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-sm">测试</button>
-                        </div>
-                        <div v-if="testResult" class="mt-2 p-2 bg-black/30 rounded text-xs">
-                            <pre class="whitespace-pre-wrap">{{ testResult }}</pre>
-                        </div>
-                    </div>
-                    
-                </div>
-            </div>
-            
-            <!-- 工具配置页面 -->
-            <div v-show="currentTab === 'tools'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto">
-                    <div class="status-card rounded-xl p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold">🔧 工具 API 配置</h3>
-                            <button @click="validateAllTools" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证全部</button>
-                        </div>
-                        
-                        <div class="grid grid-cols-3 gap-2">
-                            <div v-for="tool in tools" :key="tool.tool_id" class="bg-black/30 rounded p-2">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs font-medium">{{ tool.name }}</span>
-                                    <span :class="tool.valid ? 'valid' : (tool.apiKey ? 'pending' : 'text-gray-500')" class="text-xs">
-                                        {{ tool.valid ? '✓ 有效' : (tool.apiKey ? '? 待验证' : '✗ 未配置') }}
-                                    </span>
-                                </div>
-                                <div class="text-xs text-gray-500 mb-1">{{ tool.description }}</div>
-                                <input v-model="tool.apiKey" type="password" placeholder="API Key" class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none mb-1">
-                                <div class="flex space-x-1">
-                                    <button @click="saveTool(tool.tool_id, tool.apiKey)" class="flex-1 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">保存</button>
-                                    <button @click="validateTool(tool.tool_id)" class="flex-1 py-0.5 rounded bg-green-600 hover:bg-green-500 text-xs">验证</button>
-                                </div>
-                                <div v-if="tool.status" class="mt-1 text-xs" :class="tool.valid ? 'valid' : 'invalid'">{{ tool.status }}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 节点页面 -->
-            <div v-show="currentTab === 'nodes'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto">
-                    <div class="status-card rounded-xl p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold">🌐 节点状态</h3>
-                            <button @click="checkNodes" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">检查全部</button>
-                        </div>
-
-                        <div class="grid grid-cols-6 gap-1">
-                            <div v-for="node in nodes" :key="node.node_id" class="bg-black/30 rounded p-1 text-center cursor-pointer hover:bg-black/50">
-                                <div class="text-xs text-gray-500">{{ node.node_id }}</div>
-                                <div class="text-xs truncate">{{ node.name }}</div>
-                                <div class="text-xs" :class="node.status === 'healthy' ? 'valid' : 'text-gray-500'">{{ node.status || '?' }}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 设备页面 -->
-            <div v-show="currentTab === 'devices'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto">
-                    <div class="status-card rounded-xl p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold">📱 设备状态</h3>
-                            <button @click="loadDevices" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
-                        </div>
-
-                        <div v-if="devices.length === 0" class="text-center py-8">
-                            <div class="text-gray-500 text-sm">暂无已注册设备</div>
-                            <div class="text-gray-600 text-xs mt-1">设备注册后将自动显示在此处</div>
-                        </div>
-
-                        <div v-else class="grid grid-cols-3 gap-3">
-                            <div v-for="device in devices" :key="device.device_id || device.id" class="bg-black/30 rounded-lg p-3">
+                    <!-- 模型商 -->
+                    <div class="glass p-4">
+                        <div class="section-title">直接模型商</div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div v-for="(p, name) in providers" :key="name" class="card p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <span class="text-sm font-medium">{{ device.name || device.device_name || device.device_id || 'Unknown' }}</span>
-                                    <span class="text-xs px-2 py-0.5 rounded-full" :class="(device.status === 'online' || device.status === 'healthy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'">
-                                        {{ device.status || 'offline' }}
-                                    </span>
+                                    <span style="font-size:11px; font-weight:500;">{{ p.name }}</span>
+                                    <span class="badge" :class="p.valid ? 'badge-ok' : (p.apiKey ? 'badge-warn' : '')" v-if="p.valid || p.apiKey" style="font-size:9px;">{{ p.valid ? '✓' : '?' }}</span>
                                 </div>
-                                <div class="text-xs text-gray-400 space-y-1">
-                                    <div>类型: {{ device.device_type || device.type || '-' }}</div>
-                                    <div v-if="device.capabilities">能力: {{ Array.isArray(device.capabilities) ? device.capabilities.join(', ') : device.capabilities }}</div>
-                                    <div v-if="device.last_seen">最后活跃: {{ formatTime(device.last_seen) }}</div>
+                                <input v-model="p.apiKey" type="password" placeholder="API Key" class="g-input" style="font-size:11px; padding:6px 10px; margin-bottom:5px;">
+                                <div class="flex gap-1">
+                                    <button @click="saveProvider(name, p.apiKey)" class="g-btn g-btn-ghost flex-1" style="padding:4px; font-size:10px;">保存</button>
+                                    <button @click="validateProvider(name)" class="g-btn g-btn-ghost flex-1" style="padding:4px; font-size:10px;">验证</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 测试 -->
+                    <div class="glass p-4">
+                        <div class="section-title">LLM 测试</div>
+                        <div class="flex gap-2">
+                            <input v-model="testMsg" type="text" placeholder="测试消息" class="g-input flex-1">
+                            <button @click="testLLM" class="g-btn g-btn-primary">测试</button>
+                        </div>
+                        <div v-if="testRes" class="card p-3 mt-2" style="font-size:11px; font-family:monospace;">
+                            <pre style="white-space:pre-wrap; color:rgba(255,255,255,0.6);">{{ testRes }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 工具 API ── -->
+            <div v-show="tab === 'tools'" class="h-full overflow-auto fade-up">
+                <div style="max-width:940px; margin:0 auto;">
+                    <div class="glass p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="section-title" style="margin:0;">工具 API 配置</div>
+                            <button @click="validateAllTools" class="g-btn g-btn-ghost" style="font-size:10px;">验证全部</button>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div v-for="tool in tools" :key="tool.tool_id" class="card p-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span style="font-size:11px; font-weight:500;">{{ tool.name }}</span>
+                                    <span class="badge" :class="tool.valid ? 'badge-ok' : (tool.apiKey ? 'badge-warn' : '')" v-if="tool.valid || tool.apiKey" style="font-size:9px;">{{ tool.valid ? '有效' : '待验' }}</span>
+                                </div>
+                                <div style="font-size:10px; color:rgba(255,255,255,0.25); margin-bottom:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ tool.description }}</div>
+                                <input v-model="tool.apiKey" type="password" placeholder="API Key" class="g-input" style="font-size:10px; padding:5px 8px; margin-bottom:4px;">
+                                <div class="flex gap-1">
+                                    <button @click="saveTool(tool.tool_id, tool.apiKey)" class="g-btn g-btn-ghost flex-1" style="padding:3px; font-size:10px;">保存</button>
+                                    <button @click="validateTool(tool.tool_id)" class="g-btn g-btn-ghost flex-1" style="padding:3px; font-size:10px;">验证</button>
+                                </div>
+                                <div v-if="tool.status" style="margin-top:3px; font-size:10px;" :class="tool.valid ? 'text-green-400' : 'text-red-400'">{{ tool.status }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 节点状态 ── -->
+            <div v-show="tab === 'nodes'" class="h-full overflow-auto fade-up">
+                <div style="max-width:940px; margin:0 auto;">
+                    <div class="glass p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="section-title" style="margin:0;">节点状态</div>
+                            <button @click="checkNodes" class="g-btn g-btn-ghost" style="font-size:10px;">检查全部</button>
+                        </div>
+                        <div class="grid grid-cols-6 gap-2">
+                            <div v-for="node in nodes" :key="node.node_id" class="card p-2 text-center cursor-pointer">
+                                <div style="font-size:9px; color:rgba(255,255,255,0.25);">{{ node.node_id }}</div>
+                                <div style="font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ node.name }}</div>
+                                <div style="font-size:9px; margin-top:2px;" :class="node.status === 'healthy' ? 'text-green-400' : 'text-gray-600'">{{ node.status || '—' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── MCP 服务 ── -->
+            <div v-show="tab === 'mcp'" class="h-full overflow-auto fade-up">
+                <div style="max-width:940px; margin:0 auto;" class="space-y-3">
+                    <div class="glass p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="section-title" style="margin:0;">MCP Server</div>
+                            <button @click="loadMCP" class="g-btn g-btn-ghost" style="font-size:10px;">刷新</button>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 text-center mb-4">
+                            <div><div class="stat-val">{{ mcpServers.length }}</div><div class="stat-lbl">Server 数</div></div>
+                            <div><div class="stat-val">{{ mcpToolCount }}</div><div class="stat-lbl">工具总数</div></div>
+                            <div><div class="stat-val">{{ mcpRunning }}</div><div class="stat-lbl">运行中</div></div>
+                        </div>
+                        <div v-if="mcpServers.length === 0" class="text-center py-6" style="color:rgba(255,255,255,0.2); font-size:12px;">暂无 MCP Server</div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div v-for="srv in mcpServers" :key="srv.server_id" class="card p-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span style="font-size:12px; font-weight:500;">{{ srv.name || srv.server_id }}</span>
+                                    <span class="badge" :class="srv.status === 'running' ? 'badge-ok' : 'badge-err'" style="font-size:9px;">{{ srv.status }}</span>
+                                </div>
+                                <div style="font-size:10px; color:rgba(255,255,255,0.3); line-height:1.5;">
+                                    <div>命令: {{ srv.command || '—' }}</div>
+                                    <div>工具: {{ (srv.tools || []).length }} 个</div>
+                                    <div>资源: {{ (srv.resources || []).length }} 个</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Skill 协议 ── -->
+            <div v-show="tab === 'skills'" class="h-full overflow-auto fade-up">
+                <div style="max-width:940px; margin:0 auto;" class="space-y-3">
+                    <div class="glass p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="section-title" style="margin:0;">Skill 协议</div>
+                            <button @click="loadSkills" class="g-btn g-btn-ghost" style="font-size:10px;">刷新</button>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 text-center mb-4">
+                            <div><div class="stat-val">{{ skillList.length }}</div><div class="stat-lbl">已加载</div></div>
+                            <div><div class="stat-val">{{ skillStats.total_executions || 0 }}</div><div class="stat-lbl">总执行</div></div>
+                            <div><div class="stat-val">{{ skillStats.total_errors || 0 }}</div><div class="stat-lbl">错误数</div></div>
+                        </div>
+                        <div v-if="skillList.length === 0" class="text-center py-6" style="color:rgba(255,255,255,0.2); font-size:12px;">暂无已加载 Skill</div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div v-for="sk in skillList" :key="sk.skill_id" class="card p-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span style="font-size:12px; font-weight:500;">{{ sk.name || sk.skill_id }}</span>
+                                    <span class="badge" :class="sk.status === 'loaded' ? 'badge-ok' : (sk.status === 'disabled' ? 'badge-warn' : 'badge-err')" style="font-size:9px;">{{ sk.status }}</span>
+                                </div>
+                                <div style="font-size:10px; color:rgba(255,255,255,0.3); margin-bottom:4px;">{{ sk.description || '—' }}</div>
+                                <div style="font-size:10px; color:rgba(255,255,255,0.2);">
+                                    <span v-if="sk.tags">标签: {{ (sk.tags || []).join(', ') }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 设备总览 ── -->
+            <div v-show="tab === 'devices'" class="h-full overflow-auto fade-up">
+                <div style="max-width:940px; margin:0 auto;">
+                    <div class="glass p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="section-title" style="margin:0;">设备总览</div>
+                            <button @click="loadDevices" class="g-btn g-btn-ghost" style="font-size:10px;">刷新</button>
+                        </div>
+                        <div v-if="devices.length === 0" class="text-center py-10" style="color:rgba(255,255,255,0.2); font-size:12px;">暂无已注册设备</div>
+                        <div v-else class="grid grid-cols-3 gap-3">
+                            <div v-for="d in devices" :key="d.device_id || d.id" class="card p-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span style="font-size:12px; font-weight:500;">{{ d.name || d.device_name || d.device_id || '—' }}</span>
+                                    <span class="badge" :class="(d.status === 'online' || d.status === 'healthy') ? 'badge-ok' : 'badge-err'">{{ d.status || 'offline' }}</span>
+                                </div>
+                                <div style="font-size:10px; color:rgba(255,255,255,0.3); line-height:1.6;">
+                                    <div>类型: {{ d.device_type || d.type || '—' }}</div>
+                                    <div v-if="d.capabilities">能力: {{ Array.isArray(d.capabilities) ? d.capabilities.join(', ') : d.capabilities }}</div>
+                                    <div v-if="d.last_seen">活跃: {{ fmtTime(d.last_seen) }}</div>
                                 </div>
                             </div>
                         </div>
@@ -271,218 +368,139 @@
 
         </main>
     </div>
-    
+
     <script>
-        const { createApp, ref, onMounted, computed, watch } = Vue;
-        
-        createApp({
-            setup() {
-                const currentTab = ref('llm');
-                const messages = ref([]);
-                const inputMessage = ref('');
-                const isLoading = ref(false);
-                const currentTime = ref('');
-                const chatContainer = ref(null);
-                const starsContainer = ref(null);
-                
-                const configStatus = ref({});
-                const oneapiUrl = ref('http://localhost:8001/v1');
-                const oneapiKey = ref('');
-                const oneapiStatus = ref(null);
-                
-                const directProviders = ref({
-                    openai: { name: 'OpenAI', apiKey: '', valid: false },
-                    anthropic: { name: 'Anthropic', apiKey: '', valid: false },
-                    deepseek: { name: 'DeepSeek', apiKey: '', valid: false },
-                    zhipu: { name: '智谱 AI', apiKey: '', valid: false },
-                    groq: { name: 'Groq', apiKey: '', valid: false },
-                    openrouter: { name: 'OpenRouter', apiKey: '', valid: false },
-                    gemini: { name: 'Gemini', apiKey: '', valid: false },
-                    qwen: { name: '通义千问', apiKey: '', valid: false }
-                });
-                
-                const tools = ref([]);
-                const nodes = ref([]);
-                const devices = ref([]);
-                const devicesTimer = ref(null);
-                const testMessage = ref('Hello');
-                const testResult = ref('');
-                
-                const configuredCount = computed(() => {
-                    let count = 0;
-                    if (oneapiKey.value) count++;
-                    for (const p of Object.values(directProviders.value)) {
-                        if (p.apiKey) count++;
-                    }
-                    for (const t of tools.value) {
-                        if (t.apiKey) count++;
-                    }
-                    return count;
-                });
-                
-                const generateStars = () => {
-                    if (!starsContainer.value) return;
-                    for (let i = 0; i < 80; i++) {
-                        const star = document.createElement('div');
-                        star.className = 'star';
-                        star.style.left = Math.random() * 100 + '%';
-                        star.style.top = Math.random() * 100 + '%';
-                        star.style.width = Math.random() * 2 + 1 + 'px';
-                        star.style.height = star.style.width;
-                        star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
-                        star.style.setProperty('--opacity', Math.random() * 0.5 + 0.3);
-                        starsContainer.value.appendChild(star);
-                    }
-                };
-                
-                const updateTime = () => { currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); };
-                
-                const loadConfigStatus = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/config/status');
-                        configStatus.value = response.data;
-                    } catch (error) { console.error('Failed to load config status:', error); }
-                };
-                
-                const loadTools = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/config/tools');
-                        tools.value = (response.data.tools || []).map(t => ({ ...t, status: '' }));
-                    } catch (error) { console.error('Failed to load tools:', error); }
-                };
-                
-                const loadNodes = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/config/nodes');
-                        nodes.value = response.data.nodes || [];
-                    } catch (error) { console.error('Failed to load nodes:', error); }
-                };
+    const { createApp, ref, onMounted, computed, watch } = Vue;
+    createApp({
+        setup() {
+            const islandOpen = ref(true);
+            const tab = ref('llm');
+            const clock = ref('');
+            const tabs = [
+                { key: 'llm', label: 'LLM' },
+                { key: 'tools', label: '工具' },
+                { key: 'nodes', label: '节点' },
+                { key: 'mcp', label: 'MCP' },
+                { key: 'skills', label: 'Skill' },
+                { key: 'devices', label: '设备' }
+            ];
 
-                const loadDevices = async () => {
-                    try {
-                        const response = await axios.get('/api/v1/devices');
-                        devices.value = response.data.devices || [];
-                    } catch (error) { console.error('Failed to load devices:', error); }
-                };
+            /* ── State ── */
+            const cs = ref({});  // config status
+            const oneapiUrl = ref('http://localhost:8001/v1');
+            const oneapiKey = ref('');
+            const oneapiSt = ref(null);
+            const providers = ref({
+                openai: { name: 'OpenAI', apiKey: '', valid: false },
+                anthropic: { name: 'Anthropic', apiKey: '', valid: false },
+                deepseek: { name: 'DeepSeek', apiKey: '', valid: false },
+                zhipu: { name: '智谱 AI', apiKey: '', valid: false },
+                groq: { name: 'Groq', apiKey: '', valid: false },
+                openrouter: { name: 'OpenRouter', apiKey: '', valid: false },
+                gemini: { name: 'Gemini', apiKey: '', valid: false },
+                qwen: { name: '通义千问', apiKey: '', valid: false }
+            });
+            const tools = ref([]);
+            const nodes = ref([]);
+            const devices = ref([]);
+            const testMsg = ref('Hello');
+            const testRes = ref('');
+            const mcpServers = ref([]);
+            const skillList = ref([]);
+            const skillStats = ref({});
 
-                const saveOneAPI = async () => {
-                    try {
-                        await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
-                };
-                
-                const validateOneAPI = async () => {
-                    oneapiStatus.value = { valid: false, message: '验证中...' };
-                    try {
-                        const response = await axios.post('/api/v1/config/validate', { category: 'oneapi', key_name: '' });
-                        oneapiStatus.value = response.data;
-                    } catch (error) { oneapiStatus.value = { valid: false, error: error.message }; }
-                };
-                
-                const saveProvider = async (name, apiKey) => {
-                    try {
-                        await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
-                };
-                
-                const validateProvider = async (name) => {
-                    directProviders.value[name].valid = false;
-                    try {
-                        const response = await axios.post('/api/v1/config/validate', { category: 'direct_models', key_name: name });
-                        directProviders.value[name].valid = response.data.valid;
-                    } catch (error) { directProviders.value[name].valid = false; }
-                };
-                
-                const saveTool = async (toolId, apiKey) => {
-                    try {
-                        await axios.post('/api/v1/config/tools/api-key', { tool_id: toolId, api_key: apiKey });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
-                };
-                
-                const validateTool = async (toolId) => {
-                    const tool = tools.value.find(t => t.tool_id === toolId);
-                    if (tool) {
-                        tool.status = '验证中...';
-                        try {
-                            const response = await axios.post('/api/v1/config/validate', { category: 'tools', key_name: toolId });
-                            tool.valid = response.data.valid;
-                            tool.status = response.data.valid ? '有效' : response.data.error;
-                        } catch (error) { tool.status = error.message; }
-                    }
-                };
-                
-                const validateAllTools = async () => {
-                    for (const tool of tools.value) {
-                        if (tool.apiKey) {
-                            await validateTool(tool.tool_id);
-                        }
-                    }
-                };
-                
-                const testLLM = async () => {
-                    testResult.value = '测试中...';
-                    try {
-                        const response = await axios.post('/api/v1/config/test-llm', { message: testMessage.value });
-                        testResult.value = JSON.stringify(response.data, null, 2);
-                    } catch (error) { testResult.value = '测试失败: ' + error.message; }
-                };
-                
-                const checkNodes = async () => {
-                    try {
-                        const response = await axios.post('/api/v1/config/nodes/check');
-                        const results = response.data.results;
-                        nodes.value.forEach(node => { node.status = results[node.node_id]?.success ? 'healthy' : 'error'; });
-                    } catch (error) { console.error('Failed to check nodes:', error); }
-                };
-                
-                const sendMessage = async () => {
-                    if (!inputMessage.value.trim() || isLoading.value) return;
-                    const message = inputMessage.value.trim();
-                    inputMessage.value = '';
-                    messages.value.push({ id: Date.now(), role: 'user', content: message, timestamp: new Date() });
-                    isLoading.value = true;
-                    try {
-                        const response = await axios.post('/api/v1/chat', { message });
-                        messages.value.push({ id: Date.now() + 1, role: 'assistant', content: response.data.response || '处理完成', timestamp: new Date() });
-                    } catch (error) {
-                        messages.value.push({ id: Date.now() + 1, role: 'assistant', content: '❌ 连接失败: ' + error.message, timestamp: new Date() });
-                    }
-                    isLoading.value = false;
-                };
-                
-                const formatTime = (date) => new Date(date).toLocaleTimeString('zh-CN', { hour12: false });
-                
-                watch(currentTab, (newTab, oldTab) => {
-                    if (newTab === 'devices') {
-                        loadDevices();
-                        devicesTimer.value = setInterval(loadDevices, 5000);
-                    } else if (oldTab === 'devices' && devicesTimer.value) {
-                        clearInterval(devicesTimer.value);
-                        devicesTimer.value = null;
-                    }
-                });
+            const cfgCount = computed(() => {
+                let c = 0;
+                if (oneapiKey.value) c++;
+                for (const p of Object.values(providers.value)) { if (p.apiKey) c++; }
+                for (const t of tools.value) { if (t.apiKey) c++; }
+                return c;
+            });
+            const mcpToolCount = computed(() => mcpServers.value.reduce((s, srv) => s + (srv.tools || []).length, 0));
+            const mcpRunning = computed(() => mcpServers.value.filter(s => s.status === 'running').length);
 
-                onMounted(() => {
-                    generateStars();
-                    updateTime();
-                    setInterval(updateTime, 1000);
-                    loadConfigStatus();
-                    loadTools();
-                    loadNodes();
-                });
-                
-                return {
-                    currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
-                    configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes, devices,
-                    testMessage, testResult, configuredCount,
-                    loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
-                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices, sendMessage, formatTime
-                };
-            }
-        }).mount('#app');
+            /* ── Stars ── */
+            const initStars = () => {
+                const el = document.getElementById('starsEl');
+                if (!el) return;
+                for (let i = 0; i < 100; i++) {
+                    const s = document.createElement('div');
+                    s.className = 'star';
+                    s.style.left = Math.random() * 100 + '%';
+                    s.style.top = Math.random() * 100 + '%';
+                    const sz = Math.random() * 1.8 + 0.5 + 'px';
+                    s.style.width = sz; s.style.height = sz;
+                    s.style.setProperty('--dur', (Math.random() * 3 + 2) + 's');
+                    s.style.setProperty('--op', Math.random() * 0.5 + 0.25);
+                    el.appendChild(s);
+                }
+            };
+
+            /* ── API ── */
+            const ax = axios;
+            const loadCS = async () => { try { cs.value = (await ax.get('/api/v1/config/status')).data; } catch(e) {} };
+            const loadTools = async () => { try { tools.value = ((await ax.get('/api/v1/config/tools')).data.tools || []).map(t => ({ ...t, status: '' })); } catch(e) {} };
+            const loadNodes = async () => { try { nodes.value = (await ax.get('/api/v1/config/nodes')).data.nodes || []; } catch(e) {} };
+            const loadDevices = async () => { try { devices.value = (await ax.get('/api/v1/devices')).data.devices || []; } catch(e) {} };
+            const loadMCP = async () => { try { mcpServers.value = (await ax.get('/api/v1/system/mcp')).data.servers || []; } catch(e) {} };
+            const loadSkills = async () => {
+                try {
+                    const r = (await ax.get('/api/v1/system/skills')).data;
+                    skillList.value = r.skills || [];
+                    skillStats.value = r.stats || {};
+                } catch(e) {}
+            };
+
+            const saveOneAPI = async () => { try { await ax.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value }); loadCS(); } catch(e) { alert('保存失败: ' + e.message); } };
+            const validateOneAPI = async () => {
+                oneapiSt.value = { valid: false, message: '验证中...' };
+                try { oneapiSt.value = (await ax.post('/api/v1/config/validate', { category: 'oneapi', key_name: '' })).data; } catch(e) { oneapiSt.value = { valid: false, error: e.message }; }
+            };
+            const saveProvider = async (n, k) => { try { await ax.post('/api/v1/config/api-key', { provider: n, api_key: k }); loadCS(); } catch(e) { alert('保存失败: ' + e.message); } };
+            const validateProvider = async (n) => {
+                providers.value[n].valid = false;
+                try { providers.value[n].valid = (await ax.post('/api/v1/config/validate', { category: 'direct_models', key_name: n })).data.valid; } catch(e) {}
+            };
+            const saveTool = async (id, k) => { try { await ax.post('/api/v1/config/tools/api-key', { tool_id: id, api_key: k }); loadCS(); } catch(e) { alert('保存失败: ' + e.message); } };
+            const validateTool = async (id) => {
+                const t = tools.value.find(x => x.tool_id === id);
+                if (t) { t.status = '验证中...'; try { const r = (await ax.post('/api/v1/config/validate', { category: 'tools', key_name: id })).data; t.valid = r.valid; t.status = r.valid ? '有效' : r.error; } catch(e) { t.status = e.message; } }
+            };
+            const validateAllTools = async () => { for (const t of tools.value) { if (t.apiKey) await validateTool(t.tool_id); } };
+            const testLLM = async () => {
+                testRes.value = '测试中...';
+                try { testRes.value = JSON.stringify((await ax.post('/api/v1/config/test-llm', { message: testMsg.value })).data, null, 2); } catch(e) { testRes.value = '失败: ' + e.message; }
+            };
+            const checkNodes = async () => {
+                try { const res = (await ax.post('/api/v1/config/nodes/check')).data.results; nodes.value.forEach(n => { n.status = res[n.node_id]?.success ? 'healthy' : 'error'; }); } catch(e) {}
+            };
+            const fmtTime = (d) => new Date(d).toLocaleTimeString('zh-CN', { hour12: false });
+
+            /* ── Tab watcher ── */
+            let devTimer = null;
+            watch(tab, (n, o) => {
+                if (n === 'devices') { loadDevices(); devTimer = setInterval(loadDevices, 5000); }
+                else if (o === 'devices' && devTimer) { clearInterval(devTimer); devTimer = null; }
+                if (n === 'mcp') loadMCP();
+                if (n === 'skills') loadSkills();
+            });
+
+            onMounted(() => {
+                initStars();
+                setInterval(() => { clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); }, 1000);
+                loadCS(); loadTools(); loadNodes();
+            });
+
+            return {
+                islandOpen, tab, clock, tabs, cs, oneapiUrl, oneapiKey, oneapiSt,
+                providers, tools, nodes, devices, testMsg, testRes, cfgCount,
+                mcpServers, mcpToolCount, mcpRunning, skillList, skillStats,
+                loadCS, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
+                saveTool, validateTool, validateAllTools, testLLM, checkNodes,
+                loadDevices, loadMCP, loadSkills, fmtTime
+            };
+        }
+    }).mount('#app');
     </script>
 </body>
 </html>

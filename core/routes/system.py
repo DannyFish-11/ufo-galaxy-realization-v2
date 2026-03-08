@@ -131,6 +131,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         }
         return JSONResponse(config_data)
 
+    @router.get("/api/v1/system/mcp")
+    async def system_mcp():
+        """列出所有 MCP Server 及其工具/资源/状态"""
+        try:
+            from core.mcp_loader import mcp_loader
+            servers = mcp_loader.list_servers()
+            return JSONResponse({"servers": servers})
+        except Exception as e:
+            logger.warning(f"获取 MCP 状态失败: {e}")
+            return JSONResponse({"servers": [], "error": str(e)})
+
+    @router.get("/api/v1/system/skills")
+    async def system_skills():
+        """列出所有已加载 Skill 及执行统计"""
+        try:
+            from core.skill_loader import skill_loader
+            skills = skill_loader.list_skills()
+            stats = skill_loader.get_stats()
+            return JSONResponse({
+                "skills": [s.to_dict() if hasattr(s, 'to_dict') else s for s in skills],
+                "stats": stats
+            })
+        except Exception as e:
+            logger.warning(f"获取 Skill 状态失败: {e}")
+            return JSONResponse({"skills": [], "stats": {}, "error": str(e)})
+
     @router.post("/api/config/update")
     async def update_config(request: Request, auth: dict = Depends(require_auth)):
         """

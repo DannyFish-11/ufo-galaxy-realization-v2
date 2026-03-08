@@ -190,9 +190,11 @@ class SymbolicEngine:
             # Replace ^ with **
             expr = expr.replace('^', '**')
             
-            # Safe evaluation (very limited)
+            # Safe evaluation (very limited) — pre-validate expression chars
+            if not re.match(r'^[\d\s\+\-\*/\.\(\)\,\*abs\minmax]+$', expr):
+                return None
             allowed_names = {"abs": abs, "min": min, "max": max}
-            result = eval(expr, {"__builtins__": {}}, allowed_names)
+            result = eval(expr, {"__builtins__": {}}, allowed_names)  # noqa: S307
             return float(result)
         except Exception:
             return None

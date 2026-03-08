@@ -30,6 +30,8 @@ _ACTION_KEYWORDS_ZH = [
     "帮我操作", "帮我执行", "帮我控制",
     "在手机上", "在电脑上", "在平板上", "在设备上",
     "切换应用", "返回桌面", "锁屏", "解锁", "音量",
+    "传到手机", "传到电脑", "发到手机", "发到电脑",
+    "跨设备", "同步剪贴板", "设备间",
 ]
 _ACTION_KEYWORDS_EN = [
     "open ", "close ", "launch ", "run ", "install ", "click ",
@@ -281,16 +283,25 @@ async def _try_agent_factory(message: str, llm_router, parsed_intent=None) -> di
     尝试通过 AgentFactory 创建专用 Agent 处理复杂任务。
     仅在 IntentParser 判定为复杂任务或涉及多设备/多步骤时触发。
     返回 None 表示任务不需要 AgentFactory。
+
+    复杂度分级:
+    - 高复杂 (targets > 2 或 workflow): FractalExecutor 分形递归分解
+    - 中复杂 (targets > 1 或 multi_device): LLM 动态生成 Agent
     """
     # 判定是否需要 Agent 工厂
     is_complex = False
+    is_highly_complex = False
     if parsed_intent:
         # 多目标 = 复杂
         if len(parsed_intent.targets) > 1:
             is_complex = True
+        if len(parsed_intent.targets) > 2:
+            is_highly_complex = True
         # 特定意图类型 = 复杂
         if parsed_intent.intent in ("multi_device", "workflow", "batch_task"):
             is_complex = True
+        if parsed_intent.intent == "workflow":
+            is_highly_complex = True
 
     if not is_complex:
         return None
@@ -300,7 +311,6 @@ async def _try_agent_factory(message: str, llm_router, parsed_intent=None) -> di
 
         factory = get_agent_factory(llm_router)
 
-        # 用 LLM 动态生成最优 Agent
         context = {}
         if parsed_intent:
             context = {
@@ -309,6 +319,16 @@ async def _try_agent_factory(message: str, llm_router, parsed_intent=None) -> di
                 "params": parsed_intent.params,
             }
 
+        # 高复杂度 → 分形递归分解
+        if is_highly_complex:
+            try:
+                result = await factory.create_fractal_task(message, context)
+                logger.info(f"FractalExecutor 完成任务: {result.get('data', {}).get('total_agents', 0)} agents")
+                return result
+            except Exception as e:
+                logger.debug(f"FractalExecutor 失败，降级到普通 Agent: {e}")
+
+        # 中复杂度 → LLM 动态生成 Agent
         agent = await factory.create_from_llm(message, context=context)
         result = await factory.execute_agent_task(
             agent.id,

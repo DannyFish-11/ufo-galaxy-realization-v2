@@ -740,6 +740,132 @@ class AgentFactory:
         if expired:
             logger.info(f"清理了 {len(expired)} 个过期 Agent")
 
+    # ─────── 分形任务 ─────────
+
+    async def create_fractal_task(
+        self, task_description: str, context: Optional[Dict] = None
+    ) -> Dict:
+        """
+        通过 FractalExecutor 执行分形递归任务分解。
+
+        适用于复杂多步骤任务 — FractalAgent 会自动评估复杂度，
+        递归分解子任务，并行执行后合并结果。
+        """
+        from core.fractal_agent import get_fractal_executor
+
+        executor = get_fractal_executor(
+            llm_router=self.llm_router,
+            agent_factory=self,
+        )
+        result = await executor.run(task_description, context)
+
+        return {
+            "success": result.success,
+            "reply": result.summary if hasattr(result, "summary") else str(result),
+            "data": {
+                "total_agents": result.total_agents if hasattr(result, "total_agents") else 0,
+                "latency_ms": result.latency_ms if hasattr(result, "latency_ms") else 0,
+                "mode": "fractal",
+            },
+        }
+
+    # ─────── 统一模板注册表 ─────────
+
+    def register_template(self, name: str, config: AgentConfig):
+        """动态注册新的 Agent 模板（运行时扩展）"""
+        AGENT_TEMPLATES[name] = config
+        logger.info(f"模板注册: {name} ({config.role.value})")
+
+    def list_templates(self) -> List[Dict]:
+        """列出所有可用模板（含内置 + 动态注册）"""
+        result = []
+        for name, cfg in AGENT_TEMPLATES.items():
+            result.append({
+                "name": name,
+                "role": cfg.role.value,
+                "description": cfg.description,
+                "capabilities": [c.name for c in cfg.capabilities],
+                "max_subtasks": cfg.max_subtasks,
+                "max_depth": cfg.max_depth,
+            })
+        return result
+
+    def create_unified(
+        self,
+        agent_type: str,
+        task_description: str = "",
+        template_name: str = "",
+        device_id: str = "",
+        device_type: str = "",
+        context: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        统一创建接口 — 支持所有 Agent 类型:
+        - "task"    → create_from_template / create_from_llm
+        - "device"  → DeviceAgentManager.create_agent
+        - "twin"    → DigitalTwinEngine.create_twin
+        - "fractal" → create_fractal_task (async, 返回占位)
+
+        Returns: {"agent_id": ..., "type": ..., "status": ...}
+        """
+        if agent_type == "task":
+            if template_name and template_name in AGENT_TEMPLATES:
+                agent = self.create_from_template(template_name)
+            else:
+                template = self._match_template(task_description or "coordinator")
+                agent = self.create_from_template(template)
+            return {
+                "agent_id": agent.id,
+                "type": "task",
+                "role": agent.config.role.value,
+                "name": agent.config.name,
+                "status": agent.state.value,
+            }
+
+        elif agent_type == "device":
+            try:
+                from core.device_agent_manager import DeviceAgentManager
+                manager = DeviceAgentManager()
+                # DeviceAgentManager.register_device is async and requires DeviceInfo
+                # For sync unified creation, return a placeholder with info
+                return {
+                    "agent_id": device_id or f"dev_{uuid.uuid4().hex[:8]}",
+                    "type": "device",
+                    "device_type": device_type or "generic",
+                    "status": "ready",
+                    "note": "Use POST /api/v1/devices/register for full device registration",
+                }
+            except Exception as e:
+                return {"agent_id": None, "type": "device", "error": str(e)}
+
+        elif agent_type == "twin":
+            try:
+                from core.digital_twin_engine import get_digital_twin_engine
+                engine = get_digital_twin_engine()
+                twin = engine.create_twin(
+                    device_id=device_id or f"virtual_{uuid.uuid4().hex[:8]}",
+                    device_type=device_type or "generic",
+                    initial_state=context,
+                )
+                return {
+                    "agent_id": twin.twin_id,
+                    "type": "twin",
+                    "device_id": twin.device_id,
+                    "status": twin.status.value,
+                }
+            except Exception as e:
+                return {"agent_id": None, "type": "twin", "error": str(e)}
+
+        elif agent_type == "fractal":
+            return {
+                "agent_id": f"fractal_pending_{uuid.uuid4().hex[:8]}",
+                "type": "fractal",
+                "status": "use create_fractal_task() for async execution",
+            }
+
+        else:
+            raise ValueError(f"未知 Agent 类型: {agent_type}，可用: task, device, twin, fractal")
+
     def get_status(self) -> Dict:
         by_state = {}
         by_mode = {}
@@ -751,6 +877,7 @@ class AgentFactory:
             "total_agents": len(self.agents),
             "by_state": by_state,
             "by_creation_mode": by_mode,
+            "templates": list(AGENT_TEMPLATES.keys()),
             "agent_tree": self.get_agent_tree(),
         }
 
