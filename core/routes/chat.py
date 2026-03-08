@@ -64,12 +64,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     scheduler = AutonomousScheduler(nodes_root)
     llm_router = get_llm_router()  # 统一使用 MultiLLMRouter（任务感知路由+成本追踪+故障转移）
 
+    # 意图解析器 — 注入 LLM 路由器以支持深度意图理解
+    try:
+        from core.ai_intent import IntentParser
+        intent_parser = IntentParser(llm_client=llm_router)
+    except Exception:
+        intent_parser = None
+
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
         """
         统一对话接口 — 智能分流:
-        1. 操作指令 → ReAct Agent 调度 (LLM + tool_call → 节点执行)
-        2. 纯聊天 → LLM 对话回复
+        1. IntentParser 解析意图（规则 + LLM 增强）
+        2. 操作指令 → ReAct Agent 调度 (LLM + tool_call → 节点执行)
+        3. 纯聊天 → LLM 对话回复
 
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         """
@@ -77,17 +85,41 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         try:
             # === 融合对话记忆 ===
+            context_dict = None
             try:
                 from core.ai_intent import get_conversation_memory
                 memory = get_conversation_memory()
                 await memory.add_turn(session_id, "user", req.message)
                 if not req.context:
                     req.context = await memory.get_context(session_id, max_turns=10)
+                context_dict = {"history": req.context} if req.context else None
             except Exception as e:
                 logger.debug(f"Conversation memory unavailable: {e}")
 
-            # === 意图分流 ===
-            if _is_action_intent(req.message) and llm_router.is_available():
+            # === 意图分流（IntentParser 优先，关键词匹配兜底） ===
+            is_action = False
+            parsed_intent = None
+
+            if intent_parser and llm_router.is_available():
+                try:
+                    parsed_intent = await intent_parser.parse(req.message, context_dict)
+                    is_action = (
+                        parsed_intent.intent != "chat"
+                        and parsed_intent.confidence >= 0.4
+                    )
+                    if is_action:
+                        logger.info(
+                            f"IntentParser: {parsed_intent.intent} "
+                            f"(conf={parsed_intent.confidence:.2f}, "
+                            f"cmd={parsed_intent.command})"
+                        )
+                except Exception as e:
+                    logger.debug(f"IntentParser failed, falling back to keywords: {e}")
+                    is_action = _is_action_intent(req.message)
+            else:
+                is_action = _is_action_intent(req.message) and llm_router.is_available()
+
+            if is_action:
                 result = await _handle_agent_action(req, session_id, scheduler, llm_router)
                 return result
             else:
