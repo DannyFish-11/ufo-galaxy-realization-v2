@@ -1,5 +1,5 @@
 """
-UFO Galaxy Cross-Device Integration Tests
+Galaxy Cross-Device Integration Tests
 Simulates the full Android <-> Server handshake sequence over AIP v3.0.
 
 Tests call android_bridge.AndroidBridge.handle_message() directly with a

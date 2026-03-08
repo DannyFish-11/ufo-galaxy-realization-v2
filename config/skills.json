@@ -53,9 +53,9 @@
   ],
   "skill_packages": [
     {
-      "name": "ufo-galaxy-skills",
-      "source": "https://github.com/DannyFish-11/ufo-galaxy-skills",
-      "description": "UFO Galaxy 官方技能包",
+      "name": "galaxy-skills",
+      "source": "https://github.com/DannyFish-11/galaxy-skills",
+      "description": "Galaxy 官方技能包",
       "auto_load": false
     }
   ]

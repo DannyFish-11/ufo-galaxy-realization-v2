@@ -221,7 +221,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-logger = logging.getLogger("UFO-Galaxy.Node_{node_number}_{node_name}")
+logger = logging.getLogger("Galaxy.Node_{node_number}_{node_name}")
 
 
 class {node_name}Engine:

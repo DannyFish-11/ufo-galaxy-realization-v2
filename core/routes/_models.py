@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Shared Request/Response Models
+Galaxy - Shared Request/Response Models
 ============================================
 
 Pydantic models and enums shared across all route modules.

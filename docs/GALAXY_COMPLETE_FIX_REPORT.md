@@ -1,4 +1,4 @@
-# 🛸 UFO Galaxy 系统完整性修复报告
+# 🛸 Galaxy 系统完整性修复报告
 ## 修复完成日期: 2026-02-05
 
 > **注意**: 本报告记录的是 2026-02-05 的系统状态。其中部分节点 ID 已在 PR #23 中重新编号（例如 Node_23_Calendar → Node_123_Calendar），详见 CHANGELOG.md。
@@ -128,7 +128,7 @@ REDIS_URL=redis://redis:6379/0
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin123
-MINIO_BUCKET=ufo-galaxy
+MINIO_BUCKET=galaxy
 ```
 
 ### WebRTC配置
@@ -167,7 +167,7 @@ VLLM_URL=http://vllm:8000
 ### Android客户端UI
 
 #### DynamicIsland组件
-- ✅ CollapsedContent (120dp×40dp) - 状态指示器 + UFO图标
+- ✅ CollapsedContent (120dp×40dp) - 状态指示器 + Galaxy图标
 - ✅ CompactExpandedContent (280dp×80dp) - 任务名称 + 进度条
 - ✅ FullyExpandedContent (360dp×600dp) - 终端界面
 
@@ -183,7 +183,7 @@ VLLM_URL=http://vllm:8000
 
 | 触发类型 | 实现方式 | 功能 |
 |---------|----------|------|
-| **VOICE** | Vosk语音识别 | 唤醒词检测（"Hey UFO"） |
+| **VOICE** | Vosk语音识别 | 唤醒词检测（"Hey Galaxy"） |
 | **HOTKEY** | pynput/pywin32 | 全局快捷键 |
 | **GESTURE** | Windows Touch API | 触摸板手势 |
 | **HARDWARE_KEY** | Pyjnius/Accessibility | 音量/电源键 |
@@ -239,7 +239,7 @@ VLLM_URL=http://vllm:8000
 ├── core/node_communication_fixed.py
 ├── enhancements/nodes/Node_45_DroneControl/universal_drone_controller_fixed.py
 ├── enhancements/nodes/Node_43_BambuLab/bambu_printer_controller_fixed.py
-└── UFO_GALAXY_CORE_LOGIC_FIX_REPORT.md
+└── GALAXY_CORE_LOGIC_FIX_REPORT.md
 ```
 
 ### 节点系统
@@ -282,10 +282,10 @@ VLLM_URL=http://vllm:8000
 ### UI系统
 ```
 /mnt/okcomputer/output/
-├── ufo_galaxy_fix/
+├── galaxy_fix/
 │   ├── uicomponents/scrollpaperview.py
 │   └── windows_client/ui/sidebar_ui.py
-└── ufo-galaxy/androidclient/
+└── galaxy/androidclient/
     └── app/src/main/java/com/ufo/galaxy/ui/
         ├── DynamicIsland.kt
         ├── hardware/HardwareKeyHandler.kt
@@ -302,7 +302,7 @@ VLLM_URL=http://vllm:8000
 
 ### UI-L4集成
 ```
-/mnt/okcomputer/output/ufo_galaxy_integration/
+/mnt/okcomputer/output/galaxy_integration/
 ├── integration/event_bus.py
 ├── integration/websocket_server.py
 ├── core/galaxy_main_loop_l4_enhanced.py
@@ -377,7 +377,7 @@ cp .env.example .env
 
 ### 2. 启动L4主循环
 ```bash
-cd /mnt/okcomputer/output/ufo_galaxy_integration
+cd /mnt/okcomputer/output/galaxy_integration
 python launcher.py --mode full
 ```
 
@@ -421,7 +421,7 @@ python windows_client/windows_client_integrated.py
 
 ## 🎯 修复结论
 
-UFO Galaxy系统已从"骨架完整，血肉待填"状态转变为**功能完整的L4级AI自主系统**。
+Galaxy系统已从"骨架完整，血肉待填"状态转变为**功能完整的L4级AI自主系统**。
 
 所有P0级阻塞性问题已解决：
 - ✅ 核心逻辑从模拟实现替换为真实代码

@@ -3,7 +3,7 @@
 > 版本：v2.4.0  
 > 日期：2026-03-04
 
-本文档说明 UFO Galaxy 新增的 6 大特性的使用方式与 API 参考。
+本文档说明 Galaxy 新增的 6 大特性的使用方式与 API 参考。
 
 ---
 
@@ -435,7 +435,7 @@ node server.js
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | node server.js
 ```
 
-#### 通过 UFO Galaxy 加载
+#### 通过 Galaxy 加载
 
 **方法 1：使用 Python mcp_bridge API**
 

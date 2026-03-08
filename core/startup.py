@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 系统启动引导
+Galaxy - 系统启动引导
 ==========================
 
 统一初始化所有核心子系统，供 unified_launcher.py 调用。
@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import FastAPI
 
-logger = logging.getLogger("UFO-Galaxy.Startup")
+logger = logging.getLogger("Galaxy.Startup")
 
 
 # ───────────────────── 启动依赖图 ─────────────────────
@@ -299,7 +299,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         from core.config_hot_reload import get_config_manager
 
         config_path = os.environ.get(
-            "UFO_CONFIG_PATH",
+            "GALAXY_CONFIG_PATH",
             os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "unified_config.json"),
         )
         config_mgr = get_config_manager(config_path=config_path)
@@ -591,7 +591,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from core.node_discovery import get_node_discovery
 
-        node_id = os.environ.get("UFO_NODE_ID", "master")
+        node_id = os.environ.get("GALAXY_NODE_ID", "master")
         discovery = get_node_discovery(node_id=node_id)
         await discovery.start()
         results["node_discovery"] = {"status": "ok", "node_id": node_id}

@@ -32,7 +32,7 @@ import uuid
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 
-logger = logging.getLogger("UFO-Galaxy.SafeExecutor")
+logger = logging.getLogger("Galaxy.SafeExecutor")
 
 
 # ============================================================================

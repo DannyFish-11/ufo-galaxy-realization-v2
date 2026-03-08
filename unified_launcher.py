@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 统一启动器
+Galaxy - 统一启动器
 ======================
 
 融合性整合所有模块的统一入口：
@@ -33,6 +33,7 @@ from datetime import datetime
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
+from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
 logging.basicConfig(
@@ -40,7 +41,7 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("UFO-Galaxy")
+logger = logging.getLogger("Galaxy")
 
 
 # ============================================================================
@@ -408,11 +409,11 @@ class CoreServiceLauncher:
         )
         
         try:
-            from core.microsoft_ufo_integration import UFOIntegrationService
-            integration = UFOIntegrationService()
+            from core.microsoft_ufo_integration import GalaxyIntegrationService
+            integration = GalaxyIntegrationService()
             result = await integration.initialize()
             # initialize 返回 bool，转换为 dict
-            result = {"success": result, "message": "UFO Integration initialized" if result else "UFO Integration failed"}
+            result = {"success": result, "message": "Galaxy Integration initialized" if result else "Galaxy Integration failed"}
             
             if result.get("success"):
                 logger.info("微软 UFO 集成已初始化")
@@ -622,7 +623,7 @@ class UnifiedWebUI:
             import uvicorn
             
             self.app = FastAPI(
-                title="UFO Galaxy",
+                title="Galaxy",
                 description="L4 级自主性智能系统",
                 version="2.0"
             )
@@ -757,7 +758,7 @@ class UnifiedWebUI:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO Galaxy - 全景指挥舱</title>
+    <title>Galaxy - 全景指挥舱</title>
     <style>
         :root {
             --bg-dark: #0a0a0a;
@@ -940,7 +941,7 @@ class UnifiedWebUI:
 </head>
 <body>
     <div class="top-bar">
-        <div class="logo">🌌 UFO Galaxy Command</div>
+        <div class="logo">🌌 Galaxy Command</div>
         <div class="network-info">
             <span class="network-badge" id="tailscale-ip">Tailscale: 检测中...</span>
             <span class="network-badge" id="local-ip">Local: 127.0.0.1</span>
@@ -1035,7 +1036,7 @@ class UnifiedWebUI:
 
             <!-- 页脚 -->
             <div class="footer">
-                <span>UFO Galaxy v3.0.0 | L4 Autonomous System</span>
+                <span>Galaxy v3.0.0 | L4 Autonomous System</span>
                 <span>Subsystems: Cache + Monitoring + Performance + CommandRouter + AI Intent + EventBridge</span>
                 <span class="footer-uptime" id="footer-uptime">Uptime: --</span>
             </div>
@@ -1251,11 +1252,11 @@ class UnifiedWebUI:
 
 
 # ============================================================================
-# UFO Galaxy 统一系统
+# Galaxy 统一系统
 # ============================================================================
 
-class UFOGalaxyUnified:
-    """UFO Galaxy 统一系统"""
+class GalaxyUnified:
+    """Galaxy 统一系统"""
     
     def __init__(self):
         self.config = SystemConfig.load_from_env()
@@ -1361,7 +1362,7 @@ class UFOGalaxyUnified:
         self.running = True
         
         print_section("系统就绪")
-        print_status("UFO Galaxy 统一系统已启动！", "success")
+        print_status("Galaxy 统一系统已启动！", "success")
         print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
@@ -1526,7 +1527,7 @@ async def _run_check_only(galaxy: 'UFOGalaxyUnified'):
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="UFO Galaxy - L4 级自主性智能系统（统一融合版）",
+        description="Galaxy - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -1548,7 +1549,7 @@ def main():
     args = parser.parse_args()
     
     # 创建系统实例
-    galaxy = UFOGalaxyUnified()
+    galaxy = GalaxyUnified()
     
     # 应用命令行参数
     galaxy.config.minimal_mode = args.minimal

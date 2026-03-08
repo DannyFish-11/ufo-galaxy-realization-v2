@@ -9,7 +9,7 @@ import asyncio
 import logging
 from typing import Coroutine, Optional
 
-logger = logging.getLogger("UFO-Galaxy.TaskUtils")
+logger = logging.getLogger("Galaxy.TaskUtils")
 
 
 def create_tracked_task(

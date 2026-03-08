@@ -1,5 +1,5 @@
 """
-UFO Galaxy WebSocket服务器
+Galaxy WebSocket服务器
 处理Android客户端和Windows客户端的连接
 实现UI与L4主循环的双向通信
 """
@@ -13,7 +13,7 @@ from datetime import datetime
 
 # 导入L4主循环和事件总线
 import sys
-sys.path.insert(0, '/mnt/okcomputer/output/ufo_galaxy_integration')
+sys.path.insert(0, '/mnt/okcomputer/output/galaxy_integration')
 from core.galaxy_main_loop_l4_enhanced import get_galaxy_loop, GalaxyMainLoopL4Enhanced
 from integration.event_bus import (
     EventBus, EventType, UIGalaxyEvent, event_bus
@@ -102,7 +102,7 @@ class ConnectionManager:
 
 class GalaxyWebSocketServer:
     """
-    UFO Galaxy WebSocket服务器
+    Galaxy WebSocket服务器
     处理客户端连接和L4主循环的集成
     """
     
@@ -218,7 +218,7 @@ class GalaxyWebSocketServer:
             # 发送欢迎消息
             await self.connection_manager.send_to_client(websocket, {
                 "type": "welcome",
-                "message": "Connected to UFO Galaxy Server",
+                "message": "Connected to Galaxy Server",
                 "server_time": datetime.now().isoformat()
             })
             

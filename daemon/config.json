@@ -1,5 +1,5 @@
 {
-  "daemon_name": "UFO Galaxy 24/7 Daemon",
+  "daemon_name": "Galaxy 24/7 Daemon",
   "version": "1.0.0",
   "health_check_interval": 30,
   "metrics_collection_interval": 60,
@@ -30,7 +30,7 @@
   },
   "logging": {
     "level": "INFO",
-    "file": "/var/log/ufo-galaxy/daemon.log",
+    "file": "/var/log/galaxy/daemon.log",
     "max_size_mb": 100,
     "backup_count": 10
   },

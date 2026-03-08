@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 加载器 API
+Galaxy - 加载器 API
 ======================
 
 提供 MCP 和 Skill 的加载/卸载 API 端点
@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger("UFO-Galaxy.LoaderAPI")
+logger = logging.getLogger("Galaxy.LoaderAPI")
 
 router = APIRouter()
 

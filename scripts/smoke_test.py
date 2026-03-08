@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy — Deployment Smoke Test
+Galaxy — Deployment Smoke Test
 ====================================
 
 Quick post-deploy validation that critical components work.
@@ -134,7 +134,7 @@ def test_tests():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="UFO Galaxy Smoke Test")
+    parser = argparse.ArgumentParser(description="Galaxy Smoke Test")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--skip-http", action="store_true",
@@ -144,7 +144,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 50)
-    print("  UFO Galaxy — Smoke Test")
+    print("  Galaxy — Smoke Test")
     print("=" * 50)
 
     test_imports()

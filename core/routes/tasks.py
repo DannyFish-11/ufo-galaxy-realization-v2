@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Task Routes
+Galaxy - Task Routes
 ==========================
 
 Routes:
@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from core.routes._shared import connection_manager, task_queue
 from core.routes._models import TaskRequest
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

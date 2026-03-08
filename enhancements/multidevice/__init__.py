@@ -1,8 +1,8 @@
 """
-UFO Galaxy v5.0 - Multi-Device Coordination System
+Galaxy v5.0 - Multi-Device Coordination System
 
 This package provides comprehensive multi-device coordination capabilities
-for the UFO Galaxy distributed intelligence platform.
+for the Galaxy distributed intelligence platform.
 
 Modules:
 - device_protocol: AIP v2.0 protocol implementation
@@ -27,13 +27,13 @@ Usage:
     from multidevice import CrossDeviceScheduler, AndroidBridge
     from multidevice import FailoverManager
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 License: MIT
 """
 
 __version__ = "5.0.0"
-__author__ = "UFO Galaxy Team"
+__author__ = "Galaxy Team"
 
 # Protocol module
 from .device_protocol import (

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO³ Galaxy 智能启动器
+Galaxy 智能启动器
 支持按需启动、分组管理、健康检查
 
 特性:
@@ -338,7 +338,7 @@ class NodeManager:
 async def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO³ Galaxy Launcher")
+    parser = argparse.ArgumentParser(description="Galaxy Launcher")
     parser.add_argument("command", choices=["start", "stop", "restart", "status"], help="Command to execute")
     parser.add_argument("--group", choices=["core", "extended", "optional", "all"], default="core", help="Node group to start")
     parser.add_argument("--nodes", nargs="+", help="Specific node IDs to start")
@@ -402,7 +402,7 @@ async def main():
 if __name__ == "__main__":
     print("""
 ╔═══════════════════════════════════════╗
-║   UFO³ Galaxy Intelligent Launcher    ║
+║   Galaxy Intelligent Launcher    ║
 ║   75 Nodes | On-Demand | Optimized    ║
 ╚═══════════════════════════════════════╝
 """)

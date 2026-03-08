@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timedelta
 
 import sys
-sys.path.insert(0, '/mnt/okcomputer/output/ufo-galaxy-v5/enhancements/learning')
+sys.path.insert(0, '/mnt/okcomputer/output/galaxy-v5/enhancements/learning')
 
 from feedback_loop import (
     FeedbackType,

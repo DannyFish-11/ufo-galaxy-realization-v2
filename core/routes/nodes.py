@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Node & Agent Routes
+Galaxy - Node & Agent Routes
 ===================================
 
 Routes:
@@ -32,7 +32,7 @@ from core.routes._shared import (
 from core.routes._helpers import nodes_root, _load_node, _execute_node
 from core.routes._models import NodeCallRequest
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

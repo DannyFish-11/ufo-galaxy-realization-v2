@@ -313,7 +313,7 @@ OPENAI_API_KEY=sk-...  # 用于调用 Node_01_OneAPI
 ## 启动节点
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes/nodes/node_108_metacognition
+cd /path/to/galaxy-enhanced-nodes/nodes/node_108_metacognition
 python server.py
 ```
 
@@ -324,7 +324,7 @@ python server.py
 ## 测试
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes
+cd /path/to/galaxy-enhanced-nodes
 python -m pytest tests/test_node_108.py -v
 ```
 

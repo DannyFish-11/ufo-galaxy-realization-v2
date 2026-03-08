@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy Core 模块
+Galaxy Core 模块
 ====================
 
 核心模块导出，提供统一的导入接口。
@@ -67,8 +67,8 @@ def get_device_status_api():
     return device_status_app
 
 def get_microsoft_ufo_integration():
-    from .microsoft_ufo_integration import UFOIntegrationService
-    return UFOIntegrationService()
+    from .microsoft_ufo_integration import GalaxyIntegrationService
+    return GalaxyIntegrationService()
 
 def get_system_load_monitor():
     from .system_load_monitor import SystemLoadMonitor

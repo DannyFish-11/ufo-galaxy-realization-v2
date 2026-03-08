@@ -1,7 +1,7 @@
 # Windows MCP Server & AIP 客户端 使用说明
 
 本文档说明如何启动 **Windows 本地 MCP Server** 并将 Windows 主机注册到
-UFO Galaxy 服务端，使大模型（ReAct Agent）可以直接调用 Windows UI 自动化能力。
+Galaxy 服务端，使大模型（ReAct Agent）可以直接调用 Windows UI 自动化能力。
 
 ---
 

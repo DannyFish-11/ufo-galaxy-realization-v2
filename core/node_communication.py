@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Universal Node Communication System - 修复版
+Galaxy - Universal Node Communication System - 修复版
 提供任意节点间的双向通信，支持动态路由、负载均衡和消息确认
 
 修复内容:

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy CLI
+Galaxy CLI
 ==============
 
 命令行工具，提供便捷的技能和 MCP 管理
 
 使用方法:
-    ufo skill install <name>      # 安装技能
-    ufo skill search <query>      # 搜索技能
-    ufo skill list               # 列出已安装技能
-    ufo skill create <name>      # 创建新技能
+    galaxy skill install <name>      # 安装技能
+    galaxy skill search <query>      # 搜索技能
+    galaxy skill list               # 列出已安装技能
+    galaxy skill create <name>      # 创建新技能
     
-    ufo mcp load <command>       # 加载 MCP 服务器
-    ufo mcp list                 # 列出已加载服务器
-    ufo mcp tools <server_id>    # 列出服务器工具
+    galaxy mcp load <command>       # 加载 MCP 服务器
+    galaxy mcp list                 # 列出已加载服务器
+    galaxy mcp tools <server_id>    # 列出服务器工具
     
     ufo onboard                  # 安装向导
     ufo status                   # 系统状态
@@ -92,7 +92,7 @@ async def install_from_market(name: str) -> dict:
     # 查询市场 API
     import httpx
     
-    market_url = os.environ.get("UFO_SKILL_MARKET", "https://skills.ufo-galaxy.ai")
+    market_url = os.environ.get("GALAXY_SKILL_MARKET", "https://skills.galaxy.ai")
     
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -144,7 +144,7 @@ async def skill_search(query: str):
         
         # 搜索市场
         import httpx
-        market_url = os.environ.get("UFO_SKILL_MARKET", "https://skills.ufo-galaxy.ai")
+        market_url = os.environ.get("GALAXY_SKILL_MARKET", "https://skills.galaxy.ai")
         
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -351,7 +351,7 @@ async def onboard():
     print(f"""
 {Colors.CYAN}{Colors.BOLD}
     ╔═══════════════════════════════════════════════════════════════╗
-    ║                    UFO Galaxy 安装向导                         ║
+    ║                    Galaxy 安装向导                         ║
     ╚═══════════════════════════════════════════════════════════════╝
 {Colors.ENDC}
 """)
@@ -388,7 +388,7 @@ async def onboard():
             print_success(".env 文件已创建，请编辑配置 API Key")
         else:
             # 创建默认 .env
-            default_env = """# UFO Galaxy 配置文件
+            default_env = """# Galaxy 配置文件
 
 # LLM API Keys (至少配置一个)
 OPENAI_API_KEY=
@@ -462,7 +462,7 @@ async def status():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="UFO Galaxy CLI - 智能体操作系统命令行工具",
+        description="Galaxy CLI - 智能体操作系统命令行工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     

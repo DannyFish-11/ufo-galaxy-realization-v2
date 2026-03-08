@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - 系统实际测试
+Galaxy - 系统实际测试
 ========================
 
 测试：
@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 print("=" * 60)
-print("UFO Galaxy 系统实际测试")
+print("Galaxy 系统实际测试")
 print("=" * 60)
 
 

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Device Routes
+Galaxy - Device Routes
 ============================
 
 Routes:
@@ -28,7 +28,7 @@ from core.routes._shared import (
 )
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

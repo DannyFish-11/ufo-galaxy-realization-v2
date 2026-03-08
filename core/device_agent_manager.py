@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 统一设备 Agent 管理器
+Galaxy - 统一设备 Agent 管理器
 ===================================
 
 功能：
@@ -700,7 +700,7 @@ def create_device_api():
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
     
-    app = FastAPI(title="UFO Galaxy Device Manager API", version="2.0")
+    app = FastAPI(title="Galaxy Device Manager API", version="2.0")
     
     class RegisterDeviceRequest(BaseModel):
         device_id: str

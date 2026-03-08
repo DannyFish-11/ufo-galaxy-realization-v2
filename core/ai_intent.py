@@ -1,5 +1,5 @@
 """
-UFO Galaxy - AI 意图理解引擎
+Galaxy - AI 意图理解引擎
 =============================
 
 融合元气 AI Bot 精髓 - 智能感知：
@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("UFO-Galaxy.AIIntent")
+logger = logging.getLogger("Galaxy.AIIntent")
 
 
 # ============================================================================
@@ -205,7 +205,7 @@ class IntentParser:
         """LLM 意图解析 — 通过 MultiLLMRouter 路由"""
         available_intents = list(self.RULE_PATTERNS.keys()) + ["chat"]
 
-        system_prompt = f"""你是 UFO Galaxy 意图解析器。用户会输入自然语言，你需要：
+        system_prompt = f"""你是 Galaxy 意图解析器。用户会输入自然语言，你需要：
 1. 判断意图类别（可选: {', '.join(available_intents)}）
 2. 提取命令和参数
 3. 确定目标节点
@@ -545,7 +545,7 @@ class SemanticSearch:
     def __init__(self, qdrant_url: str = ""):
         self._index: Dict[str, Dict[str, Any]] = {}
         self._qdrant_client = None
-        self._collection_name = os.environ.get("KB_COLLECTION", "ufo_galaxy_docs")
+        self._collection_name = os.environ.get("KB_COLLECTION", "galaxy_docs")
         self._qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "")
         self._qdrant_ready = False
         # 延迟引入，避免循环依赖

@@ -333,7 +333,7 @@ engine.config = {
 ## 启动节点
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes/nodes/node_109_proactive_sensing
+cd /path/to/galaxy-enhanced-nodes/nodes/node_109_proactive_sensing
 python server.py
 ```
 
@@ -344,7 +344,7 @@ python server.py
 ## 测试
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes
+cd /path/to/galaxy-enhanced-nodes
 python -m pytest tests/test_node_109.py -v
 ```
 

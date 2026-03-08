@@ -4,8 +4,7 @@ DEPRECATED — 请使用 core.skill_loader (skill_loader 单例) 替代。
 此模块保留但不再是主 Skill 运行时。所有生产代码已迁移至 skill_loader.py。
 
 UFO Galaxy - Skill 系统（旧版）
-================================
-
+=========================
 通用的技能管理系统
 
 功能：
@@ -45,7 +44,7 @@ from pathlib import Path
 from enum import Enum
 import subprocess
 
-logger = logging.getLogger("UFO-Galaxy.Skill")
+logger = logging.getLogger("Galaxy.Skill")
 
 
 # ============================================================================

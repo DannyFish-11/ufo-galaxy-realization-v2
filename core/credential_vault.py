@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 集中凭证管理模块（Credential Vault）
+Galaxy - 集中凭证管理模块（Credential Vault）
 ================================================
 
 功能：
@@ -31,7 +31,7 @@ import secrets
 import time
 from typing import Dict, List, Optional, Tuple
 
-logger = logging.getLogger("UFO-Galaxy.CredentialVault")
+logger = logging.getLogger("Galaxy.CredentialVault")
 
 # 支持的凭证键名 -> 对应的环境变量名
 _ENV_MAPPING: Dict[str, str] = {

@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy - 任务路由和调度模块
+Galaxy - 任务路由和调度模块
 
 功能：
 1. 任务路由 - 将任务发送到目标设备
@@ -422,7 +422,7 @@ async def main():
     ]
     
     print("="*80)
-    print("UFO³ Galaxy - 任务路由和调度测试")
+    print("Galaxy - 任务路由和调度测试")
     print("="*80)
     
     # 执行任务

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 技能市场 API
+Galaxy - 技能市场 API
 ========================
 
 提供技能市场的 REST API
@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger("UFO-Galaxy.MarketAPI")
+logger = logging.getLogger("Galaxy.MarketAPI")
 
 router = APIRouter()
 
@@ -93,7 +93,7 @@ BUILTIN_SKILLS = [
         "name": "Weather",
         "description": "Get current weather and forecasts",
         "version": "1.0.0",
-        "author": "UFO Galaxy",
+        "author": "Galaxy",
         "tags": ["weather", "api"],
         "downloads": 1000,
         "rating": 4.5,
@@ -103,7 +103,7 @@ BUILTIN_SKILLS = [
         "name": "GitHub",
         "description": "GitHub operations via gh CLI",
         "version": "1.0.0",
-        "author": "UFO Galaxy",
+        "author": "Galaxy",
         "tags": ["github", "git", "cli"],
         "downloads": 800,
         "rating": 4.8,
@@ -113,7 +113,7 @@ BUILTIN_SKILLS = [
         "name": "Web Search",
         "description": "Search the web using DuckDuckGo",
         "version": "1.0.0",
-        "author": "UFO Galaxy",
+        "author": "Galaxy",
         "tags": ["search", "web"],
         "downloads": 600,
         "rating": 4.2,
@@ -123,7 +123,7 @@ BUILTIN_SKILLS = [
         "name": "File Operations",
         "description": "Read, write, and manage files",
         "version": "1.0.0",
-        "author": "UFO Galaxy",
+        "author": "Galaxy",
         "tags": ["file", "io"],
         "downloads": 500,
         "rating": 4.0,
@@ -133,7 +133,7 @@ BUILTIN_SKILLS = [
         "name": "Email",
         "description": "Send and manage emails",
         "version": "1.0.0",
-        "author": "UFO Galaxy",
+        "author": "Galaxy",
         "tags": ["email", "communication"],
         "downloads": 400,
         "rating": 3.8,
@@ -187,7 +187,7 @@ async def get_market_skill(skill_id: str):
                 "success": True,
                 "skill": {
                     **skill,
-                    "download_url": f"https://raw.githubusercontent.com/DannyFish-11/ufo-galaxy-realization-v2/main/skills/examples/{skill_id}/SKILL.md",
+                    "download_url": f"https://raw.githubusercontent.com/DannyFish-11/galaxy-realization-v2/main/skills/examples/{skill_id}/SKILL.md",
                     "readme": f"# {skill['name']}\n\n{skill['description']}",
                 },
             })

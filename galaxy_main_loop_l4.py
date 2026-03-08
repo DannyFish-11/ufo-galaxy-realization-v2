@@ -221,7 +221,7 @@ class GalaxyMainLoopL4:
     async def start(self):
         """启动主循环"""
         self.logger.info("=" * 60)
-        self.logger.info("启动 UFO Galaxy L4 级自主性智能系统")
+        self.logger.info("启动 Galaxy L4 级自主性智能系统")
         self.logger.info("=" * 60)
         
         # 初始化
@@ -248,7 +248,7 @@ class GalaxyMainLoopL4:
         self.logger.info(f"发现 {len(tools)} 个工具")
         
         # 注册到世界模型
-        for tool in tools:
+        for tool in tools.values():
             entity = Entity(
                 id=f"tool_{tool.name.lower().replace(' ', '_')}",
                 type=EntityType.SERVICE,
@@ -272,7 +272,7 @@ class GalaxyMainLoopL4:
                 availability=1.0,
                 metadata={}
             )
-            for t in tools
+            for t in tools.values()
         ]
         self.planner.available_resources = resources
         
@@ -280,11 +280,14 @@ class GalaxyMainLoopL4:
     
     def _setup_signal_handlers(self):
         """设置信号处理器"""
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            asyncio.get_event_loop().add_signal_handler(
-                sig, 
-                lambda: asyncio.create_task(self.stop())
-            )
+        if sys.platform != "win32":
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                asyncio.get_event_loop().add_signal_handler(
+                    sig,
+                    lambda: asyncio.create_task(self.stop())
+                )
+        else:
+            signal.signal(signal.SIGINT, lambda s, f: asyncio.ensure_future(self.stop()))
     
     async def _main_loop(self):
         """主循环"""

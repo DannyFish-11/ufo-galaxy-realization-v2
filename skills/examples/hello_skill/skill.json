@@ -3,7 +3,7 @@
     "name": "问候",
     "description": "一个简单的问候技能示例",
     "version": "1.0.0",
-    "author": "UFO Galaxy",
+    "author": "Galaxy",
     "tags": ["example", "demo"],
     "parameters": [
         {

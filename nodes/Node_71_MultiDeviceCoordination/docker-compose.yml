@@ -3,7 +3,7 @@ version: "3.8"
 services:
   node71-coordinator:
     build: .
-    container_name: ufo-node71-coordinator
+    container_name: galaxy-node71-coordinator
     ports:
       - "8071:8071"
     environment:
@@ -29,7 +29,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - ufo-network
+      - galaxy-network
     deploy:
       resources:
         limits:
@@ -49,6 +49,6 @@ volumes:
   node71-logs:
 
 networks:
-  ufo-network:
+  galaxy-network:
     external: true
-    name: ufo-galaxy-network
+    name: galaxy-network

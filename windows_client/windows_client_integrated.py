@@ -1,5 +1,5 @@
 """
-UFO Galaxy Windows客户端 - UI与L4集成版
+Galaxy Windows客户端 - UI与L4集成版
 极简主义设计风格，集成L4主循环
 """
 
@@ -188,7 +188,7 @@ class L4WorkerThread(QThread):
 
 class MinimalistWindow(QMainWindow):
     """
-    UFO Galaxy Windows客户端主窗口
+    Galaxy Windows客户端主窗口
     极简主义设计风格
     """
     
@@ -199,7 +199,7 @@ class MinimalistWindow(QMainWindow):
         self.l4_thread: Optional[L4WorkerThread] = None
         
         # 设置窗口
-        self.setWindowTitle("UFO Galaxy - AI Assistant")
+        self.setWindowTitle("Galaxy - AI Assistant")
         self.setMinimumSize(900, 700)
         
         # 设置深色主题
@@ -309,7 +309,7 @@ class MinimalistWindow(QMainWindow):
         main_layout.setSpacing(20)
         
         # 标题
-        title_label = QLabel("UFO Galaxy")
+        title_label = QLabel("Galaxy")
         title_label.setObjectName("title")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title_label)
@@ -548,16 +548,18 @@ class MinimalistWindow(QMainWindow):
                 # 尝试主系统
                 result = self._api_call(f"{api_base}/api/v1/chat",
                                         {"message": message, "device_id": "windows_integrated"})
-                if result and result.get("success") and result.get("reply"):
+                reply_text = (result.get("response") or result.get("reply")) if result else None
+                if result and result.get("success") and reply_text:
                     model = result.get("model", "")
-                    return f"[{model}] {result['reply']}" if model else result["reply"]
+                    return f"[{model}] {reply_text}" if model else reply_text
 
                 # 尝试 Dashboard
-                result = self._api_call(f"{dashboard_base}/api/chat",
+                result = self._api_call(f"{dashboard_base}/api/v1/dashboard/chat",
                                         {"message": message, "session_id": "windows_integrated"})
-                if result and result.get("success") and result.get("reply"):
+                reply_text = (result.get("response") or result.get("reply")) if result else None
+                if result and result.get("success") and reply_text:
                     model = result.get("model", "")
-                    return f"[{model}] {result['reply']}" if model else result["reply"]
+                    return f"[{model}] {reply_text}" if model else reply_text
 
                 # 直接调用 LLM
                 for key_name, base_url, model in [
@@ -570,7 +572,7 @@ class MinimalistWindow(QMainWindow):
                     try:
                         payload = json.dumps({
                             "model": model,
-                            "messages": [{"role": "system", "content": "你是 UFO Galaxy 智能助手。"},
+                            "messages": [{"role": "system", "content": "你是 Galaxy 智能助手。"},
                                          {"role": "user", "content": message}],
                             "max_tokens": 2048
                         }).encode("utf-8")

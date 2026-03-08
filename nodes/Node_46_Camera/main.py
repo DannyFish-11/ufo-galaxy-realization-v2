@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Node_46_Camera: UFO Galaxy 摄像头控制节点
+Node_46_Camera: Galaxy 摄像头控制节点
 
 该节点负责与摄像头硬件进行交互，提供拍照和视频录制的功能。
 它通过一个异步服务框架运行，并提供状态查询和健康检查接口。
@@ -369,7 +369,7 @@ class CameraNodeService:
 async def main():
     """主函数，用于启动和管理节点服务"""
     logger.info("==================================================")
-    logger.info("=          UFO Galaxy - Node_46_Camera           =")
+    logger.info("=          Galaxy - Node_46_Camera           =")
     logger.info("==================================================")
 
     service = CameraNodeService()

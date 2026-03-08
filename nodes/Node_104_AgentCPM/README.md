@@ -382,4 +382,4 @@ Apache-2.0
 
 ---
 
-**Node 104** | AgentCPM Integration | UFO³ Galaxy
+**Node 104** | AgentCPM Integration | Galaxy

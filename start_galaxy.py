@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy — Quick Start (Dashboard / WebUI)
+Galaxy — Quick Start (Dashboard / WebUI)
 =============================================
 
 Lightweight launcher for the Dashboard web UI.
@@ -54,7 +54,7 @@ def print_banner():
         print(GALAXY_ASCII_MINIMAL)
     except ImportError:
         print("=" * 50)
-        print("  UFO Galaxy — L4 Autonomous Intelligence System")
+        print("  Galaxy — L4 Autonomous Intelligence System")
         print("=" * 50)
     print()
 
@@ -106,7 +106,7 @@ def start_desktop():
 
 
 def main():
-    parser = argparse.ArgumentParser(description='UFO Galaxy Quick Start')
+    parser = argparse.ArgumentParser(description='Galaxy Quick Start')
     parser.add_argument('--desktop', action='store_true', help='Launch desktop UI')
     parser.add_argument('--all', action='store_true', help='Launch Dashboard + desktop')
     parser.add_argument('--port', type=int, default=8080, help='Dashboard port (default: 8080)')

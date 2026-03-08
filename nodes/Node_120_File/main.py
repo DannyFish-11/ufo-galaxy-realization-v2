@@ -1,6 +1,6 @@
 """
 Node 12: File Operations
-UFO Galaxy 64-Core MCP Matrix - Core Tool Node
+Galaxy 64-Core MCP Matrix - Core Tool Node
 
 Provides comprehensive file system operations:
 - File read/write/append
@@ -10,7 +10,7 @@ Provides comprehensive file system operations:
 - Archive operations (zip, tar)
 - File watching and monitoring
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -573,7 +573,7 @@ class FileService:
 
 app = FastAPI(
     title=f"Node {NODE_ID}: {NODE_NAME}",
-    description="File operations service for UFO Galaxy",
+    description="File operations service for Galaxy",
     version="5.0.0"
 )
 

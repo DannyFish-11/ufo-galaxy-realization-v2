@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# UFO Galaxy - 命令路由集成测试脚本
+# Galaxy - 命令路由集成测试脚本
 # ============================================================
 #
 # 用法: bash scripts/test_command_routing.sh [BASE_URL]
@@ -64,7 +64,7 @@ if command -v jq &> /dev/null; then
 fi
 
 echo "============================================"
-echo "  UFO Galaxy 命令路由集成测试"
+echo "  Galaxy 命令路由集成测试"
 echo "  Base URL: $BASE_URL"
 echo "============================================"
 echo ""
@@ -80,7 +80,7 @@ if [ "$HTTP_CODE" = "200" ]; then
 else
     log_fail "系统不可达 (HTTP $HTTP_CODE) - 请确保服务已启动"
     echo ""
-    echo "提示: 请先启动 UFO Galaxy 服务"
+    echo "提示: 请先启动 Galaxy 服务"
     echo "  python unified_launcher.py"
     echo ""
     exit 1

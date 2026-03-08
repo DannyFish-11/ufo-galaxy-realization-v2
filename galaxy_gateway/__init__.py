@@ -1,5 +1,5 @@
 """
-UFO Galaxy Gateway - 跨平台分布式 Agent 网关
+Galaxy Gateway - 跨平台分布式 Agent 网关
 
 核心功能:
 1. WebSocket 服务端，接收设备连接

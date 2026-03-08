@@ -85,7 +85,7 @@ GET /methods
 ## 启动
 
 ```bash
-cd /home/ubuntu/ufo-galaxy/nodes/Node_96_SmartTransportRouter
+cd /home/ubuntu/galaxy/nodes/Node_96_SmartTransportRouter
 python3 main.py
 ```
 

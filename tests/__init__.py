@@ -1,1 +1,1 @@
-# UFO Galaxy Test Package
+# Galaxy Test Package

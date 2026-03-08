@@ -1,5 +1,5 @@
 """
-UFO Galaxy 知识库系统 - 增强节点 Node 52 (enhancements)
+Galaxy 知识库系统 - 增强节点 Node 52 (enhancements)
 
 此模块是 nodes/Node_72_KnowledgeBase/knowledge_base_system.py 的轻量代理。
 所有功能委托给 Node_72 实现，保持接口完全兼容。
@@ -25,7 +25,7 @@ except ImportError:
     from typing import List, Dict, Any, Optional
     from dataclasses import dataclass
 
-    logger = logging.getLogger("UFO-Galaxy.Node52KB")
+    logger = logging.getLogger("Galaxy.Node52KB")
 
     @dataclass
     class KnowledgeEntry:  # type: ignore[no-redef]

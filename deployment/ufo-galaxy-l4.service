@@ -1,23 +1,23 @@
 [Unit]
-Description=UFO Galaxy L4 Autonomous Intelligence System
+Description=Galaxy L4 Autonomous Intelligence System
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/ufo-galaxy-realization-v2
-EnvironmentFile=/home/ubuntu/ufo-galaxy-realization-v2/.env
-Environment=PYTHONPATH=/home/ubuntu/ufo-galaxy-realization-v2
+WorkingDirectory=/home/ubuntu/galaxy-realization-v2
+EnvironmentFile=/home/ubuntu/galaxy-realization-v2/.env
+Environment=PYTHONPATH=/home/ubuntu/galaxy-realization-v2
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /home/ubuntu/ufo-galaxy-realization-v2/unified_launcher.py --host 0.0.0.0 --port 8080
+ExecStart=/usr/bin/python3 /home/ubuntu/galaxy-realization-v2/unified_launcher.py --host 0.0.0.0 --port 8080
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ufo-galaxy-l4
+SyslogIdentifier=galaxy-l4
 
 [Install]
 WantedBy=multi-user.target

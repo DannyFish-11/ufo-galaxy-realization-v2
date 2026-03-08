@@ -1,7 +1,7 @@
 """
-UFO³ Galaxy 深度融合兼容性测试套件
+Galaxy 深度融合兼容性测试套件
 
-目标：彻底测试微软 UFO 和 ufo-galaxy 的融合兼容性
+目标：彻底测试微软 UFO 和 galaxy 的融合兼容性
 
 作者：Manus AI
 日期：2026-01-22
@@ -28,7 +28,7 @@ class FusionCompatibilityTest:
     async def run_all_tests(self):
         """运行所有测试"""
         print("=" * 80)
-        print("UFO³ Galaxy 深度融合兼容性测试")
+        print("Galaxy 深度融合兼容性测试")
         print("=" * 80)
         
         # 测试套件
@@ -110,8 +110,8 @@ class FusionCompatibilityTest:
             "capabilities": ["screenshot", "input"]
         }
         
-        # ufo-galaxy 的设备注册格式
-        ufo_galaxy_device = {
+        # galaxy 的设备注册格式
+        galaxy_device = {
             "device_id": "phone_a",
             "device_type": "android",
             "device_name": "手机 A",
@@ -120,11 +120,11 @@ class FusionCompatibilityTest:
             "last_heartbeat": 1234567890
         }
         
-        # 检查是否兼容（ufo-galaxy 包含微软 UFO 的所有字段）
-        compatible = all(k in ufo_galaxy_device for k in ms_ufo_device.keys())
+        # 检查是否兼容（galaxy 包含微软 UFO 的所有字段）
+        compatible = all(k in galaxy_device for k in ms_ufo_device.keys())
         
         if compatible:
-            print("✅ PASS: ufo-galaxy 设备格式兼容微软 UFO")
+            print("✅ PASS: galaxy 设备格式兼容微软 UFO")
             self.passed += 1
             test_results.append(("设备管理", "设备注册格式兼容性", "PASS"))
         else:
@@ -135,15 +135,15 @@ class FusionCompatibilityTest:
         print("\n【测试 2.2】设备能力扩展性")
         print("-" * 80)
         
-        # 检查 ufo-galaxy 是否提供了额外的能力
-        extra_capabilities = set(ufo_galaxy_device["capabilities"]) - set(ms_ufo_device["capabilities"])
+        # 检查 galaxy 是否提供了额外的能力
+        extra_capabilities = set(galaxy_device["capabilities"]) - set(ms_ufo_device["capabilities"])
         
         if extra_capabilities:
-            print(f"✅ PASS: ufo-galaxy 提供了额外能力: {extra_capabilities}")
+            print(f"✅ PASS: galaxy 提供了额外能力: {extra_capabilities}")
             self.passed += 1
             test_results.append(("设备管理", "设备能力扩展性", "PASS"))
         else:
-            print("⚠️  WARNING: ufo-galaxy 未提供额外能力")
+            print("⚠️  WARNING: galaxy 未提供额外能力")
             self.warnings += 1
             test_results.append(("设备管理", "设备能力扩展性", "WARNING"))
     
@@ -152,8 +152,8 @@ class FusionCompatibilityTest:
         print("\n【测试 3.1】节点目录结构兼容性")
         print("-" * 80)
         
-        # 检查 ufo-galaxy 的节点目录是否存在
-        nodes_dir = Path("/home/ubuntu/ufo-galaxy/nodes")
+        # 检查 galaxy 的节点目录是否存在
+        nodes_dir = Path("/home/ubuntu/galaxy/nodes")
         if nodes_dir.exists():
             node_count = len(list(nodes_dir.glob("Node_*")))
             print(f"✅ PASS: 找到 {node_count} 个节点")
@@ -185,7 +185,7 @@ class FusionCompatibilityTest:
         print("-" * 80)
         
         # 检查 Node_90 的接口
-        node_90_path = Path("/home/ubuntu/ufo-galaxy/nodes/Node_90_MultimodalVision/main.py")
+        node_90_path = Path("/home/ubuntu/galaxy/nodes/Node_90_MultimodalVision/main.py")
         if node_90_path.exists():
             content = node_90_path.read_text()
             
@@ -229,7 +229,7 @@ class FusionCompatibilityTest:
         print("\n【测试 5.1】跨设备协调器存在性")
         print("-" * 80)
         
-        coordinator_path = Path("/home/ubuntu/ufo-galaxy/galaxy_gateway/cross_device_coordinator.py")
+        coordinator_path = Path("/home/ubuntu/galaxy/galaxy_gateway/cross_device_coordinator.py")
         if coordinator_path.exists():
             print("✅ PASS: 跨设备协调器存在")
             self.passed += 1
@@ -242,7 +242,7 @@ class FusionCompatibilityTest:
         print("\n【测试 5.2】Android Agent 兼容性")
         print("-" * 80)
         
-        android_client_path = Path("/home/ubuntu/ufo-galaxy/enhancements/clients/android_client")
+        android_client_path = Path("/home/ubuntu/galaxy/enhancements/clients/android_client")
         if android_client_path.exists():
             print("✅ PASS: Android 客户端存在")
             self.passed += 1

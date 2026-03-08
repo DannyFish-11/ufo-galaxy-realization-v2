@@ -1,5 +1,5 @@
 """
-Integration Module for UFO Galaxy Realization.
+Integration Module for Galaxy Realization.
 
 This module provides end-to-end integration between:
 - Natural Language Understanding

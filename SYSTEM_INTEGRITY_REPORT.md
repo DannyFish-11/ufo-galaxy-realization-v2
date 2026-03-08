@@ -1,8 +1,8 @@
-# UFO Galaxy V2 系统完整性检查报告
+# Galaxy V2 系统完整性检查报告
 
 **检查时间**: 2026-02-14
 **检查者**: Qingyan Agent (Core Architect)
-**仓库**: https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
+**仓库**: https://github.com/DannyFish-11/galaxy-realization-v2.git
 
 ---
 
@@ -21,7 +21,7 @@
 ### 1.2 目录结构
 
 ```
-ufo-galaxy-v2/
+galaxy-v2/
 ├── core/                    # 核心模块 (33 文件, 17,925 行)
 ├── nodes/                   # 节点目录 (108 节点)
 ├── enhancements/            # 增强模块 (24,922 行)

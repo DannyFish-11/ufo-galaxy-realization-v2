@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy L4 级自主性智能系统启动脚本
+Galaxy L4 级自主性智能系统启动脚本
 """
 
 import asyncio
@@ -55,7 +55,7 @@ def print_banner():
     banner = """
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║              UFO Galaxy L4 自主性智能系统                      ║
+║              Galaxy L4 自主性智能系统                      ║
 ║                                                              ║
 ║  • 自主发现工具和资源                                          ║
 ║  • 自主编写代码解决问题                                        ║
@@ -81,12 +81,12 @@ async def main():
     
     logger = logging.getLogger("L4Startup")
     logger.info("=" * 60)
-    logger.info("启动 UFO Galaxy L4 系统")
+    logger.info("启动 Galaxy L4 系统")
     logger.info("=" * 60)
     
     # 显示配置
     system_config = config.get("system", {})
-    logger.info(f"系统名称: {system_config.get('name', 'UFO Galaxy L4')}")
+    logger.info(f"系统名称: {system_config.get('name', 'Galaxy L4')}")
     logger.info(f"系统版本: {system_config.get('version', '4.0.0')}")
     logger.info(f"运行模式: {system_config.get('mode', 'autonomous')}")
     

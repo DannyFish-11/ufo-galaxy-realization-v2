@@ -1,4 +1,4 @@
-# UFO Galaxy v5.0 - Multi-Device Coordination System Dependencies
+# Galaxy v5.0 - Multi-Device Coordination System Dependencies
 # Python 3.11+
 # Last Updated: 2025-06-10
 # All versions are pinned for reproducibility

@@ -1,5 +1,5 @@
 '''
-# UFO Galaxy 综合部署指南
+# Galaxy 综合部署指南
 
 **版本**: 1.0
 **最后更新**: 2026-02-06
@@ -9,7 +9,7 @@
 
 ## 1. 简介
 
-UFO Galaxy 是一个 L4 级自主AI系统，具备物理设备控制、Android 集成和系统级 AI 交互层。本指南将详细介绍如何部署和配置 UFO Galaxy 系统，确保您能够成功启动并运行所有核心功能。
+Galaxy 是一个 L4 级自主AI系统，具备物理设备控制、Android 集成和系统级 AI 交互层。本指南将详细介绍如何部署和配置 Galaxy 系统，确保您能够成功启动并运行所有核心功能。
 
 ## 2. 系统需求
 
@@ -58,11 +58,11 @@ UFO Galaxy 是一个 L4 级自主AI系统，具备物理设备控制、Android �
 
 ```bash
 # 服务端
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/galaxy-realization.git
+cd galaxy-realization
 
 # Android 端
-git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
+git clone https://github.com/DannyFish-11/galaxy-android.git
 ```
 
 ### 4.2. 运行配置向导
@@ -97,7 +97,7 @@ python main.py --setup
 为了实现完整功能，特别是知识库和长期记忆，您需要部署 PostgreSQL、Redis 和 Qdrant。我们提供了 `docker-compose.yml` 文件来简化此过程。
 
 ```bash
-# 在 ufo-galaxy-realization 根目录运行
+# 在 galaxy-realization 根目录运行
 docker-compose up -d
 ```
 
@@ -109,12 +109,12 @@ docker-compose up -d
 python build_exe.py
 ```
 
-打包过程可能需要几分钟。完成后，您将在 `dist` 目录下找到 `ufo_galaxy.exe`。
+打包过程可能需要几分钟。完成后，您将在 `dist` 目录下找到 `galaxy.exe`。
 
 ## 8. Android 应用部署
 
-1.  使用 Android Studio 打开 `ufo-galaxy-android` 项目。
-2.  在 `app/src/main/java/com/ufogalaxy/Constants.kt` 文件中，将 `SERVER_URL` 修改为您的 UFO Galaxy 服务器地址。
+1.  使用 Android Studio 打开 `galaxy-android` 项目。
+2.  在 `app/src/main/java/com/ufogalaxy/Constants.kt` 文件中，将 `SERVER_URL` 修改为您的 Galaxy 服务器地址。
 3.  连接您的 Android 设备（需开启开发者模式和 USB 调试）。
 4.  点击 "Run 'app'" 按钮来编译和安装应用。
 5.  启动应用后，根据提示授予无障碍服务和悬浮窗权限。
@@ -127,5 +127,5 @@ python build_exe.py
 
 ---
 
-**[返回顶部](#ufo-galaxy-综合部署指南)**
+**[返回顶部](#galaxy-综合部署指南)**
 '''

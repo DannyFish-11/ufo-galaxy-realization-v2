@@ -1,5 +1,5 @@
 """
-UFO Galaxy 知识库系统 - Node 72
+Galaxy 知识库系统 - Node 72
 
 功能：
 1. 向量数据库存储（通过 core.vector_backend 统一接口）
@@ -22,7 +22,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import hashlib
 
-logger = logging.getLogger("UFO-Galaxy.KnowledgeBase72")
+logger = logging.getLogger("Galaxy.KnowledgeBase72")
 
 
 @dataclass

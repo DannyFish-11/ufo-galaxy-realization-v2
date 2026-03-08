@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 统一配置管理器
+Galaxy - 统一配置管理器
 ==========================
 
 确保 WebUI 配置和主 UI 配置的一致性
@@ -31,7 +31,7 @@ from typing import Any, Dict, Optional
 from dataclasses import dataclass, field
 import threading
 
-logger = logging.getLogger("UFO-Galaxy.Config")
+logger = logging.getLogger("Galaxy.Config")
 
 
 @dataclass
@@ -290,7 +290,7 @@ class UnifiedConfig:
             
             if env_lines:
                 with open(self.env_file, "w", encoding="utf-8") as f:
-                    f.write("# UFO Galaxy 配置文件\n")
+                    f.write("# Galaxy 配置文件\n")
                     f.write("# 自动生成，请勿手动编辑\n\n")
                     f.write("\n".join(env_lines))
                 

@@ -72,7 +72,7 @@ class GoogleSearchNode:
         self.logger.info(f"节点 {self.config.node_name} 正在初始化...")
         self._app = FastAPI(
             title=self.config.node_name,
-            description="一个用于执行Google搜索的UFO Galaxy节点",
+            description="一个用于执行Google搜索的Galaxy节点",
             version="1.0.0"
         )
         self._setup_routes()
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         exit(1)
 
     logging.info("==================================================")
-    logging.info("            UFO Galaxy - Google Search Node      ")
+    logging.info("            Galaxy - Google Search Node      ")
     logging.info("==================================================")
     
     # 使用asyncio.run来运行异步主函数

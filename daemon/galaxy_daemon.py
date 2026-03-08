@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy 24/7 Daemon
+Galaxy 24/7 Daemon
 
 This module provides the main daemon process for 24/7 operation:
 - Automatic restart on failure
@@ -129,7 +129,7 @@ class ProcessManager:
                 self.command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                cwd=os.environ.get('UFO_GALAXY_HOME', '/opt/ufo-galaxy')
+                cwd=os.environ.get('GALAXY_HOME', '/opt/galaxy')
             )
             
             self.status.state = DaemonState.RUNNING
@@ -213,9 +213,9 @@ class ProcessManager:
         return self.start()
 
 
-class UFOGalaxyDaemon:
+class GalaxyDaemon:
     """
-    UFO Galaxy 24/7 Daemon
+    Galaxy 24/7 Daemon
     
     Manages all system components for continuous operation:
     - Main Galaxy system
@@ -224,7 +224,7 @@ class UFOGalaxyDaemon:
     - Automatic recovery
     
     Example:
-        >>> daemon = UFOGalaxyDaemon()
+        >>> daemon = GalaxyDaemon()
         >>> daemon.start()
         >>> # Runs 24/7 until stopped
         >>> daemon.stop()
@@ -257,7 +257,7 @@ class UFOGalaxyDaemon:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGHUP, self._signal_handler)
         
-        logger.info("UFOGalaxyDaemon initialized")
+        logger.info("GalaxyDaemon initialized")
     
     def _load_config(self, config_path: Optional[str]) -> Dict[str, Any]:
         """Load daemon configuration"""
@@ -315,13 +315,13 @@ class UFOGalaxyDaemon:
     def start(self) -> bool:
         """Start the daemon and all managed services"""
         try:
-            logger.info("Starting UFO Galaxy Daemon...")
+            logger.info("Starting Galaxy Daemon...")
             self.state = DaemonState.STARTING
             self.start_time = datetime.now()
             self._running = True
             
             # Create log directory
-            Path("/var/log/ufo-galaxy").mkdir(parents=True, exist_ok=True)
+            Path("/var/log/galaxy").mkdir(parents=True, exist_ok=True)
             
             # Start all services
             for name, service_config in self.config["services"].items():
@@ -335,7 +335,7 @@ class UFOGalaxyDaemon:
                 pm.start()
             
             self.state = DaemonState.RUNNING
-            logger.info("UFO Galaxy Daemon started successfully")
+            logger.info("Galaxy Daemon started successfully")
             
             # Start main loop
             self._main_loop()
@@ -349,7 +349,7 @@ class UFOGalaxyDaemon:
     
     def stop(self) -> bool:
         """Stop the daemon and all services gracefully"""
-        logger.info("Stopping UFO Galaxy Daemon...")
+        logger.info("Stopping Galaxy Daemon...")
         self._running = False
         self._shutdown_event.set()
         self.state = DaemonState.STOPPING
@@ -360,7 +360,7 @@ class UFOGalaxyDaemon:
             pm.stop()
         
         self.state = DaemonState.STOPPED
-        logger.info("UFO Galaxy Daemon stopped")
+        logger.info("Galaxy Daemon stopped")
         return True
     
     def _main_loop(self):
@@ -496,14 +496,14 @@ class UFOGalaxyDaemon:
 
 
 # Convenience functions
-def start_daemon(config_path: Optional[str] = None) -> UFOGalaxyDaemon:
+def start_daemon(config_path: Optional[str] = None) -> GalaxyDaemon:
     """Start the daemon"""
-    daemon = UFOGalaxyDaemon(config_path)
+    daemon = GalaxyDaemon(config_path)
     daemon.start()
     return daemon
 
 
-def stop_daemon(daemon: UFOGalaxyDaemon):
+def stop_daemon(daemon: GalaxyDaemon):
     """Stop the daemon"""
     daemon.stop()
 
@@ -512,7 +512,7 @@ if __name__ == "__main__":
     # Run as daemon
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO Galaxy 24/7 Daemon")
+    parser = argparse.ArgumentParser(description="Galaxy 24/7 Daemon")
     parser.add_argument("--config", "-c", help="Configuration file path")
     parser.add_argument("--status", "-s", action="store_true", help="Show status")
     parser.add_argument("--stop", action="store_true", help="Stop daemon")
@@ -527,7 +527,7 @@ if __name__ == "__main__":
             print("psutil not available, cannot find daemon process")
             sys.exit(1)
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            if 'ufogalaxy_daemon' in ' '.join(proc.info['cmdline'] or []):
+            if 'galaxy_daemon' in ' '.join(proc.info['cmdline'] or []):
                 os.kill(proc.info['pid'], signal.SIGTERM)
                 print(f"Stopped daemon (PID {proc.info['pid']})")
     else:
