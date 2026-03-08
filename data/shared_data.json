@@ -55,5 +55,113 @@
       }
     },
     "timestamp": "2026-03-08T14:03:09.509076"
+  },
+  "test": {
+    "value": {
+      "value": 123
+    },
+    "timestamp": "2026-03-08T15:10:02.885739"
+  },
+  "device_state:dev_1": {
+    "value": {
+      "battery": 80,
+      "updated_at": "2026-03-08T15:10:02.887077"
+    },
+    "timestamp": "2026-03-08T15:10:02.887084"
+  },
+  "session_snapshot:74a28ada-0ab": {
+    "value": {
+      "session_id": "74a28ada-0ab",
+      "created_at": 1772980944.5699482,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772980944.5702953
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T14:42:24.571429"
+  },
+  "session_snapshot:bbfe2f86-519": {
+    "value": {
+      "session_id": "bbfe2f86-519",
+      "created_at": 1772980967.01101,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772980967.011178
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T14:42:47.011792"
+  },
+  "session_snapshot:120e0949-015": {
+    "value": {
+      "session_id": "120e0949-015",
+      "created_at": 1772982580.6800158,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772982580.680379
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T15:09:40.698576"
+  },
+  "session_snapshot:24468f96-a43": {
+    "value": {
+      "session_id": "24468f96-a43",
+      "created_at": 1772982590.7658174,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772982590.766088
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T15:09:50.790382"
+  },
+  "session_snapshot:d61a0543-055": {
+    "value": {
+      "session_id": "d61a0543-055",
+      "created_at": 1772982603.1225703,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772982603.1227386
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T15:10:03.123425"
   }
 }

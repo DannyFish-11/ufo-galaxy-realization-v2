@@ -75,9 +75,9 @@
       "port": 0,
       "mac_address": "",
       "metadata": {},
-      "registered_at": 1772978589.5162473,
-      "last_seen": 1772978589.5162473,
-      "last_heartbeat": 1772978589.5162475,
+      "registered_at": 1772982603.1333277,
+      "last_seen": 1772982603.133328,
+      "last_heartbeat": 1772982603.1333282,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
@@ -105,9 +105,9 @@
       "port": 0,
       "mac_address": "",
       "metadata": {},
-      "registered_at": 1772978589.5173647,
-      "last_seen": 1772978589.5173647,
-      "last_heartbeat": 1772978589.517365,
+      "registered_at": 1772982603.134479,
+      "last_seen": 1772982603.1344793,
+      "last_heartbeat": 1772982603.1344793,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
@@ -135,9 +135,9 @@
       "port": 0,
       "mac_address": "",
       "metadata": {},
-      "registered_at": 1772978589.5178092,
-      "last_seen": 1772978589.5178094,
-      "last_heartbeat": 1772978589.5178094,
+      "registered_at": 1772982603.1349416,
+      "last_seen": 1772982603.134942,
+      "last_heartbeat": 1772982603.1349423,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
@@ -158,9 +158,9 @@
       "port": 0,
       "mac_address": "",
       "metadata": {},
-      "registered_at": 1772978589.518854,
-      "last_seen": 1772978589.518854,
-      "last_heartbeat": 1772978589.5188541,
+      "registered_at": 1772982603.1362288,
+      "last_seen": 1772982603.136229,
+      "last_heartbeat": 1772982603.136229,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
@@ -197,5 +197,5 @@
     ],
     "touch": []
   },
-  "saved_at": 1772978589.5188694
+  "saved_at": 1772982603.1362464
 }
