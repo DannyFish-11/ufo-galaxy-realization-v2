@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.ContextEngine")
+logger = logging.getLogger("Galaxy.ContextEngine")
 
 
 class ContextManager:

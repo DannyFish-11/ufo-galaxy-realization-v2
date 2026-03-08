@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("UFO-Galaxy.HealingEngine")
+logger = logging.getLogger("Galaxy.HealingEngine")
 
 
 class SelfHealingEngine:

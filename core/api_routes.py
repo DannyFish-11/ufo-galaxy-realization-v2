@@ -207,7 +207,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
             # 写回 .env
             with open(env_path, "w", encoding="utf-8") as f:
-                f.write("# UFO Galaxy - Environment Configuration\n")
+                f.write("# Galaxy - Environment Configuration\n")
                 f.write(f"# Updated: {datetime.now().isoformat()}\n\n")
                 for key, val in sorted(current_env.items()):
                     f.write(f"{key}={val}\n")
@@ -1296,7 +1296,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 messages = [
                     {"role": "system", "content": (
-                        "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。\n"
+                        "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。\n"
                         "当用户想要操作设备时，请告诉他们直接描述操作指令即可，"
                         "系统会自动调度 Agent 执行。例如: '帮我打开手机上的微信'。"
                     )},

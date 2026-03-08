@@ -22,7 +22,7 @@ try:
 except ImportError:
     CircuitBreaker = None
 
-logger = logging.getLogger("UFO-Galaxy.AgentFactory")
+logger = logging.getLogger("Galaxy.AgentFactory")
 
 
 # ───────────────────── Agent 消息通信 ─────────────────────

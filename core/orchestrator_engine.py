@@ -10,7 +10,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.Orchestrator")
+logger = logging.getLogger("Galaxy.Orchestrator")
 
 
 class SmartOrchestrator:

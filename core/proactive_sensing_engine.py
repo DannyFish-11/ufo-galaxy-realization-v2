@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.ProactiveSensing")
+logger = logging.getLogger("Galaxy.ProactiveSensing")
 
 
 class AlertLevel(str, Enum):

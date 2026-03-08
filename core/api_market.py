@@ -32,7 +32,7 @@ router = APIRouter()
 # 技能存储 (JSON 文件持久化)
 # ============================================================================
 
-_MARKET_STORE_DIR = os.getenv("UFO_MARKET_STORE_DIR", "./data/market")
+_MARKET_STORE_DIR = os.getenv("GALAXY_MARKET_STORE_DIR", "./data/market")
 _MARKET_STORE_FILE = os.path.join(_MARKET_STORE_DIR, "published_skills.json")
 
 
@@ -59,11 +59,11 @@ _published_skills: List[Dict[str, Any]] = _load_published_skills()
 
 
 def _verify_publish_token(token: str) -> bool:
-    """验证发布令牌 (基于 UFO_API_TOKEN)"""
-    expected = os.getenv("UFO_API_TOKEN", "")
+    """验证发布令牌 (基于 GALAXY_API_TOKEN)"""
+    expected = os.getenv("GALAXY_API_TOKEN", "")
     if not expected:
         # 未设置令牌时，只允许本地开发环境
-        logger.warning("UFO_API_TOKEN 未设置，技能发布仅允许本地访问")
+        logger.warning("GALAXY_API_TOKEN 未设置，技能发布仅允许本地访问")
         return True
     return hashlib.sha256(token.encode()).hexdigest() == hashlib.sha256(expected.encode()).hexdigest()
 

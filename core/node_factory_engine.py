@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.NodeFactory")
+logger = logging.getLogger("Galaxy.NodeFactory")
 
 
 class NodeType(str, Enum):
