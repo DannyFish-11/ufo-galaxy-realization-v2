@@ -1,0 +1,21 @@
+{
+  "session_snapshot:f9b99008-ff2": {
+    "value": {
+      "session_id": "f9b99008-ff2",
+      "created_at": 1772976677.831322,
+      "history": [
+        {
+          "role": "user",
+          "content": "帮我查天气",
+          "timestamp": 1772976677.8317924
+        }
+      ],
+      "task_state": {},
+      "meta": {
+        "wake_word": "",
+        "initial_device": "phone_001"
+      }
+    },
+    "timestamp": "2026-03-08T13:31:17.837239"
+  }
+}

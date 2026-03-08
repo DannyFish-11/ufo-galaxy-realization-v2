@@ -4,7 +4,7 @@
       "device_id": "windows_001",
       "device_type": "windows",
       "name": "测试电脑",
-      "status": "online",
+      "status": "offline",
       "manufacturer": "",
       "model": "",
       "os_version": "",
@@ -45,6 +45,125 @@
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0
+    },
+    "dr_001": {
+      "device_id": "dr_001",
+      "device_type": "android",
+      "name": "Device-dr_001",
+      "status": "online",
+      "manufacturer": "",
+      "model": "",
+      "os_version": "",
+      "app_version": "",
+      "capabilities": [
+        {
+          "name": "screen",
+          "description": "",
+          "available": true,
+          "params": {}
+        },
+        {
+          "name": "camera",
+          "description": "",
+          "available": true,
+          "params": {}
+        }
+      ],
+      "groups": [],
+      "tags": [],
+      "ip_address": "",
+      "port": 0,
+      "mac_address": "",
+      "metadata": {},
+      "registered_at": 1772976677.8497078,
+      "last_seen": 1772976677.849708,
+      "last_heartbeat": 1772976677.8497083,
+      "total_commands": 0,
+      "successful_commands": 0,
+      "failed_commands": 0
+    },
+    "a1": {
+      "device_id": "a1",
+      "device_type": "android",
+      "name": "Device-a1",
+      "status": "online",
+      "manufacturer": "",
+      "model": "",
+      "os_version": "",
+      "app_version": "",
+      "capabilities": [
+        {
+          "name": "screen",
+          "description": "",
+          "available": true,
+          "params": {}
+        }
+      ],
+      "groups": [],
+      "tags": [],
+      "ip_address": "",
+      "port": 0,
+      "mac_address": "",
+      "metadata": {},
+      "registered_at": 1772976677.8509104,
+      "last_seen": 1772976677.8509104,
+      "last_heartbeat": 1772976677.8509107,
+      "total_commands": 0,
+      "successful_commands": 0,
+      "failed_commands": 0
+    },
+    "w1": {
+      "device_id": "w1",
+      "device_type": "windows",
+      "name": "Device-w1",
+      "status": "online",
+      "manufacturer": "",
+      "model": "",
+      "os_version": "",
+      "app_version": "",
+      "capabilities": [
+        {
+          "name": "keyboard",
+          "description": "",
+          "available": true,
+          "params": {}
+        }
+      ],
+      "groups": [],
+      "tags": [],
+      "ip_address": "",
+      "port": 0,
+      "mac_address": "",
+      "metadata": {},
+      "registered_at": 1772976677.8513355,
+      "last_seen": 1772976677.8513358,
+      "last_heartbeat": 1772976677.8513358,
+      "total_commands": 0,
+      "successful_commands": 0,
+      "failed_commands": 0
+    },
+    "u1": {
+      "device_id": "u1",
+      "device_type": "android",
+      "name": "Device-u1",
+      "status": "online",
+      "manufacturer": "",
+      "model": "",
+      "os_version": "",
+      "app_version": "",
+      "capabilities": [],
+      "groups": [],
+      "tags": [],
+      "ip_address": "",
+      "port": 0,
+      "mac_address": "",
+      "metadata": {},
+      "registered_at": 1772976677.8524847,
+      "last_seen": 1772976677.852485,
+      "last_heartbeat": 1772976677.852485,
+      "total_commands": 0,
+      "successful_commands": 0,
+      "failed_commands": 0
     }
   },
   "groups": {
@@ -61,17 +180,22 @@
   },
   "capability_index": {
     "screen": [
-      "windows_001"
+      "windows_001",
+      "dr_001",
+      "a1"
     ],
-    "camera": [],
+    "camera": [
+      "dr_001"
+    ],
     "microphone": [],
     "keyboard": [
-      "windows_001"
+      "windows_001",
+      "w1"
     ],
     "mouse": [
       "windows_001"
     ],
     "touch": []
   },
-  "saved_at": 1772941789.3500206
+  "saved_at": 1772976677.852509
 }
