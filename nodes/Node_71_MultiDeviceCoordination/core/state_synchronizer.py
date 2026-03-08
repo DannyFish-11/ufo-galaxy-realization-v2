@@ -13,7 +13,10 @@ from enum import Enum, auto
 from datetime import datetime
 import random
 
-from models.device import Device, DeviceState, VectorClock
+try:
+    from nodes.Node_71_MultiDeviceCoordination.models.device import Device, DeviceState, VectorClock
+except ImportError:
+    from models.device import Device, DeviceState, VectorClock
 
 logger = logging.getLogger(__name__)
 

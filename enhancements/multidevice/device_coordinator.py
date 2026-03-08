@@ -2,6 +2,9 @@
 UFO Galaxy v5.0 - Device Coordinator Module
 WebSocket-based Real-time Coordination System
 
+DEPRECATED: WebSocket 服务器保留以兼容 AIP v2.0 二进制客户端。
+新代码请使用 core.unified_coordinator 进行设备协调和会话管理。
+
 This module provides WebSocket server for real-time device coordination,
 AIP v2.0 protocol implementation, message routing, and session management.
 
@@ -489,7 +492,16 @@ class DeviceCoordinator:
         
         # Setup message handlers
         self._setup_handlers()
-        
+
+        # 委托到统一协调器（新架构）
+        self._unified_coordinator = None
+        try:
+            from core.unified_coordinator import get_unified_coordinator
+            self._unified_coordinator = get_unified_coordinator()
+            logger.info("DeviceCoordinator: 已连接统一协调器")
+        except (ImportError, Exception) as e:
+            logger.debug(f"DeviceCoordinator: 统一协调器不可用: {e}")
+
         logger.info("DeviceCoordinator initialized")
     
     def _setup_handlers(self) -> None:

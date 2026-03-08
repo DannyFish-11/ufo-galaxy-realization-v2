@@ -2,6 +2,11 @@
 UFO Galaxy v5.0 - Device Protocol Module
 AIP v2.0 Protocol Implementation
 
+DEPRECATED: 此二进制协议保留以兼容现有客户端。
+新代码请使用 galaxy_gateway.protocol.aip_v3.AIPMessage (AIP v3.0 JSON/Pydantic)
+兼容层: galaxy_gateway.protocol.compat.parse_message_compat 自动支持 AIP v1/v2/v3
+设备协调: core.unified_coordinator.get_unified_coordinator()
+
 This module defines the AIP (Advanced Inter-device Protocol) v2.0 message format,
 protocol buffer schemas, and message serialization/deserialization for device communication.
 

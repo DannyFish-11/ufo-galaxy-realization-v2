@@ -25,30 +25,51 @@ from enum import Enum, auto
 from datetime import datetime
 import traceback
 
-# 导入模型
-from models.device import (
-    Device, DeviceType, DeviceState, DeviceRegistry,
-    Capability, ResourceConstraints, VectorClock, DiscoveryProtocol
-)
-from models.task import (
-    Task, TaskState, TaskPriority, TaskType, TaskDependency,
-    TaskResource, RetryPolicy, SubTask, TaskQueue, SchedulingStrategy
-)
-
-# 导入核心模块
-from core.device_discovery import (
-    DeviceDiscovery, DiscoveryConfig, DiscoveryEvent, DiscoveryEventType
-)
-from core.state_synchronizer import (
-    StateSynchronizer, SyncConfig, StateEvent, SyncEventType, ConflictResolution
-)
-from core.task_scheduler import (
-    TaskScheduler, SchedulerConfig, SchedulerEvent, SchedulerEventType
-)
-from core.fault_tolerance import (
-    FaultToleranceLayer, CircuitBreakerConfig, RetryConfig, FailoverConfig,
-    CircuitBreakerOpenError
-)
+# 导入模型（支持项目根和 Node_71 目录两种路径）
+try:
+    from nodes.Node_71_MultiDeviceCoordination.models.device import (
+        Device, DeviceType, DeviceState, DeviceRegistry,
+        Capability, ResourceConstraints, VectorClock, DiscoveryProtocol
+    )
+    from nodes.Node_71_MultiDeviceCoordination.models.task import (
+        Task, TaskState, TaskPriority, TaskType, TaskDependency,
+        TaskResource, RetryPolicy, SubTask, TaskQueue, SchedulingStrategy
+    )
+    from nodes.Node_71_MultiDeviceCoordination.core.device_discovery import (
+        DeviceDiscovery, DiscoveryConfig, DiscoveryEvent, DiscoveryEventType
+    )
+    from nodes.Node_71_MultiDeviceCoordination.core.state_synchronizer import (
+        StateSynchronizer, SyncConfig, StateEvent, SyncEventType, ConflictResolution
+    )
+    from nodes.Node_71_MultiDeviceCoordination.core.task_scheduler import (
+        TaskScheduler, SchedulerConfig, SchedulerEvent, SchedulerEventType
+    )
+    from nodes.Node_71_MultiDeviceCoordination.core.fault_tolerance import (
+        FaultToleranceLayer, CircuitBreakerConfig, RetryConfig, FailoverConfig,
+        CircuitBreakerOpenError
+    )
+except ImportError:
+    from models.device import (
+        Device, DeviceType, DeviceState, DeviceRegistry,
+        Capability, ResourceConstraints, VectorClock, DiscoveryProtocol
+    )
+    from models.task import (
+        Task, TaskState, TaskPriority, TaskType, TaskDependency,
+        TaskResource, RetryPolicy, SubTask, TaskQueue, SchedulingStrategy
+    )
+    from core.device_discovery import (
+        DeviceDiscovery, DiscoveryConfig, DiscoveryEvent, DiscoveryEventType
+    )
+    from core.state_synchronizer import (
+        StateSynchronizer, SyncConfig, StateEvent, SyncEventType, ConflictResolution
+    )
+    from core.task_scheduler import (
+        TaskScheduler, SchedulerConfig, SchedulerEvent, SchedulerEventType
+    )
+    from core.fault_tolerance import (
+        FaultToleranceLayer, CircuitBreakerConfig, RetryConfig, FailoverConfig,
+        CircuitBreakerOpenError
+    )
 
 logger = logging.getLogger("Node71_MDCE")
 

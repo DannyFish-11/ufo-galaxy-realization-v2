@@ -544,6 +544,18 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             logger.warning(f"设备路由器降级: {e}")
 
     # ====================================================================
+    # 17b. 统一设备协调器
+    # ====================================================================
+    try:
+        from core.unified_coordinator import get_unified_coordinator
+        unified_coord = get_unified_coordinator()
+        results["unified_coordinator"] = {"status": "ok", "instance": "unified_coordinator"}
+        logger.info("统一设备协调器就绪")
+    except Exception as e:
+        results["unified_coordinator"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"统一设备协调器降级: {e}")
+
+    # ====================================================================
     # 18. 编排器
     # ====================================================================
     if _deps_ok("orchestrator"):

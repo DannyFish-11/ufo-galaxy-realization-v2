@@ -14,10 +14,16 @@ from enum import Enum, auto
 from datetime import datetime
 import struct
 
-from models.device import (
-    Device, DeviceType, DeviceState, DiscoveryProtocol,
-    Capability, ResourceConstraints, VectorClock
-)
+try:
+    from nodes.Node_71_MultiDeviceCoordination.models.device import (
+        Device, DeviceType, DeviceState, DiscoveryProtocol,
+        Capability, ResourceConstraints, VectorClock
+    )
+except ImportError:
+    from models.device import (
+        Device, DeviceType, DeviceState, DiscoveryProtocol,
+        Capability, ResourceConstraints, VectorClock
+    )
 
 logger = logging.getLogger(__name__)
 

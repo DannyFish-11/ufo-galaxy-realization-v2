@@ -13,12 +13,20 @@ from datetime import datetime
 import heapq
 import random
 
-from models.device import Device, DeviceState, DeviceRegistry
-from models.task import (
-    Task, TaskState, TaskPriority, TaskType, TaskDependency,
-    TaskResource, RetryPolicy, SubTask, TaskQueue,
-    SchedulingStrategy
-)
+try:
+    from nodes.Node_71_MultiDeviceCoordination.models.device import Device, DeviceState, DeviceRegistry
+    from nodes.Node_71_MultiDeviceCoordination.models.task import (
+        Task, TaskState, TaskPriority, TaskType, TaskDependency,
+        TaskResource, RetryPolicy, SubTask, TaskQueue,
+        SchedulingStrategy
+    )
+except ImportError:
+    from models.device import Device, DeviceState, DeviceRegistry
+    from models.task import (
+        Task, TaskState, TaskPriority, TaskType, TaskDependency,
+        TaskResource, RetryPolicy, SubTask, TaskQueue,
+        SchedulingStrategy
+    )
 
 logger = logging.getLogger(__name__)
 
