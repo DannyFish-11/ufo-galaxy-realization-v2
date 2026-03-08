@@ -103,8 +103,8 @@ class ConnectionManager:
                             "online": True,
                             "source": "gateway_ws",
                         }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Gateway ws_manager 设备合并不可用: {e}")
 
         # 合并 device_router 的设备
         try:
@@ -118,8 +118,8 @@ class ConnectionManager:
                     all_devices[did]["status"] = "online"
                     if device.device_type:
                         all_devices[did]["device_type"] = device.device_type
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"DeviceRouter 设备合并不可用: {e}")
 
         return all_devices
 
@@ -128,7 +128,8 @@ class ConnectionManager:
         for device_id, ws in self.active_devices.items():
             try:
                 await ws.send_json(message)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"广播消息到设备 {device_id} 失败: {e}")
                 disconnected.append(device_id)
         for d in disconnected:
             self.disconnect_device(d)
@@ -145,7 +146,8 @@ class ConnectionManager:
         for ws in self.status_subscribers:
             try:
                 await ws.send_json(status)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"状态推送到订阅者失败: {e}")
                 disconnected.append(ws)
         for ws in disconnected:
             self.status_subscribers.discard(ws)

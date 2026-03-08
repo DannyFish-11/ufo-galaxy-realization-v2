@@ -14,6 +14,7 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Dict, Any, Optional, Type
 
 # 1. 日志配置
@@ -60,11 +61,11 @@ class MediaGenConfig:
     """媒体生成节点的配置"""
     node_id: str = "Node_125_MediaGen"
     api_keys: Dict[str, str] = field(default_factory=lambda: {
-        "image_gen_api_key": "dummy_image_api_key_xxxxxxxx",
-        "audio_gen_api_key": "dummy_audio_api_key_xxxxxxxx",
-        "video_gen_api_key": "dummy_video_api_key_xxxxxxxx",
+        "image_gen_api_key": os.getenv("IMAGE_GEN_API_KEY", ""),
+        "audio_gen_api_key": os.getenv("AUDIO_GEN_API_KEY", ""),
+        "video_gen_api_key": os.getenv("VIDEO_GEN_API_KEY", ""),
     })
-    output_directory: str = "/home/ubuntu/media_output"
+    output_directory: str = field(default_factory=lambda: os.getenv("MEDIA_OUTPUT_DIR", str(Path.home() / "media_output")))
     max_concurrent_tasks: int = 10
     default_image_model: str = "stable-diffusion-v1.5"
     default_audio_model: str = "tts-1"

@@ -790,129 +790,127 @@ if __name__ == "__main__":
 
 
 # =============================================================================
-# Academic Extension API Endpoints
+# Academic Extension API Endpoints (optional)
 # =============================================================================
 
-from academic_extension import academic_manager, PaperNote, CitationNetwork
-from nodes.common.cors_config import get_cors_origins
+try:
+    from academic_extension import academic_manager, PaperNote, CitationNetwork
 
-@app.post("/academic/paper_note")
-async def save_academic_paper_note(paper: PaperNote):
-    """保存论文笔记"""
-    success = await academic_manager.save_paper_note(paper)
-    return {
-        "success": success,
-        "paper_id": paper.paper_id,
-        "title": paper.title
-    }
+    @app.post("/academic/paper_note")
+    async def save_academic_paper_note(paper: PaperNote):
+        """保存论文笔记"""
+        success = await academic_manager.save_paper_note(paper)
+        return {
+            "success": success,
+            "paper_id": paper.paper_id,
+            "title": paper.title
+        }
 
-@app.get("/academic/paper_notes")
-async def search_academic_paper_notes(
-    query: str = Query(default="", description="搜索关键词"),
-    tags: Optional[str] = Query(default=None, description="标签（逗号分隔）")
-):
-    """搜索论文笔记"""
-    tag_list = tags.split(",") if tags else None
-    memos = await academic_manager.search_paper_notes(query, tag_list)
-    return {
-        "query": query,
-        "tags": tag_list,
-        "count": len(memos),
-        "papers": memos
-    }
+    @app.get("/academic/paper_notes")
+    async def search_academic_paper_notes(
+        query: str = Query(default="", description="搜索关键词"),
+        tags: Optional[str] = Query(default=None, description="标签（逗号分隔）")
+    ):
+        """搜索论文笔记"""
+        tag_list = tags.split(",") if tags else None
+        memos = await academic_manager.search_paper_notes(query, tag_list)
+        return {
+            "query": query,
+            "tags": tag_list,
+            "count": len(memos),
+            "papers": memos
+        }
 
-@app.get("/academic/citation_network/{paper_id}")
-async def get_academic_citation_network(paper_id: str):
-    """获取论文引用网络"""
-    network = await academic_manager.get_citation_network(paper_id)
-    return network.dict()
+    @app.get("/academic/citation_network/{paper_id}")
+    async def get_academic_citation_network(paper_id: str):
+        """获取论文引用网络"""
+        network = await academic_manager.get_citation_network(paper_id)
+        return network.dict()
 
-@app.get("/academic/papers_by_tag/{tag}")
-async def get_academic_papers_by_tag(tag: str):
-    """根据标签获取论文"""
-    papers = await academic_manager.get_papers_by_tag(tag)
-    return {
-        "tag": tag,
-        "count": len(papers),
-        "papers": papers
-    }
+    @app.get("/academic/papers_by_tag/{tag}")
+    async def get_academic_papers_by_tag(tag: str):
+        """根据标签获取论文"""
+        papers = await academic_manager.get_papers_by_tag(tag)
+        return {
+            "tag": tag,
+            "count": len(papers),
+            "papers": papers
+        }
 
-@app.get("/academic/recent_papers")
-async def get_academic_recent_papers(days: int = Query(default=7, ge=1, le=30)):
-    """获取最近的论文笔记"""
-    papers = await academic_manager.get_recent_papers(days)
-    return {
-        "days": days,
-        "count": len(papers),
-        "papers": papers
-    }
+    @app.get("/academic/recent_papers")
+    async def get_academic_recent_papers(days: int = Query(default=7, ge=1, le=30)):
+        """获取最近的论文笔记"""
+        papers = await academic_manager.get_recent_papers(days)
+        return {
+            "days": days,
+            "count": len(papers),
+            "papers": papers
+        }
 
-@app.post("/academic/export_bibtex")
-async def export_academic_bibtex(paper_ids: List[str]):
-    """导出论文为 BibTeX 格式"""
-    bibtex = await academic_manager.export_papers_to_bibtex(paper_ids)
-    return {
-        "count": len(paper_ids),
-        "bibtex": bibtex
-    }
+    @app.post("/academic/export_bibtex")
+    async def export_academic_bibtex(paper_ids: List[str]):
+        """导出论文为 BibTeX 格式"""
+        bibtex = await academic_manager.export_papers_to_bibtex(paper_ids)
+        return {
+            "count": len(paper_ids),
+            "bibtex": bibtex
+        }
 
+    @app.get("/academic/keywords/{paper_id:path}")
+    async def extract_paper_keywords(paper_id: str, top_n: int = Query(default=10, ge=1, le=30)):
+        """自动提取论文关键词"""
+        memos = await academic_manager.search_paper_notes(paper_id)
+        if not memos:
+            raise HTTPException(status_code=404, detail="未找到该论文笔记")
+        keywords = await academic_manager.extract_keywords_from_memo(memos[0], top_n)
+        return {
+            "paper_id": paper_id,
+            "keywords": keywords,
+            "count": len(keywords)
+        }
 
-@app.get("/academic/keywords/{paper_id:path}")
-async def extract_paper_keywords(paper_id: str, top_n: int = Query(default=10, ge=1, le=30)):
-    """自动提取论文关键词"""
-    memos = await academic_manager.search_paper_notes(paper_id)
-    if not memos:
-        raise HTTPException(status_code=404, detail="未找到该论文笔记")
-    keywords = await academic_manager.extract_keywords_from_memo(memos[0], top_n)
-    return {
-        "paper_id": paper_id,
-        "keywords": keywords,
-        "count": len(keywords)
-    }
+    @app.get("/academic/similarity")
+    async def compute_paper_similarity(
+        paper_id_a: str = Query(..., description="第一篇论文 ID"),
+        paper_id_b: str = Query(..., description="第二篇论文 ID")
+    ):
+        """计算两篇论文的相似度（基于关键词 Jaccard 相似度）"""
+        similarity = await academic_manager.compute_similarity(paper_id_a, paper_id_b)
+        return {
+            "paper_id_a": paper_id_a,
+            "paper_id_b": paper_id_b,
+            "similarity": similarity
+        }
 
+    @app.get("/academic/recommend/{paper_id:path}")
+    async def recommend_related_papers(
+        paper_id: str,
+        top_n: int = Query(default=5, ge=1, le=20)
+    ):
+        """推荐与目标论文相关的论文（基于关键词相似度）"""
+        recommendations = await academic_manager.recommend_related_papers(paper_id, top_n)
+        return {
+            "paper_id": paper_id,
+            "recommendations": recommendations,
+            "count": len(recommendations)
+        }
 
-@app.get("/academic/similarity")
-async def compute_paper_similarity(
-    paper_id_a: str = Query(..., description="第一篇论文 ID"),
-    paper_id_b: str = Query(..., description="第二篇论文 ID")
-):
-    """计算两篇论文的相似度（基于关键词 Jaccard 相似度）"""
-    similarity = await academic_manager.compute_similarity(paper_id_a, paper_id_b)
-    return {
-        "paper_id_a": paper_id_a,
-        "paper_id_b": paper_id_b,
-        "similarity": similarity
-    }
+    class LiteratureReviewRequest(BaseModel):
+        paper_ids: List[str]
+        topic: Optional[str] = ""
 
+    @app.post("/academic/literature_review")
+    async def generate_literature_review(request: LiteratureReviewRequest):
+        """自动生成文献综述（Markdown 格式）"""
+        review = await academic_manager.generate_literature_review(
+            request.paper_ids,
+            request.topic or ""
+        )
+        return {
+            "topic": request.topic,
+            "paper_count": len(request.paper_ids),
+            "review": review
+        }
 
-@app.get("/academic/recommend/{paper_id:path}")
-async def recommend_related_papers(
-    paper_id: str,
-    top_n: int = Query(default=5, ge=1, le=20)
-):
-    """推荐与目标论文相关的论文（基于关键词相似度）"""
-    recommendations = await academic_manager.recommend_related_papers(paper_id, top_n)
-    return {
-        "paper_id": paper_id,
-        "recommendations": recommendations,
-        "count": len(recommendations)
-    }
-
-
-class LiteratureReviewRequest(BaseModel):
-    paper_ids: List[str]
-    topic: Optional[str] = ""
-
-
-@app.post("/academic/literature_review")
-async def generate_literature_review(request: LiteratureReviewRequest):
-    """自动生成文献综述（Markdown 格式）"""
-    review = await academic_manager.generate_literature_review(
-        request.paper_ids,
-        request.topic or ""
-    )
-    return {
-        "topic": request.topic,
-        "paper_count": len(request.paper_ids),
-        "review": review
-    }
+except ImportError:
+    logger.info("academic_extension 模块未安装，学术功能路由已跳过")

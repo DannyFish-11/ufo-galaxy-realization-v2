@@ -74,8 +74,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         try:
                             with open(config_file, encoding="utf-8") as f:
                                 node_config = json.load(f)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"加载节点配置失败 {config_file}: {e}")
 
                     status = node_status_cache.get(name, {})
                     nodes.append({
@@ -103,8 +103,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 with open(config_file, encoding="utf-8") as f:
                     node_config = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"加载节点配置失败 {config_file}: {e}")
 
         status = node_status_cache.get(node_name, {})
         return JSONResponse({

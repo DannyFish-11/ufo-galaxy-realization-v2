@@ -264,19 +264,19 @@ class RAGMemory:
         """
         chunks = []
 
-        # 尝试 Node_105
+        # 尝试 Node_105 (UnifiedKnowledgeBase)
         try:
-            from nodes.Node_105_UnifiedKnowledgeBase.main import search_knowledge
+            from nodes.Node_105_UnifiedKnowledgeBase.main import kb as node105_kb
             results = await asyncio.get_running_loop().run_in_executor(
-                None, search_knowledge, query, top_k
+                None, node105_kb.search_hybrid, query, top_k
             )
             for r in (results or []):
                 chunks.append(KnowledgeChunk(
-                    chunk_id=r.get("id", ""),
-                    content=r.get("content", ""),
+                    chunk_id=getattr(r, "id", ""),
+                    content=getattr(r, "content", ""),
                     source="Node_105",
-                    relevance_score=r.get("score", 0.0),
-                    metadata=r.get("metadata", {}),
+                    relevance_score=0.8,
+                    metadata=getattr(r, "metadata", {}),
                 ))
         except Exception as e:
             logger.debug(f"Node_105 query failed: {e}")
@@ -295,6 +295,28 @@ class RAGMemory:
                     ))
             except Exception as e:
                 logger.debug(f"Node_72 query failed: {e}")
+
+        # 尝试 Node_80 Memos 长期记忆
+        if len(chunks) < top_k:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=5) as client:
+                    response = await client.post(
+                        "http://localhost:8080/memory/recall",
+                        json={"query": query, "limit": top_k - len(chunks)},
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        for mem in data.get("memories", []):
+                            chunks.append(KnowledgeChunk(
+                                chunk_id=mem.get("id", ""),
+                                content=mem.get("content", ""),
+                                source="Node_80_Memos",
+                                relevance_score=mem.get("relevance_score", 0.5),
+                                metadata=mem.get("metadata", {}),
+                            ))
+            except Exception as e:
+                logger.debug(f"Node_80 memory recall failed: {e}")
 
         return chunks[:top_k]
 

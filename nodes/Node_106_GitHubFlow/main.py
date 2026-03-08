@@ -180,8 +180,8 @@ class GitHubFlow:
     def __init__(self, github_token: Optional[str] = None, kb_url: str = "http://localhost:8105"):
         self.github = GitHubClient(github_token)
         self.kb_url = kb_url
-        self.use_mock = True  # Mock 模式（无需 LLM）
-        
+        self.use_mock = not bool(github_token)  # 有 token 时使用真实模式
+
         print(f"✅ GitHub 工作流已初始化 (Mock 模式: {self.use_mock})")
     
     async def create_issue_from_task(self, repo: str, task: str, labels: List[str] = None) -> Dict:

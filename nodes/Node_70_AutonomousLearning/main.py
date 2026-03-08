@@ -262,13 +262,22 @@ class AutonomousLearningEngine:
             session.completed_at = datetime.now()
     
     def _update_q_values(self, experience: Experience):
-        """更新 Q 值"""
-        # 简化的 Q-learning 更新
+        """更新 Q 值 - 简化的 Q-learning"""
         state_key = hashlib.md5(str(experience.context).encode()).hexdigest()[:8]
         action_key = experience.action
-        
-        # 这里应该有一个 Q 表，简化处理
-        pass
+
+        if not hasattr(self, '_q_table'):
+            self._q_table = {}
+
+        if state_key not in self._q_table:
+            self._q_table[state_key] = {}
+
+        old_value = self._q_table[state_key].get(action_key, 0.0)
+        learning_rate = 0.1
+
+        # Q(s,a) = Q(s,a) + α * (reward - Q(s,a))
+        new_value = old_value + learning_rate * (experience.reward - old_value)
+        self._q_table[state_key][action_key] = new_value
     
     def _calculate_avg_reward(self) -> float:
         """计算平均奖励"""

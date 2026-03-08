@@ -45,7 +45,7 @@ STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "300"))
 DEFAULT_SHELL = os.getenv("DEFAULT_SHELL", "/bin/bash")
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "/home/ubuntu")
+WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", str(Path.home()))
 
 # Security: blocked commands
 BLOCKED_COMMANDS = [

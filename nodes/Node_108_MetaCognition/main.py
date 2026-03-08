@@ -258,7 +258,7 @@ class MetaCognitionEngine:
         # 简化的相关性评估
         keywords = ["urgent", "important", "critical", "error", "success"]
         text = str(data).lower()
-        score = sum(1 for k in keywords if k in text) / len(keywords)
+        score = sum(1 for k in keywords if k in text) / max(len(keywords), 1)
         return min(1.0, score + 0.3)
     
     def _determine_attention(self, data: Dict) -> bool:
