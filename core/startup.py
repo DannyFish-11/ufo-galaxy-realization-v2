@@ -510,6 +510,30 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.info(f"Galaxy Gateway 未加载: {e}")
 
     # ====================================================================
+    # 17. 设备路由器
+    # ====================================================================
+    if _deps_ok("device_router"):
+        try:
+            from galaxy_gateway.device_router import device_router
+            results["device_router"] = {"status": "ok", "instance": "device_router"}
+            logger.info("设备路由器就绪")
+        except Exception as e:
+            results["device_router"] = {"status": "degraded", "error": str(e)}
+            logger.warning(f"设备路由器降级: {e}")
+
+    # ====================================================================
+    # 18. 编排器
+    # ====================================================================
+    if _deps_ok("orchestrator"):
+        try:
+            from galaxy_gateway.orchestrator import GalaxyOrchestrator
+            results["orchestrator"] = {"status": "ok"}
+            logger.info("GalaxyOrchestrator 就绪")
+        except Exception as e:
+            results["orchestrator"] = {"status": "degraded", "error": str(e)}
+            logger.warning(f"编排器降级: {e}")
+
+    # ====================================================================
     # 汇总
     # ====================================================================
     elapsed = time.monotonic() - t0

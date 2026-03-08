@@ -1,7 +1,18 @@
 """
 WebSocket Handler v2 - 协议兼容版
 支持 AIP v1.0 和 AIP v2.0 (Android Agent) 的颗粒级对接
+
+.. deprecated::
+    此模块已废弃。AIP v1/v2 兼容由 galaxy_gateway/protocol/compat.py 处理。
+    如需 WebSocket 处理，请使用 galaxy_gateway/websocket_handler.py。
 """
+import warnings as _warnings
+_warnings.warn(
+    "websocket_handler_v2 已废弃，请使用 websocket_handler",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import asyncio
 import json
 import logging

@@ -83,18 +83,28 @@ def test_core_imports():
     except Exception as e:
         log_test("Android Bridge 模块", False, str(e))
     
-    # 测试 Fusion 编排器
+    # 测试统一编排器（新）
+    try:
+        from galaxy_gateway.orchestrator import GalaxyOrchestrator
+        log_test("GalaxyOrchestrator", True)
+    except Exception as e:
+        log_test("GalaxyOrchestrator", False, str(e))
+
+    # 测试 Fusion 编排器（已废弃，仅验证向后兼容）
     try:
         from fusion.topology_manager import TopologyManager
         log_test("Fusion TopologyManager", True)
     except Exception as e:
         log_test("Fusion TopologyManager", False, str(e))
-    
+
     try:
-        from fusion.unified_orchestrator import UnifiedOrchestrator
-        log_test("Fusion UnifiedOrchestrator", True)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            from fusion.unified_orchestrator import UnifiedOrchestrator
+        log_test("Fusion UnifiedOrchestrator (deprecated)", True)
     except Exception as e:
-        log_test("Fusion UnifiedOrchestrator", False, str(e))
+        log_test("Fusion UnifiedOrchestrator (deprecated)", False, str(e))
     
     # 测试增强模块
     try:
