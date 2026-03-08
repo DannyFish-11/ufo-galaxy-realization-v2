@@ -227,29 +227,26 @@ class IntentParser:
                 logger.info("LLM intent parsing skipped: no provider available")
                 return None
 
-                resp = await router.chat(
-                    messages=messages,
-                    task_type="FAST_RESPONSE",
-                    temperature=0.1,
-                    max_tokens=256,
-                    response_format={"type": "json_object"},
-                )
-                content = resp.content
-                parsed = json.loads(content)
+            resp = await router.chat(
+                messages=messages,
+                task_type="FAST_RESPONSE",
+                temperature=0.1,
+                max_tokens=256,
+                response_format={"type": "json_object"},
+            )
+            content = resp.content
+            parsed = json.loads(content)
 
-                return ParsedIntent(
-                    intent=parsed.get("intent", "chat"),
-                    command=parsed.get("command", "chat"),
-                    targets=parsed.get("targets", ["llm"]),
-                    params=parsed.get("params", {"message": text}),
-                    confidence=float(parsed.get("confidence", 0.8)),
-                    raw_text=text,
-                    context_used=True,
-                    suggestions=[],
-                )
-            except Exception as e:
-                logger.warning(f"LLM intent parse via router failed: {e}")
-                return None
+            return ParsedIntent(
+                intent=parsed.get("intent", "chat"),
+                command=parsed.get("command", "chat"),
+                targets=parsed.get("targets", ["llm"]),
+                params=parsed.get("params", {"message": text}),
+                confidence=float(parsed.get("confidence", 0.8)),
+                raw_text=text,
+                context_used=True,
+                suggestions=[],
+            )
         except Exception as e:
             logger.warning(f"LLM intent parse failed: {e}")
             return None
