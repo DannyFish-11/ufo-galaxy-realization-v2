@@ -58,6 +58,41 @@ try:
 except ImportError:
     DEVICE_PROTOCOL_AVAILABLE = False
 
+# MCP 管理器
+try:
+    from core.mcp_manager import mcp_manager
+    MCP_MANAGER_AVAILABLE = True
+except ImportError:
+    MCP_MANAGER_AVAILABLE = False
+    mcp_manager = None
+
+# Skill 管理器
+try:
+    from core.skill_manager import skill_manager
+    SKILL_MANAGER_AVAILABLE = True
+except ImportError:
+    SKILL_MANAGER_AVAILABLE = False
+    skill_manager = None
+
+# 高级 Agent 系统
+try:
+    from core.agent_swarm import get_agent_swarm, SwarmConfig, SwarmStrategy
+    AGENT_SWARM_AVAILABLE = True
+except ImportError:
+    AGENT_SWARM_AVAILABLE = False
+
+try:
+    from core.special_forces_team import get_special_forces_team, TeamConfig, CoordinationMode
+    SPECIAL_FORCES_AVAILABLE = True
+except ImportError:
+    SPECIAL_FORCES_AVAILABLE = False
+
+try:
+    from core.twin_commander import get_twin_commander, ConsensusStrategy
+    TWIN_COMMANDER_AVAILABLE = True
+except ImportError:
+    TWIN_COMMANDER_AVAILABLE = False
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -970,3 +1005,290 @@ async def get_federation_health():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# MCP 服务器管理 API
+# ============================================================================
+
+@app.get("/api/v1/mcp/servers")
+async def list_mcp_servers():
+    """列出所有 MCP 服务器"""
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        return {"servers": mcp_manager.list_servers()}
+    return {"servers": []}
+
+
+@app.get("/api/v1/mcp/tools")
+async def list_mcp_tools():
+    """列出所有 MCP 工具"""
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        return {"tools": mcp_manager.list_tools()}
+    return {"tools": []}
+
+
+@app.get("/api/v1/mcp/servers/{name}/tools")
+async def list_mcp_server_tools(name: str):
+    """列出指定服务器的工具"""
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        all_tools = mcp_manager.list_tools()
+        server_tools = [t for t in all_tools if t.get("server_name") == name]
+        return {"tools": server_tools, "server": name}
+    return {"tools": [], "server": name}
+
+
+@app.post("/api/v1/mcp/servers/{name}/start")
+async def start_mcp_server(name: str):
+    """启动 MCP 服务器"""
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        try:
+            success = await mcp_manager.start_server(name)
+            return {"success": success}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    return {"success": False, "error": "MCP manager not available"}
+
+
+@app.post("/api/v1/mcp/servers/{name}/stop")
+async def stop_mcp_server(name: str):
+    """停止 MCP 服务器"""
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        try:
+            success = await mcp_manager.stop_server(name)
+            return {"success": success}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    return {"success": False, "error": "MCP manager not available"}
+
+
+@app.post("/api/v1/mcp/servers/add")
+async def add_mcp_server(request: dict):
+    """添加新 MCP 服务器"""
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        try:
+            name = request.get("name", "")
+            command = request.get("command", "")
+            env = request.get("env", {})
+            if not name or not command:
+                return {"success": False, "error": "name and command are required"}
+            await mcp_manager.load_server(name, command, env=env, auto_start=False)
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    return {"success": False, "error": "MCP manager not available"}
+
+
+# ============================================================================
+# Skill 管理 API
+# ============================================================================
+
+@app.get("/api/v1/skills")
+async def list_skills(tag: str = None, skill_type: str = None, status: str = None):
+    """列出所有技能"""
+    if SKILL_MANAGER_AVAILABLE and skill_manager:
+        kwargs = {}
+        if tag:
+            kwargs["tag"] = tag
+        skills = skill_manager.list_skills(**kwargs)
+        stats = getattr(skill_manager, "stats", {})
+        return {"skills": skills, "stats": stats}
+    return {"skills": [], "stats": {}}
+
+
+@app.post("/api/v1/skills/{skill_id}/execute")
+async def execute_skill(skill_id: str, request: dict):
+    """执行技能"""
+    if SKILL_MANAGER_AVAILABLE and skill_manager:
+        try:
+            params = request.get("params", {})
+            result = await skill_manager.execute(skill_id, **params)
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    return {"success": False, "error": "Skill manager not available"}
+
+
+@app.post("/api/v1/skills/{skill_id}/enable")
+async def enable_skill(skill_id: str):
+    """启用技能"""
+    if SKILL_MANAGER_AVAILABLE and skill_manager:
+        success = skill_manager.enable_skill(skill_id)
+        return {"success": success}
+    return {"success": False, "error": "Skill manager not available"}
+
+
+@app.post("/api/v1/skills/{skill_id}/disable")
+async def disable_skill(skill_id: str):
+    """禁用技能"""
+    if SKILL_MANAGER_AVAILABLE and skill_manager:
+        success = skill_manager.disable_skill(skill_id)
+        return {"success": success}
+    return {"success": False, "error": "Skill manager not available"}
+
+
+# ============================================================================
+# 高级 Agent 系统 API
+# ============================================================================
+
+@app.get("/api/v1/agents/swarm/status")
+async def get_swarm_status():
+    """获取蜂群状态"""
+    if AGENT_SWARM_AVAILABLE:
+        try:
+            swarm = get_agent_swarm()
+            return {"available": True, **swarm.get_status()}
+        except Exception as e:
+            return {"available": True, "error": str(e)}
+    return {"available": False}
+
+
+@app.post("/api/v1/agents/swarm/execute")
+async def execute_swarm(request: dict):
+    """执行蜂群任务"""
+    if not AGENT_SWARM_AVAILABLE:
+        return {"success": False, "error": "Agent Swarm not available"}
+    try:
+        task = request.get("task", "")
+        if not task:
+            return {"success": False, "error": "task is required"}
+        config = SwarmConfig(
+            swarm_size=request.get("swarm_size", 5),
+            strategy=SwarmStrategy(request.get("strategy", "same_task")),
+            aggregation=request.get("aggregation", "best"),
+        )
+        swarm = get_agent_swarm(config=config)
+        swarm.config = config
+        result = await swarm.execute(task, request.get("context"))
+        return {"success": True, **result.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v1/agents/team/status")
+async def get_team_status():
+    """获取特种部队状态"""
+    if SPECIAL_FORCES_AVAILABLE:
+        try:
+            team = get_special_forces_team()
+            return {"available": True, **team.get_status()}
+        except Exception as e:
+            return {"available": True, "error": str(e)}
+    return {"available": False}
+
+
+@app.post("/api/v1/agents/team/execute")
+async def execute_team(request: dict):
+    """执行特种部队任务"""
+    if not SPECIAL_FORCES_AVAILABLE:
+        return {"success": False, "error": "Special Forces not available"}
+    try:
+        task = request.get("task", "")
+        if not task:
+            return {"success": False, "error": "task is required"}
+        config = TeamConfig(
+            coordination_mode=CoordinationMode(request.get("coordination_mode", "parallel")),
+        )
+        team = get_special_forces_team(config=config)
+        team.config = config
+        result = await team.execute(task, request.get("context"))
+        return {"success": True, **result.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v1/agents/twin/status")
+async def get_twin_status():
+    """获取孪生指挥官状态"""
+    if TWIN_COMMANDER_AVAILABLE:
+        try:
+            cmd = get_twin_commander()
+            return {"available": True, **cmd.get_status()}
+        except Exception as e:
+            return {"available": True, "error": str(e)}
+    return {"available": False}
+
+
+@app.post("/api/v1/agents/twin/analyze")
+async def twin_analyze(request: dict):
+    """孪生指挥官分析"""
+    if not TWIN_COMMANDER_AVAILABLE:
+        return {"success": False, "error": "Twin Commander not available"}
+    try:
+        task = request.get("task", "")
+        if not task:
+            return {"success": False, "error": "task is required"}
+        cmd = get_twin_commander()
+        result = await cmd.analyze(task, request.get("context"))
+        return {"success": True, **result.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# 监控汇总 + 分类节点 API
+# ============================================================================
+
+@app.get("/api/v1/monitoring/summary")
+async def get_monitoring_summary():
+    """系统监控汇总 — Dynamic Island 数据源"""
+    summary = {
+        "nodes": {"total": 0, "healthy": 0},
+        "mcp_servers": {"total": 0, "running": 0},
+        "skills": {"total": 0, "enabled": 0},
+        "agents": {"swarm_available": AGENT_SWARM_AVAILABLE, "team_available": SPECIAL_FORCES_AVAILABLE, "twin_available": TWIN_COMMANDER_AVAILABLE},
+    }
+
+    if MCP_MANAGER_AVAILABLE and mcp_manager:
+        servers = mcp_manager.list_servers()
+        summary["mcp_servers"]["total"] = len(servers)
+        summary["mcp_servers"]["running"] = sum(1 for s in servers if s.get("status") == "running")
+
+    if SKILL_MANAGER_AVAILABLE and skill_manager:
+        skills = skill_manager.list_skills()
+        summary["skills"]["total"] = len(skills)
+        summary["skills"]["enabled"] = sum(1 for s in skills if s.get("status") == "enabled")
+
+    if API_MANAGER_AVAILABLE and api_manager:
+        nodes = api_manager.get_nodes()
+        summary["nodes"]["total"] = len(nodes)
+
+    return summary
+
+
+@app.get("/api/v1/nodes/categorized")
+async def get_categorized_nodes():
+    """按分类返回节点"""
+    categories = {
+        "Core": [], "LLM/AI": [], "Tools": [], "Physical": [],
+        "Intelligence": [], "Monitoring": [], "Advanced": [], "Other": [],
+    }
+
+    # 分类关键词映射
+    cat_keywords = {
+        "Core": ["statemachine", "oneapi", "tasker", "secret", "router", "auth", "filesystem", "git", "sandbox"],
+        "LLM/AI": ["transformer", "llm", "chat", "nlu", "model", "localllm"],
+        "Tools": ["slack", "github", "postgres", "sqlite", "ffmpeg", "ocr", "email", "tts", "deepl", "notion", "brave", "weather", "search", "calendar", "time", "news", "stock"],
+        "Physical": ["adb", "scrcpy", "apple", "uia", "linux", "ble", "ssh", "sftp", "mqtt", "can", "mav", "nfc", "desktop", "camera", "audio", "serial", "octoprint", "bambu", "android"],
+        "Intelligence": ["quantum", "graph", "symbolic", "planning", "causal", "geometric", "probabilistic", "swarm", "mediagen"],
+        "Monitoring": ["telemetry", "logger", "config", "health", "security", "backup", "multidevice"],
+        "Advanced": ["learning", "knowledge", "twin", "orchestrat", "network", "prompt", "memory", "code", "debug", "agent", "meta", "proactive", "smart", "context", "self", "vlm", "webrtc", "transport", "academic"],
+    }
+
+    nodes_data = []
+    if API_MANAGER_AVAILABLE and api_manager:
+        nodes_data = api_manager.get_nodes()
+
+    for node in nodes_data:
+        node_name = (node.get("name", "") + " " + str(node.get("node_id", ""))).lower()
+        placed = False
+        for cat, keywords in cat_keywords.items():
+            if any(kw in node_name for kw in keywords):
+                categories[cat].append(node)
+                placed = True
+                break
+        if not placed:
+            categories["Other"].append(node)
+
+    # 过滤空分类
+    categories = {k: v for k, v in categories.items() if v}
+    return {"categories": categories}

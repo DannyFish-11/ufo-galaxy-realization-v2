@@ -9,10 +9,10 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
-        
+
         * { font-family: 'Rajdhani', sans-serif; }
         body { background: #000000; overflow: hidden; }
-        
+
         .galaxy-bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(ellipse at center, #0a0a20 0%, #000000 70%),
@@ -20,11 +20,11 @@
                         radial-gradient(circle at 80% 20%, rgba(0, 150, 255, 0.15) 0%, transparent 50%);
             z-index: -2;
         }
-        
+
         .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
         .star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; }
         @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.2; } }
-        
+
         .galaxy-title {
             font-family: 'Orbitron', monospace;
             background: linear-gradient(135deg, #00d4ff, #7b2fff, #ff006e, #00d4ff);
@@ -33,28 +33,79 @@
             animation: gradient-shift 5s ease infinite;
         }
         @keyframes gradient-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-        
+
         .status-card { background: rgba(10, 10, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
         .galaxy-input { background: rgba(10, 10, 30, 0.8); border: 1px solid rgba(0, 212, 255, 0.3); transition: all 0.3s ease; }
         .galaxy-input:focus { border-color: rgba(0, 212, 255, 0.6); box-shadow: 0 0 20px rgba(0, 212, 255, 0.2); }
-        
+
         .tab-active { background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 47, 255, 0.2)); border-bottom: 2px solid #00d4ff; }
-        
+
         .valid { color: #00ff88; }
         .invalid { color: #ff4444; }
         .pending { color: #ffaa00; }
-        
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
         ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7b2fff); border-radius: 3px; }
+
+        .dynamic-island {
+            position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 100;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); cursor: pointer;
+        }
+        .dynamic-island.compact {
+            width: 220px; height: 30px; border-radius: 15px;
+            background: rgba(10, 10, 30, 0.85); border: 1px solid rgba(0, 212, 255, 0.3); backdrop-filter: blur(20px);
+        }
+        .dynamic-island.expanded {
+            width: 400px; border-radius: 18px;
+            background: rgba(10, 10, 30, 0.92); border: 1px solid rgba(0, 212, 255, 0.4);
+            backdrop-filter: blur(20px); box-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
+        }
+        .di-compact { display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 12px; }
+        .di-expanded { padding: 10px 14px; }
+        @keyframes island-pulse { 0%,100%{box-shadow:0 0 10px rgba(0,212,255,0.1)} 50%{box-shadow:0 0 20px rgba(255,170,0,0.3)} }
+        .dynamic-island.has-alert { animation: island-pulse 2s ease-in-out infinite; border-color: rgba(255,170,0,0.5); }
+
+        .node-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .node-dot.healthy { background: #00ff88; }
+        .node-dot.warning { background: #ffaa00; }
+        .node-dot.error { background: #ff4444; }
+        .node-dot.unknown { background: #666; }
+
+        .toggle-btn { position: relative; width: 36px; height: 20px; border-radius: 10px; cursor: pointer; transition: all 0.3s; }
+        .toggle-btn.on { background: #00d4ff; }
+        .toggle-btn.off { background: #444; }
+        .toggle-btn::after { content: ''; position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: all 0.3s; }
+        .toggle-btn.on::after { left: 18px; }
+        .toggle-btn.off::after { left: 2px; }
     </style>
 </head>
 <body class="text-white min-h-screen">
     <div class="galaxy-bg"></div>
     <div class="stars" ref="starsContainer"></div>
-    
+
     <div id="app" class="h-screen flex flex-col relative z-10">
-        
+
+        <!-- Dynamic Island -->
+        <div class="dynamic-island" :class="[diExpanded ? 'expanded' : 'compact', diHasAlert ? 'has-alert' : '']" @click="toggleDynamicIsland" @mouseleave="scheduleDiCollapse">
+            <div v-if="!diExpanded" class="di-compact">
+                <span class="node-dot mr-2" :class="diOverallStatus"></span>
+                <span class="text-xs text-gray-300">{{ diStatusText }}</span>
+                <span v-if="diActiveTasks > 0" class="ml-2 text-xs text-cyan-400">{{ diActiveTasks }} 任务</span>
+            </div>
+            <div v-else class="di-expanded">
+                <div class="grid grid-cols-4 gap-2 text-center mb-2">
+                    <div><div class="text-sm font-bold text-cyan-400">{{ diData.nodes?.healthy || 0 }}/{{ diData.nodes?.total || 0 }}</div><div class="text-xs text-gray-500">节点</div></div>
+                    <div><div class="text-sm font-bold text-purple-400">{{ diData.mcp_servers?.running || 0 }}/{{ diData.mcp_servers?.total || 0 }}</div><div class="text-xs text-gray-500">MCP</div></div>
+                    <div><div class="text-sm font-bold text-green-400">{{ diData.skills?.enabled || 0 }}/{{ diData.skills?.total || 0 }}</div><div class="text-xs text-gray-500">技能</div></div>
+                    <div><div class="text-sm font-bold text-pink-400">{{ diData.agents?.active || 0 }}</div><div class="text-xs text-gray-500">Agent</div></div>
+                </div>
+                <div v-if="diAlerts.length > 0" class="border-t border-white/10 pt-1">
+                    <div v-for="alert in diAlerts.slice(0, 3)" :key="alert" class="text-xs text-yellow-400 truncate">* {{ alert }}</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 顶部导航 -->
         <header class="px-6 py-3 border-b border-white/10 bg-black/30 backdrop-blur-md">
             <div class="flex items-center justify-between">
@@ -67,7 +118,7 @@
                     </div>
                     <span class="text-xs text-gray-500 font-mono">v2.3.25</span>
                 </div>
-                
+
                 <!-- 标签页 -->
                 <div class="flex space-x-1 text-sm">
                     <button @click="currentTab = 'chat'" :class="currentTab === 'chat' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">💬 对话</button>
@@ -75,18 +126,20 @@
                     <button @click="currentTab = 'tools'" :class="currentTab === 'tools' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🔧 工具</button>
                     <button @click="currentTab = 'nodes'" :class="currentTab === 'nodes' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🌐 节点</button>
                     <button @click="currentTab = 'devices'" :class="currentTab === 'devices' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">📱 设备</button>
+                    <button @click="currentTab = 'mcp'" :class="currentTab === 'mcp' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">⚡ MCP/技能</button>
+                    <button @click="currentTab = 'agents'" :class="currentTab === 'agents' ? 'tab-active' : ''" class="px-3 py-1.5 rounded-t-lg transition-all hover:bg-white/5">🐝 Agent</button>
                 </div>
-                
+
                 <div class="flex items-center space-x-3 text-xs">
                     <span class="text-green-400" v-if="configuredCount > 0">✓ {{ configuredCount }} 已配置</span>
                     <span class="text-gray-600 font-mono">{{ currentTime }}</span>
                 </div>
             </div>
         </header>
-        
+
         <!-- 主内容区 -->
         <main class="flex-1 overflow-hidden">
-            
+
             <!-- 对话页面 -->
             <div v-show="currentTab === 'chat'" class="h-full flex flex-col">
                 <div class="flex-1 overflow-auto p-4 space-y-3" ref="chatContainer">
@@ -95,14 +148,14 @@
                         <div class="text-gray-500 mb-2">L4 级自主性智能系统</div>
                         <div class="text-gray-600 text-sm">请先配置 API Key</div>
                     </div>
-                    
+
                     <div v-for="msg in messages" :key="msg.id" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
                         <div class="max-w-2xl rounded-xl p-3 text-sm" :class="msg.role === 'user' ? 'bg-cyan-900/30 border border-cyan-500/30' : 'bg-purple-900/30 border border-purple-500/30'">
                             <div class="whitespace-pre-wrap">{{ msg.content }}</div>
                             <div class="text-xs mt-1 opacity-50">{{ formatTime(msg.timestamp) }}</div>
                         </div>
                     </div>
-                    
+
                     <div v-if="isLoading" class="flex justify-start">
                         <div class="bg-purple-900/30 rounded-xl p-3">
                             <div class="flex space-x-1">
@@ -113,7 +166,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="p-3 border-t border-white/10 bg-black/30">
                     <div class="flex space-x-2">
                         <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="galaxy-input flex-1 rounded-lg px-3 py-2 text-sm outline-none">
@@ -121,11 +174,11 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- LLM 配置页面 -->
             <div v-show="currentTab === 'llm'" class="h-full overflow-auto p-4">
                 <div class="max-w-5xl mx-auto space-y-4">
-                    
+
                     <!-- 状态 -->
                     <div class="status-card rounded-xl p-3">
                         <div class="grid grid-cols-5 gap-3 text-center text-sm">
@@ -136,7 +189,7 @@
                             <div><div class="text-xl font-bold" :class="configStatus.oneapi_configured ? 'text-green-400' : 'text-red-400'">{{ configStatus.oneapi_configured ? '✓' : '✗' }}</div><div class="text-xs text-gray-500">OneAPI</div></div>
                         </div>
                     </div>
-                    
+
                     <!-- OneAPI -->
                     <div class="status-card rounded-xl p-3">
                         <h3 class="font-semibold mb-2">🔗 OneAPI 聚合器 (核心)</h3>
@@ -150,7 +203,7 @@
                         </div>
                         <div v-if="oneapiStatus" class="mt-2 text-xs" :class="oneapiStatus.valid ? 'valid' : 'invalid'">{{ oneapiStatus.message || oneapiStatus.error }}</div>
                     </div>
-                    
+
                     <!-- 直接模型 -->
                     <div class="status-card rounded-xl p-3">
                         <h3 class="font-semibold mb-2">🤖 直接模型 (细节)</h3>
@@ -170,7 +223,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 测试 -->
                     <div class="status-card rounded-xl p-3">
                         <h3 class="font-semibold mb-2">🧪 测试 LLM</h3>
@@ -182,10 +235,10 @@
                             <pre class="whitespace-pre-wrap">{{ testResult }}</pre>
                         </div>
                     </div>
-                    
+
                 </div>
             </div>
-            
+
             <!-- 工具配置页面 -->
             <div v-show="currentTab === 'tools'" class="h-full overflow-auto p-4">
                 <div class="max-w-5xl mx-auto">
@@ -194,7 +247,7 @@
                             <h3 class="font-semibold">🔧 工具 API 配置</h3>
                             <button @click="validateAllTools" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">验证全部</button>
                         </div>
-                        
+
                         <div class="grid grid-cols-3 gap-2">
                             <div v-for="tool in tools" :key="tool.tool_id" class="bg-black/30 rounded p-2">
                                 <div class="flex items-center justify-between mb-1">
@@ -215,23 +268,54 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- 节点页面 -->
-            <div v-show="currentTab === 'nodes'" class="h-full overflow-auto p-4">
-                <div class="max-w-5xl mx-auto">
-                    <div class="status-card rounded-xl p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold">🌐 节点状态</h3>
-                            <button @click="checkNodes" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">检查全部</button>
-                        </div>
 
+            <!-- 节点页面（增强版） -->
+            <div v-show="currentTab === 'nodes'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto space-y-3">
+                    <!-- 搜索和过滤栏 -->
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center space-x-3">
+                            <input v-model="nodeSearchQuery" type="text" placeholder="搜索节点..." class="galaxy-input flex-1 rounded px-2 py-1 text-sm outline-none">
+                            <select v-model="nodeFilter" class="galaxy-input rounded px-2 py-1 text-sm outline-none">
+                                <option value="all">全部分类</option>
+                                <option v-for="cat in Object.keys(nodeCategories)" :key="cat" :value="cat">{{ cat }}</option>
+                            </select>
+                            <button @click="loadCategorizedNodes" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
+                            <button @click="checkNodes" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-xs">检查全部</button>
+                        </div>
+                    </div>
+
+                    <!-- 分类显示 -->
+                    <div v-for="(catNodes, category) in filteredNodeCategories" :key="category" class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2 text-sm">{{ category }} <span class="text-xs text-gray-500">({{ catNodes.length }})</span></h3>
                         <div class="grid grid-cols-6 gap-1">
-                            <div v-for="node in nodes" :key="node.node_id" class="bg-black/30 rounded p-1 text-center cursor-pointer hover:bg-black/50">
-                                <div class="text-xs text-gray-500">{{ node.node_id }}</div>
-                                <div class="text-xs truncate">{{ node.name }}</div>
-                                <div class="text-xs" :class="node.status === 'healthy' ? 'valid' : 'text-gray-500'">{{ node.status || '?' }}</div>
+                            <div v-for="node in catNodes" :key="node.node_id"
+                                 class="bg-black/30 rounded p-1.5 text-center cursor-pointer hover:bg-black/50 transition-all"
+                                 :class="expandedNodeId === node.node_id ? 'col-span-6 bg-black/50' : ''"
+                                 @click="expandedNodeId = expandedNodeId === node.node_id ? null : node.node_id">
+                                <div class="flex items-center justify-center space-x-1">
+                                    <span class="node-dot" :class="node.status === 'healthy' ? 'healthy' : (node.status === 'warning' ? 'warning' : (node.status === 'error' ? 'error' : 'unknown'))"></span>
+                                    <span class="text-xs truncate">{{ node.name }}</span>
+                                </div>
+                                <div class="text-xs text-gray-600">{{ node.node_id }}</div>
+                                <!-- 展开详情 -->
+                                <div v-if="expandedNodeId === node.node_id" class="mt-2 text-left border-t border-white/10 pt-2">
+                                    <div class="grid grid-cols-3 gap-2 text-xs">
+                                        <div><span class="text-gray-500">端口:</span> {{ node.port || '-' }}</div>
+                                        <div><span class="text-gray-500">状态:</span> <span :class="node.status === 'healthy' ? 'valid' : 'text-gray-400'">{{ node.status || '未知' }}</span></div>
+                                        <div><span class="text-gray-500">类型:</span> {{ node.type || '-' }}</div>
+                                    </div>
+                                    <div v-if="node.capabilities" class="mt-1 text-xs">
+                                        <span class="text-gray-500">能力:</span>
+                                        <span v-for="cap in (Array.isArray(node.capabilities) ? node.capabilities : [])" :key="cap" class="inline-block bg-cyan-900/30 text-cyan-400 rounded px-1 mx-0.5 text-xs">{{ cap }}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div v-if="Object.keys(filteredNodeCategories).length === 0" class="status-card rounded-xl p-6 text-center">
+                        <div class="text-gray-500 text-sm">无匹配节点</div>
                     </div>
                 </div>
             </div>
@@ -269,12 +353,250 @@
                 </div>
             </div>
 
+            <!-- MCP/技能 管理页面 -->
+            <div v-show="currentTab === 'mcp'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto space-y-4">
+
+                    <!-- MCP 服务器 -->
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">⚡ MCP 服务器</h3>
+                            <button @click="loadMcpServers" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div v-for="server in mcpServers" :key="server.name" class="bg-black/30 rounded-lg p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="node-dot" :class="server.status === 'running' ? 'healthy' : 'unknown'"></span>
+                                        <span class="text-sm font-medium">{{ server.name }}</span>
+                                    </div>
+                                    <span class="text-xs text-gray-500">{{ server.tool_count || 0 }} 工具</span>
+                                </div>
+                                <div class="flex space-x-1">
+                                    <button @click="startMcpServer(server.name)" class="flex-1 py-1 rounded bg-green-600 hover:bg-green-500 text-xs" :disabled="server.status === 'running'">启动</button>
+                                    <button @click="stopMcpServer(server.name)" class="flex-1 py-1 rounded bg-red-600 hover:bg-red-500 text-xs" :disabled="server.status !== 'running'">停止</button>
+                                    <button @click="viewMcpTools(server.name)" class="flex-1 py-1 rounded bg-purple-600 hover:bg-purple-500 text-xs">工具</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 添加服务器 -->
+                        <div class="bg-black/20 rounded-lg p-2">
+                            <div class="text-xs text-gray-500 mb-1">添加新服务器</div>
+                            <div class="flex space-x-2">
+                                <input v-model="newMcpServer.name" type="text" placeholder="服务器名称" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                <input v-model="newMcpServer.command" type="text" placeholder="启动命令" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                <button @click="addMcpServer" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">添加</button>
+                            </div>
+                        </div>
+
+                        <!-- 工具浏览器 -->
+                        <div v-if="selectedMcpServer" class="mt-3 bg-black/20 rounded-lg p-2">
+                            <div class="text-xs text-gray-400 mb-2">{{ selectedMcpServer }} 的工具:</div>
+                            <div class="grid grid-cols-2 gap-1">
+                                <div v-for="tool in mcpTools" :key="tool.name" class="bg-black/30 rounded p-2">
+                                    <div class="text-xs font-medium text-cyan-400">{{ tool.name }}</div>
+                                    <div class="text-xs text-gray-500 truncate">{{ tool.description || '-' }}</div>
+                                </div>
+                            </div>
+                            <div v-if="mcpTools.length === 0" class="text-xs text-gray-600 text-center py-2">暂无工具</div>
+                        </div>
+                    </div>
+
+                    <!-- 技能管理 -->
+                    <div class="status-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold">🎯 技能管理</h3>
+                            <button @click="loadSkills" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-xs">刷新</button>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2 mb-3">
+                            <div v-for="skill in skillsList" :key="skill.id" class="bg-black/30 rounded-lg p-2">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs font-medium">{{ skill.name }}</span>
+                                    <div class="toggle-btn" :class="skill.enabled ? 'on' : 'off'" @click.stop="toggleSkill(skill)"></div>
+                                </div>
+                                <div class="text-xs text-gray-500">{{ skill.type || 'general' }}</div>
+                                <div v-if="skill.tags" class="mt-1">
+                                    <span v-for="tag in skill.tags" :key="tag" class="inline-block bg-purple-900/30 text-purple-400 rounded px-1 mr-0.5 text-xs">{{ tag }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 技能测试面板 -->
+                        <div class="bg-black/20 rounded-lg p-2">
+                            <div class="text-xs text-gray-500 mb-1">技能测试</div>
+                            <div class="flex space-x-2 mb-2">
+                                <select v-model="skillTestId" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                    <option value="">选择技能...</option>
+                                    <option v-for="skill in skillsList" :key="skill.id" :value="skill.id">{{ skill.name }}</option>
+                                </select>
+                                <button @click="executeSkillTest" class="px-3 py-1 rounded bg-green-600 hover:bg-green-500 text-xs" :disabled="!skillTestId">执行</button>
+                            </div>
+                            <textarea v-model="skillTestParams" placeholder='参数 JSON (如: {"key": "value"})' class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none h-16 resize-none"></textarea>
+                            <div v-if="skillTestResult" class="mt-2 p-2 bg-black/30 rounded text-xs">
+                                <pre class="whitespace-pre-wrap text-green-400">{{ skillTestResult }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent 系统页面 -->
+            <div v-show="currentTab === 'agents'" class="h-full overflow-auto p-4">
+                <div class="max-w-5xl mx-auto space-y-4">
+
+                    <!-- 蜂群 Swarm -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">🐝 蜂群 (Agent Swarm)</h3>
+
+                        <!-- 状态 -->
+                        <div class="grid grid-cols-4 gap-2 text-center text-xs mb-3">
+                            <div class="bg-black/30 rounded p-2"><div class="text-lg font-bold text-cyan-400">{{ swarmStatus.swarm_size || 5 }}</div><div class="text-gray-500">蜂群大小</div></div>
+                            <div class="bg-black/30 rounded p-2"><div class="text-lg font-bold text-green-400">{{ swarmStatus.active_agents || 0 }}</div><div class="text-gray-500">活跃Agent</div></div>
+                            <div class="bg-black/30 rounded p-2"><div class="text-lg font-bold text-purple-400">{{ swarmStatus.strategy || 'same_task' }}</div><div class="text-gray-500">策略</div></div>
+                            <div class="bg-black/30 rounded p-2"><div class="text-lg font-bold text-pink-400">{{ swarmStatus.max_concurrent || 10 }}</div><div class="text-gray-500">最大并发</div></div>
+                        </div>
+
+                        <!-- 配置表单 -->
+                        <div class="bg-black/20 rounded-lg p-2 space-y-2">
+                            <textarea v-model="swarmForm.task" placeholder="任务描述..." class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none h-16 resize-none"></textarea>
+                            <div class="flex space-x-2">
+                                <input v-model.number="swarmForm.swarm_size" type="number" min="2" max="20" placeholder="蜂群大小" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                <select v-model="swarmForm.strategy" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                    <option value="same_task">同任务</option>
+                                    <option value="split_task">拆分</option>
+                                    <option value="compete">竞争</option>
+                                </select>
+                                <select v-model="swarmForm.aggregation" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                    <option value="best">最优</option>
+                                    <option value="vote">投票</option>
+                                    <option value="merge">合并</option>
+                                </select>
+                                <button @click="executeSwarm" class="px-4 py-1 rounded bg-gradient-to-r from-cyan-500 to-purple-600 text-xs" :disabled="swarmLoading">
+                                    {{ swarmLoading ? '执行中...' : '启动蜂群' }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 结果 -->
+                        <div v-if="swarmResult" class="mt-3 bg-black/20 rounded-lg p-2">
+                            <div class="grid grid-cols-4 gap-2 text-center text-xs mb-2">
+                                <div><span class="text-gray-500">任务ID:</span> <span class="text-cyan-400">{{ swarmResult.task_id?.slice(0,8) || '-' }}</span></div>
+                                <div><span class="text-gray-500">成功:</span> <span class="valid">{{ swarmResult.successful || 0 }}</span></div>
+                                <div><span class="text-gray-500">失败:</span> <span class="invalid">{{ swarmResult.failed || 0 }}</span></div>
+                                <div><span class="text-gray-500">耗时:</span> <span class="text-purple-400">{{ (swarmResult.duration || 0).toFixed(1) }}s</span></div>
+                            </div>
+                            <div class="text-xs bg-black/30 rounded p-2 max-h-32 overflow-auto">
+                                <pre class="whitespace-pre-wrap">{{ swarmResult.aggregated_result || swarmResult.result || '无结果' }}</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 特种部队 -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">🎖️ 特种部队 (Special Forces)</h3>
+
+                        <!-- 团队组成 -->
+                        <div class="grid grid-cols-5 gap-1 text-xs mb-3">
+                            <div v-for="(member, role) in (teamStatus.composition || {})" :key="role" class="bg-black/30 rounded p-1.5 text-center">
+                                <div class="text-purple-400 font-medium">{{ role }}</div>
+                                <div class="text-gray-500 truncate">{{ member.provider }}/{{ member.model }}</div>
+                            </div>
+                        </div>
+
+                        <!-- 配置表单 -->
+                        <div class="bg-black/20 rounded-lg p-2 space-y-2">
+                            <textarea v-model="teamForm.task" placeholder="团队任务描述..." class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none h-16 resize-none"></textarea>
+                            <div class="flex space-x-2">
+                                <select v-model="teamForm.coordination_mode" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                    <option value="sequential">顺序协作</option>
+                                    <option value="parallel">并行协作</option>
+                                    <option value="pipeline">流水线</option>
+                                </select>
+                                <button @click="executeTeam" class="px-4 py-1 rounded bg-gradient-to-r from-purple-500 to-pink-600 text-xs" :disabled="teamLoading">
+                                    {{ teamLoading ? '执行中...' : '部署团队' }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 结果 -->
+                        <div v-if="teamResult" class="mt-3 bg-black/20 rounded-lg p-2">
+                            <div class="text-xs text-gray-400 mb-1">成员贡献:</div>
+                            <div v-for="(contrib, idx) in (teamResult.contributions || [])" :key="idx" class="bg-black/30 rounded p-1.5 mb-1 text-xs">
+                                <span class="text-purple-400 font-medium">{{ contrib.role || contrib.member }}:</span>
+                                <span class="text-gray-300 ml-1">{{ (contrib.result || contrib.output || '').slice(0, 150) }}</span>
+                            </div>
+                            <div class="mt-2 bg-black/30 rounded p-2 text-xs border-l-2 border-cyan-500">
+                                <div class="text-gray-400 mb-1">最终结果:</div>
+                                <pre class="whitespace-pre-wrap text-green-400">{{ teamResult.final_result || teamResult.result || '无结果' }}</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 孪生指挥官 -->
+                    <div class="status-card rounded-xl p-3">
+                        <h3 class="font-semibold mb-2">👥 孪生指挥官 (Twin Commander)</h3>
+
+                        <!-- 双指挥官配置 -->
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div class="bg-black/30 rounded-lg p-2 text-center">
+                                <div class="text-xs text-cyan-400 font-medium">Commander A</div>
+                                <div class="text-xs text-gray-500">{{ twinStatus.commander_a?.perspective || 'analytical' }}</div>
+                                <div class="text-xs text-gray-600">{{ twinStatus.commander_a?.provider || 'anthropic' }}/{{ twinStatus.commander_a?.model || 'claude' }}</div>
+                            </div>
+                            <div class="bg-black/30 rounded-lg p-2 text-center">
+                                <div class="text-xs text-pink-400 font-medium">Commander B</div>
+                                <div class="text-xs text-gray-500">{{ twinStatus.commander_b?.perspective || 'creative' }}</div>
+                                <div class="text-xs text-gray-600">{{ twinStatus.commander_b?.provider || 'openai' }}/{{ twinStatus.commander_b?.model || 'gpt-4o' }}</div>
+                            </div>
+                        </div>
+
+                        <!-- 配置表单 -->
+                        <div class="bg-black/20 rounded-lg p-2 space-y-2">
+                            <textarea v-model="twinForm.task" placeholder="分析任务描述..." class="galaxy-input w-full rounded px-2 py-1 text-xs outline-none h-16 resize-none"></textarea>
+                            <div class="flex space-x-2">
+                                <select v-model="twinForm.consensus_strategy" class="galaxy-input flex-1 rounded px-2 py-1 text-xs outline-none">
+                                    <option value="debate">辩论</option>
+                                    <option value="vote">投票</option>
+                                    <option value="defer_to_confidence">信心优先</option>
+                                    <option value="merge">合并</option>
+                                </select>
+                                <button @click="executeTwin" class="px-4 py-1 rounded bg-gradient-to-r from-cyan-500 to-pink-600 text-xs" :disabled="twinLoading">
+                                    {{ twinLoading ? '分析中...' : '双指挥官分析' }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 结果 -->
+                        <div v-if="twinResult" class="mt-3 bg-black/20 rounded-lg p-2">
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <div class="bg-black/30 rounded p-2 text-xs border-l-2 border-cyan-500">
+                                    <div class="text-cyan-400 font-medium mb-1">Commander A 分析:</div>
+                                    <pre class="whitespace-pre-wrap text-gray-300">{{ (twinResult.commander_a || twinResult.analysis_a || '').slice(0, 300) }}</pre>
+                                </div>
+                                <div class="bg-black/30 rounded p-2 text-xs border-l-2 border-pink-500">
+                                    <div class="text-pink-400 font-medium mb-1">Commander B 分析:</div>
+                                    <pre class="whitespace-pre-wrap text-gray-300">{{ (twinResult.commander_b || twinResult.analysis_b || '').slice(0, 300) }}</pre>
+                                </div>
+                            </div>
+                            <div class="bg-black/30 rounded p-2 text-xs border-t-2 border-purple-500">
+                                <div class="text-purple-400 font-medium mb-1">共识结果:</div>
+                                <pre class="whitespace-pre-wrap text-green-400">{{ twinResult.consensus || twinResult.result || '无共识' }}</pre>
+                                <div v-if="twinResult.confidence" class="mt-1 text-gray-500">信心度: {{ (twinResult.confidence * 100).toFixed(0) }}%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
-    
+
     <script>
-        const { createApp, ref, onMounted, computed, watch } = Vue;
-        
+        const { createApp, ref, reactive, onMounted, onUnmounted, computed, watch } = Vue;
+
         createApp({
             setup() {
                 const currentTab = ref('llm');
@@ -284,12 +606,12 @@
                 const currentTime = ref('');
                 const chatContainer = ref(null);
                 const starsContainer = ref(null);
-                
+
                 const configStatus = ref({});
                 const oneapiUrl = ref('http://localhost:8001/v1');
                 const oneapiKey = ref('');
                 const oneapiStatus = ref(null);
-                
+
                 const directProviders = ref({
                     openai: { name: 'OpenAI', apiKey: '', valid: false },
                     anthropic: { name: 'Anthropic', apiKey: '', valid: false },
@@ -300,14 +622,52 @@
                     gemini: { name: 'Gemini', apiKey: '', valid: false },
                     qwen: { name: '通义千问', apiKey: '', valid: false }
                 });
-                
+
                 const tools = ref([]);
                 const nodes = ref([]);
                 const devices = ref([]);
                 const devicesTimer = ref(null);
                 const testMessage = ref('Hello');
                 const testResult = ref('');
-                
+
+                // Nodes enhanced
+                const nodeCategories = ref({});
+                const nodeSearchQuery = ref('');
+                const expandedNodeId = ref(null);
+                const nodeFilter = ref('all');
+
+                // MCP/Skills
+                const mcpServers = ref([]);
+                const mcpTools = ref([]);
+                const selectedMcpServer = ref(null);
+                const skillsList = ref([]);
+                const skillTestId = ref('');
+                const skillTestParams = ref('');
+                const skillTestResult = ref('');
+                const newMcpServer = reactive({ name: '', command: '' });
+
+                // Dynamic Island
+                const diExpanded = ref(false);
+                const diData = ref({});
+                const diCollapseTimer = ref(null);
+                const diPollTimer = ref(null);
+
+                // Agent system
+                const swarmStatus = ref({});
+                const swarmForm = reactive({ task: '', swarm_size: 5, strategy: 'same_task', aggregation: 'best' });
+                const swarmResult = ref(null);
+                const swarmLoading = ref(false);
+
+                const teamStatus = ref({});
+                const teamForm = reactive({ task: '', coordination_mode: 'parallel' });
+                const teamResult = ref(null);
+                const teamLoading = ref(false);
+
+                const twinStatus = ref({});
+                const twinForm = reactive({ task: '', consensus_strategy: 'debate' });
+                const twinResult = ref(null);
+                const twinLoading = ref(false);
+
                 const configuredCount = computed(() => {
                     let count = 0;
                     if (oneapiKey.value) count++;
@@ -319,7 +679,50 @@
                     }
                     return count;
                 });
-                
+
+                // Dynamic Island computed
+                const diOverallStatus = computed(() => {
+                    const d = diData.value;
+                    if (!d.nodes) return 'unknown';
+                    const healthyRatio = (d.nodes?.healthy || 0) / Math.max(d.nodes?.total || 1, 1);
+                    if (healthyRatio > 0.8) return 'healthy';
+                    if (healthyRatio > 0.5) return 'warning';
+                    return 'error';
+                });
+
+                const diStatusText = computed(() => {
+                    const map = { healthy: '正常', warning: '警告', error: '异常', unknown: '未知' };
+                    return map[diOverallStatus.value] || '未知';
+                });
+
+                const diActiveTasks = computed(() => diData.value.agents?.active || 0);
+
+                const diHasAlert = computed(() => diOverallStatus.value === 'warning' || diOverallStatus.value === 'error');
+
+                const diAlerts = computed(() => {
+                    const alerts = [];
+                    const d = diData.value;
+                    if (d.nodes && d.nodes.healthy < d.nodes.total) alerts.push(`${d.nodes.total - d.nodes.healthy} 个节点不健康`);
+                    if (d.mcp_servers && d.mcp_servers.running < d.mcp_servers.total) alerts.push(`${d.mcp_servers.total - d.mcp_servers.running} 个MCP服务未运行`);
+                    if (d.skills && d.skills.enabled < d.skills.total) alerts.push(`${d.skills.total - d.skills.enabled} 个技能未启用`);
+                    return alerts;
+                });
+
+                const filteredNodeCategories = computed(() => {
+                    const cats = nodeCategories.value;
+                    const result = {};
+                    const query = nodeSearchQuery.value.toLowerCase();
+                    for (const [cat, catNodes] of Object.entries(cats)) {
+                        if (nodeFilter.value !== 'all' && nodeFilter.value !== cat) continue;
+                        const filtered = catNodes.filter(n => {
+                            if (!query) return true;
+                            return (n.name || '').toLowerCase().includes(query) || (n.node_id || '').toLowerCase().includes(query);
+                        });
+                        if (filtered.length > 0) result[cat] = filtered;
+                    }
+                    return result;
+                });
+
                 const generateStars = () => {
                     if (!starsContainer.value) return;
                     for (let i = 0; i < 80; i++) {
@@ -334,28 +737,45 @@
                         starsContainer.value.appendChild(star);
                     }
                 };
-                
+
                 const updateTime = () => { currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); };
-                
+
                 const loadConfigStatus = async () => {
                     try {
                         const response = await axios.get('/api/v1/config/status');
                         configStatus.value = response.data;
                     } catch (error) { console.error('Failed to load config status:', error); }
                 };
-                
+
                 const loadTools = async () => {
                     try {
                         const response = await axios.get('/api/v1/config/tools');
                         tools.value = (response.data.tools || []).map(t => ({ ...t, status: '' }));
                     } catch (error) { console.error('Failed to load tools:', error); }
                 };
-                
+
                 const loadNodes = async () => {
                     try {
                         const response = await axios.get('/api/v1/config/nodes');
                         nodes.value = response.data.nodes || [];
                     } catch (error) { console.error('Failed to load nodes:', error); }
+                };
+
+                const loadCategorizedNodes = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/nodes/categorized');
+                        nodeCategories.value = response.data.categories || {};
+                    } catch (error) {
+                        console.error('Failed to load categorized nodes:', error);
+                        // Fallback: group flat nodes list
+                        const cats = {};
+                        for (const node of nodes.value) {
+                            const cat = 'Other';
+                            if (!cats[cat]) cats[cat] = [];
+                            cats[cat].push(node);
+                        }
+                        nodeCategories.value = cats;
+                    }
                 };
 
                 const loadDevices = async () => {
@@ -365,13 +785,188 @@
                     } catch (error) { console.error('Failed to load devices:', error); }
                 };
 
+                // MCP methods
+                const loadMcpServers = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/mcp/servers');
+                        mcpServers.value = response.data.servers || [];
+                    } catch (error) {
+                        console.error('Failed to load MCP servers:', error);
+                        mcpServers.value = [];
+                    }
+                };
+
+                const startMcpServer = async (name) => {
+                    try {
+                        await axios.post(`/api/v1/mcp/servers/${name}/start`);
+                        await loadMcpServers();
+                    } catch (error) { console.error('Failed to start MCP server:', error); }
+                };
+
+                const stopMcpServer = async (name) => {
+                    try {
+                        await axios.post(`/api/v1/mcp/servers/${name}/stop`);
+                        await loadMcpServers();
+                    } catch (error) { console.error('Failed to stop MCP server:', error); }
+                };
+
+                const viewMcpTools = async (name) => {
+                    selectedMcpServer.value = name;
+                    try {
+                        const response = await axios.get(`/api/v1/mcp/servers/${name}/tools`);
+                        mcpTools.value = response.data.tools || [];
+                    } catch (error) {
+                        console.error('Failed to load MCP tools:', error);
+                        mcpTools.value = [];
+                    }
+                };
+
+                const addMcpServer = async () => {
+                    if (!newMcpServer.name || !newMcpServer.command) return;
+                    try {
+                        await axios.post('/api/v1/mcp/servers/add', { name: newMcpServer.name, command: newMcpServer.command });
+                        newMcpServer.name = '';
+                        newMcpServer.command = '';
+                        await loadMcpServers();
+                    } catch (error) { console.error('Failed to add MCP server:', error); }
+                };
+
+                // Skills methods
+                const loadSkills = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/skills');
+                        skillsList.value = response.data.skills || [];
+                    } catch (error) {
+                        console.error('Failed to load skills:', error);
+                        skillsList.value = [];
+                    }
+                };
+
+                const toggleSkill = async (skill) => {
+                    try {
+                        const endpoint = skill.enabled ? 'disable' : 'enable';
+                        await axios.post(`/api/v1/skills/${skill.id}/${endpoint}`);
+                        skill.enabled = !skill.enabled;
+                    } catch (error) { console.error('Failed to toggle skill:', error); }
+                };
+
+                const executeSkillTest = async () => {
+                    if (!skillTestId.value) return;
+                    skillTestResult.value = '执行中...';
+                    try {
+                        let params = {};
+                        if (skillTestParams.value.trim()) {
+                            params = JSON.parse(skillTestParams.value);
+                        }
+                        const response = await axios.post(`/api/v1/skills/${skillTestId.value}/execute`, params);
+                        skillTestResult.value = JSON.stringify(response.data, null, 2);
+                    } catch (error) {
+                        skillTestResult.value = '执行失败: ' + (error.response?.data?.detail || error.message);
+                    }
+                };
+
+                // Dynamic Island methods
+                const toggleDynamicIsland = () => {
+                    diExpanded.value = !diExpanded.value;
+                    if (diExpanded.value) {
+                        clearTimeout(diCollapseTimer.value);
+                        diCollapseTimer.value = setTimeout(() => { diExpanded.value = false; }, 5000);
+                    }
+                };
+
+                const scheduleDiCollapse = () => {
+                    if (diExpanded.value) {
+                        clearTimeout(diCollapseTimer.value);
+                        diCollapseTimer.value = setTimeout(() => { diExpanded.value = false; }, 3000);
+                    }
+                };
+
+                const loadMonitoringSummary = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/monitoring/summary');
+                        diData.value = response.data;
+                    } catch (error) { /* silent */ }
+                };
+
+                // Agent methods
+                const loadSwarmStatus = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/agents/swarm/status');
+                        swarmStatus.value = response.data;
+                    } catch (error) { swarmStatus.value = {}; }
+                };
+
+                const executeSwarm = async () => {
+                    if (!swarmForm.task) return;
+                    swarmLoading.value = true;
+                    swarmResult.value = null;
+                    try {
+                        const response = await axios.post('/api/v1/agents/swarm/execute', {
+                            task: swarmForm.task,
+                            swarm_size: swarmForm.swarm_size,
+                            strategy: swarmForm.strategy,
+                            aggregation: swarmForm.aggregation
+                        });
+                        swarmResult.value = response.data;
+                    } catch (error) {
+                        swarmResult.value = { result: '执行失败: ' + (error.response?.data?.detail || error.message) };
+                    }
+                    swarmLoading.value = false;
+                };
+
+                const loadTeamStatus = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/agents/team/status');
+                        teamStatus.value = response.data;
+                    } catch (error) { teamStatus.value = {}; }
+                };
+
+                const executeTeam = async () => {
+                    if (!teamForm.task) return;
+                    teamLoading.value = true;
+                    teamResult.value = null;
+                    try {
+                        const response = await axios.post('/api/v1/agents/team/execute', {
+                            task: teamForm.task,
+                            coordination_mode: teamForm.coordination_mode
+                        });
+                        teamResult.value = response.data;
+                    } catch (error) {
+                        teamResult.value = { result: '执行失败: ' + (error.response?.data?.detail || error.message) };
+                    }
+                    teamLoading.value = false;
+                };
+
+                const loadTwinStatus = async () => {
+                    try {
+                        const response = await axios.get('/api/v1/agents/twin/status');
+                        twinStatus.value = response.data;
+                    } catch (error) { twinStatus.value = {}; }
+                };
+
+                const executeTwin = async () => {
+                    if (!twinForm.task) return;
+                    twinLoading.value = true;
+                    twinResult.value = null;
+                    try {
+                        const response = await axios.post('/api/v1/agents/twin/analyze', {
+                            task: twinForm.task,
+                            consensus_strategy: twinForm.consensus_strategy
+                        });
+                        twinResult.value = response.data;
+                    } catch (error) {
+                        twinResult.value = { result: '分析失败: ' + (error.response?.data?.detail || error.message) };
+                    }
+                    twinLoading.value = false;
+                };
+
                 const saveOneAPI = async () => {
                     try {
                         await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value });
                         loadConfigStatus();
                     } catch (error) { alert('保存失败: ' + error.message); }
                 };
-                
+
                 const validateOneAPI = async () => {
                     oneapiStatus.value = { valid: false, message: '验证中...' };
                     try {
@@ -379,14 +974,14 @@
                         oneapiStatus.value = response.data;
                     } catch (error) { oneapiStatus.value = { valid: false, error: error.message }; }
                 };
-                
+
                 const saveProvider = async (name, apiKey) => {
                     try {
                         await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey });
                         loadConfigStatus();
                     } catch (error) { alert('保存失败: ' + error.message); }
                 };
-                
+
                 const validateProvider = async (name) => {
                     directProviders.value[name].valid = false;
                     try {
@@ -394,14 +989,14 @@
                         directProviders.value[name].valid = response.data.valid;
                     } catch (error) { directProviders.value[name].valid = false; }
                 };
-                
+
                 const saveTool = async (toolId, apiKey) => {
                     try {
                         await axios.post('/api/v1/config/tools/api-key', { tool_id: toolId, api_key: apiKey });
                         loadConfigStatus();
                     } catch (error) { alert('保存失败: ' + error.message); }
                 };
-                
+
                 const validateTool = async (toolId) => {
                     const tool = tools.value.find(t => t.tool_id === toolId);
                     if (tool) {
@@ -413,7 +1008,7 @@
                         } catch (error) { tool.status = error.message; }
                     }
                 };
-                
+
                 const validateAllTools = async () => {
                     for (const tool of tools.value) {
                         if (tool.apiKey) {
@@ -421,7 +1016,7 @@
                         }
                     }
                 };
-                
+
                 const testLLM = async () => {
                     testResult.value = '测试中...';
                     try {
@@ -429,15 +1024,23 @@
                         testResult.value = JSON.stringify(response.data, null, 2);
                     } catch (error) { testResult.value = '测试失败: ' + error.message; }
                 };
-                
+
                 const checkNodes = async () => {
                     try {
                         const response = await axios.post('/api/v1/config/nodes/check');
                         const results = response.data.results;
                         nodes.value.forEach(node => { node.status = results[node.node_id]?.success ? 'healthy' : 'error'; });
+                        // Also update categorized nodes
+                        for (const catNodes of Object.values(nodeCategories.value)) {
+                            for (const node of catNodes) {
+                                if (results[node.node_id]) {
+                                    node.status = results[node.node_id].success ? 'healthy' : 'error';
+                                }
+                            }
+                        }
                     } catch (error) { console.error('Failed to check nodes:', error); }
                 };
-                
+
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim() || isLoading.value) return;
                     const message = inputMessage.value.trim();
@@ -452,9 +1055,9 @@
                     }
                     isLoading.value = false;
                 };
-                
+
                 const formatTime = (date) => new Date(date).toLocaleTimeString('zh-CN', { hour12: false });
-                
+
                 watch(currentTab, (newTab, oldTab) => {
                     if (newTab === 'devices') {
                         loadDevices();
@@ -462,6 +1065,18 @@
                     } else if (oldTab === 'devices' && devicesTimer.value) {
                         clearInterval(devicesTimer.value);
                         devicesTimer.value = null;
+                    }
+                    if (newTab === 'nodes') {
+                        loadCategorizedNodes();
+                    }
+                    if (newTab === 'mcp') {
+                        loadMcpServers();
+                        loadSkills();
+                    }
+                    if (newTab === 'agents') {
+                        loadSwarmStatus();
+                        loadTeamStatus();
+                        loadTwinStatus();
                     }
                 });
 
@@ -472,14 +1087,39 @@
                     loadConfigStatus();
                     loadTools();
                     loadNodes();
+                    loadCategorizedNodes();
+                    // Dynamic Island polling
+                    loadMonitoringSummary();
+                    diPollTimer.value = setInterval(loadMonitoringSummary, 10000);
                 });
-                
+
+                onUnmounted(() => {
+                    if (diPollTimer.value) clearInterval(diPollTimer.value);
+                    if (devicesTimer.value) clearInterval(devicesTimer.value);
+                });
+
                 return {
                     currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
                     configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes, devices,
                     testMessage, testResult, configuredCount,
+                    // Nodes enhanced
+                    nodeCategories, nodeSearchQuery, expandedNodeId, nodeFilter, filteredNodeCategories,
+                    // MCP/Skills
+                    mcpServers, mcpTools, selectedMcpServer, skillsList, skillTestId, skillTestParams, skillTestResult, newMcpServer,
+                    // Dynamic Island
+                    diExpanded, diData, diOverallStatus, diStatusText, diActiveTasks, diHasAlert, diAlerts,
+                    // Agents
+                    swarmStatus, swarmForm, swarmResult, swarmLoading,
+                    teamStatus, teamForm, teamResult, teamLoading,
+                    twinStatus, twinForm, twinResult, twinLoading,
+                    // Methods
                     loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
-                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices, sendMessage, formatTime
+                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices, sendMessage, formatTime,
+                    loadCategorizedNodes, loadMcpServers, startMcpServer, stopMcpServer, viewMcpTools, addMcpServer,
+                    loadSkills, toggleSkill, executeSkillTest,
+                    toggleDynamicIsland, scheduleDiCollapse,
+                    executeSwarm, executeTeam, executeTwin,
+                    loadSwarmStatus, loadTeamStatus, loadTwinStatus
                 };
             }
         }).mount('#app');
