@@ -1,5 +1,5 @@
 """
-UFO Galaxy Fusion - Topology Manager
+Galaxy Fusion - Topology Manager
 
 三层球体拓扑管理器
 
@@ -487,7 +487,7 @@ class TopologyManager:
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')
-            ax.set_title('UFO Galaxy - Three-Layer Sphere Topology')
+            ax.set_title('Galaxy - Three-Layer Sphere Topology')
             
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()

@@ -1,3 +1,9 @@
+"""
+DEPRECATED — 请使用 core.multi_llm_router.get_llm_router() 替代。
+
+此模块仅保留供旧版测试引用。所有生产代码已迁移至 MultiLLMRouter。
+"""
+
 import os
 import json
 import logging

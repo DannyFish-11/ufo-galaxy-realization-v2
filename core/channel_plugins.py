@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 外部渠道插件框架（Channel Plugins）
+Galaxy - 外部渠道插件框架（Channel Plugins）
 ==============================================
 
 定义统一 ChannelAdapter 接口，允许系统接入不同外部通信渠道（飞书、Slack、企业微信、SMS 等）。
@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.ChannelPlugins")
+logger = logging.getLogger("Galaxy.ChannelPlugins")
 
 
 # ============================================================================

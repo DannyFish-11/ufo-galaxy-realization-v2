@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 命令路由引擎
+Galaxy - 命令路由引擎
 ==========================
 
 核心命令分发器，支持：
@@ -27,7 +27,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.CommandRouter")
+logger = logging.getLogger("Galaxy.CommandRouter")
 
 
 # ============================================================================

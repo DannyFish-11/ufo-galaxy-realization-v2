@@ -3,7 +3,7 @@
 # -*- coding: utf-8 -*-
 
 """
-UFO Galaxy - Node_28_Reserved
+Galaxy - Node_28_Reserved
 
 这是一个预留节点，实现了一个通用的插件化框架。
 它能够动态地发现、加载、执行和管理插件，为系统提供灵活的扩展能力。
@@ -54,7 +54,7 @@ class NodeConfig:
     """节点配置"""
     node_name: str = "Node_28_Reserved"
     log_level: LogLevel = LogLevel.INFO
-    plugin_dir: str = field(default_factory=lambda: os.getenv("UFO_PLUGIN_DIR", os.path.expanduser("~/ufo-plugins")))
+    plugin_dir: str = os.getenv("UFO_PLUGIN_DIR", "./plugins")
     health_check_port: int = 8080
 
 @dataclass
@@ -298,7 +298,7 @@ async def main():
         if "Example_Plugin" in service.plugins:
             print("\n" + "="*50)
             print("🚀 开始执行示例插件...")
-            result = await service.run_plugin("Example_Plugin", message="UFO Galaxy")
+            result = await service.run_plugin("Example_Plugin", message="Galaxy")
             print(f"插件执行结果: {result}")
             print("="*50 + "\n")
         else:

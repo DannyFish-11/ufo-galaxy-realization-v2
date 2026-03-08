@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 统一设备注册管理器
+Galaxy - 统一设备注册管理器
 ================================
 
 提供完整的设备注册、发现、管理功能
@@ -46,7 +46,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 
-logger = logging.getLogger("UFO-Galaxy.DeviceRegistry")
+logger = logging.getLogger("Galaxy.DeviceRegistry")
 
 
 # ============================================================================

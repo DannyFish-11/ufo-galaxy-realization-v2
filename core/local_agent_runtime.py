@@ -25,7 +25,7 @@ import traceback
 from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 
-logger = logging.getLogger("UFO-Galaxy.LocalRuntime")
+logger = logging.getLogger("Galaxy.LocalRuntime")
 
 
 @dataclass

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Cost Tracking Routes
+Galaxy - Cost Tracking Routes
 ====================================
 
 Routes:
@@ -13,7 +13,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:

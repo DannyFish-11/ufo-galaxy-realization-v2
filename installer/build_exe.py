@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy - Windows EXE 打包脚本
+Galaxy - Windows EXE 打包脚本
 使用 PyInstaller 将项目打包为可执行文件
 """
 
@@ -17,7 +17,7 @@ DIST_DIR = PROJECT_ROOT / "dist"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
 
 # 打包配置
-APP_NAME = "UFO_Galaxy"
+APP_NAME = "Galaxy"
 APP_VERSION = "1.0.0"
 APP_ICON = INSTALLER_DIR / "icon.ico"
 
@@ -49,7 +49,7 @@ def create_spec_file():
     print("[3/5] 创建打包配置...")
     
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
-# UFO Galaxy PyInstaller Spec File
+# Galaxy PyInstaller Spec File
 
 import os
 import sys
@@ -182,7 +182,7 @@ def create_installer_package():
     if dist_app_dir.exists():
         # 复制安装脚本
         shutil.copy(INSTALLER_DIR / "install_windows.bat", dist_app_dir)
-        shutil.copy(INSTALLER_DIR / "start_ufo_galaxy.bat", dist_app_dir)
+        shutil.copy(INSTALLER_DIR / "start_galaxy.bat", dist_app_dir)
         
         # 复制配置模板
         env_example = PROJECT_ROOT / ".env.example"
@@ -212,7 +212,7 @@ def create_installer_package():
 def main():
     """主函数"""
     print("=" * 60)
-    print(f"  UFO Galaxy Windows EXE 打包工具 v{APP_VERSION}")
+    print(f"  Galaxy Windows EXE 打包工具 v{APP_VERSION}")
     print("=" * 60)
     print()
     

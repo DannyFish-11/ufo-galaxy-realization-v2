@@ -1,4 +1,4 @@
-# UFO Galaxy — Grafana Datasource Provisioning
+# Galaxy — Grafana Datasource Provisioning
 apiVersion: 1
 
 datasources:

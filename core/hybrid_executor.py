@@ -29,7 +29,7 @@ from typing import Dict, Any, Optional, Callable, Awaitable, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.HybridExecutor")
+logger = logging.getLogger("Galaxy.HybridExecutor")
 
 
 class ExecutionLevel(str, Enum):

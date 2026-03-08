@@ -2,7 +2,7 @@
 DeepSeek OCR 2 适配器
 ====================
 
-为 UFO Galaxy 其他节点提供统一的 OCR 调用接口。
+为 Galaxy 其他节点提供统一的 OCR 调用接口。
 其他节点（如 Node_70_ALE、Node_36_UIAWindows、Node_113_AndroidVLM）
 可以直接导入此适配器来使用 DeepSeek OCR 2。
 
@@ -31,7 +31,7 @@ class DeepSeekOCRAdapter:
     """
     DeepSeek OCR 2 统一适配器
 
-    为 UFO Galaxy 系统内部各节点提供 OCR 能力。
+    为 Galaxy 系统内部各节点提供 OCR 能力。
     支持云端 API 和本地部署两种模式。
     """
 

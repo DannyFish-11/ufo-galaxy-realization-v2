@@ -1,17 +1,17 @@
 [Unit]
-Description=UFO Galaxy L4 Autonomous Intelligence System
+Description=Galaxy L4 Autonomous Intelligence System
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=ufo-galaxy
-Group=ufo-galaxy
-WorkingDirectory=/opt/ufo-galaxy
-EnvironmentFile=/opt/ufo-galaxy/.env
-Environment=PYTHONPATH=/opt/ufo-galaxy
+User=galaxy
+Group=galaxy
+WorkingDirectory=/opt/galaxy
+EnvironmentFile=/opt/galaxy/.env
+Environment=PYTHONPATH=/opt/galaxy
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /opt/ufo-galaxy/unified_launcher.py --host 0.0.0.0 --port 8080
+ExecStart=/usr/bin/python3 /opt/galaxy/unified_launcher.py --host 0.0.0.0 --port 8080
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
@@ -21,11 +21,11 @@ WatchdogSec=120
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ufo-galaxy/data /opt/ufo-galaxy/logs
+ReadWritePaths=/opt/galaxy/data /opt/galaxy/logs
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ufo-galaxy
+SyslogIdentifier=galaxy
 
 [Install]
 WantedBy=multi-user.target

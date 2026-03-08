@@ -17,7 +17,12 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.AgentFactory")
+try:
+    from core.monitoring import CircuitBreaker
+except ImportError:
+    CircuitBreaker = None
+
+logger = logging.getLogger("Galaxy.AgentFactory")
 
 
 # ───────────────────── Agent 消息通信 ─────────────────────
@@ -45,6 +50,8 @@ class AgentMessageBus:
     - 请求-回复模式（request / reply）
     """
 
+    MAX_QUEUE_SIZE = 1000  # 每个 Agent 队列的最大消息数
+
     def __init__(self):
         self._queues: Dict[str, asyncio.Queue] = {}
         self._pending_acks: Dict[str, asyncio.Event] = {}
@@ -53,7 +60,7 @@ class AgentMessageBus:
     def register(self, agent_id: str):
         """为 Agent 注册一个消息队列"""
         if agent_id not in self._queues:
-            self._queues[agent_id] = asyncio.Queue()
+            self._queues[agent_id] = asyncio.Queue(maxsize=self.MAX_QUEUE_SIZE)
 
     def unregister(self, agent_id: str):
         if agent_id in self._queues:
@@ -374,12 +381,26 @@ class AgentFactory:
     3. split_agent() - 现有 Agent 根据负载分裂为多个子 Agent
     """
 
+    # 生产可用性配置
+    MAX_AGENTS = 500              # 最大 Agent 数
+    CLEANUP_INTERVAL = 60         # TTL 清理间隔（秒）
+    MAX_CREATES_PER_MINUTE = 50   # 每分钟最大创建数
+    STATE_FILE = "data/agent_state.json"
+
     def __init__(self, llm_router=None):
         self.llm_router = llm_router
         self.agents: Dict[str, TaskAgent] = {}
         self.agent_tree: Dict[str, List[str]] = {}  # parent_id → [child_ids]
         self._task_handlers: Dict[str, Callable] = {}
         self.message_bus = get_message_bus()
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._creation_timestamps: List[float] = []  # 速率限制追踪
+        # LLM 调用熔断器
+        self._llm_circuit_breaker = (
+            CircuitBreaker(name="agent_llm", failure_threshold=5, recovery_timeout=30.0)
+            if CircuitBreaker else None
+        )
+        self._load_state()
         logger.info("AgentFactory 已初始化")
 
     # ─────── 模式 1: 模板创建 ─────────
@@ -645,11 +666,20 @@ class AgentFactory:
                     *[self._run_agent(c.id) for c in children],
                     return_exceptions=True,
                 )
-                # 收集执行结果并通过消息总线通知父 Agent
+                # 收集执行结果，区分成功和失败
                 child_results = []
+                success_count = 0
+                fail_count = 0
                 for i, child in enumerate(children):
                     r = results[i]
-                    result_payload = r if not isinstance(r, Exception) else {"error": str(r)}
+                    if isinstance(r, BaseException):
+                        result_payload = {"error": str(r), "error_type": type(r).__name__}
+                        fail_count += 1
+                        agent.metrics["tasks_failed"] += 1
+                        logger.warning(f"子 Agent {child.id} 执行失败: {r}")
+                    else:
+                        result_payload = r if isinstance(r, dict) else {"result": r}
+                        success_count += 1
                     child_results.append(result_payload)
                     # 发送结果消息给父 Agent
                     result_msg = AgentMessage(
@@ -660,10 +690,26 @@ class AgentFactory:
                         payload=result_payload if isinstance(result_payload, dict) else {},
                     )
                     await self.message_bus.send(result_msg)
+
+                # 如果所有子 Agent 都失败，回退到父 Agent 串行执行
+                if fail_count == len(children) and agent.task_queue:
+                    logger.warning(
+                        f"所有子 Agent 均失败，回退到父 Agent {agent_id} 串行执行"
+                    )
+                    agent.state = AgentState.WORKING
+                    fallback_result = await self._run_agent(agent_id)
+                    return {
+                        "strategy": "split_fallback_serial",
+                        "children_failed": [c.id for c in children],
+                        "fallback_result": fallback_result,
+                    }
+
                 agent.state = AgentState.IDLE
                 return {
                     "strategy": "split_and_parallel",
                     "children": [c.id for c in children],
+                    "success_count": success_count,
+                    "fail_count": fail_count,
                     "results": child_results,
                 }
 
@@ -686,15 +732,22 @@ class AgentFactory:
 
             try:
                 if self.llm_router:
-                    # 用 LLM 执行
+                    # 用 LLM 执行（带熔断器保护）
                     messages = [
                         {"role": "system", "content": agent.config.system_prompt},
                         {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
                     ]
-                    resp = await self.llm_router.chat(
-                        messages=messages,
-                        task_type="agent_control",
-                    )
+
+                    async def _llm_call():
+                        return await self.llm_router.chat(
+                            messages=messages,
+                            task_type="agent_control",
+                        )
+
+                    if self._llm_circuit_breaker:
+                        resp = await self._llm_circuit_breaker.execute(_llm_call)
+                    else:
+                        resp = await _llm_call()
                     result = {"task": task, "output": resp.content, "provider": resp.provider}
                 else:
                     # 无 LLM，模拟执行
@@ -702,6 +755,7 @@ class AgentFactory:
                         "task": task,
                         "output": f"Agent {agent.config.name} 已处理任务（无 LLM 模式）",
                         "simulated": True,
+                        "status": "simulated",
                     }
 
                 latency = (time.monotonic() - t0) * 1000
@@ -711,23 +765,49 @@ class AgentFactory:
                 agent.completed_tasks.append(result)
                 results.append(result)
 
+                if result.get("simulated"):
+                    logger.warning(
+                        f"Agent {agent_id} task was SIMULATED (no LLM): "
+                        f"{task.get('description', str(task)[:80])}"
+                    )
+
             except Exception as e:
                 agent.metrics["tasks_failed"] += 1
                 results.append({"task": task, "error": str(e)})
 
         agent.state = AgentState.IDLE
         agent.last_active = time.time()
-        return {"agent_id": agent_id, "results": results}
+        any_simulated = any(r.get("simulated") for r in results)
+        return {
+            "agent_id": agent_id,
+            "results": results,
+            "status": "simulated" if any_simulated else "completed",
+        }
 
     # ─────── 内部工具 ─────────
 
+    def _check_rate_limit(self):
+        """检查 Agent 创建速率限制"""
+        now = time.time()
+        # 清理 1 分钟前的记录
+        self._creation_timestamps = [t for t in self._creation_timestamps if now - t < 60]
+        if len(self._creation_timestamps) >= self.MAX_CREATES_PER_MINUTE:
+            raise RuntimeError(
+                f"Agent 创建速率超限: {len(self._creation_timestamps)}/{self.MAX_CREATES_PER_MINUTE} per minute"
+            )
+        if len(self.agents) >= self.MAX_AGENTS:
+            raise RuntimeError(f"Agent 数量超限: {len(self.agents)}/{self.MAX_AGENTS}")
+
     def _register_agent(self, agent: TaskAgent):
+        self._check_rate_limit()
         self.agents[agent.id] = agent
         self.message_bus.register(agent.id)
+        self._creation_timestamps.append(time.time())
         if agent.parent_id:
             if agent.parent_id not in self.agent_tree:
                 self.agent_tree[agent.parent_id] = []
             self.agent_tree[agent.parent_id].append(agent.id)
+        self._persist_state()
 
     def _get_depth(self, parent_id: Optional[str]) -> int:
         if parent_id and parent_id in self.agents:
@@ -785,9 +865,274 @@ class AgentFactory:
             and now - a.created_at > a.config.ttl
         ]
         for aid in expired:
+            self.message_bus.unregister(aid)
             del self.agents[aid]
+            # 从 agent_tree 中清理
+            for parent_id in list(self.agent_tree.keys()):
+                if aid in self.agent_tree[parent_id]:
+                    self.agent_tree[parent_id].remove(aid)
         if expired:
             logger.info(f"清理了 {len(expired)} 个过期 Agent")
+            self._persist_state()
+
+    # ─────── 生命周期管理 ─────────
+
+    async def start_cleanup_loop(self):
+        """启动定期清理任务"""
+        if self._cleanup_task is not None:
+            return
+
+        async def _loop():
+            while True:
+                await asyncio.sleep(self.CLEANUP_INTERVAL)
+                try:
+                    self.cleanup_expired()
+                except Exception as e:
+                    logger.error(f"Agent 清理循环异常: {e}")
+
+        self._cleanup_task = asyncio.create_task(_loop())
+        logger.info(f"Agent TTL 清理循环已启动 (间隔 {self.CLEANUP_INTERVAL}s)")
+
+    async def stop_cleanup_loop(self):
+        """停止清理任务"""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+            logger.info("Agent TTL 清理循环已停止")
+
+    # ─────── 状态持久化 ─────────
+
+    def _persist_state(self):
+        """持久化 Agent 状态到磁盘"""
+        import os as _os
+        state_dir = _os.path.dirname(self.STATE_FILE)
+        if state_dir:
+            _os.makedirs(state_dir, exist_ok=True)
+        try:
+            state = {
+                "agents": {},
+                "agent_tree": self.agent_tree,
+                "timestamp": time.time(),
+            }
+            for aid, agent in self.agents.items():
+                if agent.state in (AgentState.TERMINATED, AgentState.COMPLETED):
+                    continue  # 不持久化已终止的 Agent
+                state["agents"][aid] = {
+                    "id": agent.id,
+                    "config": {
+                        "role": agent.config.role.value,
+                        "name": agent.config.name,
+                        "description": agent.config.description,
+                        "system_prompt": agent.config.system_prompt,
+                        "max_subtasks": agent.config.max_subtasks,
+                        "max_depth": agent.config.max_depth,
+                        "split_threshold": agent.config.split_threshold,
+                        "ttl": agent.config.ttl,
+                    },
+                    "state": agent.state.value,
+                    "parent_id": agent.parent_id,
+                    "children_ids": agent.children_ids,
+                    "creation_mode": agent.creation_mode.value,
+                    "depth": agent.depth,
+                    "created_at": agent.created_at,
+                    "last_active": agent.last_active,
+                    "metrics": agent.metrics,
+                }
+            with open(self.STATE_FILE, "w") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"Agent 状态持久化失败: {e}")
+
+    def _load_state(self):
+        """从磁盘恢复 Agent 状态"""
+        import os as _os
+        if not _os.path.exists(self.STATE_FILE):
+            return
+        try:
+            with open(self.STATE_FILE) as f:
+                state = json.load(f)
+
+            self.agent_tree = state.get("agent_tree", {})
+            loaded = 0
+            for aid, adata in state.get("agents", {}).items():
+                cfg_data = adata.get("config", {})
+                try:
+                    role = AgentRole(cfg_data.get("role", "executor"))
+                except ValueError:
+                    role = AgentRole.EXECUTOR
+
+                config = AgentConfig(
+                    role=role,
+                    name=cfg_data.get("name", "restored_agent"),
+                    description=cfg_data.get("description", ""),
+                    capabilities=[],
+                    system_prompt=cfg_data.get("system_prompt", ""),
+                    max_subtasks=cfg_data.get("max_subtasks", 5),
+                    max_depth=cfg_data.get("max_depth", 3),
+                    split_threshold=cfg_data.get("split_threshold", 3),
+                    ttl=cfg_data.get("ttl", 3600),
+                )
+
+                try:
+                    agent_state = AgentState(adata.get("state", "idle"))
+                except ValueError:
+                    agent_state = AgentState.IDLE
+
+                try:
+                    creation_mode = CreationMode(adata.get("creation_mode", "template"))
+                except ValueError:
+                    creation_mode = CreationMode.TEMPLATE
+
+                agent = TaskAgent(
+                    id=aid,
+                    config=config,
+                    state=agent_state,
+                    parent_id=adata.get("parent_id"),
+                    children_ids=adata.get("children_ids", []),
+                    creation_mode=creation_mode,
+                    depth=adata.get("depth", 0),
+                    created_at=adata.get("created_at", time.time()),
+                    last_active=adata.get("last_active", time.time()),
+                    metrics=adata.get("metrics", {}),
+                )
+                self.agents[aid] = agent
+                self.message_bus.register(aid)
+                loaded += 1
+
+            if loaded:
+                logger.info(f"从磁盘恢复了 {loaded} 个 Agent")
+        except Exception as e:
+            logger.warning(f"Agent 状态恢复失败: {e}")
+
+    # ─────── 分形任务 ─────────
+
+    async def create_fractal_task(
+        self, task_description: str, context: Optional[Dict] = None
+    ) -> Dict:
+        """
+        通过 FractalExecutor 执行分形递归任务分解。
+
+        适用于复杂多步骤任务 — FractalAgent 会自动评估复杂度，
+        递归分解子任务，并行执行后合并结果。
+        """
+        from core.fractal_agent import get_fractal_executor
+
+        executor = get_fractal_executor(
+            llm_router=self.llm_router,
+            agent_factory=self,
+        )
+        result = await executor.run(task_description, context)
+
+        return {
+            "success": result.success,
+            "reply": result.summary if hasattr(result, "summary") else str(result),
+            "data": {
+                "total_agents": result.total_agents if hasattr(result, "total_agents") else 0,
+                "latency_ms": result.latency_ms if hasattr(result, "latency_ms") else 0,
+                "mode": "fractal",
+            },
+        }
+
+    # ─────── 统一模板注册表 ─────────
+
+    def register_template(self, name: str, config: AgentConfig):
+        """动态注册新的 Agent 模板（运行时扩展）"""
+        AGENT_TEMPLATES[name] = config
+        logger.info(f"模板注册: {name} ({config.role.value})")
+
+    def list_templates(self) -> List[Dict]:
+        """列出所有可用模板（含内置 + 动态注册）"""
+        result = []
+        for name, cfg in AGENT_TEMPLATES.items():
+            result.append({
+                "name": name,
+                "role": cfg.role.value,
+                "description": cfg.description,
+                "capabilities": [c.name for c in cfg.capabilities],
+                "max_subtasks": cfg.max_subtasks,
+                "max_depth": cfg.max_depth,
+            })
+        return result
+
+    def create_unified(
+        self,
+        agent_type: str,
+        task_description: str = "",
+        template_name: str = "",
+        device_id: str = "",
+        device_type: str = "",
+        context: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        统一创建接口 — 支持所有 Agent 类型:
+        - "task"    → create_from_template / create_from_llm
+        - "device"  → DeviceAgentManager.create_agent
+        - "twin"    → DigitalTwinEngine.create_twin
+        - "fractal" → create_fractal_task (async, 返回占位)
+
+        Returns: {"agent_id": ..., "type": ..., "status": ...}
+        """
+        if agent_type == "task":
+            if template_name and template_name in AGENT_TEMPLATES:
+                agent = self.create_from_template(template_name)
+            else:
+                template = self._match_template(task_description or "coordinator")
+                agent = self.create_from_template(template)
+            return {
+                "agent_id": agent.id,
+                "type": "task",
+                "role": agent.config.role.value,
+                "name": agent.config.name,
+                "status": agent.state.value,
+            }
+
+        elif agent_type == "device":
+            try:
+                from core.device_agent_manager import DeviceAgentManager
+                manager = DeviceAgentManager()
+                # DeviceAgentManager.register_device is async and requires DeviceInfo
+                # For sync unified creation, return a placeholder with info
+                return {
+                    "agent_id": device_id or f"dev_{uuid.uuid4().hex[:8]}",
+                    "type": "device",
+                    "device_type": device_type or "generic",
+                    "status": "ready",
+                    "note": "Use POST /api/v1/devices/register for full device registration",
+                }
+            except Exception as e:
+                return {"agent_id": None, "type": "device", "error": str(e)}
+
+        elif agent_type == "twin":
+            try:
+                from core.digital_twin_engine import get_digital_twin_engine
+                engine = get_digital_twin_engine()
+                twin = engine.create_twin(
+                    device_id=device_id or f"virtual_{uuid.uuid4().hex[:8]}",
+                    device_type=device_type or "generic",
+                    initial_state=context,
+                )
+                return {
+                    "agent_id": twin.twin_id,
+                    "type": "twin",
+                    "device_id": twin.device_id,
+                    "status": twin.status.value,
+                }
+            except Exception as e:
+                return {"agent_id": None, "type": "twin", "error": str(e)}
+
+        elif agent_type == "fractal":
+            return {
+                "agent_id": f"fractal_pending_{uuid.uuid4().hex[:8]}",
+                "type": "fractal",
+                "status": "use create_fractal_task() for async execution",
+            }
+
+        else:
+            raise ValueError(f"未知 Agent 类型: {agent_type}，可用: task, device, twin, fractal")
 
     def get_status(self) -> Dict:
         by_state = {}
@@ -800,6 +1145,7 @@ class AgentFactory:
             "total_agents": len(self.agents),
             "by_state": by_state,
             "by_creation_mode": by_mode,
+            "templates": list(AGENT_TEMPLATES.keys()),
             "agent_tree": self.get_agent_tree(),
         }
 

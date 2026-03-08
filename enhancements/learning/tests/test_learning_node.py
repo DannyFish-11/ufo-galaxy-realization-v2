@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime
 
 import sys
-sys.path.insert(0, '/mnt/okcomputer/output/ufo-galaxy-v5/enhancements/learning')
+sys.path.insert(0, '/mnt/okcomputer/output/galaxy-v5/enhancements/learning')
 
 # Import models from learning_node
 from learning_node import (

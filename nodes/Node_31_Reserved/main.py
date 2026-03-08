@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-UFO Galaxy - Node_31_Reserved: 通用插件框架节点
+Galaxy - Node_31_Reserved: 通用插件框架节点
 
 此节点实现了一个通用的插件化框架，允许在运行时动态加载和管理插件。
 它被设计为可扩展的，以便在未来根据具体需求添加新的功能模块。
@@ -49,7 +49,7 @@ class NodeConfig:
     """节点配置信息"""
     node_name: str = "Node_31_Reserved"
     log_level: str = "INFO"
-    plugin_dir: str = field(default_factory=lambda: os.getenv("UFO_PLUGIN_DIR", os.path.expanduser("~/ufo-plugins")))
+    plugin_dir: str = os.getenv("UFO_PLUGIN_DIR", "./plugins")
     health_check_port: int = 8080
 
 @dataclass
@@ -300,7 +300,7 @@ async def main():
 
 if __name__ == "__main__":
     # 为了演示，创建一个示例插件
-    plugin_dir = os.path.expanduser("~/ufo-plugins")
+    plugin_dir = os.getenv("UFO_PLUGIN_DIR", "./plugins")
     os.makedirs(plugin_dir, exist_ok=True)
     sample_plugin_code = """
 from typing import Any

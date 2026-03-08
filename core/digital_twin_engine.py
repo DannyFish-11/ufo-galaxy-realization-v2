@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import deque
 
-logger = logging.getLogger("UFO-Galaxy.DigitalTwin")
+logger = logging.getLogger("Galaxy.DigitalTwin")
 
 
 # ───────────────────── 数据模型 ─────────────────────
@@ -202,6 +202,7 @@ class DigitalTwin:
     async def _sync_from_physical(self):
         """从物理设备拉取状态"""
         if not self._state_fetcher:
+            logger.warning(f"Twin {self.twin_id}: no state_fetcher configured, skipping sync")
             return
 
         try:

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Node & Agent Routes
+Galaxy - Node & Agent Routes
 ===================================
 
 Routes:
@@ -17,7 +17,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.auth import require_auth
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -30,7 +32,7 @@ from core.routes._shared import (
 from core.routes._helpers import nodes_root, _load_node, _execute_node
 from core.routes._models import NodeCallRequest
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -38,12 +40,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
 
     from core.scheduler import AutonomousScheduler
-    from core.llm_manager import LLMManager
+    from core.multi_llm_router import get_llm_router
 
     scheduler = AutonomousScheduler(nodes_root)
-    llm_manager = LLMManager(os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.json"
-    ))
+    llm_router = get_llm_router()
 
     class AutonomousRequest(BaseModel):
         instruction: str
@@ -116,7 +116,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         })
 
     @router.post("/api/v1/agent/deploy")
-    async def deploy_agent(req: AgentDeployRequest):
+    async def deploy_agent(req: AgentDeployRequest, auth: dict = Depends(require_auth)):
         """
         部署 Agent 到端侧设备
 
@@ -171,7 +171,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/v1/agent/autonomous")
-    async def autonomous_execute(req: AutonomousRequest):
+    async def autonomous_execute(req: AutonomousRequest, auth: dict = Depends(require_auth)):
         """自主调度接口：接收自然语言指令，自动规划并执行节点任务 (ReAct Loop)"""
         try:
             async def node_executor(node_id: str, action: str, params: dict):
@@ -208,7 +208,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 plan_result = await scheduler.plan_and_execute(
                     req.instruction,
-                    llm_manager,
+                    llm_router,
                     execution_context
                 )
                 return plan_result
@@ -232,6 +232,51 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             logger.error(f"Autonomous execution failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    # ─────── Agent Factory Unified API ─────────
+
+    class AgentCreateRequest(BaseModel):
+        agent_type: str = "task"           # task / device / twin / fractal
+        task_description: str = ""
+        template_name: str = ""
+        device_id: str = ""
+        device_type: str = ""
+        context: Dict[str, Any] = {}
+
+    @router.get("/api/v1/agent/templates")
+    async def list_agent_templates():
+        """列出所有可用 Agent 模板"""
+        from core.agent_factory import get_agent_factory
+        factory = get_agent_factory(llm_router)
+        return JSONResponse({
+            "templates": factory.list_templates(),
+            "agent_types": ["task", "device", "twin", "fractal"],
+        })
+
+    @router.get("/api/v1/agent/status")
+    async def agent_factory_status():
+        """Agent 工厂状态"""
+        from core.agent_factory import get_agent_factory
+        factory = get_agent_factory(llm_router)
+        return JSONResponse(factory.get_status())
+
+    @router.post("/api/v1/agent/create")
+    async def create_agent_unified(req: AgentCreateRequest, auth: dict = Depends(require_auth)):
+        """统一 Agent 创建接口"""
+        from core.agent_factory import get_agent_factory
+        factory = get_agent_factory(llm_router)
+        try:
+            result = factory.create_unified(
+                agent_type=req.agent_type,
+                task_description=req.task_description,
+                template_name=req.template_name,
+                device_id=req.device_id,
+                device_type=req.device_type,
+                context=req.context,
+            )
+            return JSONResponse(result)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     @router.post("/api/v1/nodes/call")
     async def call_node(req: NodeCallRequest):

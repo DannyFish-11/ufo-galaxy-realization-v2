@@ -2,7 +2,7 @@
 name: weather
 description: "Get current weather and forecasts via wttr.in"
 version: "1.0.0"
-author: "UFO Galaxy"
+author: "Galaxy"
 tags: ["weather", "api", "forecast"]
 homepage: "https://wttr.in"
 ---

@@ -1,6 +1,6 @@
 """
 Node 54: Symbolic Math & Formal Verification
-UFO Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
+Galaxy 64-Core MCP Matrix - Phase 5: Scientific Brain
 
 Three-layer verification pipeline for mathematical formulas.
 """
@@ -190,9 +190,11 @@ class SymbolicEngine:
             # Replace ^ with **
             expr = expr.replace('^', '**')
             
-            # Safe evaluation (very limited)
+            # Safe evaluation (very limited) — pre-validate expression chars
+            if not re.match(r'^[\d\s\+\-\*/\.\(\)\,\*abs\minmax]+$', expr):
+                return None
             allowed_names = {"abs": abs, "min": min, "max": max}
-            result = eval(expr, {"__builtins__": {}}, allowed_names)
+            result = eval(expr, {"__builtins__": {}}, allowed_names)  # noqa: S307
             return float(result)
         except Exception:
             return None
@@ -512,7 +514,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
 
 app = FastAPI(
-    title=f"UFO Galaxy Node {NODE_ID}: {NODE_NAME}",
+    title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Symbolic Math & Formal Verification",
     version="1.0.0",
     lifespan=lifespan

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 能力编排器
+Galaxy - 能力编排器
 =======================
 
 统一管理 MCP 工具和 Skill，提供智能的能力发现和调用
@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.Capability")
+logger = logging.getLogger("Galaxy.Capability")
 
 
 # ============================================================================
@@ -97,6 +97,12 @@ class CapabilityOrchestrator:
             cls._instance = CapabilityOrchestrator()
         return cls._instance
     
+    async def reinitialize(self):
+        """重新加载所有能力（MCP/Skill 变更后调用）"""
+        self.capabilities.clear()
+        self._initialized = False
+        await self.initialize()
+
     async def initialize(self):
         """初始化 - 加载所有能力"""
         if self._initialized:
@@ -118,38 +124,42 @@ class CapabilityOrchestrator:
         logger.info(f"已加载 {len(self.capabilities)} 个能力")
     
     async def _load_mcp_tools(self):
-        """加载 MCP 工具"""
+        """加载 MCP 工具 — 从 mcp_loader 读取已加载的 MCP 服务器工具"""
         try:
-            from core.mcp_manager import mcp_manager
-            
-            for tool_name, tool in mcp_manager.tools.items():
-                cap = Capability(
-                    id=f"mcp_{tool_name}",
-                    name=tool.name,
-                    description=tool.description,
-                    type=CapabilityType.MCP_TOOL,
-                    source=tool.server_name,
-                    parameters=tool.input_schema,
-                    tags=["mcp", tool.server_name],
-                )
-                self.capabilities[cap.id] = cap
+            from core.mcp_loader import mcp_loader, MCPServerStatus
+
+            for server_id, server in mcp_loader.servers.items():
+                if server.status != MCPServerStatus.RUNNING:
+                    continue
+                for tool in server.tools:
+                    cap = Capability(
+                        id=f"mcp_{server.name}_{tool.name}",
+                        name=tool.name,
+                        description=tool.description,
+                        type=CapabilityType.MCP_TOOL,
+                        source=server.name,
+                        parameters=tool.inputSchema if hasattr(tool, "inputSchema") else {},
+                        tags=["mcp", server.name],
+                    )
+                    self.capabilities[cap.id] = cap
         except Exception as e:
             logger.warning(f"加载 MCP 工具失败: {e}")
     
     async def _load_skills(self):
-        """加载技能"""
+        """加载技能 — 从 skill_loader 读取已加载的技能"""
         try:
-            from core.skill_manager import skill_manager
-            
-            for skill_id, skill in skill_manager.skills.items():
+            from core.skill_loader import skill_loader
+
+            for skill_dict in skill_loader.list_skills():
+                skill_id = skill_dict.get("id", "")
                 cap = Capability(
                     id=f"skill_{skill_id}",
-                    name=skill.name,
-                    description=skill.description,
+                    name=skill_dict.get("name", skill_id),
+                    description=skill_dict.get("description", ""),
                     type=CapabilityType.SKILL,
                     source=skill_id,
-                    parameters={"type": skill.type.value},
-                    tags=skill.tags + ["skill"],
+                    parameters=skill_dict.get("parameters", {}),
+                    tags=skill_dict.get("tags", []) + ["skill"],
                 )
                 self.capabilities[cap.id] = cap
         except Exception as e:
@@ -217,6 +227,19 @@ class CapabilityOrchestrator:
                 description="使用双指挥官交叉验证决策",
                 type=CapabilityType.BUILTIN,
                 tags=["agent", "twin", "decision"],
+                id="builtin_simulate",
+                name="模拟执行",
+                description="通过数字孪生引擎模拟操作效果",
+                type=CapabilityType.BUILTIN,
+                tags=["simulate", "twin", "predict"],
+                priority=6,
+            ),
+            Capability(
+                id="builtin_cross_device",
+                name="跨设备协同",
+                description="跨设备任务协调：剪贴板同步、文件传输、媒体控制、通知同步",
+                type=CapabilityType.BUILTIN,
+                tags=["cross_device", "sync", "transfer", "clipboard", "multi_device"],
                 priority=7,
             ),
         ]
@@ -333,15 +356,30 @@ class CapabilityOrchestrator:
     
     async def _execute_mcp(self, cap: Capability, params: Dict) -> Any:
         """执行 MCP 工具"""
-        from core.mcp_manager import mcp_manager
-        tool_name = cap.id.replace("mcp_", "")
-        return await mcp_manager.call_tool(tool_name, params)
+        from core.mcp_loader import mcp_loader
+
+        # cap.id 格式: mcp_{server_name}_{tool_name}
+        # cap.source = server_name
+        server_name = cap.source
+        tool_name = cap.name
+
+        # 查找 server_id（mcp_loader 用 id 而非 name 索引）
+        server_id = None
+        for sid, srv in mcp_loader.servers.items():
+            if srv.name == server_name:
+                server_id = sid
+                break
+
+        if not server_id:
+            raise RuntimeError(f"MCP 服务器 {server_name} 未找到")
+
+        return await mcp_loader.call_tool(server_id, tool_name, params)
     
     async def _execute_skill(self, cap: Capability, params: Dict) -> Any:
         """执行技能"""
-        from core.skill_manager import skill_manager
+        from core.skill_loader import skill_loader
         skill_id = cap.source
-        return await skill_manager.execute(skill_id, **params)
+        return await skill_loader.execute(skill_id, **params)
     
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
         """执行节点"""
@@ -387,6 +425,41 @@ class CapabilityOrchestrator:
             commander = get_twin_commander()
             result = await commander.analyze(params.get("task", ""), params.get("context"))
             return result.to_dict()
+        elif cap.id == "builtin_simulate":
+            # 数字孪生模拟 — 选择指定设备的孪生体或第一个可用孪生体
+            from core.digital_twin_engine import get_digital_twin_engine
+            engine = get_digital_twin_engine()
+            action = params.get("action", params.get("message", ""))
+            device_id = params.get("device_id", "")
+
+            twin = None
+            if device_id:
+                twin = engine.get_twin_by_device(device_id)
+            if not twin and engine.twins:
+                twin = next(iter(engine.twins.values()))
+
+            if not twin:
+                return {"success": False, "reply": "没有可用的数字孪生体", "predicted_state": {}}
+
+            result = await twin.simulate_action(action, params)
+            return {
+                "success": result.success_probability > 0.5 if hasattr(result, "success_probability") else True,
+                "reply": f"模拟完成: {result.action}" if hasattr(result, "action") else str(result),
+                "predicted_state": result.predicted_state if hasattr(result, "predicted_state") else {},
+                "risks": result.risks if hasattr(result, "risks") else [],
+            }
+
+        elif cap.id == "builtin_cross_device":
+            # 跨设备协同
+            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
+            command = params.get("message", params.get("command", ""))
+            context = {k: v for k, v in params.items() if k not in ("message", "command")}
+            result = await cross_device_coordinator.execute_cross_device_task(command, context)
+            return {
+                "success": result.get("success", False),
+                "reply": result.get("message", str(result)),
+                "data": result,
+            }
 
         return None
     

@@ -1,5 +1,5 @@
 """
-UFO Galaxy v5.0 - Device Protocol Module
+Galaxy v5.0 - Device Protocol Module
 AIP v2.0 Protocol Implementation
 
 DEPRECATED: 此二进制协议保留以兼容现有客户端。
@@ -17,7 +17,7 @@ Features:
 - Cross-platform message handling
 - Support for 500+ TPS
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -103,6 +103,7 @@ class DeviceType(IntEnum):
     For business logic, convert to ``core.device_types.DeviceType`` via
     :func:`to_unified_device_type`.
     """
+    """Device Types supported by Galaxy"""
     UNKNOWN = 0
     LINUX_SERVER = 1
     LINUX_DESKTOP = 2
@@ -668,7 +669,7 @@ class MessageRouter:
 PROTOBUF_SCHEMA = """
 syntax = "proto3";
 
-package ufo_galaxy.aip.v2;
+package galaxy.aip.v2;
 
 // Device message
 message Device {

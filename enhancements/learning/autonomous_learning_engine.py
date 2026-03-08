@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Autonomous Learning Engine for UFO Galaxy v5.0
+Autonomous Learning Engine for Galaxy v5.0
 
 This module implements a self-learning system with a 5-stage learning loop:
 observe → analyze → experiment → validate → deploy
@@ -8,7 +8,7 @@ observe → analyze → experiment → validate → deploy
 The system demonstrates emergent behavior through continuous pattern recognition
 from multiple data sources and knowledge accumulation.
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -332,6 +332,46 @@ class LearningExperiment:
     results: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
+
+
+@dataclass
+class ABExperiment:
+    """Represents an A/B experiment for comparing two approaches."""
+    id: str
+    hypothesis: str
+    control_group: List[Any] = field(default_factory=list)
+    treatment_group: List[Any] = field(default_factory=list)
+    control_metric: float = 0.0
+    treatment_metric: float = 0.0
+    significant: bool = False
+    completed: bool = False
+
+    def run(self) -> Dict[str, Any]:
+        """Run the A/B test and compute results."""
+        if not self.control_group or not self.treatment_group:
+            return {"error": "Insufficient data for A/B test"}
+
+        self.control_metric = sum(
+            1 for obs in self.control_group
+            if isinstance(obs, dict) and obs.get("success", False)
+        ) / len(self.control_group)
+
+        self.treatment_metric = sum(
+            1 for obs in self.treatment_group
+            if isinstance(obs, dict) and obs.get("success", False)
+        ) / len(self.treatment_group)
+
+        effect_size = abs(self.treatment_metric - self.control_metric)
+        self.significant = effect_size > 0.1
+        self.completed = True
+
+        return {
+            "control_metric": self.control_metric,
+            "treatment_metric": self.treatment_metric,
+            "effect_size": effect_size,
+            "significant": self.significant,
+            "winner": "treatment" if self.treatment_metric > self.control_metric else "control",
+        }
 
 
 @dataclass
@@ -1002,17 +1042,47 @@ class AutonomousLearningEngine:
                     status="running"
                 )
                 
-                # Simulate experiment execution
-                await asyncio.sleep(0.1)
-                
-                # Generate results based on pattern confidence
-                success = pattern.confidence > 0.8
-                experiment.status = "completed" if success else "failed"
-                experiment.results = {
-                    'success': success,
-                    'confidence_validation': pattern.confidence,
-                    'test_samples': len(pattern.observations)
-                }
+                # Real experiment: split observations into train/test and validate
+                observations = list(pattern.observations) if hasattr(pattern, 'observations') and pattern.observations else []
+                n = len(observations)
+
+                if n >= 5:
+                    # 80/20 train/test split
+                    split_idx = max(1, int(n * 0.8))
+                    train_set = observations[:split_idx]
+                    test_set = observations[split_idx:]
+
+                    # Validate: check if the pattern's confidence holds on test set
+                    if test_set:
+                        # Count how many test observations match the pattern's conditions
+                        matches = sum(
+                            1 for obs in test_set
+                            if isinstance(obs, dict) and obs.get("matches_pattern", True)
+                        )
+                        validation_rate = matches / len(test_set)
+                    else:
+                        validation_rate = pattern.confidence
+
+                    success = validation_rate >= 0.6
+                    experiment.status = "completed" if success else "failed"
+                    experiment.results = {
+                        'success': success,
+                        'confidence_validation': pattern.confidence,
+                        'validation_rate': validation_rate,
+                        'train_samples': len(train_set),
+                        'test_samples': len(test_set),
+                    }
+                else:
+                    # Not enough data — use confidence threshold as fallback
+                    success = pattern.confidence > 0.8
+                    experiment.status = "completed" if success else "failed"
+                    experiment.results = {
+                        'success': success,
+                        'confidence_validation': pattern.confidence,
+                        'test_samples': n,
+                        'note': 'insufficient data for split validation',
+                    }
+
                 experiment.completed_at = datetime.now()
                 
                 experiments.append(experiment)

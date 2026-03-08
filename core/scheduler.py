@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 自主调度器 (Autonomous Scheduler)
+Galaxy - 自主调度器 (Autonomous Scheduler)
 ==============================================
 
 核心 ReAct Loop:
@@ -256,6 +256,8 @@ class AutonomousScheduler:
         )
         # 注入已加载的 MCP 工具
         self.inject_mcp_tools()
+        # 注入已注册的 Skill 工具
+        self.inject_skill_tools()
 
     def _infer_description_from_main(self, main_py_path: str, node_name: str) -> Optional[str]:
         """从 main.py 的头部注释/docstring 推断节点描述"""
@@ -337,6 +339,33 @@ class AutonomousScheduler:
                 logger.info(f"注入 {injected} 个 MCP 工具到调度器")
         except Exception as e:
             logger.warning(f"注入 MCP 工具失败: {e}")
+
+    def inject_skill_tools(self):
+        """将 skill_loader 中已加载的 Skill 注入为可用工具"""
+        try:
+            from core.skill_loader import skill_loader as loader
+            if not loader:
+                return
+            existing_names = {t["function"]["name"] for t in self.tools_cache}
+            injected = 0
+            for skill in loader.list_skills():
+                func_name = f"skill_{skill.get('name', '')}"
+                if func_name in existing_names or not skill.get("name"):
+                    continue
+                self.tools_cache.append({
+                    "type": "function",
+                    "function": {
+                        "name": func_name,
+                        "description": f"[Skill] {skill.get('description', skill['name'])}",
+                        "parameters": skill.get("params_schema") or {"type": "object", "properties": {}},
+                    },
+                })
+                existing_names.add(func_name)
+                injected += 1
+            if injected:
+                logger.info(f"注入 {injected} 个 Skill 工具到调度器")
+        except Exception as e:
+            logger.debug(f"注入 Skill 工具跳过: {e}")
 
     async def plan_and_execute(
         self,
@@ -444,6 +473,7 @@ CROSS-DEVICE:
                     messages=messages,
                     tools=active_tools if active_tools else None,
                     tool_choice="auto",
+                    task_type="AGENT_CONTROL",
                 )
 
                 message = response.choices[0].message
@@ -571,6 +601,10 @@ CROSS-DEVICE:
                     result = await executor(node_id, action, params)
                     return json.dumps(result, ensure_ascii=False)
                 return json.dumps({"error": "No executor available"})
+
+            # Skill 工具: skill_{name}
+            if function_name.startswith("skill_"):
+                return await self._exec_skill_tool(function_name, args)
 
             return json.dumps({"error": f"Unknown tool: {function_name}"})
         except Exception as e:
@@ -713,6 +747,18 @@ CROSS-DEVICE:
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": f"MCP tool failed: {e}"})
+
+    async def _exec_skill_tool(self, function_name: str, args: Dict) -> str:
+        """调用已注册的 Skill — 格式: skill_{name}"""
+        try:
+            from core.skill_loader import skill_loader as loader
+            skill_name = function_name[len("skill_"):]
+            result = await loader.execute(skill_name, **args)
+            if isinstance(result, dict):
+                return json.dumps(result, ensure_ascii=False)
+            return str(result)
+        except Exception as e:
+            return json.dumps({"error": f"Skill execution failed: {e}"})
 
     def _select_relevant_tools(self, instruction: str, max_tools: int = 20) -> List[Dict]:
         """根据指令选择最相关的工具 (避免 token 爆炸)"""

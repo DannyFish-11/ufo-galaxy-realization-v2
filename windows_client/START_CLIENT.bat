@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal
 
 echo ========================================
-echo    UFO³ Galaxy Windows 客户端
+echo    Galaxy Windows 客户端
 echo ========================================
 echo.
 

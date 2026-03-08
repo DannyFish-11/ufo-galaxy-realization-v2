@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Device Routes
+Galaxy - Device Routes
 ============================
 
 Routes:
@@ -10,14 +10,16 @@ Routes:
   GET    /api/v1/devices/{device_id}           - 获取设备详情
   POST   /api/v1/devices/{device_id}/heartbeat - 设备心跳
   DELETE /api/v1/devices/{device_id}           - 注销设备
+  POST   /api/v1/devices/cross-device          - 跨设备协同任务
 """
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from core.routes._shared import (
     connection_manager,
@@ -26,7 +28,7 @@ from core.routes._shared import (
 )
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -162,5 +164,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         logger.info(f"设备注销: {device_id}")
         return JSONResponse({"success": True, "device_id": device_id})
+
+    # ─────── 跨设备协同 ─────────
+
+    class CrossDeviceRequest(BaseModel):
+        command: str
+        context: Dict = Field(default_factory=dict)
+
+    @router.post("/api/v1/devices/cross-device")
+    async def cross_device_task(req: CrossDeviceRequest):
+        """跨设备协同任务（剪贴板同步、文件传输、媒体控制等）"""
+        try:
+            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
+            result = await cross_device_coordinator.execute_cross_device_task(
+                req.command, req.context
+            )
+            return JSONResponse(result)
+        except Exception as e:
+            logger.error(f"跨设备任务失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
 
     return router

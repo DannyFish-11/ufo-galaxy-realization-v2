@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 标准 MCP 加载器
+Galaxy - 标准 MCP 加载器
 ============================
 
 完全兼容 Model Context Protocol 标准协议
@@ -40,7 +40,7 @@ from pathlib import Path
 from enum import Enum
 import uuid
 
-logger = logging.getLogger("UFO-Galaxy.MCP")
+logger = logging.getLogger("Galaxy.MCP")
 
 
 # ============================================================================
@@ -427,7 +427,7 @@ class MCPLoader:
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {
-                    "name": "UFO-Galaxy",
+                    "name": "Galaxy",
                     "version": "1.0.0",
                 },
             },

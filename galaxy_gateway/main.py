@@ -1,5 +1,5 @@
 """
-UFO³ Galaxy Gateway - 超级网关
+Galaxy Gateway - 超级网关
 统一调用 One-API、本地 LLM 和所有节点功能
 """
 
@@ -21,7 +21,7 @@ import uvicorn
 import uuid
 import logging
 
-from core.llm_manager import LLMManager
+from core.multi_llm_router import get_llm_router
 from galaxy_gateway.websocket_handler import handle_websocket, connection_manager
 from galaxy_gateway.device_router import device_router
 from nodes.common.cors_config import get_cors_origins
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
-    title="UFO³ Galaxy Gateway",
+    title="Galaxy Gateway",
     description="统一调用 One-API、本地 LLM 和所有节点功能的超级网关",
     version="1.0.0"
 )
@@ -45,7 +45,7 @@ app.add_middleware(
 )
 
 # 初始化 LLM 客户端
-llm_client = LLMManager()
+llm_client = get_llm_router()
 
 
 # ===== 数据模型 =====
@@ -97,7 +97,7 @@ class SmartTaskRequest(BaseModel):
 async def root():
     """根路径"""
     return {
-        "service": "UFO³ Galaxy Gateway",
+        "service": "Galaxy Gateway",
         "version": "1.0.0",
         "status": "online",
         "endpoints": {

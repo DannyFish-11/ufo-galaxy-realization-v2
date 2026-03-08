@@ -1,8 +1,8 @@
-# UFO Galaxy - 快速上手指南
+# Galaxy - 快速上手指南
 
 ## 🎯 系统概览 (Round 2 - R-4)
 
-UFO Galaxy 是一个 **L4 级自主性智能系统**，集成了：
+Galaxy 是一个 **L4 级自主性智能系统**，集成了：
 
 - ✨ **能力注册与发现** (OpenClaw 风格) - 统一能力索引和调度
 - 🔗 **稳定连接管理** (向日葵风格) - 心跳保活、自动重连
@@ -27,8 +27,8 @@ graph LR
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/galaxy-realization.git
+cd galaxy-realization
 
 # 2. 一键启动
 docker-compose up -d
@@ -41,8 +41,8 @@ docker-compose ps
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/galaxy-realization.git
+cd galaxy-realization
 
 # 2. 安装依赖
 pip install -r requirements.txt
@@ -61,7 +61,7 @@ python -m launcher status
 1. **下载 APK**
    ```bash
    # 从 GitHub Releases 下载
-   wget https://github.com/DannyFish-11/ufo-galaxy-android/releases/latest/download/app-release.apk
+   wget https://github.com/DannyFish-11/galaxy-android/releases/latest/download/app-release.apk
    ```
 
 2. **配置服务器地址**
@@ -172,15 +172,15 @@ curl http://localhost:8080/health
 
 ```bash
 # 设置 API Key
-export UFO_API_KEY="your-secret-key"
+export GALAXY_API_KEY="your-secret-key"
 
 # 配置 JWT Secret
 export JWT_SECRET="your-jwt-secret"
 
 # 启用 HTTPS
-export UFO_HTTPS_ENABLED=true
-export UFO_SSL_CERT=/path/to/cert.pem
-export UFO_SSL_KEY=/path/to/key.pem
+export GALAXY_HTTPS_ENABLED=true
+export GALAXY_SSL_CERT=/path/to/cert.pem
+export GALAXY_SSL_KEY=/path/to/key.pem
 ```
 
 ## 🐛 故障排查
@@ -285,8 +285,8 @@ python system_manager.py status
 
 ## 💬 获取帮助
 
-- GitHub Issues: https://github.com/DannyFish-11/ufo-galaxy-realization/issues
-- Discord: https://discord.gg/ufo-galaxy
+- GitHub Issues: https://github.com/DannyFish-11/galaxy-realization/issues
+- Discord: https://discord.gg/galaxy
 
 ---
 

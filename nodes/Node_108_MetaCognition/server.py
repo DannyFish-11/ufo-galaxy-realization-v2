@@ -14,12 +14,13 @@ import uvicorn
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.metacognition_engine import (
 from nodes.common.cors_config import get_cors_origins
+from core.metacognition_engine import (
     MetaCognitionEngine,
     ThoughtType,
     CognitiveBias
 )
+from nodes.common.cors_config import get_cors_origins
 
 # ========== 配置 ==========
 NODE_PORT = int(os.getenv("NODE_108_PORT", "9100"))

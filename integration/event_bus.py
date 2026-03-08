@@ -1,5 +1,5 @@
 """
-UFO Galaxy 事件总线系统
+Galaxy 事件总线系统
 实现UI与L4主循环之间的双向通信
 """
 
@@ -100,7 +100,7 @@ class UIGalaxyEvent:
 
 class EventBus:
     """
-    UFO Galaxy 事件总线
+    Galaxy 事件总线
     实现发布-订阅模式，支持同步和异步回调
     """
     

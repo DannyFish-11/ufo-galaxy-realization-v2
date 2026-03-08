@@ -19,7 +19,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.NLU")
+logger = logging.getLogger("Galaxy.NLU")
 
 class IntentType(Enum):
     """意图类型"""
@@ -246,88 +246,66 @@ class EnhancedNLUEngine:
         )
     
     def _understand_with_ai(self, user_input: str) -> Intent:
-        """使用 AI 模型进行意图识别（通过 OneAPI）"""
+        """使用 AI 模型进行意图识别（通过 OneAPI / OpenAI 兼容接口）"""
         import os
-        try:
-            import requests
-        except ImportError:
-            logger.warning("requests 库不可用，降级为规则引擎")
-            return self._understand_with_rules(user_input)
-
-        api_url = self.oneapi_url.rstrip("/")
-        api_key = os.getenv("ONEAPI_API_KEY", "")
-        model = os.getenv("ONEAPI_MODEL", "gpt-3.5-turbo")
+        api_key = os.getenv("ONEAPI_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
+        api_base = os.getenv("ONEAPI_BASE_URL") or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 
         if not api_key:
-            logger.warning("ONEAPI_API_KEY 未设置，降级为规则引擎")
             return self._understand_with_rules(user_input)
-
-        system_prompt = (
-            "你是一个意图识别系统。根据用户输入返回 JSON 格式的意图分析结果。\n"
-            "JSON 格式如下（不要输出其他内容）：\n"
-            '{"intent_type": "software_operation|file_operation|device_control|'
-            'information_query|media_generation|cross_device_task|unknown",\n'
-            ' "action": "open|close|send|query|search|generate|create|unknown",\n'
-            ' "target": "目标对象名称或null",\n'
-            ' "parameters": {},\n'
-            ' "device": "windows|android|cloud|3d_printer|auto",\n'
-            ' "confidence": 0.0-1.0}'
-        )
 
         try:
-            resp = requests.post(
-                f"{api_url}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_input},
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 512,
-                },
-                timeout=10,
+            import urllib.request
+            prompt = (
+                "你是一个意图识别系统。分析用户输入并返回 JSON:\n"
+                '{"intent_type": "software_operation|media_generation|cross_device_task|information_query|general_chat",'
+                ' "target": "目标应用/对象", "action": "操作动作", "device": "windows|android|auto",'
+                ' "parameters": {}, "confidence": 0.0-1.0}\n\n'
+                f"用户输入: {user_input}\n\n只返回 JSON，不要其他内容。"
             )
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
+            data = json.dumps({
+                "model": os.getenv("LLM_MODEL", "gpt-3.5-turbo"),
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 256,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{api_base.rstrip('/')}/chat/completions",
+                data=data,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            content = result["choices"][0]["message"]["content"].strip()
+            # 提取 JSON（处理可能的 markdown 包裹）
+            if "```" in content:
+                parts = content.split("```")
+                content = parts[1].lstrip("json\n") if len(parts) > 1 else content
+            parsed = json.loads(content)
 
-            # 从回复中提取 JSON（兼容 markdown code-fence 包裹）
-            json_match = re.search(r'\{[\s\S]*\}', content)
-            if not json_match:
-                logger.warning("AI 回复中未找到 JSON，降级为规则引擎")
-                return self._understand_with_rules(user_input)
-
-            parsed = json.loads(json_match.group())
-
-            # 映射字段
-            intent_type_map = {v.value: v for v in IntentType}
-            device_map = {v.value: v for v in TargetDevice}
+            intent_map = {
+                "software_operation": IntentType.SOFTWARE_OPERATION,
+                "media_generation": IntentType.MEDIA_GENERATION,
+                "cross_device_task": IntentType.CROSS_DEVICE_TASK,
+                "information_query": IntentType.INFORMATION_QUERY,
+                "general_chat": IntentType.GENERAL_CHAT,
+            }
+            device_map = {
+                "windows": TargetDevice.WINDOWS,
+                "android": TargetDevice.ANDROID,
+                "auto": TargetDevice.AUTO,
+            }
 
             return Intent(
-                type=intent_type_map.get(parsed.get("intent_type", ""), IntentType.UNKNOWN),
-                action=parsed.get("action", "unknown"),
-                target=parsed.get("target"),
+                type=intent_map.get(parsed.get("intent_type", ""), IntentType.GENERAL_CHAT),
+                target=parsed.get("target", ""),
+                action=parsed.get("action", ""),
                 parameters=parsed.get("parameters", {}),
                 device=device_map.get(parsed.get("device", "auto"), TargetDevice.AUTO),
-                confidence=float(parsed.get("confidence", 0.5)),
+                confidence=float(parsed.get("confidence", 0.7)),
             )
-
-        except requests.exceptions.Timeout:
-            logger.warning("OneAPI 请求超时，降级为规则引擎")
-            return self._understand_with_rules(user_input)
-        except requests.exceptions.ConnectionError:
-            logger.warning("无法连接 OneAPI 服务，降级为规则引擎")
-            return self._understand_with_rules(user_input)
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.warning(f"AI 回复解析失败: {e}，降级为规则引擎")
-            return self._understand_with_rules(user_input)
         except Exception as e:
-            logger.error(f"AI 意图识别异常: {e}，降级为规则引擎")
+            # AI 解析失败，回退到规则引擎
             return self._understand_with_rules(user_input)
     
     def plan_task(self, intent: Intent) -> List[TaskStep]:

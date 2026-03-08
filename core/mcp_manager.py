@@ -1,7 +1,10 @@
 """
-UFO Galaxy - MCP 管理器
-=======================
+DEPRECATED — 请使用 core.mcp_loader (mcp_loader 单例) 替代。
 
+此模块保留但不再是主 MCP 运行时。所有生产代码已迁移至 mcp_loader.py。
+
+UFO Galaxy - MCP 管理器（旧版）
+=========================
 通用的 MCP (Model Context Protocol) 管理系统
 
 功能：
@@ -36,7 +39,7 @@ from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 from enum import Enum
 
-logger = logging.getLogger("UFO-Galaxy.MCP")
+logger = logging.getLogger("Galaxy.MCP")
 
 
 # ============================================================================

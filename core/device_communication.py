@@ -1,5 +1,5 @@
 """
-UFO Galaxy - 统一设备通信协议
+Galaxy - 统一设备通信协议
 ============================
 
 提供统一的设备通信层，支持多种通信方式：
@@ -39,7 +39,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Callable, Union
 from fastapi import WebSocket
 
-logger = logging.getLogger("UFO-Galaxy.DeviceComm")
+logger = logging.getLogger("Galaxy.DeviceComm")
 
 
 # ============================================================================

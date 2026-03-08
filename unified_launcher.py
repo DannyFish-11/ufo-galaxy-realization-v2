@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UFO Galaxy - 统一启动器
+Galaxy - 统一启动器
 ======================
 
 融合性整合所有模块的统一入口：
@@ -33,6 +33,7 @@ from datetime import datetime
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
+from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
 logging.basicConfig(
@@ -40,7 +41,7 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("UFO-Galaxy")
+logger = logging.getLogger("Galaxy")
 
 
 # ============================================================================
@@ -151,6 +152,7 @@ class SystemConfig:
     qdrant_url: str = ""
     
     # 服务配置
+    host: str = "0.0.0.0"
     web_ui_port: int = 8080
     device_api_port: int = 8766
     ufo_api_port: int = 8767
@@ -176,6 +178,11 @@ class SystemConfig:
                     if line and not line.startswith('#') and '=' in line:
                         key, value = line.split('=', 1)
                         os.environ[key.strip()] = value.strip()
+        else:
+            logger.warning(
+                ".env file not found. Copy .env.example to .env and configure: "
+                "cp .env.example .env"
+            )
         
         # 从环境变量读取
         config.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -402,11 +409,11 @@ class CoreServiceLauncher:
         )
         
         try:
-            from core.microsoft_ufo_integration import UFOIntegrationService
-            integration = UFOIntegrationService()
+            from core.microsoft_ufo_integration import GalaxyIntegrationService
+            integration = GalaxyIntegrationService()
             result = await integration.initialize()
             # initialize 返回 bool，转换为 dict
-            result = {"success": result, "message": "UFO Integration initialized" if result else "UFO Integration failed"}
+            result = {"success": result, "message": "Galaxy Integration initialized" if result else "Galaxy Integration failed"}
             
             if result.get("success"):
                 logger.info("微软 UFO 集成已初始化")
@@ -616,11 +623,12 @@ class UnifiedWebUI:
             import uvicorn
             
             self.app = FastAPI(
-                title="UFO Galaxy",
+                title="Galaxy",
                 description="L4 级自主性智能系统",
                 version="2.0"
             )
             
+            from nodes.common.cors_config import get_cors_origins
             self.app.add_middleware(
                 CORSMiddleware,
                 allow_origins=get_cors_origins(),
@@ -730,12 +738,12 @@ class UnifiedWebUI:
                 
             config = uvicorn.Config(
                 self.app,
-                host="0.0.0.0",
+                host=self.config.host,
                 port=self.config.web_ui_port,
                 log_level="warning"
             )
             server = uvicorn.Server(config)
-            logger.info(f"API 服务启动: http://0.0.0.0:{self.config.web_ui_port}")
+            logger.info(f"API 服务启动: http://{self.config.host}:{self.config.web_ui_port}")
             logger.info(f"API 文档: http://localhost:{self.config.web_ui_port}/docs")
             await server.serve()
             
@@ -750,7 +758,7 @@ class UnifiedWebUI:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO Galaxy - 全景指挥舱</title>
+    <title>Galaxy - 全景指挥舱</title>
     <style>
         :root {
             --bg-dark: #0a0a0a;
@@ -933,7 +941,7 @@ class UnifiedWebUI:
 </head>
 <body>
     <div class="top-bar">
-        <div class="logo">🌌 UFO Galaxy Command</div>
+        <div class="logo">🌌 Galaxy Command</div>
         <div class="network-info">
             <span class="network-badge" id="tailscale-ip">Tailscale: 检测中...</span>
             <span class="network-badge" id="local-ip">Local: 127.0.0.1</span>
@@ -1028,7 +1036,7 @@ class UnifiedWebUI:
 
             <!-- 页脚 -->
             <div class="footer">
-                <span>UFO Galaxy v3.0.0 | L4 Autonomous System</span>
+                <span>Galaxy v3.0.0 | L4 Autonomous System</span>
                 <span>Subsystems: Cache + Monitoring + Performance + CommandRouter + AI Intent + EventBridge</span>
                 <span class="footer-uptime" id="footer-uptime">Uptime: --</span>
             </div>
@@ -1244,11 +1252,11 @@ class UnifiedWebUI:
 
 
 # ============================================================================
-# UFO Galaxy 统一系统
+# Galaxy 统一系统
 # ============================================================================
 
-class UFOGalaxyUnified:
-    """UFO Galaxy 统一系统"""
+class GalaxyUnified:
+    """Galaxy 统一系统"""
     
     def __init__(self):
         self.config = SystemConfig.load_from_env()
@@ -1354,7 +1362,7 @@ class UFOGalaxyUnified:
         self.running = True
         
         print_section("系统就绪")
-        print_status("UFO Galaxy 统一系统已启动！", "success")
+        print_status("Galaxy 统一系统已启动！", "success")
         print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
@@ -1393,7 +1401,6 @@ class UFOGalaxyUnified:
         """异步关闭核心子系统"""
         try:
             from core.startup import shutdown_subsystems
-from nodes.common.cors_config import get_cors_origins
             await shutdown_subsystems()
         except Exception as e:
             logger.warning(f"子系统关闭异常: {e}")
@@ -1426,10 +1433,101 @@ from nodes.common.cors_config import get_cors_origins
 # 主函数
 # ============================================================================
 
+async def _run_check_only(galaxy: 'UFOGalaxyUnified'):
+    """仅检查依赖和配置，输出完整系统状态表，不启动服务"""
+    print_banner()
+    print_section("系统检查模式 (--check-only)")
+
+    # 1. 依赖检查
+    print_section("依赖检查")
+    try:
+        from scripts.check_dependencies import CORE_DEPS, OPTIONAL_DEPS, check_dep as check_dependency
+        missing_core = []
+        missing_optional = []
+        for dep in CORE_DEPS:
+            if not check_dependency(dep):
+                missing_core.append(dep)
+        for dep in OPTIONAL_DEPS:
+            if not check_dependency(dep):
+                missing_optional.append(dep)
+        print_status(f"核心依赖: {len(CORE_DEPS) - len(missing_core)}/{len(CORE_DEPS)} 已安装",
+                     "success" if not missing_core else "error")
+        if missing_core:
+            for d in missing_core:
+                print_status(f"  缺失: {d}", "error")
+        print_status(f"可选依赖: {len(OPTIONAL_DEPS) - len(missing_optional)}/{len(OPTIONAL_DEPS)} 已安装",
+                     "success" if not missing_optional else "warning")
+        if missing_optional:
+            for d in missing_optional:
+                print_status(f"  缺失: {d}", "warning")
+    except Exception as e:
+        print_status(f"依赖检查脚本加载失败: {e}", "error")
+
+    # 2. 配置检查
+    print_section("配置检查")
+    status = galaxy.config.get_status_dict()
+    llm_count = sum(1 for v in status["llm_apis"].values() if v)
+    print_status(f"LLM API: {llm_count} 个已配置", "success" if llm_count > 0 else "warning")
+
+    # 3. 核心模块导入检查
+    print_section("核心模块导入")
+    core_modules = [
+        "core.startup", "core.agent_factory", "core.multi_llm_router",
+        "core.node_registry", "core.node_discovery", "core.monitoring",
+        "core.health_check", "core.cache", "core.error_framework",
+        "core.event_bridge", "core.command_router", "core.concurrency_manager",
+        "core.config_hot_reload", "core.digital_twin_engine",
+        "core.health_integration", "core.api_routes",
+    ]
+    ok_count = 0
+    for mod_name in core_modules:
+        try:
+            __import__(mod_name)
+            ok_count += 1
+        except BaseException as e:
+            print_status(f"  {mod_name}: {type(e).__name__}: {e}", "error")
+    print_status(f"核心模块: {ok_count}/{len(core_modules)} 可导入",
+                 "success" if ok_count == len(core_modules) else "warning")
+
+    # 4. 节点导入检查
+    print_section("节点导入检查")
+    nodes_dir = PROJECT_ROOT / "nodes"
+    loaded = 0
+    failed = 0
+    failed_names = []
+    if nodes_dir.exists():
+        for node_dir in sorted(nodes_dir.iterdir()):
+            main_py = node_dir / "main.py"
+            if not main_py.exists():
+                continue
+            mod_path = f"nodes.{node_dir.name}.main"
+            try:
+                __import__(mod_path)
+                loaded += 1
+            except BaseException as e:
+                failed += 1
+                failed_names.append((node_dir.name, f"{type(e).__name__}: {str(e)[:80]}"))
+    print_status(f"节点: {loaded}/{loaded + failed} 可导入",
+                 "success" if failed == 0 else "warning")
+    if failed_names:
+        for name, err in failed_names:
+            print_status(f"  {name}: {err}", "warning")
+
+    # 汇总
+    print_section("检查完成")
+    has_core_issues = bool(missing_core) if 'missing_core' in locals() else False
+    all_ok = (not has_core_issues) and ok_count == len(core_modules)
+    if all_ok:
+        print_status("系统就绪，可以启动", "success")
+    else:
+        print_status("存在问题，请检查上方输出", "warning")
+    sys.stdout.flush()
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="UFO Galaxy - L4 级自主性智能系统（统一融合版）",
+        description="Galaxy - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -1444,25 +1542,33 @@ def main():
     parser.add_argument("--no-l4", action="store_true", help="不启动 L4 增强模块")
     parser.add_argument("--no-nodes", action="store_true", help="不启动节点系统")
     parser.add_argument("--status", action="store_true", help="查看系统状态")
+    parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
+    parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
     parser.add_argument("--port", "-p", type=int, default=8080, help="Web UI 端口")
     
     args = parser.parse_args()
     
     # 创建系统实例
-    galaxy = UFOGalaxyUnified()
+    galaxy = GalaxyUnified()
     
     # 应用命令行参数
     galaxy.config.minimal_mode = args.minimal
     galaxy.config.enable_web_ui = not args.no_ui
     galaxy.config.enable_l4 = not args.no_l4
     galaxy.config.enable_nodes = not args.no_nodes
+    galaxy.config.host = args.host
     galaxy.config.web_ui_port = args.port
     
     # 查看状态
     if args.status:
         galaxy.show_status()
         return
-        
+
+    # 仅检查依赖和配置
+    if args.check_only:
+        asyncio.run(_run_check_only(galaxy))
+        return
+
     # 设置信号处理
     def signal_handler(sig, frame):
         galaxy.stop()

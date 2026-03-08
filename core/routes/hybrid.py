@@ -1,5 +1,5 @@
 """
-UFO Galaxy - Hybrid, RAG, Code & Mesh Routes (Phases 3-5)
+Galaxy - Hybrid, RAG, Code & Mesh Routes (Phases 3-5)
 ===========================================================
 
 Routes:
@@ -23,13 +23,15 @@ Routes:
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from core.auth import require_auth
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core.routes._shared import connection_manager
 
-logger = logging.getLogger("UFO-Galaxy.API")
+logger = logging.getLogger("Galaxy.API")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -127,7 +129,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse({"patterns": rag_memory.get_learned_patterns()})
 
     @router.post("/api/v1/code/execute")
-    async def code_execute(req: CodeExecuteRequest):
+    async def code_execute(req: CodeExecuteRequest, auth: dict = Depends(require_auth)):
         """安全代码执行 — Agent 自编码运行时"""
         result = await safe_executor.execute(
             code=req.code,

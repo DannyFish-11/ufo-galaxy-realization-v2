@@ -1,5 +1,5 @@
 """
-UFO Galaxy - MCP 多语言桥接实现
+Galaxy - MCP 多语言桥接实现
 ================================
 
 核心实现：MCPBridgeLoader 通过子进程 + stdio JSON-RPC 与任意语言编写的 MCP Server 通信，
@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.MCPBridge")
+logger = logging.getLogger("Galaxy.MCPBridge")
 
 
 @dataclass
@@ -67,7 +67,7 @@ class MCPBridgeProcess:
                 self._send_request("initialize", {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "ufo-galaxy", "version": "2.0"},
+                    "clientInfo": {"name": "galaxy", "version": "2.0"},
                 }),
                 timeout=self.spec.startup_timeout,
             )

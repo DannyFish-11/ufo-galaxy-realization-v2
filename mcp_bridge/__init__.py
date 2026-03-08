@@ -1,5 +1,5 @@
 """
-UFO Galaxy - MCP 多语言桥接层
+Galaxy - MCP 多语言桥接层
 ============================
 
 允许使用 Python 之外的语言（Node.js、Go、Rust 等）实现 MCP Server，

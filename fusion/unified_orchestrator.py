@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
+Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 
 .. deprecated::
     此模块已废弃。请使用 ``galaxy_gateway.orchestrator.GalaxyOrchestrator`` 作为

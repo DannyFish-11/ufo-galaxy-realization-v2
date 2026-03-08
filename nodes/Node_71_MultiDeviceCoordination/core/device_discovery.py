@@ -60,12 +60,12 @@ class DiscoveryConfig:
     """发现配置"""
     # mDNS 配置
     mdns_enabled: bool = True
-    mdns_service_type: str = "_ufo-galaxy._tcp.local."
+    mdns_service_type: str = "_galaxy._tcp.local."
     mdns_scan_interval: float = 30.0
     
     # UPnP 配置
     upnp_enabled: bool = True
-    upnp_search_target: str = "urn:schemas-ufo-galaxy:device:Coordinator:1"
+    upnp_search_target: str = "urn:schemas-galaxy:device:Coordinator:1"
     upnp_scan_interval: float = 60.0
     
     # 广播配置
@@ -103,8 +103,8 @@ class BroadcastDiscovery:
     使用 UDP 多播进行设备发现
     """
     
-    DISCOVERY_MESSAGE = "UFO_GALAXY_DISCOVER"
-    RESPONSE_MESSAGE = "UFO_GALAXY_RESPONSE"
+    DISCOVERY_MESSAGE = "GALAXY_DISCOVER"
+    RESPONSE_MESSAGE = "GALAXY_RESPONSE"
     
     def __init__(self, config: DiscoveryConfig, node_id: str):
         self.config = config

@@ -1,5 +1,5 @@
 """
-UFO Galaxy - LLM 成本可观测性模块（Cost Tracker）
+Galaxy - LLM 成本可观测性模块（Cost Tracker）
 ================================================
 
 功能：
@@ -37,7 +37,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("UFO-Galaxy.CostTracker")
+logger = logging.getLogger("Galaxy.CostTracker")
 
 # 默认成本表（每千 token 的美元价格）
 DEFAULT_COST_TABLE: Dict[str, Dict[str, float]] = {

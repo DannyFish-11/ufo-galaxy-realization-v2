@@ -7,7 +7,7 @@ Node 36: UIAWindows - 微软 UFO 深度集成模块
 1. 深度集成微软 UFO 的 UI 自动化能力
 2. 提供统一的 Windows UI 控制接口
 3. 支持自然语言任务执行
-4. 与 UFO Galaxy 节点系统无缝对接
+4. 与 Galaxy 节点系统无缝对接
 
 作者：Manus AI
 日期：2026-02-06
@@ -39,7 +39,7 @@ if UFO_ROOT.exists():
 # 微软 UFO 组件加载器
 # ============================================================================
 
-class UFOComponentLoader:
+class GalaxyComponentLoader:
     """微软 UFO 组件加载器"""
     
     def __init__(self):
@@ -119,7 +119,7 @@ class UFODeepIntegration:
     """
     
     def __init__(self):
-        self.loader = UFOComponentLoader()
+        self.loader = GalaxyComponentLoader()
         self.puppeteer_instance = None
         self._ControlReceiverClass = None
         self.is_initialized = False
@@ -538,7 +538,7 @@ def create_ufo_integration_api():
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
     
-    app = FastAPI(title="UFO Galaxy - Microsoft UFO Deep Integration", version="2.0")
+    app = FastAPI(title="Galaxy - Microsoft UFO Deep Integration", version="2.0")
     integration = UFODeepIntegration()
     
     class ClickRequest(BaseModel):

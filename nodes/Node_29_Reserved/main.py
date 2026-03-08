@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-UFO Galaxy - Node_29_Reserved: 通用插件框架
+Galaxy - Node_29_Reserved: 通用插件框架
 
 该节点作为一个通用的插件加载和执行框架，允许在运行时动态发现、加载和执行插件。
 它为系统提供了强大的可扩展性，使得新功能可以作为独立的插件模块进行开发和集成，
@@ -81,7 +81,7 @@ class ReservedNodeConfig:
     """节点配置的数据类"""
     node_id: str = "Node_29_Reserved"
     node_name: str = "通用插件框架"
-    plugin_directory: str = field(default_factory=lambda: os.getenv("UFO_PLUGIN_DIR", os.path.expanduser("~/ufo-plugins")))
+    plugin_directory: str = os.getenv("UFO_PLUGIN_DIR", "./plugins")
     plugin_config: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     health_check_interval: int = 60  # seconds
 
@@ -266,7 +266,7 @@ class ExamplePlugin(PluginBase):
 async def main():
     """主异步函数，用于初始化和运行服务"""
     logger.info("==================================================")
-    logger.info("======         UFO Galaxy Node Start          ======")
+    logger.info("======         Galaxy Node Start          ======")
     logger.info("==================================================")
     
     config = ReservedNodeConfig()
@@ -296,7 +296,7 @@ async def main():
         if service.status == NodeStatus.RUNNING:
             await service.stop()
         logger.info("==================================================")
-        logger.info("======          UFO Galaxy Node End           ======")
+        logger.info("======          Galaxy Node End           ======")
         logger.info("==================================================")
 
 if __name__ == "__main__":

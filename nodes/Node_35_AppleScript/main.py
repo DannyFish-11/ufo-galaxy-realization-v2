@@ -196,7 +196,7 @@ async def main():
         logger.info(f"健康检查结果: {health}")
 
         # 3. 定义一个简单的 AppleScript 脚本
-        simple_script = '''display dialog "Hello from UFO Galaxy!" buttons {"OK"} default button "OK" with icon note'''
+        simple_script = '''display dialog "Hello from Galaxy!" buttons {"OK"} default button "OK" with icon note'''
         logger.info("\n--- 准备执行一个简单的 AppleScript ---")
         result = await service.execute_script(simple_script, timeout=10)
         logger.info(f"简单脚本执行结果: {result.status.value}")

@@ -2,13 +2,13 @@
 
 ## 修复概览
 
-本次修复针对 `ufo-galaxy-realization-v2` 仓库中的 SQL 注入风险进行了系统性修复。
+本次修复针对 `galaxy-realization-v2` 仓库中的 SQL 注入风险进行了系统性修复。
 
 ### 修复统计
 
 - **修复文件数**: 4 个
 - **修复问题数**: 44 个
-- **备份目录**: `/mnt/okcomputer/ufo-galaxy-realization-main/sql_fix_backups/`
+- **备份目录**: `/mnt/okcomputer/galaxy-realization-main/sql_fix_backups/`
 
 ### 修复的文件列表
 
@@ -133,7 +133,7 @@ query += "\nWHERE a.user_name = $user_name AND b.user_name = $user_name"
 修复后，可以使用以下命令验证 SQL 注入风险是否已消除:
 
 ```bash
-cd /mnt/okcomputer/ufo-galaxy-realization-main
+cd /mnt/okcomputer/galaxy-realization-main
 grep -rn "f\".*'{\|f'.*'{\|WHERE.*'{\|MATCH.*'{" external/memos/src/memos/graph_dbs/*.py | grep -v "logger\." | grep -v "traceback" | grep -v "exc_info"
 ```
 

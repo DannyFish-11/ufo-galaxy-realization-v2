@@ -6,7 +6,7 @@
 ## 概述
 
 MCP Bridge 允许用任意语言（Node.js、Go、Rust、Java 等）实现 MCP Server，
-只要该 Server 遵循本规范，就能被 UFO Galaxy 的 `mcp_bridge/bridge.py` 加载和调用。
+只要该 Server 遵循本规范，就能被 Galaxy 的 `mcp_bridge/bridge.py` 加载和调用。
 
 ## 协议
 
@@ -29,7 +29,7 @@ MCP Bridge 允许用任意语言（Node.js、Go、Rust、Java 等）实现 MCP S
   "params": {
     "protocolVersion": "2024-11-05",
     "capabilities": {},
-    "clientInfo": {"name": "ufo-galaxy", "version": "2.0"}
+    "clientInfo": {"name": "galaxy", "version": "2.0"}
   }
 }
 ```

@@ -1,13 +1,13 @@
-# UFO Galaxy UI-L4 集成方案
+# Galaxy UI-L4 集成方案
 
 ## 项目概述
 
-本项目实现了UFO Galaxy系统的UI与L4主循环的完整集成，打通了用户输入到系统执行的完整链路。
+本项目实现了Galaxy系统的UI与L4主循环的完整集成，打通了用户输入到系统执行的完整链路。
 
 ## 目录结构
 
 ```
-ufo_galaxy_integration/
+galaxy_integration/
 ├── core/
 │   └── galaxy_main_loop_l4_enhanced.py  # 增强版L4主循环（带UI回调）
 ├── integration/
@@ -35,7 +35,7 @@ ufo_galaxy_integration/
 pip install PyQt6 websockets aiohttp asyncio
 
 # 如果使用原始L4组件，还需要:
-pip install -r /path/to/ufo-galaxy-realization/requirements.txt
+pip install -r /path/to/galaxy-realization/requirements.txt
 ```
 
 ### 2. 启动服务器

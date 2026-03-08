@@ -1,6 +1,6 @@
 """
 Node 12: File Operations
-UFO Galaxy 64-Core MCP Matrix - Core Tool Node
+Galaxy 64-Core MCP Matrix - Core Tool Node
 
 Provides comprehensive file system operations:
 - File read/write/append
@@ -10,7 +10,7 @@ Provides comprehensive file system operations:
 - Archive operations (zip, tar)
 - File watching and monitoring
 
-Author: UFO Galaxy Team
+Author: Galaxy Team
 Version: 5.0.0
 """
 
@@ -47,7 +47,7 @@ NODE_NAME = os.getenv("NODE_NAME", "FileOperations")
 NODE_PORT = int(os.getenv("NODE_PORT", "8120"))
 STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", str(Path.home() / "workspace"))
+WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.join(os.path.expanduser("~"), "workspace"))
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100MB
 
 logging.basicConfig(
@@ -573,7 +573,7 @@ class FileService:
 
 app = FastAPI(
     title=f"Node {NODE_ID}: {NODE_NAME}",
-    description="File operations service for UFO Galaxy",
+    description="File operations service for Galaxy",
     version="5.0.0"
 )
 

@@ -20,7 +20,7 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("UFO-Galaxy.HealthIntegration")
+logger = logging.getLogger("Galaxy.HealthIntegration")
 
 
 class UnifiedHealthManager:

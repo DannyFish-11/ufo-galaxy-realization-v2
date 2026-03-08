@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UFO Galaxy 系统最终端到端功能测试
+Galaxy 系统最终端到端功能测试
 测试所有核心模块、节点和UI的完整性
 """
 
@@ -106,9 +106,9 @@ def test_ui_files():
         return False
     
     # 安卓端 UI (需要检查安卓仓库)
-    android_root = os.path.abspath(os.path.join(project_root, '..', 'ufo-galaxy-android'))
+    android_root = os.path.abspath(os.path.join(project_root, '..', 'galaxy-android'))
     android_ui_layout = os.path.join(android_root, 'app', 'src', 'main', 'res', 'layout', 'floating_window_dynamic_island.xml')
-    android_ui_code = os.path.join(android_root, 'app', 'src', 'main', 'java', 'com', 'ufo', 'galaxy', 'ui', 'DynamicIslandFloatingWindow.kt')
+    android_ui_code = os.path.join(android_root, 'app', 'src', 'main', 'java', 'com', 'galaxy', 'app', 'ui', 'DynamicIslandFloatingWindow.kt')
     
     if os.path.exists(android_ui_layout) and os.path.exists(android_ui_code):
         layout_size = os.path.getsize(android_ui_layout)
@@ -160,7 +160,7 @@ def test_code_statistics():
 def main():
     """运行所有测试"""
     print("\n" + "=" * 60)
-    print("UFO Galaxy 系统最终端到端功能测试")
+    print("Galaxy 系统最终端到端功能测试")
     print("=" * 60 + "\n")
     
     tests = [

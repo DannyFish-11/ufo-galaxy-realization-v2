@@ -2,7 +2,7 @@
 name: web_search
 description: "Search the web using DuckDuckGo"
 version: "1.0.0"
-author: "UFO Galaxy"
+author: "Galaxy"
 tags: ["search", "web", "duckduckgo"]
 ---
 

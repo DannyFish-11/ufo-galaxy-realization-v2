@@ -253,7 +253,7 @@ DEEPSEEK_API_KEY=...  # DeepSeek API Key
 ## 启动节点
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes/nodes/node_114_opencode
+cd /path/to/galaxy-enhanced-nodes/nodes/node_114_opencode
 python server.py
 ```
 
@@ -264,7 +264,7 @@ python server.py
 ## 测试
 
 ```bash
-cd /path/to/ufo-galaxy-enhanced-nodes
+cd /path/to/galaxy-enhanced-nodes
 python -m pytest tests/test_node_114.py -v
 ```
 

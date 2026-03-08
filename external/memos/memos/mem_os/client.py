@@ -1,7 +1,8 @@
 """
-Minimal ClientMOS - a lightweight wrapper around MOSCore for client-side usage.
+ClientMOS — Memory Operating System 客户端
+
+提供对 MOSCore 的高层封装，简化外部调用者对记忆系统的访问。
 """
-from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -11,80 +12,147 @@ logger = logging.getLogger(__name__)
 
 class ClientMOS:
     """
-    Minimal client interface for the Memory Operating System (MemOS).
+    Memory Operating System 客户端。
 
-    Wraps :class:`memos.mem_os.core.MOSCore` when available, otherwise
-    operates in a degraded (no-op) mode so that imports never fail at
-    runtime.
+    封装 MOSCore 的常用操作，提供简洁的 API 给外部集成方使用。
+
+    Example:
+        >>> client = ClientMOS(user_id="user1")
+        >>> client.chat("你好")
+        >>> client.add_memory("今天学习了 Python")
+        >>> results = client.search("Python 学习")
     """
 
-    def __init__(self, config: Optional[Any] = None) -> None:
-        self._core: Optional[Any] = None
-        if config is not None:
-            try:
-                from memos.mem_os.core import MOSCore  # type: ignore
-                self._core = MOSCore(config)
-                logger.info("ClientMOS: MOSCore initialised successfully.")
-            except Exception as exc:  # pragma: no cover
-                logger.warning("ClientMOS: could not initialise MOSCore (%s). Running in degraded mode.", exc)
+    def __init__(self, user_id: str = "default", session_id: str = "", config: Optional[Dict[str, Any]] = None):
+        self.user_id = user_id
+        self.session_id = session_id or f"{user_id}_session"
+        self._config = config or {}
+        self._core = None
+        self._initialized = False
 
-    # ------------------------------------------------------------------
-    # Core operations (delegate to MOSCore when available)
-    # ------------------------------------------------------------------
-
-    def chat(self, query: str, user_id: Optional[str] = None, **kwargs: Any) -> str:
-        """Send a chat message and return the response string."""
+    def _ensure_core(self):
+        """延迟初始化 MOSCore"""
         if self._core is not None:
-            try:
-                return self._core.chat(query, user_id=user_id, **kwargs)
-            except Exception as exc:
-                logger.error("ClientMOS.chat failed: %s", exc)
-        return ""
+            return
+        try:
+            from memos.configs.mem_os import MOSConfig
+            from memos.mem_os.core import MOSCore
 
-    def add(self, messages: Any, user_id: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
-        """Add memories."""
-        if self._core is not None:
-            try:
-                return self._core.add(messages, user_id=user_id, **kwargs)  # type: ignore[return-value]
-            except Exception as exc:
-                logger.error("ClientMOS.add failed: %s", exc)
-        return {"success": False, "error": "MOSCore not available"}
+            mos_config = MOSConfig(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                **self._config,
+            )
+            self._core = MOSCore(config=mos_config)
+            self._initialized = True
+            logger.info(f"ClientMOS 初始化成功: user={self.user_id}, session={self.session_id}")
+        except Exception as e:
+            logger.warning(f"ClientMOS 初始化失败 (MOS 依赖可能未安装): {e}")
+            self._core = None
+            self._initialized = False
 
-    def search(self, query: str, user_id: Optional[str] = None, **kwargs: Any) -> List[Any]:
-        """Search memories."""
-        if self._core is not None:
-            try:
-                return self._core.search(query, user_id=user_id, **kwargs)  # type: ignore[return-value]
-            except Exception as exc:
-                logger.error("ClientMOS.search failed: %s", exc)
-        return []
-
-    def get(self, mem_cube_id: str, memory_id: str, user_id: Optional[str] = None) -> Optional[Any]:
-        """Get a single memory by id."""
-        if self._core is not None:
-            try:
-                return self._core.get(mem_cube_id, memory_id, user_id=user_id)
-            except Exception as exc:
-                logger.error("ClientMOS.get failed: %s", exc)
-        return None
-
-    def delete(self, mem_cube_id: str, memory_id: str, user_id: Optional[str] = None) -> None:
-        """Delete a memory."""
-        if self._core is not None:
-            try:
-                self._core.delete(mem_cube_id, memory_id, user_id=user_id)
-            except Exception as exc:
-                logger.error("ClientMOS.delete failed: %s", exc)
-
-    def get_user_info(self) -> Dict[str, Any]:
-        """Return user information summary."""
-        if self._core is not None:
-            try:
-                return self._core.get_user_info()  # type: ignore[return-value]
-            except Exception as exc:
-                logger.error("ClientMOS.get_user_info failed: %s", exc)
-        return {}
-
+    @property
     def is_available(self) -> bool:
-        """Return *True* when a live MOSCore backend is connected."""
-        return self._core is not None
+        """检查 MOS 核心是否可用"""
+        if not self._initialized:
+            self._ensure_core()
+        return self._initialized and self._core is not None
+
+    def chat(self, message: str, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+        """
+        与 MOS 进行对话。
+
+        Args:
+            message: 用户消息
+            history: 对话历史 (可选)
+
+        Returns:
+            包含 response 的字典
+        """
+        self._ensure_core()
+        if not self._core:
+            return {"success": False, "error": "MOS core not available", "response": ""}
+
+        try:
+            chat_history = []
+            if history:
+                for item in history:
+                    chat_history.append({"role": item.get("role", "user"), "content": item.get("content", "")})
+            chat_history.append({"role": "user", "content": message})
+
+            result = self._core.chat(messages=chat_history)
+            return {"success": True, "response": result}
+        except Exception as e:
+            logger.error(f"ClientMOS.chat 失败: {e}")
+            return {"success": False, "error": str(e), "response": ""}
+
+    def add_memory(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        添加一条记忆。
+
+        Args:
+            content: 记忆内容
+            metadata: 额外元数据
+
+        Returns:
+            操作结果
+        """
+        self._ensure_core()
+        if not self._core:
+            return {"success": False, "error": "MOS core not available"}
+
+        try:
+            result = self._core.add(content=content, metadata=metadata or {})
+            return {"success": True, "result": result}
+        except Exception as e:
+            logger.error(f"ClientMOS.add_memory 失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    def search(self, query: str, top_k: int = 5) -> Dict[str, Any]:
+        """
+        搜索记忆。
+
+        Args:
+            query: 搜索查询
+            top_k: 返回结果数量
+
+        Returns:
+            搜索结果
+        """
+        self._ensure_core()
+        if not self._core:
+            return {"success": False, "error": "MOS core not available", "results": []}
+
+        try:
+            results = self._core.search(query=query, top_k=top_k)
+            return {"success": True, "results": results}
+        except Exception as e:
+            logger.error(f"ClientMOS.search 失败: {e}")
+            return {"success": False, "error": str(e), "results": []}
+
+    def get_summary(self) -> Dict[str, Any]:
+        """获取当前会话摘要"""
+        self._ensure_core()
+        if not self._core:
+            return {"success": False, "error": "MOS core not available"}
+
+        try:
+            summary = self._core.get_summary() if hasattr(self._core, "get_summary") else "No summary available"
+            return {"success": True, "summary": summary}
+        except Exception as e:
+            logger.error(f"ClientMOS.get_summary 失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    def clear_session(self) -> Dict[str, Any]:
+        """清除当前会话数据"""
+        self._ensure_core()
+        if not self._core:
+            return {"success": False, "error": "MOS core not available"}
+
+        try:
+            if hasattr(self._core, "clear_session"):
+                self._core.clear_session()
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"ClientMOS.clear_session 失败: {e}")
+            return {"success": False, "error": str(e)}

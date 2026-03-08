@@ -1,5 +1,5 @@
 """
-UFO Galaxy Fusion - Android Granular Adapter
+Galaxy Fusion - Android Granular Adapter
 功能: 将 AIP v2.0 消息转化为 Node 33 (ADB) / Node 34 (Scrcpy) 可执行的颗粒级指令。
 支持完整的设备控制命令集: click, swipe, input, keyevent, screenshot, shell, app_launch等。
 """

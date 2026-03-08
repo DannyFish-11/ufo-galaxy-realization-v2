@@ -34,10 +34,24 @@ from enum import Enum
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from nodes.common.cors_config import get_cors_origins
 from pydantic import BaseModel, Field
 import uvicorn
 import httpx
-import redis.asyncio as redis
+
+try:
+    import redis.asyncio as redis
+    HAS_REDIS = True
+except ImportError:
+    redis = None
+    HAS_REDIS = False
+    logging.getLogger("Node_80_MemorySystem").warning("redis 未安装，短期记忆功能降级")
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
 
 # =============================================================================
 # Configuration
@@ -49,7 +63,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Redis 配置（短期记忆）
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-REDIS_PREFIX = os.getenv("REDIS_PREFIX", "ufo_galaxy:")
+REDIS_PREFIX = os.getenv("REDIS_PREFIX", "galaxy:")
 SHORT_TERM_TTL = int(os.getenv("SHORT_TERM_TTL", "3600"))  # 1 小时
 
 # Memos 配置（长期记忆）
@@ -58,7 +72,7 @@ MEMOS_TOKEN = os.getenv("MEMOS_TOKEN", "")
 
 # ChromaDB 配置（语义记忆）
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_db")
-CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "ufo_galaxy_memory")
+CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "galaxy_memory")
 
 # SQLite 配置（用户画像）
 SQLITE_PATH = os.getenv("SQLITE_PATH", "./user_profile.db")
@@ -789,7 +803,7 @@ async def clear_session(session_id: str):
 # =============================================================================
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("NODE_PORT", "8208")))
 
 
 # =============================================================================
@@ -798,6 +812,17 @@ if __name__ == "__main__":
 
 try:
     from academic_extension import academic_manager, PaperNote, CitationNetwork
+    HAS_ACADEMIC = True
+except ImportError:
+    HAS_ACADEMIC = False
+    academic_manager = None
+    from pydantic import BaseModel as _AcademicBase
+    class PaperNote(_AcademicBase):
+        paper_id: str = ""
+        title: str = ""
+    class CitationNetwork(_AcademicBase):
+        paper_id: str = ""
+    logging.getLogger("Node_80_MemorySystem").warning("academic_extension 未安装，学术功能不可用")
 
     @app.post("/academic/paper_note")
     async def save_academic_paper_note(paper: PaperNote):

@@ -7,12 +7,27 @@ import os
 import base64
 import hashlib
 import hmac
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from nodes.common.cors_config import get_cors_origins
+
+logger = logging.getLogger("Node_19_Crypto")
+
+# 可选依赖：优雅降级
+try:
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
+    logger.warning("fastapi/pydantic 未安装，HTTP API 不可用")
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    def get_cors_origins():
+        return ["*"]
 
 # 尝试导入cryptography
 try:
@@ -21,11 +36,19 @@ try:
     from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     CRYPTO_AVAILABLE = True
-except ImportError:
+except BaseException as e:
     CRYPTO_AVAILABLE = False
+    logger.warning(f"cryptography 不可用: {e}")
 
-app = FastAPI(title="Node 19 - Crypto", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+if HAS_FASTAPI:
+    app = FastAPI(title="Node 19 - Crypto", version="2.0.0")
+    app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+else:
+    app = None
+
+if not HAS_FASTAPI:
+    class BaseModel:
+        pass
 
 class HashRequest(BaseModel):
     data: str

@@ -15,6 +15,6 @@ async def execute(name: str) -> dict:
         结果
     """
     return {
-        "message": f"你好, {name}! 欢迎使用 UFO Galaxy!",
+        "message": f"你好, {name}! 欢迎使用 Galaxy!",
         "timestamp": __import__('datetime').datetime.now().isoformat(),
     }
