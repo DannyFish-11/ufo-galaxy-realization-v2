@@ -21,7 +21,7 @@ import uvicorn
 import uuid
 import logging
 
-from core.llm_manager import LLMManager
+from core.multi_llm_router import get_llm_router
 from galaxy_gateway.websocket_handler import handle_websocket, connection_manager
 from galaxy_gateway.device_router import device_router
 from nodes.common.cors_config import get_cors_origins
@@ -45,7 +45,7 @@ app.add_middleware(
 )
 
 # 初始化 LLM 客户端
-llm_client = LLMManager()
+llm_client = get_llm_router()
 
 
 # ===== 数据模型 =====

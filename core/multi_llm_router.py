@@ -850,9 +850,132 @@ class MultiLLMRouter:
                 self.providers[name].status = ProviderStatus.DOWN
         return results
 
+    # ───────── LLMManager 兼容接口 ─────────
+    # 使 MultiLLMRouter 可以作为 LLMManager 的替代品使用，
+    # 保持与 scheduler 和 chat.py 的接口兼容。
+
+    def is_available(self) -> bool:
+        """检查是否有可用的 LLM Provider"""
+        return len(self.providers) > 0
+
+    def get_default_model(self) -> str:
+        """获取默认模型名"""
+        if self.providers:
+            first = next(iter(self.providers.values()))
+            return first.default_model
+        return "gpt-4o"
+
+    def get_provider_status(self) -> list:
+        """获取所有 Provider 状态（兼容 LLMManager 格式）"""
+        result = []
+        for name, prov in self.providers.items():
+            result.append({
+                "provider": name,
+                "model": prov.default_model,
+                "source": "env/vault",
+                "active": prov.status != ProviderStatus.DOWN,
+                "supports_tools": prov.supports_tools,
+            })
+        return result
+
+    async def chat_completion(
+        self,
+        messages: list,
+        tools: list = None,
+        model_alias: str = None,
+        task_type: str = None,
+        **kwargs,
+    ):
+        """
+        OpenAI 兼容的 chat completion 接口。
+        内部调用 self.chat() 并将 LLMResponse 转为 OpenAI 格式，
+        使 scheduler 等依赖 .choices[0].message 格式的模块无需修改。
+        """
+        resp = await self.chat(
+            messages=messages,
+            tools=tools,
+            model=model_alias,
+            task_type=task_type,
+            **{k: v for k, v in kwargs.items() if k in (
+                "temperature", "max_tokens", "response_format",
+                "auto_failover", "provider", "tool_choice",
+            )},
+        )
+
+        # 如果 raw_response 存在且有标准 OpenAI 格式，直接用它
+        if resp.raw_response and "choices" in resp.raw_response:
+            return _OpenAICompatResponse(resp.raw_response, resp.model)
+
+        # 否则手动构建 OpenAI 兼容结构
+        message_dict = {"role": "assistant", "content": resp.content}
+        if resp.tool_calls:
+            message_dict["tool_calls"] = resp.tool_calls
+
+        return _OpenAICompatResponse({
+            "choices": [{"message": message_dict, "finish_reason": "stop"}],
+            "model": resp.model,
+            "usage": {
+                "prompt_tokens": resp.input_tokens,
+                "completion_tokens": resp.output_tokens,
+            },
+        }, resp.model)
+
     async def close(self):
         for adapter in self.adapters.values():
             await adapter.close()
+
+
+class _OpenAICompatResponse:
+    """
+    将 dict 包装为 OpenAI SDK 风格的响应对象，
+    支持 response.choices[0].message.content / .tool_calls 访问。
+    """
+
+    def __init__(self, data: dict, model: str = ""):
+        self._data = data
+        self.model = model or data.get("model", "")
+        self.choices = [_OpenAICompatChoice(c) for c in data.get("choices", [])]
+        usage = data.get("usage", {})
+        self.usage = _OpenAICompatUsage(usage) if usage else None
+
+
+class _OpenAICompatUsage:
+    def __init__(self, data: dict):
+        self.prompt_tokens = data.get("prompt_tokens", 0)
+        self.completion_tokens = data.get("completion_tokens", 0)
+        self.total_tokens = self.prompt_tokens + self.completion_tokens
+
+
+class _OpenAICompatChoice:
+    def __init__(self, data: dict):
+        msg = data.get("message", {})
+        self.message = _OpenAICompatMessage(msg)
+        self.finish_reason = data.get("finish_reason", "stop")
+
+
+class _OpenAICompatMessage:
+    def __init__(self, data: dict):
+        self.role = data.get("role", "assistant")
+        self.content = data.get("content", "")
+        raw_tool_calls = data.get("tool_calls")
+        if raw_tool_calls:
+            self.tool_calls = [_OpenAICompatToolCall(tc) for tc in raw_tool_calls]
+        else:
+            self.tool_calls = None
+
+
+class _OpenAICompatToolCall:
+    def __init__(self, data: dict):
+        self.id = data.get("id", "")
+        self.type = data.get("type", "function")
+        func = data.get("function", {})
+        self.function = _OpenAICompatFunction(func)
+
+
+class _OpenAICompatFunction:
+    def __init__(self, data: dict):
+        self.name = data.get("name", "")
+        self.arguments = data.get("arguments", "{}")
 
 
 # ───────────────────── 单例 ─────────────────────

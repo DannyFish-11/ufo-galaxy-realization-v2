@@ -174,17 +174,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 for key, val in sorted(current_env.items()):
                     f.write(f"{key}={val}\n")
 
-            # 热重载 LLM Manager 以拾取新 API Key
+            # 热重载 LLM Router 以拾取新 API Key
             if updated_keys and any("API_KEY" in k or "URL" in k for k in updated_keys):
                 try:
-                    from core.llm_manager import LLMManager
-                    _llm = LLMManager(os.path.join(
-                        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.json"
-                    ))
-                    _llm.reload()
-                    logger.info(f"LLM Manager 已热重载 (更新: {updated_keys})")
+                    from core.multi_llm_router import get_llm_router
+                    router = get_llm_router()
+                    router._discover_providers()  # 重新发现 providers
+                    logger.info(f"LLM Router 已热重载 (更新: {updated_keys})")
                 except Exception as e:
-                    logger.warning(f"LLM Manager 热重载失败: {e}")
+                    logger.warning(f"LLM Router 热重载失败: {e}")
 
             return {"status": "success", "message": "Configuration updated", "updated": updated_keys}
         except Exception as e:

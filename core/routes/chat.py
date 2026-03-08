@@ -59,12 +59,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
 
     from core.scheduler import AutonomousScheduler
-    from core.llm_manager import LLMManager
+    from core.multi_llm_router import get_llm_router
 
     scheduler = AutonomousScheduler(nodes_root)
-    llm_manager = LLMManager(os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.json"
-    ))
+    llm_router = get_llm_router()  # 统一使用 MultiLLMRouter（任务感知路由+成本追踪+故障转移）
 
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
@@ -89,11 +87,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 logger.debug(f"Conversation memory unavailable: {e}")
 
             # === 意图分流 ===
-            if _is_action_intent(req.message) and llm_manager.is_available():
-                result = await _handle_agent_action(req, session_id, scheduler, llm_manager)
+            if _is_action_intent(req.message) and llm_router.is_available():
+                result = await _handle_agent_action(req, session_id, scheduler, llm_router)
                 return result
             else:
-                result = await _handle_pure_chat(req, session_id, llm_manager)
+                result = await _handle_pure_chat(req, session_id, llm_router)
                 return result
 
         except Exception as e:
@@ -110,7 +108,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
 
 async def _handle_agent_action(
-    req: ChatRequest, session_id: str, scheduler, llm_manager
+    req: ChatRequest, session_id: str, scheduler, llm_router
 ) -> JSONResponse:
     """操作指令 → ReAct Agent 调度"""
     try:
@@ -168,7 +166,7 @@ async def _handle_agent_action(
 
         plan_result = await scheduler.plan_and_execute(
             req.message,
-            llm_manager,
+            llm_router,
             execution_context,
             max_turns=5,
         )
@@ -198,7 +196,7 @@ async def _handle_agent_action(
             intent="action",
             confidence=0.9,
             mode="agent_react",
-            model=llm_manager.get_default_model(),
+            model=llm_router.get_default_model(),
             data={"steps": steps},
             session_id=session_id,
         )
@@ -206,7 +204,7 @@ async def _handle_agent_action(
 
     except ValueError as ve:
         logger.warning(f"Agent 调度失败 (LLM 不可用): {ve}, 降级到纯聊天")
-        return await _handle_pure_chat(req, session_id, llm_manager)
+        return await _handle_pure_chat(req, session_id, llm_router)
     except Exception as e:
         logger.error(f"Agent 调度异常: {e}")
         resp = UnifiedChatResponse(
@@ -220,10 +218,10 @@ async def _handle_agent_action(
 
 
 async def _handle_pure_chat(
-    req: ChatRequest, session_id: str, llm_manager
+    req: ChatRequest, session_id: str, llm_router
 ) -> JSONResponse:
     """纯 LLM 对话 (无工具调用)"""
-    if llm_manager.is_available():
+    if llm_router.is_available():
         try:
             messages = [
                 {"role": "system", "content": (
@@ -236,9 +234,9 @@ async def _handle_pure_chat(
                 messages.append(ctx)
             messages.append({"role": "user", "content": req.message})
 
-            response = await llm_manager.chat_completion(messages=messages)
+            response = await llm_router.chat_completion(messages=messages, task_type="GENERAL")
             reply = response.choices[0].message.content or ""
-            model_name = response.model if hasattr(response, "model") else llm_manager.get_default_model()
+            model_name = response.model if hasattr(response, "model") else llm_router.get_default_model()
 
             try:
                 from core.ai_intent import get_conversation_memory
@@ -258,7 +256,7 @@ async def _handle_pure_chat(
             )
             return JSONResponse(resp.to_json_response())
         except Exception as e:
-            logger.warning(f"LLMManager chat failed: {e}")
+            logger.warning(f"LLM chat failed: {e}")
 
     resp = UnifiedChatResponse(
         success=False,
