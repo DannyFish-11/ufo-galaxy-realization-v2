@@ -384,7 +384,50 @@ eval(condition, {"__builtins__": {}}, context)
 
 ---
 
-## 十一、是否需要重新设计？
+## 十一、全链路数据流审计
+
+### 已通的路径 ✅
+1. **纯聊天**: 用户→chat.py→LLMManager→LLM回复 ✅
+2. **设备命令**: LLM生成send_to_device→device_comm.send_command()→WebSocket ✅
+3. **MCP工具注入**: scheduler可列出和调用MCP工具(IF已加载) ✅
+4. **Skill加载执行**: skill_loader.load()+execute() ✅
+5. **Windows客户端**: F12侧边栏→POST /api/v1/chat→fallback链 ✅
+6. **Dashboard配置**: API Key管理→验证→环境同步 ✅
+
+### 断裂的路径 ❌
+1. **Agent工厂从未被调用**: agent_factory.py 771行定义了完整生命周期，但无API端点触发
+2. **chat.py用错LLM路由器**: 用Legacy LLMManager，不用MultiLLMRouter (86%绕过率)
+3. **ai_intent未接入chat**: IntentParser定义了但chat路由不调用它
+4. **Skills不是scheduler工具**: scheduler不知道已加载的skills
+5. **MCP Bridge未启动**: mcp_bridge/bridge.py定义了但startup不调它
+6. **Twin孪生零import**: twin_model.py 464行，整个仓库零引用
+7. **DigitalTwin零调用**: startup初始化了但无代码调用其方法
+8. **capability_orchestrator被跳过**: scheduler直接执行，不走能力发现
+9. **device_agent_manager被跳过**: scheduler用WebSocket直发，不走设备Agent
+10. **Android桥不完整**: AIP协议定义了但执行路径未闭环
+11. **task_decomposer被跳过**: orchestrator硬编码任务列表
+
+### Windows客户端详情 (70%可用)
+- ✅ PyQt5侧边栏 + F12热键 + 滑入动画
+- ✅ LLM对话(Galaxy→Dashboard→直连LLM fallback链)
+- ✅ 本地自动化(UIAutomation、键鼠控制)
+- ✅ AIP客户端(WebSocket设备注册)
+- ✅ MCP Server(暴露自动化为MCP工具)
+- ❌ scroll_paper_view.py 卷轴组件(定义了但未实例化)
+- ❌ 语音输入(桩代码)
+
+### Dashboard详情 (80%可用)
+- ✅ API Key管理(OneAPI/各厂商/工具)
+- ✅ API Key验证(测试连通性)
+- ✅ 节点状态(依赖core)
+- ✅ 设备列表(依赖core)
+- ❌ MCP管理界面不存在
+- ❌ Skill管理界面不存在
+- ❌ 灵动岛风格未实现(当前是传统Tab)
+
+---
+
+## 十二、是否需要重新设计？
 
 ### 推荐方案：**有针对性的架构重构（非推倒重写）**
 
