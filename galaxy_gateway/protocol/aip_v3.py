@@ -204,6 +204,11 @@ class MessageType(str, Enum):
     CAPABILITY_REPORT = "capability_report"
     CAPABILITY_REPORT_ACK = "capability_report_ack"
     DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
+
+    # === 唤醒与会话漫游 ===
+    WAKE_EVENT = "wake_event"
+    SESSION_MIGRATE = "session_migrate"
+    SESSION_MIGRATE_ACK = "session_migrate_ack"
     DIAGNOSTICS_PAYLOAD_ACK = "diagnostics_payload_ack"
 
     # === 视觉请求 ===

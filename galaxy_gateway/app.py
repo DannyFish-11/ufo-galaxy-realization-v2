@@ -355,6 +355,91 @@ async def send_command(request: CommandRequest):
 # Maps old /api/devices/* paths → current /api/v1/devices/* behaviour
 # ============================================================================
 
+# ============================================================================
+# Session Roaming REST API
+# ============================================================================
+
+class SessionMigrateRequest(BaseModel):
+    target_device_id: str
+
+
+@app.get("/api/v1/sessions")
+async def list_sessions(state: Optional[str] = None):
+    """列出所有会话（可按状态过滤）"""
+    try:
+        from galaxy_gateway.session_roaming import session_roaming, SessionState
+
+        filter_state = None
+        if state:
+            try:
+                filter_state = SessionState(state)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid state: {state}")
+
+        sessions = session_roaming.list_sessions(state=filter_state)
+        return {"sessions": sessions, "total": len(sessions)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sessions/{session_id}")
+async def get_session(session_id: str):
+    """获取单个会话详情"""
+    try:
+        from galaxy_gateway.session_roaming import session_roaming
+
+        session = session_roaming.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return session.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/migrate")
+async def migrate_session(session_id: str, request: SessionMigrateRequest):
+    """触发会话迁移到目标设备"""
+    try:
+        from galaxy_gateway.session_roaming import session_roaming
+
+        success = await session_roaming.migrate_session(
+            session_id, request.target_device_id
+        )
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Migration failed (session not found or already closed)"
+            )
+        return {
+            "success": True,
+            "session_id": session_id,
+            "target_device_id": request.target_device_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sessions/stats")
+async def session_stats():
+    """获取会话统计信息"""
+    try:
+        from galaxy_gateway.session_roaming import session_roaming
+        return session_roaming.get_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Legacy HTTP device API compatibility shim
+# Maps old /api/devices/* paths → current /api/v1/devices/* behaviour
+# ============================================================================
+
 class _LegacyRegisterRequest(BaseModel):
     device_id: str
     device_type: str = "android"

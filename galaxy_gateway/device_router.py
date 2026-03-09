@@ -103,15 +103,11 @@ class DeviceRouter:
         self.devices: Dict[str, Device] = {}
         self.task_queue: Dict[str, Dict] = {}
         self.task_results: Dict[str, Dict] = {}
+        self._task_events: Dict[str, asyncio.Event] = {}
 
     def register_device(self, device_id: str, device_type: str,
                         capabilities: List[str], websocket=None) -> bool:
         """注册设备 — 同时写入本地运行时表和统一注册表"""
-        self._task_events: Dict[str, asyncio.Event] = {}
-    
-    def register_device(self, device_id: str, device_type: str, 
-                       capabilities: List[str], websocket=None) -> bool:
-        """注册设备"""
         try:
             device = Device(device_id, device_type, capabilities)
             device.websocket = websocket

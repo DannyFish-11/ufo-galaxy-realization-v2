@@ -13,94 +13,6 @@
         * { font-family: 'Rajdhani', sans-serif; }
         body { background: #000000; overflow: hidden; }
 
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700;900&display=swap');
-
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-        body { background: #000000; overflow: hidden; user-select: none; }
-
-        /* ── Galaxy 背景 ── */
-        .galaxy-bg {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(ellipse at 50% 50%, #0a0a1a 0%, #000000 70%),
-                        radial-gradient(circle at 25% 75%, rgba(100, 60, 255, 0.08) 0%, transparent 50%),
-                        radial-gradient(circle at 75% 25%, rgba(0, 180, 255, 0.08) 0%, transparent 50%);
-            z-index: -2;
-        }
-
-        .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
-        .star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; }
-        @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.2; } }
-
-        .galaxy-title {
-            font-family: 'Orbitron', monospace;
-            background: linear-gradient(135deg, #00d4ff, #7b2fff, #ff006e, #00d4ff);
-            background-size: 300% 300%;
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            animation: gradient-shift 5s ease infinite;
-        }
-        @keyframes gradient-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-
-        .status-card { background: rgba(10, 10, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .galaxy-input { background: rgba(10, 10, 30, 0.8); border: 1px solid rgba(0, 212, 255, 0.3); transition: all 0.3s ease; }
-        .galaxy-input:focus { border-color: rgba(0, 212, 255, 0.6); box-shadow: 0 0 20px rgba(0, 212, 255, 0.2); }
-
-        .tab-active { background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 47, 255, 0.2)); border-bottom: 2px solid #00d4ff; }
-
-        .valid { color: #00ff88; }
-        .invalid { color: #ff4444; }
-        .pending { color: #ffaa00; }
-
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
-        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7b2fff); border-radius: 3px; }
-
-        .dynamic-island {
-            position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 100;
-            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); cursor: pointer;
-        }
-        .dynamic-island.compact {
-            width: 220px; height: 30px; border-radius: 15px;
-            background: rgba(10, 10, 30, 0.85); border: 1px solid rgba(0, 212, 255, 0.3); backdrop-filter: blur(20px);
-        }
-        .dynamic-island.expanded {
-            width: 400px; border-radius: 18px;
-            background: rgba(10, 10, 30, 0.92); border: 1px solid rgba(0, 212, 255, 0.4);
-            backdrop-filter: blur(20px); box-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
-        }
-        .di-compact { display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 12px; }
-        .di-expanded { padding: 10px 14px; }
-        @keyframes island-pulse { 0%,100%{box-shadow:0 0 10px rgba(0,212,255,0.1)} 50%{box-shadow:0 0 20px rgba(255,170,0,0.3)} }
-        .dynamic-island.has-alert { animation: island-pulse 2s ease-in-out infinite; border-color: rgba(255,170,0,0.5); }
-
-        .node-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-        .node-dot.healthy { background: #00ff88; }
-        .node-dot.warning { background: #ffaa00; }
-        .node-dot.error { background: #ff4444; }
-        .node-dot.unknown { background: #666; }
-
-        .toggle-btn { position: relative; width: 36px; height: 20px; border-radius: 10px; cursor: pointer; transition: all 0.3s; }
-        .toggle-btn.on { background: #00d4ff; }
-        .toggle-btn.off { background: #444; }
-        .toggle-btn::after { content: ''; position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: all 0.3s; }
-        .toggle-btn.on::after { left: 18px; }
-        .toggle-btn.off::after { left: 2px; }
-        .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
-        .star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; }
-        @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.1; } }
-
-        /* ── 灵动岛核心 ── */
-        .dynamic-island {
-            position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 44px; height: 44px; min-width: 200px; padding: 0 20px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; z-index: 100;
-            transition: all 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
-        }
         .dynamic-island:hover { border-color: rgba(255, 255, 255, 0.15); }
         .dynamic-island.expanded {
             top: 12px; width: calc(100% - 80px); max-width: 960px;
@@ -686,10 +598,156 @@
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-        </main>
+                    <!-- ═══ 节点 API 配置（新增核心功能）═══ -->
+                    <div v-show="tab === 'nodeapis'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span style="font-size: 14px; font-weight: 600;">🌐 节点 API 配置</span>
+                                <div class="flex space-x-2 items-center">
+                                    <span style="font-size: 11px; color: rgba(255,255,255,0.35);">{{ nodeApis.filter(n => n.all_configured).length }}/{{ nodeApis.length }} 已配置</span>
+                                    <button @click="loadNodeApis" class="btn-sm btn-blue">刷新</button>
+                                </div>
+                            </div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.25); margin-bottom: 10px;">填入各节点所需的 API Key，激活系统能力</div>
+                        </div>
+
+                        <!-- 按类别分组 -->
+                        <div v-for="cat in nodeApiCategories" :key="cat.id" class="glass-card p-4">
+                            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">{{ cat.icon }} {{ cat.label }}</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div v-for="node in nodeApis.filter(n => n.category === cat.id)" :key="node.node_id" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <span style="font-size: 12px; font-weight: 500;">{{ node.name }}</span>
+                                        <span style="font-size: 10px;" :class="node.all_configured ? 'valid' : 'invalid'">{{ node.all_configured ? '✓ 已配置' : '✗ 待配置' }}</span>
+                                    </div>
+                                    <div v-for="key in node.keys" :key="key.env_var" class="mb-1.5">
+                                        <div style="font-size: 10px; color: rgba(255,255,255,0.3); margin-bottom: 2px;">{{ key.label }} ({{ key.env_var }})</div>
+                                        <div class="flex space-x-1.5">
+                                            <input v-model="key.inputValue" :type="key.env_var.includes('URL') ? 'text' : 'password'" :placeholder="key.configured ? key.masked : key.label" class="island-input flex-1 px-2.5 py-1.5" style="font-size: 11px; border-radius: 10px;">
+                                            <button @click="saveNodeApiKey(key.env_var, key.inputValue || '')" class="btn-sm btn-purple" style="padding: 4px 8px; font-size: 10px;">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ 工具配置 ═══ -->
+                    <div v-show="tab === 'tools'" style="flex: 1; overflow-y: auto;">
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">🔧 工具 API 配置</span>
+                                <button @click="validateAllTools" class="btn-sm btn-green">验证全部</button>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div v-for="tool in tools" :key="tool.tool_id" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span style="font-size: 12px; font-weight: 500;">{{ tool.name }}</span>
+                                        <span :class="tool.valid ? 'valid' : (tool.apiKey ? 'pending' : '')" style="font-size: 10px;">{{ tool.valid ? '✓' : (tool.apiKey ? '?' : '✗') }}</span>
+                                    </div>
+                                    <div style="font-size: 10px; color: rgba(255,255,255,0.25); margin-bottom: 6px;">{{ tool.description }}</div>
+                                    <input v-model="tool.apiKey" type="password" placeholder="API Key" class="island-input w-full px-2.5 py-1.5 mb-1.5" style="font-size: 11px; border-radius: 10px;">
+                                    <div class="flex space-x-1">
+                                        <button @click="saveTool(tool.tool_id, tool.apiKey)" class="btn-sm btn-blue flex-1">保存</button>
+                                        <button @click="validateTool(tool.tool_id)" class="btn-sm btn-green flex-1">验证</button>
+                                    </div>
+                                    <div v-if="tool.status" class="mt-1" style="font-size: 10px;" :class="tool.valid ? 'valid' : 'invalid'">{{ tool.status }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ Agent 监控 ═══ -->
+                    <div v-show="tab === 'agents'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div class="grid grid-cols-3 gap-3 text-center">
+                                <div><div style="font-size: 22px; font-weight: 700; color: #7c5cfc;">{{ agents.filter(a => a.state === 'working').length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">活跃</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #0a84ff;">{{ agents.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">总数</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #30d158;">{{ agentTemplates.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">模板</div></div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🏭 创建 Agent</div>
+                            <div class="flex space-x-2 items-center mb-3">
+                                <select v-model="selectedTemplate" class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px; appearance: none;">
+                                    <option value="">选择模板...</option>
+                                    <option v-for="t in agentTemplates" :key="t.name" :value="t.name">{{ t.display_name }} ({{ t.role }})</option>
+                                </select>
+                                <button @click="createAgentFromTemplate" class="btn-sm btn-purple" :disabled="!selectedTemplate">从模板创建</button>
+                            </div>
+                            <div class="flex space-x-2 items-center">
+                                <input v-model="agentTaskDesc" type="text" placeholder="描述任务，LLM 自动生成 Agent..." class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;" @keypress.enter="createAgentDynamic">
+                                <button @click="createAgentDynamic" class="btn-sm btn-blue" :disabled="!agentTaskDesc.trim()">智能创建</button>
+                            </div>
+                            <div v-if="agentCreateStatus" class="mt-2" style="font-size: 11px;" :class="agentCreateStatus.success ? 'valid' : 'invalid'">{{ agentCreateStatus.message }}</div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">📋 Agent 列表</span>
+                                <button @click="loadAgents" class="btn-sm btn-blue">刷新</button>
+                            </div>
+                            <div v-if="agents.length === 0" style="text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 20px 0;">暂无 Agent</div>
+                            <div class="space-y-2">
+                                <div v-for="agent in agents" :key="agent.id" class="provider-chip flex items-center justify-between">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="status-dot" :class="agent.state === 'working' ? 'online' : (agent.state === 'error' || agent.state === 'terminated' ? 'offline' : '')"></span>
+                                            <span style="font-size: 12px; font-weight: 600;">{{ agent.name }}</span>
+                                            <span style="font-size: 10px; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 6px;">{{ agent.role }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex space-x-1.5 ml-2">
+                                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px;" :style="{ background: agent.state === 'working' ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.05)', color: agent.state === 'working' ? '#30d158' : 'rgba(255,255,255,0.35)' }">{{ agent.state }}</span>
+                                        <button @click="deleteAgent(agent.id)" class="btn-sm" style="background: rgba(255,69,58,0.15); color: #ff453a; padding: 2px 8px; font-size: 10px;">删除</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ 系统测试（简化对话）═══ -->
+                    <div v-show="tab === 'test'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">🧪 系统连通测试</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.25); margin-bottom: 12px;">快速验证后端和 LLM 连通性。完整智能对话请使用 Windows 客户端。</div>
+                            <div class="flex space-x-2 mb-3">
+                                <input v-model="testMessage" type="text" placeholder="测试消息..." class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;" @keypress.enter="testLLM">
+                                <button @click="testLLM" class="send-btn px-4 py-2" style="font-size: 12px;">测试 LLM</button>
+                            </div>
+                            <div v-if="testResult" class="p-3" style="background: rgba(0,0,0,0.3); border-radius: 12px; font-size: 11px; font-family: 'SF Mono', monospace;">
+                                <pre style="white-space: pre-wrap; color: rgba(255,255,255,0.7);">{{ testResult }}</pre>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🌐 节点健康检查</div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 11px; color: rgba(255,255,255,0.3);">{{ nodes.length }} 个节点</span>
+                                <button @click="checkNodes" class="btn-sm btn-blue">检查全部</button>
+                            </div>
+                            <div class="grid grid-cols-8 gap-1.5">
+                                <div v-for="node in nodes" :key="node.node_id" class="provider-chip text-center" style="padding: 6px;">
+                                    <div style="font-size: 9px; color: rgba(255,255,255,0.25);">{{ node.node_id }}</div>
+                                    <div style="font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ node.name }}</div>
+                                    <div style="font-size: 9px;" :class="node.status === 'healthy' ? 'valid' : ''">{{ node.status || '—' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">💬 简单对话测试</div>
+                            <div class="flex space-x-2">
+                                <input v-model="inputMessage" @keypress.enter="sendMessage" type="text" placeholder="输入消息..." class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;">
+                                <button @click="sendMessage" class="send-btn px-4 py-2" style="font-size: 12px;">发送</button>
+                            </div>
+                            <div v-if="chatReply" class="mt-2 p-3" style="background: rgba(0,0,0,0.3); border-radius: 12px; font-size: 12px;">
+                                <div style="white-space: pre-wrap; color: rgba(255,255,255,0.7);">{{ chatReply }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </template>
+        </div>
     </div>
 
     <script>
@@ -846,31 +904,6 @@
     </div>
 
     <script>
-        (() => {
-            const c = document.getElementById('starsContainer');
-            for (let i = 0; i < 60; i++) {
-                const s = document.createElement('div');
-                s.className = 'star';
-                s.style.left = Math.random() * 100 + '%';
-                s.style.top = Math.random() * 100 + '%';
-                const size = Math.random() * 1.5 + 0.5 + 'px';
-                s.style.width = size; s.style.height = size;
-                s.style.setProperty('--duration', (Math.random() * 4 + 3) + 's');
-                s.style.setProperty('--opacity', Math.random() * 0.4 + 0.2);
-                c.appendChild(s);
-            }
-        })();
-
-        const { createApp, ref, onMounted, computed } = Vue;
-
-        createApp({
-            setup() {
-                const isExpanded = ref(false);
-                const tab = ref('llm');
-                const currentTime = ref('');
-                const chatContainer = ref(null);
-                const starsContainer = ref(null);
-
                 const configStatus = ref({});
                 const oneapiUrl = ref('http://localhost:8001/v1');
                 const oneapiKey = ref('');
@@ -951,81 +984,6 @@
                 const twinForm = reactive({ task: '', consensus_strategy: 'debate' });
                 const twinResult = ref(null);
                 const twinLoading = ref(false);
-                const inputMessage = ref('');
-                const chatReply = ref('');
-
-                const configuredCount = computed(() => {
-                    let count = 0;
-                    if (oneapiKey.value) count++;
-                    for (const p of Object.values(directProviders.value)) { if (p.apiKey) count++; }
-                    for (const t of tools.value) { if (t.apiKey) count++; }
-                    count += nodeApis.value.filter(n => n.all_configured).length;
-                    return count;
-                });
-
-                // Dynamic Island computed
-                const diOverallStatus = computed(() => {
-                    const d = diData.value;
-                    if (!d.nodes) return 'unknown';
-                    const healthyRatio = (d.nodes?.healthy || 0) / Math.max(d.nodes?.total || 1, 1);
-                    if (healthyRatio > 0.8) return 'healthy';
-                    if (healthyRatio > 0.5) return 'warning';
-                    return 'error';
-                });
-
-                const diStatusText = computed(() => {
-                    const map = { healthy: '正常', warning: '警告', error: '异常', unknown: '未知' };
-                    return map[diOverallStatus.value] || '未知';
-                });
-
-                const diActiveTasks = computed(() => diData.value.agents?.active || 0);
-
-                const diHasAlert = computed(() => diOverallStatus.value === 'warning' || diOverallStatus.value === 'error');
-
-                const diAlerts = computed(() => {
-                    const alerts = [];
-                    const d = diData.value;
-                    if (d.nodes && d.nodes.healthy < d.nodes.total) alerts.push(`${d.nodes.total - d.nodes.healthy} 个节点不健康`);
-                    if (d.mcp_servers && d.mcp_servers.running < d.mcp_servers.total) alerts.push(`${d.mcp_servers.total - d.mcp_servers.running} 个MCP服务未运行`);
-                    if (d.skills && d.skills.enabled < d.skills.total) alerts.push(`${d.skills.total - d.skills.enabled} 个技能未启用`);
-                    return alerts;
-                });
-
-                const filteredNodeCategories = computed(() => {
-                    const cats = nodeCategories.value;
-                    const result = {};
-                    const query = nodeSearchQuery.value.toLowerCase();
-                    for (const [cat, catNodes] of Object.entries(cats)) {
-                        if (nodeFilter.value !== 'all' && nodeFilter.value !== cat) continue;
-                        const filtered = catNodes.filter(n => {
-                            if (!query) return true;
-                            return (n.name || '').toLowerCase().includes(query) || (n.node_id || '').toLowerCase().includes(query);
-                        });
-                        if (filtered.length > 0) result[cat] = filtered;
-                    }
-                    return result;
-                });
-
-                const generateStars = () => {
-                    if (!starsContainer.value) return;
-                    for (let i = 0; i < 80; i++) {
-                        const star = document.createElement('div');
-                        star.className = 'star';
-                        star.style.left = Math.random() * 100 + '%';
-                        star.style.top = Math.random() * 100 + '%';
-                        star.style.width = Math.random() * 2 + 1 + 'px';
-                        star.style.height = star.style.width;
-                        star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
-                        star.style.setProperty('--opacity', Math.random() * 0.5 + 0.3);
-                        starsContainer.value.appendChild(star);
-                    }
-                };
-
-                const updateTime = () => { currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); };
-
-                const loadConfigStatus = async () => {
-                const updateTime = () => { currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false }); };
-
                 const loadConfigStatus = async () => { try { configStatus.value = (await axios.get('/api/v1/config/status')).data; } catch (e) {} };
                 const loadTools = async () => { try { tools.value = ((await axios.get('/api/v1/config/tools')).data.tools || []).map(t => ({ ...t, status: '' })); } catch (e) {} };
                 const loadNodes = async () => { try { nodes.value = (await axios.get('/api/v1/config/nodes')).data.nodes || []; } catch (e) {} };
@@ -1276,15 +1234,6 @@
                         twinResult.value = { result: '分析失败: ' + (error.response?.data?.detail || error.message) };
                     }
                     twinLoading.value = false;
-                };
-
-                const saveOneAPI = async () => {
-                    try {
-                        await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
-                };
-
                 const saveOneAPI = async () => { try { await axios.post('/api/v1/config/api-key', { provider: 'oneapi', api_key: oneapiKey.value }); loadConfigStatus(); } catch (e) { alert('保存失败: ' + e.message); } };
                 const validateOneAPI = async () => {
                     oneapiStatus.value = { valid: false, message: '验证中...' };
@@ -1294,19 +1243,6 @@
                 const saveProvider = async (name, apiKey) => {
                     try {
                         await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey });
-                        loadConfigStatus();
-                    } catch (error) { alert('保存失败: ' + error.message); }
-                };
-
-                const saveProvider = async (name, apiKey) => { try { await axios.post('/api/v1/config/api-key', { provider: name, api_key: apiKey }); loadConfigStatus(); } catch (e) { alert('保存失败: ' + e.message); } };
-                const validateProvider = async (name) => {
-                    directProviders.value[name].valid = false;
-                    try { directProviders.value[name].valid = (await axios.post('/api/v1/config/validate', { category: 'direct_models', key_name: name })).data.valid; } catch (e) {}
-                };
-
-                const saveTool = async (toolId, apiKey) => {
-                    try {
-                        await axios.post('/api/v1/config/tools/api-key', { tool_id: toolId, api_key: apiKey });
                         loadConfigStatus();
                     } catch (error) { alert('保存失败: ' + error.message); }
                 };
@@ -1328,112 +1264,6 @@
                     }
                 };
 
-                const validateAllTools = async () => { for (const t of tools.value) { if (t.apiKey) await validateTool(t.tool_id); } };
-                const testLLM = async () => {
-                    testResult.value = '测试中...';
-                    try { testResult.value = JSON.stringify((await axios.post('/api/v1/config/test-llm', { message: testMessage.value })).data, null, 2); } catch (e) { testResult.value = '失败: ' + e.message; }
-                };
-
-                const checkNodes = async () => {
-                    try {
-                        const response = await axios.post('/api/v1/config/nodes/check');
-                        const results = response.data.results;
-                        nodes.value.forEach(node => { node.status = results[node.node_id]?.success ? 'healthy' : 'error'; });
-                        // Also update categorized nodes
-                        for (const catNodes of Object.values(nodeCategories.value)) {
-                            for (const node of catNodes) {
-                                if (results[node.node_id]) {
-                                    node.status = results[node.node_id].success ? 'healthy' : 'error';
-                                }
-                            }
-                        }
-                    } catch (error) { console.error('Failed to check nodes:', error); }
-                };
-
-                const checkNodes = async () => {
-                    try { const r = (await axios.post('/api/v1/config/nodes/check')).data.results; nodes.value.forEach(n => { n.status = r[n.node_id]?.success ? 'healthy' : 'error'; }); } catch (e) {}
-                };
-                const sendMessage = async () => {
-                    if (!inputMessage.value.trim()) return;
-                    chatReply.value = '处理中...';
-                    try {
-                        const r = await axios.post('/api/v1/chat', { message: inputMessage.value.trim() });
-                        chatReply.value = r.data.response || r.data.reply || '处理完成';
-                        inputMessage.value = '';
-                    } catch (e) { chatReply.value = '连接失败: ' + e.message; }
-                };
-
-                const formatTime = (date) => new Date(date).toLocaleTimeString('zh-CN', { hour12: false });
-
-                watch(currentTab, (newTab, oldTab) => {
-                    if (newTab === 'devices') {
-                        loadDevices();
-                        devicesTimer.value = setInterval(loadDevices, 5000);
-                    } else if (oldTab === 'devices' && devicesTimer.value) {
-                        clearInterval(devicesTimer.value);
-                        devicesTimer.value = null;
-                    }
-                    if (newTab === 'nodes') {
-                        loadCategorizedNodes();
-                    }
-                    if (newTab === 'mcp') {
-                        loadMcpServers();
-                        loadSkills();
-                    }
-                    if (newTab === 'agents') {
-                        loadSwarmStatus();
-                        loadTeamStatus();
-                        loadTwinStatus();
-                    }
-                });
-
-                onMounted(() => {
-                    generateStars();
-                    updateTime();
-                    setInterval(updateTime, 1000);
-                    loadConfigStatus();
-                    loadTools();
-                    loadNodes();
-                    loadCategorizedNodes();
-                    // Dynamic Island polling
-                    loadMonitoringSummary();
-                    diPollTimer.value = setInterval(loadMonitoringSummary, 10000);
-                });
-
-                onUnmounted(() => {
-                    if (diPollTimer.value) clearInterval(diPollTimer.value);
-                    if (devicesTimer.value) clearInterval(devicesTimer.value);
-                });
-
-                return {
-                    currentTab, messages, inputMessage, isLoading, currentTime, chatContainer, starsContainer,
-                    configStatus, oneapiUrl, oneapiKey, oneapiStatus, directProviders, tools, nodes, devices,
-                    testMessage, testResult, configuredCount,
-                    // Nodes enhanced
-                    nodeCategories, nodeSearchQuery, expandedNodeId, nodeFilter, filteredNodeCategories,
-                    // MCP/Skills
-                    mcpServers, mcpTools, selectedMcpServer, skillsList, skillTestId, skillTestParams, skillTestResult, newMcpServer,
-                    // Dynamic Island
-                    diExpanded, diData, diOverallStatus, diStatusText, diActiveTasks, diHasAlert, diAlerts,
-                    // Agents
-                    swarmStatus, swarmForm, swarmResult, swarmLoading,
-                    teamStatus, teamForm, teamResult, teamLoading,
-                    twinStatus, twinForm, twinResult, twinLoading,
-                    // Methods
-                    loadConfigStatus, saveOneAPI, validateOneAPI, saveProvider, validateProvider,
-                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, loadDevices, sendMessage, formatTime,
-                    loadCategorizedNodes, loadMcpServers, startMcpServer, stopMcpServer, viewMcpTools, addMcpServer,
-                    loadSkills, toggleSkill, executeSkillTest,
-                    toggleDynamicIsland, scheduleDiCollapse,
-                    executeSwarm, executeTeam, executeTwin,
-                    loadSwarmStatus, loadTeamStatus, loadTwinStatus
-
-                onMounted(() => {
-                    updateTime(); setInterval(updateTime, 1000);
-                    loadConfigStatus(); loadTools(); loadNodes(); loadAgentTemplates(); loadNodeApis();
-                });
-
-                return {
                     isExpanded, tab, currentTime, configStatus, oneapiUrl, oneapiKey, oneapiStatus,
                     directProviders, nodeApis, nodeApiCategories, agents, agentTemplates,
                     selectedTemplate, agentTaskDesc, agentCreateStatus,

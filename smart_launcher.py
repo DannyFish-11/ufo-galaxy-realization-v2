@@ -1,7 +1,6 @@
 """
 LEGACY: 请使用 unified_launcher.py 作为主入口。
 
-UFO³ Galaxy - 智能节点启动器
 Galaxy - 智能节点启动器
 =============================
 

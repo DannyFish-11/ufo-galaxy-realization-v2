@@ -661,11 +661,25 @@ class AgentFactory:
                             payload=task_item,
                         )
                         await self.message_bus.send(task_msg)
-                # 子 Agent 并行执行
-                results = await asyncio.gather(
-                    *[self._run_agent(c.id) for c in children],
-                    return_exceptions=True,
-                )
+                # 子 Agent 并行执行（带总超时保护）
+                try:
+                    results = await asyncio.wait_for(
+                        asyncio.gather(
+                            *[self._run_agent(c.id) for c in children],
+                            return_exceptions=True,
+                        ),
+                        timeout=self.TASK_TIMEOUT_SECONDS * 2,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"子 Agent 并行执行整体超时 ({self.TASK_TIMEOUT_SECONDS * 2}s)")
+                    for child in children:
+                        child.state = AgentState.ERROR
+                    agent.state = AgentState.ERROR
+                    return {
+                        "strategy": "split_and_parallel",
+                        "error": f"Parallel execution timed out after {self.TASK_TIMEOUT_SECONDS * 2}s",
+                        "children": [c.id for c in children],
+                    }
                 # 收集执行结果，区分成功和失败
                 child_results = []
                 success_count = 0
@@ -717,6 +731,8 @@ class AgentFactory:
         result = await self._run_agent(agent_id)
         return result
 
+    TASK_TIMEOUT_SECONDS = 300  # 单个任务超时（秒）
+
     async def _run_agent(self, agent_id: str) -> Dict:
         """执行 Agent 的当前任务队列"""
         agent = self.agents.get(agent_id)
@@ -731,32 +747,10 @@ class AgentFactory:
             t0 = time.monotonic()
 
             try:
-                if self.llm_router:
-                    # 用 LLM 执行（带熔断器保护）
-                    messages = [
-                        {"role": "system", "content": agent.config.system_prompt},
-                        {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
-                    ]
-
-                    async def _llm_call():
-                        return await self.llm_router.chat(
-                            messages=messages,
-                            task_type="agent_control",
-                        )
-
-                    if self._llm_circuit_breaker:
-                        resp = await self._llm_circuit_breaker.execute(_llm_call)
-                    else:
-                        resp = await _llm_call()
-                    result = {"task": task, "output": resp.content, "provider": resp.provider}
-                else:
-                    # 无 LLM，模拟执行
-                    result = {
-                        "task": task,
-                        "output": f"Agent {agent.config.name} 已处理任务（无 LLM 模式）",
-                        "simulated": True,
-                        "status": "simulated",
-                    }
+                result = await asyncio.wait_for(
+                    self._execute_single_task(agent, task),
+                    timeout=self.TASK_TIMEOUT_SECONDS,
+                )
 
                 latency = (time.monotonic() - t0) * 1000
                 result["latency_ms"] = latency
@@ -771,6 +765,22 @@ class AgentFactory:
                         f"{task.get('description', str(task)[:80])}"
                     )
 
+
+            except asyncio.TimeoutError:
+                latency = (time.monotonic() - t0) * 1000
+                agent.metrics["tasks_failed"] += 1
+                results.append({
+                    "task": task,
+                    "error": f"Task timed out after {self.TASK_TIMEOUT_SECONDS}s",
+                    "error_type": "TimeoutError",
+                    "latency_ms": latency,
+                })
+                logger.error(
+                    f"Agent {agent_id} task timed out after {self.TASK_TIMEOUT_SECONDS}s: "
+                    f"{task.get('description', str(task)[:80])}"
+                )
+
+
             except Exception as e:
                 agent.metrics["tasks_failed"] += 1
                 results.append({"task": task, "error": str(e)})
@@ -783,6 +793,36 @@ class AgentFactory:
             "results": results,
             "status": "simulated" if any_simulated else "completed",
         }
+
+    async def _execute_single_task(self, agent: TaskAgent, task: Dict) -> Dict:
+        """执行单个任务（可被 wait_for 超时包装）"""
+        if self.llm_router:
+            # 用 LLM 执行（带熔断器保护）
+            messages = [
+                {"role": "system", "content": agent.config.system_prompt},
+                {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
+            ]
+
+            async def _llm_call():
+                return await self.llm_router.chat(
+                    messages=messages,
+                    task_type="agent_control",
+                )
+
+            if self._llm_circuit_breaker:
+                resp = await self._llm_circuit_breaker.execute(_llm_call)
+            else:
+                resp = await _llm_call()
+            return {"task": task, "output": resp.content, "provider": resp.provider}
+        else:
+            # 无 LLM，模拟执行
+            return {
+                "task": task,
+                "output": f"Agent {agent.config.name} 已处理任务（无 LLM 模式）",
+                "simulated": True,
+                "status": "simulated",
+            }
+
 
     # ─────── 内部工具 ─────────
 

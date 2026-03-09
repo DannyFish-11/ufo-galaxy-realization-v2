@@ -1,7 +1,6 @@
 """
 LEGACY: 请使用 unified_launcher.py 作为主入口。
 
-UFO Galaxy 主循环入口
 Galaxy 主循环入口
 全天候运行模式 - 接收目标、规划、执行、自我反思
 """

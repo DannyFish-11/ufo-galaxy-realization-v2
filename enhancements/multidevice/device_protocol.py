@@ -103,7 +103,6 @@ class DeviceType(IntEnum):
     For business logic, convert to ``core.device_types.DeviceType`` via
     :func:`to_unified_device_type`.
     """
-    """Device Types supported by Galaxy"""
     UNKNOWN = 0
     LINUX_SERVER = 1
     LINUX_DESKTOP = 2
