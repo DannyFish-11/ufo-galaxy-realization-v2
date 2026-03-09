@@ -958,7 +958,7 @@ class AgentFactoryPanel(QWidget):
             diverged = sum(1 for t in twins if t.get("state") == "diverged")
             detached = sum(1 for t in twins if t.get("state") == "detached")
             self.team_result_area.append(
-                f'<div style="background: rgba(255,107,157,0.05); border-radius: 8px; '
+                f'<div style="background: rgba(180,180,180,0.04); border-radius: 8px; '
                 f'padding: 6px 8px; margin: 4px 0; font-size: 11px;">'
                 f'<span style="color: {COLORS["accent"]}; font-weight: 600;">孪生状态:</span> '
                 f'<span style="color: {COLORS["success"]};">{synced} synced</span> | '
@@ -1100,8 +1100,8 @@ class AgentFactoryPanel(QWidget):
         total_latency = result.get("total_latency_ms", 0)
         if synthesized:
             self.team_result_area.append(
-                f'<div style="background: rgba(0, 212, 170, 0.08); border-radius: 10px; '
-                f'padding: 8px 10px; margin: 6px 0; border: 1px solid rgba(0, 212, 170, 0.15);">'
+                f'<div style="background: rgba(200, 200, 200, 0.06); border-radius: 10px; '
+                f'padding: 8px 10px; margin: 6px 0; border: 1px solid rgba(200, 200, 200, 0.1);">'
                 f'<span style="color: {COLORS["secondary"]}; font-size: 12px; font-weight: 600;">'
                 f'综合结果</span> '
                 f'<span style="color: {COLORS["text_muted"]}; font-size: 10px;">{total_latency:.0f}ms</span>'
@@ -1259,7 +1259,7 @@ class DevicePanel(QWidget):
         by_status = twins_data.get("by_status", {})
         by_coupling = twins_data.get("by_coupling", {})
         self.cmd_result.append(
-            f'<div style="background: rgba(255,107,157,0.05); border-radius: 8px; '
+            f'<div style="background: rgba(180,180,180,0.04); border-radius: 8px; '
             f'padding: 6px 8px; margin: 4px 0; font-size: 11px;">'
             f'<span style="color: {COLORS["accent"]}; font-weight: 600;">设备孪生:</span> '
             f'{total} 个 | '
@@ -1655,7 +1655,7 @@ class SettingsPanel(QWidget):
             self.conn_status.setStyleSheet(f"""
                 QLabel {{
                     background: {COLORS['bg_panel']};
-                    border: 1px solid rgba(48, 209, 88, 0.3);
+                    border: 1px solid rgba(192, 192, 192, 0.3);
                     border-radius: 10px;
                     padding: 12px;
                     color: {COLORS['success']};
@@ -1688,7 +1688,7 @@ class SettingsPanel(QWidget):
             self.conn_status.setStyleSheet(f"""
                 QLabel {{
                     background: {COLORS['bg_panel']};
-                    border: 1px solid rgba(255, 69, 58, 0.3);
+                    border: 1px solid rgba(144, 144, 144, 0.3);
                     border-radius: 10px;
                     padding: 12px;
                     color: {COLORS['error']};
@@ -1700,7 +1700,7 @@ class SettingsPanel(QWidget):
             self.conn_status.setStyleSheet(f"""
                 QLabel {{
                     background: {COLORS['bg_panel']};
-                    border: 1px solid rgba(48, 209, 88, 0.3);
+                    border: 1px solid rgba(192, 192, 192, 0.3);
                     border-radius: 10px;
                     padding: 12px;
                     color: {COLORS['success']};
