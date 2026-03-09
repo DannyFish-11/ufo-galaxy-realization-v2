@@ -23,6 +23,7 @@ class DeviceRegisterSchema(BaseModel):
     device_id: str = Field(
         ...,
         min_length=1,
+        max_length=256,
         description="设备唯一标识符",
     )
     device_type: str = Field(
@@ -57,6 +58,7 @@ class DeviceStatusSchema(BaseModel):
 
     device_id: str = Field(
         ...,
+        max_length=256,
         description="设备唯一标识符",
     )
     status: str = Field(
@@ -109,6 +111,7 @@ class DeviceCommandSchema(BaseModel):
 
     device_id: str = Field(
         ...,
+        max_length=256,
         description="目标设备 ID",
     )
     command: str = Field(
@@ -137,6 +140,7 @@ class DeviceCommandResultSchema(BaseModel):
 
     device_id: str = Field(
         ...,
+        max_length=256,
         description="设备 ID",
     )
     command_id: str = Field(

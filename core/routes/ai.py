@@ -54,6 +54,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             context["history"] = history
 
         parsed = await intent_parser.parse(req.text, context)
+        if parsed is None:
+            return JSONResponse(
+                {"success": False, "error": "Intent parse failed"},
+                status_code=422,
+            )
         return JSONResponse({
             "success": True,
             **parsed.to_dict(),

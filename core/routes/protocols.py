@@ -18,11 +18,13 @@ Routes:
 """
 
 import logging
+import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -30,6 +32,10 @@ logger = logging.getLogger("Galaxy.API")
 # ============================================================================
 # Pydantic 请求模型
 # ============================================================================
+
+_ALLOWED_MCP_EXECUTABLES = {"node", "python", "python3", "npx", "uvx", "deno"}
+_SHELL_METACHAR_RE = re.compile(r'[;|&`$(){}]')
+
 
 class MCPLoadRequest(BaseModel):
     """加载 MCP 服务器的请求体"""
@@ -39,6 +45,21 @@ class MCPLoadRequest(BaseModel):
     env: Dict[str, str] = Field(default_factory=dict, description="环境变量")
     cwd: str = Field(default="", description="工作目录")
     auto_start: bool = Field(default=True, description="是否自动启动")
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(cls, v: str) -> str:
+        parts = v.strip().split()
+        if not parts:
+            raise ValueError("Command cannot be empty")
+        base = Path(parts[0]).name
+        if base not in _ALLOWED_MCP_EXECUTABLES:
+            raise ValueError(
+                f"Executable '{base}' not in allowlist: {_ALLOWED_MCP_EXECUTABLES}"
+            )
+        if _SHELL_METACHAR_RE.search(v):
+            raise ValueError("Command contains disallowed shell metacharacters")
+        return v
 
 
 class MCPToolCallRequest(BaseModel):

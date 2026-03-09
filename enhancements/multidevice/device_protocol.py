@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 class MessageType(IntEnum):
-    """AIP v2.0 Message Types"""
+    """AIP v2.0 Message Types (LEGACY — 新代码请使用 galaxy_gateway.protocol.aip_v3.MessageType)"""
     # Device Management
     DEVICE_REGISTER = 0x01
     DEVICE_UNREGISTER = 0x02

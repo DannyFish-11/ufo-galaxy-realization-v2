@@ -13,7 +13,9 @@ from datetime import datetime
 
 # 导入L4主循环和事件总线
 import sys
-sys.path.insert(0, '/mnt/okcomputer/output/galaxy_integration')
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+sys.path.insert(0, _PROJECT_ROOT)
 from core.galaxy_main_loop_l4_enhanced import get_galaxy_loop, GalaxyMainLoopL4Enhanced
 from integration.event_bus import (
     EventBus, EventType, UIGalaxyEvent, event_bus
@@ -60,7 +62,7 @@ class IntegrationWSManager:
     async def broadcast(self, message: Dict[str, Any], exclude: websockets.WebSocketServerProtocol = None):
         """广播消息给所有客户端"""
         disconnected = []
-        for connection in self.active_connections:
+        for connection in list(self.active_connections):
             if connection != exclude:
                 try:
                     await connection.send(json.dumps(message))
@@ -75,7 +77,7 @@ class IntegrationWSManager:
     async def broadcast_to_type(self, client_type: str, message: Dict[str, Any]):
         """广播消息给特定类型的客户端"""
         disconnected = []
-        for connection in self.active_connections:
+        for connection in list(self.active_connections):
             info = self.client_info.get(connection, {})
             if info.get("client_type") == client_type:
                 try:

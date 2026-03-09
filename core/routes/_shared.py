@@ -216,12 +216,16 @@ connection_manager = RouteConnectionPool()
 
 # 设备注册表
 registered_devices: Dict[str, Dict[str, Any]] = {}
+registered_devices_lock = asyncio.Lock()
 
 # 任务队列
 task_queue: Dict[str, Dict[str, Any]] = {}
+task_queue_lock = asyncio.Lock()
 
 # 节点状态缓存
 node_status_cache: Dict[str, Dict[str, Any]] = {}
+node_status_cache_lock = asyncio.Lock()
 
 # 统一命令结果存储
 command_results: Dict[str, Dict[str, Any]] = {}
+command_results_lock = asyncio.Lock()

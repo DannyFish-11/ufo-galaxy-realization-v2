@@ -36,7 +36,7 @@ def _get_device_registry():
         from core.device_registry import DeviceRegistry
         return DeviceRegistry.get_instance()
     except Exception as exc:
-        logger.debug(f"DeviceRegistry 不可用: {exc}")
+        logger.warning(f"DeviceRegistry 不可用: {exc}")
         return None
 
 
@@ -46,7 +46,7 @@ def _get_node_registry():
         from core.node_registry import get_registry
         return get_registry()
     except Exception as exc:
-        logger.debug(f"NodeRegistry 不可用: {exc}")
+        logger.warning(f"NodeRegistry 不可用: {exc}")
         return None
 
 
@@ -171,7 +171,7 @@ class DeviceOrchestrator:
             if device is not None:
                 return {
                     "device_id": device.device_id,
-                    "status": device.status.value,
+                    "status": device.status.value if hasattr(device.status, "value") else str(device.status),
                     "online": device.is_online(),
                     "last_seen": datetime.fromtimestamp(device.last_seen).isoformat(),
                     "telemetry": device.metadata.get("telemetry", {}),

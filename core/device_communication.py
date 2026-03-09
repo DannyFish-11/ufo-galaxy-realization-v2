@@ -47,7 +47,7 @@ logger = logging.getLogger("Galaxy.DeviceComm")
 # ============================================================================
 
 class MessageType(str, Enum):
-    """消息类型 — 兼容 AIP v3.0
+    """消息类型 — 兼容 AIP v3.0 (COMPAT LAYER — canonical: galaxy_gateway.protocol.aip_v3.MessageType)
 
     本地简化类型与 AIP v3.0 MessageType 的映射关系：
       COMMAND     → CONTROL_COMMAND

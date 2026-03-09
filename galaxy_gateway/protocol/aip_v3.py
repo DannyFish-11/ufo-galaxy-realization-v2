@@ -125,7 +125,7 @@ class DeviceCapability(Flag):
 # ============================================================================
 
 class MessageType(str, Enum):
-    """消息类型 - 统一客户端和服务端"""
+    """消息类型 - 统一客户端和服务端 (CANONICAL — 新代码应导入此定义)"""
     
     # === 设备管理 ===
     DEVICE_REGISTER = "device_register"

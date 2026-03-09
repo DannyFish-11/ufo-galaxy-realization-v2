@@ -105,6 +105,9 @@ class OpenClawd:
             # Step 3: 根据意图路由到对应处理器
             intent_type = parsed_intent.intent if parsed_intent else "chat"
             handler_name = self._INTENT_HANDLER_MAP.get(intent_type, "_dispatch_chat")
+            if not hasattr(self, handler_name):
+                logger.warning(f"Handler {handler_name} not found, falling back to chat")
+                handler_name = "_dispatch_chat"
             handler = getattr(self, handler_name)
 
             result = await handler(

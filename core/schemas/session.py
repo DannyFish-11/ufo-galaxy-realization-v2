@@ -24,10 +24,12 @@ class SessionSchema(BaseModel):
     session_id: str = Field(
         ...,
         min_length=1,
+        max_length=256,
         description="Unique session identifier.",
     )
     device_id: str = Field(
         ...,
+        max_length=256,
         description="ID of the device currently hosting this session.",
     )
     created_at: Optional[datetime] = Field(
@@ -59,14 +61,17 @@ class SessionMigrateSchema(BaseModel):
     session_id: str = Field(
         ...,
         min_length=1,
+        max_length=256,
         description="ID of the session to migrate.",
     )
     source_device: str = Field(
         ...,
+        max_length=256,
         description="Device ID where the session currently lives.",
     )
     target_device: str = Field(
         ...,
+        max_length=256,
         description="Device ID to migrate the session to.",
     )
     context: Dict[str, Any] = Field(
