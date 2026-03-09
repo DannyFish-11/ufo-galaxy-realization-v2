@@ -9,24 +9,8 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum, auto
 from datetime import datetime
 
-
-class DeviceType(str, Enum):
-    """设备类型枚举"""
-    DRONE = "drone"
-    PRINTER_3D = "printer_3d"
-    ROBOT = "robot"
-    CAMERA = "camera"
-    SENSOR = "sensor"
-    ACTUATOR = "actuator"
-    DISPLAY = "display"
-    SPEAKER = "speaker"
-    ANDROID = "android"
-    IOS = "ios"
-    WINDOWS = "windows"
-    LINUX = "linux"
-    EMBEDDED = "embedded"
-    CLOUD = "cloud"
-    UNKNOWN = "unknown"
+# 统一设备类型 — 从 core.device_types 导入（单一事实来源）
+from core.device_types import DeviceType  # noqa: F401
 
 
 class DeviceState(str, Enum):

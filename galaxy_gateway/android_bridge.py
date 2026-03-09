@@ -31,56 +31,12 @@ logger = logging.getLogger(__name__)
 # 设备类型定义 (与 AIPMessageV3.kt 完全对齐)
 # =============================================================================
 
-class DeviceType(str, Enum):
-    # === 移动端 ===
-    ANDROID_PHONE = "android_phone"
-    ANDROID_TABLET = "android_tablet"
-    ANDROID_TV = "android_tv"
-    ANDROID_CAR = "android_car"
-    ANDROID_WEAR = "android_wear"
-    
-    IOS_PHONE = "ios_phone"
-    IOS_TABLET = "ios_tablet"
-    IOS_WATCH = "ios_watch"
-    
-    # === 桌面端 ===
-    WINDOWS_DESKTOP = "windows_desktop"
-    WINDOWS_LAPTOP = "windows_laptop"
-    WINDOWS_WSL = "windows_wsl"
-    
-    MACOS_DESKTOP = "macos_desktop"
-    MACOS_LAPTOP = "macos_laptop"
-    
-    LINUX_DESKTOP = "linux_desktop"
-    LINUX_SERVER = "linux_server"
-    LINUX_RASPBERRY = "linux_raspberry"
-    
-    # === 云端 ===
-    CLOUD_HUAWEI = "cloud_huawei"
-    CLOUD_ALIYUN = "cloud_aliyun"
-    CLOUD_TENCENT = "cloud_tencent"
-    CLOUD_AWS = "cloud_aws"
-    CLOUD_AZURE = "cloud_azure"
-    
-    # === 嵌入式/IoT ===
-    EMBEDDED_ESP32 = "embedded_esp32"
-    EMBEDDED_ARDUINO = "embedded_arduino"
-    IOT_GENERIC = "iot_generic"
-    
-    # === 容器/虚拟 ===
-    CONTAINER_DOCKER = "container_docker"
-    VIRTUAL_VM = "virtual_vm"
-    
-    # === 通用 ===
-    UNKNOWN = "unknown"
-
-
-class DevicePlatform(str, Enum):
-    ANDROID = "android"
-    IOS = "ios"
-    WINDOWS = "windows"
-    MACOS = "macos"
-    LINUX = "linux"
+# 统一设备类型 — 从 core.device_types 导入（单一事实来源）
+# DeviceType = AIPDeviceType (细粒度28种)，DevicePlatform (平台大类)
+from core.device_types import (  # noqa: E402
+    AIPDeviceType as DeviceType,
+    DevicePlatform,
+)
     CLOUD = "cloud"
     EMBEDDED = "embedded"
     UNKNOWN = "unknown"

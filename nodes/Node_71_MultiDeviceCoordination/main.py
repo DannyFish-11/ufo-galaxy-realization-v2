@@ -26,20 +26,8 @@ app = FastAPI(title="Node 71 - MultiDeviceCoordination", version="2.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
-class DeviceType(str, Enum):
-    """设备类型"""
-    ANDROID = "android"
-    WINDOWS = "windows"
-    MACOS = "macos"
-    LINUX = "linux"
-    IOS = "ios"
-    TABLET = "tablet"
-    DRONE = "drone"
-    PRINTER_3D = "printer_3d"
-    ROBOT = "robot"
-    CAMERA = "camera"
-    SENSOR = "sensor"
-    ACTUATOR = "actuator"
+# 统一设备类型 — 从 core.device_types 导入（单一事实来源）
+from core.device_types import DeviceType  # noqa: F811,E402
 
 
 class DeviceState(str, Enum):
