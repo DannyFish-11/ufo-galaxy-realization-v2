@@ -151,11 +151,24 @@ class SystemConfig:
     redis_url: str = ""
     qdrant_url: str = ""
     
-    # 服务配置
+    # 服务配置（默认值从 PortConfig 读取，回退到硬编码值）
     host: str = "0.0.0.0"
     web_ui_port: int = 8080
     device_api_port: int = 8766
     ufo_api_port: int = 8767
+
+    def __post_init__(self):
+        """从 PortConfig 加载端口默认值（如果可用）"""
+        try:
+            from core.port_config import get_service_port
+            if self.web_ui_port == 8080:
+                self.web_ui_port = get_service_port("dashboard_backend")
+            if self.device_api_port == 8766:
+                self.device_api_port = get_service_port("device_api")
+            if self.ufo_api_port == 8767:
+                self.ufo_api_port = get_service_port("ufo_api")
+        except Exception:
+            pass
     
     # 启动选项
     enable_l4: bool = True

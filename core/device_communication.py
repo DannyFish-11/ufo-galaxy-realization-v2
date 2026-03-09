@@ -46,16 +46,25 @@ logger = logging.getLogger("Galaxy.DeviceComm")
 # 消息协议定义
 # ============================================================================
 
+try:
+    from galaxy_gateway.protocol.aip_v3 import MessageType as AIPv3MessageType
+except ImportError:
+    AIPv3MessageType = None  # type: ignore[assignment,misc]
+
+
 class MessageType(str, Enum):
-    """消息类型 — 兼容 AIP v3.0 (COMPAT LAYER — canonical: galaxy_gateway.protocol.aip_v3.MessageType)
+    """消息类型 — 兼容 AIP v3.0 (COMPAT LAYER)
+
+    这是简化的本地消息类型。Canonical 定义位于:
+        galaxy_gateway.protocol.aip_v3.MessageType
 
     本地简化类型与 AIP v3.0 MessageType 的映射关系：
-      COMMAND     → CONTROL_COMMAND
+      COMMAND     → COMMAND
       RESPONSE    → TASK_RESULT
       HEARTBEAT   → DEVICE_HEARTBEAT
       STATUS      → DEVICE_STATUS
       ERROR       → ERROR
-    使用 ``to_aip_v3()`` 获取对应的 AIP v3.0 类型字符串。
+    使用 ``to_aip_v3()`` 获取对应的 AIP v3.0 MessageType 枚举值。
     """
     # 控制
     COMMAND = "command"         # 命令
@@ -80,10 +89,15 @@ class MessageType(str, Enum):
     SESSION_MIGRATE = "session_migrate" # 会话迁移请求
     SESSION_RESTORE = "session_restore" # 会话恢复
 
-    def to_aip_v3(self) -> str:
-        """转换为 AIP v3.0 MessageType 名称"""
-        _map = {
-            "command": "CONTROL_COMMAND",
+    def to_aip_v3(self):
+        """转换为 AIP v3.0 MessageType 枚举值（若可用）或名称字符串。
+
+        Returns:
+            galaxy_gateway.protocol.aip_v3.MessageType 枚举值，
+            若 v3 模块不可用则返回 str。
+        """
+        _name_map = {
+            "command": "COMMAND",
             "response": "TASK_RESULT",
             "ack": "COORD_SYNC",
             "heartbeat": "DEVICE_HEARTBEAT",
@@ -97,7 +111,13 @@ class MessageType(str, Enum):
             "session_migrate": "SESSION_MIGRATE",
             "session_restore": "SESSION_MIGRATE_ACK",
         }
-        return _map.get(self.value, self.value.upper())
+        v3_name = _name_map.get(self.value, self.value.upper())
+        if AIPv3MessageType is not None:
+            try:
+                return AIPv3MessageType[v3_name]
+            except KeyError:
+                pass
+        return v3_name
 
 
 @dataclass

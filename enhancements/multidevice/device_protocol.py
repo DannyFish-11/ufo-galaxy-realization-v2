@@ -85,6 +85,8 @@ class MessageType(IntEnum):
     SESSION_RESTORE = 0x73     # 目标设备恢复会话
 
 
+import warnings
+
 from core.device_types import DeviceType, DeviceStatus
 
 # Backward-compatible integer mapping for binary protocol serialization.
@@ -96,6 +98,71 @@ _V2_DEVICE_TYPE_INT: Dict[str, int] = {
     DeviceType.EMBEDDED.value: 6,
     DeviceType.CUSTOM.value: 7,      # was CONTAINER
 }
+
+
+# ---------------------------------------------------------------------------
+# AIP v2 ↔ v3 消息类型映射
+# ---------------------------------------------------------------------------
+
+def _build_v2_v3_mapping() -> tuple:
+    """构建 v2 IntEnum ↔ v3 str Enum 双向映射（延迟导入避免循环依赖）"""
+    try:
+        from galaxy_gateway.protocol.aip_v3 import MessageType as V3MT
+    except ImportError:
+        return {}, {}
+
+    v2_to_v3 = {
+        0x01: V3MT.DEVICE_REGISTER,
+        0x02: V3MT.DEVICE_UNREGISTER,
+        0x03: V3MT.DEVICE_HEARTBEAT,
+        0x04: V3MT.DEVICE_STATUS,
+        0x05: V3MT.DEVICE_REGISTER,       # DISCOVER → REGISTER (closest)
+        0x10: V3MT.TASK_SUBMIT,
+        0x11: V3MT.TASK_ASSIGN,
+        0x12: V3MT.TASK_STATUS,
+        0x13: V3MT.TASK_RESULT,
+        0x14: V3MT.TASK_CANCEL,
+        0x20: V3MT.COORD_SYNC,
+        0x21: V3MT.COORD_BROADCAST,
+        0x30: V3MT.FILE_READ,
+        0x31: V3MT.FILE_READ,             # DATA_RESPONSE
+        0x40: V3MT.COMMAND,
+        0x41: V3MT.AGENT_CONFIG_UPDATE,
+        0x42: V3MT.SYSTEM_COMMAND,
+        0x50: V3MT.ERROR,
+        0x51: V3MT.ERROR_RECOVERY,
+        0x52: V3MT.ERROR_RECOVERY,
+        0x60: V3MT.GUI_SCREENSHOT,
+        0x61: V3MT.GUI_INPUT,
+        0x70: V3MT.WAKE_EVENT,
+        0x71: V3MT.WAKE_EVENT,            # WAKE_ROUTE_RESULT
+        0x72: V3MT.SESSION_MIGRATE,
+        0x73: V3MT.SESSION_MIGRATE,       # SESSION_RESTORE
+    }
+    v3_to_v2 = {}
+    for k, v in v2_to_v3.items():
+        if v not in v3_to_v2:
+            v3_to_v2[v] = k
+    return v2_to_v3, v3_to_v2
+
+
+# 惰性缓存
+_V2_TO_V3_CACHE: Optional[Dict] = None
+_V3_TO_V2_CACHE: Optional[Dict] = None
+
+
+def _get_v2_to_v3() -> Dict:
+    global _V2_TO_V3_CACHE
+    if _V2_TO_V3_CACHE is None:
+        _V2_TO_V3_CACHE, _ = _build_v2_v3_mapping()
+    return _V2_TO_V3_CACHE
+
+
+def _get_v3_to_v2() -> Dict:
+    global _V3_TO_V2_CACHE
+    if _V3_TO_V2_CACHE is None:
+        _, _V3_TO_V2_CACHE = _build_v2_v3_mapping()
+    return _V3_TO_V2_CACHE
 
 # Backward-compatible integer mapping for DeviceStatus in binary protocol.
 _V2_DEVICE_STATUS_INT: Dict[str, int] = {
@@ -274,8 +341,85 @@ class AIPMessage:
     HEADER_SIZE: int = 16
     FOOTER_SIZE: int = 8
     
+    # ------------------------------------------------------------------
+    # AIP v3.0 JSON 序列化 (推荐新代码使用)
+    # ------------------------------------------------------------------
+
+    def to_json(self) -> str:
+        """AIP v3.0 JSON 序列化 — 推荐新代码使用此方法。
+
+        Returns:
+            JSON 字符串，兼容 galaxy_gateway.protocol.aip_v3.AIPMessage 格式。
+            若 v3 模块不可用，回退到 self.to_dict() 的 JSON 表示。
+        """
+        v2_to_v3 = _get_v2_to_v3()
+        v3_type = v2_to_v3.get(int(self.msg_type))
+        if v3_type is None:
+            # 无法映射到 v3 类型，使用纯 dict 回退
+            return json.dumps(self.to_dict(), ensure_ascii=False)
+        try:
+            from galaxy_gateway.protocol.aip_v3 import AIPMessage as V3Message
+            v3_msg = V3Message(
+                type=v3_type,
+                device_id=self.source_device or "",
+                payload=self.payload,
+                correlation_id=self.correlation_id,
+            )
+            return v3_msg.model_dump_json()
+        except Exception:
+            return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, data: str) -> 'AIPMessage':
+        """AIP v3.0 JSON 反序列化 — 推荐新代码使用此方法。
+
+        Args:
+            data: JSON 字符串（v3.0 AIPMessage 格式或 v2 to_dict 格式）。
+
+        Returns:
+            AIPMessage 实例。
+        """
+        parsed = json.loads(data)
+
+        # 尝试解析为 v3 格式（含 "type" 字符串字段）
+        if "type" in parsed and isinstance(parsed["type"], str):
+            v3_to_v2 = _get_v3_to_v2()
+            try:
+                from galaxy_gateway.protocol.aip_v3 import MessageType as V3MT
+                v3_type = V3MT(parsed["type"])
+                v2_int = v3_to_v2.get(v3_type, MessageType.CONTROL_COMMAND.value)
+                return cls(
+                    msg_type=MessageType(v2_int),
+                    payload=parsed.get("payload", {}),
+                    timestamp=parsed.get("timestamp", time.time()),
+                    source_device=parsed.get("device_id"),
+                    target_device=parsed.get("payload", {}).get("target_device"),
+                    correlation_id=parsed.get("correlation_id"),
+                )
+            except (ValueError, ImportError):
+                pass
+
+        # 回退：直接解析为 v2 dict 格式
+        return cls(
+            msg_type=MessageType(parsed.get("msg_type", MessageType.CONTROL_COMMAND)),
+            payload=parsed.get("payload", {}),
+            timestamp=parsed.get("timestamp", time.time()),
+            source_device=parsed.get("source_device"),
+            target_device=parsed.get("target_device"),
+            correlation_id=parsed.get("correlation_id"),
+        )
+
+    # ------------------------------------------------------------------
+    # AIP v2.0 二进制序列化 (DEPRECATED — 保留供旧版客户端使用)
+    # ------------------------------------------------------------------
+
     def to_bytes(self) -> bytes:
-        """Serialize message to bytes"""
+        """DEPRECATED: 使用 to_json() 替代。保留供旧版二进制客户端兼容。"""
+        warnings.warn(
+            "AIPMessage.to_bytes() is deprecated, use to_json() for AIP v3.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Build payload with metadata
         full_payload = {
             'payload': self.payload,
@@ -309,7 +453,12 @@ class AIPMessage:
     
     @classmethod
     def from_bytes(cls, data: bytes) -> 'AIPMessage':
-        """Deserialize message from bytes"""
+        """DEPRECATED: 使用 from_json() 替代。保留供旧版二进制客户端兼容。"""
+        warnings.warn(
+            "AIPMessage.from_bytes() is deprecated, use from_json() for AIP v3.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if len(data) < cls.HEADER_SIZE + cls.FOOTER_SIZE:
             raise ProtocolError("Message too short")
         

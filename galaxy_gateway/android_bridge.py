@@ -37,9 +37,6 @@ from core.device_types import (  # noqa: E402
     AIPDeviceType as DeviceType,
     DevicePlatform,
 )
-    CLOUD = "cloud"
-    EMBEDDED = "embedded"
-    UNKNOWN = "unknown"
 
 
 # =============================================================================
