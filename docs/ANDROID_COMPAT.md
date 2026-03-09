@@ -155,9 +155,11 @@ before the message is dispatched:
 | `register` | `device_register` |
 | `agent_register` | `device_register` |
 | `device_register` | `device_register` |
+| `registration` | `device_register` |
 | `heartbeat` | `heartbeat` |
 | `agent_heartbeat` | `heartbeat` |
 | `device_heartbeat` | `heartbeat` |
+| `command_result` | `task_result` |
 
 ### AIP/2.0
 

@@ -479,9 +479,10 @@ MessageHandler / DeviceManager / DeviceRouter
 
 | 旧 type 字符串 | 规范化后 v3 MessageType |
 |----------------|------------------------|
-| `register` / `agent_register` / `device_register` | `device_register` |
+| `register` / `agent_register` / `device_register` / `registration` | `device_register` |
 | `heartbeat` / `agent_heartbeat` / `device_heartbeat` | `heartbeat` |
 | `task_execute` | `task_submit` |
+| `command_result` | `task_result` |
 | `status_update` / `update_status` | `device_status` |
 
 ### device_id 规范

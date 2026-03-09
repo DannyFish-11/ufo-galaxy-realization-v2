@@ -20,7 +20,6 @@ Galaxy-Nexus 星枢核心智能体 — OpenClawd
   4. 统一响应 — 所有方法返回标准 dict 格式
 """
 
-import asyncio
 import logging
 import time
 import uuid
