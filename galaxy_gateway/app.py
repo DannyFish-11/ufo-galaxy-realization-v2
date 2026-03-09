@@ -568,8 +568,13 @@ def main():
     """主入口函数"""
     import uvicorn
     
+    try:
+        from core.port_config import get_service_port
+        _default_gw_port = str(get_service_port("gateway"))
+    except Exception:
+        _default_gw_port = "8000"
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
+    port = int(os.getenv("PORT", _default_gw_port))
     
     logger.info(f"Starting Galaxy Gateway on {host}:{port}")
     uvicorn.run(app, host=host, port=port)

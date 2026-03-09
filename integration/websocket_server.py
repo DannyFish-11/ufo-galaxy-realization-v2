@@ -528,9 +528,15 @@ async def main():
     # 启动事件总线
     await event_bus.start()
     
-    # 创建服务器
-    ws_server = GalaxyWebSocketServer(host="0.0.0.0", port=8080)
-    http_server = GalaxyHTTPServer(port=8081)
+    # 创建服务器（端口从 PortConfig 读取，回退到默认值）
+    try:
+        from core.port_config import get_service_port
+        _ws_port = get_service_port("websocket")
+        _http_port = get_service_port("websocket_http")
+    except Exception:
+        _ws_port, _http_port = 8080, 8081
+    ws_server = GalaxyWebSocketServer(host="0.0.0.0", port=_ws_port)
+    http_server = GalaxyHTTPServer(port=_http_port)
     
     # 同时启动WebSocket和HTTP服务器
     await asyncio.gather(

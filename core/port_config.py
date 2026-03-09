@@ -38,6 +38,13 @@ _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "oneapi_web": 3001,
     "api_gateway": 8088,
     "state_machine": 8000,
+    "gateway": 8088,
+    "dashboard_backend": 8080,
+    "websocket": 8080,
+    "websocket_http": 8081,
+    "health_monitor": 9000,
+    "device_api": 8766,
+    "ufo_api": 8767,
 }
 
 

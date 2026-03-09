@@ -128,7 +128,12 @@ class DeviceSession:
                 ack_future = asyncio.Future()
                 self.pending_acks[message.correlation_id or str(uuid.uuid4())] = ack_future
             
-            await self.websocket.send_bytes(message.to_bytes())
+            # AIP v3.0: 优先使用 JSON 序列化
+            try:
+                await self.websocket.send_text(message.to_json())
+            except Exception:
+                # 回退到 v2.0 二进制（旧版客户端兼容）
+                await self.websocket.send_bytes(message.to_bytes())
             self.update_activity()
             
             if require_ack:
@@ -558,13 +563,21 @@ class DeviceCoordinator:
         
         try:
             while True:
-                # Receive message
-                data = await websocket.receive_bytes()
-                self._messages_received += 1
-                
+                # Receive message — 支持 JSON (v3.0) 和 binary (v2.0)
                 try:
-                    # Parse message
-                    message = AIPMessage.from_bytes(data)
+                    data = await websocket.receive_text()
+                    is_text = True
+                except Exception:
+                    data = await websocket.receive_bytes()
+                    is_text = False
+                self._messages_received += 1
+
+                try:
+                    # AIP v3.0 JSON 优先，回退到 v2.0 binary
+                    if is_text:
+                        message = AIPMessage.from_json(data)
+                    else:
+                        message = AIPMessage.from_bytes(data)
                     message.source_device = session.session_id
                     
                     # Validate message

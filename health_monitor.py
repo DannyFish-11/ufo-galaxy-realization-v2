@@ -410,4 +410,9 @@ if __name__ == "__main__":
     import uvicorn
 
     # 启动 Web 服务（监控循环通过 startup 事件自动启动）
-    uvicorn.run(app, host="0.0.0.0", port=9000)
+    try:
+        from core.port_config import get_service_port
+        _hm_port = get_service_port("health_monitor")
+    except Exception:
+        _hm_port = 9000
+    uvicorn.run(app, host="0.0.0.0", port=_hm_port)
