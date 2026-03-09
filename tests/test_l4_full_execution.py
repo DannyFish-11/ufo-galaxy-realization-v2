@@ -11,6 +11,9 @@ import logging
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import pytest
+pytest.importorskip("numpy")
+
 from enhancements.perception.environment_scanner import EnvironmentScanner
 from enhancements.reasoning.goal_decomposer import GoalDecomposer, Goal, GoalType
 from enhancements.reasoning.autonomous_planner import AutonomousPlanner, Resource, ResourceType

@@ -32,9 +32,11 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port, get_node_port
+
 NODE_ID = os.getenv("NODE_ID", "69")
 NODE_NAME = os.getenv("NODE_NAME", "BackupRestore")
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 BACKUP_DIR = os.getenv("BACKUP_DIR", os.path.join(os.path.dirname(__file__), "backups"))
 
@@ -323,9 +325,9 @@ class BackupService:
         
         # Known nodes and their data endpoints
         self.node_data_endpoints = {
-            "Node_00_StateMachine": "http://localhost:8000/state/export",
-            "Node_58_ModelRouter": "http://localhost:8058/history",
-            "Node_65_LoggerCentral": "http://localhost:8065/export",
+            "Node_00_StateMachine": f"http://localhost:{get_node_port('Node_00_StateMachine')}/state/export",
+            "Node_58_ModelRouter": f"http://localhost:{get_node_port('Node_58_ModelRouter')}/history",
+            "Node_65_LoggerCentral": f"http://localhost:{get_node_port('Node_65_LoggerCentral')}/export",
         }
     
     def _generate_backup_id(self) -> str:

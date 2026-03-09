@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="AgentCPM Integration Node", version="1.1.0")
 
 # 配置
-AGENTDOCK_URL = os.getenv("AGENTDOCK_URL", "http://localhost:8000")
+from core.port_config import get_service_port
+
+AGENTDOCK_URL = os.getenv("AGENTDOCK_URL", f"http://localhost:{get_service_port('state_machine')}")
 AGENTCPM_API_KEY = os.getenv("AGENTCPM_API_KEY", "")
 AGENTCPM_BASE_URL = os.getenv("AGENTCPM_BASE_URL", "")
 MEMOS_URL = os.getenv("MEMOS_URL", "http://localhost:5230")

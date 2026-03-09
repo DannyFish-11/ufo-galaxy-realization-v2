@@ -13,6 +13,7 @@ Windows 主 UI — OPPO 光场 + 极客极简 + 书法卷轴式侧边栏
 
 import sys
 import json
+from core.port_config import get_service_port
 import logging
 from typing import Callable, Optional
 
@@ -291,7 +292,7 @@ class McpSkillPanel(ModePanel):
         refresh_btn.clicked.connect(self.fetch_from_api)
         self._layout.addWidget(refresh_btn)
 
-        self._api_base = "http://localhost:8080"
+        self._api_base = f"http://localhost:{get_service_port('dashboard')}"
 
     def fetch_from_api(self):
         """从 Dashboard API 获取 MCP/Skill 状态"""

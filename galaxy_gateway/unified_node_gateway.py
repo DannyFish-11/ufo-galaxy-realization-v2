@@ -22,6 +22,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
+from core.port_config import get_service_port
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -121,4 +122,4 @@ async def execute_on_node(node_id: str, request: ExecuteRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=get_service_port("state_machine"))

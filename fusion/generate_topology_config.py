@@ -8,6 +8,7 @@
 import json
 import math
 from pathlib import Path
+from core.port_config import get_node_port
 
 # 节点列表（从实际目录读取）
 NODES = [
@@ -205,9 +206,12 @@ def generate_topology():
         layer_index = {"core": 0, "cognitive": 1, "perception": 2}[layer]
         coords = generate_coordinates(idx, len(NODES), layer)
         
-        # 端口分配（基于节点 ID）
-        base_port = 8000 + int(node_name.split('_')[1])
-        
+        # 端口分配（基于节点名称，通过 port_config 获取）
+        try:
+            base_port = get_node_port(node_name)
+        except KeyError:
+            base_port = 8000 + int(node_name.split('_')[1])
+
         node = {
             "id": node_id,
             "name": node_display_name,

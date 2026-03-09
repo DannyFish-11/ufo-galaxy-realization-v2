@@ -28,10 +28,12 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port, get_node_port
+
 NODE_ID = os.getenv("NODE_ID", "51")
 NODE_NAME = os.getenv("NODE_NAME", "QuantumDispatcher")
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
-SIMULATOR_URL = os.getenv("SIMULATOR_URL", "http://localhost:8052")
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
+SIMULATOR_URL = os.getenv("SIMULATOR_URL", f"http://localhost:{get_node_port('Node_52_QiskitSimulator')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Quantum constraints
@@ -636,7 +638,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8051,
+        port=get_node_port("Node_51_QuantumDispatcher"),
         reload=False,
         log_level=LOG_LEVEL.lower()
     )

@@ -1,103 +1,136 @@
 """
 Galaxy v5.0 - Device Protocol Module
-AIP v2.0 Protocol Implementation
+AIP v3.0 Protocol Implementation (migrated from v2.0)
 
-This module defines the AIP (Advanced Inter-device Protocol) v2.0 message format,
-protocol buffer schemas, and message serialization/deserialization for device communication.
+This module provides the device communication protocol for Galaxy's multi-device
+coordination system. It uses AIP v3.0 (JSON/Pydantic) as the primary format,
+with backward-compatible v2.0 binary serialization for legacy clients.
 
-Features:
-- Protocol buffer message definitions
-- Message serialization/deserialization
-- Protocol validation
-- Cross-platform message handling
-- Support for 500+ TPS
+All new code should use:
+  - to_json() / from_json() for serialization
+  - AIPMessage (Pydantic BaseModel from aip_v3)
+  - MessageType (from aip_v3) for message types
+
+Legacy v2.0 binary support (to_bytes/from_bytes) is retained for wire
+compatibility but internally bridges through v3.0.
 
 Author: Galaxy Team
-Version: 5.0.0
+Version: 5.0.0 (AIP v3.0)
 """
 
 import json
 import struct
 import hashlib
 import time
-from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional, List, Callable, Union, Type
-from enum import Enum, IntEnum
-from abc import ABC, abstractmethod
 import logging
 import asyncio
+from dataclasses import dataclass, field, asdict
+from typing import Dict, Any, Optional, List, Callable, Union
+from enum import Enum, IntEnum
+from abc import ABC, abstractmethod
 from datetime import datetime
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# AIP v3.0 MessageType — 从协议层导入，作为本模块的标准消息类型
+# =============================================================================
 
-class MessageType(IntEnum):
-    """AIP v2.0 Message Types (LEGACY — 新代码请使用 galaxy_gateway.protocol.aip_v3.MessageType)"""
-    # Device Management
+from galaxy_gateway.protocol.aip_v3 import (
+    MessageType as V3MessageType,
+    AIPDeviceType,
+    DevicePlatform,
+    DeviceCapability as V3DeviceCapability,
+    AIPMessage as V3AIPMessage,
+    parse_message as v3_parse_message,
+    validate_message as v3_validate_message,
+    create_register_message,
+    create_heartbeat_message,
+    create_task_message,
+    create_error_message,
+)
+from core.device_types import DeviceType, DeviceStatus
+
+
+# =============================================================================
+# Legacy v2.0 MessageType — 保留 IntEnum 以支持 v2 二进制协议的序列化/反序列化
+# =============================================================================
+
+class LegacyMessageType(IntEnum):
+    """AIP v2.0 Message Types (binary protocol only, use V3MessageType for new code)"""
     DEVICE_REGISTER = 0x01
     DEVICE_UNREGISTER = 0x02
     DEVICE_HEARTBEAT = 0x03
     DEVICE_STATUS = 0x04
     DEVICE_DISCOVER = 0x05
-    
-    # Task Management
     TASK_SUBMIT = 0x10
     TASK_ASSIGN = 0x11
     TASK_STATUS = 0x12
     TASK_RESULT = 0x13
     TASK_CANCEL = 0x14
-    
-    # Coordination
     COORD_SYNC = 0x20
     COORD_BROADCAST = 0x21
     COORD_ROUTING = 0x22
     COORD_ELECTION = 0x23
-    
-    # Data Transfer
     DATA_REQUEST = 0x30
     DATA_RESPONSE = 0x31
     DATA_STREAM = 0x32
-    
-    # Control
     CONTROL_COMMAND = 0x40
     CONTROL_CONFIG = 0x41
     CONTROL_SHUTDOWN = 0x42
-    
-    # Error & Recovery
     ERROR_REPORT = 0x50
     RECOVERY_REQUEST = 0x51
     RECOVERY_RESPONSE = 0x52
-    
-    # Android Specific
     ANDROID_SCREEN = 0x60
     ANDROID_INPUT = 0x61
     ANDROID_INSTALL = 0x62
-
-    # Wake & Session (唤醒与会话漫游)
-    WAKE_EVENT = 0x70          # 设备发出的唤醒事件
-    WAKE_ROUTE_RESULT = 0x71   # 唤醒路由决策结果
-    SESSION_MIGRATE = 0x72     # 会话迁移请求
-    SESSION_RESTORE = 0x73     # 目标设备恢复会话
+    WAKE_EVENT = 0x70
+    WAKE_ROUTE_RESULT = 0x71
+    SESSION_MIGRATE = 0x72
+    SESSION_RESTORE = 0x73
 
 
-from core.device_types import DeviceType, DeviceStatus
-
-# Backward-compatible integer mapping for binary protocol serialization.
-# Maps canonical DeviceType string values to the legacy v2 integer codes.
-_V2_DEVICE_TYPE_INT: Dict[str, int] = {
-    DeviceType.UNKNOWN.value: 0,
-    DeviceType.LINUX.value: 1,       # was LINUX_SERVER
-    DeviceType.ANDROID.value: 3,     # was ANDROID_PHONE
-    DeviceType.EMBEDDED.value: 6,
-    DeviceType.CUSTOM.value: 7,      # was CONTAINER
+# v2 int → v3 string 映射表
+_V2_TO_V3_MSG_TYPE: Dict[int, str] = {
+    0x01: "device_register",
+    0x02: "device_unregister",
+    0x03: "device_heartbeat",
+    0x04: "device_status",
+    0x05: "device_capabilities",
+    0x10: "task_submit",
+    0x11: "task_assign",
+    0x12: "task_status",
+    0x13: "task_result",
+    0x14: "task_cancel",
+    0x20: "coord_sync",
+    0x21: "coord_broadcast",
+    0x40: "command",
+    0x41: "command",
+    0x42: "command",
+    0x50: "error",
+    0x51: "error_recovery",
+    0x60: "screen_capture",
+    0x61: "gui_input",
+    0x62: "command",
+    0x70: "wake_event",
+    0x72: "session_migrate",
 }
 
-# Backward-compatible integer mapping for DeviceStatus in binary protocol.
+# v3 string → v2 int 反向映射（取第一个匹配）
+_V3_TO_V2_MSG_TYPE: Dict[str, int] = {}
+for _v2_int, _v3_str in _V2_TO_V3_MSG_TYPE.items():
+    if _v3_str not in _V3_TO_V2_MSG_TYPE:
+        _V3_TO_V2_MSG_TYPE[_v3_str] = _v2_int
+
+# v2 DeviceType integer mapping（向后兼容）
+_V2_DEVICE_TYPE_INT: Dict[str, int] = {
+    DeviceType.UNKNOWN.value: 0,
+    DeviceType.LINUX.value: 1,
+    DeviceType.ANDROID.value: 3,
+    DeviceType.EMBEDDED.value: 6,
+    DeviceType.CUSTOM.value: 7,
+}
+
 _V2_DEVICE_STATUS_INT: Dict[str, int] = {
     DeviceStatus.OFFLINE.value: 0,
     DeviceStatus.ONLINE.value: 1,
@@ -106,6 +139,18 @@ _V2_DEVICE_STATUS_INT: Dict[str, int] = {
     DeviceStatus.UNKNOWN.value: 5,
 }
 
+# =============================================================================
+# 公开 MessageType — 使用 V3MessageType 作为标准
+# =============================================================================
+
+# 新代码应使用 V3MessageType (str enum with 48+ types)
+# 向后兼容: MessageType 现在指向 V3MessageType
+MessageType = V3MessageType
+
+
+# =============================================================================
+# Task & Device data classes（保留 dataclass 接口以兼容现有代码）
+# =============================================================================
 
 class TaskPriority(IntEnum):
     """Task Priority Levels"""
@@ -128,7 +173,7 @@ class TaskState(IntEnum):
 
 
 class ErrorCode(IntEnum):
-    """AIP v2.0 Error Codes"""
+    """AIP Error Codes"""
     SUCCESS = 0
     INVALID_MESSAGE = 1
     DEVICE_NOT_FOUND = 2
@@ -155,13 +200,14 @@ class DeviceCapabilities:
     supports_audio: bool = False
     supports_camera: bool = False
     custom_features: List[str] = field(default_factory=list)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeviceCapabilities':
-        return cls(**data)
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 @dataclass
@@ -182,19 +228,18 @@ class DeviceInfo:
     registered_at: float = field(default_factory=time.time)
     last_heartbeat: float = field(default_factory=time.time)
     status: DeviceStatus = DeviceStatus.ONLINE
-    
+
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data['device_type'] = self.device_type.value
         data['capabilities'] = self.capabilities.to_dict()
         data['status'] = self.status.value
         return data
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeviceInfo':
         data = data.copy()
         raw_dt = data.get('device_type', 'unknown')
-        # Support both legacy integer codes and string values
         if isinstance(raw_dt, int):
             _int_to_dt = {v: k for k, v in _V2_DEVICE_TYPE_INT.items()}
             raw_dt = _int_to_dt.get(raw_dt, DeviceType.UNKNOWN.value)
@@ -228,13 +273,13 @@ class TaskInfo:
     retry_count: int = 0
     max_retries: int = 3
     timeout_seconds: float = 300.0
-    
+
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data['priority'] = self.priority.value
         data['state'] = self.state.value
         return data
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'TaskInfo':
         data = data.copy()
@@ -243,130 +288,118 @@ class TaskInfo:
         return cls(**data)
 
 
-@dataclass
-class AIPMessage:
+# =============================================================================
+# AIPMessage — v3.0 Pydantic 消息 + v2.0 二进制兼容层
+# =============================================================================
+
+class AIPMessage(V3AIPMessage):
     """
-    AIP v2.0 Message Structure
-    
-    Format:
-    - Header (16 bytes):
-        - Magic (4 bytes): 0x55464F47 ('UFOG')
-        - Version (2 bytes): 0x0200
-        - Message Type (2 bytes)
-        - Payload Length (4 bytes)
-        - Sequence Number (4 bytes)
-    - Body (variable): JSON payload
-    - Footer (8 bytes):
-        - Checksum (4 bytes)
-        - Reserved (4 bytes)
+    AIP v3.0 消息（继承自 galaxy_gateway.protocol.aip_v3.AIPMessage）
+
+    新增 v2.0 二进制兼容方法:
+      - to_bytes() / from_bytes() — legacy 二进制序列化
+      - to_json() / from_json() — 推荐的 JSON 序列化
     """
-    msg_type: MessageType
-    payload: Dict[str, Any]
-    sequence: int = 0
-    timestamp: float = field(default_factory=time.time)
-    source_device: Optional[str] = None
-    target_device: Optional[str] = None
-    correlation_id: Optional[str] = None
-    
-    # Protocol constants
-    MAGIC: int = 0x55464F47  # 'UFOG' in ASCII
-    VERSION: int = 0x0200    # v2.0
-    HEADER_SIZE: int = 16
-    FOOTER_SIZE: int = 8
-    
+
+    # v2.0 protocol constants
+    _V2_MAGIC: int = 0x55464F47  # 'UFOG'
+    _V2_VERSION: int = 0x0200
+    _V2_HEADER_SIZE: int = 16
+    _V2_FOOTER_SIZE: int = 8
+
+    def to_json(self) -> str:
+        """序列化为 JSON 字符串（推荐接口）"""
+        return self.model_dump_json()
+
+    @classmethod
+    def from_json(cls, data: Union[str, dict]) -> 'AIPMessage':
+        """从 JSON 反序列化（推荐接口）"""
+        if isinstance(data, str):
+            data = json.loads(data)
+        return cls.model_validate(data)
+
     def to_bytes(self) -> bytes:
-        """Serialize message to bytes"""
-        # Build payload with metadata
+        """
+        Legacy v2.0 二进制序列化
+
+        Format: Header(16) + JSON payload + Footer(8)
+        """
+        v3_type_str = self.type.value if isinstance(self.type, Enum) else str(self.type)
+        v2_msg_type = _V3_TO_V2_MSG_TYPE.get(v3_type_str, 0x40)
+
         full_payload = {
             'payload': self.payload,
-            'timestamp': self.timestamp,
-            'source_device': self.source_device,
-            'target_device': self.target_device,
-            'correlation_id': self.correlation_id
+            'timestamp': self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else str(self.timestamp),
+            'source_device': self.device_id,
+            'target_device': None,
+            'correlation_id': self.correlation_id,
         }
-        
-        # Serialize payload to JSON
         payload_bytes = json.dumps(full_payload, ensure_ascii=False).encode('utf-8')
         payload_length = len(payload_bytes)
-        
-        # Build header
+
         header = struct.pack(
             '>IHHII',
-            self.MAGIC,
-            self.VERSION,
-            self.msg_type.value,
+            self._V2_MAGIC,
+            self._V2_VERSION,
+            v2_msg_type,
             payload_length,
-            self.sequence
+            0
         )
-        
-        # Calculate checksum
-        checksum = self._calculate_checksum(payload_bytes)
-        
-        # Build footer
+
+        checksum = hashlib.crc32(payload_bytes) & 0xFFFFFFFF
         footer = struct.pack('>II', checksum, 0)
-        
+
         return header + payload_bytes + footer
-    
+
     @classmethod
     def from_bytes(cls, data: bytes) -> 'AIPMessage':
-        """Deserialize message from bytes"""
-        if len(data) < cls.HEADER_SIZE + cls.FOOTER_SIZE:
+        """
+        Legacy v2.0 二进制反序列化
+
+        Parses the v2 binary wire format and returns a v3 AIPMessage.
+        """
+        if len(data) < cls._V2_HEADER_SIZE + cls._V2_FOOTER_SIZE:
             raise ProtocolError("Message too short")
-        
-        # Parse header
+
         magic, version, msg_type_val, payload_length, sequence = struct.unpack(
-            '>IHHII', data[:cls.HEADER_SIZE]
+            '>IHHII', data[:cls._V2_HEADER_SIZE]
         )
-        
-        # Validate magic
-        if magic != cls.MAGIC:
+
+        if magic != cls._V2_MAGIC:
             raise ProtocolError(f"Invalid magic: {hex(magic)}")
-        
-        # Validate version
-        if version != cls.VERSION:
+
+        if version != cls._V2_VERSION:
             raise ProtocolError(f"Unsupported version: {hex(version)}")
-        
-        # Extract payload
-        payload_start = cls.HEADER_SIZE
+
+        payload_start = cls._V2_HEADER_SIZE
         payload_end = payload_start + payload_length
         payload_bytes = data[payload_start:payload_end]
-        
-        # Validate checksum
-        stored_checksum = struct.unpack('>I', data[payload_end:payload_end+4])[0]
-        calculated_checksum = cls._calculate_checksum(payload_bytes)
+
+        stored_checksum = struct.unpack('>I', data[payload_end:payload_end + 4])[0]
+        calculated_checksum = hashlib.crc32(payload_bytes) & 0xFFFFFFFF
         if stored_checksum != calculated_checksum:
             raise ProtocolError("Checksum mismatch")
-        
-        # Parse payload
+
         full_payload = json.loads(payload_bytes.decode('utf-8'))
-        
+
+        v3_type_str = _V2_TO_V3_MSG_TYPE.get(msg_type_val, "command")
+        try:
+            v3_type = V3MessageType(v3_type_str)
+        except ValueError:
+            v3_type = V3MessageType.COMMAND
+
+        source = full_payload.get('source_device', '')
+
         return cls(
-            msg_type=MessageType(msg_type_val),
+            type=v3_type,
+            device_id=source or "unknown",
             payload=full_payload.get('payload', {}),
-            sequence=sequence,
-            timestamp=full_payload.get('timestamp', time.time()),
-            source_device=full_payload.get('source_device'),
-            target_device=full_payload.get('target_device'),
-            correlation_id=full_payload.get('correlation_id')
+            correlation_id=full_payload.get('correlation_id'),
         )
-    
-    @staticmethod
-    def _calculate_checksum(data: bytes) -> int:
-        """Calculate CRC32 checksum"""
-        return hashlib.crc32(data) & 0xFFFFFFFF
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return {
-            'msg_type': self.msg_type.value,
-            'msg_type_name': self.msg_type.name,
-            'payload': self.payload,
-            'sequence': self.sequence,
-            'timestamp': self.timestamp,
-            'source_device': self.source_device,
-            'target_device': self.target_device,
-            'correlation_id': self.correlation_id
-        }
+        """转换为字典"""
+        return self.model_dump()
 
 
 class ProtocolError(Exception):
@@ -374,72 +407,76 @@ class ProtocolError(Exception):
     pass
 
 
+# =============================================================================
+# Protocol Validator — v3.0 JSON 消息验证
+# =============================================================================
+
 class ProtocolValidator:
-    """AIP v2.0 Protocol Validator"""
-    
+    """AIP v3.0 Protocol Validator"""
+
     @staticmethod
-    def validate_message(message: AIPMessage) -> tuple[bool, Optional[str]]:
-        """Validate AIP message"""
-        # Check message type
-        if not isinstance(message.msg_type, MessageType):
-            return False, f"Invalid message type: {message.msg_type}"
-        
-        # Check payload
-        if not isinstance(message.payload, dict):
-            return False, "Payload must be a dictionary"
-        
-        # Validate based on message type
+    def validate_message(message: AIPMessage) -> tuple:
+        """验证 AIP 消息"""
+        if not message.device_id:
+            return False, "Missing device_id"
+        if not message.type:
+            return False, "Missing message type"
+
         validators = {
-            MessageType.DEVICE_REGISTER: ProtocolValidator._validate_register,
-            MessageType.TASK_SUBMIT: ProtocolValidator._validate_task_submit,
-            MessageType.DEVICE_HEARTBEAT: ProtocolValidator._validate_heartbeat,
+            V3MessageType.DEVICE_REGISTER: ProtocolValidator._validate_register,
+            V3MessageType.TASK_SUBMIT: ProtocolValidator._validate_task_submit,
+            V3MessageType.DEVICE_HEARTBEAT: ProtocolValidator._validate_heartbeat,
         }
-        
-        validator = validators.get(message.msg_type)
+
+        validator = validators.get(message.type)
         if validator:
             return validator(message.payload)
-        
+
         return True, None
-    
+
     @staticmethod
-    def _validate_register(payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-        """Validate device registration payload"""
+    def _validate_register(payload: Dict[str, Any]) -> tuple:
+        """验证设备注册 payload"""
         required = ['device_id', 'device_type', 'device_name']
-        for field in required:
-            if field not in payload:
-                return False, f"Missing required field: {field}"
+        for f in required:
+            if f not in payload:
+                return False, f"Missing required field: {f}"
         return True, None
-    
+
     @staticmethod
-    def _validate_task_submit(payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-        """Validate task submission payload"""
+    def _validate_task_submit(payload: Dict[str, Any]) -> tuple:
+        """验证任务提交 payload"""
         required = ['task_id', 'task_type', 'payload']
-        for field in required:
-            if field not in payload:
-                return False, f"Missing required field: {field}"
+        for f in required:
+            if f not in payload:
+                return False, f"Missing required field: {f}"
         return True, None
-    
+
     @staticmethod
-    def _validate_heartbeat(payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-        """Validate heartbeat payload"""
+    def _validate_heartbeat(payload: Dict[str, Any]) -> tuple:
+        """验证心跳 payload"""
         if 'device_id' not in payload:
             return False, "Missing required field: device_id"
         return True, None
 
 
+# =============================================================================
+# Message Builder — 构建 AIP v3.0 消息
+# =============================================================================
+
 class MessageBuilder:
-    """Builder for AIP v2.0 Messages"""
-    
+    """Builder for AIP Messages (v3.0)"""
+
     _sequence_counter: int = 0
     _lock = asyncio.Lock()
-    
+
     @classmethod
     async def get_next_sequence(cls) -> int:
         """Get next sequence number"""
         async with cls._lock:
             cls._sequence_counter = (cls._sequence_counter + 1) % 0xFFFFFFFF
             return cls._sequence_counter
-    
+
     @classmethod
     async def build_register(
         cls,
@@ -448,12 +485,11 @@ class MessageBuilder:
     ) -> AIPMessage:
         """Build device registration message"""
         return AIPMessage(
-            msg_type=MessageType.DEVICE_REGISTER,
+            type=V3MessageType.DEVICE_REGISTER,
+            device_id=source_device or device_info.device_id,
             payload=device_info.to_dict(),
-            sequence=await cls.get_next_sequence(),
-            source_device=source_device
         )
-    
+
     @classmethod
     async def build_heartbeat(
         cls,
@@ -470,12 +506,11 @@ class MessageBuilder:
             'metrics': metrics or {}
         }
         return AIPMessage(
-            msg_type=MessageType.DEVICE_HEARTBEAT,
+            type=V3MessageType.DEVICE_HEARTBEAT,
+            device_id=source_device or device_id,
             payload=payload,
-            sequence=await cls.get_next_sequence(),
-            source_device=source_device
         )
-    
+
     @classmethod
     async def build_task_submit(
         cls,
@@ -484,12 +519,12 @@ class MessageBuilder:
     ) -> AIPMessage:
         """Build task submission message"""
         return AIPMessage(
-            msg_type=MessageType.TASK_SUBMIT,
+            type=V3MessageType.TASK_SUBMIT,
+            device_id=source_device or "system",
+            task_id=task_info.task_id,
             payload=task_info.to_dict(),
-            sequence=await cls.get_next_sequence(),
-            source_device=source_device
         )
-    
+
     @classmethod
     async def build_task_result(
         cls,
@@ -508,18 +543,18 @@ class MessageBuilder:
             'timestamp': time.time()
         }
         return AIPMessage(
-            msg_type=MessageType.TASK_RESULT,
+            type=V3MessageType.TASK_RESULT,
+            device_id=source_device or "system",
+            task_id=task_id,
             payload=payload,
-            sequence=await cls.get_next_sequence(),
-            source_device=source_device
         )
-    
+
     @classmethod
     async def build_error(
         cls,
         error_code: ErrorCode,
         error_message: str,
-        original_msg_type: Optional[MessageType] = None,
+        original_msg_type: Optional[V3MessageType] = None,
         source_device: Optional[str] = None
     ) -> AIPMessage:
         """Build error message"""
@@ -530,12 +565,12 @@ class MessageBuilder:
             'original_msg_type': original_msg_type.value if original_msg_type else None
         }
         return AIPMessage(
-            msg_type=MessageType.ERROR_REPORT,
+            type=V3MessageType.ERROR,
+            device_id=source_device or "system",
+            error=error_message,
             payload=payload,
-            sequence=await cls.get_next_sequence(),
-            source_device=source_device
         )
-    
+
     @classmethod
     async def build_broadcast(
         cls,
@@ -550,21 +585,24 @@ class MessageBuilder:
             'timestamp': time.time()
         }
         return AIPMessage(
-            msg_type=MessageType.COORD_BROADCAST,
+            type=V3MessageType.COORD_BROADCAST,
+            device_id=source_device or "system",
             payload=payload,
-            sequence=await cls.get_next_sequence(),
-            source_device=source_device
         )
 
 
+# =============================================================================
+# Protocol Handler & Router — 抽象消息处理
+# =============================================================================
+
 class ProtocolHandler(ABC):
     """Abstract base class for protocol handlers"""
-    
+
     @abstractmethod
     async def handle_message(self, message: AIPMessage) -> Optional[AIPMessage]:
         """Handle incoming message"""
         pass
-    
+
     @abstractmethod
     async def handle_error(self, error: Exception, message: Optional[AIPMessage] = None) -> AIPMessage:
         """Handle protocol error"""
@@ -572,44 +610,41 @@ class ProtocolHandler(ABC):
 
 
 class MessageRouter:
-    """Message routing system"""
-    
+    """Message routing system (v3.0)"""
+
     def __init__(self):
-        self.handlers: Dict[MessageType, List[ProtocolHandler]] = {}
+        self.handlers: Dict[V3MessageType, List[ProtocolHandler]] = {}
         self.default_handler: Optional[ProtocolHandler] = None
         self.middleware: List[Callable[[AIPMessage], AIPMessage]] = []
-    
+
     def register_handler(
         self,
-        msg_type: MessageType,
+        msg_type: V3MessageType,
         handler: ProtocolHandler
     ) -> None:
         """Register handler for message type"""
         if msg_type not in self.handlers:
             self.handlers[msg_type] = []
         self.handlers[msg_type].append(handler)
-        logger.info(f"Registered handler for {msg_type.name}")
-    
+        logger.info(f"Registered handler for {msg_type.value}")
+
     def set_default_handler(self, handler: ProtocolHandler) -> None:
         """Set default handler for unhandled message types"""
         self.default_handler = handler
-    
+
     def add_middleware(self, middleware: Callable[[AIPMessage], AIPMessage]) -> None:
         """Add middleware to message processing pipeline"""
         self.middleware.append(middleware)
-    
+
     async def route(self, message: AIPMessage) -> List[AIPMessage]:
         """Route message to appropriate handlers"""
-        # Apply middleware
         for mw in self.middleware:
             message = mw(message)
-        
-        # Get handlers
-        handlers = self.handlers.get(message.msg_type, [])
+
+        handlers = self.handlers.get(message.type, [])
         if not handlers and self.default_handler:
             handlers = [self.default_handler]
-        
-        # Process message
+
         responses = []
         for handler in handlers:
             try:
@@ -617,153 +652,24 @@ class MessageRouter:
                 if response:
                     responses.append(response)
             except Exception as e:
-                logger.error(f"Handler error: {e}")
+                logger.error(f"Handler error for {message.type}: {e}")
                 error_response = await handler.handle_error(e, message)
                 responses.append(error_response)
-        
+
         return responses
 
 
-# Protocol buffer schema definitions (as Python code for reference)
-PROTOBUF_SCHEMA = """
-syntax = "proto3";
+# =============================================================================
+# Exports
+# =============================================================================
 
-package galaxy.aip.v2;
-
-// Device message
-message Device {
-    string device_id = 1;
-    DeviceType device_type = 2;
-    string device_name = 3;
-    string device_model = 4;
-    string os_version = 5;
-    string app_version = 6;
-    string ip_address = 7;
-    int32 port = 8;
-    DeviceCapabilities capabilities = 9;
-    repeated string tags = 10;
-    repeated string groups = 11;
-    DeviceStatus status = 12;
-    double registered_at = 13;
-    double last_heartbeat = 14;
-}
-
-enum DeviceType {
-    UNKNOWN = 0;
-    LINUX_SERVER = 1;
-    LINUX_DESKTOP = 2;
-    ANDROID_PHONE = 3;
-    ANDROID_TABLET = 4;
-    ANDROID_TV = 5;
-    EMBEDDED = 6;
-    CONTAINER = 7;
-    VIRTUAL = 8;
-}
-
-enum DeviceStatus {
-    OFFLINE = 0;
-    ONLINE = 1;
-    BUSY = 2;
-    ERROR = 3;
-    MAINTENANCE = 4;
-    DEGRADED = 5;
-}
-
-message DeviceCapabilities {
-    int32 cpu_cores = 1;
-    double memory_gb = 2;
-    double storage_gb = 3;
-    bool gpu_available = 4;
-    double gpu_memory_gb = 5;
-    double network_mbps = 6;
-    bool supports_screen = 7;
-    bool supports_audio = 8;
-    bool supports_camera = 9;
-    repeated string custom_features = 10;
-}
-
-// Task message
-message Task {
-    string task_id = 1;
-    string task_type = 2;
-    TaskPriority priority = 3;
-    bytes payload = 4;
-    string assigned_device = 5;
-    double created_at = 6;
-    double scheduled_at = 7;
-    double started_at = 8;
-    double completed_at = 9;
-    TaskState state = 10;
-    bytes result = 11;
-    string error_message = 12;
-    int32 retry_count = 13;
-    int32 max_retries = 14;
-    double timeout_seconds = 15;
-}
-
-enum TaskPriority {
-    CRITICAL = 0;
-    HIGH = 1;
-    NORMAL = 2;
-    LOW = 3;
-    BACKGROUND = 4;
-}
-
-enum TaskState {
-    PENDING = 0;
-    SCHEDULED = 1;
-    RUNNING = 2;
-    COMPLETED = 3;
-    FAILED = 4;
-    CANCELLED = 5;
-    TIMEOUT = 6;
-}
-
-// AIP Message wrapper
-message AIPMessage {
-    MessageType msg_type = 1;
-    bytes payload = 2;
-    uint32 sequence = 3;
-    double timestamp = 4;
-    string source_device = 5;
-    string target_device = 6;
-    string correlation_id = 7;
-}
-
-enum MessageType {
-    DEVICE_REGISTER = 1;
-    DEVICE_UNREGISTER = 2;
-    DEVICE_HEARTBEAT = 3;
-    DEVICE_STATUS = 4;
-    DEVICE_DISCOVER = 5;
-    TASK_SUBMIT = 16;
-    TASK_ASSIGN = 17;
-    TASK_STATUS = 18;
-    TASK_RESULT = 19;
-    TASK_CANCEL = 20;
-    COORD_SYNC = 32;
-    COORD_BROADCAST = 33;
-    COORD_ROUTING = 34;
-    COORD_ELECTION = 35;
-    DATA_REQUEST = 48;
-    DATA_RESPONSE = 49;
-    DATA_STREAM = 50;
-    CONTROL_COMMAND = 64;
-    CONTROL_CONFIG = 65;
-    CONTROL_SHUTDOWN = 66;
-    ERROR_REPORT = 80;
-    RECOVERY_REQUEST = 81;
-    RECOVERY_RESPONSE = 82;
-    ANDROID_SCREEN = 96;
-    ANDROID_INPUT = 97;
-    ANDROID_INSTALL = 98;
-}
-"""
-
-
-# Export all public classes and functions
 __all__ = [
+    # v3.0 types (primary)
     'MessageType',
+    'V3MessageType',
+    'AIPMessage',
+    'V3AIPMessage',
+    # Data structures
     'DeviceType',
     'DeviceStatus',
     'TaskPriority',
@@ -772,11 +678,12 @@ __all__ = [
     'DeviceCapabilities',
     'DeviceInfo',
     'TaskInfo',
-    'AIPMessage',
+    # Protocol utilities
     'ProtocolError',
     'ProtocolValidator',
     'MessageBuilder',
     'ProtocolHandler',
     'MessageRouter',
-    'PROTOBUF_SCHEMA'
+    # Legacy v2.0 (for binary wire compat only)
+    'LegacyMessageType',
 ]

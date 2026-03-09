@@ -17,6 +17,7 @@ Galaxy Gateway v5.0 - 自主学习和编程版本
 日期：2026-01-22
 作者：Manus AI
 """
+from core.port_config import get_service_port
 
 import os
 import json
@@ -396,4 +397,4 @@ async def stats() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=get_service_port("state_machine"))

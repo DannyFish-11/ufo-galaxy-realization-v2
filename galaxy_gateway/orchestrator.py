@@ -14,6 +14,7 @@ from datetime import datetime
 import uuid
 
 import httpx
+from core.port_config import get_service_port
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -69,7 +70,7 @@ class AIGateway:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.model_endpoint = config.get("model_endpoint", "http://localhost:8000")
+        self.model_endpoint = config.get("model_endpoint", f"http://localhost:{get_service_port('state_machine')}")
         self.api_key = config.get("api_key", "")
         self.llm_enabled = config.get("llm_enabled", True)
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -857,7 +858,7 @@ if __name__ == "__main__":
         # 创建调度器
         config = {
             "ai_gateway": {
-                "model_endpoint": "http://localhost:8000",
+                "model_endpoint": f"http://localhost:{get_service_port('state_machine')}",
                 "api_key": "test-key"
             },
             "device_manager": {}

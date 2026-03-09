@@ -33,9 +33,11 @@ except ImportError:
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port
+
 NODE_ID = os.getenv("NODE_ID", "00")
 NODE_NAME = os.getenv("NODE_NAME", "StateMachine")
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_URL = os.getenv("REDIS_URL", f"redis://localhost:{get_service_port('redis')}")
 USE_MEMORY_STORE = os.getenv("USE_MEMORY_STORE", "true").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

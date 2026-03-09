@@ -34,12 +34,14 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port, get_node_port
+
 NODE_ID = os.getenv("NODE_ID", "58")
 NODE_NAME = os.getenv("NODE_NAME", "ModelRouter")
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
-TRANSFORMER_URL = os.getenv("TRANSFORMER_URL", "http://localhost:8050")
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
+TRANSFORMER_URL = os.getenv("TRANSFORMER_URL", f"http://localhost:{get_node_port('Node_50_Transformer')}")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-ONEAPI_URL = os.getenv("ONEAPI_URL", "http://localhost:3000")
+ONEAPI_URL = os.getenv("ONEAPI_URL", f"http://localhost:{get_service_port('oneapi_web')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "data", "router.db"))
 
@@ -1049,7 +1051,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8058,
+        port=get_node_port("Node_58_ModelRouter"),
         reload=False,
         log_level=LOG_LEVEL.lower()
     )

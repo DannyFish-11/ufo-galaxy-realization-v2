@@ -22,11 +22,16 @@ import uuid
 import logging
 
 from core.multi_llm_router import get_llm_router
+from core.port_config import get_service_port
 from galaxy_gateway.websocket_handler import handle_websocket, connection_manager
 from galaxy_gateway.device_router import device_router
 from nodes.common.cors_config import get_cors_origins
 
 logger = logging.getLogger(__name__)
+
+# 从统一端口配置读取 StateMachine (Node_00) 地址
+_STATE_MACHINE_PORT = get_service_port("state_machine")
+_STATE_MACHINE_BASE = f"http://127.0.0.1:{_STATE_MACHINE_PORT}"
 
 
 app = FastAPI(
@@ -208,7 +213,7 @@ async def list_nodes(
     try:
         import httpx
         async with httpx.AsyncClient() as client:
-            resp = await client.get("http://127.0.0.1:8000/api/v1/nodes", timeout=5.0)
+            resp = await client.get(f"{_STATE_MACHINE_BASE}/api/v1/nodes", timeout=5.0)
             return resp.json()
     except Exception as e:
         logger.warning(f"Failed to proxy node list: {e}")
@@ -223,7 +228,7 @@ async def get_node_info(node_id: str):
     try:
         import httpx
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f"http://127.0.0.1:8000/api/v1/nodes/{node_id}", timeout=5.0)
+            resp = await client.get(f"{_STATE_MACHINE_BASE}/api/v1/nodes/{node_id}", timeout=5.0)
             if resp.status_code == 404:
                 raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
             return resp.json()
@@ -241,7 +246,7 @@ async def check_node_health(node_id: str):
     try:
         import httpx
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f"http://127.0.0.1:8000/api/v1/nodes/{node_id}", timeout=5.0)
+            resp = await client.get(f"{_STATE_MACHINE_BASE}/api/v1/nodes/{node_id}", timeout=5.0)
             data = resp.json()
             is_healthy = data.get("status") == "active" if resp.status_code == 200 else False
             return {"node_id": node_id, "healthy": is_healthy, "status": "online" if is_healthy else "offline"}
@@ -258,7 +263,7 @@ async def call_node(request: NodeCallRequest):
         import httpx
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                "http://127.0.0.1:8000/api/v1/nodes/call",
+                f"{_STATE_MACHINE_BASE}/api/v1/nodes/call",
                 json={"node_id": request.node_id, "action": request.method, "params": request.params or {}},
                 timeout=30.0,
             )
@@ -323,7 +328,7 @@ async def execute_batch_tasks(request: BatchTaskRequest):
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    "http://127.0.0.1:8000/api/v1/nodes/call",
+                    f"{_STATE_MACHINE_BASE}/api/v1/nodes/call",
                     json={"node_id": node_id, "action": method, "params": params},
                     timeout=30.0,
                 )

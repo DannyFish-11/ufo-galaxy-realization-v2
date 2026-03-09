@@ -36,9 +36,11 @@ app.add_middleware(
 # ============================================================================
 
 # 节点地址
-NODE_50_NLU_URL = os.getenv("NODE_50_NLU_URL", "http://localhost:8050")
-NODE_90_VISION_URL = os.getenv("NODE_90_VISION_URL", "http://localhost:8090")
-NODE_92_CONTROL_URL = os.getenv("NODE_92_CONTROL_URL", "http://localhost:8092")
+from core.port_config import get_node_port
+
+NODE_50_NLU_URL = os.getenv("NODE_50_NLU_URL", f"http://localhost:{get_node_port('Node_50_Transformer')}")
+NODE_90_VISION_URL = os.getenv("NODE_90_VISION_URL", f"http://localhost:{get_node_port('Node_90_MultimodalVision')}")
+NODE_92_CONTROL_URL = os.getenv("NODE_92_CONTROL_URL", f"http://localhost:{get_node_port('Node_92_AutoControl')}")
 
 # 多模态 LLM
 llm_client = None

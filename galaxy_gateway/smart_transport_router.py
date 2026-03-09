@@ -18,6 +18,7 @@ import httpx
 from typing import Optional, Dict, Any, Literal
 from enum import Enum
 from pydantic import BaseModel
+from core.port_config import get_service_port
 
 # ============================================================================
 # 传输方式枚举
@@ -198,7 +199,7 @@ class SmartTransportRouter:
         if method == TransportMethod.WEBRTC and use_gateway:
             # Return the gateway WebSocket signaling URL so Android clients
             # need only know the gateway address, not Node_95 directly.
-            gateway_url = os.getenv("GATEWAY_URL", "http://localhost:8000").rstrip("/")
+            gateway_url = os.getenv("GATEWAY_URL", f"http://localhost:{get_service_port('state_machine')}").rstrip("/")
             ws_url = gateway_url.replace("https://", "wss://").replace("http://", "ws://")
             return f"{ws_url}/ws/webrtc/{device_id}"
 

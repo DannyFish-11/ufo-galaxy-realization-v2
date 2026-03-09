@@ -32,6 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from fusion.topology_manager import TopologyManager
 from fusion.unified_orchestrator import UnifiedOrchestrator, Task, TaskType, TaskPriority
 from fusion.node_executor import ExecutionPool
+from core.port_config import get_service_port
 
 # 配置日志
 logging.basicConfig(
@@ -91,7 +92,7 @@ class FusionSystem:
         self.topology_manager = TopologyManager(str(topology_config))
         
         # 2. 初始化执行池 (指向统一网关)
-        self.execution_pool = ExecutionPool(gateway_url="http://localhost:8000")
+        self.execution_pool = ExecutionPool(gateway_url=f"http://localhost:{get_service_port('state_machine')}")
         
         # 3. 初始化统一编排引擎
         self.orchestrator = UnifiedOrchestrator(
