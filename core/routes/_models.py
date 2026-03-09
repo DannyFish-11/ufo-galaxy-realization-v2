@@ -49,6 +49,8 @@ class ChatRequest(BaseModel):
     message: str
     device_id: str = ""
     context: List[Dict[str, str]] = []
+    user_id: str = ""          # 用户标识（跨设备统一会话）
+    session_id: str = ""       # 会话 ID（跨设备共享）
 
 
 class NodeCallRequest(BaseModel):

@@ -227,6 +227,9 @@ class CapabilityOrchestrator:
                 description="使用双指挥官交叉验证决策",
                 type=CapabilityType.BUILTIN,
                 tags=["agent", "twin", "decision"],
+                priority=6,
+            ),
+            Capability(
                 id="builtin_simulate",
                 name="模拟执行",
                 description="通过数字孪生引擎模拟操作效果",
@@ -425,6 +428,7 @@ class CapabilityOrchestrator:
             commander = get_twin_commander()
             result = await commander.analyze(params.get("task", ""), params.get("context"))
             return result.to_dict()
+
         elif cap.id == "builtin_simulate":
             # 数字孪生模拟 — 选择指定设备的孪生体或第一个可用孪生体
             from core.digital_twin_engine import get_digital_twin_engine
