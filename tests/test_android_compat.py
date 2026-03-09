@@ -346,6 +346,18 @@ class TestProtocolCompat:
         msg = self.parse({"type": "update_status", "device_id": "dev-us"})
         assert msg.type == self.MessageType.DEVICE_STATUS
 
+    def test_v1_registration_alias(self):
+        """AIP/1.0 'registration' (sent by Android AIPClient) maps to MessageType.DEVICE_REGISTER."""
+        msg = self.parse({"type": "registration", "device_id": "android-001"})
+        assert msg.type == self.MessageType.DEVICE_REGISTER
+        assert msg.device_id == "android-001"
+
+    def test_v1_command_result_alias(self):
+        """AIP/1.0 'command_result' (sent by Android clients) maps to MessageType.TASK_RESULT."""
+        msg = self.parse({"type": "command_result", "device_id": "android-002"})
+        assert msg.type == self.MessageType.TASK_RESULT
+        assert msg.device_id == "android-002"
+
 
 # ============================================================================
 # 4. New v1 device endpoints  (core/routes/devices.py)
