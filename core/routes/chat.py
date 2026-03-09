@@ -89,6 +89,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def chat(req: ChatRequest):
         """
         统一对话接口 — 智能分流:
+        0. OpenClawd 统一入口（优先，如可用）
         1. IntentParser 解析意图（规则 + LLM 增强）
         2. 操作指令 → ReAct Agent 调度 (LLM + tool_call → 节点执行)
         3. 纯聊天 → LLM 对话回复
@@ -96,6 +97,34 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
+        # ── 层 0: OpenClawd 优先入口 ──
+        try:
+            from core.openclawd import get_openclawd
+            clawd = get_openclawd()
+            result = await clawd.process(
+                message=req.message,
+                device_id=req.device_id,
+                session_id=req.session_id,
+            )
+            if result.get("success"):
+                resp = UnifiedChatResponse(
+                    success=True,
+                    response=result.get("response", ""),
+                    intent=result.get("intent", "chat"),
+                    confidence=result.get("confidence", 1.0),
+                    mode="openclawd",
+                    model=result.get("model", ""),
+                    session_id=result.get("session_id", req.session_id or ""),
+                    data=result.get("metadata"),
+                )
+                resp_dict = resp.to_json_response()
+                resp_dict["reply"] = result.get("response", "")
+                return JSONResponse(resp_dict)
+        except ImportError:
+            pass  # OpenClawd 未安装，继续使用原有逻辑
+        except Exception as e:
+            logger.debug(f"OpenClawd 处理失败，降级到原有逻辑: {e}")
+
         # ── 统一会话管理 ──
         try:
             from core.session_manager import get_session_manager

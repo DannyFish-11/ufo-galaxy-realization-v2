@@ -85,27 +85,26 @@ class MessageType(IntEnum):
     SESSION_RESTORE = 0x73     # 目标设备恢复会话
 
 
-class DeviceType(IntEnum):
-    """Device Types supported by Galaxy"""
-    UNKNOWN = 0
-    LINUX_SERVER = 1
-    LINUX_DESKTOP = 2
-    ANDROID_PHONE = 3
-    ANDROID_TABLET = 4
-    ANDROID_TV = 5
-    EMBEDDED = 6
-    CONTAINER = 7
-    VIRTUAL = 8
+from core.device_types import DeviceType, DeviceStatus
 
+# Backward-compatible integer mapping for binary protocol serialization.
+# Maps canonical DeviceType string values to the legacy v2 integer codes.
+_V2_DEVICE_TYPE_INT: Dict[str, int] = {
+    DeviceType.UNKNOWN.value: 0,
+    DeviceType.LINUX.value: 1,       # was LINUX_SERVER
+    DeviceType.ANDROID.value: 3,     # was ANDROID_PHONE
+    DeviceType.EMBEDDED.value: 6,
+    DeviceType.CUSTOM.value: 7,      # was CONTAINER
+}
 
-class DeviceStatus(IntEnum):
-    """Device Status States"""
-    OFFLINE = 0
-    ONLINE = 1
-    BUSY = 2
-    ERROR = 3
-    MAINTENANCE = 4
-    DEGRADED = 5
+# Backward-compatible integer mapping for DeviceStatus in binary protocol.
+_V2_DEVICE_STATUS_INT: Dict[str, int] = {
+    DeviceStatus.OFFLINE.value: 0,
+    DeviceStatus.ONLINE.value: 1,
+    DeviceStatus.BUSY.value: 2,
+    DeviceStatus.ERROR.value: 3,
+    DeviceStatus.UNKNOWN.value: 5,
+}
 
 
 class TaskPriority(IntEnum):
@@ -194,11 +193,20 @@ class DeviceInfo:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeviceInfo':
         data = data.copy()
-        data['device_type'] = DeviceType(data.get('device_type', 0))
+        raw_dt = data.get('device_type', 'unknown')
+        # Support both legacy integer codes and string values
+        if isinstance(raw_dt, int):
+            _int_to_dt = {v: k for k, v in _V2_DEVICE_TYPE_INT.items()}
+            raw_dt = _int_to_dt.get(raw_dt, DeviceType.UNKNOWN.value)
+        data['device_type'] = DeviceType(raw_dt)
         data['capabilities'] = DeviceCapabilities.from_dict(
             data.get('capabilities', {})
         )
-        data['status'] = DeviceStatus(data.get('status', 1))
+        raw_st = data.get('status', 'online')
+        if isinstance(raw_st, int):
+            _int_to_st = {v: k for k, v in _V2_DEVICE_STATUS_INT.items()}
+            raw_st = _int_to_st.get(raw_st, DeviceStatus.UNKNOWN.value)
+        data['status'] = DeviceStatus(raw_st)
         return cls(**data)
 
 

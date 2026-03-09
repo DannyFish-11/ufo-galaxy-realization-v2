@@ -19,7 +19,7 @@ from typing import List, Optional
 
 # 从 AIP v3.0 重导出细分类型（协议层使用）
 from galaxy_gateway.protocol.aip_v3 import (
-    DeviceType as AIPDeviceType,
+    AIPDeviceType,
     DevicePlatform,
     DeviceCapability as AIPDeviceCapability,
 )
@@ -60,6 +60,8 @@ class DeviceType(str, Enum):
     BLE = "ble"
     NFC = "nfc"
     CANBUS = "canbus"
+    # ── 量子计算 ──
+    QUANTUM = "quantum"
     # ── 通用 ──
     CUSTOM = "custom"
     UNKNOWN = "unknown"

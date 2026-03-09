@@ -32,7 +32,7 @@ class TestResolveDeviceType:
     def test_prefix_match(self):
         assert resolve_device_type("android_unknown_future") == DeviceType.ANDROID
         assert resolve_device_type("ios_future_device") == DeviceType.IOS
-        assert resolve_device_type("embedded_new") == DeviceType.IOT
+        assert resolve_device_type("embedded_new") == DeviceType.EMBEDDED
 
     def test_case_insensitive(self):
         assert resolve_device_type("ANDROID") == DeviceType.ANDROID

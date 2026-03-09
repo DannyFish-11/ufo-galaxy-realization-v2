@@ -7,7 +7,8 @@ AIP v3.0 协议模块
 from .compat import parse_message_compat
 from .aip_v3 import (
     # 枚举类型
-    DeviceType,
+    AIPDeviceType,
+    AIPDeviceType as DeviceType,  # backward compat alias
     DevicePlatform,
     DeviceCapability,
     MessageType,

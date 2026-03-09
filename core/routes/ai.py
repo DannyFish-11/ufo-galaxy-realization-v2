@@ -8,12 +8,19 @@ Routes:
   GET    /api/v1/ai/conversation/{session_id}    - 对话上下文
   GET    /api/v1/ai/recommendations/{session_id} - 智能推荐
   DELETE /api/v1/ai/conversation/{session_id}    - 清除对话记忆
+  POST   /api/v1/agents/twin                     - 孪生指挥创建
+  POST   /api/v1/agents/swarm                    - Agent Swarm 创建
+  GET    /api/v1/agents/{agent_id}/children      - Agent 子树
+  POST   /api/v1/agents/{agent_id}/split         - 手动触发 Agent 分裂
 """
 
 import logging
+import uuid
+from typing import Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from core.routes._shared import registered_devices, task_queue
 from core.routes._models import AIIntentRequest, ConversationRequest
@@ -96,5 +103,159 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """清除对话记忆"""
         await conversation_memory.clear_session(session_id)
         return JSONResponse({"success": True, "message": f"Session {session_id} cleared"})
+
+    # ─────── Agent 增强端点 ─────────
+
+    class TwinCreateRequest(BaseModel):
+        task: str = Field(..., description="要执行的任务描述")
+        strategy: str = Field(default="SPECIALIZED", description="团队策略: PARALLEL/SPECIALIZED/SWARM")
+        member_count: int = Field(default=2, ge=1, le=10, description="团队成员数")
+        providers: List[str] = Field(default_factory=list, description="指定使用的 LLM 提供商列表")
+
+    class SwarmCreateRequest(BaseModel):
+        task: str = Field(..., description="要执行的任务描述")
+        agent_count: int = Field(default=3, ge=1, le=20, description="Swarm Agent 数量")
+        template: str = Field(default="general", description="Agent 模板名称")
+
+    class AgentSplitRequest(BaseModel):
+        subtasks: List[str] = Field(..., description="分裂后的子任务列表")
+
+    @router.post("/api/v1/agents/twin")
+    async def create_twin_command(req: TwinCreateRequest):
+        """孪生指挥创建 — 使用 SPECIALIZED 策略让多个 LLM 协作完成任务"""
+        try:
+            from core.agent_team import TeamManager, TeamStrategy
+            from core.multi_llm_router import get_llm_router
+
+            strategy_map = {
+                "PARALLEL": TeamStrategy.PARALLEL,
+                "SPECIALIZED": TeamStrategy.SPECIALIZED,
+                "SWARM": TeamStrategy.SWARM,
+            }
+            strategy = strategy_map.get(req.strategy.upper(), TeamStrategy.SPECIALIZED)
+
+            llm_router = get_llm_router()
+            team_manager = TeamManager(llm_router=llm_router)
+            team_id = str(uuid.uuid4())[:8]
+
+            result = await team_manager.execute_team_task(
+                task=req.task,
+                strategy=strategy,
+                member_count=req.member_count,
+                providers=req.providers if req.providers else None,
+            )
+
+            return JSONResponse({
+                "success": True,
+                "team_id": team_id,
+                "strategy": req.strategy,
+                "member_count": req.member_count,
+                "result": result if isinstance(result, dict) else {"response": str(result)},
+            })
+        except ImportError:
+            raise HTTPException(status_code=501, detail="agent_team 模块不可用")
+        except Exception as e:
+            logger.error(f"孪生指挥创建失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
+
+    @router.post("/api/v1/agents/swarm")
+    async def create_agent_swarm(req: SwarmCreateRequest):
+        """Agent Swarm 创建 — 批量同类 Agent 并行执行，投票/合并结果"""
+        try:
+            from core.agent_team import TeamManager, TeamStrategy
+            from core.multi_llm_router import get_llm_router
+
+            llm_router = get_llm_router()
+            team_manager = TeamManager(llm_router=llm_router)
+
+            result = await team_manager.execute_team_task(
+                task=req.task,
+                strategy=TeamStrategy.SWARM,
+                member_count=req.agent_count,
+            )
+
+            return JSONResponse({
+                "success": True,
+                "strategy": "SWARM",
+                "agent_count": req.agent_count,
+                "template": req.template,
+                "result": result if isinstance(result, dict) else {"response": str(result)},
+            })
+        except ImportError:
+            raise HTTPException(status_code=501, detail="agent_team 模块不可用")
+        except Exception as e:
+            logger.error(f"Agent Swarm 创建失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
+
+    @router.get("/api/v1/agents/{agent_id}/children")
+    async def get_agent_children(agent_id: str):
+        """获取 Agent 子树 — 查看 Agent 创建的子 Agent"""
+        try:
+            from core.agent_factory import get_agent_factory
+
+            factory = get_agent_factory()
+            children = []
+            for aid, agent in factory._agents.items():
+                parent = getattr(agent, "parent_id", None)
+                if parent == agent_id:
+                    children.append({
+                        "agent_id": aid,
+                        "name": getattr(agent, "name", aid),
+                        "status": getattr(agent, "status", "unknown"),
+                        "template": getattr(agent, "template_name", ""),
+                    })
+
+            return JSONResponse({
+                "agent_id": agent_id,
+                "children": children,
+                "count": len(children),
+            })
+        except ImportError:
+            raise HTTPException(status_code=501, detail="agent_factory 模块不可用")
+        except Exception as e:
+            logger.error(f"获取 Agent 子树失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
+
+    @router.post("/api/v1/agents/{agent_id}/split")
+    async def split_agent(agent_id: str, req: AgentSplitRequest):
+        """手动触发 Agent 分裂 — 将当前任务拆分为子任务并创建子 Agent"""
+        try:
+            from core.agent_factory import get_agent_factory
+
+            factory = get_agent_factory()
+            child_agents = []
+
+            for subtask in req.subtasks:
+                child_id = f"{agent_id}-child-{uuid.uuid4().hex[:6]}"
+                child = await factory.create_agent(
+                    name=f"Split-{child_id}",
+                    task=subtask,
+                    parent_id=agent_id,
+                )
+                child_agents.append({
+                    "agent_id": child_id,
+                    "task": subtask,
+                    "status": "created",
+                })
+
+            return JSONResponse({
+                "success": True,
+                "parent_agent_id": agent_id,
+                "children": child_agents,
+                "split_count": len(child_agents),
+            })
+        except ImportError:
+            raise HTTPException(status_code=501, detail="agent_factory 模块不可用")
+        except Exception as e:
+            logger.error(f"Agent 分裂失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
 
     return router

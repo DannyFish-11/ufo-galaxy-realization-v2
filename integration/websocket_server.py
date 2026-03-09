@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("WebSocketServer")
 
 
-class ConnectionManager:
+class IntegrationWSManager:
     """WebSocket连接管理器"""
     
     def __init__(self):
@@ -109,7 +109,7 @@ class GalaxyWebSocketServer:
     def __init__(self, host: str = "0.0.0.0", port: int = 8080):
         self.host = host
         self.port = port
-        self.connection_manager = ConnectionManager()
+        self.connection_manager = IntegrationWSManager()
         self.galaxy_loop: Optional[GalaxyMainLoopL4Enhanced] = None
         self._running = False
         self._server = None

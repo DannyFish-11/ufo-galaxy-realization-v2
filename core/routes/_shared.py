@@ -3,7 +3,7 @@ Galaxy - Shared Route State
 ================================
 
 Module-level singletons shared across all route modules:
-  - ConnectionManager  (WebSocket connection pool)
+  - RouteConnectionPool  (WebSocket connection pool)
   - registered_devices (device registry)
   - task_queue         (in-memory task store)
   - node_status_cache  (node health cache)
@@ -26,7 +26,7 @@ logger = logging.getLogger("Galaxy.API")
 # WebSocket Connection Manager
 # ============================================================================
 
-class ConnectionManager:
+class RouteConnectionPool:
     """WebSocket 连接管理器"""
 
     def __init__(self):
@@ -212,7 +212,7 @@ class ConnectionManager:
 # Global Shared State
 # ============================================================================
 
-connection_manager = ConnectionManager()
+connection_manager = RouteConnectionPool()
 
 # 设备注册表
 registered_devices: Dict[str, Dict[str, Any]] = {}

@@ -47,20 +47,29 @@ logger = logging.getLogger("Galaxy.DeviceComm")
 # ============================================================================
 
 class MessageType(str, Enum):
-    """消息类型"""
+    """消息类型 — 兼容 AIP v3.0
+
+    本地简化类型与 AIP v3.0 MessageType 的映射关系：
+      COMMAND     → CONTROL_COMMAND
+      RESPONSE    → TASK_RESULT
+      HEARTBEAT   → DEVICE_HEARTBEAT
+      STATUS      → DEVICE_STATUS
+      ERROR       → ERROR
+    使用 ``to_aip_v3()`` 获取对应的 AIP v3.0 类型字符串。
+    """
     # 控制
     COMMAND = "command"         # 命令
     RESPONSE = "response"       # 响应
     ACK = "ack"                 # 确认
-    
+
     # 状态
     HEARTBEAT = "heartbeat"     # 心跳
     STATUS = "status"           # 状态更新
-    
+
     # 事件
     EVENT = "event"             # 事件
     ERROR = "error"             # 错误
-    
+
     # 流
     STREAM_START = "stream_start"
     STREAM_DATA = "stream_data"
@@ -70,6 +79,25 @@ class MessageType(str, Enum):
     WAKE_EVENT = "wake_event"           # 设备唤醒事件
     SESSION_MIGRATE = "session_migrate" # 会话迁移请求
     SESSION_RESTORE = "session_restore" # 会话恢复
+
+    def to_aip_v3(self) -> str:
+        """转换为 AIP v3.0 MessageType 名称"""
+        _map = {
+            "command": "CONTROL_COMMAND",
+            "response": "TASK_RESULT",
+            "ack": "COORD_SYNC",
+            "heartbeat": "DEVICE_HEARTBEAT",
+            "status": "DEVICE_STATUS",
+            "event": "WAKE_EVENT",
+            "error": "ERROR",
+            "stream_start": "SCREEN_STREAM_START",
+            "stream_data": "SCREEN_STREAM_DATA",
+            "stream_end": "SCREEN_STREAM_STOP",
+            "wake_event": "WAKE_EVENT",
+            "session_migrate": "SESSION_MIGRATE",
+            "session_restore": "SESSION_MIGRATE_ACK",
+        }
+        return _map.get(self.value, self.value.upper())
 
 
 @dataclass
@@ -93,6 +121,21 @@ class DeviceMessage:
             "device_id": self.device_id,
             "correlation_id": self.correlation_id,
         })
+
+    def to_aip_v3_dict(self) -> dict:
+        """转换为 AIP v3.0 格式的字典"""
+        return {
+            "version": "3.0",
+            "message_id": self.message_id,
+            "type": self.type.to_aip_v3(),
+            "device_id": self.device_id,
+            "timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
+            "correlation_id": self.correlation_id,
+            "payload": {
+                "action": self.action,
+                **self.payload,
+            },
+        }
     
     @classmethod
     def from_json(cls, data: str) -> "DeviceMessage":
