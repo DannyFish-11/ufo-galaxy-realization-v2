@@ -1,13 +1,13 @@
 {
   "agents": {
-    "agent_7c1b0ffd10c0": {
-      "id": "agent_7c1b0ffd10c0",
+    "agent_3f1f96f534ab": {
+      "id": "agent_3f1f96f534ab",
       "config": {
-        "role": "analyst",
-        "name": "数据分析 Agent",
-        "description": "专门处理数据分析、统计和可视化任务",
-        "system_prompt": "你是一个数据分析 Agent。分析给定的数据并提供洞察。\n输出格式为 JSON: {\"analysis\": ..., \"insights\": [...], \"recommendations\": [...]}",
-        "max_subtasks": 5,
+        "role": "coordinator",
+        "name": "协调 Agent",
+        "description": "负责接收复杂任务，分解为子任务并分配给子 Agent",
+        "system_prompt": "你是一个协调 Agent。你的职责是：\n1. 接收用户的复杂任务\n2. 将任务分解为可独立执行的子任务\n3. 为每个子任务分配合适的执行 Agent\n4. 监控执行进度并汇总结果\n\n返回 JSON 格式的任务分解方案。",
+        "max_subtasks": 10,
         "max_depth": 3,
         "split_threshold": 3,
         "ttl": 3600
@@ -17,8 +17,8 @@
       "children_ids": [],
       "creation_mode": "template",
       "depth": 0,
-      "created_at": 1773008488.7793837,
-      "last_active": 1773008488.7793837,
+      "created_at": 1773050632.4950666,
+      "last_active": 1773050632.4950666,
       "metrics": {
         "tasks_completed": 0,
         "tasks_failed": 0,
@@ -28,5 +28,5 @@
     }
   },
   "agent_tree": {},
-  "timestamp": 1773008488.7794435
+  "timestamp": 1773050632.4950898
 }

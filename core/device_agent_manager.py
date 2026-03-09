@@ -32,27 +32,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# 设备类型和状态定义
-# ============================================================================
-
-class DeviceType(Enum):
-    """设备类型枚举"""
-    ANDROID = "android"
-    WINDOWS = "windows"
-    MACOS = "macos"
-    LINUX = "linux"
-    IOS = "ios"
-    IOT = "iot"
-    CAMERA = "camera"
-    AUDIO = "audio"
-    SERIAL = "serial"
-    BLE = "ble"
-    NFC = "nfc"
-    CANBUS = "canbus"
-    DRONE = "drone"
-    PRINTER_3D = "printer_3d"
-    CUSTOM = "custom"
+# 统一设备类型 — 从 core.device_types 导入（单一事实来源）
+from core.device_types import DeviceType  # noqa: F811,E402
 
 
 class DeviceStatus(Enum):

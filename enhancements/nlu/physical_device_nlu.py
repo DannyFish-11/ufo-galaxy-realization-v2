@@ -48,12 +48,7 @@ class CommandType(Enum):
     UNKNOWN = "unknown"
 
 
-class DeviceType(Enum):
-    """Types of physical devices"""
-    DRONE = "drone"
-    PRINTER_3D = "printer_3d"
-    QUANTUM = "quantum"
-    UNKNOWN = "unknown"
+from core.device_types import DeviceType
 
 
 @dataclass

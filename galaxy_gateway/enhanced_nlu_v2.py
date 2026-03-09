@@ -28,21 +28,7 @@ from datetime import datetime
 # 数据结构定义
 # ============================================================================
 
-class DeviceType(Enum):
-    """设备类型"""
-    ANDROID = "android"
-    WINDOWS = "windows"
-    IOS = "ios"
-    MACOS = "macos"
-    LINUX = "linux"
-    UNKNOWN = "unknown"
-
-class DeviceStatus(Enum):
-    """设备状态"""
-    ONLINE = "online"
-    OFFLINE = "offline"
-    BUSY = "busy"
-    UNKNOWN = "unknown"
+from core.device_types import DeviceType, DeviceStatus
 
 @dataclass
 class Device:

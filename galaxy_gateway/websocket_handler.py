@@ -26,7 +26,7 @@ from galaxy_gateway.protocol.aip_v3 import MessageType
 logger = logging.getLogger(__name__)
 
 
-class ConnectionManager:
+class GatewayWSManager:
     """WebSocket 连接管理器"""
     
     def __init__(self):
@@ -88,7 +88,7 @@ class ConnectionManager:
 
 
 # 全局连接管理器
-connection_manager = ConnectionManager()
+connection_manager = GatewayWSManager()
 
 
 async def handle_websocket(websocket: WebSocket, connection_id: str):

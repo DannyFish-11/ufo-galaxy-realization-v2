@@ -19,7 +19,7 @@ from typing import List, Optional
 
 # 从 AIP v3.0 重导出细分类型（协议层使用）
 from galaxy_gateway.protocol.aip_v3 import (
-    DeviceType as AIPDeviceType,
+    AIPDeviceType,
     DevicePlatform,
     DeviceCapability as AIPDeviceCapability,
 )
@@ -30,15 +30,39 @@ from galaxy_gateway.protocol.aip_v3 import (
 # ============================================================================
 
 class DeviceType(str, Enum):
-    """设备类型大类 — 所有模块统一使用"""
+    """设备类型大类 — 所有模块统一使用
+
+    包含平台类型和专用设备类型，覆盖 Galaxy-Nexus 星枢的
+    全部设备节点场景（手机/电脑/无人机/3D打印机/机器人等）。
+    """
+    # ── 平台类型 ──
     ANDROID = "android"
     IOS = "ios"
     WINDOWS = "windows"
     MACOS = "macos"
     LINUX = "linux"
-    IOT = "iot"
     BROWSER = "browser"
     CLOUD = "cloud"
+    # ── 专用设备类型 ──
+    DRONE = "drone"
+    PRINTER_3D = "printer_3d"
+    ROBOT = "robot"
+    CAMERA = "camera"
+    SENSOR = "sensor"
+    ACTUATOR = "actuator"
+    DISPLAY = "display"
+    SPEAKER = "speaker"
+    IOT = "iot"
+    EMBEDDED = "embedded"
+    # ── 通信/接口类设备 ──
+    AUDIO = "audio"
+    SERIAL = "serial"
+    BLE = "ble"
+    NFC = "nfc"
+    CANBUS = "canbus"
+    # ── 量子计算 ──
+    QUANTUM = "quantum"
+    # ── 通用 ──
     CUSTOM = "custom"
     UNKNOWN = "unknown"
 
@@ -111,10 +135,18 @@ _PREFIX_TO_DEVICE_TYPE: dict[str, DeviceType] = {
     "macos": DeviceType.MACOS,
     "linux": DeviceType.LINUX,
     "cloud": DeviceType.CLOUD,
-    "embedded": DeviceType.IOT,
+    "embedded": DeviceType.EMBEDDED,
     "iot": DeviceType.IOT,
     "web": DeviceType.BROWSER,
     "browser": DeviceType.BROWSER,
+    "drone": DeviceType.DRONE,
+    "printer": DeviceType.PRINTER_3D,
+    "robot": DeviceType.ROBOT,
+    "camera": DeviceType.CAMERA,
+    "sensor": DeviceType.SENSOR,
+    "actuator": DeviceType.ACTUATOR,
+    "display": DeviceType.DISPLAY,
+    "speaker": DeviceType.SPEAKER,
     "container": DeviceType.CUSTOM,
     "virtual": DeviceType.CUSTOM,
 }

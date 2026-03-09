@@ -27,11 +27,12 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QLineEdit, QPushButton, QLabel, QScrollArea,
     QStackedWidget, QFrame, QSizePolicy, QGraphicsDropShadowEffect,
-    QComboBox
+    QGraphicsOpacityEffect, QComboBox
 )
 from PyQt5.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer,
-    QRect, QSize, QPoint, QThread, pyqtSlot, QParallelAnimationGroup
+    QRect, QSize, QPoint, QThread, pyqtSlot, QParallelAnimationGroup,
+    pyqtProperty, QSequentialAnimationGroup
 )
 from PyQt5.QtGui import (
     QFont, QPalette, QColor, QLinearGradient, QRadialGradient,
@@ -40,28 +41,118 @@ from PyQt5.QtGui import (
 
 logger = logging.getLogger(__name__)
 
-# ── 光场色彩方案 ──
+# ── 光场色彩方案（纯黑/白/灰梯度） ──
 COLORS = {
-    "bg_dark": "#0a0f1a",
-    "bg_panel": "rgba(255, 255, 255, 0.04)",
-    "bg_panel_hover": "rgba(255, 255, 255, 0.07)",
-    "bg_input": "rgba(255, 255, 255, 0.06)",
-    "border": "rgba(255, 255, 255, 0.08)",
-    "border_focus": "rgba(124, 92, 252, 0.5)",
-    "primary": "#7C5CFC",       # 紫
-    "secondary": "#00D4AA",     # 青
-    "accent": "#FF6B9D",        # 珊瑚
+    # 背景层（纯黑 → 深灰梯度）
+    "bg_dark": "#000000",
+    "bg_medium": "#0a0a0a",
+    "bg_panel": "#0f0f0f",
+    "bg_panel_hover": "#1a1a1a",
+    "bg_input": "#0d0d0d",
+    "bg_card": "#111111",
+    # 边框（灰度梯度）
+    "border": "#1a1a1a",
+    "border_hover": "#2a2a2a",
+    "border_focus": "#333333",
+    # 主色调（纯白 → 灰白 → 中灰）
+    "primary": "#ffffff",
+    "secondary": "#b0b0b0",
+    "accent": "#808080",
+    # 文字（白到暗灰梯度）
     "text": "#ffffff",
-    "text_dim": "rgba(255, 255, 255, 0.45)",
-    "text_muted": "rgba(255, 255, 255, 0.2)",
-    "success": "#30d158",
-    "error": "#ff453a",
-    "warning": "#ffd60a",
+    "text_secondary": "#b0b0b0",
+    "text_dim": "#666666",
+    "text_muted": "#404040",
+    # 状态色（也用灰度表达）
+    "success": "#c0c0c0",
+    "error": "#909090",
+    "warning": "#a0a0a0",
+    "info": "#888888",
+    # 光场效果色
+    "glow": "#ffffff",
+    "glow_dim": "#333333",
 }
 
 SIDEBAR_WIDTH = 420
+SIDEBAR_COLLAPSED_WIDTH = 40
 FULL_WIDTH = 940
 FULL_HEIGHT = 720
+
+
+class GlowPanel(QFrame):
+    """磨砂半透明面板 + 径向光晕效果"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._glow_opacity_value = 0.03
+        self._breath_animation = QPropertyAnimation(self, b"glow_opacity")
+        self._breath_animation.setDuration(4000)
+        self._breath_animation.setStartValue(0.02)
+        self._breath_animation.setEndValue(0.06)
+        self._breath_animation.setLoopCount(-1)  # infinite
+        self._breath_animation.setEasingCurve(QEasingCurve.InOutSine)
+        self._breath_animation.start()
+
+    def _get_glow_opacity(self):
+        return self._glow_opacity_value
+
+    def _set_glow_opacity(self, value):
+        self._glow_opacity_value = value
+        self.update()
+
+    glow_opacity = pyqtProperty(float, _get_glow_opacity, _set_glow_opacity)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        # Draw radial gradient background (center white glow fading to transparent)
+        gradient = QRadialGradient(
+            self.width() / 2, self.height() / 2,
+            max(self.width(), self.height()) / 2
+        )
+        gradient.setColorAt(0, QColor(255, 255, 255, int(self._glow_opacity_value * 255)))
+        gradient.setColorAt(1, QColor(0, 0, 0, 0))
+        painter.fillRect(self.rect(), gradient)
+        super().paintEvent(event)
+
+
+class FlowBorderFrame(QFrame):
+    """带动态渐变边框的面板，6 秒循环灰度边框色"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._border_phase = 0.0
+        self._border_timer = QTimer(self)
+        self._border_timer.timeout.connect(self._animate_border)
+        self._border_timer.start(50)  # ~20fps
+
+    def _animate_border(self):
+        self._border_phase += 0.05 / 6.0 * 2  # full cycle in ~6 seconds
+        if self._border_phase > 1.0:
+            self._border_phase = 0.0
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        import math
+        # Cycle between gray tones: #1a1a1a -> #333333 -> #1a1a1a
+        phase = math.sin(self._border_phase * math.pi * 2)  # -1 to 1
+        gray_val = int(0x1a + (0x33 - 0x1a) * (phase + 1) / 2)
+        border_color = QColor(gray_val, gray_val, gray_val)
+
+        # Draw rounded rect border
+        pen = QPen(border_color, 1.5)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(QColor(COLORS['bg_panel'])))
+        path = QPainterPath()
+        path.addRoundedRect(1, 1, self.width() - 2, self.height() - 2, 16, 16)
+        painter.drawPath(path)
+        painter.end()
+
+        # Let children paint on top
+        super().paintEvent(event)
 
 
 class APIClient:
@@ -156,36 +247,36 @@ class LightFieldBackground(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
 
-        # 主背景渐变
+        # 主背景渐变（纯黑到深灰）
         bg = QLinearGradient(0, 0, w, h)
-        bg.setColorAt(0.0, QColor(26, 5, 51))     # 深紫
-        bg.setColorAt(0.5, QColor(13, 33, 55))     # 深蓝
-        bg.setColorAt(1.0, QColor(10, 22, 40))     # 深靛
+        bg.setColorAt(0.0, QColor(0, 0, 0))        # 纯黑
+        bg.setColorAt(0.5, QColor(8, 8, 8))         # 极深灰
+        bg.setColorAt(1.0, QColor(5, 5, 5))         # 近黑
         painter.fillRect(self.rect(), QBrush(bg))
 
-        # 光晕 1 - 紫色 (缓慢移动)
+        # 光晕 1 - 白色微光 (缓慢移动)
         import math
         cx1 = w * 0.3 + math.sin(self._phase) * 40
         cy1 = h * 0.4 + math.cos(self._phase * 0.7) * 30
         g1 = QRadialGradient(cx1, cy1, w * 0.35)
-        g1.setColorAt(0.0, QColor(124, 92, 252, 25))
-        g1.setColorAt(1.0, QColor(124, 92, 252, 0))
+        g1.setColorAt(0.0, QColor(255, 255, 255, 18))
+        g1.setColorAt(1.0, QColor(255, 255, 255, 0))
         painter.fillRect(self.rect(), QBrush(g1))
 
-        # 光晕 2 - 青色
+        # 光晕 2 - 灰白
         cx2 = w * 0.7 + math.cos(self._phase * 0.8) * 35
         cy2 = h * 0.6 + math.sin(self._phase * 0.6) * 25
         g2 = QRadialGradient(cx2, cy2, w * 0.3)
-        g2.setColorAt(0.0, QColor(0, 212, 170, 18))
-        g2.setColorAt(1.0, QColor(0, 212, 170, 0))
+        g2.setColorAt(0.0, QColor(200, 200, 200, 12))
+        g2.setColorAt(1.0, QColor(200, 200, 200, 0))
         painter.fillRect(self.rect(), QBrush(g2))
 
-        # 光晕 3 - 珊瑚 (微弱)
+        # 光晕 3 - 暗灰 (微弱)
         cx3 = w * 0.5 + math.sin(self._phase * 1.2) * 30
         cy3 = h * 0.2 + math.cos(self._phase * 0.9) * 20
         g3 = QRadialGradient(cx3, cy3, w * 0.25)
-        g3.setColorAt(0.0, QColor(255, 107, 157, 12))
-        g3.setColorAt(1.0, QColor(255, 107, 157, 0))
+        g3.setColorAt(0.0, QColor(150, 150, 150, 8))
+        g3.setColorAt(1.0, QColor(150, 150, 150, 0))
         painter.fillRect(self.rect(), QBrush(g3))
 
         painter.end()
@@ -241,10 +332,10 @@ def _combo_style() -> str:
             width: 24px;
         }}
         QComboBox QAbstractItemView {{
-            background: #1a1f2e;
+            background: {COLORS['bg_panel']};
             color: {COLORS['text']};
             border: 1px solid {COLORS['border']};
-            selection-background-color: {COLORS['primary']};
+            selection-background-color: {COLORS['accent']};
         }}
     """
 
@@ -302,8 +393,8 @@ class ChatPanel(QWidget):
         self.mode_indicator = QLabel("chat")
         self.mode_indicator.setStyleSheet(f"""
             QLabel {{
-                background: rgba(124, 92, 252, 0.2);
-                border: 1px solid rgba(124, 92, 252, 0.3);
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.12);
                 border-radius: 8px;
                 padding: 3px 10px;
                 color: {COLORS['primary']};
@@ -376,7 +467,7 @@ class ChatPanel(QWidget):
         send_btn.setFixedSize(64, 40)
         send_btn.setStyleSheet(f"""
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0a84ff, stop:1 {COLORS['primary']});
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {COLORS['accent']}, stop:1 {COLORS['primary']});
                 border: none;
                 border-radius: 20px;
                 color: white;
@@ -513,7 +604,7 @@ class ChatPanel(QWidget):
         # 2. Agent 步骤（ReAct 过程展示）
         if agent_steps:
             parts.append(
-                f'<div style="background: rgba(124, 92, 252, 0.05); border-left: 2px solid rgba(124, 92, 252, 0.3); '
+                f'<div style="background: rgba(255, 255, 255, 0.03); border-left: 2px solid rgba(255, 255, 255, 0.12); '
                 f'padding: 6px 10px; margin: 4px 0; border-radius: 0 8px 8px 0;">'
             )
             for step in agent_steps:
@@ -549,7 +640,7 @@ class ChatPanel(QWidget):
                 output = tc.get("output", "")
                 display_output = output[:150] + "..." if len(str(output)) > 150 else output
                 parts.append(
-                    f'<div style="background: rgba(0, 212, 170, 0.05); border-radius: 8px; '
+                    f'<div style="background: rgba(200, 200, 200, 0.04); border-radius: 8px; '
                     f'padding: 5px 10px; margin: 3px 0; font-size: 11px;">'
                     f'<span style="color: {COLORS["secondary"]};">Tool:</span> '
                     f'<span style="color: {COLORS["text"]};">{_safe(tool_name)}</span> '
@@ -752,7 +843,7 @@ class AgentFactoryPanel(QWidget):
         team_exec_layout.addWidget(self.team_exec_input, 1)
 
         btn_exec_team = QPushButton("执行")
-        btn_exec_team.setStyleSheet(_btn_style("#0a84ff"))
+        btn_exec_team.setStyleSheet(_btn_style(COLORS['accent']))
         btn_exec_team.clicked.connect(self._execute_team)
         team_exec_layout.addWidget(btn_exec_team)
 
@@ -867,7 +958,7 @@ class AgentFactoryPanel(QWidget):
             diverged = sum(1 for t in twins if t.get("state") == "diverged")
             detached = sum(1 for t in twins if t.get("state") == "detached")
             self.team_result_area.append(
-                f'<div style="background: rgba(255,107,157,0.05); border-radius: 8px; '
+                f'<div style="background: rgba(180,180,180,0.04); border-radius: 8px; '
                 f'padding: 6px 8px; margin: 4px 0; font-size: 11px;">'
                 f'<span style="color: {COLORS["accent"]}; font-weight: 600;">孪生状态:</span> '
                 f'<span style="color: {COLORS["success"]};">{synced} synced</span> | '
@@ -1009,8 +1100,8 @@ class AgentFactoryPanel(QWidget):
         total_latency = result.get("total_latency_ms", 0)
         if synthesized:
             self.team_result_area.append(
-                f'<div style="background: rgba(0, 212, 170, 0.08); border-radius: 10px; '
-                f'padding: 8px 10px; margin: 6px 0; border: 1px solid rgba(0, 212, 170, 0.15);">'
+                f'<div style="background: rgba(200, 200, 200, 0.06); border-radius: 10px; '
+                f'padding: 8px 10px; margin: 6px 0; border: 1px solid rgba(200, 200, 200, 0.1);">'
                 f'<span style="color: {COLORS["secondary"]}; font-size: 12px; font-weight: 600;">'
                 f'综合结果</span> '
                 f'<span style="color: {COLORS["text_muted"]}; font-size: 10px;">{total_latency:.0f}ms</span>'
@@ -1072,7 +1163,7 @@ class DevicePanel(QWidget):
         device_row.addWidget(self.device_select)
 
         btn_refresh = QPushButton("刷新")
-        btn_refresh.setStyleSheet(_btn_style("#555"))
+        btn_refresh.setStyleSheet(_btn_style(COLORS['accent']))
         btn_refresh.clicked.connect(self._refresh)
         device_row.addWidget(btn_refresh)
 
@@ -1168,7 +1259,7 @@ class DevicePanel(QWidget):
         by_status = twins_data.get("by_status", {})
         by_coupling = twins_data.get("by_coupling", {})
         self.cmd_result.append(
-            f'<div style="background: rgba(255,107,157,0.05); border-radius: 8px; '
+            f'<div style="background: rgba(180,180,180,0.04); border-radius: 8px; '
             f'padding: 6px 8px; margin: 4px 0; font-size: 11px;">'
             f'<span style="color: {COLORS["accent"]}; font-weight: 600;">设备孪生:</span> '
             f'{total} 个 | '
@@ -1564,7 +1655,7 @@ class SettingsPanel(QWidget):
             self.conn_status.setStyleSheet(f"""
                 QLabel {{
                     background: {COLORS['bg_panel']};
-                    border: 1px solid rgba(48, 209, 88, 0.3);
+                    border: 1px solid rgba(192, 192, 192, 0.3);
                     border-radius: 10px;
                     padding: 12px;
                     color: {COLORS['success']};
@@ -1597,7 +1688,7 @@ class SettingsPanel(QWidget):
             self.conn_status.setStyleSheet(f"""
                 QLabel {{
                     background: {COLORS['bg_panel']};
-                    border: 1px solid rgba(255, 69, 58, 0.3);
+                    border: 1px solid rgba(144, 144, 144, 0.3);
                     border-radius: 10px;
                     padding: 12px;
                     color: {COLORS['error']};
@@ -1609,7 +1700,7 @@ class SettingsPanel(QWidget):
             self.conn_status.setStyleSheet(f"""
                 QLabel {{
                     background: {COLORS['bg_panel']};
-                    border: 1px solid rgba(48, 209, 88, 0.3);
+                    border: 1px solid rgba(192, 192, 192, 0.3);
                     border-radius: 10px;
                     padding: 12px;
                     color: {COLORS['success']};
@@ -1637,6 +1728,7 @@ class GalaxyClientUI(QWidget):
         self.on_command = on_command
         self.is_sidebar_mode = True
         self.is_visible = False
+        self._sidebar_expanded = False  # calligraphy scroll state
 
         if on_command:
             self.command_submitted.connect(on_command)
@@ -1659,10 +1751,10 @@ class GalaxyClientUI(QWidget):
         self.screen_width = screen.width()
         self.screen_height = screen.height()
 
-        # 初始位置：屏幕右侧外
+        # 初始位置：屏幕右侧外（collapsed width）
         self.setGeometry(
             self.screen_width, 0,
-            SIDEBAR_WIDTH, self.screen_height
+            SIDEBAR_COLLAPSED_WIDTH, self.screen_height
         )
 
     def _create_ui(self):
@@ -1674,11 +1766,39 @@ class GalaxyClientUI(QWidget):
         # 光场背景
         self.bg = LightFieldBackground(self)
 
+        # Collapsed frosted strip (visible when sidebar is collapsed)
+        self._collapsed_strip = QWidget(self)
+        self._collapsed_strip.setFixedWidth(SIDEBAR_COLLAPSED_WIDTH)
+        self._collapsed_strip.setStyleSheet(f"""
+            QWidget {{
+                background: {COLORS['bg_medium']};
+                border-left: 1px solid {COLORS['border']};
+            }}
+        """)
+        self._collapsed_strip.setCursor(Qt.PointingHandCursor)
+        self._collapsed_strip.mousePressEvent = lambda e: self.toggle_sidebar()
+
+        # Collapsed strip indicator dots
+        strip_layout = QVBoxLayout(self._collapsed_strip)
+        strip_layout.setContentsMargins(0, 0, 0, 0)
+        strip_layout.addStretch()
+        for i in range(3):
+            dot = QLabel("·")
+            dot.setAlignment(Qt.AlignCenter)
+            dot.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 16px;")
+            strip_layout.addWidget(dot)
+        strip_layout.addStretch()
+
         # 主容器 (覆盖在背景上)
         self.container = QWidget(self)
         container_layout = QVBoxLayout(self.container)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
+
+        # Content opacity effect for fade animation during expand/collapse
+        self._content_opacity = QGraphicsOpacityEffect(self.container)
+        self._content_opacity.setOpacity(0.0)  # start hidden (collapsed)
+        self.container.setGraphicsEffect(self._content_opacity)
 
         # 标题栏
         self.title_bar = self._create_title_bar()
@@ -1825,11 +1945,63 @@ class GalaxyClientUI(QWidget):
         self.slide_anim.setDuration(350)
         self.slide_anim.setEasingCurve(QEasingCurve.OutQuart)
 
+        # Sidebar scroll expand/collapse animation
+        self._sidebar_width_anim = QPropertyAnimation(self, b"geometry")
+        self._sidebar_width_anim.setDuration(500)
+        self._sidebar_width_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        # Content fade animation (right-to-left appearance via opacity)
+        self._content_fade_anim = QPropertyAnimation(self._content_opacity, b"opacity")
+        self._content_fade_anim.setDuration(400)
+        self._content_fade_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def toggle_sidebar(self):
+        """Calligraphy scroll: expand/collapse sidebar with scroll-like animation"""
+        if self._sidebar_expanded:
+            # Collapse: 420px → 40px, fade out content
+            self._sidebar_expanded = False
+            target_x = self.screen_width - SIDEBAR_COLLAPSED_WIDTH
+
+            self._sidebar_width_anim.setStartValue(self.geometry())
+            self._sidebar_width_anim.setEndValue(
+                QRect(target_x, 0, SIDEBAR_COLLAPSED_WIDTH, self.screen_height)
+            )
+            self._sidebar_width_anim.start()
+
+            # Fade out content
+            self._content_fade_anim.setStartValue(1.0)
+            self._content_fade_anim.setEndValue(0.0)
+            self._content_fade_anim.start()
+
+            # Show collapsed strip after animation
+            QTimer.singleShot(500, lambda: self._collapsed_strip.setVisible(True))
+        else:
+            # Expand: 40px → 420px, fade in content from right to left
+            self._sidebar_expanded = True
+            self._collapsed_strip.setVisible(False)
+            target_x = self.screen_width - SIDEBAR_WIDTH
+
+            self._sidebar_width_anim.setStartValue(self.geometry())
+            self._sidebar_width_anim.setEndValue(
+                QRect(target_x, 0, SIDEBAR_WIDTH, self.screen_height)
+            )
+            self._sidebar_width_anim.start()
+
+            # Fade in content (delayed slightly for scroll unroll effect)
+            self._content_fade_anim.setStartValue(0.0)
+            self._content_fade_anim.setEndValue(1.0)
+            self._content_fade_anim.setDuration(400)
+            QTimer.singleShot(150, self._content_fade_anim.start)
+            QTimer.singleShot(500, lambda: self.chat_panel.input_field.setFocus())
+
     def toggle_mode(self):
         """侧边栏 ↔ 全功能窗口"""
         if self.is_sidebar_mode:
             # 展开为全窗口
             self.is_sidebar_mode = False
+            self._sidebar_expanded = True
+            self._collapsed_strip.setVisible(False)
+            self._content_opacity.setOpacity(1.0)
             self.tab_bar.setVisible(True)
             self.toggle_btn.setText("▬")
 
@@ -1839,8 +2011,10 @@ class GalaxyClientUI(QWidget):
             self.slide_anim.setEndValue(QRect(cx, cy, FULL_WIDTH, FULL_HEIGHT))
             self.slide_anim.start()
         else:
-            # 收缩为侧边栏
+            # 收缩为侧边栏 (expanded state)
             self.is_sidebar_mode = True
+            self._sidebar_expanded = True
+            self._collapsed_strip.setVisible(False)
             self.tab_bar.setVisible(False)
             self.toggle_btn.setText("⬜")
             self._switch_tab(0)
@@ -1861,34 +2035,53 @@ class GalaxyClientUI(QWidget):
             return
         self.show()
         self.is_visible = True
+        self._sidebar_expanded = False  # start collapsed
 
         if self.is_sidebar_mode:
-            target_x = self.screen_width - SIDEBAR_WIDTH
-            self.slide_anim.setStartValue(QRect(self.screen_width, 0, SIDEBAR_WIDTH, self.screen_height))
-            self.slide_anim.setEndValue(QRect(target_x, 0, SIDEBAR_WIDTH, self.screen_height))
+            # Slide in as collapsed strip first (40px)
+            target_x = self.screen_width - SIDEBAR_COLLAPSED_WIDTH
+            self.slide_anim.setStartValue(
+                QRect(self.screen_width, 0, SIDEBAR_COLLAPSED_WIDTH, self.screen_height)
+            )
+            self.slide_anim.setEndValue(
+                QRect(target_x, 0, SIDEBAR_COLLAPSED_WIDTH, self.screen_height)
+            )
+            self._collapsed_strip.setVisible(True)
+            self._content_opacity.setOpacity(0.0)
         else:
             cx = (self.screen_width - FULL_WIDTH) // 2
             cy = (self.screen_height - FULL_HEIGHT) // 2
             self.slide_anim.setStartValue(QRect(self.screen_width, cy, FULL_WIDTH, FULL_HEIGHT))
             self.slide_anim.setEndValue(QRect(cx, cy, FULL_WIDTH, FULL_HEIGHT))
+            self._content_opacity.setOpacity(1.0)
+            self._collapsed_strip.setVisible(False)
+            self._sidebar_expanded = True
 
         self.slide_anim.start()
-        self.chat_panel.input_field.setFocus()
+        if not self.is_sidebar_mode:
+            self.chat_panel.input_field.setFocus()
         logger.info("Galaxy 客户端显示")
 
     def hide_sidebar(self):
         if not self.is_visible:
             return
         self.is_visible = False
+        self._sidebar_expanded = False
 
         target_x = self.screen_width
+        current_w = self.width()
         self.slide_anim.setStartValue(self.geometry())
         if self.is_sidebar_mode:
-            self.slide_anim.setEndValue(QRect(target_x, 0, SIDEBAR_WIDTH, self.screen_height))
+            self.slide_anim.setEndValue(QRect(target_x, 0, current_w, self.screen_height))
         else:
             cy = (self.screen_height - FULL_HEIGHT) // 2
             self.slide_anim.setEndValue(QRect(target_x, cy, FULL_WIDTH, FULL_HEIGHT))
         self.slide_anim.start()
+
+        # Fade out content
+        self._content_fade_anim.setStartValue(self._content_opacity.opacity())
+        self._content_fade_anim.setEndValue(0.0)
+        self._content_fade_anim.start()
 
         QTimer.singleShot(400, self.hide)
         logger.info("Galaxy 客户端隐藏")
@@ -1897,6 +2090,7 @@ class GalaxyClientUI(QWidget):
         super().resizeEvent(event)
         self.bg.setGeometry(0, 0, self.width(), self.height())
         self.container.setGeometry(0, 0, self.width(), self.height())
+        self._collapsed_strip.setGeometry(0, 0, SIDEBAR_COLLAPSED_WIDTH, self.height())
 
     def update_status(self, status: str, color: str = None):
         color = color or COLORS['success']

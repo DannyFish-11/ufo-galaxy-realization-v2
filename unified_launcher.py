@@ -751,7 +751,24 @@ class UnifiedWebUI:
             logger.error(f"Web UI 依赖未安装: {e}")
             
     def _get_dashboard_html(self) -> str:
-        """获取仪表板 HTML"""
+        """获取仪表板 HTML — 从 dashboard/frontend/public/ 读取
+
+        优先加载独立 Dashboard 的 index.html（Dynamic Island 设计），
+        如果不存在则返回最小化的系统状态页面。
+        """
+        # 优先使用独立 Dashboard
+        dashboard_paths = [
+            PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html",
+            PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index_v2.html",
+        ]
+        for path in dashboard_paths:
+            if path.exists():
+                try:
+                    return path.read_text(encoding="utf-8")
+                except Exception as exc:
+                    logger.warning("读取 Dashboard HTML 失败: %s", exc)
+
+        # 回退：最小化系统状态页面
         return """
 <!DOCTYPE html>
 <html lang="zh-CN">

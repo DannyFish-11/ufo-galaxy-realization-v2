@@ -430,7 +430,7 @@ layer_physical:
       description: "串口通信"
       
     Node_49_OctoPrint:
-      port: 8050
+      port: 8048
       name: "OctoPrint"
       group: "physical"
       critical: false

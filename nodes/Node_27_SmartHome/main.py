@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class DeviceType(Enum):
+class SmartHomeDeviceType(Enum):
     """Smart home device types"""
     LIGHT = "light"
     SWITCH = "switch"
@@ -69,7 +69,7 @@ class SmartDevice:
     """Smart device information"""
     device_id: str
     name: str
-    device_type: DeviceType
+    device_type: SmartHomeDeviceType
     protocol: ProtocolType
     manufacturer: str = ""
     model: str = ""
@@ -375,7 +375,7 @@ class SmartHomeController:
         """Get devices by room"""
         return [d for d in self.devices.values() if d.room == room]
     
-    def get_devices_by_type(self, device_type: DeviceType) -> List[SmartDevice]:
+    def get_devices_by_type(self, device_type: SmartHomeDeviceType) -> List[SmartDevice]:
         """Get devices by type"""
         return [d for d in self.devices.values() if d.device_type == device_type]
     

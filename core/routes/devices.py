@@ -11,11 +11,18 @@ Routes:
   POST   /api/v1/devices/{device_id}/heartbeat - 设备心跳
   DELETE /api/v1/devices/{device_id}           - 注销设备
   POST   /api/v1/devices/cross-device          - 跨设备协同任务
+  POST   /api/v1/devices/{device_id}/command   - 单设备命令 (AIP v3.0)
+  POST   /api/v1/devices/parallel              - 并行多设备命令
+  POST   /api/v1/devices/discover-active       - 触发主动设备发现
+  GET    /api/v1/devices/{device_id}/telemetry  - 设备遥测数据
+  POST   /api/v1/devices/transfer              - 跨设备文件传输
 """
 
+import asyncio
 import logging
+import uuid
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -185,5 +192,188 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(
                 {"success": False, "error": str(e)}, status_code=500
             )
+
+    # ─────── 单设备命令 (AIP v3.0) ─────────
+
+    class DeviceCommandRequest(BaseModel):
+        command: str = Field(..., description="命令名称")
+        params: Dict = Field(default_factory=dict, description="命令参数")
+        timeout: int = Field(default=30, description="超时秒数")
+
+    @router.post("/api/v1/devices/{device_id}/command")
+    async def send_device_command(device_id: str, req: DeviceCommandRequest):
+        """发送 AIP v3.0 格式命令到单个设备"""
+        if device_id not in registered_devices:
+            raise HTTPException(status_code=404, detail="设备未注册")
+
+        command_id = str(uuid.uuid4())[:8]
+        message = {
+            "version": "3.0",
+            "message_id": command_id,
+            "type": "CONTROL_COMMAND",
+            "device_id": device_id,
+            "payload": {
+                "command": req.command,
+                "params": req.params,
+            },
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        sent = await connection_manager.send_to_device(device_id, message)
+        if sent:
+            return JSONResponse({
+                "success": True,
+                "command_id": command_id,
+                "device_id": device_id,
+                "message": f"命令 {req.command} 已发送",
+            })
+
+        return JSONResponse({
+            "success": False,
+            "command_id": command_id,
+            "error": "设备离线或发送失败",
+        }, status_code=503)
+
+    # ─────── 并行多设备命令 ─────────
+
+    class ParallelCommandItem(BaseModel):
+        device_id: str
+        command: str
+        params: Dict = Field(default_factory=dict)
+
+    class ParallelCommandRequest(BaseModel):
+        commands: List[ParallelCommandItem]
+        timeout: int = Field(default=30, description="整体超时秒数")
+
+    @router.post("/api/v1/devices/parallel")
+    async def parallel_device_commands(req: ParallelCommandRequest):
+        """并行发送命令到多个设备"""
+        async def _send_one(item: ParallelCommandItem):
+            cmd_id = str(uuid.uuid4())[:8]
+            msg = {
+                "version": "3.0",
+                "message_id": cmd_id,
+                "type": "CONTROL_COMMAND",
+                "device_id": item.device_id,
+                "payload": {"command": item.command, "params": item.params},
+                "timestamp": datetime.now().isoformat(),
+            }
+            try:
+                sent = await connection_manager.send_to_device(item.device_id, msg)
+                return {"device_id": item.device_id, "command_id": cmd_id, "sent": sent}
+            except Exception as e:
+                return {"device_id": item.device_id, "command_id": cmd_id, "sent": False, "error": str(e)}
+
+        results = await asyncio.gather(
+            *[_send_one(cmd) for cmd in req.commands],
+            return_exceptions=True,
+        )
+
+        processed = []
+        for r in results:
+            if isinstance(r, Exception):
+                processed.append({"error": str(r), "sent": False})
+            else:
+                processed.append(r)
+
+        return JSONResponse({
+            "success": True,
+            "total": len(req.commands),
+            "results": processed,
+        })
+
+    # ─────── 主动设备发现 ─────────
+
+    @router.post("/api/v1/devices/discover-active")
+    async def trigger_device_discovery():
+        """触发主动设备发现（mDNS/UPnP 扫描）"""
+        try:
+            from core.device_orchestrator import get_device_orchestrator
+            orchestrator = get_device_orchestrator()
+            devices = await orchestrator.discover_devices()
+            return JSONResponse({
+                "success": True,
+                "discovered": devices if isinstance(devices, list) else [],
+                "message": "设备发现完成",
+            })
+        except ImportError:
+            # Fallback: 返回已注册设备
+            devices = []
+            for did, info in registered_devices.items():
+                devices.append({
+                    "device_id": did,
+                    "device_type": info.get("device_type", "unknown"),
+                    "device_name": info.get("device_name", did),
+                    "online": did in connection_manager.active_devices,
+                })
+            return JSONResponse({
+                "success": True,
+                "discovered": devices,
+                "message": "使用注册表回退（device_orchestrator 不可用）",
+            })
+        except Exception as e:
+            logger.error(f"设备发现失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
+
+    # ─────── 设备遥测 ─────────
+
+    @router.get("/api/v1/devices/{device_id}/telemetry")
+    async def get_device_telemetry(device_id: str):
+        """获取设备遥测数据（CPU、内存、电量等）"""
+        if device_id not in registered_devices:
+            raise HTTPException(status_code=404, detail="设备未注册")
+
+        info = registered_devices[device_id]
+        telemetry = {
+            "device_id": device_id,
+            "online": device_id in connection_manager.active_devices,
+            "last_seen": info.get("last_seen"),
+            "status": info.get("status", "unknown"),
+            "metrics": info.get("metrics", {}),
+            "capabilities": info.get("capabilities", []),
+        }
+        return JSONResponse(telemetry)
+
+    # ─────── 跨设备文件传输 ─────────
+
+    class FileTransferRequest(BaseModel):
+        source_device: str = Field(..., description="源设备 ID")
+        target_device: str = Field(..., description="目标设备 ID")
+        file_path: str = Field(..., description="源设备上的文件路径")
+        target_path: str = Field(default="", description="目标设备上的保存路径（空则使用默认）")
+
+    @router.post("/api/v1/devices/transfer")
+    async def transfer_file(req: FileTransferRequest):
+        """跨设备文件传输"""
+        for did in [req.source_device, req.target_device]:
+            if did not in registered_devices:
+                raise HTTPException(status_code=404, detail=f"设备 {did} 未注册")
+
+        transfer_id = str(uuid.uuid4())[:8]
+        transfer_msg = {
+            "version": "3.0",
+            "message_id": transfer_id,
+            "type": "FILE_TRANSFER",
+            "device_id": req.source_device,
+            "payload": {
+                "source_device": req.source_device,
+                "target_device": req.target_device,
+                "file_path": req.file_path,
+                "target_path": req.target_path,
+            },
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        sent = await connection_manager.send_to_device(req.source_device, transfer_msg)
+        return JSONResponse({
+            "success": sent,
+            "transfer_id": transfer_id,
+            "source": req.source_device,
+            "target": req.target_device,
+            "file": req.file_path,
+            "message": "传输请求已发送" if sent else "源设备离线",
+        })
 
     return router

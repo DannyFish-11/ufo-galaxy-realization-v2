@@ -3,11 +3,11 @@ Galaxy v5.0 - Device Coordinator Module
 WebSocket-based Real-time Coordination System
 
 This module provides WebSocket server for real-time device coordination,
-AIP v2.0 protocol implementation, message routing, and session management.
+AIP v2.0/v3.0 protocol implementation, message routing, and session management.
 
 Features:
 - WebSocket server for real-time communication
-- AIP v2.0 protocol implementation
+- AIP v2.0 binary + v3.0 JSON protocol support
 - Message routing and broadcasting
 - Session management with authentication
 - Support for 500+ TPS

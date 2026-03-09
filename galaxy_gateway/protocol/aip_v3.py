@@ -18,8 +18,8 @@ import uuid
 # 设备类型定义 (统一所有平台)
 # ============================================================================
 
-class DeviceType(str, Enum):
-    """统一设备类型定义 - 覆盖所有支持的平台"""
+class AIPDeviceType(str, Enum):
+    """AIP v3.0 细分设备类型定义 - 覆盖所有支持的平台"""
     
     # === 移动端 ===
     ANDROID_PHONE = "android_phone"
@@ -125,7 +125,7 @@ class DeviceCapability(Flag):
 # ============================================================================
 
 class MessageType(str, Enum):
-    """消息类型 - 统一客户端和服务端"""
+    """消息类型 - 统一客户端和服务端 (CANONICAL — 新代码应导入此定义)"""
     
     # === 设备管理 ===
     DEVICE_REGISTER = "device_register"
@@ -278,7 +278,7 @@ class UIElement(BaseModel):
 class DeviceInfo(BaseModel):
     """设备信息"""
     device_id: str
-    device_type: DeviceType = DeviceType.UNKNOWN
+    device_type: AIPDeviceType = AIPDeviceType.UNKNOWN
     platform: DevicePlatform = DevicePlatform.UNKNOWN
     name: Optional[str] = None
     model: Optional[str] = None
@@ -327,7 +327,7 @@ class AIPMessage(BaseModel):
     
     # 设备信息
     device_id: str
-    device_type: Optional[DeviceType] = None
+    device_type: Optional[AIPDeviceType] = None
     
     # 时间戳
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -359,7 +359,7 @@ class AIPMessage(BaseModel):
 
 def create_register_message(
     device_id: str,
-    device_type: DeviceType,
+    device_type: AIPDeviceType,
     device_info: DeviceInfo
 ) -> AIPMessage:
     """创建设备注册消息"""

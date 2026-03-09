@@ -168,3 +168,73 @@ export interface ParallelExecuteResponse {
   success: boolean;
   results: Record<string, any>;
 }
+
+// ============================================================================
+// MCP / 协议类型
+// ============================================================================
+
+export interface MCPServer {
+  name: string;
+  url: string;
+  status: 'online' | 'offline' | 'error';
+  tools_count: number;
+}
+
+export interface MCPTool {
+  name: string;
+  description: string;
+  parameters: Record<string, any>;
+  server_name: string;
+}
+
+export interface SkillInstance {
+  name: string;
+  version: string;
+  status: 'loaded' | 'available' | 'loading';
+  description: string;
+}
+
+// ============================================================================
+// 设备节点类型
+// ============================================================================
+
+export interface DeviceNode {
+  device_id: string;
+  device_type: string;
+  device_name: string;
+  online: boolean;
+  status: string;
+  last_seen: string;
+  capabilities: string[];
+  metrics: Record<string, any>;
+}
+
+// ============================================================================
+// 孪生命令配置
+// ============================================================================
+
+export interface TwinCommandConfig {
+  task: string;
+  strategy: string;
+  member_count: number;
+  providers: string[];
+}
+
+// ============================================================================
+// 提供商健康详情
+// ============================================================================
+
+export interface ProviderHealthDetail {
+  provider: string;
+  status: string;
+  latency_avg_ms: number;
+  error_rate: number;
+  circuit_breaker_state: string;
+  model: string;
+  supports_tools: boolean;
+  supports_json_mode: boolean;
+  supports_vision: boolean;
+  calls_count: number;
+  tokens_used: number;
+  total_cost: number;
+}

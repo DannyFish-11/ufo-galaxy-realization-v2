@@ -130,6 +130,14 @@ except ImportError:
     TEAM_MANAGER_AVAILABLE = False
     team_manager = None
 
+# 导入协议管理路由
+try:
+    from core.routes import protocols as protocols_routes
+    PROTOCOLS_ROUTES_AVAILABLE = True
+except ImportError:
+    PROTOCOLS_ROUTES_AVAILABLE = False
+    protocols_routes = None
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -151,6 +159,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 注册协议管理路由
+if PROTOCOLS_ROUTES_AVAILABLE and protocols_routes:
+    try:
+        app.include_router(protocols_routes.create_router())
+        logger.info("已注册协议管理路由 (/api/v1/protocols/*)")
+    except Exception as _e:
+        logger.warning(f"协议管理路由注册失败: {_e}")
 
 # 静态文件
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")

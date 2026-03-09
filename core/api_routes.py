@@ -55,7 +55,7 @@ logger = logging.getLogger("Galaxy.API")
 # (other modules that imported from core.api_routes directly still work)
 # ---------------------------------------------------------------------------
 from core.routes._shared import (
-    ConnectionManager,
+    RouteConnectionPool,
     connection_manager,
     registered_devices,
     task_queue,
@@ -92,6 +92,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import system, devices, nodes, vision, tasks, command as cmd_routes
     from core.routes import chat, ai, monitoring, relay, hybrid, vault, cost, channels, federation
     from core.routes import compat, twin, sessions
+    try:
+        from core.routes import protocols
+    except ImportError:
+        protocols = None
 
     router = APIRouter()
 
@@ -114,6 +118,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(compat.create_router(service_manager=service_manager, config=config))
     router.include_router(twin.create_router(service_manager=service_manager, config=config))
     router.include_router(sessions.create_router(service_manager=service_manager, config=config))
+    if protocols:
+        router.include_router(protocols.create_router(service_manager=service_manager, config=config))
     @router.get("/api/config")
     async def get_frontend_config(request: Request = None):
         """

@@ -1,21 +1,13 @@
 """
-LLM 提供商管理器
-===============
+LLM 提供商管理器 (旧版 — 保留向后兼容)
+=======================================
 
-支持多种大模型 API：
-- OpenAI (GPT-4, GPT-3.5)
-- Anthropic (Claude 3.5)
-- Groq (Llama 3.3 70B)
-- 智谱 (GLM-4)
-- DeepSeek
-- 本地模型 (Ollama)
-- 自定义 API
+.. deprecated::
+    生产代码请使用 ``core.multi_llm_router.get_llm_router()``，
+    它提供任务感知路由、熔断器、成本追踪等完整功能。
 
-支持：
-- 自动故障转移
-- 负载均衡
-- 成本优化
-- 模型切换
+本模块保留原有 LLMProviderManager 类及 llm_manager 全局实例，
+以兼容尚未迁移的调用方。
 
 版本: v2.3.22
 """
