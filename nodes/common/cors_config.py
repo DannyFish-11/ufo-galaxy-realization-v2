@@ -11,8 +11,9 @@ Galaxy - CORS 配置
 
 import os
 from typing import List
+from core.port_config import get_service_port
 
-_DEFAULT_ORIGINS = "http://localhost:3000,http://localhost:8080"
+_DEFAULT_ORIGINS = f"http://localhost:{get_service_port('dashboard')},http://localhost:{get_service_port('api_gateway')}"
 
 
 def get_cors_origins() -> List[str]:

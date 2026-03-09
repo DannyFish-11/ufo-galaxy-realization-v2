@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
+from core.port_config import get_node_port
 from nodes.common.cors_config import get_cors_origins
 
 logger = logging.getLogger("Node_50_Transformer")
@@ -290,4 +291,4 @@ async def mcp_call(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8050)
+    uvicorn.run(app, host="0.0.0.0", port=get_node_port("Node_50_Transformer"))

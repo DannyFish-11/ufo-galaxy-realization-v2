@@ -208,6 +208,10 @@ class RouteConnectionPool:
                 await self.send_to_device(target, payload)
 
 
+# 向后兼容别名 — 部分模块和测试通过此名称引用
+ConnectionManager = RouteConnectionPool
+
+
 # ============================================================================
 # Global Shared State
 # ============================================================================

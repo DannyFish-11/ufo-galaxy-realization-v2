@@ -52,7 +52,6 @@ from .device_protocol import (
     MessageBuilder,
     ProtocolHandler,
     MessageRouter,
-    PROTOBUF_SCHEMA
 )
 
 # Device Manager module
@@ -112,12 +111,9 @@ from .android_bridge import (
 # Failover Manager module
 from .failover_manager import (
     RecoveryType,
-    CircuitState,
     RecoveryStatus,
-    CircuitBreakerConfig,
     Checkpoint,
     RecoveryResult,
-    CircuitBreaker,
     RecoveryStrategy,
     RetryRecovery,
     FailoverRecovery,
@@ -125,6 +121,7 @@ from .failover_manager import (
     GracefulDegradation,
     FailoverManager
 )
+from core.monitoring import CircuitBreaker, CircuitState
 
 __all__ = [
     # Version info
@@ -199,7 +196,6 @@ __all__ = [
     'RecoveryType',
     'CircuitState',
     'RecoveryStatus',
-    'CircuitBreakerConfig',
     'Checkpoint',
     'RecoveryResult',
     'CircuitBreaker',

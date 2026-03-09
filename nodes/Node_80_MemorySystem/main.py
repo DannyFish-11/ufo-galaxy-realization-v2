@@ -54,12 +54,14 @@ except ImportError:
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port
+
 NODE_ID = os.getenv("NODE_ID", "80")
 NODE_NAME = os.getenv("NODE_NAME", "MemorySystem")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Redis 配置（短期记忆）
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_URL = os.getenv("REDIS_URL", f"redis://localhost:{get_service_port('redis')}")
 REDIS_PREFIX = os.getenv("REDIS_PREFIX", "galaxy:")
 SHORT_TERM_TTL = int(os.getenv("SHORT_TERM_TTL", "3600"))  # 1 小时
 

@@ -21,6 +21,7 @@ import aiohttp
 import time
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
+from core.port_config import get_service_port
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -41,7 +42,7 @@ class ExecutionPool:
     执行池 - 提供底层节点执行能力
     """
 
-    def __init__(self, gateway_url: str = "http://localhost:8000"):
+    def __init__(self, gateway_url: str = f"http://localhost:{get_service_port('state_machine')}"):
         self.gateway_url = gateway_url.rstrip('/')
         self.session: Optional[aiohttp.ClientSession] = None
         self._node_status: Dict[str, bool] = {}
@@ -140,7 +141,7 @@ class ExecutionPool:
 class NodeExecutor:
     """节点执行器 - 提供高级节点执行接口"""
 
-    def __init__(self, gateway_url: str = "http://localhost:8000"):
+    def __init__(self, gateway_url: str = f"http://localhost:{get_service_port('state_machine')}"):
         self._pool = ExecutionPool(gateway_url)
         logger.info(f"NodeExecutor initialized with gateway: {gateway_url}")
 

@@ -22,14 +22,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from datetime import datetime, timedelta
 
+from core.monitoring import CircuitBreaker, CircuitState
+
 logger = logging.getLogger(__name__)
-
-
-class CircuitState(Enum):
-    """Circuit breaker states."""
-    CLOSED = auto()  # Normal operation
-    OPEN = auto()    # Failing, reject requests
-    HALF_OPEN = auto()  # Testing recovery
 
 
 class RecoveryType(Enum):
@@ -48,21 +43,6 @@ class RecoveryStatus(Enum):
     SUCCESS = auto()     # Recovery successful
     FAILED = auto()      # Recovery failed
     CANCELLED = auto()   # Recovery cancelled
-
-
-@dataclass
-class CircuitBreakerConfig:
-    """Configuration for circuit breaker."""
-    failure_threshold: int = 5
-    timeout_seconds: float = 60.0
-    half_open_max_calls: int = 3
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'failure_threshold': self.failure_threshold,
-            'timeout_seconds': self.timeout_seconds,
-            'half_open_max_calls': self.half_open_max_calls
-        }
 
 
 @dataclass
@@ -124,84 +104,6 @@ class RecoveryResult:
             'error_message': self.error_message,
             'metadata': self.metadata
         }
-
-
-class CircuitBreaker:
-    """
-    Circuit breaker for device operations.
-    
-    Prevents cascading failures by temporarily blocking requests
-    to failing devices.
-    """
-    
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        timeout_seconds: float = 60.0,
-        half_open_max_calls: int = 3
-    ):
-        self.failure_threshold = failure_threshold
-        self.timeout_seconds = timeout_seconds
-        self.half_open_max_calls = half_open_max_calls
-        
-        self._state = CircuitState.CLOSED
-        self._failure_count = 0
-        self._last_failure_time: Optional[float] = None
-        self._half_open_calls = 0
-        
-        logger.info(f"CircuitBreaker initialized (threshold={failure_threshold})")
-    
-    @property
-    def state(self) -> CircuitState:
-        """Get current circuit state."""
-        self._check_timeout()
-        return self._state
-    
-    def _check_timeout(self) -> None:
-        """Check if timeout has expired and transition to HALF_OPEN."""
-        if self._state == CircuitState.OPEN:
-            if self._last_failure_time:
-                elapsed = time.time() - self._last_failure_time
-                if elapsed >= self.timeout_seconds:
-                    self._state = CircuitState.HALF_OPEN
-                    self._half_open_calls = 0
-                    logger.info("Circuit breaker transitioning to HALF_OPEN")
-    
-    def record_success(self) -> None:
-        """Record a successful operation."""
-        if self._state == CircuitState.HALF_OPEN:
-            self._half_open_calls += 1
-            if self._half_open_calls >= self.half_open_max_calls:
-                self._state = CircuitState.CLOSED
-                self._failure_count = 0
-                logger.info("Circuit breaker transitioning to CLOSED")
-        elif self._state == CircuitState.CLOSED:
-            self._failure_count = max(0, self._failure_count - 1)
-    
-    def record_failure(self) -> None:
-        """Record a failed operation."""
-        self._failure_count += 1
-        self._last_failure_time = time.time()
-        
-        if self._state == CircuitState.HALF_OPEN:
-            self._state = CircuitState.OPEN
-            logger.warning("Circuit breaker transitioning to OPEN (half-open failure)")
-        elif self._failure_count >= self.failure_threshold:
-            self._state = CircuitState.OPEN
-            logger.warning(f"Circuit breaker transitioning to OPEN (threshold reached)")
-    
-    def can_execute(self) -> bool:
-        """Check if operation can be executed."""
-        self._check_timeout()
-        return self._state != CircuitState.OPEN
-    
-    def reset(self) -> None:
-        """Reset circuit breaker to CLOSED state."""
-        self._state = CircuitState.CLOSED
-        self._failure_count = 0
-        self._last_failure_time = None
-        self._half_open_calls = 0
-        logger.info("Circuit breaker reset to CLOSED")
 
 
 class RecoveryStrategy:
@@ -311,6 +213,7 @@ class FailoverManager:
         """Get or create circuit breaker for device."""
         if device_id not in self._circuit_breakers:
             self._circuit_breakers[device_id] = CircuitBreaker(
+                name=device_id,
                 failure_threshold=self.failure_threshold
             )
         return self._circuit_breakers[device_id]
@@ -400,5 +303,9 @@ class FailoverManager:
     def reset_circuit_breaker(self, device_id: str) -> None:
         """Reset circuit breaker for a device."""
         if device_id in self._circuit_breakers:
-            self._circuit_breakers[device_id].reset()
+            cb = self._circuit_breakers[device_id]
+            cb.state = CircuitState.CLOSED
+            cb.failure_count = 0
+            cb.last_failure_time = None
+            cb._half_open_calls = 0
             logger.info(f"Circuit breaker reset for device {device_id}")

@@ -15,7 +15,8 @@ Date: 2026-01-22
 
 import asyncio
 import json
-import websockets
+import pytest
+websockets = pytest.importorskip("websockets")
 from datetime import datetime
 
 

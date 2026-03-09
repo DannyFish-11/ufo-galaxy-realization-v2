@@ -12,7 +12,9 @@ import threading # 导入桌面自动化模块
 # 从环境变量或默认值获取配置
 import argparse
 
-NODE_50_URL = os.environ.get("NODE_50_URL", "ws://localhost:8050")
+from core.port_config import get_node_port
+
+NODE_50_URL = os.environ.get("NODE_50_URL", f"ws://localhost:{get_node_port('Node_50_Transformer')}")
 DEVICE_ID = os.environ.get("DEVICE_ID", "Windows_Galaxy_Client_001")
 
 

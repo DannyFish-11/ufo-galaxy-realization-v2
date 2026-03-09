@@ -17,6 +17,7 @@ Windows 客户端 = 主战场（类 OpenClaude 的全能智能体）
 """
 
 import sys
+from core.port_config import get_service_port
 import json
 import logging
 import html as html_module
@@ -158,7 +159,7 @@ class FlowBorderFrame(QFrame):
 class APIClient:
     """HTTP API 客户端"""
 
-    def __init__(self, base_url: str = "http://localhost:8080"):
+    def __init__(self, base_url: str = f"http://localhost:{get_service_port('dashboard')}"):
         self.base_url = base_url
         try:
             import httpx
@@ -1722,7 +1723,7 @@ class GalaxyClientUI(QWidget):
 
     command_submitted = pyqtSignal(str)
 
-    def __init__(self, api_base: str = "http://localhost:8080", on_command: Callable = None):
+    def __init__(self, api_base: str = f"http://localhost:{get_service_port('dashboard')}", on_command: Callable = None):
         super().__init__()
         self.api = APIClient(api_base)
         self.on_command = on_command

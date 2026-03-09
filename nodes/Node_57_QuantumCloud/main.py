@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from core.port_config import get_node_port
 
 app = FastAPI(title="Node 57 - QuantumCloud", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -181,4 +182,4 @@ async def mcp_call(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8057)
+    uvicorn.run(app, host="0.0.0.0", port=get_node_port("Node_57_QuantumCloud"))

@@ -31,9 +31,11 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port
+
 NODE_ID = os.getenv("NODE_ID", "64")
 NODE_NAME = os.getenv("NODE_NAME", "Telemetry")
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Telemetry constraints (5% CPU rule)

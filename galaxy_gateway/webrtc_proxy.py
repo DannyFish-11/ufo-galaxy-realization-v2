@@ -26,6 +26,7 @@ from typing import Dict, Any
 import httpx
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
+from core.port_config import get_service_port, get_node_port
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,12 @@ logger = logging.getLogger(__name__)
 
 def _get_node95_url() -> str:
     """Return current Node_95 base URL from environment."""
-    return os.getenv("NODE_95_URL", "http://localhost:8095").rstrip("/")
+    return os.getenv("NODE_95_URL", f"http://localhost:{get_node_port('Node_95_WebRTC_Receiver')}").rstrip("/")
 
 
 def _get_gateway_url() -> str:
     """Return current Gateway base URL from environment."""
-    return os.getenv("GATEWAY_URL", "http://localhost:8000").rstrip("/")
+    return os.getenv("GATEWAY_URL", f"http://localhost:{get_service_port('state_machine')}").rstrip("/")
 
 
 def _http_to_ws(url: str) -> str:

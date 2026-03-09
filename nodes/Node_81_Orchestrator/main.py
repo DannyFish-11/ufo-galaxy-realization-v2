@@ -78,22 +78,24 @@ def _safe_condition(condition: str, context: dict) -> bool:
 # Configuration
 # =============================================================================
 
+from core.port_config import get_node_port
+
 NODE_ID = os.getenv("NODE_ID", "81")
 NODE_NAME = os.getenv("NODE_NAME", "Orchestrator")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # 节点服务地址
 NODE_SERVICES = {
-    "00": "http://localhost:8000",  # StateMachine
-    "01": "http://localhost:8001",  # OneAPI
-    "02": "http://localhost:8002",  # Tasker
-    "79": "http://localhost:8079",  # LocalLLM
-    "80": "http://localhost:8080",  # MemorySystem
-    "22": "http://localhost:8022",  # BraveSearch
-    "24": "http://localhost:8024",  # Weather
-    "06": "http://localhost:8006",  # Filesystem
-    "12": "http://localhost:8012",  # Postgres
-    "13": "http://localhost:8013",  # SQLite
+    "00": f"http://localhost:{get_node_port('Node_00_StateMachine')}",  # StateMachine
+    "01": f"http://localhost:{get_node_port('Node_01_OneAPI')}",  # OneAPI
+    "02": f"http://localhost:{get_node_port('Node_02_Tasker')}",  # Tasker
+    "79": f"http://localhost:{get_node_port('Node_79_LocalLLM')}",  # LocalLLM
+    "80": f"http://localhost:{get_node_port('Node_80_MemorySystem')}",  # MemorySystem
+    "22": f"http://localhost:{get_node_port('Node_22_BraveSearch')}",  # BraveSearch
+    "24": f"http://localhost:{get_node_port('Node_24_Weather')}",  # Weather
+    "06": f"http://localhost:{get_node_port('Node_06_Filesystem')}",  # Filesystem
+    "12": f"http://localhost:{get_node_port('Node_12_Postgres')}",  # Postgres
+    "13": f"http://localhost:{get_node_port('Node_13_SQLite')}",  # SQLite
 }
 
 # 超时配置

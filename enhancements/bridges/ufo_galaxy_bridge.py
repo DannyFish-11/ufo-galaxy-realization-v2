@@ -22,6 +22,8 @@ import sys
 # 添加路径以便导入两个系统的模块
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "galaxy_gateway"))
 
+from core.port_config import get_service_port
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class GalaxyBridge:
             # 尝试连接 Galaxy Gateway
             import aiohttp
             async with aiohttp.ClientSession() as session:
-                async with session.get("http://localhost:8000/health", timeout=2) as resp:
+                async with session.get(f"http://localhost:{get_service_port('state_machine')}/health", timeout=2) as resp:
                     if resp.status == 200:
                         self.galaxy_available = True
                         logger.info("✅ galaxy 系统已检测到")
@@ -113,7 +115,7 @@ class GalaxyBridge:
         
         try:
             import aiohttp
-            url = f"http://localhost:8000/node/{node_id}/{action}"
+            url = f"http://localhost:{get_service_port('state_machine')}/node/{node_id}/{action}"
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=params) as resp:

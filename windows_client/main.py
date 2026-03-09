@@ -21,13 +21,14 @@ from PyQt5.QtCore import QThread, pyqtSignal, QTimer
 from ui.galaxy_client_ui import GalaxyClientUI
 from ui.sidebar_ui import SidebarUI  # legacy fallback
 from autonomy.autonomy_manager import WindowsAutonomyManager
+from core.port_config import get_service_port
 
 logger = logging.getLogger(__name__)
 
 # 后端 API 地址（默认本地）
 GALAXY_API_BASE = os.environ.get("GALAXY_API_BASE", "http://localhost:8099")
 # Dashboard API 地址
-DASHBOARD_API_BASE = os.environ.get("DASHBOARD_API_BASE", "http://localhost:3000")
+DASHBOARD_API_BASE = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
 
 
 class CommandProcessor(QThread):
@@ -323,7 +324,7 @@ class WindowsClient:
         self.command_processor.response_ready.connect(self._on_response)
 
         # OPPO 光场设计客户端 (混合模式: 侧边栏 + 全功能窗口)
-        api_base = os.environ.get("DASHBOARD_API_BASE", "http://localhost:8080")
+        api_base = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
         self.ui = GalaxyClientUI(api_base=api_base, on_command=self._on_command)
 
         # 全局 F12 热键

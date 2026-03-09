@@ -22,6 +22,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+from core.port_config import get_service_port
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,7 +84,7 @@ def init_system():
     return True
 
 
-def start_dashboard(port: int = 8080):
+def start_dashboard(port: int = get_service_port("dashboard")):
     """Start Dashboard web UI."""
     import uvicorn
     logger.info(f"Starting Dashboard on http://0.0.0.0:{port}")
@@ -109,7 +110,7 @@ def main():
     parser = argparse.ArgumentParser(description='Galaxy Quick Start')
     parser.add_argument('--desktop', action='store_true', help='Launch desktop UI')
     parser.add_argument('--all', action='store_true', help='Launch Dashboard + desktop')
-    parser.add_argument('--port', type=int, default=8080, help='Dashboard port (default: 8080)')
+    parser.add_argument('--port', type=int, default=get_service_port("dashboard"), help='Dashboard port')
     args = parser.parse_args()
 
     print_banner()

@@ -31,6 +31,7 @@ from galaxy_gateway.aip_protocol_v2 import (
     AIPMessage, MessageBuilder, DeviceInfo,
     MessageType, TransferMethod, ContentType
 )
+from core.port_config import get_service_port
 
 # ============================================================================
 # 配置
@@ -63,7 +64,7 @@ class TransferConfig:
 class MultimodalTransferManager:
     """多模态传输管理器"""
     
-    def __init__(self, gateway_url: str = "http://localhost:8000"):
+    def __init__(self, gateway_url: str = f"http://localhost:{get_service_port('state_machine')}"):
         self.gateway_url = gateway_url
         self.config = TransferConfig()
     

@@ -28,10 +28,12 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port, get_node_port
+
 NODE_ID = os.getenv("NODE_ID", "67")
 NODE_NAME = os.getenv("NODE_NAME", "HealthMonitor")
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
-TELEMETRY_URL = os.getenv("TELEMETRY_URL", "http://localhost:8064")
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
+TELEMETRY_URL = os.getenv("TELEMETRY_URL", f"http://localhost:{get_node_port('Node_64_Telemetry')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Health check configuration
@@ -211,11 +213,11 @@ class HealthMonitor:
         
         # Known node endpoints
         self.node_endpoints: Dict[str, str] = {
-            "Node_00_StateMachine": "http://localhost:8000",
-            "Node_50_Transformer": "http://localhost:8050",
-            "Node_58_ModelRouter": "http://localhost:8058",
-            "Node_33_ADB": "http://localhost:8033",
-            "Node_64_Telemetry": "http://localhost:8064",
+            "Node_00_StateMachine": f"http://localhost:{get_node_port('Node_00_StateMachine')}",
+            "Node_50_Transformer": f"http://localhost:{get_node_port('Node_50_Transformer')}",
+            "Node_58_ModelRouter": f"http://localhost:{get_node_port('Node_58_ModelRouter')}",
+            "Node_33_ADB": f"http://localhost:{get_node_port('Node_33_ADB')}",
+            "Node_64_Telemetry": f"http://localhost:{get_node_port('Node_64_Telemetry')}",
         }
     
     async def check_node(self, node_id: str) -> NodeHealth:

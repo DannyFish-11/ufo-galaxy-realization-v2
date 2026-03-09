@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # Set test environment variables
 os.environ.setdefault("GALAXY_MODE", "test")
+os.environ.setdefault("GALAXY_DEV_MODE", "1")
 os.environ.setdefault("PYTHONPATH", str(PROJECT_ROOT))
 
 

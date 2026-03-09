@@ -162,7 +162,10 @@ class TestGalaxyCoreCallNode:
     @pytest.fixture
     def core(self):
         from core.galaxy_core import GalaxyCore
-        return GalaxyCore()
+        c = GalaxyCore()
+        # 确保测试用节点 "04" 存在（无论 node_registry.json 内容如何）
+        c.nodes.setdefault("04", {"name": "Router", "port": 8004, "capabilities": ["route"]})
+        return c
 
     @pytest.mark.asyncio
     async def test_node_not_found(self, core):

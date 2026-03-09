@@ -32,9 +32,11 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port
+
 NODE_ID = os.getenv("NODE_ID", "65")
 NODE_NAME = os.getenv("NODE_NAME", "LoggerCentral")
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DATA_DIR = os.getenv("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 HMAC_SECRET = os.getenv("HMAC_SECRET", "galaxy-audit-secret-key")

@@ -12,6 +12,7 @@ Galaxy - 任务路由和调度模块
 日期：2026-01-22
 版本：1.0
 """
+from core.port_config import get_service_port
 
 import asyncio
 import json
@@ -277,7 +278,7 @@ class TaskRouter:
         """
         # 构建设备 API URL
         # 假设每个设备都有一个 HTTP API 端点
-        url = f"http://{device.ip_address}:8080/api/execute"
+        url = f"http://{device.ip_address}:{get_service_port('dashboard')}/api/execute"
         
         try:
             async with aiohttp.ClientSession() as session:

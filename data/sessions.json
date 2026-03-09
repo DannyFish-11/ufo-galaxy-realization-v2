@@ -1,7 +1,7 @@
 {
   "sessions": {
-    "session_f39e1d8c3a95": {
-      "id": "session_f39e1d8c3a95",
+    "session_56c50535ea38": {
+      "id": "session_56c50535ea38",
       "user_id": "user_001",
       "devices": [
         "phone_01",
@@ -9,25 +9,25 @@
       ],
       "active_device": "pc_01",
       "history": [],
-      "created_at": 1773055515.235137,
-      "updated_at": 1773055515.2352953,
+      "created_at": 1773073358.1888437,
+      "updated_at": 1773073358.188994,
       "metadata": {}
     },
-    "session_6088ce84a1c1": {
-      "id": "session_6088ce84a1c1",
+    "session_9bc952587ebd": {
+      "id": "session_9bc952587ebd",
       "user_id": "user_002",
       "devices": [
         "pc_01"
       ],
       "active_device": "pc_01",
       "history": [],
-      "created_at": 1773055515.2355278,
-      "updated_at": 1773055515.235528,
+      "created_at": 1773073358.1892242,
+      "updated_at": 1773073358.1892242,
       "metadata": {}
     }
   },
   "user_active_session": {
-    "user_001": "session_f39e1d8c3a95",
-    "user_002": "session_6088ce84a1c1"
+    "user_001": "session_56c50535ea38",
+    "user_002": "session_9bc952587ebd"
   }
 }

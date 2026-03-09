@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from core.port_config import get_service_port
 
 # PyQt6 导入
 try:
@@ -543,7 +544,7 @@ class MinimalistWindow(QMainWindow):
             def _call_llm(self, message: str) -> str:
                 """调用 LLM API"""
                 api_base = os.environ.get("GALAXY_API_BASE", "http://localhost:8099")
-                dashboard_base = os.environ.get("DASHBOARD_API_BASE", "http://localhost:3000")
+                dashboard_base = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
 
                 # 尝试主系统
                 result = self._api_call(f"{api_base}/api/v1/chat",
@@ -585,7 +586,7 @@ class MinimalistWindow(QMainWindow):
                     except Exception:
                         continue
 
-                return "AI 服务未连接。请在 Dashboard (http://localhost:3000) 配置 API Key。"
+                return f"AI 服务未连接。请在 Dashboard (http://localhost:{get_service_port('dashboard')}) 配置 API Key。"
 
             def _api_call(self, url: str, payload: dict) -> Optional[dict]:
                 try:

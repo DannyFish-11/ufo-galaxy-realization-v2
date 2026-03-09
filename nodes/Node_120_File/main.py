@@ -42,10 +42,12 @@ from nodes.common.cors_config import get_cors_origins
 # Configuration
 # =============================================================================
 
+from core.port_config import get_service_port, get_node_port
+
 NODE_ID = os.getenv("NODE_ID", "120")
 NODE_NAME = os.getenv("NODE_NAME", "FileOperations")
-NODE_PORT = int(os.getenv("NODE_PORT", "8120"))
-STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", "http://localhost:8000")
+NODE_PORT = int(os.getenv("NODE_PORT", str(get_node_port("Node_120_File"))))
+STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.join(os.path.expanduser("~"), "workspace"))
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100MB

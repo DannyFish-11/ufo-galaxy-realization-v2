@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from collections import deque
 import heapq
 from nodes.common.cors_config import get_cors_origins
+from core.port_config import get_node_port
 
 app = FastAPI(title="Node 53 - GraphLogic", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -262,4 +263,4 @@ async def mcp_call(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8053)
+    uvicorn.run(app, host="0.0.0.0", port=get_node_port("Node_53_GraphLogic"))
