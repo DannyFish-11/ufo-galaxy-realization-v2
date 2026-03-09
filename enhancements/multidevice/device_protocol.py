@@ -1,14 +1,16 @@
 """
 Galaxy v5.0 - Device Protocol Module
-AIP v2.0 Protocol Implementation
+AIP v2.0↔v3.0 Bridge Protocol Module
 
-This module defines the AIP (Advanced Inter-device Protocol) v2.0 message format,
-protocol buffer schemas, and message serialization/deserialization for device communication.
+This module serves as the AIP (Advanced Inter-device Protocol) bridge between
+v2.0 and v3.0, providing backward-compatible message serialization and
+deserialization for device communication.
 
 Features:
-- Protocol buffer message definitions
-- Message serialization/deserialization
-- Protocol validation
+- AIP v3.0 JSON-based serialization via to_json()/from_json()
+- v2.0↔v3.0 message type and device type mapping tables
+- Backward-compatible binary protocol via to_bytes()/from_bytes() (DEPRECATED)
+- Protocol validation and error handling
 - Cross-platform message handling
 - Support for 500+ TPS
 
@@ -773,142 +775,6 @@ class MessageRouter:
         return responses
 
 
-# Protocol buffer schema definitions (as Python code for reference)
-PROTOBUF_SCHEMA = """
-syntax = "proto3";
-
-package galaxy.aip.v2;
-
-// Device message
-message Device {
-    string device_id = 1;
-    DeviceType device_type = 2;
-    string device_name = 3;
-    string device_model = 4;
-    string os_version = 5;
-    string app_version = 6;
-    string ip_address = 7;
-    int32 port = 8;
-    DeviceCapabilities capabilities = 9;
-    repeated string tags = 10;
-    repeated string groups = 11;
-    DeviceStatus status = 12;
-    double registered_at = 13;
-    double last_heartbeat = 14;
-}
-
-enum DeviceType {
-    UNKNOWN = 0;
-    LINUX_SERVER = 1;
-    LINUX_DESKTOP = 2;
-    ANDROID_PHONE = 3;
-    ANDROID_TABLET = 4;
-    ANDROID_TV = 5;
-    EMBEDDED = 6;
-    CONTAINER = 7;
-    VIRTUAL = 8;
-}
-
-enum DeviceStatus {
-    OFFLINE = 0;
-    ONLINE = 1;
-    BUSY = 2;
-    ERROR = 3;
-    MAINTENANCE = 4;
-    DEGRADED = 5;
-}
-
-message DeviceCapabilities {
-    int32 cpu_cores = 1;
-    double memory_gb = 2;
-    double storage_gb = 3;
-    bool gpu_available = 4;
-    double gpu_memory_gb = 5;
-    double network_mbps = 6;
-    bool supports_screen = 7;
-    bool supports_audio = 8;
-    bool supports_camera = 9;
-    repeated string custom_features = 10;
-}
-
-// Task message
-message Task {
-    string task_id = 1;
-    string task_type = 2;
-    TaskPriority priority = 3;
-    bytes payload = 4;
-    string assigned_device = 5;
-    double created_at = 6;
-    double scheduled_at = 7;
-    double started_at = 8;
-    double completed_at = 9;
-    TaskState state = 10;
-    bytes result = 11;
-    string error_message = 12;
-    int32 retry_count = 13;
-    int32 max_retries = 14;
-    double timeout_seconds = 15;
-}
-
-enum TaskPriority {
-    CRITICAL = 0;
-    HIGH = 1;
-    NORMAL = 2;
-    LOW = 3;
-    BACKGROUND = 4;
-}
-
-enum TaskState {
-    PENDING = 0;
-    SCHEDULED = 1;
-    RUNNING = 2;
-    COMPLETED = 3;
-    FAILED = 4;
-    CANCELLED = 5;
-    TIMEOUT = 6;
-}
-
-// AIP Message wrapper
-message AIPMessage {
-    MessageType msg_type = 1;
-    bytes payload = 2;
-    uint32 sequence = 3;
-    double timestamp = 4;
-    string source_device = 5;
-    string target_device = 6;
-    string correlation_id = 7;
-}
-
-enum MessageType {
-    DEVICE_REGISTER = 1;
-    DEVICE_UNREGISTER = 2;
-    DEVICE_HEARTBEAT = 3;
-    DEVICE_STATUS = 4;
-    DEVICE_DISCOVER = 5;
-    TASK_SUBMIT = 16;
-    TASK_ASSIGN = 17;
-    TASK_STATUS = 18;
-    TASK_RESULT = 19;
-    TASK_CANCEL = 20;
-    COORD_SYNC = 32;
-    COORD_BROADCAST = 33;
-    COORD_ROUTING = 34;
-    COORD_ELECTION = 35;
-    DATA_REQUEST = 48;
-    DATA_RESPONSE = 49;
-    DATA_STREAM = 50;
-    CONTROL_COMMAND = 64;
-    CONTROL_CONFIG = 65;
-    CONTROL_SHUTDOWN = 66;
-    ERROR_REPORT = 80;
-    RECOVERY_REQUEST = 81;
-    RECOVERY_RESPONSE = 82;
-    ANDROID_SCREEN = 96;
-    ANDROID_INPUT = 97;
-    ANDROID_INSTALL = 98;
-}
-"""
-
 
 # Export all public classes and functions
 __all__ = [
@@ -927,5 +793,4 @@ __all__ = [
     'MessageBuilder',
     'ProtocolHandler',
     'MessageRouter',
-    'PROTOBUF_SCHEMA'
 ]
