@@ -104,8 +104,10 @@
                 <div class="island-tabs">
                     <div class="island-tab" :class="{ active: tab === 'llm' }" @click="tab = 'llm'">⚙️ LLM</div>
                     <div class="island-tab" :class="{ active: tab === 'nodeapis' }" @click="tab = 'nodeapis'; loadNodeApis()">🌐 节点 API</div>
-                    <div class="island-tab" :class="{ active: tab === 'tools' }" @click="tab = 'tools'">🔧 工具</div>
+                    <div class="island-tab" :class="{ active: tab === 'protocols' }" @click="tab = 'protocols'; loadProtocols()">🔌 协议</div>
+                    <div class="island-tab" :class="{ active: tab === 'devices' }" @click="tab = 'devices'; loadDevices()">📱 设备</div>
                     <div class="island-tab" :class="{ active: tab === 'agents' }" @click="tab = 'agents'; loadAgents()">🤖 Agent</div>
+                    <div class="island-tab" :class="{ active: tab === 'tools' }" @click="tab = 'tools'">🔧 工具</div>
                     <div class="island-tab" :class="{ active: tab === 'test' }" @click="tab = 'test'">🧪 测试</div>
                 </div>
 
@@ -186,6 +188,143 @@
                         </div>
                     </div>
 
+                    <!-- ═══ 协议管理 (MCP / Skill) ═══ -->
+                    <div v-show="tab === 'protocols'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div class="grid grid-cols-4 gap-3 text-center">
+                                <div><div style="font-size: 22px; font-weight: 700; color: #0a84ff;">{{ mcpServers.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">MCP 服务</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #30d158;">{{ mcpServers.filter(s => s.status === 'running').length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">运行中</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #7c5cfc;">{{ skills.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">Skill 包</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #ff375f;">{{ skills.filter(s => s.status === 'loaded').length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">已加载</div></div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">🔌 MCP 服务器</span>
+                                <div class="flex space-x-2">
+                                    <button @click="loadProtocols" class="btn-sm btn-blue">刷新</button>
+                                </div>
+                            </div>
+                            <div v-if="mcpServers.length === 0" style="text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 20px 0;">暂无 MCP 服务器</div>
+                            <div class="space-y-2">
+                                <div v-for="server in mcpServers" :key="server.name" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="status-dot" :class="server.status === 'running' ? 'online' : 'offline'"></span>
+                                            <span style="font-size: 12px; font-weight: 600;">{{ server.name }}</span>
+                                            <span style="font-size: 10px; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 6px;">{{ server.tool_count || 0 }} tools</span>
+                                        </div>
+                                        <div class="flex space-x-1.5">
+                                            <button @click="toggleMcpTools(server)" class="btn-sm btn-blue" style="padding: 2px 8px; font-size: 10px;">{{ server.showTools ? '收起' : '工具' }}</button>
+                                            <button @click="unloadMcp(server.name)" class="btn-sm" style="background: rgba(255,69,58,0.15); color: #ff453a; padding: 2px 8px; font-size: 10px;">卸载</button>
+                                        </div>
+                                    </div>
+                                    <div v-if="server.description" style="font-size: 10px; color: rgba(255,255,255,0.3);">{{ server.description }}</div>
+                                    <div v-if="server.showTools && server.tools" class="mt-2 space-y-1">
+                                        <div v-for="tool in server.tools" :key="tool.name" style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 6px 8px;">
+                                            <div style="font-size: 11px; font-weight: 500; color: #0a84ff;">{{ tool.name }}</div>
+                                            <div style="font-size: 10px; color: rgba(255,255,255,0.3);">{{ tool.description }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">📦 Skill 包</span>
+                            </div>
+                            <div v-if="skills.length === 0" style="text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 20px 0;">暂无 Skill 包</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div v-for="skill in skills" :key="skill.name" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span style="font-size: 12px; font-weight: 500;">{{ skill.name }}</span>
+                                        <span style="font-size: 10px;" :class="skill.status === 'loaded' ? 'valid' : 'invalid'">{{ skill.status }}</span>
+                                    </div>
+                                    <div style="font-size: 10px; color: rgba(255,255,255,0.25);">{{ skill.description || '—' }}</div>
+                                    <div class="flex space-x-1 mt-2">
+                                        <button v-if="skill.status !== 'loaded'" @click="loadSkill(skill.name)" class="btn-sm btn-green flex-1" style="font-size: 10px;">加载</button>
+                                        <button v-else @click="unloadSkill(skill.name)" class="btn-sm flex-1" style="background: rgba(255,69,58,0.15); color: #ff453a; font-size: 10px;">卸载</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ 设备管理 ═══ -->
+                    <div v-show="tab === 'devices'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div class="grid grid-cols-3 gap-3 text-center">
+                                <div><div style="font-size: 22px; font-weight: 700; color: #0a84ff;">{{ deviceList.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">注册设备</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #30d158;">{{ deviceList.filter(d => d.online).length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">在线</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #ff375f;">{{ deviceList.filter(d => !d.online).length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">离线</div></div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span style="font-size: 14px; font-weight: 600;">📱 设备列表</span>
+                                <div class="flex space-x-2">
+                                    <button @click="discoverDevices" class="btn-sm btn-purple">主动发现</button>
+                                    <button @click="loadDevices" class="btn-sm btn-blue">刷新</button>
+                                </div>
+                            </div>
+                            <div v-if="deviceList.length === 0" style="text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 20px 0;">暂无注册设备</div>
+                            <div class="space-y-2">
+                                <div v-for="device in deviceList" :key="device.device_id" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="status-dot" :class="device.online ? 'online' : 'offline'"></span>
+                                            <span style="font-size: 12px; font-weight: 600;">{{ device.device_name || device.device_id }}</span>
+                                            <span style="font-size: 10px; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 6px;">{{ device.device_type || 'unknown' }}</span>
+                                        </div>
+                                        <div class="flex space-x-1.5">
+                                            <button @click="showDeviceTelemetry(device)" class="btn-sm btn-blue" style="padding: 2px 8px; font-size: 10px;">遥测</button>
+                                            <button @click="sendDeviceCmd(device.device_id)" class="btn-sm btn-green" style="padding: 2px 8px; font-size: 10px;">命令</button>
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 10px; color: rgba(255,255,255,0.25);">
+                                        <span v-if="device.os_version">OS: {{ device.os_version }} </span>
+                                        <span v-if="device.last_seen"> | 最近活跃: {{ device.last_seen }}</span>
+                                    </div>
+                                    <div v-if="device.capabilities && device.capabilities.length" class="mt-1 flex flex-wrap gap-1">
+                                        <span v-for="cap in device.capabilities" :key="cap" style="font-size: 9px; background: rgba(124,92,252,0.15); color: #7c5cfc; padding: 1px 5px; border-radius: 4px;">{{ cap }}</span>
+                                    </div>
+                                    <div v-if="device.telemetry" class="mt-2" style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 6px 8px; font-size: 10px; color: rgba(255,255,255,0.5);">
+                                        <pre style="white-space: pre-wrap; margin: 0;">{{ JSON.stringify(device.telemetry, null, 2) }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">🔄 跨设备操作</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="provider-chip">
+                                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 6px;">📋 剪贴板同步</div>
+                                    <div class="flex space-x-2">
+                                        <select v-model="crossDeviceSource" class="island-input flex-1 px-2 py-1" style="font-size: 11px; border-radius: 10px; appearance: none;">
+                                            <option value="">源设备</option>
+                                            <option v-for="d in deviceList.filter(d => d.online)" :key="d.device_id" :value="d.device_id">{{ d.device_name || d.device_id }}</option>
+                                        </select>
+                                        <button @click="syncClipboard" class="btn-sm btn-purple" style="font-size: 10px;">同步</button>
+                                    </div>
+                                </div>
+                                <div class="provider-chip">
+                                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 6px;">📁 文件传输</div>
+                                    <div class="flex space-x-2">
+                                        <select v-model="transferSource" class="island-input flex-1 px-2 py-1" style="font-size: 11px; border-radius: 10px; appearance: none;">
+                                            <option value="">源</option>
+                                            <option v-for="d in deviceList" :key="d.device_id" :value="d.device_id">{{ d.device_name || d.device_id }}</option>
+                                        </select>
+                                        <select v-model="transferTarget" class="island-input flex-1 px-2 py-1" style="font-size: 11px; border-radius: 10px; appearance: none;">
+                                            <option value="">目标</option>
+                                            <option v-for="d in deviceList" :key="d.device_id" :value="d.device_id">{{ d.device_name || d.device_id }}</option>
+                                        </select>
+                                        <button @click="transferFile" class="btn-sm btn-green" style="font-size: 10px;">传输</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- ═══ 工具配置 ═══ -->
                     <div v-show="tab === 'tools'" style="flex: 1; overflow-y: auto;">
                         <div class="glass-card p-4">
@@ -234,6 +373,38 @@
                                 <button @click="createAgentDynamic" class="btn-sm btn-blue" :disabled="!agentTaskDesc.trim()">智能创建</button>
                             </div>
                             <div v-if="agentCreateStatus" class="mt-2" style="font-size: 11px;" :class="agentCreateStatus.success ? 'valid' : 'invalid'">{{ agentCreateStatus.message }}</div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">👥 孪生指挥 / Swarm</div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="provider-chip">
+                                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 6px;">🔀 孪生指挥</div>
+                                    <input v-model="twinTask" type="text" placeholder="任务描述..." class="island-input w-full px-2.5 py-1.5 mb-2" style="font-size: 11px; border-radius: 10px;">
+                                    <div class="flex space-x-2 mb-2">
+                                        <select v-model="twinStrategy" class="island-input flex-1 px-2 py-1" style="font-size: 11px; border-radius: 10px; appearance: none;">
+                                            <option value="SPECIALIZED">SPECIALIZED</option>
+                                            <option value="PARALLEL">PARALLEL</option>
+                                            <option value="SWARM">SWARM</option>
+                                        </select>
+                                        <select v-model="twinCount" class="island-input px-2 py-1" style="font-size: 11px; border-radius: 10px; width: 60px; appearance: none;">
+                                            <option v-for="n in 5" :key="n" :value="n+1">{{ n+1 }}</option>
+                                        </select>
+                                    </div>
+                                    <button @click="createTwin" class="btn-sm btn-purple w-full" :disabled="!twinTask.trim()">创建孪生团队</button>
+                                    <div v-if="twinResult" class="mt-2" style="font-size: 10px; color: rgba(255,255,255,0.5);">{{ twinResult }}</div>
+                                </div>
+                                <div class="provider-chip">
+                                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 6px;">🐝 Agent Swarm</div>
+                                    <input v-model="swarmTask" type="text" placeholder="Swarm 任务描述..." class="island-input w-full px-2.5 py-1.5 mb-2" style="font-size: 11px; border-radius: 10px;">
+                                    <div class="flex space-x-2 mb-2">
+                                        <select v-model="swarmCount" class="island-input flex-1 px-2 py-1" style="font-size: 11px; border-radius: 10px; appearance: none;">
+                                            <option v-for="n in 10" :key="n" :value="n+1">{{ n+1 }} agents</option>
+                                        </select>
+                                    </div>
+                                    <button @click="createSwarm" class="btn-sm btn-green w-full" :disabled="!swarmTask.trim()">创建 Swarm</button>
+                                    <div v-if="swarmResult" class="mt-2" style="font-size: 10px; color: rgba(255,255,255,0.5);">{{ swarmResult }}</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="glass-card p-4">
                             <div class="flex items-center justify-between mb-3">
@@ -364,6 +535,25 @@
                 const agentTaskDesc = ref('');
                 const agentCreateStatus = ref(null);
 
+                // Twin / Swarm
+                const twinTask = ref('');
+                const twinStrategy = ref('SPECIALIZED');
+                const twinCount = ref(2);
+                const twinResult = ref('');
+                const swarmTask = ref('');
+                const swarmCount = ref(3);
+                const swarmResult = ref('');
+
+                // Protocols (MCP / Skill)
+                const mcpServers = ref([]);
+                const skills = ref([]);
+
+                // Devices
+                const deviceList = ref([]);
+                const crossDeviceSource = ref('');
+                const transferSource = ref('');
+                const transferTarget = ref('');
+
                 const tools = ref([]);
                 const nodes = ref([]);
                 const testMessage = ref('Hello');
@@ -403,6 +593,60 @@
                 };
 
                 const loadAgents = async () => { try { agents.value = (await axios.get('/api/v1/agents')).data.agents || []; } catch (e) {} };
+                const createTwin = async () => {
+                    if (!twinTask.value.trim()) return;
+                    twinResult.value = '创建中...';
+                    try {
+                        const r = await axios.post('/api/v1/agents/twin', { task: twinTask.value, strategy: twinStrategy.value, member_count: twinCount.value });
+                        twinResult.value = r.data.success ? `团队 ${r.data.team_id} 创建成功` : (r.data.error || '创建失败');
+                        twinTask.value = ''; loadAgents();
+                    } catch (e) { twinResult.value = '失败: ' + (e.response?.data?.detail || e.message); }
+                };
+                const createSwarm = async () => {
+                    if (!swarmTask.value.trim()) return;
+                    swarmResult.value = '创建中...';
+                    try {
+                        const r = await axios.post('/api/v1/agents/swarm', { task: swarmTask.value, agent_count: swarmCount.value });
+                        swarmResult.value = r.data.success ? `Swarm (${r.data.agent_count} agents) 创建成功` : (r.data.error || '创建失败');
+                        swarmTask.value = ''; loadAgents();
+                    } catch (e) { swarmResult.value = '失败: ' + (e.response?.data?.detail || e.message); }
+                };
+
+                // Protocol methods
+                const loadProtocols = async () => {
+                    try { mcpServers.value = ((await axios.get('/api/v1/protocols/mcp')).data.servers || []).map(s => ({ ...s, showTools: false, tools: [] })); } catch (e) {}
+                    try { skills.value = (await axios.get('/api/v1/protocols/skills')).data.skills || []; } catch (e) {}
+                };
+                const toggleMcpTools = async (server) => {
+                    if (server.showTools) { server.showTools = false; return; }
+                    try { server.tools = (await axios.get('/api/v1/protocols/mcp/' + server.name + '/tools')).data.tools || []; } catch (e) { server.tools = []; }
+                    server.showTools = true;
+                };
+                const unloadMcp = async (name) => { try { await axios.delete('/api/v1/protocols/mcp/' + name); loadProtocols(); } catch (e) {} };
+                const loadSkill = async (name) => { try { await axios.post('/api/v1/protocols/skills/load', { name }); loadProtocols(); } catch (e) {} };
+                const unloadSkill = async (name) => { try { await axios.delete('/api/v1/protocols/skills/' + name); loadProtocols(); } catch (e) {} };
+
+                // Device methods
+                const loadDevices = async () => { try { deviceList.value = (await axios.get('/api/v1/devices')).data.devices || []; } catch (e) {} };
+                const discoverDevices = async () => { try { await axios.post('/api/v1/devices/discover-active'); loadDevices(); } catch (e) {} };
+                const showDeviceTelemetry = async (device) => {
+                    try { device.telemetry = (await axios.get('/api/v1/devices/' + device.device_id + '/telemetry')).data; } catch (e) { device.telemetry = { error: e.message }; }
+                };
+                const sendDeviceCmd = async (deviceId) => {
+                    const cmd = prompt('命令名称:');
+                    if (!cmd) return;
+                    try { await axios.post('/api/v1/devices/' + deviceId + '/command', { command: cmd, params: {} }); alert('命令已发送'); } catch (e) { alert('发送失败: ' + e.message); }
+                };
+                const syncClipboard = async () => {
+                    if (!crossDeviceSource.value) return;
+                    try { await axios.post('/api/v1/devices/cross-device', { command: 'clipboard_sync', context: { source_device: crossDeviceSource.value } }); } catch (e) {}
+                };
+                const transferFile = async () => {
+                    if (!transferSource.value || !transferTarget.value) return;
+                    const path = prompt('源文件路径:');
+                    if (!path) return;
+                    try { await axios.post('/api/v1/devices/transfer', { source_device: transferSource.value, target_device: transferTarget.value, file_path: path }); alert('传输请求已发送'); } catch (e) { alert('传输失败: ' + e.message); }
+                };
                 const loadAgentTemplates = async () => { try { agentTemplates.value = (await axios.get('/api/v1/agents/templates')).data.templates || []; } catch (e) {} };
                 const createAgentFromTemplate = async () => {
                     if (!selectedTemplate.value) return;
@@ -471,8 +715,13 @@
                     isExpanded, tab, currentTime, configStatus, oneapiUrl, oneapiKey, oneapiStatus,
                     directProviders, nodeApis, nodeApiCategories, agents, agentTemplates,
                     selectedTemplate, agentTaskDesc, agentCreateStatus,
+                    twinTask, twinStrategy, twinCount, twinResult, swarmTask, swarmCount, swarmResult,
+                    mcpServers, skills, deviceList, crossDeviceSource, transferSource, transferTarget,
                     tools, nodes, testMessage, testResult, inputMessage, chatReply, configuredCount,
                     loadNodeApis, saveNodeApiKey, loadAgents, createAgentFromTemplate, createAgentDynamic, deleteAgent,
+                    createTwin, createSwarm,
+                    loadProtocols, toggleMcpTools, unloadMcp, loadSkill, unloadSkill,
+                    loadDevices, discoverDevices, showDeviceTelemetry, sendDeviceCmd, syncClipboard, transferFile,
                     saveOneAPI, validateOneAPI, saveProvider, validateProvider,
                     saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage
                 };
