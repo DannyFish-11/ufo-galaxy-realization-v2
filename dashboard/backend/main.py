@@ -1249,7 +1249,12 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    try:
+        from core.port_config import get_service_port
+        _dashboard_port = get_service_port("dashboard_backend")
+    except Exception:
+        _dashboard_port = 8080
+    uvicorn.run(app, host="0.0.0.0", port=_dashboard_port)
 
 
 # ============================================================================

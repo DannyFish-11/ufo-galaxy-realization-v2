@@ -396,4 +396,9 @@ async def stats() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    try:
+        from core.port_config import get_service_port
+        _gw_port = get_service_port("gateway")
+    except Exception:
+        _gw_port = 8000
+    uvicorn.run(app, host="0.0.0.0", port=_gw_port)
