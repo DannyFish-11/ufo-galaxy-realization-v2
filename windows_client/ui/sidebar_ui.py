@@ -283,8 +283,41 @@ class McpSkillPanel(ModePanel):
         super().__init__("MCP / Skill", parent)
         self.info = QTextEdit()
         self.info.setReadOnly(True)
-        self.info.setPlaceholderText("MCP 服务 & Skill 协议...")
+        self.info.setPlaceholderText("MCP 服务 & Skill 协议...\n加载中...")
         self._layout.addWidget(self.info, 1)
+
+        # 刷新按钮
+        refresh_btn = QPushButton("刷新")
+        refresh_btn.clicked.connect(self.fetch_from_api)
+        self._layout.addWidget(refresh_btn)
+
+        self._api_base = "http://localhost:8080"
+
+    def fetch_from_api(self):
+        """从 Dashboard API 获取 MCP/Skill 状态"""
+        try:
+            import httpx
+            client = httpx.Client(timeout=5.0)
+            mcp_data = {}
+            skill_data = {}
+            try:
+                resp = client.get(f"{self._api_base}/api/v1/config/mcp-servers")
+                if resp.status_code == 200:
+                    mcp_data = resp.json()
+            except Exception:
+                pass
+            try:
+                resp = client.get(f"{self._api_base}/api/v1/config/skills")
+                if resp.status_code == 200:
+                    skill_data = resp.json()
+            except Exception:
+                pass
+            client.close()
+            self.load_status(mcp_data, skill_data)
+        except ImportError:
+            self.info.setPlainText("需要安装 httpx: pip install httpx")
+        except Exception as e:
+            self.info.setPlainText(f"获取状态失败: {e}")
 
     def load_status(self, mcp_data=None, skill_data=None):
         lines = ["── MCP Server ──"]

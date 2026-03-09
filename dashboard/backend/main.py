@@ -964,7 +964,8 @@ async def dashboard_chat(request: dict):
     message = request.get("message", "")
     device_id = request.get("device_id", "")
     context = request.get("context", [])
-    session_id = device_id or "default"
+    session_id = request.get("session_id", "") or device_id or "default"
+    user_id = request.get("user_id", "default")
 
     logger.info(f"Dashboard Chat: {message[:50]}...")
 
@@ -1470,6 +1471,184 @@ async def set_tool_api_key(request: dict):
         success = api_manager.set_api_key("tools", tool_id, api_key)
         return {"success": success}
     return {"success": False, "error": "API manager not available"}
+
+
+# ============================================================================
+# MCP 服务器管理
+# ============================================================================
+
+@app.get("/api/v1/config/mcp-servers")
+async def list_mcp_servers():
+    """列出已配置的 MCP 服务器及其状态"""
+    try:
+        from core.mcp_loader import mcp_loader
+        servers = []
+        for name, srv in mcp_loader.servers.items():
+            servers.append({
+                "name": name,
+                "status": "running" if srv.get("process") and srv["process"].returncode is None else "stopped",
+                "command": srv.get("command", ""),
+                "tools_count": len(srv.get("tools", [])),
+                "tools": [t.get("name", "") for t in srv.get("tools", [])],
+            })
+
+        # 也读取配置文件中未启动的服务器
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "config", "mcp_servers.json"
+        )
+        if os.path.exists(config_path):
+            import json as _json
+            with open(config_path, "r", encoding="utf-8") as f:
+                mcp_config = _json.load(f)
+            for srv_cfg in mcp_config.get("servers", []):
+                if srv_cfg["name"] not in mcp_loader.servers:
+                    servers.append({
+                        "name": srv_cfg["name"],
+                        "status": "configured",
+                        "command": srv_cfg.get("command", ""),
+                        "auto_start": srv_cfg.get("auto_start", False),
+                        "tools_count": 0,
+                        "tools": [],
+                    })
+
+        return {"success": True, "servers": servers}
+    except Exception as e:
+        return {"success": False, "error": str(e), "servers": []}
+
+
+@app.post("/api/v1/config/mcp-servers")
+async def add_mcp_server(request: dict):
+    """添加或修改 MCP 服务器配置"""
+    name = request.get("name", "")
+    command = request.get("command", "")
+    auto_start = request.get("auto_start", False)
+    env = request.get("env", {})
+
+    if not name or not command:
+        return {"success": False, "error": "name 和 command 必填"}
+
+    try:
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "config", "mcp_servers.json"
+        )
+        import json as _json
+        config = {"servers": []}
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = _json.load(f)
+
+        # 更新或添加
+        found = False
+        for srv in config["servers"]:
+            if srv["name"] == name:
+                srv["command"] = command
+                srv["auto_start"] = auto_start
+                srv["env"] = env
+                found = True
+                break
+        if not found:
+            config["servers"].append({
+                "name": name,
+                "command": command,
+                "auto_start": auto_start,
+                "env": env,
+            })
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            _json.dump(config, f, ensure_ascii=False, indent=2)
+
+        return {"success": True, "message": f"MCP 服务器 '{name}' 已{'更新' if found else '添加'}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.delete("/api/v1/config/mcp-servers/{name}")
+async def remove_mcp_server(name: str):
+    """移除 MCP 服务器配置"""
+    try:
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "config", "mcp_servers.json"
+        )
+        import json as _json
+        if not os.path.exists(config_path):
+            return {"success": False, "error": "配置文件不存在"}
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = _json.load(f)
+
+        config["servers"] = [s for s in config["servers"] if s["name"] != name]
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            _json.dump(config, f, ensure_ascii=False, indent=2)
+
+        # 如果正在运行，尝试停止
+        try:
+            from core.mcp_loader import mcp_loader
+            if name in mcp_loader.servers:
+                await mcp_loader.unload(name)
+        except Exception:
+            pass
+
+        return {"success": True, "message": f"MCP 服务器 '{name}' 已移除"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# Skill 管理
+# ============================================================================
+
+@app.get("/api/v1/config/skills")
+async def list_skills():
+    """列出已加载的 Skill 及状态"""
+    try:
+        from core.skill_loader import skill_loader
+        skills = []
+        for name, skill in skill_loader.skills.items():
+            skills.append({
+                "name": name,
+                "description": getattr(skill, "description", ""),
+                "status": "loaded",
+                "actions": list(getattr(skill, "actions", {}).keys()) if hasattr(skill, "actions") else [],
+            })
+
+        # 扫描 skills 目录中未加载的
+        skills_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "skills"
+        )
+        if os.path.isdir(skills_dir):
+            for entry in os.listdir(skills_dir):
+                entry_path = os.path.join(skills_dir, entry)
+                if os.path.isdir(entry_path) and entry not in [s["name"] for s in skills]:
+                    skills.append({
+                        "name": entry,
+                        "description": "",
+                        "status": "available",
+                        "actions": [],
+                    })
+
+        return {"success": True, "skills": skills}
+    except Exception as e:
+        return {"success": False, "error": str(e), "skills": []}
+
+
+@app.post("/api/v1/config/skills/reload")
+async def reload_skills():
+    """重新加载所有 Skill"""
+    try:
+        from core.skill_loader import skill_loader
+        skill_loader.reload_all()
+        return {
+            "success": True,
+            "message": f"已重新加载 {len(skill_loader.skills)} 个 Skill",
+            "skills_count": len(skill_loader.skills),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # ============================================================================

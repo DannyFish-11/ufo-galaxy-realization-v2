@@ -146,6 +146,10 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
             await handle_command(connection_id, aip_msg)
         elif aip_msg.type == MessageType.DEVICE_STATUS:
             await handle_status(connection_id, aip_msg)
+        elif aip_msg.type == MessageType.WAKE_EVENT:
+            await handle_wake_event(connection_id, aip_msg)
+        elif aip_msg.type == MessageType.SESSION_MIGRATE:
+            await handle_session_migrate(connection_id, aip_msg)
         else:
             logger.debug(f"ℹ️ 未处理的消息类型: {aip_msg.type.value}")
 
@@ -320,3 +324,86 @@ async def push_command_result(request_id: str, status: str, results: Dict):
     
     await connection_manager.broadcast(message)
     logger.info(f"✅ 命令结果已推送: request_id={request_id}, status={status}")
+
+
+async def handle_wake_event(connection_id: str, aip_msg):
+    """处理唤醒事件 — 转发给 WakeEventBus 进行去重和路由"""
+    try:
+        device_id = aip_msg.device_id
+        payload = aip_msg.payload
+
+        from galaxy_gateway.wake_event_bus import wake_event_bus
+
+        dispatched = await wake_event_bus.handle_websocket_message(
+            device_id,
+            {"type": "WAKE_EVENT", "payload": payload},
+        )
+
+        # 唤醒同时创建/关联会话
+        if dispatched:
+            from core.e2e_orchestrator import process_wake_event
+
+            wake_result = await process_wake_event(
+                device_id=device_id,
+                wake_word=payload.get("wake_word", ""),
+                task_type=payload.get("task_type", "general"),
+                extra=payload.get("extra", {}),
+            )
+
+            # 发送确认响应
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": "wake_event_ack",
+                "device_id": device_id,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "payload": wake_result,
+            }
+            await connection_manager.send_message(connection_id, response)
+
+        logger.info(
+            f"✅ 唤醒事件已处理: device={device_id} "
+            f"dispatched={dispatched}"
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 处理唤醒事件失败: {e}")
+
+
+async def handle_session_migrate(connection_id: str, aip_msg):
+    """处理会话迁移请求"""
+    try:
+        device_id = aip_msg.device_id
+        payload = aip_msg.payload
+        session_id = payload.get("session_id", "")
+        target_device_id = payload.get("target_device_id", device_id)
+
+        from galaxy_gateway.session_roaming import session_roaming
+
+        success = await session_roaming.migrate_session(
+            session_id, target_device_id
+        )
+
+        response = {
+            "version": "3.0",
+            "message_id": str(uuid.uuid4()),
+            "correlation_id": aip_msg.message_id,
+            "type": MessageType.SESSION_MIGRATE_ACK.value,
+            "device_id": device_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": {
+                "session_id": session_id,
+                "target_device_id": target_device_id,
+                "success": success,
+            },
+        }
+        await connection_manager.send_message(connection_id, response)
+
+        logger.info(
+            f"✅ 会话迁移{'成功' if success else '失败'}: "
+            f"session={session_id} -> device={target_device_id}"
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 处理会话迁移失败: {e}")
