@@ -445,9 +445,10 @@ async def dashboard_websocket(websocket: WebSocket):
 
 # ===== 启动服务 =====
 if __name__ == "__main__":
+    _gateway_port = get_service_port("gateway")
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=9000,  # Galaxy Gateway 使用 9000 端口
+        port=_gateway_port,
         log_level="info"
     )

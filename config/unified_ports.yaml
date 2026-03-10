@@ -651,7 +651,7 @@ layer_advanced:
       description: "本地大语言模型"
       
     Node_80_MemorySystem:
-      port: 8080
+      port: 8180
       name: "MemorySystem"
       group: "advanced"
       critical: true
@@ -920,14 +920,14 @@ infrastructure:
       description: "Qdrant向量数据库"
       
     dashboard:
-      port: 3000
+      port: 8080
       name: "Dashboard"
-      description: "可视化监控面板"
+      description: "可视化监控面板 (Dashboard Backend / Web UI)"
       
     gateway:
-      port: 8088
+      port: 9000
       name: "Gateway"
-      description: "API网关服务"
+      description: "API网关服务 (Galaxy Gateway)"
       
     oneapi_web:
       port: 3001
@@ -955,3 +955,15 @@ port_conflicts_resolved:
     
   - old: "Node_64_Telemetry: 19999 (inconsistent)"
     new: "Node_64_Telemetry: 8063"
+
+  - old: "Node_80_MemorySystem: 8080 (conflict with Dashboard Backend)"
+    new: "Node_80_MemorySystem: 8180"
+
+  - old: "Gateway: 8088 (inconsistent with actual gateway_main.py)"
+    new: "Gateway: 9000"
+
+  - old: "Dashboard: 3000 (inconsistent with unified_launcher default)"
+    new: "Dashboard: 8080"
+
+  - old: "HealthMonitor: 9000 (conflict with Gateway)"
+    new: "HealthMonitor: 9100"

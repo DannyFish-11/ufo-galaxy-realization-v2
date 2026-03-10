@@ -1,6 +1,10 @@
 """
-Galaxy - Monitoring & Infrastructure Routes
-=================================================
+Galaxy - Monitoring & Infrastructure Routes (模块化版本)
+==========================================================
+
+注意: 这些路由与 core/api_routes.py 中的监控路由功能重复。
+当前 unified_launcher.py 使用 core/api_routes.py 中的版本。
+本模块可用于未来模块化重构，将路由从 api_routes.py 中拆分出来。
 
 Routes:
   GET /api/v1/monitoring/dashboard    - 监控仪表盘
