@@ -791,9 +791,6 @@ class UnifiedWebUI:
         return "<html><body><h1>Galaxy System</h1><p>Dashboard unavailable.</p></body></html>"
 
 
-# NOTE: 495行内联HTML已提取到 dashboard/frontend/public/fallback.html
-_REMOVED_HTML_PLACEHOLDER = "extracted"  # noqa: F841
-
 # ============================================================================
 # Galaxy 统一系统
 # ============================================================================
@@ -976,7 +973,7 @@ class GalaxyUnified:
 # 主函数
 # ============================================================================
 
-async def _run_check_only(galaxy: 'UFOGalaxyUnified'):
+async def _run_check_only(galaxy: 'GalaxyUnified'):
     """仅检查依赖和配置，输出完整系统状态表，不启动服务"""
     print_banner()
     print_section("系统检查模式 (--check-only)")

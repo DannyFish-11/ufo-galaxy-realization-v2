@@ -967,3 +967,33 @@ port_conflicts_resolved:
 
   - old: "HealthMonitor: 9000 (conflict with Gateway)"
     new: "HealthMonitor: 9100"
+
+# =============================================================================
+# Docker 宿主端口映射（防止冲突参考）
+# =============================================================================
+# 此段记录 docker-compose 中宿主机端口映射，用于避免未来端口冲突。
+# 容器内端口可能不同（如 memos 内部仍为 8080）。
+docker_host_ports:
+  description: "Docker 宿主机端口映射（避免冲突）"
+  mappings:
+    galaxy_main: 8080
+    gateway: 9000
+    memos: 8180
+    agentcpm: 8401
+    oneapi: 3001
+    grafana: 3000
+    minio_api: 9002
+    minio_console: 9001
+    neo4j_http: 7474
+    neo4j_bolt: 7687
+    qdrant_rest: 6333
+    qdrant_grpc: 6334
+    redis: 6379
+    mongodb: 27017
+    ollama: 11434
+    nats_client: 4222
+    nats_http: 8222
+    temporal: 7233
+    temporal_ui: 8233
+    galaxy_worker: 8300
+    prometheus: 9090

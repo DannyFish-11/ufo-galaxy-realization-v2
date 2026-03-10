@@ -20,7 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     HOST=0.0.0.0 \
-    PORT=8000
+    PORT=9000
 
 RUN groupadd -r galaxy && useradd -r -g galaxy -m -u 1000 galaxy \
     && mkdir -p /app/data /app/logs \
@@ -30,16 +30,17 @@ COPY --chown=galaxy:galaxy core/ ./core/
 COPY --chown=galaxy:galaxy config/ ./config/
 COPY --chown=galaxy:galaxy nodes/ ./nodes/
 COPY --chown=galaxy:galaxy enhancements/ ./enhancements/
+COPY --chown=galaxy:galaxy galaxy_gateway/ ./galaxy_gateway/
 COPY --chown=galaxy:galaxy dashboard/ ./dashboard/
 COPY --chown=galaxy:galaxy daemon/ ./daemon/
 COPY --chown=galaxy:galaxy requirements.txt .
 
 USER galaxy
 
-EXPOSE 8000
+EXPOSE 9000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -sf http://localhost:${PORT}/health || exit 1
 
 ENTRYPOINT ["tini", "--"]
-CMD ["python", "-c", "import uvicorn; from core.api_routes import app; uvicorn.run(app, host='0.0.0.0', port=8000)"]
+CMD ["python", "-m", "uvicorn", "galaxy_gateway.app:app", "--host", "0.0.0.0", "--port", "9000"]

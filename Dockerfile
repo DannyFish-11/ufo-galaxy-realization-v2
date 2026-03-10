@@ -53,8 +53,8 @@ COPY --chown=galaxy:galaxy . .
 
 USER galaxy
 
-# Ports: API=8080, Dashboard=8001, WS=8000
-EXPOSE 8080 8001 8000
+# Main API + Web UI (灵动岛 Dashboard)
+EXPOSE 8080
 
 # Health check (uses core health endpoint)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
