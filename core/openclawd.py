@@ -23,7 +23,7 @@ Galaxy-Nexus 星枢核心智能体 — OpenClawd
 import logging
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 logger = logging.getLogger("Galaxy.OpenClawd")
 
@@ -263,11 +263,284 @@ class OpenClawd:
         }
 
     # ========================================================================
-    # handle_chat — 纯聊天 (无设备命令)
+    # 工具总线 — 三层统一收集与分发
+    # ========================================================================
+
+    def _collect_tools(self) -> List[Dict]:
+        """统一收集三层工具（MCP / Skill / Node），转为 OpenAI function calling 格式
+
+        返回格式: [{"type": "function", "function": {"name": "mcp__server__tool", ...}}, ...]
+        前缀约定:
+          - mcp__<server_id>__<tool_name>   → MCP 协议工具
+          - skill__<skill_id>               → Skill 技能
+          - node__<node_id>__<action>       → Node 节点操作
+        """
+        tools: List[Dict] = []
+
+        # ── 层 1: MCP 服务器工具 ──
+        try:
+            from core.mcp_loader import mcp_loader
+            import asyncio
+
+            for server_info in mcp_loader.list_servers():
+                server_id = server_info.get("id", "")
+                if server_info.get("status") != "running":
+                    continue
+                # list_tools 是 async，但 _collect_tools 是 sync
+                # 使用已缓存的 tools 列表（如果可用）
+                cached_tools = server_info.get("tools", [])
+                for tool in cached_tools:
+                    tool_name = tool.get("name", "")
+                    if not tool_name:
+                        continue
+                    tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": f"mcp__{server_id}__{tool_name}",
+                            "description": tool.get("description", f"MCP tool: {tool_name}"),
+                            "parameters": tool.get("inputSchema", tool.get("parameters", {
+                                "type": "object", "properties": {}
+                            })),
+                        },
+                    })
+        except Exception as e:
+            logger.debug(f"收集 MCP 工具失败: {e}")
+
+        # ── 层 1.5: MCP Gateway 自造工具 ──
+        try:
+            from core.mcp_gateway import get_mcp_gateway
+            gateway = get_mcp_gateway()
+            for tool in gateway.list_generated_tools():
+                tool_name = tool.get("name", "")
+                if not tool_name:
+                    continue
+                tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": f"mcp__gateway__{tool_name}",
+                        "description": tool.get("description", f"Generated tool: {tool_name}"),
+                        "parameters": tool.get("parameters", {
+                            "type": "object", "properties": {}
+                        }),
+                    },
+                })
+        except Exception as e:
+            logger.debug(f"收集 MCP Gateway 工具失败: {e}")
+
+        # ── 层 2: Skill 技能 ──
+        try:
+            from core.skill_loader import skill_loader
+
+            for skill_info in skill_loader.list_skills():
+                skill_id = skill_info.get("id", "")
+                if not skill_id or skill_info.get("status") == "error":
+                    continue
+                tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": f"skill__{skill_id}",
+                        "description": skill_info.get("description", f"Skill: {skill_id}"),
+                        "parameters": skill_info.get("parameters", {
+                            "type": "object",
+                            "properties": {
+                                "input": {"type": "string", "description": "输入参数"}
+                            },
+                        }),
+                    },
+                })
+        except Exception as e:
+            logger.debug(f"收集 Skill 工具失败: {e}")
+
+        # ── 层 3: Node 节点操作 ──
+        try:
+            import json as _json
+            import os as _os
+            registry_path = _os.path.join(
+                _os.path.dirname(_os.path.dirname(__file__)), "config", "node_registry.json"
+            )
+            if _os.path.exists(registry_path):
+                with open(registry_path, "r", encoding="utf-8") as f:
+                    registry = _json.load(f)
+                for node in registry.get("nodes", []):
+                    node_id = node.get("id", "")
+                    for action in node.get("actions", []):
+                        action_name = action if isinstance(action, str) else action.get("name", "")
+                        action_desc = action if isinstance(action, str) else action.get("description", "")
+                        if not action_name:
+                            continue
+                        tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": f"node__{node_id}__{action_name}",
+                                "description": f"Node {node_id}: {action_desc}",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "params": {"type": "object", "description": "操作参数"}
+                                    },
+                                },
+                            },
+                        })
+        except Exception as e:
+            logger.debug(f"收集 Node 工具失败: {e}")
+
+        logger.info(f"工具总线收集完成: {len(tools)} 个工具")
+        return tools
+
+    async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
+        """根据工具名前缀分发到对应执行器
+
+        Args:
+            tool_name: 格式为 "mcp__server__tool" / "skill__id" / "node__id__action"
+            arguments: 工具参数
+
+        Returns:
+            {"success": bool, "result": Any, "error": Optional[str]}
+        """
+        try:
+            if tool_name.startswith("mcp__"):
+                parts = tool_name.split("__", 2)
+                if len(parts) < 3:
+                    return {"success": False, "error": f"无效 MCP 工具名: {tool_name}"}
+                server_id, mcp_tool_name = parts[1], parts[2]
+
+                # 特殊处理 gateway 自造工具
+                if server_id == "gateway":
+                    try:
+                        from core.mcp_gateway import get_mcp_gateway
+                        gateway = get_mcp_gateway()
+                        result = await gateway.execute_tool(mcp_tool_name, arguments)
+                        return {"success": True, "result": result}
+                    except Exception as e:
+                        return {"success": False, "error": f"Gateway 工具执行失败: {e}"}
+
+                from core.mcp_loader import mcp_loader
+                result = await mcp_loader.call_tool(server_id, mcp_tool_name, arguments)
+                return {"success": True, "result": result}
+
+            elif tool_name.startswith("skill__"):
+                skill_id = tool_name[7:]  # len("skill__") == 7
+                from core.skill_loader import skill_loader
+                result = await skill_loader.execute(skill_id, **arguments)
+                return {"success": True, "result": result}
+
+            elif tool_name.startswith("node__"):
+                parts = tool_name.split("__", 2)
+                if len(parts) < 3:
+                    return {"success": False, "error": f"无效 Node 工具名: {tool_name}"}
+                node_id, action_name = parts[1], parts[2]
+                # 通过节点通信协议执行
+                try:
+                    from core.node_communication import get_node_communicator
+                    comm = get_node_communicator()
+                    result = await comm.call_node(node_id, action_name, arguments.get("params", arguments))
+                    return {"success": True, "result": result}
+                except ImportError:
+                    return {"success": False, "error": f"节点通信模块不可用，无法调用 {node_id}"}
+
+            else:
+                return {"success": False, "error": f"未知工具前缀: {tool_name}"}
+
+        except Exception as e:
+            logger.warning(f"工具执行失败 [{tool_name}]: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _react_loop(
+        self,
+        messages: List[Dict],
+        tools: List[Dict],
+        max_iterations: int = 10,
+        task_type: Optional[str] = None,
+    ) -> dict:
+        """ReAct 工具调用循环
+
+        循环流程:
+          1. 调用 LLM（带 tools）
+          2. 如果 LLM 返回 tool_calls → 执行每个工具 → 追加结果到 messages → 继续
+          3. 如果 LLM 返回纯文本（无 tool_calls） → break，返回最终文本
+
+        Returns:
+            {"response": str, "tool_calls_log": List, "iterations": int,
+             "provider": str, "model": str}
+        """
+        from core.multi_llm_router import get_llm_router
+        router = get_llm_router()
+
+        tool_calls_log: List[Dict] = []
+        last_response = None
+
+        for iteration in range(max_iterations):
+            response = await router.chat(
+                messages=messages,
+                tools=tools if tools else None,
+                task_type=task_type,
+                max_tokens=4096,
+            )
+            last_response = response
+
+            if not response.tool_calls:
+                # 无工具调用 → 最终回复
+                break
+
+            # 处理每个 tool_call
+            # 先把 assistant 的 tool_calls 消息追加到 messages
+            assistant_msg: Dict[str, Any] = {
+                "role": "assistant",
+                "content": response.content or "",
+            }
+            if response.tool_calls:
+                assistant_msg["tool_calls"] = response.tool_calls
+            messages.append(assistant_msg)
+
+            for tc in response.tool_calls:
+                tc_func = tc.get("function", {})
+                tc_name = tc_func.get("name", "")
+                tc_id = tc.get("id", f"call_{tc_name}")
+
+                # 解析参数
+                try:
+                    import json as _json
+                    tc_args = _json.loads(tc_func.get("arguments", "{}"))
+                except (ValueError, TypeError):
+                    tc_args = {}
+
+                logger.info(f"ReAct 迭代 {iteration+1}: 调用工具 {tc_name}")
+
+                # 执行工具
+                result = await self._dispatch_tool_call(tc_name, tc_args)
+                tool_calls_log.append({
+                    "iteration": iteration + 1,
+                    "tool": tc_name,
+                    "arguments": tc_args,
+                    "result": result,
+                })
+
+                # 追加 tool result 到 messages
+                result_content = str(result.get("result", result.get("error", "")))
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": result_content[:4000],  # 截断过长结果
+                })
+
+        final_text = last_response.content if last_response else ""
+        return {
+            "response": final_text,
+            "tool_calls_log": tool_calls_log,
+            "iterations": min(iteration + 1, max_iterations) if last_response else 0,
+            "provider": last_response.provider if last_response else "",
+            "model": last_response.model if last_response else "",
+        }
+
+    # ========================================================================
+    # handle_chat — 对话（带 ReAct 工具调用能力）
     # ========================================================================
 
     async def handle_chat(self, message: str, session_id: str) -> dict:
-        """纯聊天 — 使用 MultiLLMRouter 进行 LLM 对话
+        """对话处理 — 使用 ReAct 循环，支持自动工具调用
+
+        流程: 构建 messages → 收集 tools → _react_loop() → 返回结果
+        如果没有可用工具，退化为普通 LLM 对话。
 
         Args:
             message: 用户消息
@@ -295,9 +568,10 @@ class OpenClawd:
                 {
                     "role": "system",
                     "content": (
-                        "你是 Galaxy 智能助手 (OpenClawd)，一个 L4 级自主性 AI 系统。\n"
+                        "你是 Galaxy 智能助手 (OpenClawd)，一个桌面级超级 AI 智能体。\n"
                         "你可以帮助用户进行对话、任务管理、设备控制、代码执行等操作。\n"
-                        "当用户需要操作设备时，请告知他们描述具体操作即可。"
+                        "当你需要执行操作时，请使用提供的工具。\n"
+                        "如果没有合适的工具，直接用文字回答。"
                     ),
                 },
             ]
@@ -309,21 +583,21 @@ class OpenClawd:
 
             messages.append({"role": "user", "content": message})
 
-            # 调用 LLM
-            response = await router.chat(
-                messages=messages,
-                task_type="GENERAL",
-                max_tokens=4096,
-            )
+            # 收集可用工具
+            tools = self._collect_tools()
+
+            # 使用 ReAct 循环
+            result = await self._react_loop(messages, tools)
 
             return {
                 "success": True,
-                "response": response.content,
+                "response": result["response"],
                 "metadata": {
-                    "provider": response.provider,
-                    "model": response.model,
-                    "latency_ms": round(response.latency_ms, 1),
-                    "tokens": response.input_tokens + response.output_tokens,
+                    "provider": result.get("provider", ""),
+                    "model": result.get("model", ""),
+                    "iterations": result.get("iterations", 1),
+                    "tool_calls": len(result.get("tool_calls_log", [])),
+                    "tool_calls_log": result.get("tool_calls_log", []),
                 },
             }
 

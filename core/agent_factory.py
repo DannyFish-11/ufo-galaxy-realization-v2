@@ -744,25 +744,100 @@ class AgentFactory:
         }
 
     async def _execute_single_task(self, agent: TaskAgent, task: Dict) -> Dict:
-        """执行单个任务（可被 wait_for 超时包装）"""
+        """执行单个任务 — 带 ReAct 工具调用循环
+
+        流程:
+          1. 构建 messages（system_prompt + task）
+          2. 收集可用工具（MCP/Skill/Node 三层）
+          3. 调用 LLM（带 tools）→ 如果有 tool_calls → 执行 → 追加结果 → 继续
+          4. 无 tool_calls 时返回最终文本
+        """
         if self.llm_router:
-            # 用 LLM 执行（带熔断器保护）
             messages = [
                 {"role": "system", "content": agent.config.system_prompt},
                 {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
             ]
 
-            async def _llm_call():
-                return await self.llm_router.chat(
-                    messages=messages,
-                    task_type="agent_control",
-                )
+            # 收集可用工具
+            tools = []
+            try:
+                from core.openclawd import get_openclawd
+                clawd = get_openclawd()
+                tools = clawd._collect_tools()
+            except Exception as e:
+                logger.debug(f"Agent 工具收集失败（降级为无工具模式）: {e}")
 
-            if self._llm_circuit_breaker:
-                resp = await self._llm_circuit_breaker.execute(_llm_call)
-            else:
-                resp = await _llm_call()
-            return {"task": task, "output": resp.content, "provider": resp.provider}
+            # ReAct 循环
+            tool_calls_log = []
+            max_react_iterations = 8
+
+            for iteration in range(max_react_iterations):
+                async def _llm_call():
+                    return await self.llm_router.chat(
+                        messages=messages,
+                        tools=tools if tools else None,
+                        task_type="agent_control",
+                    )
+
+                if self._llm_circuit_breaker:
+                    resp = await self._llm_circuit_breaker.execute(_llm_call)
+                else:
+                    resp = await _llm_call()
+
+                if not resp.tool_calls:
+                    # 无工具调用 → 最终回复
+                    return {
+                        "task": task,
+                        "output": resp.content,
+                        "provider": resp.provider,
+                        "tool_calls": tool_calls_log,
+                        "iterations": iteration + 1,
+                    }
+
+                # 处理 tool_calls
+                assistant_msg = {"role": "assistant", "content": resp.content or ""}
+                if resp.tool_calls:
+                    assistant_msg["tool_calls"] = resp.tool_calls
+                messages.append(assistant_msg)
+
+                for tc in resp.tool_calls:
+                    tc_func = tc.get("function", {})
+                    tc_name = tc_func.get("name", "")
+                    tc_id = tc.get("id", f"call_{tc_name}")
+
+                    try:
+                        tc_args = json.loads(tc_func.get("arguments", "{}"))
+                    except (ValueError, TypeError):
+                        tc_args = {}
+
+                    logger.info(f"Agent {agent.id} 调用工具: {tc_name}")
+
+                    # 通过 OpenClawd 分发工具调用
+                    try:
+                        result = await clawd._dispatch_tool_call(tc_name, tc_args)
+                    except Exception:
+                        result = {"success": False, "error": f"工具 {tc_name} 不可用"}
+
+                    tool_calls_log.append({
+                        "tool": tc_name, "arguments": tc_args, "result": result,
+                    })
+
+                    result_content = str(result.get("result", result.get("error", "")))
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": result_content[:4000],
+                    })
+
+            # 达到最大迭代次数
+            return {
+                "task": task,
+                "output": resp.content if resp else "Agent 达到最大迭代次数",
+                "provider": resp.provider if resp else "",
+                "tool_calls": tool_calls_log,
+                "iterations": max_react_iterations,
+            }
+
         else:
             # 无 LLM，模拟执行
             return {

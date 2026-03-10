@@ -97,7 +97,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
-        # ── 层 0: OpenClawd 优先入口 ──
+        # ── 层 0: OpenClawd 母体智能体 — 主入口 ──
+        # OpenClawd 是全系统唯一交互中枢，集成意图解析 + 多模型路由 +
+        # ReAct 工具调用 + Agent 协作。仅在 OpenClawd 不可用时降级到旧逻辑。
         try:
             from core.openclawd import get_openclawd
             clawd = get_openclawd()
@@ -106,24 +108,34 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 device_id=req.device_id,
                 session_id=req.session_id,
             )
-            if result.get("success"):
-                resp = UnifiedChatResponse(
-                    success=True,
-                    response=result.get("response", ""),
-                    intent=result.get("intent", "chat"),
-                    confidence=result.get("confidence", 1.0),
-                    mode="openclawd",
-                    model=result.get("model", ""),
-                    session_id=result.get("session_id", req.session_id or ""),
-                    data=result.get("metadata"),
-                )
-                resp_dict = resp.to_json_response()
-                resp_dict["reply"] = result.get("response", "")
-                return JSONResponse(resp_dict)
+            # OpenClawd 处理结果（无论成功失败都走这里）
+            metadata = result.get("metadata", {})
+            resp = UnifiedChatResponse(
+                success=result.get("success", False),
+                response=result.get("response", ""),
+                intent=result.get("intent", "chat"),
+                confidence=metadata.get("confidence", 1.0),
+                mode="openclawd",
+                model=metadata.get("model", ""),
+                session_id=metadata.get("session_id", req.session_id or ""),
+                data=metadata,
+            )
+            resp_dict = resp.to_json_response()
+            resp_dict["reply"] = result.get("response", "")
+            # 记录到会话管理器
+            try:
+                from core.session_manager import get_session_manager
+                sm = get_session_manager()
+                sid = req.session_id or req.device_id or "default"
+                sm.add_message(sid, "user", req.message, req.device_id)
+                sm.add_message(sid, "assistant", result.get("response", ""), req.device_id)
+            except Exception:
+                pass
+            return JSONResponse(resp_dict)
         except ImportError:
-            pass  # OpenClawd 未安装，继续使用原有逻辑
+            logger.info("OpenClawd 未安装，降级到 Scheduler 模式")
         except Exception as e:
-            logger.debug(f"OpenClawd 处理失败，降级到原有逻辑: {e}")
+            logger.warning(f"OpenClawd 处理异常，降级到 Scheduler 模式: {e}")
 
         # ── 统一会话管理 ──
         try:

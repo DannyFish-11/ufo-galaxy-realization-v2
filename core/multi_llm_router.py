@@ -617,6 +617,92 @@ class MultiLLMRouter:
 
         return models
 
+    # ───────── 复杂度评估 ─────────
+
+    def _compute_complexity_score(
+        self, messages: List[Dict], tools: Optional[List[Dict]] = None
+    ) -> float:
+        """量化评估任务复杂度 (0.0-1.0)
+
+        5 维向量加权求和：
+          - 上下文长度 (0.15)
+          - 逻辑深度 (0.25)
+          - 领域专业度 (0.20)
+          - 精度要求 (0.20)
+          - 工具需求 (0.20)
+        """
+        # 拼接全部文本
+        full_text = " ".join(m.get("content", "") for m in messages if isinstance(m.get("content"), str))
+        text_lower = full_text.lower()
+        char_count = len(full_text)
+
+        # ── 维度 1: 上下文长度 (weight=0.15) ──
+        # 粗略估算 token ≈ char_count / 3 (中文) 或 char_count / 4 (英文)
+        estimated_tokens = char_count / 3.5
+        dim_context = min(1.0, estimated_tokens / 8000)
+
+        # ── 维度 2: 逻辑深度 (weight=0.25) ──
+        logic_keywords = [
+            "如果", "那么", "否则", "但是", "然而", "因为", "所以", "首先", "其次", "最后",
+            "假设", "前提", "推导", "证明", "递归", "循环", "回溯", "遍历", "迭代",
+            "条件", "判断", "分支", "嵌套", "复杂", "步骤", "流程", "逻辑",
+            "if", "then", "else", "while", "for", "because", "therefore",
+            "first", "second", "finally", "assume", "prove", "recursive",
+            "algorithm", "iterate", "traverse", "backtrack",
+        ]
+        logic_hits = sum(1 for kw in logic_keywords if kw in text_lower)
+        dim_logic = min(1.0, logic_hits / 6)
+
+        # ── 维度 3: 领域专业度 (weight=0.20) ──
+        domain_keywords = [
+            # 代码 (含中文编程术语)
+            "def ", "class ", "import ", "function", "async", "await", "return",
+            "try:", "except", "raise", "lambda", "yield",
+            "python", "java", "rust", "typescript", "javascript",
+            "实现", "编程", "代码", "函数", "接口", "模块", "编译", "调试",
+            "算法", "数据结构", "排序", "求解", "优化", "注解", "类型",
+            "测试", "单元测试", "集成测试",
+            # 数学
+            "∑", "∫", "∂", "矩阵", "向量", "微分", "积分", "概率",
+            "matrix", "vector", "derivative", "integral", "probability",
+            # 专业
+            "API", "SDK", "协议", "架构", "数据库", "索引", "并发", "事务",
+            "database", "index", "concurrent", "transaction",
+            "机器学习", "深度学习", "神经网络", "模型训练",
+        ]
+        domain_hits = sum(1 for kw in domain_keywords if kw in full_text.lower())
+        dim_domain = min(1.0, domain_hits / 5)
+
+        # ── 维度 4: 精度要求 (weight=0.20) ──
+        precision_keywords = [
+            "精确", "准确", "正确", "严格", "必须", "确保", "验证", "要求",
+            "支持", "完整", "兼容", "标准", "规范",
+            "exact", "precise", "correct", "strict", "must", "verify",
+            "bug", "错误", "修复", "fix", "debug", "require",
+        ]
+        precision_hits = sum(1 for kw in precision_keywords if kw in text_lower)
+        dim_precision = min(1.0, precision_hits / 4)
+
+        # ── 维度 5: 工具需求 (weight=0.20) ──
+        tool_keywords = [
+            "文件", "目录", "搜索", "执行", "运行", "安装", "设备", "屏幕",
+            "file", "directory", "search", "execute", "run", "install", "device", "screen",
+            "打开", "关闭", "截图", "发送", "下载", "上传",
+        ]
+        tool_text_hits = sum(1 for kw in tool_keywords if kw in text_lower)
+        has_tools = 1.0 if tools and len(tools) > 0 else 0.0
+        dim_tools = min(1.0, max(tool_text_hits / 3, has_tools))
+
+        # ── 加权求和 ──
+        score = (
+            0.15 * dim_context
+            + 0.25 * dim_logic
+            + 0.20 * dim_domain
+            + 0.20 * dim_precision
+            + 0.20 * dim_tools
+        )
+        return round(min(1.0, score), 3)
+
     # ───────── 路由决策 ─────────
 
     def classify_task(self, messages: List[Dict], hint: Optional[str] = None) -> TaskType:
@@ -681,25 +767,46 @@ class MultiLLMRouter:
 
         return TaskType.GENERAL
 
+    def _select_model_by_complexity(
+        self, provider_name: str, task_type: TaskType, complexity: float
+    ) -> str:
+        """根据复杂度选择模型 — 简单任务用轻量模型，复杂任务用强模型"""
+        provider_models = PROVIDER_MODEL_MAP.get(provider_name, {})
+        default = self.providers[provider_name].default_model
+
+        if complexity < 0.3:
+            # LIGHT — 优先选快速/轻量模型
+            return provider_models.get(TaskType.FAST_RESPONSE, default)
+        elif complexity < 0.6:
+            # MEDIUM — 用任务类型推荐的模型
+            return provider_models.get(task_type, default)
+        else:
+            # HEAVY/EXPERT — 优先选推理/重型模型
+            heavy_model = provider_models.get(TaskType.REASONING, default)
+            return heavy_model
+
     def route(self, task_type: TaskType,
-              preferred_provider: Optional[str] = None) -> RoutingDecision:
+              preferred_provider: Optional[str] = None,
+              complexity_score: float = 0.5) -> RoutingDecision:
         """
-        根据任务类型做出路由决策
+        根据任务类型 + 复杂度评分做出路由决策
 
         优先级：
         1. 用户指定的提供商
         2. 任务类型推荐的提供商（跳过不可用的）
         3. 任意可用提供商
+
+        complexity_score: 0.0-1.0，影响模型等级选择
         """
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
             if prov.status != ProviderStatus.DOWN:
-                model = PROVIDER_MODEL_MAP.get(preferred_provider, {}).get(
-                    task_type, prov.default_model
+                model = self._select_model_by_complexity(
+                    preferred_provider, task_type, complexity_score
                 )
                 return RoutingDecision(
                     provider=preferred_provider, model=model,
-                    reason=f"用户指定提供商: {preferred_provider}",
+                    reason=f"用户指定提供商: {preferred_provider} (复杂度: {complexity_score:.2f})",
                 )
 
         # 按任务偏好排序
@@ -713,13 +820,13 @@ class MultiLLMRouter:
             if prov.status == ProviderStatus.DOWN:
                 continue
 
-            model = PROVIDER_MODEL_MAP.get(provider_name, {}).get(
-                task_type, prov.default_model
+            model = self._select_model_by_complexity(
+                provider_name, task_type, complexity_score
             )
             if not alternatives:
                 selected = RoutingDecision(
                     provider=provider_name, model=model,
-                    reason=f"任务类型 [{task_type.value}] 最佳匹配",
+                    reason=f"任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                 )
             alternatives.append(f"{provider_name}:{model}")
 
@@ -766,12 +873,13 @@ class MultiLLMRouter:
             response_format: 响应格式
             auto_failover: 是否自动故障转移
         """
-        # 1. 分类任务
+        # 1. 分类任务 + 复杂度评估
         classified = self.classify_task(messages, task_type)
-        logger.info(f"任务分类: {classified.value}")
+        complexity = self._compute_complexity_score(messages, tools)
+        logger.info(f"任务分类: {classified.value} | 复杂度: {complexity}")
 
-        # 2. 路由决策
-        decision = self.route(classified, provider)
+        # 2. 路由决策（综合任务类型 + 复杂度）
+        decision = self.route(classified, provider, complexity_score=complexity)
         logger.info(f"路由决策: {decision.provider}:{decision.model} ({decision.reason})")
 
         # 如果用户强制指定了 model，覆盖
@@ -841,6 +949,7 @@ class MultiLLMRouter:
                     "provider": prov_name,
                     "model": mdl,
                     "task_type": classified.value,
+                    "complexity": complexity,
                     "latency_ms": response.latency_ms,
                     "tokens": response.input_tokens + response.output_tokens,
                     "timestamp": time.time(),
