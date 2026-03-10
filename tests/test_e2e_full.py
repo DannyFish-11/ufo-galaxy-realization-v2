@@ -23,11 +23,7 @@ def test_1_core_modules_import():
         from enhancements.multidevice.cross_device_scheduler import CrossDeviceScheduler
         from enhancements.multidevice.failover_manager import FailoverManager
         from galaxy_gateway.android_bridge import AndroidBridge
-        # fusion.unified_orchestrator 已废弃，改用 galaxy_gateway.orchestrator
-        try:
-            from galaxy_gateway.orchestrator import GalaxyOrchestrator  # noqa: F401
-        except ImportError:
-            pass  # orchestrator 依赖 networkx，在无该依赖环境中跳过
+        from galaxy_gateway.orchestrator import GalaxyOrchestrator  # noqa: F401
         print("✅ 所有核心模块导入成功")
     except Exception as e:
         pytest.fail(f"模块导入失败: {e}")

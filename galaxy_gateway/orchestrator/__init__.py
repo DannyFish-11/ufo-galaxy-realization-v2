@@ -11,9 +11,20 @@ from .task_orchestrator import (
     MultiDeviceOrchestrator
 )
 
+from .galaxy_orchestrator import (
+    GalaxyOrchestrator,
+    AIGateway,
+    DeviceManager as GalaxyDeviceManager,
+    create_orchestrator,
+)
+
 __all__ = [
     "Task",
-    "TaskPriority", 
+    "TaskPriority",
     "TaskOrchestrator",
-    "MultiDeviceOrchestrator"
+    "MultiDeviceOrchestrator",
+    "GalaxyOrchestrator",
+    "AIGateway",
+    "GalaxyDeviceManager",
+    "create_orchestrator",
 ]
