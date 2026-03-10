@@ -91,10 +91,10 @@ except ImportError:
     AGENT_FACTORY_AVAILABLE = False
     agent_factory = None
 
-# 导入 LLM 路由器
+# 导入 LLM 路由器 — 使用全局单例，确保与 OpenClawd/Agent 共享同一实例
 try:
-    from core.multi_llm_router import MultiLLMRouter
-    llm_router = MultiLLMRouter()
+    from core.multi_llm_router import get_llm_router
+    llm_router = get_llm_router()
     LLM_ROUTER_AVAILABLE = True
     # 将路由器注入 AgentFactory
     if AGENT_FACTORY_AVAILABLE and agent_factory:
@@ -1820,7 +1820,12 @@ async def set_api_key(request: dict):
 
                 # 刷新 LLM Router 使其感知到新的 API Key
                 if LLM_ROUTER_AVAILABLE and llm_router:
-                    llm_router._discover_providers()
+                    try:
+                        import asyncio as _aio
+                        _aio.get_running_loop().create_task(llm_router.refresh_providers())
+                    except RuntimeError:
+                        # 没有运行中的事件循环时，使用同步发现
+                        llm_router._discover_providers()
 
         return {"success": success}
     return {"success": False, "error": "API manager not available"}

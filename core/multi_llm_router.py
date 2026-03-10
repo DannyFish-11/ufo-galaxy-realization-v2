@@ -849,7 +849,12 @@ class MultiLLMRouter:
                     reason=f"Fallback: 唯一可用提供商 {name}",
                 )
 
-        raise RuntimeError("没有可用的 LLM 提供商，请检查 API Key 配置")
+        # 无可用提供商 — 返回指向 none 的降级路由决策
+        logger.error("没有可用的 LLM 提供商")
+        return RoutingDecision(
+            provider="none", model="none",
+            reason="无可用提供商，请在 Dashboard 配置 API Key",
+        )
 
     # ───────── 统一调用入口 ─────────
 
@@ -999,8 +1004,15 @@ class MultiLLMRouter:
 
                 continue
 
-        raise RuntimeError(
-            f"所有提供商调用失败 (已尝试: {tried_providers})，请检查 API Key"
+        # 优雅降级：返回标准化错误响应而非崩溃
+        logger.error(f"所有提供商调用失败: {tried_providers}")
+        return LLMResponse(
+            content=f"所有 AI 服务暂时不可用（已尝试: {', '.join(tried_providers)}），请检查 API Key 配置后重试。",
+            provider="none",
+            model="none",
+            input_tokens=0,
+            output_tokens=0,
+            tool_calls=None,
         )
 
     # ───────── JSON 模式快捷方法 ─────────
@@ -1024,7 +1036,11 @@ class MultiLLMRouter:
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        return json.loads(text.strip())
+        try:
+            return json.loads(text.strip())
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"chat_json 解析失败: {e}，text[:200]={text[:200]}")
+            return {"error": "JSON 解析失败", "raw": text[:500]}
 
     # ───────── 状态查询 ─────────
 
