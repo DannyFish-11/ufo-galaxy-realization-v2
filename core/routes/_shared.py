@@ -13,13 +13,48 @@ Module-level singletons shared across all route modules:
 import asyncio
 import json
 import logging
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Set
 
 from fastapi import WebSocket
 
 logger = logging.getLogger("Galaxy.API")
+
+# ---------------------------------------------------------------------------
+# Device registry persistence helpers
+# ---------------------------------------------------------------------------
+
+_DEVICE_REGISTRY_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "registered_devices.json"
+
+
+def _load_registered_devices() -> Dict[str, Dict[str, Any]]:
+    """Load persisted device registry from disk (best-effort)."""
+    try:
+        if _DEVICE_REGISTRY_FILE.exists():
+            with open(_DEVICE_REGISTRY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Mark all loaded devices as offline (they need to re-heartbeat)
+            for dev in data.values():
+                dev["status"] = "offline"
+                dev["online"] = False
+            logger.info(f"Loaded {len(data)} persisted devices from {_DEVICE_REGISTRY_FILE}")
+            return data
+    except Exception as e:
+        logger.warning(f"Failed to load device registry: {e}")
+    return {}
+
+
+def _save_registered_devices(devices: Dict[str, Dict[str, Any]]) -> None:
+    """Persist device registry to disk (best-effort, non-blocking intent)."""
+    try:
+        os.makedirs(_DEVICE_REGISTRY_FILE.parent, exist_ok=True)
+        with open(_DEVICE_REGISTRY_FILE, "w", encoding="utf-8") as f:
+            json.dump(devices, f, ensure_ascii=False, indent=2, default=str)
+    except Exception as e:
+        logger.warning(f"Failed to save device registry: {e}")
 
 
 # ============================================================================
@@ -218,8 +253,8 @@ ConnectionManager = RouteConnectionPool
 
 connection_manager = RouteConnectionPool()
 
-# 设备注册表
-registered_devices: Dict[str, Dict[str, Any]] = {}
+# 设备注册表（启动时从磁盘加载）
+registered_devices: Dict[str, Dict[str, Any]] = _load_registered_devices()
 registered_devices_lock = asyncio.Lock()
 
 # 任务队列

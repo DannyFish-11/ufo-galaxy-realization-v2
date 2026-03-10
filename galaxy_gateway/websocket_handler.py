@@ -151,7 +151,18 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
         elif aip_msg.type == MessageType.SESSION_MIGRATE:
             await handle_session_migrate(connection_id, aip_msg)
         else:
-            logger.debug(f"ℹ️ 未处理的消息类型: {aip_msg.type.value}")
+            logger.warning(f"⚠️ 未处理的消息类型: {aip_msg.type.value}")
+            error_resp = {
+                "version": "3.0",
+                "type": "error",
+                "device_id": aip_msg.device_id,
+                "correlation_id": aip_msg.message_id,
+                "payload": {
+                    "error": f"Unsupported message type: {aip_msg.type.value}",
+                    "original_type": aip_msg.type.value,
+                },
+            }
+            await websocket.send_json(error_resp)
 
     except Exception as e:
         logger.error(f"❌ 消息处理失败: {e}")
