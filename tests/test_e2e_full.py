@@ -11,6 +11,8 @@ import asyncio
 import json
 from typing import Dict, Any
 
+import pytest
+
 
 def test_1_core_modules_import():
     """测试 1: 核心模块导入"""
@@ -20,16 +22,15 @@ def test_1_core_modules_import():
         from enhancements.learning.autonomous_learning_engine import AutonomousLearningEngine
         from enhancements.multidevice.cross_device_scheduler import CrossDeviceScheduler
         from enhancements.multidevice.failover_manager import FailoverManager
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            from fusion.unified_orchestrator import UnifiedOrchestrator
         from galaxy_gateway.android_bridge import AndroidBridge
+        # fusion.unified_orchestrator 已废弃，改用 galaxy_gateway.orchestrator
+        try:
+            from galaxy_gateway.orchestrator import GalaxyOrchestrator  # noqa: F401
+        except ImportError:
+            pass  # orchestrator 依赖 networkx，在无该依赖环境中跳过
         print("✅ 所有核心模块导入成功")
-        return True
     except Exception as e:
-        print(f"❌ 模块导入失败: {e}")
-        return False
+        pytest.fail(f"模块导入失败: {e}")
 
 
 def test_2_core_modules_instantiation():
@@ -53,11 +54,8 @@ def test_2_core_modules_instantiation():
         
         bridge = AndroidBridge()
         print("✅ AndroidBridge 实例化成功")
-        
-        return True
     except Exception as e:
-        print(f"❌ 模块实例化失败: {e}")
-        return False
+        pytest.fail(f"模块实例化失败: {e}")
 
 
 def test_3_node_loading():
@@ -67,8 +65,7 @@ def test_3_node_loading():
     nodes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'nodes')
     
     if not os.path.exists(nodes_dir):
-        print(f"❌ 节点目录不存在: {nodes_dir}")
-        return False
+        pytest.fail(f"节点目录不存在: {nodes_dir}")
     
     node_dirs = [d for d in os.listdir(nodes_dir) if d.startswith('Node_') and os.path.isdir(os.path.join(nodes_dir, d))]
     print(f"📊 发现 {len(node_dirs)} 个节点目录")
@@ -86,7 +83,7 @@ def test_3_node_loading():
             print(f"❌ {node_name} 不存在")
     
     print(f"📊 关键节点检查: {success_count}/{len(key_nodes)}")
-    return success_count == len(key_nodes)
+    assert success_count == len(key_nodes), f"Key nodes check: {success_count}/{len(key_nodes)}"
 
 
 async def test_4_android_bridge_message():
@@ -97,30 +94,18 @@ async def test_4_android_bridge_message():
         from galaxy_gateway.android_bridge import AndroidBridge, MessageBuilder
         
         bridge = AndroidBridge()
-        
-        # 测试设备注册消息
-        device_info = {
-            'device_id': 'test_device_001',
-            'device_type': 'ANDROID_PHONE',
-            'capabilities': ['ui_control', 'sensor_access']
-        }
-        
-        result = await bridge.register_device(device_info)
-        if result:
-            print("✅ 设备注册成功")
-        else:
-            print("⚠️  设备注册返回 False（可能是正常行为）")
-        
-        # 测试消息构建
+        print("✅ AndroidBridge 实例化成功")
+
+        # 测试消息构建（register_device 不存在，改用 MessageBuilder）
         msg = MessageBuilder.device_register_ack('test_device_001', success=True)
-        print(f"✅ 消息构建成功: {msg['message_type']}")
-        
-        return True
+        assert 'message_type' in msg or 'type' in msg
+        print(f"✅ 消息构建成功: {msg.get('message_type', msg.get('type'))}")
+
+        # 测试内部设备注册处理器存在
+        assert hasattr(bridge, '_handle_device_register'), "AndroidBridge 应有 _handle_device_register 方法"
+        print("✅ 设备注册处理器存在")
     except Exception as e:
-        print(f"❌ 安卓桥接测试失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        pytest.fail(f"安卓桥接测试失败: {e}")
 
 
 async def test_5_cross_device_scheduling():
@@ -129,16 +114,22 @@ async def test_5_cross_device_scheduling():
     
     try:
         from enhancements.multidevice.cross_device_scheduler import CrossDeviceScheduler
-        from enhancements.multidevice.device_protocol import TaskInfo, TaskPriority, DeviceInfo, DeviceStatus
-        
+        from enhancements.multidevice.device_protocol import TaskInfo, TaskPriority, DeviceInfo, DeviceStatus, DeviceCapabilities
+
         scheduler = CrossDeviceScheduler()
-        
-        # 注册测试设备
+
+        # 注册测试设备（匹配 DeviceInfo 完整签名）
         device = DeviceInfo(
             device_id='test_device_001',
             device_type='ANDROID_PHONE',
+            device_name='Test Phone',
+            device_model='Test Model',
+            os_version='Android 14',
+            app_version='1.0.0',
+            ip_address='127.0.0.1',
+            port=8033,
+            capabilities=DeviceCapabilities(custom_features=['ui_control']),
             status=DeviceStatus.ONLINE,
-            capabilities=['ui_control']
         )
         
         await scheduler.register_device(device)
@@ -152,16 +143,14 @@ async def test_5_cross_device_scheduling():
             payload={'action': 'click', 'x': 100, 'y': 200}
         )
         
-        # 提交任务
-        result = await scheduler.submit_task(task)
+        # 提交任务（submit_task 签名: task_type, payload）
+        result = await scheduler.submit_task(
+            task_type='ui_control',
+            payload={'action': 'click', 'x': 100, 'y': 200},
+        )
         print(f"✅ 任务提交成功: {result}")
-        
-        return True
     except Exception as e:
-        print(f"❌ 跨设备调度测试失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        pytest.fail(f"跨设备调度测试失败: {e}")
 
 
 def test_6_physical_device_nodes():
@@ -192,7 +181,7 @@ def test_6_physical_device_nodes():
             print(f"❌ {node_name} ({description}) - 不存在")
     
     print(f"📊 物理设备节点: {success_count}/{len(physical_nodes)}")
-    return success_count >= 3
+    assert success_count >= 3, f"Physical device nodes: {success_count}/{len(physical_nodes)}"
 
 
 async def run_all_tests():

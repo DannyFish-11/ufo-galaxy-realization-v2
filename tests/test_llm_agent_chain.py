@@ -36,7 +36,6 @@ def test_1_llm_manager_init():
 
     assert isinstance(mgr.get_provider_status(), list)
     print("  ✅ LLMManager 初始化成功")
-    return mgr
 
 
 def test_2_scheduler_tool_discovery():
@@ -68,8 +67,6 @@ def test_2_scheduler_tool_discovery():
     print(f"  '打开手机微信' 相关工具: {relevant_names[:5]}...")
     assert "send_to_device" in relevant_names, "send_to_device 应该被选中"
     print("  ✅ 工具智能选择正常")
-
-    return scheduler
 
 
 def test_3_intent_routing():

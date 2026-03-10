@@ -15,7 +15,7 @@ from typing import Dict, Optional, Callable, Set
 from datetime import datetime, timedelta
 
 from fastapi import WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..protocol import AIPMessage, MessageType, create_error_message
 from ..protocol.compat import parse_message_compat
@@ -31,8 +31,7 @@ class DeviceConnection(BaseModel):
     last_heartbeat: datetime
     is_active: bool = True
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class WebSocketManager:

@@ -21,11 +21,28 @@ import urllib.request
 import urllib.error
 import threading
 from typing import Dict, Any, Optional
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer
 
-from ui.galaxy_client_ui import GalaxyClientUI
-from ui.sidebar_ui import SidebarUI  # legacy fallback
+try:
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtCore import QThread, pyqtSignal, QTimer
+    PYQT5_AVAILABLE = True
+except ImportError:
+    PYQT5_AVAILABLE = False
+    QApplication = None
+    QThread = object  # fallback base class
+    pyqtSignal = lambda *a: None
+    QTimer = None
+
+try:
+    from ui.galaxy_client_ui import GalaxyClientUI
+except ImportError:
+    GalaxyClientUI = None
+
+try:
+    from ui.sidebar_ui import SidebarUI  # legacy fallback
+except ImportError:
+    SidebarUI = None
+
 from autonomy.autonomy_manager import WindowsAutonomyManager
 from core.port_config import get_service_port
 
@@ -395,6 +412,17 @@ def main():
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+
+    if not PYQT5_AVAILABLE:
+        print("错误: 无法加载 OPPO 光场 UI 模块 — PyQt5 未安装")
+        print("请安装依赖: pip install PyQt5 PyQtWebEngine")
+        print("如使用 conda: conda install pyqt")
+        sys.exit(1)
+
+    if GalaxyClientUI is None:
+        print("错误: 无法加载 GalaxyClientUI 模块")
+        print("请检查 windows_client/ui/galaxy_client_ui.py 及其依赖")
+        sys.exit(1)
 
     try:
         app = QApplication(sys.argv)

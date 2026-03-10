@@ -143,7 +143,6 @@ class TestPydanticModels(unittest.TestCase):
         self.assertEqual(request.timeout, 60)
 
 
-@pytest.mark.asyncio
 class TestUnifiedCommandEndpoint:
     """测试统一命令端点（使用 pytest）"""
     

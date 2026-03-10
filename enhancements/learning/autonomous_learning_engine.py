@@ -24,11 +24,28 @@ from typing import Dict, List, Optional, Any, Callable, Set, Tuple, AsyncIterato
 from dataclasses import dataclass, field, asdict
 from enum import Enum, auto
 from collections import deque
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import DBSCAN
-from sklearn.decomposition import PCA
-import aiohttp
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
+
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.cluster import DBSCAN
+    from sklearn.decomposition import PCA
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    TfidfVectorizer = None
+    DBSCAN = None
+    PCA = None
+    SKLEARN_AVAILABLE = False
+
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
 
 # Configure logging
 logging.basicConfig(
@@ -297,7 +314,7 @@ class LearningObservation:
     content: str
     timestamp: datetime
     metadata: Dict[str, Any] = field(default_factory=dict)
-    embeddings: Optional[np.ndarray] = None
+    embeddings: Optional[Any] = None  # np.ndarray when numpy available
     confidence: float = 0.0
     
     def __post_init__(self):
@@ -397,12 +414,14 @@ class PatternRecognizer:
     
     def __init__(self, min_confidence: float = 0.6, max_buffer_size: int = 5000):
         self.min_confidence = min_confidence
-        self.vectorizer = TfidfVectorizer(max_features=500, stop_words='english')
-        self.pca = PCA(n_components=min(50, 100))
-        self.clusterer = DBSCAN(eps=0.5, min_samples=3)
+        self.vectorizer = TfidfVectorizer(max_features=500, stop_words='english') if SKLEARN_AVAILABLE else None
+        self.pca = PCA(n_components=min(50, 100)) if SKLEARN_AVAILABLE else None
+        self.clusterer = DBSCAN(eps=0.5, min_samples=3) if SKLEARN_AVAILABLE else None
         self._patterns: Dict[str, DiscoveredPattern] = {}
         self._observation_buffer: deque = deque(maxlen=max_buffer_size)
         self._fitted_vectorizer = False  # 避免重复 fit
+        if not SKLEARN_AVAILABLE:
+            logger.warning("sklearn 不可用，模式识别将以基础模式运行")
         logger.info("PatternRecognizer initialized")
     
     async def recognize_patterns(
@@ -456,6 +475,9 @@ class PatternRecognizer:
         observations: List[LearningObservation]
     ) -> List[DiscoveredPattern]:
         """Recognize semantic patterns using clustering."""
+        if not SKLEARN_AVAILABLE or not NUMPY_AVAILABLE:
+            logger.debug("sklearn/numpy 不可用，跳过语义模式识别")
+            return []
         if len(observations) < 5:
             return []
 
@@ -532,8 +554,12 @@ class PatternRecognizer:
             
             # Look for periodic patterns
             patterns = []
-            mean_diff = np.mean(time_diffs)
-            std_diff = np.std(time_diffs)
+            if NUMPY_AVAILABLE:
+                mean_diff = np.mean(time_diffs)
+                std_diff = np.std(time_diffs)
+            else:
+                mean_diff = sum(time_diffs) / len(time_diffs)
+                std_diff = (sum((x - mean_diff) ** 2 for x in time_diffs) / len(time_diffs)) ** 0.5
             
             # If low variance, might be periodic
             if std_diff / mean_diff < 0.3 and mean_diff > 0:
@@ -565,6 +591,9 @@ class PatternRecognizer:
         observations: List[LearningObservation]
     ) -> List[DiscoveredPattern]:
         """Detect anomalous observations."""
+        if not SKLEARN_AVAILABLE or not NUMPY_AVAILABLE:
+            logger.debug("sklearn/numpy 不可用，跳过异常检测")
+            return []
         if len(observations) < 10:
             return []
         
@@ -820,7 +849,12 @@ class KnowledgeAccumulator:
         return {
             'total_items': len(self._knowledge),
             'history_events': len(self._knowledge_history),
-            'avg_confidence': np.mean([k['confidence'] for k in self._knowledge.values()]) if self._knowledge else 0,
+            'avg_confidence': (
+                np.mean([k['confidence'] for k in self._knowledge.values()])
+                if NUMPY_AVAILABLE and self._knowledge else
+                (sum(k['confidence'] for k in self._knowledge.values()) / len(self._knowledge))
+                if self._knowledge else 0
+            ),
             'sources': len(set(
                 source for k in self._knowledge.values() for source in k['sources']
             ))

@@ -18,6 +18,9 @@ import time
 from typing import List
 
 import pytest
+
+pytest.importorskip("websockets", reason="websockets package required for WebRTC tests")
+
 import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient

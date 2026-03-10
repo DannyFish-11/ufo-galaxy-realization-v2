@@ -36,21 +36,22 @@ class TestEventTypeCompleteness:
         assert isinstance(event_bus, EventBus)
 
 
+@pytest.mark.asyncio
 class TestEventBridgeWire:
     """验证 EventBridge.wire() 不会崩溃"""
 
-    def test_wire_idempotent(self):
+    async def test_wire_idempotent(self):
         """wire() 调用两次不应报错"""
         from core.event_bridge import EventBridge
         bridge = EventBridge()
-        bridge.wire()
-        bridge.wire()  # 第二次应为 no-op
+        await bridge.wire()
+        await bridge.wire()  # 第二次应为 no-op
 
-    def test_wire_completes_without_error(self):
+    async def test_wire_completes_without_error(self):
         """wire() 应在所有服务不可用时仍能完成（graceful degradation）"""
         from core.event_bridge import EventBridge
         bridge = EventBridge.__new__(EventBridge)
         bridge._wired = False
         bridge.logger = logging.getLogger("test_bridge")
         # Should not raise even if services are unavailable
-        bridge.wire()
+        await bridge.wire()

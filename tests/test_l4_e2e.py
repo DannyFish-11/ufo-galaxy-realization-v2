@@ -265,7 +265,7 @@ def test_autonomous_coding():
     # assert result.success, "代码生成应该成功"  # 跳过，因为没有 LLM
     print(f"✓ 错误: {len(result.errors)} 个")
     print("✓ 自主编程测试通过")
-    return result
+    assert result is not None
 
 
 async def test_full_cycle():
@@ -356,12 +356,9 @@ async def main():
         print("\n✓ L4 级自主性智能系统已就绪！")
         
     except Exception as e:
-        print(f"\n✗ 测试失败: {e}")
         import traceback
         traceback.print_exc()
-        return False
-    
-    return True
+        raise AssertionError(f"测试失败: {e}") from e
 
 
 if __name__ == "__main__":
