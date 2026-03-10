@@ -124,12 +124,16 @@ except ImportError:
     DEVICE_TWIN_AVAILABLE = False
     device_twin_engine = None
 
-# 导入 Agent Team 管理器（注入 twin_manager）
+# 导入 Agent Team 管理器（注入 twin_manager，需要 factory 和 router 都可用）
 try:
     from core.agent_team import TeamManager
-    team_manager = TeamManager(agent_factory, llm_router, twin_manager=twin_manager)
-    TEAM_MANAGER_AVAILABLE = True
-except ImportError:
+    if agent_factory and llm_router:
+        team_manager = TeamManager(agent_factory, llm_router, twin_manager=twin_manager)
+        TEAM_MANAGER_AVAILABLE = True
+    else:
+        team_manager = None
+        TEAM_MANAGER_AVAILABLE = False
+except (ImportError, Exception) as e:
     TEAM_MANAGER_AVAILABLE = False
     team_manager = None
 

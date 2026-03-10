@@ -606,19 +606,31 @@ class OpenClawd:
 
             def _call_sync(action: str):
                 """调用 execute，处理 sync/async 两种模式"""
-                if node_info["type"] == "function":
-                    func = node_info["execute"]
-                    if inspect.iscoroutinefunction(func):
-                        result = asyncio.run(func(action, {}))
+                try:
+                    if node_info["type"] == "function":
+                        func = node_info["execute"]
+                        if inspect.iscoroutinefunction(func):
+                            # 尝试在新事件循环中运行（仅在非 async 上下文有效）
+                            try:
+                                loop = asyncio.get_running_loop()
+                                # 已在运行的 loop 中 → asyncio.run 会崩溃，跳过
+                                return None
+                            except RuntimeError:
+                                return asyncio.run(func(action, {}))
+                        else:
+                            return func(action, {})
                     else:
-                        result = func(action, {})
-                else:
-                    method = node_info["instance"].execute
-                    if inspect.iscoroutinefunction(method):
-                        result = asyncio.run(method(action))
-                    else:
-                        result = method(action)
-                return result
+                        method = node_info["instance"].execute
+                        if inspect.iscoroutinefunction(method):
+                            try:
+                                loop = asyncio.get_running_loop()
+                                return None
+                            except RuntimeError:
+                                return asyncio.run(method(action))
+                        else:
+                            return method(action)
+                except Exception:
+                    return None
 
             _skip = {"status", "help"}
 

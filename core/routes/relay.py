@@ -10,7 +10,7 @@ Routes:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -63,8 +63,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(result.to_dict())
 
     @router.post("/api/v1/relay/broadcast")
-    async def relay_broadcast(source_device: str = "", payload_type: str = "task", payload: Dict[str, Any] = {}):
+    async def relay_broadcast(source_device: str = "", payload_type: str = "task", payload: Optional[Dict[str, Any]] = None):
         """从一台设备广播到所有其他在线设备"""
+        if payload is None:
+            payload = {}
         results = await proxy_relay.relay_broadcast(source_device, payload_type, payload)
         return JSONResponse({
             "source": source_device,
