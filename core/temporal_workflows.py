@@ -15,17 +15,19 @@ Constraints (see plan 强约束):
   C1  — no DI, direct instantiation
   C5  — configured via ``GALAXY_TEMPORAL_URL``; graceful degradation if unavailable
   C7  — activities return ``{"success": bool, "error": ...}``
-  C11 — loguru logger
+  C11 — uses stdlib ``logging`` (matching codebase convention)
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import uuid
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
-from loguru import logger
+logger = logging.getLogger("temporal_workflows")
 
 # Temporal SDK — may not be installed
 try:
@@ -100,8 +102,6 @@ async def wait_for_result_activity(task_id: str, timeout_ms: int = 60_000) -> di
     Returns ``{"success": True, "data": <serialized TaskResultModel>}``
     or ``{"success": False, "error": "timeout"}``.
     """
-    import asyncio
-
     from core.nats_bus import nats_bus
 
     result_holder: dict = {}
@@ -146,7 +146,7 @@ async def generate_tool_activity(description: str, context: dict) -> dict:
             f"- Output ONLY the Python code, no markdown fences"
         )
 
-        response = await llm_manager.chat(prompt)
+        response = await llm_manager.simple_chat(prompt)
         code = response.get("content", "") if isinstance(response, dict) else str(response)
 
         if not code.strip():
@@ -243,8 +243,7 @@ class CodeExecutionWorkflow:
             # Step 4: check if LSP failed and retryable
             if status == "lsp_failed" and attempt <= max_retries:
                 logger.info(
-                    "CodeExecutionWorkflow: LSP failed on attempt {}/{}, retrying",
-                    attempt, max_retries,
+                    f"CodeExecutionWorkflow: LSP failed on attempt {attempt}/{max_retries}, retrying"
                 )
                 # Generate new task_id for retry
                 task_data["task_id"] = str(uuid.uuid4())
@@ -316,7 +315,6 @@ class MultiDeviceTaskWorkflow:
                 )
             )
 
-        import asyncio
         results = await asyncio.gather(*result_tasks, return_exceptions=True)
 
         # Aggregate
@@ -413,10 +411,10 @@ async def get_temporal_client() -> Optional[Any]:
 
     try:
         client = await TemporalClient.connect(url)
-        logger.info("temporal_workflows: connected to Temporal at {}", url)
+        logger.info(f"temporal_workflows: connected to Temporal at {url}")
         return client
     except Exception as exc:
-        logger.error("temporal_workflows: connection failed — {}", exc)
+        logger.error(f"temporal_workflows: connection failed — {exc}")
         return None
 
 
@@ -441,5 +439,5 @@ async def start_temporal_worker(client: Any, task_queue: str = "galaxy-tasks") -
             test_tool_activity,
         ],
     )
-    logger.info("temporal_workflows: worker started on queue '{}'", task_queue)
+    logger.info(f"temporal_workflows: worker started on queue '{task_queue}'")
     return worker

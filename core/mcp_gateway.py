@@ -19,13 +19,14 @@ Constraints (see plan 强约束):
   C1  — module-level singleton ``mcp_gateway``
   C2  — emits MCP_TOOL_GENERATED / REGISTERED / RELOADED events to EventBus
   C7  — all methods return ``{"success": bool, "error": ...}``
-  C11 — loguru logger
+  C11 — uses stdlib ``logging`` (matching codebase convention)
 """
 
 from __future__ import annotations
 
 import fnmatch
 import json
+import logging
 import os
 import tempfile
 import uuid
@@ -33,7 +34,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from loguru import logger
+logger = logging.getLogger("mcp_gateway")
 
 from core.acl import AntiCorruptionLayer, acl
 from core.nats_bus import NATSBus, nats_bus
@@ -58,16 +59,11 @@ _TOOLS_DIR = os.path.join(
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import EventBus, EventType
+        from integration.event_bus import event_bus, EventType
 
-        bus = EventBus()
         et = getattr(EventType, event_type_name, None)
         if et is not None:
-            import asyncio
-
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(bus.emit(et, data))
+            event_bus.publish_sync(et, "agentic_os", data)
     except Exception:
         pass
 
@@ -109,7 +105,7 @@ class MCPDynamicGateway:
         Returns ``{"success": True, "tool_name": ..., "server_id": ...}``
         or error dict.
         """
-        logger.info("MCPGateway: handling capability gap for tool '{}'", missing_tool)
+        logger.info(f"MCPGateway: handling capability gap for tool '{missing_tool}'")
 
         # Step 1: Generate tool code via LLM
         gen_result = await self._generate_tool_code(missing_tool, context)
@@ -186,7 +182,7 @@ class MCPDynamicGateway:
 
             if existing:
                 await loader.stop(server_id)
-                logger.info("MCPGateway: stopped existing server {} for hot-reload", server_id)
+                logger.info(f"MCPGateway: stopped existing server {server_id} for hot-reload")
 
             # Save new script
             if registration.script_content:
@@ -202,11 +198,11 @@ class MCPDynamicGateway:
             )
 
             _try_emit_event("MCP_TOOL_RELOADED", {"tool_name": tool_name, "server_id": server_id})
-            logger.info("MCPGateway: hot-reloaded tool '{}'", tool_name)
+            logger.info(f"MCPGateway: hot-reloaded tool '{tool_name}'")
             return {"success": True, "server_id": server_id}
 
         except Exception as exc:
-            logger.error("MCPGateway: hot-reload failed for '{}' — {}", tool_name, exc)
+            logger.error(f"MCPGateway: hot-reload failed for '{tool_name}' — {exc}")
             return {"success": False, "error": str(exc)}
 
     async def sync_tool_registry(self) -> dict:
@@ -225,7 +221,7 @@ class MCPDynamicGateway:
             timestamp=TimestampModel.now(),
         )
         result = await self._nats.publish_event(event)
-        logger.info("MCPGateway: synced {} tools to workers", len(tools))
+        logger.info(f"MCPGateway: synced {len(tools)} tools to workers")
         return {"success": True, "synced": len(tools), "nats_result": result}
 
     async def list_all_tools(
@@ -288,7 +284,7 @@ class MCPDynamicGateway:
                 f"- Output ONLY the Python code, no markdown fences"
             )
 
-            response = await llm_manager.chat(prompt)
+            response = await llm_manager.simple_chat(prompt)
             code = response.get("content", "") if isinstance(response, dict) else str(response)
 
             if not code.strip():
@@ -319,7 +315,7 @@ class MCPDynamicGateway:
         safe_name = tool_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
         script_path = Path(_TOOLS_DIR) / f"{safe_name}.py"
         script_path.write_text(code, encoding="utf-8")
-        logger.info("MCPGateway: saved tool script to {}", script_path)
+        logger.info(f"MCPGateway: saved tool script to {script_path}")
         return script_path
 
     async def _register_tool(self, tool_name: str, script_path: Path) -> dict:

@@ -46,7 +46,7 @@ class ServiceConfig:
     """服务配置"""
     node_name: str = "Node_32_Reserved"
     plugin_dir: str = os.getenv("UFO_PLUGIN_DIR", "./plugins")
-    health_check_port: int = 8080
+    health_check_port: int = 8032
     plugins: Dict[str, PluginConfig] = field(default_factory=dict)
 
 # --- 插件基类 ---

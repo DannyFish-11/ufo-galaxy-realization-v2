@@ -106,7 +106,7 @@ class ConfigManager:
                            "Health monitoring", ["65"], 10),
             "79": NodeConfig("79", "LocalLLM", NodeGroup.CORE, 8079,
                            "Local LLM inference", [], 15),
-            "80": NodeConfig("80", "MemorySystem", NodeGroup.CORE, 8080,
+            "80": NodeConfig("80", "MemorySystem", NodeGroup.CORE, 8180,
                            "Memory management", [], 15),
         }
         

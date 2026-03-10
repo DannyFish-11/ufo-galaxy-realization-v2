@@ -88,13 +88,13 @@ python main.py
 ### 1. 健康检查
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8180/health
 ```
 
 ### 2. 保存短期记忆
 
 ```bash
-curl -X POST http://localhost:8080/memory \
+curl -X POST http://localhost:8180/memory \
   -H "Content-Type: application/json" \
   -d '{
     "content": "用户喜欢蓝色",
@@ -107,7 +107,7 @@ curl -X POST http://localhost:8080/memory \
 ### 3. 保存长期记忆
 
 ```bash
-curl -X POST http://localhost:8080/memory \
+curl -X POST http://localhost:8180/memory \
   -H "Content-Type: application/json" \
   -d '{
     "content": "Galaxy 是一个分布式 AI 代理系统",
@@ -120,7 +120,7 @@ curl -X POST http://localhost:8080/memory \
 ### 4. 回忆记忆
 
 ```bash
-curl -X POST http://localhost:8080/memory/recall \
+curl -X POST http://localhost:8180/memory/recall \
   -H "Content-Type: application/json" \
   -d '{
     "query": "Galaxy",
@@ -131,7 +131,7 @@ curl -X POST http://localhost:8080/memory/recall \
 ### 5. 保存对话
 
 ```bash
-curl -X POST http://localhost:8080/conversation \
+curl -X POST http://localhost:8180/conversation \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "user123_session",
@@ -145,13 +145,13 @@ curl -X POST http://localhost:8080/conversation \
 ### 6. 获取对话历史
 
 ```bash
-curl http://localhost:8080/conversation/user123_session?limit=10
+curl http://localhost:8180/conversation/user123_session?limit=10
 ```
 
 ### 7. 设置用户偏好
 
 ```bash
-curl -X POST http://localhost:8080/preference \
+curl -X POST http://localhost:8180/preference \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "user123",
@@ -163,13 +163,13 @@ curl -X POST http://localhost:8080/preference \
 ### 8. 获取用户偏好
 
 ```bash
-curl http://localhost:8080/preference/user123/language
+curl http://localhost:8180/preference/user123/language
 ```
 
 ### 9. 获取用户统计
 
 ```bash
-curl http://localhost:8080/stats/user123
+curl http://localhost:8180/stats/user123
 ```
 
 ---
@@ -187,7 +187,7 @@ async def chat_with_memory(user_input: str, session_id: str):
     
     # 1. 获取对话历史（Node 80）
     history_response = await client.get(
-        f"http://localhost:8080/conversation/{session_id}"
+        f"http://localhost:8180/conversation/{session_id}"
     )
     history = history_response.json()["messages"]
     
@@ -207,7 +207,7 @@ async def chat_with_memory(user_input: str, session_id: str):
     
     # 4. 保存对话到 Node 80
     await client.post(
-        "http://localhost:8080/conversation",
+        "http://localhost:8180/conversation",
         json={
             "session_id": session_id,
             "messages": [
@@ -309,7 +309,7 @@ rm user_profile.db-journal  # 删除日志文件
 session_id = f"{user_id}_{date}_{topic}"
 
 # 定期清理过期会话
-await client.delete(f"http://localhost:8080/session/{session_id}")
+await client.delete(f"http://localhost:8180/session/{session_id}")
 ```
 
 ### 3. 性能优化

@@ -12,16 +12,18 @@ Constraints (see plan 强约束):
   C2  — emits events through ``integration.event_bus.EventBus``
   C3  — uses ``resolve_device_type()`` for string→enum coercion
   C7  — returns ``{"success": bool, "error": str | None, ...}`` dicts
-  C11 — uses ``loguru`` logger
+  C11 — uses stdlib ``logging`` (matching codebase convention)
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, Optional, Type, TypeVar
 
-from loguru import logger
 from pydantic import BaseModel, ValidationError
+
+logger = logging.getLogger("acl")
 
 from core.device_types import resolve_device_type
 from core.schemas.contracts import (
@@ -44,18 +46,11 @@ _MAX_PAYLOAD_SIZE = 10_485_760
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import EventBus, EventType
+        from integration.event_bus import event_bus, EventType
 
-        bus = EventBus()
         et = getattr(EventType, event_type_name, None)
         if et is not None:
-            import asyncio
-
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(bus.emit(et, data))
-            else:
-                loop.run_until_complete(bus.emit(et, data))
+            event_bus.publish_sync(et, "agentic_os", data)
     except Exception:
         pass
 
@@ -128,10 +123,10 @@ class AntiCorruptionLayer:
         # Primary validation
         try:
             model = model_cls.model_validate(normalized)
-            logger.debug("ACL: {} validated successfully ({})", label, type(model).__name__)
+            logger.debug(f"ACL: {label} validated successfully ({type(model).__name__})")
             return {"success": True, "data": model}
         except ValidationError as exc:
-            logger.warning("ACL: {} primary validation failed, attempting fallback", label)
+            logger.warning(f"ACL: {label} primary validation failed, attempting fallback")
             return await self._fallback_validate(raw, model_cls, label, exc)
 
     async def _fallback_validate(
@@ -151,7 +146,7 @@ class AntiCorruptionLayer:
 
         try:
             model = model_cls.model_validate(extracted)
-            logger.info("ACL: {} fallback succeeded with {} fields", label, len(extracted))
+            logger.info(f"ACL: {label} fallback succeeded with {len(extracted)} fields")
             _try_emit_event("ACL_NORMALIZATION_APPLIED", {
                 "label": label,
                 "original_fields": len(raw),
@@ -261,7 +256,7 @@ class AntiCorruptionLayer:
         raw_input: Any,
         details: Any = None,
     ) -> dict:
-        logger.warning("ACL: {} — {}", label, error_msg)
+        logger.warning(f"ACL: {label} — {error_msg}")
         result: dict = {
             "success": False,
             "error": f"ACL validation failed: {error_msg}",

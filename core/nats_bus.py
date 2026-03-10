@@ -11,7 +11,7 @@ Constraints (see plan 强约束):
   C5  — configured via ``GALAXY_NATS_URL`` env var; no-op mode if not set
   C7  — all methods return ``{"success": bool, "error": str | None, ...}``
   C8  — exposes ``is_connected()`` and ``get_stats()``
-  C11 — loguru logger
+  C11 — uses stdlib ``logging`` (matching codebase convention)
   C12 — JSON wire format matching Pydantic model field names (snake_case)
 """
 
@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 from typing import Any, Callable, Dict, Optional
 
-from loguru import logger
+logger = logging.getLogger("nats_bus")
 
 from core.schemas.contracts import (
     AgentEventModel,
@@ -49,14 +50,11 @@ except ImportError:
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import EventBus, EventType
+        from integration.event_bus import event_bus, EventType
 
-        bus = EventBus()
         et = getattr(EventType, event_type_name, None)
         if et is not None:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(bus.emit(et, data))
+            event_bus.publish_sync(et, "agentic_os", data)
     except Exception:
         pass
 
@@ -110,7 +108,7 @@ class NATSBus:
 
         if self._noop:
             reason = "nats-py not installed" if not _HAS_NATS else "GALAXY_NATS_URL not set"
-            logger.warning("NATSBus: operating in no-op mode ({})", reason)
+            logger.warning(f"NATSBus: operating in no-op mode ({reason})")
 
     @classmethod
     def get_instance(cls) -> NATSBus:
@@ -155,16 +153,16 @@ class NATSBus:
                             storage="file",
                         )
                     )
-                    logger.info("NATSBus: created stream {}", name)
+                    logger.info(f"NATSBus: created stream {name}")
 
             self._connected = True
             _try_emit_event("NATS_CONNECTED", {"url": target})
-            logger.info("NATSBus: connected to {}", target)
+            logger.info(f"NATSBus: connected to {target}")
             return {"success": True}
 
         except Exception as exc:
             self._stats["errors"] += 1
-            logger.error("NATSBus: connection failed — {}", exc)
+            logger.error(f"NATSBus: connection failed — {exc}")
             return {"success": False, "error": str(exc)}
 
     async def disconnect(self) -> dict:
@@ -273,11 +271,11 @@ class NATSBus:
             payload = json.dumps(data, default=str).encode("utf-8")
             ack = await self._js.publish(subject, payload)
             self._stats["published"] += 1
-            logger.debug("NATSBus: published to {} (seq={})", subject, ack.seq)
+            logger.debug(f"NATSBus: published to {subject} (seq={ack.seq})")
             return {"success": True, "seq": ack.seq}
         except Exception as exc:
             self._stats["errors"] += 1
-            logger.error("NATSBus: publish failed on {} — {}", subject, exc)
+            logger.error(f"NATSBus: publish failed on {subject} — {exc}")
             return {"success": False, "error": str(exc)}
 
     async def _subscribe(
@@ -300,7 +298,7 @@ class NATSBus:
                         callback(data)
                     await msg.ack()
                 except Exception as exc:
-                    logger.error("NATSBus: handler error on {} — {}", subject, exc)
+                    logger.error(f"NATSBus: handler error on {subject} — {exc}")
                     self._stats["errors"] += 1
 
             sub = await self._js.subscribe(
@@ -309,11 +307,11 @@ class NATSBus:
                 cb=_handler,
             )
             self._subscriptions.append(sub)
-            logger.info("NATSBus: subscribed to {} (durable={})", subject, durable)
+            logger.info(f"NATSBus: subscribed to {subject} (durable={durable})")
             return {"success": True}
         except Exception as exc:
             self._stats["errors"] += 1
-            logger.error("NATSBus: subscribe failed on {} — {}", subject, exc)
+            logger.error(f"NATSBus: subscribe failed on {subject} — {exc}")
             return {"success": False, "error": str(exc)}
 
     # ── NATS callbacks ──────────────────────────────────────────────────────
@@ -321,7 +319,7 @@ class NATSBus:
     async def _on_reconnect(self) -> None:
         self._stats["reconnects"] += 1
         _try_emit_event("NATS_RECONNECTING", {"reconnects": self._stats["reconnects"]})
-        logger.warning("NATSBus: reconnected (attempt #{})", self._stats["reconnects"])
+        logger.warning(f"NATSBus: reconnected (attempt #{self._stats['reconnects']})")
 
     async def _on_disconnect(self) -> None:
         _try_emit_event("NATS_DISCONNECTED", {})
@@ -329,7 +327,7 @@ class NATSBus:
 
     async def _on_error(self, exc: Exception) -> None:
         self._stats["errors"] += 1
-        logger.error("NATSBus: error — {}", exc)
+        logger.error(f"NATSBus: error — {exc}")
 
 
 # ── Module-level singleton (constraint C1) ─────────────────────────────────

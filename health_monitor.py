@@ -414,5 +414,5 @@ if __name__ == "__main__":
         from core.port_config import get_service_port
         _hm_port = get_service_port("health_monitor")
     except Exception:
-        _hm_port = 9000
+        _hm_port = 9100
     uvicorn.run(app, host="0.0.0.0", port=_hm_port)

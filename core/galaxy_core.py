@@ -82,9 +82,19 @@ class GalaxyCore:
             try:
                 from core.master_brain import get_master_brain
                 self._master_brain = get_master_brain()
+                # Schedule async start — activates NATS connection and subscriptions
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(self._master_brain.start())
+                    else:
+                        loop.run_until_complete(self._master_brain.start())
+                except RuntimeError:
+                    pass  # No event loop yet; FastAPI lifespan will handle startup
                 logger.info("GalaxyCore: MasterBrain enabled")
             except Exception as e:
                 logger.warning(f"GalaxyCore: MasterBrain init failed: {e}")
+                self._master_brain = None
     
     def _load_node_registry(self):
         """加载节点注册表"""

@@ -1023,7 +1023,7 @@
       "health_endpoint": "/health"
     },
     "Node_80_MemorySystem": {
-      "port": 8208,
+      "port": 8180,
       "group": "advanced",
       "priority": 6,
       "dependencies": [],
@@ -1405,7 +1405,7 @@
     },
     "advanced": {
       "start": 8070,
-      "end": 8080,
+      "end": 8180,
       "description": "高级功能"
     },
     "orchestration": {

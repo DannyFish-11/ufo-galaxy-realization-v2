@@ -270,7 +270,7 @@ class GalaxyDaemon:
             "disk_threshold": 90,  # Percent
             "services": {
                 "galaxy_main": {
-                    "command": ["python", "-m", "galaxy_launcher", "--daemon"],
+                    "command": ["python", "unified_launcher.py"],
                     "restart_policy": "always",
                     "max_restarts": 10
                 },
