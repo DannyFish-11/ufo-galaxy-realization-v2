@@ -130,6 +130,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """孪生指挥创建 — 使用 SPECIALIZED 策略让多个 LLM 协作完成任务"""
         try:
             from core.agent_team import TeamManager, TeamStrategy
+            from core.agent_factory import get_agent_factory
             from core.multi_llm_router import get_llm_router
 
             strategy_map = {
@@ -140,8 +141,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             strategy = strategy_map.get(req.strategy.upper(), TeamStrategy.SPECIALIZED)
 
             llm_router = get_llm_router()
-            team_manager = TeamManager(llm_router=llm_router)
-            team_id = str(uuid.uuid4())[:8]
+            factory = get_agent_factory(llm_router)
+            team_manager = TeamManager(
+                agent_factory=factory, llm_router=llm_router,
+            )
 
             result = await team_manager.execute_team_task(
                 task=req.task,
@@ -152,7 +155,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             return JSONResponse({
                 "success": True,
-                "team_id": team_id,
                 "strategy": req.strategy,
                 "member_count": req.member_count,
                 "result": result if isinstance(result, dict) else {"response": str(result)},
@@ -170,10 +172,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """Agent Swarm 创建 — 批量同类 Agent 并行执行，投票/合并结果"""
         try:
             from core.agent_team import TeamManager, TeamStrategy
+            from core.agent_factory import get_agent_factory
             from core.multi_llm_router import get_llm_router
 
             llm_router = get_llm_router()
-            team_manager = TeamManager(llm_router=llm_router)
+            factory = get_agent_factory(llm_router)
+            team_manager = TeamManager(
+                agent_factory=factory, llm_router=llm_router,
+            )
 
             result = await team_manager.execute_team_task(
                 task=req.task,

@@ -26,6 +26,12 @@ from core.schemas.agent import (
     AgentResponseSchema,
     TwinCreateSchema,
     SwarmCreateSchema,
+    # Phase 2: Team Manifest
+    TeamStrategyEnum,
+    TeamMemberSchema,
+    TeamManifestSchema,
+    TeamMemberResultSchema,
+    TeamResultSchema,
 )
 
 # -- Routing schemas ---------------------------------------------------------
@@ -33,6 +39,18 @@ from core.schemas.routing import (
     RoutingRequestSchema,
     RoutingDecisionSchema,
     ProviderStatusSchema,
+    # Phase 2: Complexity & Response
+    ModelTier,
+    ComplexityVector,
+    RouterResponseSchema,
+)
+
+# -- Tool call schemas -------------------------------------------------------
+from core.schemas.tool_call import (
+    ToolLayer,
+    ToolCallStatus,
+    ToolCallRecord,
+    ReactLoopResult,
 )
 
 # -- Protocol schemas --------------------------------------------------------
@@ -115,10 +133,23 @@ __all__ = [
     "AgentResponseSchema",
     "TwinCreateSchema",
     "SwarmCreateSchema",
+    "TeamStrategyEnum",
+    "TeamMemberSchema",
+    "TeamManifestSchema",
+    "TeamMemberResultSchema",
+    "TeamResultSchema",
     # routing
     "RoutingRequestSchema",
     "RoutingDecisionSchema",
     "ProviderStatusSchema",
+    "ModelTier",
+    "ComplexityVector",
+    "RouterResponseSchema",
+    # tool call
+    "ToolLayer",
+    "ToolCallStatus",
+    "ToolCallRecord",
+    "ReactLoopResult",
     # protocol
     "AIPMessageSchema",
     "MCPServerSchema",

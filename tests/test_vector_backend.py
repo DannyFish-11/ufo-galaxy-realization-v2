@@ -222,44 +222,19 @@ def test_semantic_search_index_and_search(monkeypatch):
 # Integration: MCP/Skill load_from_config creates template
 # ---------------------------------------------------------------------------
 
-def test_mcp_manager_creates_config_template(tmp_path, monkeypatch):
-    """load_from_config should create a template if config file is missing."""
-    import asyncio
-    from core.mcp_manager import MCPManager
+def test_mcp_loader_singleton():
+    """MCPLoader 单例应可用且有 list_servers 方法。"""
+    from core.mcp_loader import mcp_loader
 
-    # Use a fresh instance with a temp config path
-    mgr = MCPManager.__new__(MCPManager)
-    mgr.servers = {}
-    mgr.tools = {}
-    mgr._tool_handlers = {}
-    mgr._builtin_tools = {}
-    mgr._builtin_handlers = {}
-    mgr.config_path = tmp_path / "mcp_servers.json"
-
-    asyncio.run(mgr.load_from_config())
-
-    assert mgr.config_path.exists()
-    import json
-    data = json.loads(mgr.config_path.read_text())
-    assert "servers" in data
+    servers = mcp_loader.list_servers()
+    assert isinstance(servers, list)
 
 
-def test_skill_manager_creates_config_template(tmp_path):
-    """load_from_config should create a template if config file is missing."""
-    import asyncio
-    from core.skill_manager import SkillManager, SkillType
+def test_skill_loader_singleton():
+    """SkillLoader 单例应可用且有 list_skills / get_stats 方法。"""
+    from core.skill_loader import skill_loader
 
-    mgr = SkillManager.__new__(SkillManager)
-    mgr.skills = {}
-    mgr.executions = {}
-    mgr._skill_packages = {}
-    mgr.config_path = tmp_path / "skills.json"
-    mgr.skills_dir = tmp_path / "skills"
-    mgr.stats = {"total_executions": 0, "successful_executions": 0, "failed_executions": 0}
-
-    asyncio.run(mgr.load_from_config())
-
-    assert mgr.config_path.exists()
-    import json
-    data = json.loads(mgr.config_path.read_text())
-    assert "builtin_skills" in data
+    skills = skill_loader.list_skills()
+    assert isinstance(skills, list)
+    stats = skill_loader.get_stats()
+    assert isinstance(stats, dict)

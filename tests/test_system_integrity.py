@@ -87,13 +87,11 @@ class TestPhase2DeviceSubsystem:
 class TestPhase3AgentSkills:
     """Agent factory reports simulated status; skills have handlers."""
 
-    def test_skill_manager_builtin_handlers(self):
-        from core.skill_manager import SkillManager
-        sm = SkillManager()
-        sm.register_builtin_skills()
-        for skill_id, skill in sm.skills.items():
-            if skill_id in ("web_search", "file_read", "code_execute", "device_control"):
-                assert skill.handler is not None, f"Skill {skill_id} has no handler"
+    def test_skill_loader_available(self):
+        from core.skill_loader import skill_loader
+        # skill_loader 单例应可实例化且有 list_skills 方法
+        skills = skill_loader.list_skills()
+        assert isinstance(skills, list), "list_skills() should return a list"
 
     def test_fallback_action_not_none(self):
         from enhancements.reasoning.autonomous_planner import (

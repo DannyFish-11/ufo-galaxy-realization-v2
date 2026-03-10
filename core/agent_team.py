@@ -158,10 +158,18 @@ class AgentTeam:
         self._factory = agent_factory
         self._router = llm_router
         self._results: Optional[TeamResult] = None
+        # 工具能力 (由 OpenClawd 注入)
+        self._tools: List[Dict] = []
+        self._dispatch_fn = None  # async (tool_name, args) -> dict
         # 孪生模型
         self._twin_manager = twin_manager
         # agent_id → twin_id 映射
         self._member_twins: Dict[str, str] = {}
+
+    def set_tools(self, tools: List[Dict], dispatch_fn=None):
+        """注入工具列表和分发函数，使团队成员获得 ReAct 工具调用能力"""
+        self._tools = tools
+        self._dispatch_fn = dispatch_fn
 
     async def init_twins(self, coupling_mode: str = "loose"):
         """为所有团队成员创建数字孪生体
@@ -310,21 +318,64 @@ class AgentTeam:
                 total_latency_ms=(time.monotonic() - t0) * 1000,
             )
 
-    # ─────── 策略 1: PARALLEL (Perplexity 风格) ───────
+    # ─────── 成员 ReAct 执行 (带工具) ───────
 
-    async def _execute_parallel(self, task: str, context: Optional[Dict]) -> TeamResult:
-        """每个成员用不同 LLM 独立回答同一任务，最后综合"""
+    async def _call_member_with_tools(
+        self, member: TeamMember, messages: List[Dict], max_iterations: int = 6,
+    ) -> MemberResult:
+        """带 ReAct 工具调用的成员执行 — 有工具走循环，无工具走直连"""
+        t0 = time.monotonic()
+        total_tokens = 0
 
-        async def _call_member(member: TeamMember) -> MemberResult:
-            t0 = time.monotonic()
-            try:
-                messages = [
-                    {"role": "system", "content": f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。"},
-                    {"role": "user", "content": task},
-                ]
-                if context:
-                    messages[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
+        try:
+            if self._tools and self._dispatch_fn:
+                # ReAct 循环
+                resp = None
+                for _ in range(max_iterations):
+                    resp = await self._router.chat(
+                        messages=messages,
+                        tools=self._tools,
+                        provider=member.provider,
+                        model=member.model,
+                        max_tokens=2048,
+                    )
+                    total_tokens += resp.input_tokens + resp.output_tokens
 
+                    if not resp.tool_calls:
+                        break
+
+                    # 追加 assistant tool_calls
+                    assistant_msg = {"role": "assistant", "content": resp.content or ""}
+                    if resp.tool_calls:
+                        assistant_msg["tool_calls"] = resp.tool_calls
+                    messages.append(assistant_msg)
+
+                    # 执行每个 tool_call
+                    for tc in resp.tool_calls:
+                        tc_func = tc.get("function", {})
+                        tc_name = tc_func.get("name", "")
+                        tc_id = tc.get("id", f"call_{tc_name}")
+                        try:
+                            tc_args = json.loads(tc_func.get("arguments", "{}"))
+                        except (ValueError, TypeError):
+                            tc_args = {}
+
+                        result = await self._dispatch_fn(tc_name, tc_args)
+                        result_str = str(result.get("result", result.get("error", "")))
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": result_str[:4000],
+                        })
+
+                return MemberResult(
+                    member=member,
+                    result=resp.content if resp else "",
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                    tokens=total_tokens,
+                )
+            else:
+                # 无工具 — 直接调用
                 response = await self._router.chat(
                     messages=messages,
                     provider=member.provider,
@@ -337,14 +388,28 @@ class AgentTeam:
                     latency_ms=(time.monotonic() - t0) * 1000,
                     tokens=response.input_tokens + response.output_tokens,
                 )
-            except Exception as e:
-                return MemberResult(
-                    member=member,
-                    result="",
-                    latency_ms=(time.monotonic() - t0) * 1000,
-                    success=False,
-                    error=str(e),
-                )
+        except Exception as e:
+            return MemberResult(
+                member=member,
+                result="",
+                latency_ms=(time.monotonic() - t0) * 1000,
+                success=False,
+                error=str(e),
+            )
+
+    # ─────── 策略 1: PARALLEL (Perplexity 风格) ───────
+
+    async def _execute_parallel(self, task: str, context: Optional[Dict]) -> TeamResult:
+        """每个成员用不同 LLM 独立回答同一任务，最后综合"""
+
+        async def _call_member(member: TeamMember) -> MemberResult:
+            messages = [
+                {"role": "system", "content": f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。"},
+                {"role": "user", "content": task},
+            ]
+            if context:
+                messages[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
+            return await self._call_member_with_tools(member, messages)
 
         # 并行调用所有成员
         member_results = await asyncio.gather(
@@ -405,34 +470,19 @@ class AgentTeam:
             if member:
                 assignments.append((st, member))
 
-        # Step 3: 并行执行
+        # Step 3: 并行执行 (带工具)
         async def _exec_subtask(subtask: Dict, member: TeamMember) -> MemberResult:
-            t0 = time.monotonic()
-            try:
-                messages = [
-                    {"role": "system", "content": f"你是 {member.agent_name}。你的任务是: {subtask['title']}"},
-                    {"role": "user", "content": subtask["description"]},
-                ]
-                response = await self._router.chat(
-                    messages=messages,
-                    provider=member.provider,
-                    model=member.model,
-                    max_tokens=2048,
-                )
-                return MemberResult(
-                    member=member,
-                    result=f"[{subtask['title']}]\n{response.content}",
-                    latency_ms=(time.monotonic() - t0) * 1000,
-                    tokens=response.input_tokens + response.output_tokens,
-                )
-            except Exception as e:
-                return MemberResult(
-                    member=member,
-                    result=f"[{subtask['title']}] 失败",
-                    latency_ms=(time.monotonic() - t0) * 1000,
-                    success=False,
-                    error=str(e),
-                )
+            messages = [
+                {"role": "system", "content": f"你是 {member.agent_name}。你的任务是: {subtask['title']}"},
+                {"role": "user", "content": subtask["description"]},
+            ]
+            result = await self._call_member_with_tools(member, messages)
+            # 前缀子任务标题
+            if result.success and result.result:
+                result.result = f"[{subtask['title']}]\n{result.result}"
+            else:
+                result.result = f"[{subtask['title']}] 失败"
+            return result
 
         member_results = await asyncio.gather(
             *[_exec_subtask(st, m) for st, m in assignments]
@@ -457,43 +507,16 @@ class AgentTeam:
     async def _execute_swarm(self, task: str, context: Optional[Dict]) -> TeamResult:
         """批量 Agent 并行执行同一任务，多数投票或综合合并"""
 
-        async def _call_member(member: TeamMember, temp: float) -> MemberResult:
-            t0 = time.monotonic()
-            try:
-                messages = [
-                    {"role": "system", "content": f"你是 {member.agent_name}。请独立思考并给出你的回答。"},
-                    {"role": "user", "content": task},
-                ]
-                response = await self._router.chat(
-                    messages=messages,
-                    provider=member.provider,
-                    model=member.model,
-                    temperature=temp,
-                    max_tokens=2048,
-                )
-                return MemberResult(
-                    member=member,
-                    result=response.content,
-                    latency_ms=(time.monotonic() - t0) * 1000,
-                    tokens=response.input_tokens + response.output_tokens,
-                )
-            except Exception as e:
-                return MemberResult(
-                    member=member,
-                    result="",
-                    latency_ms=(time.monotonic() - t0) * 1000,
-                    success=False,
-                    error=str(e),
-                )
+        async def _call_member(member: TeamMember) -> MemberResult:
+            messages = [
+                {"role": "system", "content": f"你是 {member.agent_name}。请独立思考并给出你的回答。"},
+                {"role": "user", "content": task},
+            ]
+            return await self._call_member_with_tools(member, messages)
 
-        # 每个成员用不同 temperature
-        temps = [0.3, 0.5, 0.7, 0.9, 1.0]
-        tasks = []
-        for i, member in enumerate(self.members):
-            temp = temps[i % len(temps)]
-            tasks.append(_call_member(member, temp))
-
-        member_results = list(await asyncio.gather(*tasks))
+        member_results = list(await asyncio.gather(
+            *[_call_member(m) for m in self.members]
+        ))
 
         # 综合合并
         synthesized = await self._synthesize_results(
@@ -593,7 +616,8 @@ class TeamManager:
         self.teams: Dict[str, AgentTeam] = {}
         logger.info(f"TeamManager 已初始化 (twin={TWIN_AVAILABLE and twin_manager is not None})")
 
-    async def create_team(self, strategy: str, task_hint: str = "") -> AgentTeam:
+    async def create_team(self, strategy: str, task_hint: str = "",
+                          complexity_score: float = 0.5) -> AgentTeam:
         """创建一个 Agent 团队"""
         try:
             strat = TeamStrategy(strategy)
@@ -602,8 +626,8 @@ class TeamManager:
 
         team_id = f"team_{uuid.uuid4().hex[:12]}"
 
-        # 根据策略和可用提供商创建成员
-        members = self._create_members(strat, task_hint)
+        # 根据策略和可用提供商创建成员 (使用复杂度选模型)
+        members = self._create_members(strat, task_hint, complexity_score)
 
         team = AgentTeam(
             team_id=team_id,
@@ -618,12 +642,12 @@ class TeamManager:
         logger.info(f"Team {team_id} 已创建，策略={strategy}，成员数={len(members)}")
         return team
 
-    def _create_members(self, strategy: TeamStrategy, task_hint: str) -> List[TeamMember]:
-        """根据策略创建团队成员"""
+    def _create_members(self, strategy: TeamStrategy, task_hint: str,
+                        complexity_score: float = 0.5) -> List[TeamMember]:
+        """根据策略创建团队成员 (按复杂度选模型)"""
         members = []
 
         if not self._router or not self._router.providers:
-            # 无可用提供商，创建占位成员
             return [TeamMember(
                 agent_id=f"agent_{uuid.uuid4().hex[:8]}",
                 agent_name="默认 Agent",
@@ -633,6 +657,24 @@ class TeamManager:
             )]
 
         providers = list(self._router.providers.items())
+
+        # 预计算任务类型 (用于复杂度选模型)
+        _task_type = None
+        if task_hint:
+            _task_type = self._router.classify_task(
+                [{"role": "user", "content": task_hint}]
+            )
+
+        def _pick_model(prov_name: str, prov_cfg) -> str:
+            """按复杂度选模型，fallback 到 default_model"""
+            if _task_type and hasattr(self._router, "select_model_by_complexity"):
+                try:
+                    return self._router.select_model_by_complexity(
+                        prov_name, _task_type, complexity_score,
+                    )
+                except Exception:
+                    pass
+            return prov_cfg.default_model
 
         if strategy == TeamStrategy.PARALLEL:
             # 每个可用提供商一个成员
@@ -652,7 +694,7 @@ class TeamManager:
                     agent_id=agent_id,
                     agent_name=f"研究员-{prov_name}",
                     provider=prov_name,
-                    model=prov_cfg.default_model,
+                    model=_pick_model(prov_name, prov_cfg),
                     role_in_team="researcher",
                     template="research",
                 ))
@@ -679,7 +721,7 @@ class TeamManager:
                     agent_id=agent_id,
                     agent_name=name,
                     provider=prov_name,
-                    model=prov_cfg.default_model,
+                    model=_pick_model(prov_name, prov_cfg),
                     role_in_team=role,
                     template=template,
                 ))
@@ -697,7 +739,7 @@ class TeamManager:
                 agent_id=agent_id,
                 agent_name="总协调",
                 provider=prov_name,
-                model=prov_cfg.default_model,
+                model=_pick_model(prov_name, prov_cfg),
                 role_in_team="coordinator",
                 template="coordinator",
             ))
@@ -718,7 +760,7 @@ class TeamManager:
                     agent_id=agent_id,
                     agent_name=f"Swarm-{i+1}",
                     provider=prov_name,
-                    model=prov_cfg.default_model,
+                    model=_pick_model(prov_name, prov_cfg),
                     role_in_team=f"swarm_worker_{i+1}",
                     template="research",
                 ))
@@ -732,6 +774,46 @@ class TeamManager:
         if not team:
             raise ValueError(f"Team {team_id} 不存在")
         return await team.execute(task, context)
+
+    async def execute_team_task(
+        self,
+        task: str,
+        strategy,
+        member_count: int = 3,
+        providers: Optional[List[str]] = None,
+        context: Optional[Dict] = None,
+    ) -> Dict:
+        """一站式接口 — 创建团队 → 执行 → 解散 → 返回结果
+
+        供 routes/ai.py 端点调用，封装完整的团队生命周期。
+
+        Args:
+            task: 任务描述
+            strategy: TeamStrategy 枚举或字符串
+            member_count: 期望成员数
+            providers: 限定使用的 LLM 提供商列表
+            context: 额外上下文
+        """
+        # 策略标准化
+        strat_value = strategy.value if hasattr(strategy, "value") else str(strategy)
+
+        team = await self.create_team(strategy=strat_value, task_hint=task)
+
+        # 按请求过滤/截取成员
+        if providers:
+            team.members = [m for m in team.members if m.provider in providers]
+            if not team.members:
+                # 所有成员都被过滤掉 → 用原始成员
+                team = await self.create_team(strategy=strat_value, task_hint=task)
+
+        if member_count and len(team.members) > member_count:
+            team.members = team.members[:member_count]
+
+        try:
+            team_result = await team.execute(task, context)
+            return team_result.to_dict()
+        finally:
+            self.disband_team(team.team_id)
 
     def list_teams(self) -> List[Dict]:
         """列出所有团队"""

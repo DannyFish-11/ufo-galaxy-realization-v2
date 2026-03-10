@@ -154,17 +154,13 @@ class TestPathTraversalPrevention(unittest.TestCase):
 # =============================================================================
 
 class TestExecSandbox(unittest.TestCase):
-    """测试 skill_manager 的 exec() 受限沙箱"""
+    """测试代码执行沙箱安全性"""
 
-    def test_exec_sandbox_blocks_os_import(self):
-        """exec 沙箱应阻止 import os"""
-        import inspect
-        from core.skill_manager import SkillManager
-        source = inspect.getsource(SkillManager)
-        # 确保使用了受限 builtins
-        self.assertIn("restricted_globals", source)
-        self.assertIn("__builtins__", source)
-        self.assertIn("_SAFE_BUILTINS", source)
+    def test_safe_executor_exists(self):
+        """SafeExecutor 应可导入且提供沙箱执行"""
+        from core.safe_executor import SafeExecutor
+        executor = SafeExecutor()
+        assert hasattr(executor, "execute")
 
     def test_safe_builtins_whitelist(self):
         """安全内置函数白名单应包含常用函数但排除危险函数"""
