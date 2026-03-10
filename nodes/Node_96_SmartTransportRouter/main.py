@@ -91,7 +91,7 @@ class NodeConfig:
     endpoints: Dict[Protocol, str] = field(default_factory=dict)
     routing_rules: Dict[str, RoutingRule] = field(default_factory=dict)
     log_level: str = "INFO"
-    health_check_port: int = 8080
+    health_check_port: int = 8096
 
 
 # --- 4. 传输协议处理器 ---

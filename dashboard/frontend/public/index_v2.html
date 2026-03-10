@@ -197,7 +197,8 @@
                     currentTime: '',
                     systemStatus: 'unknown',
                     showQuickActions: false,
-                    ws: null
+                    ws: null,
+                    apiBase: window.location.origin
                 };
             },
             mounted() {
@@ -217,7 +218,7 @@
                 },
                 async loadOverview() {
                     try {
-                        const response = await axios.get('http://localhost:3000/api/overview');
+                        const response = await axios.get(`${this.apiBase}/api/overview`);
                         this.overview = response.data;
                         this.systemStatus = parseFloat(this.overview.health_rate) > 80 ? 'healthy' : 'degraded';
                     } catch (error) {
@@ -227,7 +228,7 @@
                 },
                 async loadNodes() {
                     try {
-                        const response = await axios.get('http://localhost:3000/api/nodes');
+                        const response = await axios.get(`${this.apiBase}/api/nodes`);
                         this.nodes = response.data.nodes;
                     } catch (error) {
                         console.error('Failed to load nodes:', error);
@@ -235,7 +236,7 @@
                 },
                 async loadLogs() {
                     try {
-                        const response = await axios.get('http://localhost:3000/api/logs?limit=50');
+                        const response = await axios.get(`${this.apiBase}/api/logs?limit=50`);
                         this.logs = response.data.logs;
                     } catch (error) {
                         console.error('Failed to load logs:', error);
@@ -249,7 +250,7 @@
                 },
                 async restartNode(nodeId) {
                     try {
-                        await axios.post(`http://localhost:3000/api/nodes/${nodeId}/restart`);
+                        await axios.post(`${this.apiBase}/api/nodes/${nodeId}/restart`);
                         setTimeout(() => this.loadNodes(), 2000);
                     } catch (error) {
                         console.error('Restart failed:', error);
@@ -257,7 +258,7 @@
                 },
                 async restartAllNodes() {
                     try {
-                        await axios.post('http://localhost:3000/api/nodes/restart-all');
+                        await axios.post(`${this.apiBase}/api/nodes/restart-all`);
                         this.showQuickActions = false;
                         setTimeout(() => this.loadNodes(), 2000);
                     } catch (error) {
@@ -266,7 +267,7 @@
                 },
                 async clearLogs() {
                     try {
-                        await axios.delete('http://localhost:3000/api/logs');
+                        await axios.delete(`${this.apiBase}/api/logs`);
                         this.logs = [];
                         this.showQuickActions = false;
                     } catch (error) {
@@ -275,7 +276,7 @@
                 },
                 async exportMetrics() {
                     try {
-                        const response = await axios.get('http://localhost:3000/api/metrics/export');
+                        const response = await axios.get(`${this.apiBase}/api/metrics/export`);
                         const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
                         const url = window.URL.createObjectURL(blob);
                         const a = document.createElement('a');
@@ -291,7 +292,8 @@
                     this.showQuickActions = !this.showQuickActions;
                 },
                 connectWebSocket() {
-                    this.ws = new WebSocket('ws://localhost:3000/ws');
+                    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    this.ws = new WebSocket(`${wsProto}//${window.location.host}/ws`);
                     
                     this.ws.onmessage = (event) => {
                         const message = JSON.parse(event.data);

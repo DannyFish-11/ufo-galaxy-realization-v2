@@ -50,7 +50,7 @@ class NodeConfig:
     node_name: str = "Node_31_Reserved"
     log_level: str = "INFO"
     plugin_dir: str = os.getenv("UFO_PLUGIN_DIR", "./plugins")
-    health_check_port: int = 8080
+    health_check_port: int = 8031
 
 @dataclass
 class PluginInfo:
