@@ -317,10 +317,9 @@ class DeviceRegistry:
     
     async def unregister(self, device_id: str) -> bool:
         """注销设备"""
-        if device_id not in self.devices:
+        device = self.devices.pop(device_id, None)
+        if device is None:
             return False
-        
-        device = self.devices.pop(device_id)
         
         # 更新索引
         self._remove_from_indexes(device)
@@ -336,16 +335,16 @@ class DeviceRegistry:
         """获取设备"""
         return self.devices.get(device_id)
     
-    def get_or_create(self, device_id: str, **kwargs) -> Device:
+    async def get_or_create(self, device_id: str, **kwargs) -> Device:
         """获取或创建设备"""
         device = self.devices.get(device_id)
         if device:
             device.last_seen = time.time()
             device.status = DeviceStatus.ONLINE
             return device
-        
+
         # 创建新设备
-        return asyncio.run(self.register(device_id=device_id, **kwargs))
+        return await self.register(device_id=device_id, **kwargs)
     
     # ========================================================================
     # 设备发现

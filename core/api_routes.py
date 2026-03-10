@@ -421,7 +421,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             if inspect.iscoroutinefunction(func):
                 return await func(action, params)
             else:
-                return await asyncio.get_event_loop().run_in_executor(
+                return await asyncio.get_running_loop().run_in_executor(
                     None, func, action, params
                 )
         elif node_info["type"] == "instance":
@@ -430,7 +430,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             if inspect.iscoroutinefunction(method):
                 return await method(action, **params)
             else:
-                return await asyncio.get_event_loop().run_in_executor(
+                return await asyncio.get_running_loop().run_in_executor(
                     None, lambda: method(action, **params)
                 )
         return None
@@ -677,7 +677,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.vision_pipeline import VisionPipeline
                 pipeline = VisionPipeline()
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, pipeline.understand, image_data, req.mode, req.instruction
                 )
                 return JSONResponse({
@@ -692,7 +692,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCR2Adapter
                 adapter = DeepSeekOCR2Adapter()
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, adapter.process_image, image_data, req.mode
                 )
                 return JSONResponse({
@@ -731,7 +731,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             try:
                 from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCR2Adapter
                 adapter = DeepSeekOCR2Adapter()
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, adapter.process_image, image_data, req.mode
                 )
                 return JSONResponse({
