@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from core.port_config import get_service_port
+
 # 添加项目路径
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -418,7 +420,7 @@ OPENROUTER_API_KEY=
     print_info("下一步:")
     print("  1. 编辑 .env 文件配置 API Key")
     print("  2. 运行 'python main.py' 启动服务")
-    print("  3. 访问 http://localhost:8080")
+    print(f"  3. 访问 http://localhost:{get_service_port('dashboard_backend')}")
 
 
 async def status():
@@ -428,7 +430,7 @@ async def status():
     try:
         import httpx
         async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.get("http://localhost:8080/health")
+            response = await client.get(f"http://localhost:{get_service_port('dashboard_backend')}/health")
             
             if response.status_code == 200:
                 print_success("服务运行中")

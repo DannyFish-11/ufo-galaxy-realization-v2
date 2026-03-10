@@ -22,6 +22,8 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 from enum import Enum
 
+from core.port_config import get_service_port, get_node_port
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -364,14 +366,15 @@ class GalaxyLauncher:
         except Exception as e:
             print(f"⚠️  Could not get status: {e}")
         
+        sm_port = get_service_port("state_machine")
         print("\n🔗 Endpoints:")
-        print("   State Machine: http://localhost:8000")
-        print("   Transformer:   http://localhost:8050")
-        print("   Model Router:  http://localhost:8058")
+        print(f"   State Machine: http://localhost:{sm_port}")
+        print(f"   Transformer:   http://localhost:{get_node_port('Node_50_Transformer')}")
+        print(f"   Model Router:  http://localhost:8058")
         print("\n📖 API Docs:")
-        print("   http://localhost:8000/docs")
-        print("   http://localhost:8050/docs")
-        print("   http://localhost:8058/docs")
+        print(f"   http://localhost:{sm_port}/docs")
+        print(f"   http://localhost:{get_node_port('Node_50_Transformer')}/docs")
+        print(f"   http://localhost:8058/docs")
     
     def logs(self, service: str = None, follow: bool = False):
         """Show logs."""

@@ -22,6 +22,8 @@ from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 from enum import Enum
 
+from core.port_config import get_service_port
+
 # 颜色输出
 class Colors:
     HEADER = '\033[95m'
@@ -228,8 +230,8 @@ DATABASE_CONFIGS = [
         "env_var": "REDIS_URL",
         "description": "缓存和消息队列",
         "priority": Priority.P1,
-        "default": "redis://localhost:6379",
-        "docker_cmd": "docker run -d --name ufo-redis -p 6379:6379 redis:7"
+        "default": f"redis://localhost:{get_service_port('redis')}",
+        "docker_cmd": f"docker run -d --name ufo-redis -p {get_service_port('redis')}:{get_service_port('redis')} redis:7"
     },
     {
         "name": "Qdrant",
@@ -486,8 +488,8 @@ def quick_setup():
             "",
             "# 数据库配置（使用默认值）",
             "DATABASE_URL=postgresql://postgres:ufo123@localhost:5432/ufogalaxy",
-            "REDIS_URL=redis://localhost:6379",
-            "QDRANT_URL=http://localhost:6333",
+            f"REDIS_URL=redis://localhost:{get_service_port('redis')}",
+            f"QDRANT_URL=http://localhost:{get_service_port('qdrant')}",
         ])
         
         with open(env_file, 'w') as f:
