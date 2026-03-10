@@ -585,7 +585,25 @@ class AndroidBridge:
 
         # 视觉请求
         self._message_handlers[MessageType.VISION_REQUEST] = self._handle_vision_request
-    
+
+        # Catch-all: 为所有未注册的消息类型添加通用日志处理器
+        for msg_type in MessageType:
+            if msg_type not in self._message_handlers:
+                self._message_handlers[msg_type] = self._handle_unregistered
+
+    async def _handle_unregistered(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """通用处理器 — 记录日志并返回 ACK，防止消息被静默丢弃"""
+        msg_type = message.get("type", "unknown")
+        device_id = message.get("device_id", "unknown")
+        logger.info(f"Unhandled message type '{msg_type}' from device '{device_id}', returning ACK")
+        return {
+            "type": "ack",
+            "device_id": device_id,
+            "original_type": msg_type,
+            "status": "received",
+            "note": "No specific handler registered for this message type",
+        }
+
     async def handle_message(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理来自安卓设备的消息"""
         msg_type_str = message.get("type")

@@ -21,7 +21,11 @@ _start_time = time.time()
 
 
 def get_system_metrics() -> Dict[str, Any]:
-    """收集系统指标"""
+    """收集系统指标
+
+    优先委托 SystemLoadMonitor（更丰富的数据），不可用时回退到直接采集。
+    返回格式保持向后兼容。
+    """
     metrics = {
         "timestamp": datetime.now().isoformat(),
         "uptime_seconds": round(time.time() - _start_time, 1),
@@ -32,7 +36,34 @@ def get_system_metrics() -> Dict[str, Any]:
         },
     }
 
-    # 内存信息
+    # 优先尝试 SystemLoadMonitor
+    try:
+        from core.system_load_monitor import SystemLoadMonitor
+        monitor = SystemLoadMonitor()
+        load = monitor.get_system_load()
+        metrics["memory"] = {
+            "total_mb": round(load.memory.total_bytes / 1024 / 1024, 1),
+            "available_mb": round(load.memory.available_bytes / 1024 / 1024, 1),
+            "used_percent": load.memory.usage_percent,
+        }
+        metrics["cpu"] = {
+            "count": load.cpu.core_count,
+            "percent": load.cpu.usage_percent,
+            "load_avg_1m": load.cpu.load_avg_1m,
+            "load_avg_5m": load.cpu.load_avg_5m,
+        }
+        metrics["disk"] = {}
+        if load.disk.total_bytes > 0:
+            metrics["disk"]["/"] = {
+                "total_gb": round(load.disk.total_bytes / 1024**3, 1),
+                "free_gb": round(load.disk.free_bytes / 1024**3, 1),
+                "used_percent": load.disk.usage_percent,
+            }
+        return metrics
+    except Exception:
+        pass
+
+    # 回退: 直接采集
     try:
         import psutil
         mem = psutil.virtual_memory()
@@ -58,12 +89,11 @@ def get_system_metrics() -> Dict[str, Any]:
             except PermissionError:
                 pass
     except ImportError:
-        # psutil 未安装时使用基础方法
         try:
             with open("/proc/meminfo", encoding="utf-8") as f:
                 lines = f.readlines()
-            mem_total = int(lines[0].split()[1]) / 1024  # MB
-            mem_avail = int(lines[2].split()[1]) / 1024  # MB
+            mem_total = int(lines[0].split()[1]) / 1024
+            mem_avail = int(lines[2].split()[1]) / 1024
             metrics["memory"] = {
                 "total_mb": round(mem_total, 1),
                 "available_mb": round(mem_avail, 1),
