@@ -37,6 +37,9 @@ except ImportError:
         data: dict = {}
         error: str = ""
         session_id: str = ""
+
+        def to_json_response(self) -> dict:
+            return self.model_dump()
 from nodes.common.cors_config import get_cors_origins
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -161,9 +164,11 @@ app.add_middleware(
 )
 
 # 注册协议管理路由
+_PROTOCOLS_REGISTERED = False
 if PROTOCOLS_ROUTES_AVAILABLE and protocols_routes:
     try:
         app.include_router(protocols_routes.create_router())
+        _PROTOCOLS_REGISTERED = True
         logger.info("已注册协议管理路由 (/api/v1/protocols/*)")
     except Exception as _e:
         logger.warning(f"协议管理路由注册失败: {_e}")
@@ -287,11 +292,140 @@ async def send_device_command(device_id: str, request: dict):
     if GALAXY_CORE_AVAILABLE and galaxy_core:
         command = request.get("command", "")
         params = request.get("params", {})
-        
+
         result = await galaxy_core.send_device_command(device_id, command, params)
         return result
-    
+
     return {"success": False, "error": "Galaxy core not available"}
+
+
+@app.post("/api/v1/devices/discover-active")
+async def discover_active_devices():
+    """主动发现在线设备 — 扫描已注册节点和设备"""
+    discovered = []
+
+    # 1. 从 galaxy_core 获取已注册设备
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        for dev_id, dev in galaxy_core.devices.items():
+            discovered.append({**dev, "source": "registered"})
+
+    # 2. 尝试通过 Node_71 (MultiDeviceCoordination) 发现更多设备
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        try:
+            result = await galaxy_core.call_node("71", "discover_devices", {})
+            if result.get("success") and result.get("devices"):
+                for dev in result["devices"]:
+                    if dev.get("device_id") not in [d.get("device_id") for d in discovered]:
+                        discovered.append({**dev, "source": "discovered"})
+        except Exception as e:
+            logger.debug(f"Node_71 discover failed: {e}")
+
+    # 3. 尝试通过 Node_33 (ADB) 发现 Android 设备
+    if GALAXY_CORE_AVAILABLE and galaxy_core:
+        try:
+            result = await galaxy_core.call_node("33", "list_devices", {})
+            if result.get("success") and result.get("devices"):
+                for dev in result["devices"]:
+                    dev_id = dev.get("device_id") or dev.get("serial", "")
+                    if dev_id and dev_id not in [d.get("device_id") for d in discovered]:
+                        discovered.append({
+                            "device_id": dev_id,
+                            "device_type": "android",
+                            "name": dev.get("model", dev_id),
+                            "status": dev.get("status", "online"),
+                            "source": "adb",
+                        })
+        except Exception as e:
+            logger.debug(f"Node_33 ADB discover failed: {e}")
+
+    return {"success": True, "devices": discovered, "total": len(discovered)}
+
+
+@app.get("/api/v1/devices/{device_id}/telemetry")
+async def get_device_telemetry(device_id: str):
+    """获取设备遥测数据（CPU、内存、电池等）"""
+    if not GALAXY_CORE_AVAILABLE or not galaxy_core:
+        return {"success": False, "error": "Galaxy core not available"}
+
+    device = galaxy_core.devices.get(device_id)
+    if not device:
+        return JSONResponse(status_code=404, content={"success": False, "error": f"Device {device_id} not found"})
+
+    # 尝试从设备数字孪生获取最新状态
+    if DEVICE_TWIN_AVAILABLE and device_twin_engine:
+        twin = device_twin_engine.get_twin_by_device(device_id) if hasattr(device_twin_engine, 'get_twin_by_device') else None
+        if twin:
+            state = twin.get_state()
+            return {"success": True, "device_id": device_id, "telemetry": state, "source": "digital_twin"}
+
+    # 尝试通过 Node_92 (AutoControl) 获取实时遥测
+    try:
+        result = await galaxy_core.call_node("92", "get_device_info", {"device_id": device_id})
+        if result.get("success"):
+            return {"success": True, "device_id": device_id, "telemetry": result, "source": "node_92"}
+    except Exception as e:
+        logger.debug(f"Telemetry via node_92 failed: {e}")
+
+    # 返回基础已知信息
+    return {
+        "success": True,
+        "device_id": device_id,
+        "telemetry": {
+            "device_type": device.get("device_type", "unknown"),
+            "status": device.get("status", "unknown"),
+            "registered_at": device.get("registered_at", ""),
+        },
+        "source": "cached",
+    }
+
+
+@app.post("/api/v1/devices/cross-device")
+async def cross_device_action(request: dict):
+    """跨设备协同操作（如剪贴板同步、通知推送等）"""
+    command = request.get("command", "")
+    context = request.get("context", {})
+
+    if not command:
+        return JSONResponse(status_code=400, content={"success": False, "error": "command is required"})
+
+    if not GALAXY_CORE_AVAILABLE or not galaxy_core:
+        return {"success": False, "error": "Galaxy core not available"}
+
+    # 通过 Node_71 (MultiDeviceCoordination) 执行跨设备操作
+    try:
+        result = await galaxy_core.call_node("71", command, context)
+        return {"success": result.get("success", False), "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/v1/devices/transfer")
+async def device_file_transfer(request: dict):
+    """设备间文件传输"""
+    source_device = request.get("source_device", "")
+    target_device = request.get("target_device", "")
+    file_path = request.get("file_path", "")
+
+    if not source_device or not target_device or not file_path:
+        return JSONResponse(status_code=400, content={
+            "success": False,
+            "error": "source_device, target_device and file_path are required"
+        })
+
+    if not GALAXY_CORE_AVAILABLE or not galaxy_core:
+        return {"success": False, "error": "Galaxy core not available"}
+
+    # 通过 Node_71 (MultiDeviceCoordination) 执行文件传输
+    try:
+        result = await galaxy_core.call_node("71", "file_transfer", {
+            "source_device": source_device,
+            "target_device": target_device,
+            "file_path": file_path,
+        })
+        return {"success": result.get("success", False), "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 
 # ============================================================================
 # 事件 API
@@ -438,6 +572,115 @@ async def assign_agent_task(agent_id: str, request: dict):
             agent.state = AgentState.WORKING
         return {"success": True, "queue_length": len(agent.task_queue)}
     return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+
+# ============================================================================
+# Agent Twin & Swarm API (前端直接调用的简化接口)
+# ============================================================================
+
+@app.post("/api/v1/agents/twin")
+async def create_agent_twin_task(request: dict):
+    """
+    通过 Twin 策略执行任务 — 创建多个 Agent 孪生体协作完成任务。
+    前端发送: { task, strategy, member_count }
+    """
+    task = request.get("task", "")
+    strategy = request.get("strategy", "parallel")
+    member_count = request.get("member_count", 3)
+
+    if not task:
+        return JSONResponse(status_code=400, content={"error": "task is required"})
+
+    # 优先使用 TeamManager 创建 twin team
+    if TEAM_MANAGER_AVAILABLE and team_manager:
+        try:
+            team = await team_manager.create_team(strategy=strategy, task_hint=task)
+            result = await team_manager.execute_team(team.team_id, task)
+            return {
+                "success": True,
+                "team_id": team.team_id,
+                "strategy": strategy,
+                "result": result.to_dict() if hasattr(result, 'to_dict') else result,
+            }
+        except Exception as e:
+            logger.error(f"Twin team execution failed: {e}")
+            return JSONResponse(status_code=500, content={"error": str(e)})
+
+    # 降级: 使用 Agent Twin Manager
+    if TWIN_AVAILABLE and twin_manager and AGENT_FACTORY_AVAILABLE and agent_factory:
+        try:
+            agents = []
+            for i in range(min(member_count, 5)):
+                agent = await agent_factory.create_from_llm(
+                    f"{task} (twin #{i+1})",
+                    context={"twin_index": i, "strategy": strategy}
+                )
+                agents.append(agent.to_dict())
+            return {"success": True, "agents": agents, "strategy": strategy}
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": str(e)})
+
+    return JSONResponse(status_code=503, content={"error": "Team manager and Twin manager not available"})
+
+
+@app.post("/api/v1/agents/swarm")
+async def create_agent_swarm(request: dict):
+    """
+    创建 Agent 蜂群 — 大量轻量级 Agent 并行执行子任务。
+    前端发送: { task, agent_count }
+    """
+    task = request.get("task", "")
+    agent_count = request.get("agent_count", 5)
+
+    if not task:
+        return JSONResponse(status_code=400, content={"error": "task is required"})
+
+    if not AGENT_FACTORY_AVAILABLE or not agent_factory:
+        return JSONResponse(status_code=503, content={"error": "Agent factory not available"})
+
+    try:
+        # 使用 LLM 拆分任务
+        subtasks = []
+        if LLM_ROUTER_AVAILABLE and llm_router and llm_router.is_available():
+            try:
+                decompose_resp = await llm_router.chat_json(
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"将以下任务拆解为 {agent_count} 个独立的子任务，"
+                            f"每个子任务可以被一个 Agent 独立完成。\n"
+                            f"任务: {task}\n"
+                            f'返回 JSON: {{"subtasks": ["子任务1", "子任务2", ...]}}'
+                        ),
+                    }],
+                    task_type="planning",
+                )
+                subtasks = decompose_resp.get("subtasks", [])
+            except Exception as e:
+                logger.debug(f"LLM task decomposition failed: {e}")
+
+        # 如果 LLM 拆分失败，简单复制任务
+        if not subtasks:
+            subtasks = [f"{task} (part {i+1}/{agent_count})" for i in range(agent_count)]
+
+        # 创建 Agent 并分配子任务
+        created_agents = []
+        for i, subtask in enumerate(subtasks[:agent_count]):
+            try:
+                agent = await agent_factory.create_from_llm(subtask, context={"swarm_index": i})
+                agent.task_queue.append({"task": subtask, "type": "swarm_subtask"})
+                created_agents.append(agent.to_dict())
+            except Exception as e:
+                logger.warning(f"Swarm agent #{i} creation failed: {e}")
+
+        return {
+            "success": True,
+            "agents": created_agents,
+            "total_created": len(created_agents),
+            "subtasks": subtasks[:agent_count],
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 # ============================================================================
@@ -840,7 +1083,7 @@ async def list_llm_providers():
 @app.post("/api/v1/chat")
 async def chat_unified(request: dict):
     """统一聊天入口 - 与 /api/v1/dashboard/chat 功能相同"""
-    return await chat(request)
+    return await dashboard_chat(request)
 
 # ============================================================================
 # 并行执行 API
@@ -985,7 +1228,14 @@ async def dashboard_chat(request: dict):
 
     logger.info(f"Dashboard Chat: {message[:50]}...")
 
+    # === 意图解析 (所有路径都需要) ===
+    intent = await get_parsed_intent_modern(message, session_id)
+    intent_type = intent["type"]
+    confidence = intent.get("confidence", 0.3)
+    suggestions = intent.get("suggestions", [])
+
     # === 集成对话记忆: 记录用户消息 ===
+    memory = None
     if MODERN_INTENT_AVAILABLE:
         try:
             memory = get_conversation_memory()
@@ -994,12 +1244,6 @@ async def dashboard_chat(request: dict):
             logger.warning(f"记录用户消息失败: {e}")
 
     if GALAXY_CORE_AVAILABLE and galaxy_core:
-        # 使用现代意图解析器
-        intent = await get_parsed_intent_modern(message, session_id)
-        intent_type = intent["type"]
-        confidence = intent.get("confidence", 0.3)
-        suggestions = intent.get("suggestions", [])
-
         response_text = ""
         exec_success = False
         result_data = {}
@@ -1081,7 +1325,59 @@ async def dashboard_chat(request: dict):
             # 降级到 LLM
             pass
 
-    # 如果 galaxy_core 不可用，尝试调用 LLM
+    # 优先使用 MultiLLMRouter（智能路由 + 故障转移 + 断路器）
+    if LLM_ROUTER_AVAILABLE and llm_router and llm_router.is_available():
+        try:
+            # 构建带历史上下文的消息列表
+            llm_messages = []
+            if MODERN_INTENT_AVAILABLE:
+                try:
+                    mem = get_conversation_memory()
+                    history = await mem.get_context(session_id, max_turns=5)
+                    if isinstance(history, list):
+                        llm_messages.extend(history)
+                except Exception:
+                    pass
+            llm_messages.append({"role": "user", "content": message})
+
+            # 使用意图分类决定任务类型 hint
+            task_hint = None
+            if intent_type == "coding":
+                task_hint = "coding"
+            elif intent_type == "thinking":
+                task_hint = "reasoning"
+            elif intent_type == "learning":
+                task_hint = "analysis"
+
+            llm_resp = await llm_router.chat(
+                messages=llm_messages,
+                task_type=task_hint,
+                auto_failover=True,
+            )
+            reply = llm_resp.content
+            routing_info = {
+                "provider": llm_resp.provider,
+                "model": llm_resp.model,
+                "latency_ms": round(llm_resp.latency_ms, 1),
+                "input_tokens": llm_resp.input_tokens,
+                "output_tokens": llm_resp.output_tokens,
+            }
+            # 记录助手回复
+            if MODERN_INTENT_AVAILABLE:
+                try:
+                    mem = get_conversation_memory()
+                    await mem.add_turn(session_id, "assistant", reply)
+                except Exception:
+                    pass
+            return JSONResponse(_build_unified_response(
+                success=True,
+                response=reply,
+                data=routing_info,
+            ))
+        except Exception as e:
+            logger.warning(f"LLM Router 调用失败，降级到 api_manager: {e}")
+
+    # 降级：使用 api_manager.call_llm()
     if API_MANAGER_AVAILABLE and api_manager:
         try:
             result = await api_manager.call_llm([
@@ -1089,7 +1385,6 @@ async def dashboard_chat(request: dict):
             ])
             if result.get("success"):
                 reply = result.get("content", "处理完成")
-                # 记录助手回复
                 if MODERN_INTENT_AVAILABLE:
                     try:
                         memory = get_conversation_memory()
@@ -1212,7 +1507,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if message.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
                 elif message.get("type") == "chat":
-                    ws_response = await chat({"message": message.get("content", "")})
+                    ws_response = await dashboard_chat({"message": message.get("content", "")})
                     # chat() returns a JSONResponse; extract body as dict
                     if hasattr(ws_response, "body"):
                         body = json.loads(ws_response.body)
@@ -1246,6 +1541,79 @@ async def startup_event():
     
     if GALAXY_CORE_AVAILABLE:
         logger.info("✅ galaxy_core 已加载")
+
+# ============================================================================
+# 协议路由降级 — 当 core.routes.protocols 不可用时提供 /api/v1/protocols/* 端点
+# 这些端点将请求映射到 /api/v1/config/* 的等效实现
+# ============================================================================
+
+if not _PROTOCOLS_REGISTERED:
+    logger.info("协议路由未注册，启用降级兼容端点 (/api/v1/protocols/*)")
+
+    @app.get("/api/v1/protocols/mcp")
+    async def _fallback_list_mcp():
+        return await list_mcp_servers()
+
+    @app.get("/api/v1/protocols/mcp/{name}/tools")
+    async def _fallback_mcp_tools(name: str):
+        """列出指定 MCP 服务器的工具（降级实现）"""
+        try:
+            from core.mcp_loader import mcp_loader
+            srv = mcp_loader.servers.get(name)
+            if srv:
+                tools = srv.get("tools", [])
+                return {"success": True, "tools": tools, "total": len(tools)}
+            return {"success": False, "error": f"MCP server '{name}' not found", "tools": []}
+        except Exception as e:
+            return {"success": False, "error": str(e), "tools": []}
+
+    @app.delete("/api/v1/protocols/mcp/{name}")
+    async def _fallback_remove_mcp(name: str):
+        return await remove_mcp_server(name)
+
+    @app.get("/api/v1/protocols/skills")
+    async def _fallback_list_skills():
+        return await list_skills()
+
+    @app.post("/api/v1/protocols/skills/load")
+    async def _fallback_load_skill(request: dict):
+        """加载 Skill（降级实现）"""
+        name = request.get("name", "")
+        if not name:
+            return {"success": False, "error": "name is required"}
+        try:
+            from core.skill_loader import skill_loader
+            result = await skill_loader.load(path=name, skill_id=name)
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @app.delete("/api/v1/protocols/skills/{name}")
+    async def _fallback_unload_skill(name: str):
+        """卸载 Skill（降级实现）"""
+        try:
+            from core.skill_loader import skill_loader
+            result = await skill_loader.unload(name)
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @app.get("/api/v1/protocols/status")
+    async def _fallback_protocol_status():
+        """协议状态（降级实现）"""
+        status = {"success": True, "mcp": {"available": False}, "skills": {"available": False}}
+        try:
+            from core.mcp_loader import mcp_loader
+            status["mcp"] = {"available": True, "servers": len(mcp_loader.servers)}
+        except Exception:
+            pass
+        try:
+            from core.skill_loader import skill_loader
+            status["skills"] = {"available": True, "loaded": len(skill_loader.skills)}
+        except Exception:
+            pass
+        return status
+
 
 if __name__ == "__main__":
     import uvicorn
@@ -1397,18 +1765,63 @@ async def get_available_models():
 
 @app.post("/api/v1/config/api-key")
 async def set_api_key(request: dict):
-    """设置 API Key"""
+    """设置 API Key — 同时持久化到 api_config.json 和 .env"""
     if API_MANAGER_AVAILABLE and api_manager:
         category = request.get("category", "direct_models")  # 默认是 direct_models
         key_name = request.get("provider", "")  # 兼容旧参数名
         api_key = request.get("api_key", "")
-        
+
         # 如果 provider 是 oneapi，则 category 是 oneapi
         if key_name == "oneapi":
             category = "oneapi"
             key_name = ""
-        
+
+        # 1. 保存到 api_config.json + 同步到 os.environ
         success = api_manager.set_api_key(category, key_name, api_key)
+
+        # 2. 持久化到 .env 文件 (与 set_node_api_key 保持一致)
+        if success and api_key:
+            env_var = ""
+            if category == "oneapi":
+                env_var = "ONEAPI_API_KEY"
+            elif category == "direct_models" and key_name:
+                env_var = f"{key_name.upper()}_API_KEY"
+            elif category == "tools" and key_name:
+                env_var = f"{key_name.upper()}_API_KEY"
+
+            if env_var:
+                # 写入环境变量
+                os.environ[env_var] = api_key
+                # 写入 CredentialVault
+                try:
+                    from core.credential_vault import get_vault
+                    get_vault().set_credential(env_var, api_key, actor="dashboard")
+                except Exception:
+                    pass
+                # 持久化到 .env
+                env_path = os.path.join(PROJECT_ROOT, ".env")
+                try:
+                    lines = []
+                    replaced = False
+                    if os.path.exists(env_path):
+                        with open(env_path, "r", encoding="utf-8") as f:
+                            for line in f:
+                                if line.strip().startswith(f"{env_var}="):
+                                    lines.append(f"{env_var}={api_key}\n")
+                                    replaced = True
+                                else:
+                                    lines.append(line)
+                    if not replaced:
+                        lines.append(f"{env_var}={api_key}\n")
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.writelines(lines)
+                except Exception as e:
+                    logger.warning(f".env write failed for {env_var}: {e}")
+
+                # 刷新 LLM Router 使其感知到新的 API Key
+                if LLM_ROUTER_AVAILABLE and llm_router:
+                    llm_router._discover_providers()
+
         return {"success": success}
     return {"success": False, "error": "API manager not available"}
 
