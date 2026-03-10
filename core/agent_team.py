@@ -360,7 +360,13 @@ class AgentTeam:
                         except (ValueError, TypeError):
                             tc_args = {}
 
-                        result = await self._dispatch_fn(tc_name, tc_args)
+                        try:
+                            result = await asyncio.wait_for(
+                                self._dispatch_fn(tc_name, tc_args),
+                                timeout=30.0  # 单个工具调用最多 30 秒
+                            )
+                        except asyncio.TimeoutError:
+                            result = {"success": False, "error": f"工具 {tc_name} 执行超时 (30s)"}
                         result_str = str(result.get("result", result.get("error", "")))
                         messages.append({
                             "role": "tool",
@@ -409,13 +415,31 @@ class AgentTeam:
             ]
             if context:
                 messages[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
-            return await self._call_member_with_tools(member, messages)
+            try:
+                return await asyncio.wait_for(
+                    self._call_member_with_tools(member, messages),
+                    timeout=90.0  # 单成员最多 90 秒
+                )
+            except asyncio.TimeoutError:
+                return MemberResult(
+                    member=member, result="", latency_ms=90000,
+                    success=False, error="成员执行超时 (90s)"
+                )
 
-        # 并行调用所有成员
-        member_results = await asyncio.gather(
-            *[_call_member(m) for m in self.members]
+        # 并行调用所有成员 (return_exceptions 防止一个成员异常拖垮全组)
+        raw_results = await asyncio.gather(
+            *[_call_member(m) for m in self.members],
+            return_exceptions=True,
         )
-        member_results = list(member_results)
+        member_results = []
+        for i, r in enumerate(raw_results):
+            if isinstance(r, Exception):
+                member_results.append(MemberResult(
+                    member=self.members[i], result="",
+                    success=False, error=str(r),
+                ))
+            else:
+                member_results.append(r)
 
         # 综合所有结果
         synthesized = await self._synthesize_results(
@@ -830,12 +854,18 @@ class TeamManager:
             if team._twin_manager and TWIN_AVAILABLE:
                 for agent_id, twin_id in team._member_twins.items():
                     try:
-                        asyncio.get_event_loop().create_task(
+                        loop = asyncio.get_running_loop()
+                        task = loop.create_task(
                             team._twin_manager.delete_twin(twin_id)
                         )
+                        task.add_done_callback(
+                            lambda t, tid=twin_id: (
+                                logger.warning(f"孪生体 {tid} 清理失败: {t.exception()}")
+                                if not t.cancelled() and t.exception() else None
+                            )
+                        )
                     except RuntimeError:
-                        # 没有事件循环时直接跳过
-                        pass
+                        logger.debug(f"无事件循环，跳过孪生体 {twin_id} 清理")
                 team._member_twins.clear()
 
             # 清理 factory 中的 agent

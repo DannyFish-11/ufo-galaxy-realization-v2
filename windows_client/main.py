@@ -9,6 +9,12 @@ AI 大模型驱动对话
 
 import sys
 import os
+
+# 确保 Python 使用 UTF-8 编码 (修复中文用户名路径问题)
+if sys.platform == 'win32':
+    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+    os.environ.setdefault('PYTHONUTF8', '1')
+
 import logging
 import json
 import urllib.request
@@ -340,7 +346,8 @@ class WindowsClient:
 
     def _load_env(self):
         """加载 .env 到环境变量"""
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        from pathlib import Path
+        project_root = str(Path(__file__).resolve().parent.parent)
         env_path = os.path.join(project_root, ".env")
         if os.path.exists(env_path):
             try:

@@ -660,17 +660,22 @@ class OpenClawd:
         tools: List[Dict],
         max_iterations: int = 10,
         task_type: Optional[str] = None,
+        timeout: float = 120.0,
     ) -> dict:
-        """ReAct 工具调用循环
+        """ReAct 工具调用循环 (含总超时保护)
 
         循环流程:
           1. 调用 LLM（带 tools）
           2. 如果 LLM 返回 tool_calls → 执行每个工具 → 追加结果到 messages → 继续
           3. 如果 LLM 返回纯文本（无 tool_calls） → break，返回最终文本
 
+        Args:
+            timeout: 总超时秒数，防止工具挂起导致系统永久阻塞
+
         Returns:
             dict 兼容格式 (内部使用 ToolCallRecord 结构化记录)
         """
+        import asyncio as _asyncio
         import time as _time
         from core.multi_llm_router import get_llm_router
         from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
@@ -681,83 +686,97 @@ class OpenClawd:
         last_response = None
         total_tokens = 0
 
-        for iteration in range(max_iterations):
-            response = await router.chat(
-                messages=messages,
-                tools=tools if tools else None,
-                task_type=task_type,
-                max_tokens=4096,
-            )
-            last_response = response
-            total_tokens += (response.input_tokens + response.output_tokens)
+        async def _inner_loop():
+            nonlocal last_response, total_tokens
 
-            if not response.tool_calls:
-                # 无工具调用 → 最终回复
-                break
+            for iteration in range(max_iterations):
+                response = await router.chat(
+                    messages=messages,
+                    tools=tools if tools else None,
+                    task_type=task_type,
+                    max_tokens=4096,
+                )
+                last_response = response
+                total_tokens += (response.input_tokens + response.output_tokens)
 
-            # 先把 assistant 的 tool_calls 消息追加到 messages
-            assistant_msg: Dict[str, Any] = {
-                "role": "assistant",
-                "content": response.content or "",
-            }
-            if response.tool_calls:
-                assistant_msg["tool_calls"] = response.tool_calls
-            messages.append(assistant_msg)
+                if not response.tool_calls:
+                    # 无工具调用 → 最终回复
+                    break
 
-            for tc in response.tool_calls:
-                tc_func = tc.get("function", {})
-                tc_name = tc_func.get("name", "")
-                tc_id = tc.get("id", f"call_{tc_name}")
+                # 先把 assistant 的 tool_calls 消息追加到 messages
+                assistant_msg: Dict[str, Any] = {
+                    "role": "assistant",
+                    "content": response.content or "",
+                }
+                if response.tool_calls:
+                    assistant_msg["tool_calls"] = response.tool_calls
+                messages.append(assistant_msg)
 
-                # 解析参数
-                try:
-                    import json as _json
-                    tc_args = _json.loads(tc_func.get("arguments", "{}"))
-                except (ValueError, TypeError):
-                    tc_args = {}
+                for tc in response.tool_calls:
+                    tc_func = tc.get("function", {})
+                    tc_name = tc_func.get("name", "")
+                    tc_id = tc.get("id", f"call_{tc_name}")
 
-                logger.info(f"ReAct 迭代 {iteration+1}: 调用工具 {tc_name}")
+                    # 解析参数
+                    try:
+                        import json as _json
+                        tc_args = _json.loads(tc_func.get("arguments", "{}"))
+                    except (ValueError, TypeError):
+                        tc_args = {}
 
-                # 执行工具 (带计时)
-                t0 = _time.time()
-                result = await self._dispatch_tool_call(tc_name, tc_args)
-                elapsed_ms = (_time.time() - t0) * 1000
+                    logger.info(f"ReAct 迭代 {iteration+1}: 调用工具 {tc_name}")
 
-                # 构造结构化记录
-                layer = ToolCallRecord.classify_layer(tc_name)
-                status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
-                result_str = str(result.get("result", result.get("error", "")))
-                tool_records.append(ToolCallRecord(
-                    tool_name=tc_name,
-                    layer=layer,
-                    arguments=tc_args,
-                    result=result_str[:2000],
-                    status=status,
-                    error=result.get("error") if not result.get("success", True) else None,
-                    latency_ms=round(elapsed_ms, 1),
-                    iteration=iteration,
-                ))
+                    # 执行工具 (带计时 + 单工具超时)
+                    t0 = _time.time()
+                    try:
+                        result = await _asyncio.wait_for(
+                            self._dispatch_tool_call(tc_name, tc_args),
+                            timeout=30.0  # 单个工具调用最多 30 秒
+                        )
+                    except _asyncio.TimeoutError:
+                        result = {"success": False, "error": f"工具 {tc_name} 执行超时 (30s)"}
+                    elapsed_ms = (_time.time() - t0) * 1000
 
-                # 追加 tool result 到 messages
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": result_str[:4000],
-                })
+                    # 构造结构化记录
+                    layer = ToolCallRecord.classify_layer(tc_name)
+                    status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
+                    result_str = str(result.get("result", result.get("error", "")))
+                    tool_records.append(ToolCallRecord(
+                        tool_name=tc_name,
+                        layer=layer,
+                        arguments=tc_args,
+                        result=result_str[:2000],
+                        status=status,
+                        error=result.get("error") if not result.get("success", True) else None,
+                        latency_ms=round(elapsed_ms, 1),
+                        iteration=iteration,
+                    ))
+
+                    # 追加 tool result 到 messages
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": result_str[:4000],
+                    })
+
+        try:
+            await _asyncio.wait_for(_inner_loop(), timeout=timeout)
+        except _asyncio.TimeoutError:
+            logger.warning(f"ReAct 循环总超时 ({timeout}s)，返回已有内容")
 
         final_text = last_response.content if last_response else ""
-        hit_max = (iteration + 1 >= max_iterations) if last_response else False
+        timed_out = last_response is None  # 如果整个循环超时还没拿到 response
 
         # 返回兼容 dict (同时携带结构化 tool_records)
         return {
-            "response": final_text,
+            "response": final_text if not timed_out else "处理超时，请稍后重试",
             "tool_calls_log": [r.model_dump() for r in tool_records],
             "tool_records": tool_records,  # 结构化版本
-            "iterations": min(iteration + 1, max_iterations) if last_response else 0,
+            "iterations": len(tool_records),
             "provider": last_response.provider if last_response else "",
             "model": last_response.model if last_response else "",
             "total_tokens": total_tokens,
-            "hit_max_iterations": hit_max,
+            "timeout": timed_out,
         }
 
     # ========================================================================
@@ -983,6 +1002,10 @@ class OpenClawd:
             }
 
             result = await factory.execute_agent_task(agent.id, task_payload)
+
+            # 防御: result 可能为 None
+            if not result or not isinstance(result, dict):
+                result = {"status": "error", "results": [{"error": "Agent 任务执行返回空结果"}]}
 
             # 提取输出
             outputs = []
