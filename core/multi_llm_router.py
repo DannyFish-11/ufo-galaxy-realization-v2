@@ -619,10 +619,10 @@ class MultiLLMRouter:
 
     # ───────── 复杂度评估 ─────────
 
-    def _compute_complexity_score(
-        self, messages: List[Dict], tools: Optional[List[Dict]] = None
-    ) -> float:
-        """量化评估任务复杂度 (0.0-1.0)
+    def _compute_complexity_vector(
+        self, messages: List[Dict], tools: Optional[List[Dict]] = None,
+    ):
+        """量化评估任务复杂度，返回 ComplexityVector (Pydantic model)
 
         5 维向量加权求和：
           - 上下文长度 (0.15)
@@ -631,6 +631,8 @@ class MultiLLMRouter:
           - 精度要求 (0.20)
           - 工具需求 (0.20)
         """
+        from core.schemas.routing import ComplexityVector
+
         # 拼接全部文本
         full_text = " ".join(m.get("content", "") for m in messages if isinstance(m.get("content"), str))
         text_lower = full_text.lower()
@@ -693,15 +695,20 @@ class MultiLLMRouter:
         has_tools = 1.0 if tools and len(tools) > 0 else 0.0
         dim_tools = min(1.0, max(tool_text_hits / 3, has_tools))
 
-        # ── 加权求和 ──
-        score = (
-            0.15 * dim_context
-            + 0.25 * dim_logic
-            + 0.20 * dim_domain
-            + 0.20 * dim_precision
-            + 0.20 * dim_tools
+        # ── 返回结构化向量 ──
+        return ComplexityVector(
+            context_length=round(dim_context, 3),
+            logic_depth=round(dim_logic, 3),
+            domain_expertise=round(dim_domain, 3),
+            precision_requirement=round(dim_precision, 3),
+            tool_needs=round(dim_tools, 3),
         )
-        return round(min(1.0, score), 3)
+
+    def _compute_complexity_score(
+        self, messages: List[Dict], tools: Optional[List[Dict]] = None,
+    ) -> float:
+        """兼容接口 — 返回加权分数 (float 0.0-1.0)"""
+        return self._compute_complexity_vector(messages, tools).weighted_score
 
     # ───────── 路由决策 ─────────
 
@@ -873,10 +880,11 @@ class MultiLLMRouter:
             response_format: 响应格式
             auto_failover: 是否自动故障转移
         """
-        # 1. 分类任务 + 复杂度评估
+        # 1. 分类任务 + 复杂度评估（结构化向量）
         classified = self.classify_task(messages, task_type)
-        complexity = self._compute_complexity_score(messages, tools)
-        logger.info(f"任务分类: {classified.value} | 复杂度: {complexity}")
+        cv = self._compute_complexity_vector(messages, tools)
+        complexity = cv.weighted_score
+        logger.info(f"任务分类: {classified.value} | 复杂度: {complexity} | 等级: {cv.tier.value}")
 
         # 2. 路由决策（综合任务类型 + 复杂度）
         decision = self.route(classified, provider, complexity_score=complexity)
@@ -944,12 +952,14 @@ class MultiLLMRouter:
                 except Exception:
                     pass
 
-                # 记录调用历史
+                # 记录调用历史（含结构化复杂度）
                 self.call_history.append({
                     "provider": prov_name,
                     "model": mdl,
                     "task_type": classified.value,
                     "complexity": complexity,
+                    "model_tier": cv.tier.value,
+                    "complexity_vector": cv.model_dump(),
                     "latency_ms": response.latency_ms,
                     "tokens": response.input_tokens + response.output_tokens,
                     "timestamp": time.time(),

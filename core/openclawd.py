@@ -460,14 +460,17 @@ class OpenClawd:
           3. 如果 LLM 返回纯文本（无 tool_calls） → break，返回最终文本
 
         Returns:
-            {"response": str, "tool_calls_log": List, "iterations": int,
-             "provider": str, "model": str}
+            dict 兼容格式 (内部使用 ToolCallRecord 结构化记录)
         """
+        import time as _time
         from core.multi_llm_router import get_llm_router
+        from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
+
         router = get_llm_router()
 
-        tool_calls_log: List[Dict] = []
+        tool_records: List[ToolCallRecord] = []
         last_response = None
+        total_tokens = 0
 
         for iteration in range(max_iterations):
             response = await router.chat(
@@ -477,12 +480,12 @@ class OpenClawd:
                 max_tokens=4096,
             )
             last_response = response
+            total_tokens += (response.input_tokens + response.output_tokens)
 
             if not response.tool_calls:
                 # 无工具调用 → 最终回复
                 break
 
-            # 处理每个 tool_call
             # 先把 assistant 的 tool_calls 消息追加到 messages
             assistant_msg: Dict[str, Any] = {
                 "role": "assistant",
@@ -506,30 +509,46 @@ class OpenClawd:
 
                 logger.info(f"ReAct 迭代 {iteration+1}: 调用工具 {tc_name}")
 
-                # 执行工具
+                # 执行工具 (带计时)
+                t0 = _time.time()
                 result = await self._dispatch_tool_call(tc_name, tc_args)
-                tool_calls_log.append({
-                    "iteration": iteration + 1,
-                    "tool": tc_name,
-                    "arguments": tc_args,
-                    "result": result,
-                })
+                elapsed_ms = (_time.time() - t0) * 1000
+
+                # 构造结构化记录
+                layer = ToolCallRecord.classify_layer(tc_name)
+                status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
+                result_str = str(result.get("result", result.get("error", "")))
+                tool_records.append(ToolCallRecord(
+                    tool_name=tc_name,
+                    layer=layer,
+                    arguments=tc_args,
+                    result=result_str[:2000],
+                    status=status,
+                    error=result.get("error") if not result.get("success", True) else None,
+                    latency_ms=round(elapsed_ms, 1),
+                    iteration=iteration,
+                ))
 
                 # 追加 tool result 到 messages
-                result_content = str(result.get("result", result.get("error", "")))
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc_id,
-                    "content": result_content[:4000],  # 截断过长结果
+                    "content": result_str[:4000],
                 })
 
         final_text = last_response.content if last_response else ""
+        hit_max = (iteration + 1 >= max_iterations) if last_response else False
+
+        # 返回兼容 dict (同时携带结构化 tool_records)
         return {
             "response": final_text,
-            "tool_calls_log": tool_calls_log,
+            "tool_calls_log": [r.model_dump() for r in tool_records],
+            "tool_records": tool_records,  # 结构化版本
             "iterations": min(iteration + 1, max_iterations) if last_response else 0,
             "provider": last_response.provider if last_response else "",
             "model": last_response.model if last_response else "",
+            "total_tokens": total_tokens,
+            "hit_max_iterations": hit_max,
         }
 
     # ========================================================================
@@ -586,8 +605,15 @@ class OpenClawd:
             # 收集可用工具
             tools = self._collect_tools()
 
+            # 计算复杂度 (结构化向量)
+            cv = router._compute_complexity_vector(messages, tools if tools else None)
+
             # 使用 ReAct 循环
             result = await self._react_loop(messages, tools)
+
+            # 构建层级使用统计
+            tool_records = result.get("tool_records", [])
+            layers_used = list(set(r.layer.value for r in tool_records)) if tool_records else []
 
             return {
                 "success": True,
@@ -598,6 +624,12 @@ class OpenClawd:
                     "iterations": result.get("iterations", 1),
                     "tool_calls": len(result.get("tool_calls_log", [])),
                     "tool_calls_log": result.get("tool_calls_log", []),
+                    "total_tokens": result.get("total_tokens", 0),
+                    "complexity_score": cv.weighted_score,
+                    "model_tier": cv.tier.value,
+                    "complexity_vector": cv.model_dump(),
+                    "layers_used": layers_used,
+                    "hit_max_iterations": result.get("hit_max_iterations", False),
                 },
             }
 

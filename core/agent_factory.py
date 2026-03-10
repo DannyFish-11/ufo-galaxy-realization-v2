@@ -767,8 +767,11 @@ class AgentFactory:
             except Exception as e:
                 logger.debug(f"Agent 工具收集失败（降级为无工具模式）: {e}")
 
-            # ReAct 循环
-            tool_calls_log = []
+            # ReAct 循环（使用结构化 ToolCallRecord）
+            import time as _time
+            from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
+
+            tool_records: list = []
             max_react_iterations = 8
 
             for iteration in range(max_react_iterations):
@@ -785,12 +788,11 @@ class AgentFactory:
                     resp = await _llm_call()
 
                 if not resp.tool_calls:
-                    # 无工具调用 → 最终回复
                     return {
                         "task": task,
                         "output": resp.content,
                         "provider": resp.provider,
-                        "tool_calls": tool_calls_log,
+                        "tool_calls": [r.model_dump() for r in tool_records],
                         "iterations": iteration + 1,
                     }
 
@@ -812,21 +814,31 @@ class AgentFactory:
 
                     logger.info(f"Agent {agent.id} 调用工具: {tc_name}")
 
-                    # 通过 OpenClawd 分发工具调用
+                    t0 = _time.time()
                     try:
                         result = await clawd._dispatch_tool_call(tc_name, tc_args)
                     except Exception:
                         result = {"success": False, "error": f"工具 {tc_name} 不可用"}
+                    elapsed_ms = (_time.time() - t0) * 1000
 
-                    tool_calls_log.append({
-                        "tool": tc_name, "arguments": tc_args, "result": result,
-                    })
+                    layer = ToolCallRecord.classify_layer(tc_name)
+                    status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
+                    result_str = str(result.get("result", result.get("error", "")))
+                    tool_records.append(ToolCallRecord(
+                        tool_name=tc_name,
+                        layer=layer,
+                        arguments=tc_args,
+                        result=result_str[:2000],
+                        status=status,
+                        error=result.get("error") if not result.get("success", True) else None,
+                        latency_ms=round(elapsed_ms, 1),
+                        iteration=iteration,
+                    ))
 
-                    result_content = str(result.get("result", result.get("error", "")))
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc_id,
-                        "content": result_content[:4000],
+                        "content": result_str[:4000],
                     })
 
             # 达到最大迭代次数
@@ -834,7 +846,7 @@ class AgentFactory:
                 "task": task,
                 "output": resp.content if resp else "Agent 达到最大迭代次数",
                 "provider": resp.provider if resp else "",
-                "tool_calls": tool_calls_log,
+                "tool_calls": [r.model_dump() for r in tool_records],
                 "iterations": max_react_iterations,
             }
 
