@@ -740,10 +740,17 @@ class OpenClawd:
             router = get_llm_router()
             factory = get_agent_factory(router)
 
-            # 判断是否需要团队协作
+            # 判断是否需要团队协作 (复杂度驱动)
+            tools = self._collect_tools()
+            cv = router._compute_complexity_vector(
+                [{"role": "user", "content": message}],
+                tools if tools else None,
+            )
             targets = intent.targets if intent else []
-            is_complex = len(targets) > 2 or (
-                intent and intent.intent in ("workflow", "batch_task", "multi_device")
+            is_complex = (
+                cv.weighted_score >= 0.6
+                or len(targets) > 2
+                or (intent and intent.intent in ("workflow", "batch_task", "multi_device"))
             )
 
             if is_complex:
@@ -799,21 +806,52 @@ class OpenClawd:
             return await self.handle_chat(message, "fallback")
 
     async def _execute_team_task(self, message: str, intent, factory, router) -> dict:
-        """执行团队协作任务"""
+        """执行团队协作任务 — 复杂度驱动策略 + 工具注入 + Manifest 记录"""
         try:
             from core.agent_team import TeamManager, TeamStrategy
+            from core.schemas.agent import TeamManifestSchema, TeamMemberSchema, TeamStrategyEnum
 
             manager = TeamManager(agent_factory=factory, llm_router=router)
 
-            # 选择团队策略
-            if intent and intent.intent == "workflow":
+            # 收集工具 & 计算复杂度向量
+            tools = self._collect_tools()
+            cv = router._compute_complexity_vector(
+                [{"role": "user", "content": message}],
+                tools if tools else None,
+            )
+
+            # 复杂度驱动策略选择
+            if cv.weighted_score >= 0.7:
                 strategy = "specialized"
-            elif intent and len(intent.targets) > 3:
-                strategy = "swarm"
+            elif cv.weighted_score >= 0.4:
+                strategy = "parallel"
             else:
                 strategy = "parallel"
 
-            team = await manager.create_team(strategy=strategy, task_hint=message)
+            # 意图覆写
+            if intent and intent.intent == "workflow":
+                strategy = "specialized"
+            elif intent and hasattr(intent, "targets") and len(intent.targets) > 5:
+                strategy = "swarm"
+
+            # 创建团队 (传复杂度)
+            team = await manager.create_team(
+                strategy=strategy, task_hint=message,
+                complexity_score=cv.weighted_score,
+            )
+
+            # 注入工具能力
+            team.set_tools(tools, dispatch_fn=self._dispatch_tool_call)
+
+            # 生成 Manifest 记录
+            manifest = TeamManifestSchema(
+                team_id=team.team_id,
+                strategy=TeamStrategyEnum(strategy),
+                task=message,
+                members=[TeamMemberSchema.from_dataclass(m) for m in team.members],
+                complexity_score=cv.weighted_score,
+            )
+
             team_result = await team.execute(message)
 
             # 解散团队释放资源
@@ -828,12 +866,14 @@ class OpenClawd:
                     "member_count": len(team_result.member_results),
                     "total_latency_ms": round(team_result.total_latency_ms, 1),
                     "total_tokens": team_result.total_tokens,
+                    "manifest": manifest.model_dump(),
+                    "complexity_vector": cv.model_dump(),
+                    "model_tier": cv.tier.value,
                 },
             }
 
         except Exception as e:
             logger.warning(f"团队协作失败，降级到单 Agent: {e}")
-            # 降级到单 Agent
             try:
                 agent = factory.create_from_template("coordinator")
                 result = await factory.execute_agent_task(

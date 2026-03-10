@@ -774,7 +774,7 @@ class MultiLLMRouter:
 
         return TaskType.GENERAL
 
-    def _select_model_by_complexity(
+    def select_model_by_complexity(
         self, provider_name: str, task_type: TaskType, complexity: float
     ) -> str:
         """根据复杂度选择模型 — 简单任务用轻量模型，复杂任务用强模型"""
@@ -808,7 +808,7 @@ class MultiLLMRouter:
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
             if prov.status != ProviderStatus.DOWN:
-                model = self._select_model_by_complexity(
+                model = self.select_model_by_complexity(
                     preferred_provider, task_type, complexity_score
                 )
                 return RoutingDecision(
@@ -827,7 +827,7 @@ class MultiLLMRouter:
             if prov.status == ProviderStatus.DOWN:
                 continue
 
-            model = self._select_model_by_complexity(
+            model = self.select_model_by_complexity(
                 provider_name, task_type, complexity_score
             )
             if not alternatives:

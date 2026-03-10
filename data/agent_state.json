@@ -1,7 +1,7 @@
 {
   "agents": {
-    "agent_bef46bc3d704": {
-      "id": "agent_bef46bc3d704",
+    "agent_9b6ab946a8f5": {
+      "id": "agent_9b6ab946a8f5",
       "config": {
         "role": "coordinator",
         "name": "协调 Agent",
@@ -17,8 +17,8 @@
       "children_ids": [],
       "creation_mode": "template",
       "depth": 0,
-      "created_at": 1773143474.7870479,
-      "last_active": 1773143474.7870479,
+      "created_at": 1773145923.8105223,
+      "last_active": 1773145923.8105223,
       "metrics": {
         "tasks_completed": 0,
         "tasks_failed": 0,
@@ -28,5 +28,5 @@
     }
   },
   "agent_tree": {},
-  "timestamp": 1773143474.7870717
+  "timestamp": 1773145923.8105454
 }
