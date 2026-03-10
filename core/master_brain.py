@@ -12,18 +12,19 @@ Constraints (see plan 强约束):
   C7  — all methods return ``{"success": bool, "error": ...}``
   C8  — exposes ``get_status()`` matching GalaxyCore pattern
   C9  — integrates directly into GalaxyCore (no separate HTTP port)
-  C11 — loguru logger
+  C11 — uses stdlib ``logging`` (matching codebase convention)
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 import uuid
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
-from loguru import logger
+logger = logging.getLogger("master_brain")
 
 from core.acl import AntiCorruptionLayer, acl
 from core.nats_bus import NATSBus, nats_bus
@@ -43,16 +44,11 @@ from core.schemas.contracts import (
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import EventBus, EventType
+        from integration.event_bus import event_bus, EventType
 
-        bus = EventBus()
         et = getattr(EventType, event_type_name, None)
         if et is not None:
-            import asyncio
-
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(bus.emit(et, data))
+            event_bus.publish_sync(et, "agentic_os", data)
     except Exception:
         pass
 
@@ -118,9 +114,7 @@ class MasterBrain:
             logger.debug("MasterBrain: Temporal unavailable, workflow features disabled")
 
         self._started = True
-        logger.info("MasterBrain: started (NATS={}, Temporal={})",
-                     self._nats.is_connected(),
-                     self._temporal_client is not None)
+        logger.info(f"MasterBrain: started (NATS={self._nats.is_connected()}, Temporal={self._temporal_client is not None})")
         return {"success": True}
 
     # ── Task Dispatch ───────────────────────────────────────────────────────
@@ -176,7 +170,7 @@ class MasterBrain:
             "status": result.status.value,
         })
 
-        logger.info("MasterBrain: task {} completed with status {}", task_id, result.status.value)
+        logger.info(f"MasterBrain: task {task_id} completed with status {result.status.value}")
         return {"success": True, "task_id": task_id, "status": result.status.value}
 
     # ── Workflow launch ─────────────────────────────────────────────────────
@@ -207,10 +201,10 @@ class MasterBrain:
                 id=f"galaxy-{workflow_type}-{run_id}",
                 task_queue="galaxy-tasks",
             )
-            logger.info("MasterBrain: started workflow {} (run={})", wf_name, run_id)
+            logger.info(f"MasterBrain: started workflow {wf_name} (run={run_id})")
             return {"success": True, "workflow_id": handle.id, "run_id": run_id}
         except Exception as exc:
-            logger.error("MasterBrain: workflow start failed — {}", exc)
+            logger.error(f"MasterBrain: workflow start failed — {exc}")
             return {"success": False, "error": str(exc)}
 
     # ── Worker topology ─────────────────────────────────────────────────────
@@ -234,7 +228,7 @@ class MasterBrain:
             "registered_at": datetime.now().isoformat(),
         }
         _try_emit_event("WORKER_REGISTERED", {"worker_id": wid, "device_type": registration.device_type})
-        logger.info("MasterBrain: worker registered — {} ({})", wid, registration.device_type)
+        logger.info(f"MasterBrain: worker registered — {wid} ({registration.device_type})")
         return {"success": True, "worker_id": wid}
 
     async def handle_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
@@ -291,7 +285,7 @@ class MasterBrain:
             hb = WorkerHeartbeatModel.model_validate(data)
             await self.handle_heartbeat(hb)
         except Exception as exc:
-            logger.debug("MasterBrain: heartbeat parse error — {}", exc)
+            logger.debug(f"MasterBrain: heartbeat parse error — {exc}")
 
     async def _on_task_result(self, data: dict) -> None:
         try:
@@ -299,7 +293,7 @@ class MasterBrain:
             if result_validated["success"]:
                 await self.handle_task_result(result_validated["data"])
         except Exception as exc:
-            logger.error("MasterBrain: task result handling error — {}", exc)
+            logger.error(f"MasterBrain: task result handling error — {exc}")
 
     async def _on_worker_event(self, data: dict) -> None:
         try:

@@ -140,10 +140,18 @@ func (s *Sandbox) Execute(ctx context.Context, code CodePayload, cfg SandboxConf
 		NetworkDisabled: !cfg.NetworkEnabled,
 	}
 
+	// NanoCPUs: Docker CPU rate limit in nanoseconds per second.
+	// 1_000_000_000 = 1 CPU core. Default to 1 core if not specified.
+	// CPULimitMS is reinterpreted as millicores: 1000 = 1 core, 2000 = 2 cores.
+	nanoCPUs := int64(1_000_000_000) // Default: 1 core
+	if cfg.CPULimitMS > 0 {
+		nanoCPUs = cfg.CPULimitMS * 1_000_000
+	}
+
 	hostCfg := &container.HostConfig{
 		Resources: container.Resources{
 			Memory:   memBytes,
-			NanoCPUs: cfg.CPULimitMS * 1_000_000, // Approximate: ms → nano
+			NanoCPUs: nanoCPUs,
 		},
 		AutoRemove: true,
 	}
