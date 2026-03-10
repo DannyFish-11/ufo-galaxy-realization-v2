@@ -1,0 +1,144 @@
+// =============================================================================
+// Galaxy Agentic OS — MCP (Model Context Protocol) Contracts
+// =============================================================================
+//
+// Defines the communication contract between the MasterBrain and the MCP
+// Dynamic Gateway, including:
+//   - Tool discovery and invocation
+//   - Dynamic tool registration (Self-Tool-Making)
+//   - Hot-reload notifications
+//
+// MCP follows JSON-RPC 2.0 internally, but Brain↔Gateway communication
+// uses these Protobuf messages over NATS for type safety and performance.
+//
+// NATS Subjects:
+//   - galaxy.mcp.calls    : Brain → MCP Gateway (MCPCallRequest)
+//   - galaxy.mcp.results  : MCP Gateway → Brain (MCPCallResponse)
+//   - galaxy.mcp.register : MCP Gateway → Brain (MCPToolRegistration)
+//   - galaxy.mcp.discover : Brain → MCP Gateway (MCPDiscoveryRequest)
+//
+// Version: 1.0.0
+// =============================================================================
+
+syntax = "proto3";
+
+package galaxy.v1;
+
+option go_package = "github.com/ufo-galaxy/agentic-os/gen/go/galaxy/v1;galaxyv1";
+
+import "galaxy/v1/common.proto";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP Tool Descriptor
+// ─────────────────────────────────────────────────────────────────────────────
+
+message MCPToolDescriptor {
+  string name           = 1;  // Tool name (unique within server scope)
+  string description    = 2;  // Human-readable description
+  string input_schema   = 3;  // JSON Schema for tool input parameters
+  string output_schema  = 4;  // JSON Schema for tool output (optional)
+  string server_id      = 5;  // MCP server that hosts this tool
+  string server_name    = 6;  // Human-readable server name
+  string version        = 7;  // Tool version (semver)
+  repeated string tags  = 8;  // Categorization tags (e.g. ["code", "filesystem"])
+  bool   requires_auth  = 9;  // Whether tool requires authentication
+  int64  timeout_ms     = 10; // Recommended timeout for this tool
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP Tool Invocation
+// ─────────────────────────────────────────────────────────────────────────────
+
+message MCPCallRequest {
+  string request_id       = 1;   // Unique request ID for correlation
+  string tool_name        = 2;   // Tool to invoke
+  string server_id        = 3;   // Target MCP server (empty = auto-route)
+  string arguments_json   = 4;   // JSON-encoded tool arguments
+  int64  timeout_ms       = 5;   // Call timeout in milliseconds
+  string caller_agent_id  = 6;   // Agent that initiated the call
+  string caller_task_id   = 7;   // Parent task ID (for tracing)
+  Timestamp created_at    = 8;   // Request creation timestamp
+  Priority priority       = 9;   // Call priority
+}
+
+message MCPCallResponse {
+  string    request_id    = 1;   // Must match MCPCallRequest.request_id
+  bool      is_error      = 2;   // True if tool execution failed
+  string    result_json   = 3;   // JSON-encoded tool result
+  ErrorInfo error         = 4;   // Error details (if is_error is true)
+  int64     duration_ms   = 5;   // Tool execution time
+  Timestamp completed_at  = 6;   // Response timestamp
+  string    server_id     = 7;   // Server that handled the call
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP Tool Discovery
+// ─────────────────────────────────────────────────────────────────────────────
+
+message MCPDiscoveryRequest {
+  string request_id      = 1;   // Unique request ID
+  string name_filter     = 2;   // Filter by tool name (glob pattern, e.g. "code_*")
+  repeated string tags   = 3;   // Filter by tags (AND logic)
+  string server_id       = 4;   // Filter by server (empty = all servers)
+  bool   include_schemas = 5;   // Include input/output schemas in response
+}
+
+message MCPDiscoveryResponse {
+  string                    request_id = 1;
+  repeated MCPToolDescriptor tools     = 2;   // Matching tools
+  int32                     total      = 3;   // Total matching tools
+  Timestamp                 as_of      = 4;   // Registry snapshot timestamp
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP Dynamic Tool Registration (Self-Tool-Making)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// This contract governs the "Self-Tool-Making" mechanism:
+//
+// 1. Brain detects capability gap (worker reports "missing tool X")
+// 2. Brain uses LLM to generate a Python script implementing the tool
+// 3. Brain validates the script through ACL
+// 4. Brain sends MCPToolRegistration to MCP Gateway
+// 5. MCP Gateway:
+//    a. Saves the script to disk
+//    b. Spawns it as a stdio-based MCP server process
+//    c. Verifies tools/list returns the expected tool
+//    d. Adds to tool registry
+// 6. MCP Gateway publishes MCPToolRegistrationResult
+// 7. Brain broadcasts new capability to all workers
+
+enum MCPRegistrationAction {
+  MCP_REGISTRATION_ACTION_UNSPECIFIED = 0;
+  MCP_REGISTRATION_ACTION_REGISTER    = 1;  // Add new tool/server
+  MCP_REGISTRATION_ACTION_DEREGISTER  = 2;  // Remove tool/server
+  MCP_REGISTRATION_ACTION_UPDATE      = 3;  // Update existing tool
+  MCP_REGISTRATION_ACTION_HOT_RELOAD  = 4;  // Reload without downtime
+}
+
+message MCPToolRegistration {
+  string                  request_id   = 1;  // Unique registration request ID
+  MCPRegistrationAction   action       = 2;  // Registration action
+  MCPToolDescriptor       tool         = 3;  // Tool descriptor
+
+  // ── For REGISTER/UPDATE/HOT_RELOAD ──
+  string server_command   = 4;   // Command to start MCP server (e.g. "python /path/to/tool.py")
+  repeated string server_args = 5; // Additional arguments
+  map<string, string> server_env = 6; // Environment variables for the server process
+  string script_content   = 7;   // Full source code of the generated tool (for self-made tools)
+  string script_language  = 8;   // Language of the script ("python", "node", "go")
+
+  // ── Metadata ──
+  string generated_by     = 10;  // Agent/model that generated this tool
+  string generation_prompt = 11; // The prompt used to generate the tool (for audit)
+  Timestamp created_at    = 12;  // Registration timestamp
+}
+
+message MCPToolRegistrationResult {
+  string    request_id   = 1;   // Must match MCPToolRegistration.request_id
+  bool      success      = 2;   // Registration succeeded
+  ErrorInfo error        = 3;   // Error details (if failed)
+  string    server_id    = 4;   // Assigned server ID (for new registrations)
+  string    tool_name    = 5;   // Confirmed tool name
+  Timestamp registered_at = 6;  // When tool became available
+}

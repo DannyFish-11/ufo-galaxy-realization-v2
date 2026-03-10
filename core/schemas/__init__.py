@@ -49,6 +49,59 @@ from core.schemas.session import (
     SessionMigrateSchema,
 )
 
+# -- Contract models (Agentic OS) -------------------------------------------
+from core.schemas.contracts import (
+    # Enums
+    Priority,
+    TaskStatus,
+    WorkerStatus,
+    TaskType,
+    CodeLanguage,
+    FileOperation,
+    DiagnosticSeverity,
+    MCPRegistrationAction,
+    AgentMessageType,
+    EventDomain,
+    EventSeverity,
+    # Common
+    TimestampModel,
+    ErrorInfoModel,
+    ResourceUsageModel,
+    # Task payloads
+    CodePayloadModel,
+    SandboxConfigModel,
+    FilePayloadModel,
+    DeviceCommandPayloadModel,
+    ShellPayloadModel,
+    MCPCallPayloadModel,
+    # Task dispatch/result
+    TaskDispatchModel,
+    TaskResultModel,
+    # LSP
+    LSPDiagnosticModel,
+    LSPCheckResultModel,
+    # Execution
+    ExecutionOutputModel,
+    ArtifactModel,
+    # MCP
+    MCPToolDescriptorModel,
+    MCPCallRequestModel,
+    MCPCallResponseModel,
+    MCPDiscoveryRequestModel,
+    MCPDiscoveryResponseModel,
+    MCPToolRegistrationModel,
+    MCPToolRegistrationResultModel,
+    # Worker
+    WorkerCapabilityModel,
+    WorkerRegistrationModel,
+    WorkerHeartbeatModel,
+    WorkerShutdownModel,
+    # Events
+    AgentEventModel,
+    # Envelope
+    AgentMessageModel,
+)
+
 __all__ = [
     # device
     "DeviceRegisterSchema",
@@ -74,4 +127,53 @@ __all__ = [
     # session
     "SessionSchema",
     "SessionMigrateSchema",
+    # contracts — enums
+    "Priority",
+    "TaskStatus",
+    "WorkerStatus",
+    "TaskType",
+    "CodeLanguage",
+    "FileOperation",
+    "DiagnosticSeverity",
+    "MCPRegistrationAction",
+    "AgentMessageType",
+    "EventDomain",
+    "EventSeverity",
+    # contracts — common
+    "TimestampModel",
+    "ErrorInfoModel",
+    "ResourceUsageModel",
+    # contracts — task payloads
+    "CodePayloadModel",
+    "SandboxConfigModel",
+    "FilePayloadModel",
+    "DeviceCommandPayloadModel",
+    "ShellPayloadModel",
+    "MCPCallPayloadModel",
+    # contracts — task dispatch/result
+    "TaskDispatchModel",
+    "TaskResultModel",
+    # contracts — LSP
+    "LSPDiagnosticModel",
+    "LSPCheckResultModel",
+    # contracts — execution
+    "ExecutionOutputModel",
+    "ArtifactModel",
+    # contracts — MCP
+    "MCPToolDescriptorModel",
+    "MCPCallRequestModel",
+    "MCPCallResponseModel",
+    "MCPDiscoveryRequestModel",
+    "MCPDiscoveryResponseModel",
+    "MCPToolRegistrationModel",
+    "MCPToolRegistrationResultModel",
+    # contracts — worker
+    "WorkerCapabilityModel",
+    "WorkerRegistrationModel",
+    "WorkerHeartbeatModel",
+    "WorkerShutdownModel",
+    # contracts — events
+    "AgentEventModel",
+    # contracts — envelope
+    "AgentMessageModel",
 ]

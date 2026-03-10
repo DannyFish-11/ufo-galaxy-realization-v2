@@ -1,0 +1,188 @@
+// =============================================================================
+// Galaxy Agentic OS — Common Types (Single Source of Truth)
+// =============================================================================
+//
+// This file defines all shared enumerations and base types used across the
+// entire Distributed Agentic OS. ALL modules (Python control plane, Go/Rust
+// edge workers, MCP gateway) MUST import types from here. Defining device
+// types, priorities, or status codes elsewhere is a P0 violation.
+//
+// Version: 1.0.0
+// =============================================================================
+
+syntax = "proto3";
+
+package galaxy.v1;
+
+option go_package = "github.com/ufo-galaxy/agentic-os/gen/go/galaxy/v1;galaxyv1";
+option java_package = "com.galaxy.agenticos.v1";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timestamps & Identifiers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// High-precision timestamp with nanosecond resolution for distributed tracing.
+message Timestamp {
+  int64 seconds = 1;   // Unix epoch seconds (UTC)
+  int32 nanos   = 2;   // Sub-second nanoseconds [0, 999999999]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Device Types — Canonical Definition
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// This enum unifies the 4 previously scattered DeviceType definitions:
+//   - core/device_registry.py (ANDROID/IOS/WINDOWS/MACOS/LINUX/IOT/BROWSER/CUSTOM)
+//   - galaxy_gateway/device_router.py (ANDROID/WINDOWS/IOS/MACOS/LINUX/WEB/TABLET/UNKNOWN)
+//   - galaxy_gateway/protocol/aip_v3.py (30+ fine-grained types)
+//   - nodes/Node_71.../models/device.py (custom definition)
+//
+// Python side: core/device_types.py DeviceType enum is the runtime equivalent.
+// Go side: generated enum from this proto file.
+
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  // ── Platform types ──
+  DEVICE_TYPE_ANDROID     = 1;
+  DEVICE_TYPE_IOS         = 2;
+  DEVICE_TYPE_WINDOWS     = 3;
+  DEVICE_TYPE_MACOS       = 4;
+  DEVICE_TYPE_LINUX       = 5;
+  DEVICE_TYPE_BROWSER     = 6;
+  DEVICE_TYPE_CLOUD       = 7;
+  // ── Specialized device types ──
+  DEVICE_TYPE_DRONE       = 10;
+  DEVICE_TYPE_PRINTER_3D  = 11;
+  DEVICE_TYPE_ROBOT       = 12;
+  DEVICE_TYPE_CAMERA      = 13;
+  DEVICE_TYPE_SENSOR      = 14;
+  DEVICE_TYPE_ACTUATOR    = 15;
+  DEVICE_TYPE_DISPLAY     = 16;
+  DEVICE_TYPE_SPEAKER     = 17;
+  DEVICE_TYPE_IOT         = 18;
+  DEVICE_TYPE_EMBEDDED    = 19;
+  // ── Communication/Interface devices ──
+  DEVICE_TYPE_AUDIO       = 20;
+  DEVICE_TYPE_SERIAL      = 21;
+  DEVICE_TYPE_BLE         = 22;
+  DEVICE_TYPE_NFC         = 23;
+  DEVICE_TYPE_CANBUS      = 24;
+  // ── Quantum ──
+  DEVICE_TYPE_QUANTUM     = 30;
+  // ── Generic ──
+  DEVICE_TYPE_CUSTOM      = 90;
+  DEVICE_TYPE_UNKNOWN     = 99;
+}
+
+// Fine-grained device subtype for AIP v3.0 protocol compatibility.
+enum DeviceSubtype {
+  DEVICE_SUBTYPE_UNSPECIFIED   = 0;
+  // Android subtypes
+  DEVICE_SUBTYPE_ANDROID_PHONE  = 101;
+  DEVICE_SUBTYPE_ANDROID_TABLET = 102;
+  DEVICE_SUBTYPE_ANDROID_TV     = 103;
+  DEVICE_SUBTYPE_ANDROID_CAR    = 104;
+  DEVICE_SUBTYPE_ANDROID_WEAR   = 105;
+  // iOS subtypes
+  DEVICE_SUBTYPE_IOS_PHONE      = 201;
+  DEVICE_SUBTYPE_IOS_TABLET     = 202;
+  DEVICE_SUBTYPE_IOS_WATCH      = 203;
+  // Windows subtypes
+  DEVICE_SUBTYPE_WINDOWS_DESKTOP = 301;
+  DEVICE_SUBTYPE_WINDOWS_LAPTOP  = 302;
+  DEVICE_SUBTYPE_WINDOWS_WSL     = 303;
+  // macOS subtypes
+  DEVICE_SUBTYPE_MACOS_DESKTOP   = 401;
+  DEVICE_SUBTYPE_MACOS_LAPTOP    = 402;
+  // Linux subtypes
+  DEVICE_SUBTYPE_LINUX_DESKTOP   = 501;
+  DEVICE_SUBTYPE_LINUX_SERVER    = 502;
+  DEVICE_SUBTYPE_LINUX_RASPBERRY = 503;
+  // Cloud subtypes
+  DEVICE_SUBTYPE_CLOUD_AWS       = 601;
+  DEVICE_SUBTYPE_CLOUD_AZURE     = 602;
+  DEVICE_SUBTYPE_CLOUD_HUAWEI    = 603;
+  DEVICE_SUBTYPE_CLOUD_ALIYUN    = 604;
+  DEVICE_SUBTYPE_CLOUD_TENCENT   = 605;
+  // Embedded subtypes
+  DEVICE_SUBTYPE_EMBEDDED_ESP32   = 701;
+  DEVICE_SUBTYPE_EMBEDDED_ARDUINO = 702;
+  DEVICE_SUBTYPE_IOT_GENERIC      = 703;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform (for routing decisions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum DevicePlatform {
+  DEVICE_PLATFORM_UNSPECIFIED = 0;
+  DEVICE_PLATFORM_ANDROID     = 1;
+  DEVICE_PLATFORM_IOS         = 2;
+  DEVICE_PLATFORM_WINDOWS     = 3;
+  DEVICE_PLATFORM_MACOS       = 4;
+  DEVICE_PLATFORM_LINUX       = 5;
+  DEVICE_PLATFORM_WEB         = 6;
+  DEVICE_PLATFORM_EMBEDDED    = 7;
+  DEVICE_PLATFORM_CLOUD       = 8;
+  DEVICE_PLATFORM_UNKNOWN     = 99;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Priority & Status
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW         = 1;
+  PRIORITY_NORMAL      = 2;
+  PRIORITY_HIGH        = 3;
+  PRIORITY_CRITICAL    = 4;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING     = 1;
+  TASK_STATUS_QUEUED      = 2;
+  TASK_STATUS_DISPATCHED  = 3;
+  TASK_STATUS_RUNNING     = 4;
+  TASK_STATUS_LSP_FAILED  = 5;   // LSP pre-check found errors
+  TASK_STATUS_SUCCESS     = 6;
+  TASK_STATUS_FAILED      = 7;
+  TASK_STATUS_TIMEOUT     = 8;
+  TASK_STATUS_CANCELLED   = 9;
+  TASK_STATUS_RETRYING    = 10;
+}
+
+enum WorkerStatus {
+  WORKER_STATUS_UNSPECIFIED = 0;
+  WORKER_STATUS_IDLE        = 1;
+  WORKER_STATUS_BUSY        = 2;
+  WORKER_STATUS_DRAINING    = 3;  // Graceful shutdown in progress
+  WORKER_STATUS_OFFLINE     = 4;
+  WORKER_STATUS_ERROR       = 5;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Error Information
+// ─────────────────────────────────────────────────────────────────────────────
+
+message ErrorInfo {
+  string code    = 1;   // Machine-readable error code (e.g. "SANDBOX_OOM")
+  string message = 2;   // Human-readable error message
+  string details = 3;   // Detailed stack trace or context (may be large)
+  string source  = 4;   // Component that produced the error (e.g. "worker.sandbox")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resource Usage Metrics
+// ─────────────────────────────────────────────────────────────────────────────
+
+message ResourceUsage {
+  int64  memory_peak_bytes = 1;  // Peak RSS in bytes
+  int64  cpu_time_ms       = 2;  // Total CPU time in milliseconds
+  int64  wall_time_ms      = 3;  // Wall clock time in milliseconds
+  int64  disk_read_bytes   = 4;  // Bytes read from disk
+  int64  disk_write_bytes  = 5;  // Bytes written to disk
+  int64  network_rx_bytes  = 6;  // Network bytes received (0 if isolated)
+  int64  network_tx_bytes  = 7;  // Network bytes transmitted (0 if isolated)
+}

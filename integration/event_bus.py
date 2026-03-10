@@ -73,6 +73,29 @@ class EventType(Enum):
     SESSION_CREATED = auto()              # 会话创建
     SESSION_CLOSED = auto()               # 会话关闭
 
+    # Agentic OS — MasterBrain 任务生命周期
+    TASK_DISPATCHED = auto()              # 任务已分发到 Worker
+    TASK_RESULT_RECEIVED = auto()         # 收到 Worker 任务结果
+
+    # Agentic OS — Worker 拓扑
+    WORKER_REGISTERED = auto()            # Worker 注册
+    WORKER_HEARTBEAT_RECEIVED = auto()    # Worker 心跳
+    WORKER_DEAD = auto()                  # Worker 失联
+
+    # Agentic OS — MCP 自工具制造
+    MCP_TOOL_GENERATED = auto()           # LLM 生成了工具代码
+    MCP_TOOL_REGISTERED = auto()          # 工具已注册到 MCP Gateway
+    MCP_TOOL_RELOADED = auto()            # 工具已热重载
+
+    # Agentic OS — ACL 审计
+    ACL_VALIDATION_FAILED = auto()        # ACL 验证失败
+    ACL_NORMALIZATION_APPLIED = auto()    # ACL 应用了归一化
+
+    # Agentic OS — NATS 总线健康
+    NATS_CONNECTED = auto()               # NATS 已连接
+    NATS_DISCONNECTED = auto()            # NATS 已断开
+    NATS_RECONNECTING = auto()            # NATS 正在重连
+
 
 @dataclass
 class UIGalaxyEvent:

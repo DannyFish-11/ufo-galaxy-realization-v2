@@ -1,0 +1,273 @@
+// =============================================================================
+// Galaxy Agentic OS — Task Dispatch & Execution Result Contracts
+// =============================================================================
+//
+// Defines the absolute communication contract between the Cloud Control Plane
+// (MasterBrain, Python) and Edge Data Plane Workers (Go/Rust).
+//
+// These messages are serialized as Protobuf binary and transmitted over
+// NATS JetStream subjects:
+//   - galaxy.tasks.dispatch.{worker_id} : Brain → Worker (TaskDispatch)
+//   - galaxy.tasks.result.{task_id}     : Worker → Brain (TaskResult)
+//
+// ALL fields are explicitly typed. No `google.protobuf.Any` or `map<string,string>`
+// escape hatches for core data. Metadata/context uses maps only for extensibility.
+//
+// Version: 1.0.0
+// =============================================================================
+
+syntax = "proto3";
+
+package galaxy.v1;
+
+option go_package = "github.com/ufo-galaxy/agentic-os/gen/go/galaxy/v1;galaxyv1";
+
+import "galaxy/v1/common.proto";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TaskType {
+  TASK_TYPE_UNSPECIFIED    = 0;
+  TASK_TYPE_CODE_EXEC      = 1;   // Execute code in sandbox
+  TASK_TYPE_FILE_OP        = 2;   // File read/write/delete/move
+  TASK_TYPE_DEVICE_CMD     = 3;   // Device-specific command (ADB, BLE, etc.)
+  TASK_TYPE_MCP_CALL       = 4;   // Invoke an MCP tool
+  TASK_TYPE_SHELL          = 5;   // Shell command execution
+  TASK_TYPE_LSP_CHECK      = 6;   // LSP diagnostic check only (no execution)
+  TASK_TYPE_HEALTH_CHECK   = 7;   // Worker self-diagnostic
+  TASK_TYPE_CAPABILITY_PROBE = 8; // Probe worker capabilities
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Code Execution Payload
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CodeLanguage {
+  CODE_LANGUAGE_UNSPECIFIED = 0;
+  CODE_LANGUAGE_PYTHON      = 1;
+  CODE_LANGUAGE_JAVASCRIPT  = 2;
+  CODE_LANGUAGE_TYPESCRIPT  = 3;
+  CODE_LANGUAGE_GO          = 4;
+  CODE_LANGUAGE_RUST        = 5;
+  CODE_LANGUAGE_BASH        = 6;
+  CODE_LANGUAGE_C           = 7;
+  CODE_LANGUAGE_CPP         = 8;
+  CODE_LANGUAGE_JAVA        = 9;
+}
+
+message CodePayload {
+  CodeLanguage language    = 1;   // Programming language
+  string       source     = 2;   // Source code to execute
+  string       entrypoint = 3;   // Entry function/file (e.g. "main.py", "handler")
+  repeated string dependencies = 4;  // Required packages (e.g. ["numpy>=1.24", "pandas"])
+  map<string, string> env_vars  = 5; // Environment variables for execution
+  string       working_dir      = 6; // Working directory inside sandbox
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sandbox Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+message SandboxConfig {
+  bool   network_enabled   = 1;   // Allow network access (default: false)
+  int64  memory_limit_mb   = 2;   // Memory limit in MB (default: 512)
+  int64  cpu_limit_ms      = 3;   // CPU time limit in milliseconds (default: 30000)
+  int64  timeout_ms        = 4;   // Wall clock timeout in milliseconds (default: 60000)
+  int64  disk_limit_mb     = 5;   // Disk space limit in MB (default: 100)
+  string image             = 6;   // Docker image to use (empty = language default)
+  repeated string mount_paths = 7; // Host paths to mount read-only
+  bool   gpu_enabled       = 8;   // Allow GPU access
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File Operation Payload
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum FileOperation {
+  FILE_OPERATION_UNSPECIFIED = 0;
+  FILE_OPERATION_READ        = 1;
+  FILE_OPERATION_WRITE       = 2;
+  FILE_OPERATION_DELETE      = 3;
+  FILE_OPERATION_MOVE        = 4;
+  FILE_OPERATION_COPY        = 5;
+  FILE_OPERATION_LIST        = 6;
+  FILE_OPERATION_STAT        = 7;
+}
+
+message FilePayload {
+  FileOperation operation    = 1;
+  string        source_path  = 2;   // Source file/directory path
+  string        dest_path    = 3;   // Destination path (for move/copy)
+  bytes         content      = 4;   // File content (for write operations)
+  string        encoding     = 5;   // Content encoding (default: "utf-8")
+  bool          recursive    = 6;   // Recursive operation for directories
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Device Command Payload
+// ─────────────────────────────────────────────────────────────────────────────
+
+message DeviceCommandPayload {
+  string command               = 1;  // Command name (e.g. "screenshot", "tap", "swipe")
+  map<string, string> params   = 2;  // Command parameters
+  string target_device_id      = 3;  // Target device within worker's scope
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TaskDispatch — Brain → Worker
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// This is the PRIMARY outbound message from the MasterBrain to an Edge Worker.
+// It is published to NATS subject: galaxy.tasks.dispatch.{worker_id}
+//
+// The Brain MUST:
+//   1. Pass this through the Anti-Corruption Layer (ACL) before publishing
+//   2. Ensure task_id is globally unique (UUID v4)
+//   3. Set appropriate timeout and priority
+//   4. Include all context needed for autonomous execution
+
+message TaskDispatch {
+  // ── Identity ──
+  string     task_id       = 1;   // Globally unique task ID (UUID v4)
+  string     parent_task_id = 2;  // Parent task ID (for sub-task trees)
+  string     workflow_run_id = 3; // Temporal workflow run ID (if triggered by workflow)
+
+  // ── Routing ──
+  string     source_agent_id  = 4;  // Agent that initiated this task
+  string     target_worker_id = 5;  // Target worker ID
+  DeviceType target_device_type = 6; // Target device type
+  TaskType   task_type         = 7;  // Task classification
+
+  // ── Payload (exactly one must be set) ──
+  oneof payload {
+    CodePayload          code_payload    = 10;
+    FilePayload          file_payload    = 11;
+    DeviceCommandPayload device_payload  = 12;
+    MCPCallPayload       mcp_payload     = 13;
+    ShellPayload         shell_payload   = 14;
+  }
+
+  // ── Execution Parameters ──
+  SandboxConfig sandbox_config = 20;  // Sandbox constraints
+  Priority      priority       = 21;  // Task priority
+  int64         timeout_ms     = 22;  // Overall timeout (including queue wait)
+  int32         max_retries    = 23;  // Maximum retry attempts (default: 0)
+  bool          lsp_check_required = 24; // Force LSP pre-check (default: true for code)
+
+  // ── Context ──
+  map<string, string> context    = 30;  // Key-value metadata (agent memory, session info)
+  Timestamp           created_at = 31;  // Task creation timestamp
+  string              idempotency_key = 32; // For deduplication on retry
+}
+
+// Shell command payload
+message ShellPayload {
+  string command          = 1;  // Shell command to execute
+  string working_dir      = 2;  // Working directory
+  map<string, string> env = 3;  // Additional environment variables
+}
+
+// MCP call payload (embedded in TaskDispatch for worker-side MCP execution)
+message MCPCallPayload {
+  string server_id  = 1;  // MCP server identifier
+  string tool_name  = 2;  // Tool name to invoke
+  string arguments_json = 3; // JSON-encoded tool arguments
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LSP Diagnostic Result
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum DiagnosticSeverity {
+  DIAGNOSTIC_SEVERITY_UNSPECIFIED = 0;
+  DIAGNOSTIC_SEVERITY_ERROR       = 1;
+  DIAGNOSTIC_SEVERITY_WARNING     = 2;
+  DIAGNOSTIC_SEVERITY_INFO        = 3;
+  DIAGNOSTIC_SEVERITY_HINT        = 4;
+}
+
+message LSPDiagnostic {
+  string              file_path = 1;  // File containing the diagnostic
+  int32               line      = 2;  // 1-based line number
+  int32               column    = 3;  // 1-based column number
+  DiagnosticSeverity  severity  = 4;  // Severity level
+  string              message   = 5;  // Diagnostic message
+  string              source    = 6;  // LSP server name (e.g. "pylsp", "gopls")
+  string              code      = 7;  // Diagnostic code (e.g. "E0001", "unused-import")
+}
+
+message LSPCheckResult {
+  bool                  passed      = 1;  // True if no errors (warnings OK)
+  repeated LSPDiagnostic diagnostics = 2; // All diagnostics found
+  int32                 error_count   = 3; // Number of ERROR-level diagnostics
+  int32                 warning_count = 4; // Number of WARNING-level diagnostics
+  int64                 check_duration_ms = 5; // Time spent on LSP check
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Execution Output
+// ─────────────────────────────────────────────────────────────────────────────
+
+message ExecutionOutput {
+  string stdout       = 1;   // Standard output (may be large — truncated at 1MB)
+  string stderr       = 2;   // Standard error (may be large — truncated at 1MB)
+  int32  exit_code    = 3;   // Process exit code (0 = success)
+  int64  duration_ms  = 4;   // Execution wall time in milliseconds
+  bool   timed_out    = 5;   // True if execution was killed due to timeout
+  bool   oom_killed   = 6;   // True if killed due to out-of-memory
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Artifact (output files produced by execution)
+// ─────────────────────────────────────────────────────────────────────────────
+
+message Artifact {
+  string name       = 1;  // Artifact name/filename
+  string path       = 2;  // Path within sandbox
+  string mime_type  = 3;  // MIME type (e.g. "image/png", "application/json")
+  int64  size_bytes = 4;  // File size in bytes
+  string checksum   = 5;  // SHA-256 checksum
+  bytes  content    = 6;  // Inline content (only for small files < 1MB)
+  string storage_url = 7; // MinIO/S3 URL for large files
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TaskResult — Worker → Brain
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// This is the PRIMARY inbound message from an Edge Worker to the MasterBrain.
+// It is published to NATS subject: galaxy.tasks.result.{task_id}
+//
+// The Worker MUST:
+//   1. Always include task_id matching the original TaskDispatch
+//   2. Include LSP check results if lsp_check_required was true
+//   3. Include full stdout/stderr (truncated at 1MB each)
+//   4. Include resource usage metrics
+//   5. Set appropriate status code
+
+message TaskResult {
+  // ── Identity ──
+  string     task_id       = 1;   // Must match TaskDispatch.task_id
+  string     worker_id     = 2;   // Worker that executed the task
+  TaskStatus status        = 3;   // Final execution status
+
+  // ── Results ──
+  LSPCheckResult    lsp_result       = 10;  // LSP pre-check results (if performed)
+  ExecutionOutput   execution_output = 11;  // Sandbox execution results
+  repeated Artifact artifacts        = 12;  // Output files/blobs produced
+
+  // ── Diagnostics ──
+  ResourceUsage resource_usage = 20;  // Resource consumption metrics
+  ErrorInfo     error          = 21;  // Error details (if status is FAILED/TIMEOUT)
+  int32         attempt_number = 22;  // Which retry attempt this is (1-based)
+
+  // ── Timing ──
+  Timestamp started_at   = 30;  // When worker started processing
+  Timestamp completed_at = 31;  // When worker finished
+  int64     queue_wait_ms = 32; // Time spent waiting in NATS queue
+
+  // ── Context ──
+  map<string, string> metadata = 40; // Worker-added metadata
+}

@@ -124,3 +124,12 @@ pyinstaller>=5.13.0
 
 # Additional (from main branch integration)
 orjson>=3.9.0
+
+# ============================================================================
+# Distributed Agentic OS
+# ============================================================================
+nats-py>=2.7.0
+temporalio>=1.7.0
+grpcio>=1.62.0
+grpcio-tools>=1.62.0
+protobuf>=4.25.0
