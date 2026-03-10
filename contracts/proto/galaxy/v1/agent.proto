@@ -1,0 +1,198 @@
+// =============================================================================
+// Galaxy Agentic OS — Agent Message Envelope & Worker Registration
+// =============================================================================
+//
+// Defines the unified message envelope for ALL inter-component communication,
+// as well as worker lifecycle management (registration, heartbeat, shutdown).
+//
+// The AgentMessage envelope wraps all specific message types (TaskDispatch,
+// TaskResult, MCPCallRequest, etc.) and adds routing metadata. This enables
+// a single NATS subscriber to handle heterogeneous message types.
+//
+// NATS Subjects:
+//   - galaxy.workers.register  : Worker → Brain (WorkerRegistration)
+//   - galaxy.workers.heartbeat : Worker → Brain (WorkerHeartbeat)
+//   - galaxy.events.{type}     : Any → Any (AgentEvent)
+//
+// Version: 1.0.0
+// =============================================================================
+
+syntax = "proto3";
+
+package galaxy.v1;
+
+option go_package = "github.com/ufo-galaxy/agentic-os/gen/go/galaxy/v1;galaxyv1";
+
+import "galaxy/v1/common.proto";
+import "galaxy/v1/task.proto";
+import "galaxy/v1/mcp.proto";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent Message Envelope
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Unified wrapper for all messages flowing through the system. This allows
+// a single deserialization path on NATS subscribers.
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED       = 0;
+  MESSAGE_TYPE_TASK_DISPATCH     = 1;
+  MESSAGE_TYPE_TASK_RESULT       = 2;
+  MESSAGE_TYPE_MCP_CALL_REQUEST  = 3;
+  MESSAGE_TYPE_MCP_CALL_RESPONSE = 4;
+  MESSAGE_TYPE_MCP_REGISTRATION  = 5;
+  MESSAGE_TYPE_MCP_DISCOVERY     = 6;
+  MESSAGE_TYPE_HEARTBEAT         = 7;
+  MESSAGE_TYPE_WORKER_REGISTER   = 8;
+  MESSAGE_TYPE_WORKER_SHUTDOWN   = 9;
+  MESSAGE_TYPE_EVENT             = 10;
+}
+
+message AgentMessage {
+  // ── Envelope Header ──
+  string      message_id   = 1;   // Globally unique message ID (UUID v4)
+  MessageType type         = 2;   // Message type discriminator
+  string      source       = 3;   // Source component ID (e.g. "brain", "worker-mac-01")
+  string      target       = 4;   // Target component ID (empty = broadcast)
+  Timestamp   timestamp    = 5;   // Message creation time
+  string      trace_id     = 6;   // Distributed tracing ID (propagated across calls)
+  string      correlation_id = 7; // Request-response correlation
+
+  // ── Payload (exactly one must be set based on 'type') ──
+  oneof payload {
+    TaskDispatch              task_dispatch      = 10;
+    TaskResult                task_result        = 11;
+    MCPCallRequest            mcp_call_request   = 12;
+    MCPCallResponse           mcp_call_response  = 13;
+    MCPToolRegistration       mcp_registration   = 14;
+    MCPDiscoveryRequest       mcp_discovery      = 15;
+    WorkerHeartbeat           heartbeat          = 16;
+    WorkerRegistration        worker_register    = 17;
+    WorkerShutdown            worker_shutdown    = 18;
+    AgentEvent                event              = 19;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Worker Registration
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Sent by a worker when it first connects to the NATS bus. The Brain uses
+// this to build its worker topology and routing table.
+
+message WorkerCapability {
+  string name    = 1;   // Capability name (e.g. "python_exec", "docker_sandbox", "adb")
+  string version = 2;   // Capability version
+  bool   enabled = 3;   // Currently available
+}
+
+message WorkerRegistration {
+  string      worker_id       = 1;   // Unique worker ID (e.g. "worker-mac-danny-01")
+  string      hostname        = 2;   // Machine hostname
+  DeviceType  device_type     = 3;   // Device type
+  DevicePlatform platform     = 4;   // Platform
+  string      os_version      = 5;   // OS version string
+  string      worker_version  = 6;   // Worker binary version (semver)
+
+  // ── Capabilities ──
+  repeated WorkerCapability capabilities = 10; // What this worker can do
+  repeated CodeLanguage supported_languages = 11; // Languages for code execution
+  bool     has_docker       = 12;  // Docker available for sandboxing
+  bool     has_gpu          = 13;  // GPU available
+  int64    memory_total_mb  = 14;  // Total RAM in MB
+  int32    cpu_cores        = 15;  // Number of CPU cores
+
+  // ── Network ──
+  string   nats_inbox       = 20;  // NATS inbox for direct messages
+  repeated string addresses = 21;  // Reachable IP addresses
+  int32    grpc_port        = 22;  // Optional gRPC port for large file transfers
+
+  // ── Timing ──
+  Timestamp registered_at   = 30;  // Registration timestamp
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Worker Heartbeat
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Sent periodically (every 10s default) by each worker. The Brain uses
+// heartbeats for:
+//   1. Worker liveness detection (3 missed = considered dead)
+//   2. Load balancing (route tasks to least-loaded worker)
+//   3. Capacity planning
+
+message WorkerHeartbeat {
+  string       worker_id   = 1;   // Worker ID
+  WorkerStatus status      = 2;   // Current worker status
+  Timestamp    timestamp   = 3;   // Heartbeat timestamp
+
+  // ── Load Metrics ──
+  int32  active_tasks      = 10;  // Currently executing tasks
+  int32  queued_tasks      = 11;  // Tasks waiting in local queue
+  int32  max_concurrent    = 12;  // Maximum concurrent task capacity
+  double cpu_usage_percent = 13;  // Current CPU usage (0.0 - 100.0)
+  double memory_usage_percent = 14; // Current memory usage (0.0 - 100.0)
+  int64  disk_free_mb      = 15;  // Available disk space in MB
+
+  // ── Docker Status ──
+  int32  running_containers = 20; // Active Docker containers
+  int64  docker_disk_mb     = 21; // Docker disk usage in MB
+
+  // ── Cumulative Stats ──
+  int64  tasks_completed_total = 30; // Lifetime completed tasks
+  int64  tasks_failed_total    = 31; // Lifetime failed tasks
+  int64  uptime_seconds        = 32; // Worker uptime in seconds
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Worker Graceful Shutdown
+// ─────────────────────────────────────────────────────────────────────────────
+
+message WorkerShutdown {
+  string    worker_id      = 1;   // Worker ID
+  string    reason         = 2;   // Shutdown reason (e.g. "user_requested", "update", "error")
+  int32     drain_timeout_s = 3;  // Seconds to wait for in-flight tasks before force kill
+  Timestamp shutdown_at    = 4;   // When shutdown was initiated
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent Events (System-Wide Event Bus)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Published to galaxy.events.{event_type} for system-wide observability.
+// These map to the existing EventBus domains:
+//   UI / L4 / Hardware / Command / AI / Performance
+
+enum EventDomain {
+  EVENT_DOMAIN_UNSPECIFIED  = 0;
+  EVENT_DOMAIN_UI           = 1;
+  EVENT_DOMAIN_AI           = 2;
+  EVENT_DOMAIN_HARDWARE     = 3;
+  EVENT_DOMAIN_COMMAND      = 4;
+  EVENT_DOMAIN_PERFORMANCE  = 5;
+  EVENT_DOMAIN_L4           = 6;
+  EVENT_DOMAIN_SECURITY     = 7;
+  EVENT_DOMAIN_MCP          = 8;
+  EVENT_DOMAIN_WORKER       = 9;
+}
+
+enum EventSeverity {
+  EVENT_SEVERITY_UNSPECIFIED = 0;
+  EVENT_SEVERITY_DEBUG       = 1;
+  EVENT_SEVERITY_INFO        = 2;
+  EVENT_SEVERITY_WARNING     = 3;
+  EVENT_SEVERITY_ERROR       = 4;
+  EVENT_SEVERITY_CRITICAL    = 5;
+}
+
+message AgentEvent {
+  string         event_id    = 1;  // Unique event ID
+  EventDomain    domain      = 2;  // Event domain
+  string         event_type  = 3;  // Event type within domain (e.g. "task_completed")
+  EventSeverity  severity    = 4;  // Severity level
+  string         source      = 5;  // Component that generated the event
+  string         message     = 6;  // Human-readable event message
+  string         data_json   = 7;  // JSON-encoded event-specific data
+  Timestamp      timestamp   = 8;  // Event timestamp
+  string         trace_id    = 9;  // Distributed tracing ID
+}
