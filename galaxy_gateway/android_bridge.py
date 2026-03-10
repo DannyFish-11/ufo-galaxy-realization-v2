@@ -696,11 +696,17 @@ class AndroidBridge:
         
         logger.error(f"Error from {device_id}: [{error_code}] {error_message}")
 
-    async def _handle_generic_forward(self, websocket: Any, message: Dict[str, Any]) -> None:
-        """通用占位处理器：记录日志（后续可扩展为实际转发逻辑）"""
+    async def _handle_generic_forward(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """通用占位处理器：记录日志并返回 ACK（后续可扩展为实际转发逻辑）"""
         msg_type = message.get("type")
         device_id = message.get("device_id")
         logger.debug(f"Received {msg_type} from {device_id}: forwarding")
+        return {
+            "type": f"{msg_type}_ack" if msg_type else "ack",
+            "device_id": device_id,
+            "status": "received",
+            "message_id": message.get("message_id"),
+        }
 
     async def _handle_task_execute(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理 task_execute 请求"""

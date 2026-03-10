@@ -9,7 +9,7 @@ AIP v3.0 - Agent Interaction Protocol (统一版本)
 
 from enum import Enum, IntEnum, Flag, auto
 from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from datetime import datetime
 import uuid
 
@@ -346,11 +346,12 @@ class AIPMessage(BaseModel):
     # 错误信息
     error: Optional[str] = None
     
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            DeviceCapability: lambda v: v.value,
-        }
+    model_config = ConfigDict()
+
+    @field_serializer("timestamp")
+    @classmethod
+    def _serialize_timestamp(cls, v: datetime) -> str:
+        return v.isoformat()
 
 
 # ============================================================================

@@ -24,18 +24,18 @@ import pytest
 # =============================================================================
 
 @dataclass
-class TestResult:
+class Phase2Result:
     name: str
     passed: bool
     duration_ms: float
     details: str
 
-class TestRunner:
+class Phase2Runner:
     def __init__(self):
-        self.results: List[TestResult] = []
+        self.results: List[Phase2Result] = []
     
     def add_result(self, name: str, passed: bool, duration_ms: float, details: str = ""):
-        self.results.append(TestResult(name, passed, duration_ms, details))
+        self.results.append(Phase2Result(name, passed, duration_ms, details))
     
     def print_summary(self):
         print("\n" + "=" * 60)
@@ -60,8 +60,8 @@ class TestRunner:
 
 @pytest.fixture
 def runner():
-    """Pytest fixture that provides a fresh TestRunner instance."""
-    return TestRunner()
+    """Pytest fixture that provides a fresh Phase2Runner instance."""
+    return Phase2Runner()
 
 
 # =============================================================================
@@ -331,7 +331,7 @@ class SimulatedBackupRestore:
 # Test Cases
 # =============================================================================
 
-async def test_quantum_dispatcher(runner: TestRunner):
+async def test_quantum_dispatcher(runner: Phase2Runner):
     """Test Node 51: Quantum Task Dispatcher"""
     start = time.time()
     
@@ -354,7 +354,7 @@ async def test_quantum_dispatcher(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Quantum Task Dispatcher", True, duration, "Task queuing and processing works")
 
-async def test_qiskit_simulator(runner: TestRunner):
+async def test_qiskit_simulator(runner: Phase2Runner):
     """Test Node 52: Qiskit Quantum Simulator"""
     start = time.time()
     
@@ -371,7 +371,7 @@ async def test_qiskit_simulator(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Qiskit Quantum Simulator", True, duration, "Quantum circuits execute correctly")
 
-async def test_symbolic_math(runner: TestRunner):
+async def test_symbolic_math(runner: Phase2Runner):
     """Test Node 54: Symbolic Math Verifier"""
     start = time.time()
     
@@ -391,7 +391,7 @@ async def test_symbolic_math(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Symbolic Math Verifier", True, duration, "Math verification works")
 
-async def test_agent_swarm(runner: TestRunner):
+async def test_agent_swarm(runner: Phase2Runner):
     """Test Node 56: Multi-Agent Debate System"""
     start = time.time()
     
@@ -407,7 +407,7 @@ async def test_agent_swarm(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Multi-Agent Debate System", True, duration, f"Debate completed, consensus: {result['consensus_reached']}")
 
-async def test_telemetry(runner: TestRunner):
+async def test_telemetry(runner: Phase2Runner):
     """Test Node 64: Predictive Telemetry"""
     start = time.time()
     
@@ -429,7 +429,7 @@ async def test_telemetry(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Predictive Telemetry", True, duration, f"Detected {len(anomalies)} anomalies")
 
-async def test_health_monitor(runner: TestRunner):
+async def test_health_monitor(runner: Phase2Runner):
     """Test Node 67: Health Monitor & Self-Healer"""
     start = time.time()
     
@@ -447,7 +447,7 @@ async def test_health_monitor(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Health Monitor & Self-Healer", True, duration, f"Recovery success: {recovery['success']}")
 
-async def test_backup_restore(runner: TestRunner):
+async def test_backup_restore(runner: Phase2Runner):
     """Test Node 69: Backup & Disaster Recovery"""
     start = time.time()
     
@@ -473,7 +473,7 @@ async def test_backup_restore(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Backup & Disaster Recovery", True, duration, f"Backup size: {result['size_bytes']} bytes")
 
-async def test_integration_quantum_to_debate(runner: TestRunner):
+async def test_integration_quantum_to_debate(runner: Phase2Runner):
     """Integration test: Quantum result feeds into debate"""
     start = time.time()
     
@@ -491,7 +491,7 @@ async def test_integration_quantum_to_debate(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Integration: Quantum → Debate", True, duration, "Quantum results successfully debated")
 
-async def test_integration_telemetry_to_recovery(runner: TestRunner):
+async def test_integration_telemetry_to_recovery(runner: Phase2Runner):
     """Integration test: Telemetry triggers recovery"""
     start = time.time()
     
@@ -512,7 +512,7 @@ async def test_integration_telemetry_to_recovery(runner: TestRunner):
     duration = (time.time() - start) * 1000
     runner.add_result("Integration: Telemetry → Recovery", True, duration, "Anomaly detection triggers recovery")
 
-async def test_integration_backup_after_recovery(runner: TestRunner):
+async def test_integration_backup_after_recovery(runner: Phase2Runner):
     """Integration test: Backup after successful recovery"""
     start = time.time()
     
@@ -540,7 +540,7 @@ async def main():
     print("=" * 60)
     print()
     
-    runner = TestRunner()
+    runner = Phase2Runner()
     
     # Quantum Reasoning Layer Tests
     print("Testing Quantum Reasoning Layer...")

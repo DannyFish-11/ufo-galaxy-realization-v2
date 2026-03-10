@@ -32,18 +32,18 @@ MODEL_ROUTER_URL = "http://localhost:8058"
 # =============================================================================
 
 @dataclass
-class TestResult:
+class MissionResult:
     name: str
     passed: bool
     duration_ms: float
     details: Dict
     error: str = None
 
-class TestMission:
+class MissionRunner:
     """End-to-end test mission runner."""
     
     def __init__(self):
-        self.results: List[TestResult] = []
+        self.results: List[MissionResult] = []
         self.client = httpx.AsyncClient(timeout=30.0)
     
     async def run_all(self) -> bool:
@@ -80,7 +80,7 @@ class TestMission:
                     
             except Exception as e:
                 print(f"❌ EXCEPTION: {e}")
-                self.results.append(TestResult(
+                self.results.append(MissionResult(
                     name=test.__name__,
                     passed=False,
                     duration_ms=0,
@@ -93,7 +93,7 @@ class TestMission:
         
         return all(r.passed for r in self.results)
     
-    async def test_1_health_check(self) -> TestResult:
+    async def test_1_health_check(self) -> MissionResult:
         """Test 1: Verify all services are healthy."""
         start = time.time()
         details = {}
@@ -124,7 +124,7 @@ class TestMission:
         
         duration = (time.time() - start) * 1000
         
-        return TestResult(
+        return MissionResult(
             name="Health Check",
             passed=all_healthy,
             duration_ms=duration,
@@ -132,7 +132,7 @@ class TestMission:
             error=None if all_healthy else "Some services unhealthy"
         )
     
-    async def test_2_simple_query_routing(self) -> TestResult:
+    async def test_2_simple_query_routing(self) -> MissionResult:
         """Test 2: Simple query should route to local model."""
         start = time.time()
         
@@ -155,7 +155,7 @@ class TestMission:
         # Should route to local model for simple queries
         passed = result.get("model_tier") == "local"
         
-        return TestResult(
+        return MissionResult(
             name="Simple Query Routing",
             passed=passed,
             duration_ms=duration,
@@ -163,7 +163,7 @@ class TestMission:
             error=None if passed else f"Expected 'local', got '{result.get('model_tier')}'"
         )
     
-    async def test_3_complex_query_routing(self) -> TestResult:
+    async def test_3_complex_query_routing(self) -> MissionResult:
         """Test 3: Complex query should route to cloud model."""
         start = time.time()
         
@@ -188,7 +188,7 @@ class TestMission:
         # Should route to cloud model for complex queries
         passed = result.get("model_tier") in ["cloud_cheap", "cloud_smart", "cloud_premium"]
         
-        return TestResult(
+        return MissionResult(
             name="Complex Query Routing",
             passed=passed,
             duration_ms=duration,
@@ -196,7 +196,7 @@ class TestMission:
             error=None if passed else f"Expected cloud tier, got '{result.get('model_tier')}'"
         )
     
-    async def test_4_hardware_screenshot(self) -> TestResult:
+    async def test_4_hardware_screenshot(self) -> MissionResult:
         """Test 4: Hardware screenshot through full onion path."""
         start = time.time()
         
@@ -225,7 +225,7 @@ class TestMission:
         
         passed = result.get("success", False)
         
-        return TestResult(
+        return MissionResult(
             name="Hardware Screenshot",
             passed=passed,
             duration_ms=duration,
@@ -233,7 +233,7 @@ class TestMission:
             error=None if passed else result.get("error", "Unknown error")
         )
     
-    async def test_5_lock_management(self) -> TestResult:
+    async def test_5_lock_management(self) -> MissionResult:
         """Test 5: Hardware lock acquisition and release."""
         start = time.time()
         details = {}
@@ -254,7 +254,7 @@ class TestMission:
         details["acquire"] = acquire_result
         
         if not acquire_result.get("success"):
-            return TestResult(
+            return MissionResult(
                 name="Lock Management",
                 passed=False,
                 duration_ms=(time.time() - start) * 1000,
@@ -290,7 +290,7 @@ class TestMission:
         
         print(f"   Lock released: {passed}")
         
-        return TestResult(
+        return MissionResult(
             name="Lock Management",
             passed=passed,
             duration_ms=duration,
@@ -298,7 +298,7 @@ class TestMission:
             error=None if passed else "Failed to release lock"
         )
     
-    async def test_6_concurrent_requests(self) -> TestResult:
+    async def test_6_concurrent_requests(self) -> MissionResult:
         """Test 6: Concurrent request handling."""
         start = time.time()
         
@@ -332,7 +332,7 @@ class TestMission:
         # 80% success rate is acceptable (some may fail due to lock contention)
         passed = success_rate >= 0.8
         
-        return TestResult(
+        return MissionResult(
             name="Concurrent Requests",
             passed=passed,
             duration_ms=duration,
@@ -375,7 +375,7 @@ class TestMission:
 # =============================================================================
 
 async def main():
-    mission = TestMission()
+    mission = MissionRunner()
     success = await mission.run_all()
     return 0 if success else 1
 

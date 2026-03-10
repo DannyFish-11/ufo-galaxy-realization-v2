@@ -32,6 +32,7 @@ from core.routes._shared import (
     connection_manager,
     registered_devices,
     node_status_cache,
+    _save_registered_devices,
 )
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 
@@ -57,6 +58,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "status": "registered"
         }
         registered_devices[req.device_id] = device_info
+        _save_registered_devices(registered_devices)
         logger.info(f"设备注册: {req.device_id} ({req.device_type})")
 
         return JSONResponse({
@@ -162,6 +164,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=404, detail="设备未注册")
 
         del registered_devices[device_id]
+        _save_registered_devices(registered_devices)
 
         await connection_manager.broadcast_status({
             "type": "device_unregistered",
