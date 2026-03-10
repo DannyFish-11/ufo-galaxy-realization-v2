@@ -1025,6 +1025,49 @@ class MultiLLMRouter:
             },
         }, resp.model)
 
+    async def refresh_providers(self) -> Dict[str, Any]:
+        """热刷新所有提供商 — 重新从环境变量/CredentialVault 扫描 Key
+
+        当用户在 Dashboard 保存 API Key 后调用此方法，Router 即时感知变化。
+        返回: {"added": [...], "removed": [...], "kept": [...], "total": N}
+        """
+        old_names = set(self.providers.keys())
+
+        # 关闭所有现有 adapter 连接
+        for adapter in self.adapters.values():
+            try:
+                await adapter.close()
+            except Exception as e:
+                logger.debug(f"关闭 adapter 时出错: {e}")
+
+        # 清空
+        self.providers.clear()
+        self.adapters.clear()
+        self.circuit_breakers.clear()
+
+        # 重新发现
+        self._discover_providers()
+
+        # 为新发现的提供商创建断路器
+        for name in self.providers:
+            self.circuit_breakers[name] = ProviderCircuitBreaker(name)
+
+        new_names = set(self.providers.keys())
+        added = new_names - old_names
+        removed = old_names - new_names
+        kept = new_names & old_names
+
+        logger.info(
+            f"LLM 路由器已刷新: 新增 {list(added)}, 移除 {list(removed)}, "
+            f"保留 {list(kept)}, 总计 {len(self.providers)} 个提供商"
+        )
+        return {
+            "added": list(added),
+            "removed": list(removed),
+            "kept": list(kept),
+            "total": len(self.providers),
+        }
+
     async def close(self):
         for adapter in self.adapters.values():
             await adapter.close()
@@ -1093,3 +1136,9 @@ def get_llm_router() -> MultiLLMRouter:
     if _router_instance is None:
         _router_instance = MultiLLMRouter()
     return _router_instance
+
+
+async def refresh_llm_router() -> Dict[str, Any]:
+    """便捷函数：刷新全局 LLM 路由器的提供商列表"""
+    router = get_llm_router()
+    return await router.refresh_providers()
