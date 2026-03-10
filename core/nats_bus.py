@@ -1,0 +1,336 @@
+"""
+Galaxy Agentic OS — NATS JetStream Message Bus
+================================================
+
+Wraps ``nats-py`` async client providing typed pub/sub for distributed task
+dispatch between the MasterBrain (control plane) and Edge Workers (data plane).
+
+Constraints (see plan 强约束):
+  C1  — module-level singleton ``nats_bus``
+  C2  — emits events to EventBus (NATS_CONNECTED / DISCONNECTED / RECONNECTING)
+  C5  — configured via ``GALAXY_NATS_URL`` env var; no-op mode if not set
+  C7  — all methods return ``{"success": bool, "error": str | None, ...}``
+  C8  — exposes ``is_connected()`` and ``get_stats()``
+  C11 — loguru logger
+  C12 — JSON wire format matching Pydantic model field names (snake_case)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import time
+from typing import Any, Callable, Dict, Optional
+
+from loguru import logger
+
+from core.schemas.contracts import (
+    AgentEventModel,
+    MCPCallRequestModel,
+    TaskDispatchModel,
+    TaskResultModel,
+    WorkerHeartbeatModel,
+)
+
+# NATS import — may not be installed
+try:
+    import nats
+    from nats.aio.client import Client as NATSClient
+    from nats.js import JetStreamContext
+
+    _HAS_NATS = True
+except ImportError:
+    _HAS_NATS = False
+    NATSClient = None  # type: ignore[assignment,misc]
+    JetStreamContext = None  # type: ignore[assignment,misc]
+
+
+def _try_emit_event(event_type_name: str, data: dict) -> None:
+    """Best-effort emit to EventBus.  Never raises."""
+    try:
+        from integration.event_bus import EventBus, EventType
+
+        bus = EventBus()
+        et = getattr(EventType, event_type_name, None)
+        if et is not None:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(bus.emit(et, data))
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# JetStream stream definitions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_STREAMS = {
+    "GALAXY_TASKS": {
+        "subjects": ["galaxy.tasks.>"],
+        "max_msgs": 100_000,
+        "max_bytes": 1_073_741_824,  # 1 GB
+    },
+    "GALAXY_MCP": {
+        "subjects": ["galaxy.mcp.>"],
+        "max_msgs": 50_000,
+        "max_bytes": 536_870_912,  # 512 MB
+    },
+    "GALAXY_EVENTS": {
+        "subjects": ["galaxy.events.>", "galaxy.workers.>"],
+        "max_msgs": 200_000,
+        "max_bytes": 536_870_912,
+    },
+}
+
+
+class NATSBus:
+    """NATS JetStream client for distributed task dispatch.
+
+    Operates in **no-op mode** when ``GALAXY_NATS_URL`` is not set or when
+    the ``nats-py`` package is not installed.  In no-op mode all publish
+    calls return immediately and no subscriptions are created.
+    """
+
+    _instance: Optional[NATSBus] = None
+
+    def __init__(self) -> None:
+        self._url = os.environ.get("GALAXY_NATS_URL", "")
+        self._nc: Optional[Any] = None  # NATSClient
+        self._js: Optional[Any] = None  # JetStreamContext
+        self._connected = False
+        self._noop = not self._url or not _HAS_NATS
+        self._subscriptions: list = []
+        self._stats = {
+            "published": 0,
+            "received": 0,
+            "errors": 0,
+            "reconnects": 0,
+        }
+
+        if self._noop:
+            reason = "nats-py not installed" if not _HAS_NATS else "GALAXY_NATS_URL not set"
+            logger.warning("NATSBus: operating in no-op mode ({})", reason)
+
+    @classmethod
+    def get_instance(cls) -> NATSBus:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    # ── Connection lifecycle ────────────────────────────────────────────────
+
+    async def connect(self, url: str = "") -> dict:
+        """Connect to NATS server and create JetStream streams."""
+        if self._noop:
+            return {"success": True, "noop": True}
+        if self._connected:
+            return {"success": True, "already_connected": True}
+
+        target = url or self._url
+        try:
+            self._nc = await nats.connect(
+                target,
+                reconnected_cb=self._on_reconnect,
+                disconnected_cb=self._on_disconnect,
+                error_cb=self._on_error,
+                max_reconnect_attempts=-1,
+            )
+            self._js = self._nc.jetstream()
+
+            # Ensure JetStream streams exist
+            for name, cfg in _STREAMS.items():
+                try:
+                    await self._js.find_stream_name_by_subject(cfg["subjects"][0].replace(">", "*"))
+                except Exception:
+                    from nats.js.api import StreamConfig
+
+                    await self._js.add_stream(
+                        StreamConfig(
+                            name=name,
+                            subjects=cfg["subjects"],
+                            max_msgs=cfg["max_msgs"],
+                            max_bytes=cfg["max_bytes"],
+                            retention="limits",
+                            storage="file",
+                        )
+                    )
+                    logger.info("NATSBus: created stream {}", name)
+
+            self._connected = True
+            _try_emit_event("NATS_CONNECTED", {"url": target})
+            logger.info("NATSBus: connected to {}", target)
+            return {"success": True}
+
+        except Exception as exc:
+            self._stats["errors"] += 1
+            logger.error("NATSBus: connection failed — {}", exc)
+            return {"success": False, "error": str(exc)}
+
+    async def disconnect(self) -> dict:
+        """Gracefully close NATS connection."""
+        if self._noop or not self._connected:
+            return {"success": True}
+        try:
+            for sub in self._subscriptions:
+                try:
+                    await sub.unsubscribe()
+                except Exception:
+                    pass
+            self._subscriptions.clear()
+            await self._nc.drain()
+            self._connected = False
+            logger.info("NATSBus: disconnected")
+            return {"success": True}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    # ── Publish methods ─────────────────────────────────────────────────────
+
+    async def publish_task_dispatch(self, worker_id: str, task: TaskDispatchModel) -> dict:
+        """Publish TaskDispatch to ``galaxy.tasks.dispatch.{worker_id}``."""
+        subject = f"galaxy.tasks.dispatch.{worker_id}"
+        return await self._publish(subject, task.model_dump(mode="json", exclude_none=True))
+
+    async def publish_task_result(self, task_id: str, result: TaskResultModel) -> dict:
+        """Publish TaskResult to ``galaxy.tasks.result.{task_id}``."""
+        subject = f"galaxy.tasks.result.{task_id}"
+        return await self._publish(subject, result.model_dump(mode="json", exclude_none=True))
+
+    async def publish_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
+        """Publish heartbeat to ``galaxy.workers.heartbeat``."""
+        return await self._publish(
+            "galaxy.workers.heartbeat",
+            heartbeat.model_dump(mode="json", exclude_none=True),
+        )
+
+    async def publish_event(self, event: AgentEventModel) -> dict:
+        """Publish event to ``galaxy.events.{event_type}``."""
+        subject = f"galaxy.events.{event.event_type}"
+        return await self._publish(subject, event.model_dump(mode="json", exclude_none=True))
+
+    async def publish_mcp_call(self, request: MCPCallRequestModel) -> dict:
+        """Publish MCP call to ``galaxy.mcp.calls``."""
+        return await self._publish(
+            "galaxy.mcp.calls",
+            request.model_dump(mode="json", exclude_none=True),
+        )
+
+    # ── Subscribe methods ───────────────────────────────────────────────────
+
+    async def subscribe_task_dispatches(
+        self, worker_id: str, callback: Callable
+    ) -> dict:
+        """Subscribe to task dispatches for a specific worker."""
+        subject = f"galaxy.tasks.dispatch.{worker_id}"
+        return await self._subscribe(subject, callback, durable=f"worker-{worker_id}")
+
+    async def subscribe_task_results(self, callback: Callable) -> dict:
+        """Subscribe to all task results."""
+        return await self._subscribe("galaxy.tasks.result.*", callback, durable="brain-results")
+
+    async def subscribe_heartbeats(self, callback: Callable) -> dict:
+        """Subscribe to worker heartbeats."""
+        return await self._subscribe("galaxy.workers.heartbeat", callback, durable="brain-heartbeats")
+
+    async def subscribe_events(self, event_type: str, callback: Callable) -> dict:
+        """Subscribe to events of a specific type."""
+        subject = f"galaxy.events.{event_type}" if event_type != "*" else "galaxy.events.>"
+        return await self._subscribe(subject, callback, durable=f"events-{event_type}")
+
+    async def subscribe_mcp_results(self, callback: Callable) -> dict:
+        """Subscribe to MCP call results."""
+        return await self._subscribe("galaxy.mcp.results", callback, durable="brain-mcp-results")
+
+    # ── Health / Stats (constraint C8) ──────────────────────────────────────
+
+    def is_connected(self) -> bool:
+        """Check if NATS connection is alive."""
+        if self._noop:
+            return False
+        return self._connected and self._nc is not None and self._nc.is_connected
+
+    def get_stats(self) -> dict:
+        """Return bus statistics."""
+        return {
+            "connected": self.is_connected(),
+            "noop_mode": self._noop,
+            "url": self._url,
+            "subscriptions": len(self._subscriptions),
+            **self._stats,
+        }
+
+    # ── Internal helpers ────────────────────────────────────────────────────
+
+    async def _publish(self, subject: str, data: dict) -> dict:
+        """Serialize and publish a message to NATS JetStream."""
+        if self._noop:
+            return {"success": True, "noop": True}
+        if not self._connected or self._js is None:
+            return {"success": False, "error": "Not connected to NATS"}
+
+        try:
+            payload = json.dumps(data, default=str).encode("utf-8")
+            ack = await self._js.publish(subject, payload)
+            self._stats["published"] += 1
+            logger.debug("NATSBus: published to {} (seq={})", subject, ack.seq)
+            return {"success": True, "seq": ack.seq}
+        except Exception as exc:
+            self._stats["errors"] += 1
+            logger.error("NATSBus: publish failed on {} — {}", subject, exc)
+            return {"success": False, "error": str(exc)}
+
+    async def _subscribe(
+        self, subject: str, callback: Callable, durable: str = ""
+    ) -> dict:
+        """Create a JetStream pull/push subscription."""
+        if self._noop:
+            return {"success": True, "noop": True}
+        if not self._connected or self._js is None:
+            return {"success": False, "error": "Not connected to NATS"}
+
+        try:
+            async def _handler(msg):
+                try:
+                    data = json.loads(msg.data.decode("utf-8"))
+                    self._stats["received"] += 1
+                    if asyncio.iscoroutinefunction(callback):
+                        await callback(data)
+                    else:
+                        callback(data)
+                    await msg.ack()
+                except Exception as exc:
+                    logger.error("NATSBus: handler error on {} — {}", subject, exc)
+                    self._stats["errors"] += 1
+
+            sub = await self._js.subscribe(
+                subject,
+                durable=durable if durable else None,
+                cb=_handler,
+            )
+            self._subscriptions.append(sub)
+            logger.info("NATSBus: subscribed to {} (durable={})", subject, durable)
+            return {"success": True}
+        except Exception as exc:
+            self._stats["errors"] += 1
+            logger.error("NATSBus: subscribe failed on {} — {}", subject, exc)
+            return {"success": False, "error": str(exc)}
+
+    # ── NATS callbacks ──────────────────────────────────────────────────────
+
+    async def _on_reconnect(self) -> None:
+        self._stats["reconnects"] += 1
+        _try_emit_event("NATS_RECONNECTING", {"reconnects": self._stats["reconnects"]})
+        logger.warning("NATSBus: reconnected (attempt #{})", self._stats["reconnects"])
+
+    async def _on_disconnect(self) -> None:
+        _try_emit_event("NATS_DISCONNECTED", {})
+        logger.warning("NATSBus: disconnected")
+
+    async def _on_error(self, exc: Exception) -> None:
+        self._stats["errors"] += 1
+        logger.error("NATSBus: error — {}", exc)
+
+
+# ── Module-level singleton (constraint C1) ─────────────────────────────────
+nats_bus = NATSBus.get_instance()

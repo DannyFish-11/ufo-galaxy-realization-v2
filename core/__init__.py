@@ -116,6 +116,32 @@ def get_smart_recommender(**kwargs):
     return _get(**kwargs)
 
 
+# --- Agentic OS 子系统工厂 ---
+
+def get_acl():
+    """获取反腐败层 (ACL) 单例"""
+    from .acl import acl
+    return acl
+
+
+def get_nats_bus():
+    """获取 NATS JetStream 总线单例"""
+    from .nats_bus import nats_bus
+    return nats_bus
+
+
+def get_master_brain():
+    """获取 MasterBrain 控制面单例（未启用时返回 None）"""
+    from .master_brain import get_master_brain as _get
+    return _get()
+
+
+def get_mcp_gateway():
+    """获取 MCP 动态网关单例"""
+    from .mcp_gateway import mcp_gateway
+    return mcp_gateway
+
+
 __all__ = [
     # 节点注册表
     'NodeRegistry',
@@ -159,6 +185,12 @@ __all__ = [
     'get_intent_parser',
     'get_conversation_memory',
     'get_smart_recommender',
+
+    # Agentic OS 子系统工厂
+    'get_acl',
+    'get_nats_bus',
+    'get_master_brain',
+    'get_mcp_gateway',
 ]
 
 __version__ = '3.0.0'

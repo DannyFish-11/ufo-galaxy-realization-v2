@@ -72,9 +72,19 @@ class GalaxyCore:
         self._http_client: Optional[httpx.AsyncClient] = None
         self._protocol_client: Optional[NodeProtocolClient] = None
         self._node_host = os.getenv("UFO_NODE_HOST", "localhost")
-        
+        self._master_brain: Optional[Any] = None
+
         # 加载节点注册表
         self._load_node_registry()
+
+        # Agentic OS: optional MasterBrain init (constraint C5 — opt-in)
+        if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() == "true":
+            try:
+                from core.master_brain import get_master_brain
+                self._master_brain = get_master_brain()
+                logger.info("GalaxyCore: MasterBrain enabled")
+            except Exception as e:
+                logger.warning(f"GalaxyCore: MasterBrain init failed: {e}")
     
     def _load_node_registry(self):
         """加载节点注册表"""
@@ -298,9 +308,29 @@ class GalaxyCore:
         params: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
-        智能调用 - 通过 Node_04_Router 路由
+        智能调用 - 优先通过 MasterBrain 分布式路由，降级为 Node_04_Router
         """
-        # 通过 Router 节点路由
+        # Agentic OS: if MasterBrain available and target is remote worker
+        if self._master_brain is not None:
+            p = params or {}
+            if p.get("_distributed") or p.get("target_worker_id"):
+                try:
+                    result = await self._master_brain.dispatch_task({
+                        "task_type": capability,
+                        "target_worker_id": p.get("target_worker_id", ""),
+                        "target_device_type": p.get("device_type", "unknown"),
+                        "context": {"capability": capability, "action": action},
+                        **({"code_payload": p["code_payload"]} if "code_payload" in p else {}),
+                        **({"shell_payload": p["shell_payload"]} if "shell_payload" in p else {}),
+                        **({"device_payload": p["device_payload"]} if "device_payload" in p else {}),
+                    })
+                    if result.get("success"):
+                        return result
+                    logger.info(f"MasterBrain dispatch failed, falling back to local: {result.get('error')}")
+                except Exception as e:
+                    logger.warning(f"MasterBrain dispatch error, falling back: {e}")
+
+        # Fallback: 通过 Router 节点路由
         return await self.call_node("04", "route", {
             "capability": capability,
             "action": action,

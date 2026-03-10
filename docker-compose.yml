@@ -39,6 +39,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - MONGODB_URI=mongodb://mongoadmin:mongoadmin123@mongodb:27017
       - OLLAMA_URL=http://ollama:11434
+      - GALAXY_NATS_URL=nats://nats:4222
+      - GALAXY_TEMPORAL_URL=temporal:7233
     depends_on:
       redis:
         condition: service_healthy
@@ -308,6 +310,109 @@ services:
     profiles:
       - full
 
+  # ============ NATS JetStream (Agentic OS Message Bus) ============
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats
+    command: ["--jetstream", "--store_dir=/data", "--http_port=8222"]
+    ports:
+      - "4222:4222"   # Client
+      - "8222:8222"   # Monitoring
+    volumes:
+      - nats-data:/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ============ Temporal (Agentic OS Workflow Engine) ============
+  temporal:
+    image: temporalio/auto-setup:1.24
+    container_name: temporal
+    ports:
+      - "7233:7233"   # gRPC
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-db
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    profiles:
+      - full
+
+  temporal-db:
+    image: postgres:15-alpine
+    container_name: temporal-db
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - temporal-db-data:/var/lib/postgresql/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - full
+
+  temporal-ui:
+    image: temporalio/ui:2.31
+    container_name: temporal-ui
+    ports:
+      - "8233:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - temporal
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    profiles:
+      - full
+
+  # ============ Go Edge Worker (Agentic OS Data Plane) ============
+  galaxy-worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: galaxy-worker
+    environment:
+      - GALAXY_NATS_URL=nats://nats:4222
+      - GALAXY_WORKER_ID=worker-docker-01
+      - GALAXY_WORKER_TYPE=linux
+      - GALAXY_WORKER_PORT=8300
+    ports:
+      - "8300:8300"
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8300/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    profiles:
+      - worker
+
   # ============ Redis ============
   redis:
     image: redis:7-alpine
@@ -406,3 +511,7 @@ volumes:
   memos-data:
   redis-data:
   agentcpm-models:
+
+  # Agentic OS
+  nats-data:
+  temporal-db-data:
