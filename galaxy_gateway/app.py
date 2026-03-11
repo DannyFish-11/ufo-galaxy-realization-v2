@@ -612,8 +612,7 @@ async def chat_endpoint(request: ChatRequest):
         )
         # 确保向后兼容字段存在（reply 是 response 的别名，供旧版客户端使用）
         if isinstance(result, dict) and "reply" not in result:
-            result = dict(result)
-            result["reply"] = result.get("response", "")
+            result = {**result, "reply": result.get("response", "")}
         return result
     except Exception as e:
         logger.error("OpenClawd 处理失败: %s", e, exc_info=True)
