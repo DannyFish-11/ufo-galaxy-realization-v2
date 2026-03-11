@@ -153,6 +153,15 @@ class OpenClawd:
         self._node_actions_cache: Dict[str, Dict[str, str]] = {}
         # Node registry 缓存: {node_id: node_key}
         self._node_id_to_key: Dict[str, str] = {}
+
+        # Phase 9: 工具权限检查器
+        self._tool_permission_checker = None
+        try:
+            from core.tool_permissions import get_tool_permission_checker
+            self._tool_permission_checker = get_tool_permission_checker()
+        except Exception as e:
+            logger.warning(f"工具权限检查器不可用，所有工具将无限制: {e}")
+
         logger.info("OpenClawd 星枢核心智能体初始化")
 
     def _ensure_initialized(self):
@@ -496,6 +505,28 @@ class OpenClawd:
         Returns:
             {"success": bool, "result": Any, "error": Optional[str]}
         """
+        # Phase 9: 工具调用权限检查
+        if self._tool_permission_checker:
+            try:
+                check = self._tool_permission_checker.check(
+                    tool_name=tool_name,
+                    session_id=getattr(self, "_current_session_id", ""),
+                    device_id=getattr(self, "_current_device_id", ""),
+                )
+                if not check.allowed:
+                    logger.warning(f"工具调用被拒绝: {tool_name} — {check.reason}")
+                    return {"success": False, "error": f"权限拒绝: {check.reason}"}
+                if check.requires_confirmation:
+                    return {
+                        "success": False,
+                        "needs_confirmation": True,
+                        "tool": tool_name,
+                        "risk_level": check.risk_level,
+                        "error": f"操作 [{tool_name}] 需要用户确认（风险等级: {check.risk_level}）",
+                    }
+            except Exception as e:
+                logger.debug(f"权限检查异常（放行）: {e}")
+
         try:
             if tool_name.startswith("mcp__"):
                 parts = tool_name.split("__", 2)
@@ -698,8 +729,15 @@ class OpenClawd:
         last_response = None
         total_tokens = 0
 
+        # Phase 9: 频率限制计数器
+        _total_tool_calls = 0
+        _MAX_TOOL_CALLS = 20  # 单次请求最大工具调用次数
+        _consecutive_same: Dict[str, int] = {}  # 连续同名工具计数
+        _last_tool_name = ""
+
         async def _inner_loop():
             nonlocal last_response, total_tokens
+            nonlocal _total_tool_calls, _last_tool_name
 
             for iteration in range(max_iterations):
                 response = await router.chat(
@@ -737,6 +775,36 @@ class OpenClawd:
                         tc_args = {}
 
                     logger.info(f"ReAct 迭代 {iteration+1}: 调用工具 {tc_name}")
+
+                    # Phase 9: 频率限制检查
+                    _total_tool_calls += 1
+                    if _total_tool_calls > _MAX_TOOL_CALLS:
+                        logger.warning(
+                            f"ReAct 工具调用总次数超限 ({_MAX_TOOL_CALLS})，强制终止"
+                        )
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答",
+                        })
+                        break
+
+                    # 连续同一工具检查
+                    if tc_name == _last_tool_name:
+                        _consecutive_same[tc_name] = _consecutive_same.get(tc_name, 1) + 1
+                        if _consecutive_same[tc_name] >= 3:
+                            logger.warning(
+                                f"连续调用同一工具 {tc_name} 达 3 次，疑似幻觉循环，终止"
+                            )
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc_id,
+                                "content": f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答",
+                            })
+                            break
+                    else:
+                        _consecutive_same.clear()
+                    _last_tool_name = tc_name
 
                     # 执行工具 (带计时 + 单工具超时)
                     t0 = _time.time()
