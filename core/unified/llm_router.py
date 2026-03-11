@@ -22,6 +22,48 @@ from .models import LLMRequest, LLMResponse, LLMTaskType
 logger = logging.getLogger("Galaxy.Unified.LLMRouter")
 
 
+# ============================================================================
+# OpenAI 兼容结构（供 chat_completion 回退路径使用）
+# ============================================================================
+
+
+class _CompatMessage:
+    """OpenAI 兼容的 message 对象。"""
+
+    role: str = "assistant"
+    tool_calls: None = None
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _CompatChoice:
+    """OpenAI 兼容的 choice 对象。"""
+
+    finish_reason: str = "stop"
+
+    def __init__(self, content: str) -> None:
+        self.message = _CompatMessage(content)
+
+
+class _CompatUsage:
+    """OpenAI 兼容的 usage 对象。"""
+
+    def __init__(self, usage: Dict[str, Any]) -> None:
+        self.prompt_tokens: int = usage.get("prompt_tokens", 0)
+        self.completion_tokens: int = usage.get("completion_tokens", 0)
+        self.total_tokens: int = usage.get("total_tokens", 0)
+
+
+class _CompatResponse:
+    """OpenAI 兼容的 response 对象（供依赖 .choices[0].message 的模块使用）。"""
+
+    def __init__(self, content: str, model: str, usage: Dict[str, Any]) -> None:
+        self.choices: List[_CompatChoice] = [_CompatChoice(content)]
+        self.model: str = model
+        self.usage: _CompatUsage = _CompatUsage(usage)
+
+
 class UnifiedLLMRouter:
     """
     统一 LLM 路由器门面（进程级单例）。
@@ -182,6 +224,69 @@ class UnifiedLLMRouter:
             )
 
         return {"available": True, "providers": []}
+
+    # ------------------------------------------------------------------
+    # 代理方法（供 legacy 模块兼容使用）
+    # ------------------------------------------------------------------
+
+    def is_available(self) -> bool:
+        """检查是否有可用的 LLM 提供商。"""
+        if self._backend is None:
+            return False
+        try:
+            if hasattr(self._backend, "is_available"):
+                return bool(self._backend.is_available())
+        except Exception:
+            pass
+        return True
+
+    def get_default_model(self) -> str:
+        """返回当前默认模型名称。"""
+        if self._backend is None:
+            return "gpt-4o"
+        try:
+            if hasattr(self._backend, "get_default_model"):
+                return str(self._backend.get_default_model())
+        except Exception:
+            pass
+        return "gpt-4o"
+
+    async def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model_alias: Optional[str] = None,
+        task_type: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        OpenAI 兼容的 chat_completion 代理方法。
+
+        委派到后端 MultiLLMRouter.chat_completion()（若可用），
+        否则通过 self.chat_raw() 并返回 OpenAI 兼容结构。
+        """
+        if self._backend is not None and hasattr(self._backend, "chat_completion"):
+            return await self._backend.chat_completion(
+                messages=messages,
+                tools=tools,
+                model_alias=model_alias,
+                task_type=task_type,
+                **kwargs,
+            )
+
+        # 无 chat_completion 时回退到统一 chat 接口
+        llm_resp = await self.chat_raw(
+            messages=messages,
+            task_type=task_type or "general",
+            max_tokens=kwargs.get("max_tokens", 2048),
+            temperature=kwargs.get("temperature", 0.7),
+        )
+
+        return _CompatResponse(
+            content=llm_resp.content,
+            model=llm_resp.model,
+            usage=llm_resp.usage,
+        )
 
 
 # ============================================================================

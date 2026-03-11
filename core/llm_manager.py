@@ -1,24 +1,27 @@
 """
-DEPRECATED — 请使用 core.multi_llm_router.get_llm_router() 替代。
+LEGACY — core.llm_manager
 
-此模块仅保留供旧版测试引用。所有生产代码已迁移至 MultiLLMRouter。
+此模块作为 legacy 兼容入口保留，内部委派到
+``core.unified.llm_router.UnifiedLLMRouter``（进程级单例）。
+
+迁移路径：
+    旧：from core.llm_manager import LLMManager, llm_manager
+    新：from core.unified import get_unified_llm_router
 """
 
-import os
-import json
+from __future__ import annotations
+
 import logging
-import asyncio
-from typing import List, Dict, Any, Optional, Union
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
-from datetime import datetime
-from pathlib import Path
 
-try:
-    from openai import AsyncOpenAI
-except ImportError:
-    AsyncOpenAI = None
+logger = logging.getLogger("Galaxy.LLMManager.Legacy")
 
-logger = logging.getLogger("llm_manager")
+
+# ---------------------------------------------------------------------------
+# 保留数据模型以维持向后兼容（部分测试直接引用）
+# ---------------------------------------------------------------------------
 
 
 class ModelConfig(BaseModel):
@@ -40,295 +43,162 @@ class TokenUsage(BaseModel):
     timestamp: str
 
 
-# ============================================================================
-# 提供商优先级链 — 按 .env 中实际配置的 Key 自动构建
-# ============================================================================
-
-_ENV_PROVIDER_CHAIN = [
-    # (env_key_name, base_url, default_model, supports_tools)
-    ("OPENAI_API_KEY",     "OPENAI_API_BASE",    "https://api.openai.com/v1",       "gpt-4o",                      True),
-    ("DEEPSEEK_API_KEY",   None,                 "https://api.deepseek.com/v1",     "deepseek-chat",                True),
-    ("OPENROUTER_API_KEY", None,                 "https://openrouter.ai/api/v1",    "openai/gpt-4o-mini",           True),
-    ("GROQ_API_KEY",       None,                 "https://api.groq.com/openai/v1",  "llama-3.3-70b-versatile",      True),
-    ("XAI_API_KEY",        None,                 "https://api.x.ai/v1",             "grok-2-latest",                True),
-    ("ANTHROPIC_API_KEY",  None,                 "https://api.anthropic.com/v1",    "claude-sonnet-4-20250514",     False),  # Anthropic 有不同的 API
-    ("ZHIPU_API_KEY",      None,                 "https://open.bigmodel.cn/api/paas/v4", "glm-4-flash",             True),
-]
+# ---------------------------------------------------------------------------
+# LLMManager — legacy 委派层
+# ---------------------------------------------------------------------------
 
 
 class LLMManager:
     """
-    统一 LLM 管理器
+    Legacy LLM 管理器（委派到 UnifiedLLMRouter）。
 
-    客户端获取优先级:
-    1. config.json 中的 OneAPI 聚合层 (如已配置)
-    2. .env / 环境变量中的各 Provider API Key (自动 fallback 链)
-    3. 若全部无 → 抛出明确错误提示
+    保持原有方法签名兼容，所有实际逻辑委派到
+    ``core.unified.llm_router.UnifiedLLMRouter`` 单例。
     """
 
-    def __init__(self, config_path: str = "config.json"):
-        self.config_path = config_path
-        self.oneapi_client: Optional[Any] = None
-        self.oneapi_config: Optional[Dict] = None
-        self.usage_log: List[TokenUsage] = []
-        self.default_model = "gpt-4o"
-
-        # 环境变量 fallback 客户端链
-        self._env_clients: List[Dict[str, Any]] = []
-
-        self._load_env_file()
-        self._load_config()
-        self._build_env_client_chain()
-
-    # ================================================================
-    # 初始化
-    # ================================================================
-
-    def _load_env_file(self):
-        """加载项目根目录 .env 到 os.environ (不覆盖已有值)"""
-        project_root = Path(self.config_path).resolve().parent
-        # 尝试多个可能的 .env 位置
-        for candidate in [
-            project_root / ".env",
-            project_root.parent / ".env",
-            Path.cwd() / ".env",
-        ]:
-            if candidate.exists():
-                try:
-                    with open(candidate, "r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith("#") and "=" in line:
-                                k, v = line.split("=", 1)
-                                k, v = k.strip(), v.strip()
-                                if k and k not in os.environ:
-                                    os.environ[k] = v
-                    logger.info(f"LLMManager: 已加载 .env: {candidate}")
-                except Exception as e:
-                    logger.warning(f"LLMManager: 加载 .env 失败: {e}")
-                break
-
-    def _load_config(self):
-        """加载 config.json — 优先 OneAPI 聚合层"""
-        if not os.path.exists(self.config_path):
-            return
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-
-            oneapi_base = config.get("oneapi_base_url")
-            oneapi_key = config.get("oneapi_key")
-
-            if oneapi_base and oneapi_key and AsyncOpenAI:
-                self.oneapi_client = AsyncOpenAI(
-                    api_key=oneapi_key,
-                    base_url=oneapi_base,
-                )
-                self.oneapi_config = {"base_url": oneapi_base, "api_key": oneapi_key}
-                logger.info(f"OneAPI 聚合层已激活: {oneapi_base}")
-
-            self.default_model = config.get("default_llm_model", "gpt-4o")
-        except Exception as e:
-            logger.error(f"加载 LLM 配置失败: {e}")
-
-    def _build_env_client_chain(self):
-        """从环境变量构建 Provider fallback 链"""
-        if AsyncOpenAI is None:
-            logger.warning("openai SDK 未安装，无法构建 env client chain")
-            return
-
-        for env_key, base_url_env, default_base, default_model, supports_tools in _ENV_PROVIDER_CHAIN:
-            api_key = os.environ.get(env_key, "")
-            if not api_key or api_key.startswith("your-") or api_key.startswith("sk-YOUR"):
-                continue
-
-            # Anthropic 走不同的 API 格式，暂时跳过 (用 OpenRouter 代替)
-            if env_key == "ANTHROPIC_API_KEY":
-                continue
-
-            base_url = default_base
-            if base_url_env:
-                base_url = os.environ.get(base_url_env, default_base)
-
-            try:
-                client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-                self._env_clients.append({
-                    "provider": env_key.replace("_API_KEY", "").replace("_URL", "").lower(),
-                    "client": client,
-                    "model": default_model,
-                    "supports_tools": supports_tools,
-                    "env_key": env_key,
-                })
-                logger.info(f"LLM Provider 就绪: {env_key} → {base_url} ({default_model})")
-            except Exception as e:
-                logger.warning(f"构建 {env_key} 客户端失败: {e}")
-
-        if not self.oneapi_client and not self._env_clients:
-            logger.warning(
-                "⚠️ 无可用 LLM Provider！请在 .env 中设置至少一个 API Key "
-                "(OPENAI_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY 等)"
-            )
-
-    # ================================================================
-    # 核心 API
-    # ================================================================
-
-    def get_client(self) -> Any:
-        """获取可用客户端 (OneAPI 优先, 否则 env chain 第一个)"""
-        if self.oneapi_client:
-            return self.oneapi_client
-        if self._env_clients:
-            return self._env_clients[0]["client"]
-        raise ValueError(
-            "无可用 LLM。请配置以下任一:\n"
-            "1. config.json → oneapi_base_url + oneapi_key\n"
-            "2. .env → OPENAI_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY 等"
+    def __init__(self, config_path: str = "config.json") -> None:
+        self._config_path = config_path
+        self._router = self._get_router()
+        logger.info(
+            "LLMManager (legacy) initialized — delegating to UnifiedLLMRouter",
+            extra={"event": "init"},
         )
 
+    # ------------------------------------------------------------------
+    # 内部
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _get_router() -> Any:
+        """返回进程级 UnifiedLLMRouter 单例。"""
+        from core.unified.llm_router import get_unified_llm_router  # lazy import
+        return get_unified_llm_router()
+
+    @property
+    def _backend(self) -> Any:
+        """后端 MultiLLMRouter（UnifiedLLMRouter 的底层实现）。"""
+        return self._router._backend  # type: ignore[attr-defined]
+
+    # ------------------------------------------------------------------
+    # 公开 API（保持原有签名）
+    # ------------------------------------------------------------------
+
+    def get_client(self) -> Any:
+        """
+        获取可用 LLM 客户端。
+
+        委派到后端适配器的第一个可用客户端。
+        如无可用提供商则抛出 ValueError。
+        """
+        if self._backend is None:
+            raise ValueError(
+                "无可用 LLM。请配置以下任一:\n"
+                "1. config.json → oneapi_base_url + oneapi_key\n"
+                "2. .env → OPENAI_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY 等"
+            )
+        # MultiLLMRouter 将 adapters 挂在 .adapters 字典，返回第一个
+        adapters = getattr(self._backend, "adapters", {})
+        if adapters:
+            first = next(iter(adapters.values()))
+            client = getattr(first, "client", None)
+            if client is not None:
+                return client
+        raise ValueError("无可用 LLM 客户端，请检查 API Key 配置。")
+
     def get_default_model(self) -> str:
-        """获取当前默认模型名"""
-        if self.oneapi_client:
-            return self.default_model
-        if self._env_clients:
-            return self._env_clients[0]["model"]
-        return self.default_model
+        """返回当前默认模型名。"""
+        return self._router.get_default_model()
 
     async def chat_completion(
         self,
         messages: List[Dict],
-        tools: List[Dict] = None,
-        model_alias: str = None,
-        **kwargs,
+        tools: Optional[List[Dict]] = None,
+        model_alias: Optional[str] = None,
+        **kwargs: Any,
     ) -> Any:
         """
-        统一 Chat Completion — 自动 fallback:
-        1. OneAPI (如已配置)
-        2. 环境变量 Provider 链 (逐个尝试)
+        统一 Chat Completion（OpenAI 兼容格式）。
+
+        委派到 UnifiedLLMRouter.chat_completion()。
         """
-        # 构建候选列表
-        candidates = []
+        return await self._router.chat_completion(
+            messages=messages,
+            tools=tools,
+            model_alias=model_alias,
+            **kwargs,
+        )
 
-        if self.oneapi_client:
-            candidates.append({
-                "provider": "oneapi",
-                "client": self.oneapi_client,
-                "model": model_alias or self.default_model,
-                "supports_tools": True,
-            })
-
-        for ec in self._env_clients:
-            candidates.append({
-                "provider": ec["provider"],
-                "client": ec["client"],
-                "model": model_alias or ec["model"],
-                "supports_tools": ec["supports_tools"],
-            })
-
-        if not candidates:
-            raise ValueError(
-                "无可用 LLM Provider。请在 Dashboard API CONFIG 中设置 API Key。"
-            )
-
-        last_error = None
-        for cand in candidates:
-            try:
-                start_time = datetime.now()
-
-                # 如果 provider 不支持 tools 且 tools 被传入, 跳过
-                call_tools = tools if (tools and cand["supports_tools"]) else None
-
-                call_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-                response = await cand["client"].chat.completions.create(
-                    model=cand["model"],
-                    messages=messages,
-                    tools=call_tools,
-                    **call_kwargs,
-                )
-
-                # 记录 usage
-                if response.usage:
-                    usage_record = TokenUsage(
-                        model=cand["model"],
-                        input_tokens=response.usage.prompt_tokens or 0,
-                        output_tokens=response.usage.completion_tokens or 0,
-                        total_cost=0.0,
-                        timestamp=start_time.isoformat(),
-                    )
-                    self.usage_log.append(usage_record)
-                    logger.info(
-                        f"LLM 调用成功: [{cand['provider']}] {cand['model']}, "
-                        f"Tokens: {response.usage.prompt_tokens}/{response.usage.completion_tokens}"
-                    )
-
-                return response
-
-            except Exception as e:
-                last_error = e
-                logger.warning(f"LLM [{cand['provider']}] {cand['model']} 调用失败: {e}")
-                continue
-
-        raise ValueError(f"所有 LLM Provider 均失败。最后错误: {last_error}")
-
-    # ================================================================
-    # 便捷方法
-    # ================================================================
-
-    async def simple_chat(self, user_message: str, system_prompt: str = None) -> str:
-        """简单对话 — 返回纯文本回复"""
-        messages = []
+    async def simple_chat(
+        self,
+        user_message: str,
+        system_prompt: Optional[str] = None,
+    ) -> str:
+        """简单对话 — 返回纯文本回复。"""
+        messages: List[Dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_message})
+        resp = await self.chat_completion(messages=messages)
+        return resp.choices[0].message.content or ""
 
-        response = await self.chat_completion(messages=messages)
-        return response.choices[0].message.content or ""
+    def reload(self) -> None:
+        """热重载：刷新底层路由器的提供商配置。"""
+        import asyncio
 
-    def reload(self):
-        """热重载: 重新读取环境变量并重建客户端链"""
-        self.oneapi_client = None
-        self._env_clients = []
-        self._load_config()
-        self._build_env_client_chain()
-        logger.info(f"LLMManager reload: {len(self._env_clients)} env clients, "
-                     f"oneapi={'yes' if self.oneapi_client else 'no'}")
+        backend = self._backend
+        if backend is not None and hasattr(backend, "refresh_providers"):
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(backend.refresh_providers())
+                else:
+                    loop.run_until_complete(backend.refresh_providers())
+            except Exception as exc:
+                logger.warning(
+                    "LLMManager reload failed",
+                    extra={"event": "reload_error", "reason": str(exc)},
+                )
+        logger.info("LLMManager reload triggered", extra={"event": "reload"})
 
     def is_available(self) -> bool:
-        """检查是否有可用的 LLM Provider"""
-        return bool(self.oneapi_client or self._env_clients)
+        """检查是否有可用的 LLM 提供商。"""
+        return self._router.is_available()
 
     def get_provider_status(self) -> List[Dict[str, Any]]:
-        """获取所有 Provider 状态"""
-        result = []
-        if self.oneapi_client:
-            result.append({
-                "provider": "oneapi",
-                "model": self.default_model,
-                "source": "config.json",
-                "active": True,
-            })
-        for ec in self._env_clients:
-            result.append({
-                "provider": ec["provider"],
-                "model": ec["model"],
-                "source": f".env ({ec['env_key']})",
-                "active": True,
-                "supports_tools": ec["supports_tools"],
-            })
-        return result
+        """获取所有 Provider 状态（保持原有 list 格式兼容性）。"""
+        status = self._router.get_status()
+        raw_providers = status.get("providers", [])
+
+        # MultiLLMRouter 的 providers 是 dict {name: config}，需转换为 list
+        if isinstance(raw_providers, dict):
+            return [
+                {
+                    "provider": name,
+                    "model": info.get("default_model", "unknown") if isinstance(info, dict) else getattr(info, "default_model", "unknown"),
+                    "source": "multi_llm_router",
+                    "active": True,
+                    "status": info.get("status", "healthy") if isinstance(info, dict) else getattr(getattr(info, "status", None), "value", "healthy"),
+                }
+                for name, info in raw_providers.items()
+            ]
+        if isinstance(raw_providers, list):
+            return raw_providers
+        return []
 
     def get_usage_summary(self) -> Dict[str, Any]:
-        """获取 Token 使用统计"""
-        total_cost = sum(u.total_cost for u in self.usage_log)
-        by_model: Dict[str, Dict] = {}
-        for u in self.usage_log:
-            if u.model not in by_model:
-                by_model[u.model] = {"input": 0, "output": 0, "cost": 0.0}
-            by_model[u.model]["input"] += u.input_tokens
-            by_model[u.model]["output"] += u.output_tokens
-            by_model[u.model]["cost"] += u.total_cost
+        """获取 Token 使用统计（从底层 backend 聚合）。"""
+        backend = self._backend
+        if backend is not None and hasattr(backend, "get_usage_summary"):
+            try:
+                return backend.get_usage_summary()  # type: ignore[return-value]
+            except Exception:
+                pass
+        return {"total_cost": 0.0, "by_model": {}, "history_count": 0}
 
-        return {
-            "total_cost": total_cost,
-            "by_model": by_model,
-            "history_count": len(self.usage_log),
-        }
+
+# ---------------------------------------------------------------------------
+# 模块级单例（供 `from core.llm_manager import llm_manager` 使用）
+# ---------------------------------------------------------------------------
+
+llm_manager: LLMManager = LLMManager()
+
