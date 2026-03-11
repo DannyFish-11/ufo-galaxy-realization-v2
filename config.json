@@ -2,34 +2,8 @@
   "web_ui_port": 8099,
   "log_level": "INFO",
   "default_llm_model": "gpt-4o",
-  "llm_models": {
-    "gpt-4o": {
-      "provider": "openai",
-      "model_name": "gpt-4o",
-      "api_key": "sk-YOUR_OPENAI_KEY_HERE",
-      "cost_per_1k_input": 0.005,
-      "cost_per_1k_output": 0.015
-    },
-    "deepseek-v3": {
-      "provider": "deepseek",
-      "model_name": "deepseek-chat",
-      "api_key": "sk-YOUR_DEEPSEEK_KEY_HERE",
-      "base_url": "https://api.deepseek.com/v1",
-      "cost_per_1k_input": 0.001,
-      "cost_per_1k_output": 0.002
-    },
-    "claude-3-5-sonnet": {
-      "provider": "anthropic",
-      "model_name": "claude-3-5-sonnet-20240620",
-      "api_key": "sk-ant-YOUR_ANTHROPIC_KEY_HERE",
-      "cost_per_1k_input": 0.003,
-      "cost_per_1k_output": 0.015
-    }
-  },
-  "nodes": {
-    "Node_82_NetworkGuard": {
-      "enabled": true,
-      "tailscale_check_interval": 60
-    }
-  }
+  "llm_models": {},
+  "mcp_servers": {},
+  "skills": {},
+  "nodes": {}
 }

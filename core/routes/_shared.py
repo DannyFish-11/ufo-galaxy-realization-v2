@@ -62,18 +62,47 @@ def _save_registered_devices(devices: Dict[str, Dict[str, Any]]) -> None:
 # ============================================================================
 
 class RouteConnectionPool:
-    """WebSocket 连接管理器"""
+    """
+    WebSocket 连接管理器。
+
+    委托 core.unified.UnifiedConnectionManager 管理实际连接状态，
+    保留原有接口以维持向后兼容。
+    """
 
     def __init__(self):
+        # 保留 active_devices 供直接赋值的旧代码读取，但写操作会同步到统一管理器
         self.active_devices: Dict[str, WebSocket] = {}
         self.status_subscribers: Set[WebSocket] = set()
         # 命令响应等待器: command_id → asyncio.Future
         self._pending_responses: Dict[str, asyncio.Future] = {}
 
+    # ------------------------------------------------------------------
+    # 内部：懒加载统一管理器（避免循环导入）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _unified() -> "UnifiedConnectionManager":  # type: ignore[name-defined]
+        from core.unified.connection_manager import get_unified_connection_manager
+        return get_unified_connection_manager()
+
+    # ------------------------------------------------------------------
+    # 连接管理
+    # ------------------------------------------------------------------
+
     async def connect_device(self, websocket: WebSocket, device_id: str):
         await websocket.accept()
         self.active_devices[device_id] = websocket
         logger.info(f"设备已连接: {device_id}")
+        # 同步到统一连接管理器（不再重复 accept）
+        ucm = self._unified()
+        ucm._websockets[device_id] = websocket
+        from core.unified.models import UnifiedConnectionInfo, UnifiedConnectionState
+        from datetime import datetime as _dt
+        ucm._connections[device_id] = UnifiedConnectionInfo(
+            device_id=device_id,
+            state=UnifiedConnectionState.CONNECTED,
+            connected_at=_dt.utcnow(),
+        )
         await self.broadcast_status({
             "type": "device_connected",
             "device_id": device_id,
@@ -83,9 +112,14 @@ class RouteConnectionPool:
     def disconnect_device(self, device_id: str):
         self.active_devices.pop(device_id, None)
         logger.info(f"设备已断开: {device_id}")
+        # 同步到统一连接管理器
+        ucm = self._unified()
+        ucm._websockets.pop(device_id, None)
+        ucm._connections.pop(device_id, None)
 
     async def send_to_device(self, device_id: str, message: dict) -> bool:
-        # 1. 先查本地 active_devices（REST API 注册的设备）
+        """委托统一连接管理器发送消息（含多路径 fallback）。"""
+        # 1. 优先查本地 active_devices（存量旧路径兼容）
         ws = self.active_devices.get(device_id)
         if ws:
             try:
@@ -95,67 +129,20 @@ class RouteConnectionPool:
                 logger.error(f"发送消息到设备 {device_id} 失败: {e}")
                 self.disconnect_device(device_id)
 
-        # 2. 查 gateway 的 WebSocketManager（WebSocket 注册的设备）
-        try:
-            from galaxy_gateway.app import websocket_manager as gw_ws_manager
-            if gw_ws_manager and gw_ws_manager.is_device_connected(device_id):
-                from galaxy_gateway.protocol import AIPMessage, MessageType
-                aip_msg = AIPMessage(
-                    type=MessageType.COMMAND,
-                    device_id=device_id,
-                    payload=message,
-                )
-                return await gw_ws_manager.send_message(device_id, aip_msg)
-        except Exception as e:
-            logger.debug(f"Gateway WebSocketManager 不可用: {e}")
-
-        # 3. 查 gateway 的 device_router（保底）
-        try:
-            from galaxy_gateway.device_router import device_router
-            device = device_router.get_device(device_id)
-            if device and device.websocket:
-                await device.websocket.send_json(message)
-                return True
-        except Exception as e:
-            logger.debug(f"DeviceRouter 发送失败: {e}")
-
-        return False
+        # 2. 委托统一管理器（包含 gateway fallback 逻辑）
+        return await self._unified().send_to_device(device_id, message)
 
     def get_all_devices(self) -> Dict[str, Dict[str, Any]]:
-        """合并所有来源的设备信息（REST + gateway WebSocket + device_router）"""
+        """委托统一连接管理器合并所有来源的设备信息。"""
         all_devices = dict(registered_devices)
-
-        # 合并 gateway WebSocketManager 的连接设备
-        try:
-            from galaxy_gateway.app import websocket_manager as gw_ws_manager
-            if gw_ws_manager:
-                for did in gw_ws_manager.get_connected_devices():
-                    if did not in all_devices:
-                        all_devices[did] = {
-                            "device_id": did,
-                            "device_type": "unknown",
-                            "status": "online",
-                            "online": True,
-                            "source": "gateway_ws",
-                        }
-        except Exception as e:
-            logger.debug(f"Gateway ws_manager 设备合并不可用: {e}")
-
-        # 合并 device_router 的设备
-        try:
-            from galaxy_gateway.device_router import device_router
-            for did, device in device_router.devices.items():
-                if did not in all_devices:
-                    all_devices[did] = device.to_dict()
-                    all_devices[did]["online"] = True
-                else:
-                    all_devices[did]["online"] = True
-                    all_devices[did]["status"] = "online"
-                    if device.device_type:
-                        all_devices[did]["device_type"] = device.device_type
-        except Exception as e:
-            logger.debug(f"DeviceRouter 设备合并不可用: {e}")
-
+        unified_devices = self._unified().get_all_devices()
+        for did, info in unified_devices.items():
+            if did not in all_devices:
+                all_devices[did] = info
+            else:
+                # 已有条目时，用统一管理器的在线状态覆盖
+                all_devices[did]["online"] = info.get("online", all_devices[did].get("online", False))
+                all_devices[did]["status"] = info.get("status", all_devices[did].get("status", "offline"))
         return all_devices
 
     async def broadcast_to_devices(self, message: dict):
