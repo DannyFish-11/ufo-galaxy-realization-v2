@@ -3,7 +3,12 @@ Galaxy - Chat Routes
 ==========================
 
 Routes:
-  POST /api/v1/chat  - 统一对话接口 (意图分流: ReAct Agent / 纯聊天)
+  POST /api/v1/chat  - 统一对话接口 (意图分流: AgentKernel → OpenClawd → Scheduler)
+
+处理优先级:
+  层 -1: AgentKernel — 统一智能体内核 (chat_only / task_execute / hybrid)
+  层  0: OpenClawd   — 母体智能体 (降级路径)
+  层  1: Scheduler + IntentParser (最终降级路径)
 """
 
 import logging
@@ -89,17 +94,49 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def chat(req: ChatRequest):
         """
         统一对话接口 — 智能分流:
-        0. OpenClawd 统一入口（优先，如可用）
-        1. IntentParser 解析意图（规则 + LLM 增强）
-        2. 操作指令 → ReAct Agent 调度 (LLM + tool_call → 节点执行)
-        3. 纯聊天 → LLM 对话回复
+        -1. AgentKernel 统一智能体内核（优先，chat_only/task_execute/hybrid 三模式）
+         0. OpenClawd 母体智能体（降级）
+         1. IntentParser + Scheduler ReAct（最终降级）
 
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
-        # ── 层 0: OpenClawd 母体智能体 — 主入口 ──
-        # OpenClawd 是全系统唯一交互中枢，集成意图解析 + 多模型路由 +
-        # ReAct 工具调用 + Agent 协作。仅在 OpenClawd 不可用时降级到旧逻辑。
+        # ── 层 -1: AgentKernel 统一内核 — 最优先 ──
+        # AgentKernel 实现 chat_only / task_execute / hybrid 三模式分流，
+        # SOUL 仅在执行链路注入，纯聊天不注入，返回结构化 KernelResponse。
+        try:
+            from core.agent.kernel import get_kernel
+            kernel = get_kernel()
+            kernel_result = await kernel.process(
+                message=req.message,
+                session_id=req.session_id or None,
+                device_id=req.device_id or None,
+                context=req.context or [],
+                user_id=req.user_id or None,
+            )
+            resp_dict = kernel_result.to_dict()
+            # 兼容旧客户端期望的字段名（response / intent / confidence）
+            resp_dict["response"] = kernel_result.reply
+            resp_dict["intent"] = kernel_result.intent_label
+            resp_dict["confidence"] = kernel_result.confidence
+            # 会话管理
+            try:
+                from core.session_manager import get_session_manager
+                sm = get_session_manager()
+                sid = kernel_result.session_id or req.device_id or "default"
+                sm.add_message(sid, "user", req.message, req.device_id)
+                sm.add_message(sid, "assistant", kernel_result.reply, req.device_id)
+            except Exception:
+                pass
+            return JSONResponse(resp_dict)
+        except ImportError:
+            logger.info("AgentKernel 未安装，降级到 OpenClawd 模式")
+        except Exception as e:
+            logger.warning(f"AgentKernel 处理异常，降级到 OpenClawd 模式: {e}")
+
+        # ── 层 0: OpenClawd 母体智能体 — 降级路径 ──
+        # 仅在 AgentKernel 不可用时触发。
+        # OpenClawd 是全系统通用交互中枢，集成意图解析 + 多模型路由 + ReAct 工具调用。
         try:
             from core.openclawd import get_openclawd
             clawd = get_openclawd()
