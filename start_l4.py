@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """
 Galaxy L4 级自主性智能系统启动脚本
+
+.. deprecated::
+    This script is retained for backwards compatibility only.
+    The recommended entrypoint is ``main.py`` (or ``unified_launcher.py``),
+    which starts the full Galaxy system including L4 modules.
+
+    Migration::
+
+        # Before:
+        python start_l4.py
+
+        # After (full system with L4 enabled):
+        python main.py
 """
 
 import asyncio
@@ -8,6 +21,7 @@ import logging
 import json
 import sys
 import os
+import warnings
 from pathlib import Path
 
 # 添加路径
@@ -70,6 +84,19 @@ def print_banner():
 
 async def main():
     """主函数"""
+    warnings.warn(
+        "start_l4.py is deprecated. Use 'python main.py' (or 'python unified_launcher.py') "
+        "as the standard entrypoint for the full Galaxy system including L4 modules. "
+        "start_l4.py will continue to work but may be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+    _dep_logger = logging.getLogger("L4Startup")
+    _dep_logger.warning(
+        "⚠  DEPRECATED: start_l4.py — use 'python main.py' instead. "
+        "See unified_launcher.py for the full feature set."
+    )
+
     # 打印横幅
     print_banner()
     

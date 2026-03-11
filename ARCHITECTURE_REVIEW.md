@@ -209,3 +209,101 @@ UFO Galaxy 在**节点级别的结构一致性**方面表现优秀（100% 遵循
 主要问题集中在**系统级整合**层面：多设备编排存在三套并行系统、设备类型定义分散、core/gateway 边界模糊。这些问题虽然不影响单个模块的功能，但会在系统规模扩大时带来维护困难和状态不一致风险。
 
 建议按照 Phase 1→5 的优先级逐步整合，每个阶段保持系统可运行状态。
+
+---
+
+## 六、单例模式现状与重构策略（Singleton Guardrails）
+
+### 现状
+
+系统中有 **30+ 个管理器类**使用 `_instance` + `get_instance()` 或 `__new__` 单例模式。主要集中在：
+
+| 类 | 文件 | 单例方式 |
+|----|------|---------|
+| `SystemIntegration` | `core/system_integration.py` | `get_instance()` |
+| `DeviceCommunication` | `core/device_communication.py` | `get_instance()` |
+| `DeviceRegistry` | `core/device_registry.py` | `get_instance()` |
+| `CapabilityOrchestrator` | `core/capability_orchestrator.py` | `get_instance()` |
+| `CapabilityRegistry` | `core/agent/capability_registry.py` | `get_instance()` |
+| `AgentKernel` | `core/agent/kernel.py` | `__new__` |
+| `MasterBrain` | `core/master_brain.py` | `get_instance()` |
+| `NodeRegistry` | `core/node_registry.py` | `__new__` |
+| `MCPDynamicGateway` | `core/mcp_gateway.py` | `get_instance()` |
+| `NATSBus` | `core/nats_bus.py` | `get_instance()` |
+| `ChannelPluginLoader` | `core/channel_plugins.py` | `get_instance()` |
+| `UnifiedConfig` | `core/unified_config.py` | `__new__` |
+| `ConnectionManager` | `core/connection_manager.py` | `__new__` |
+| `DeviceOrchestrator` | `core/device_orchestrator.py` | `__new__` |
+| *(其余约 16 个)* | `core/unified/`, `core/performance.py`, 等 | 各类单例 |
+
+### 问题
+
+- **测试隔离困难**：单例在测试间共享状态，难以 mock，需要手动重置 `_instance`。
+- **隐式依赖**：调用方通过全局 `get_instance()` 绑定，依赖关系不可见。
+- **分布式部署风险**：多进程/多节点场景下，单例状态不跨进程共享（需要显式传递）。
+
+### 代码层面保护措施
+
+关键单例工厂方法（`get_instance()`）已添加注释，提示开发者：
+> *Avoid adding new call sites — prefer dependency injection where possible.*
+
+相关文件：
+- `core/system_integration.py` — `SystemIntegration.get_instance()`
+- `core/device_communication.py` — `DeviceCommunication.get_instance()`
+- `core/device_registry.py` — `DeviceRegistry.get_instance()`
+
+### 推荐重构路径（分阶段）
+
+| 阶段 | 目标 | 方法 |
+|------|------|------|
+| **短期** | 不新增单例调用点 | 代码审查拒绝新的 `get_instance()` 调用，除非有充分理由 |
+| **中期** | 关键路径依赖注入 | 将 `service_manager` 传参替代 `get_instance()`，从 `api_routes.py` 开始 |
+| **长期** | 移除单例模式 | 迁移到 IoC 容器或 FastAPI `Depends()` 机制，逐类替换 |
+
+> **原则**：在完成替换之前，所有单例类的 `get_instance()` 方法保持稳定接口，不做破坏性修改。
+
+---
+
+## 七、节点容器化覆盖率诊断报告
+
+### 现状
+
+| 指标 | 数量 | 覆盖率 |
+|------|------|--------|
+| 总节点数 | 113 | — |
+| 有 Dockerfile | 71 | **63%** |
+| 有 requirements.txt | 24 | **21%** |
+| 两者都有 | 24 | **21%** |
+
+### 缺少 Dockerfile 的节点（39 个）
+
+```
+Node_09_Sandbox          Node_100_MemorySystem    Node_101_CodeEngine
+Node_102_DebugOptimize   Node_103_KnowledgeGraph  Node_104_AgentCPM
+Node_105_UnifiedKnowledgeBase  Node_106_GitHubFlow  Node_108_MetaCognition
+Node_109_ProactiveSensing  Node_110_SmartOrchestrator  Node_111_ContextManager
+Node_112_SelfHealing     Node_113_AndroidVLM      Node_116_ExternalToolWrapper
+Node_117_OpenCode        Node_118_NodeFactory     Node_120_File
+Node_121_Web             Node_122_Shell           Node_123_Calendar
+Node_124_LinuxDesktopAuto  Node_130_AutonomousCoding  Node_27_SmartHome
+Node_56_Planning         Node_70_AutonomousLearning  Node_79_LocalLLM
+Node_80_MemorySystem     Node_81_Orchestrator     Node_82_NetworkGuard
+Node_83_NewsAggregator   Node_84_StockTracker     Node_85_PromptLibrary
+Node_90_MultimodalVision  Node_91_MultimodalAgent  Node_92_AutoControl
+Node_95_WebRTC_Receiver  Node_96_SmartTransportRouter  Node_97_AcademicSearch
+```
+
+### 缺少 requirements.txt 的节点（89 个）
+
+大多数节点缺少 `requirements.txt`，参见 `tools/check_node_packaging.sh` 的完整输出。
+
+### 建议下一步
+
+1. **高优先级**（有复杂依赖的节点）：为 `Node_101_CodeEngine`、`Node_90_MultimodalVision`、
+   `Node_79_LocalLLM`、`Node_103_KnowledgeGraph` 补充 Dockerfile 和 requirements.txt。
+2. **批量补充**：参考已有节点（如 `Node_10_Slack`）的 Dockerfile 模板，使用
+   `tools/check_node_packaging.sh` 识别缺口，逐步补充。
+3. **CI 门禁**（推荐）：在 CI workflow 中添加检查步骤，确保新节点 PR 必须包含
+   Dockerfile 和 requirements.txt。
+
+> 详细列表和自动化工具请参见 `tools/check_node_packaging.sh`。

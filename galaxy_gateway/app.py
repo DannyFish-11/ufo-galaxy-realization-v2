@@ -593,34 +593,30 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/v1/chat")
 async def chat_endpoint(request: ChatRequest):
-    """智能对话端点 — 委托给 OpenClawd 统一智能入口
+    """智能对话端点 — 严格委托给 OpenClawd 统一智能入口
 
-    支持对话记忆（通过 session_id），自动意图识别和 Agent 调度。
-    当 OpenClawd 不可用时降级到 GalaxyOrchestrator。
+    所有对话请求经由 OpenClawd.process() 路由，确保 CapabilityRegistry
+    和 Agent 调度逻辑的一致性。响应包含向后兼容字段 (reply, response,
+    intent)，供老版本客户端使用。
     """
-    if openclawd_instance:
-        try:
-            result = await openclawd_instance.process(
-                message=request.message,
-                session_id=request.session_id or "gateway_default",
-                device_id=request.device_id,
-                context=request.context or {},
-            )
-            return result
-        except Exception as e:
-            logger.warning(f"OpenClawd 处理失败，降级到 Orchestrator: {e}")
+    if not openclawd_instance:
+        logger.warning("OpenClawd 未初始化，chat 端点不可用")
+        raise HTTPException(status_code=503, detail="AI service not available")
 
-    # Fallback: 使用 GalaxyOrchestrator
-    if task_orchestrator:
-        try:
-            from .orchestrator.galaxy_orchestrator import GalaxyOrchestrator
-            orch = GalaxyOrchestrator(config={})
-            result = await orch.process_request(request.message, request.context)
-            return result
-        except Exception as e:
-            logger.error(f"Orchestrator 降级也失败: {e}")
-
-    raise HTTPException(status_code=503, detail="AI service not available")
+    try:
+        result = await openclawd_instance.process(
+            message=request.message,
+            session_id=request.session_id or "gateway_default",
+            device_id=request.device_id,
+            context=request.context or {},
+        )
+        # 确保向后兼容字段存在（reply 是 response 的别名，供旧版客户端使用）
+        if isinstance(result, dict) and "reply" not in result:
+            result = {**result, "reply": result.get("response", "")}
+        return result
+    except Exception as e:
+        logger.error("OpenClawd 处理失败: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chat processing error: {e}")
 
 
 # ============================================================================

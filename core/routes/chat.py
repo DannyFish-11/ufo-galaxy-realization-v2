@@ -110,8 +110,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 sid = req.session_id or req.device_id or "default"
                 sm.add_message(sid, "user", req.message, req.device_id)
                 sm.add_message(sid, "assistant", result.get("response", ""), req.device_id)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("Session recording skipped: %s", _e)
             return JSONResponse(resp_dict)
         except Exception as e:
             logger.error(f"OpenClawd 处理异常: {e}", exc_info=True)
@@ -145,8 +145,8 @@ async def _handle_agent_action(
                 from core.ai_intent import get_conversation_memory
                 memory = get_conversation_memory()
                 await memory.add_turn(session_id, "assistant", full_reply)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("Conversation memory update skipped (capability): %s", _e)
 
             resp = UnifiedChatResponse(
                 success=cap_result.get("success", True),
@@ -170,8 +170,8 @@ async def _handle_agent_action(
                 from core.ai_intent import get_conversation_memory
                 memory = get_conversation_memory()
                 await memory.add_turn(session_id, "assistant", full_reply)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("Conversation memory update skipped (agent_factory): %s", _e)
 
             resp = UnifiedChatResponse(
                 success=agent_result.get("success", True),
@@ -357,7 +357,8 @@ async def _handle_scheduler_react(
                             "payload": params,
                         })
                         return {"success": True, "device": did, "action": action, "via": "websocket"}
-                    except Exception:
+                    except Exception as _e:
+                        logger.debug("WebSocket send failed for device %s: %s", did, _e)
                         continue
                 return {"error": f"Node {node_id} not found and no device available"}
 
@@ -414,8 +415,8 @@ async def _handle_scheduler_react(
         from core.ai_intent import get_conversation_memory
         memory = get_conversation_memory()
         await memory.add_turn(session_id, "assistant", full_reply)
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("Conversation memory update skipped (agent_react): %s", _e)
 
     resp = UnifiedChatResponse(
         success=plan_result.get("success", True),
@@ -455,8 +456,8 @@ async def _handle_pure_chat(
                 from core.ai_intent import get_conversation_memory
                 memory = get_conversation_memory()
                 await memory.add_turn(session_id, "assistant", reply)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("Conversation memory update skipped (pure_chat): %s", _e)
 
             resp = UnifiedChatResponse(
                 success=True,
