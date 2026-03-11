@@ -23,11 +23,97 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.CommandRouter")
+
+
+# ============================================================================
+# 错误代码 — 结构化、可解释的网关错误（PR-C）
+# ============================================================================
+
+class GatewayErrorCode(str, Enum):
+    """网关层可解释错误代码"""
+    INVALID_ENVELOPE = "INVALID_ENVELOPE"      # 消息体缺少必要字段
+    DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND"      # 设备未注册
+    DEVICE_OFFLINE = "DEVICE_OFFLINE"          # 设备已注册但当前离线
+    COMMAND_TIMEOUT = "COMMAND_TIMEOUT"        # 命令执行超时
+    DISCONNECT = "DISCONNECT"                  # 连接断开
+    EXECUTOR_ERROR = "EXECUTOR_ERROR"          # 执行器内部错误
+    INTERNAL_ERROR = "INTERNAL_ERROR"          # 未分类内部错误
+
+
+@dataclass
+class GatewayError(Exception):
+    """结构化网关错误，携带可解释错误代码"""
+    code: GatewayErrorCode
+    message: str
+    command_id: str = ""
+    task_id: str = ""
+    device_id: str = ""
+
+    def __str__(self) -> str:
+        return f"[{self.code}] {self.message}"
+
+    def to_dict(self) -> dict:
+        return {
+            "error": True,
+            "error_code": self.code.value,
+            "error_message": self.message,
+            "command_id": self.command_id,
+            "task_id": self.task_id,
+            "device_id": self.device_id,
+        }
+
+
+# ============================================================================
+# 协议信封验证（PR-C）
+# ============================================================================
+
+_REQUIRED_ENVELOPE_FIELDS: Tuple[str, ...] = ("command",)
+
+
+def validate_command_envelope(
+    device_id: str,
+    command: str,
+    payload: Dict[str, Any],
+    command_id: str,
+    task_id: str,
+) -> None:
+    """
+    验证命令信封完整性。
+
+    规则：
+      - device_id 不能为空
+      - command 不能为空
+      - command_id 必须为非空字符串
+      - task_id 必须为非空字符串
+      - payload 必须为 dict（可为空 dict）
+
+    Raises:
+        GatewayError: 当信封不符合规范时，携带 INVALID_ENVELOPE 错误代码。
+    """
+    errors = []
+    if not device_id:
+        errors.append("device_id 为空")
+    if not command:
+        errors.append("command 为空")
+    if not command_id:
+        errors.append("command_id 为空")
+    if not task_id:
+        errors.append("task_id 为空")
+    if not isinstance(payload, dict):
+        errors.append(f"payload 必须为 dict，实际类型: {type(payload).__name__}")
+    if errors:
+        raise GatewayError(
+            code=GatewayErrorCode.INVALID_ENVELOPE,
+            message="; ".join(errors),
+            command_id=command_id,
+            task_id=task_id,
+            device_id=device_id,
+        )
 
 
 # ============================================================================
@@ -284,6 +370,228 @@ class CommandRouter:
         self._executor = executor
 
     # ------------------------------------------------------------------
+    # 统一网关命令路径（PR-C）
+    # ------------------------------------------------------------------
+
+    async def route_command(
+        self,
+        device_id: str,
+        command: str,
+        payload: Dict[str, Any],
+        command_id: str,
+        task_id: str,
+        timeout: float = 30.0,
+        request_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        统一网关命令路径：OpenClawd → command_router → gateway/device → result
+
+        所有命令必须经由此方法执行，确保：
+          1. 协议信封验证（invalid_envelope 立即返回错误）
+          2. 全链路 trace ID（request_id / task_id / command_id / device_id）
+          3. 超时与断连结构化错误代码
+          4. 结果写入 GatewayTraceStore 供可观测接口查询
+
+        Returns:
+            {
+                "success": bool,
+                "result": any,
+                "error_code": str | None,   # GatewayErrorCode 值
+                "error_message": str | None,
+                "request_id": str,
+                "task_id": str,
+                "command_id": str,
+                "device_id": str,
+                "latency_ms": float,
+                "via": "command_router",
+            }
+        """
+        request_id = request_id or f"req_{uuid.uuid4().hex[:12]}"
+        t0 = time.monotonic()
+
+        trace_base = {
+            "request_id": request_id,
+            "task_id": task_id,
+            "command_id": command_id,
+            "device_id": device_id,
+            "command": command,
+            "via": "command_router",
+        }
+
+        logger.info(
+            "CommandRouter.route_command | request_id=%s command_id=%s task_id=%s "
+            "device_id=%s command=%s",
+            request_id, command_id, task_id, device_id, command,
+        )
+
+        # ── 1. 协议信封校验 ──────────────────────────────────────────────
+        try:
+            validate_command_envelope(device_id, command, payload, command_id, task_id)
+        except GatewayError as exc:
+            latency_ms = (time.monotonic() - t0) * 1000
+            result = {
+                **trace_base,
+                "success": False,
+                "result": None,
+                "error_code": exc.code.value,
+                "error_message": exc.message,
+                "latency_ms": round(latency_ms, 1),
+            }
+            _get_gateway_trace_store().record(result)
+            logger.warning(
+                "CommandRouter.route_command envelope invalid | command_id=%s error=%s",
+                command_id, exc.message,
+            )
+            return result
+
+        # ── 2. 委托 executor 执行 ────────────────────────────────────────
+        if self._executor:
+            try:
+                raw_result = await asyncio.wait_for(
+                    self._executor(device_id, command, payload),
+                    timeout=timeout,
+                )
+                latency_ms = (time.monotonic() - t0) * 1000
+                result = {
+                    **trace_base,
+                    "success": True,
+                    "result": raw_result,
+                    "error_code": None,
+                    "error_message": None,
+                    "latency_ms": round(latency_ms, 1),
+                }
+                _get_gateway_trace_store().record(result)
+                logger.info(
+                    "CommandRouter.route_command done | command_id=%s latency=%.1fms",
+                    command_id, latency_ms,
+                )
+                return result
+
+            except asyncio.TimeoutError:
+                latency_ms = (time.monotonic() - t0) * 1000
+                result = {
+                    **trace_base,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.COMMAND_TIMEOUT.value,
+                    "error_message": f"命令超时（{timeout}s）: {command} @ {device_id}",
+                    "latency_ms": round(latency_ms, 1),
+                }
+                self._stats["total_timeout"] += 1
+                _get_gateway_trace_store().record(result)
+                logger.warning(
+                    "CommandRouter.route_command timeout | command_id=%s device=%s",
+                    command_id, device_id,
+                )
+                return result
+
+            except (ConnectionError, OSError) as exc:
+                latency_ms = (time.monotonic() - t0) * 1000
+                result = {
+                    **trace_base,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.DISCONNECT.value,
+                    "error_message": f"设备连接断开: {exc}",
+                    "latency_ms": round(latency_ms, 1),
+                }
+                self._stats["total_failed"] += 1
+                _get_gateway_trace_store().record(result)
+                logger.warning(
+                    "CommandRouter.route_command disconnect | command_id=%s device=%s error=%s",
+                    command_id, device_id, exc,
+                )
+                return result
+
+            except Exception as exc:  # pylint: disable=broad-except
+                latency_ms = (time.monotonic() - t0) * 1000
+                result = {
+                    **trace_base,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.EXECUTOR_ERROR.value,
+                    "error_message": str(exc),
+                    "latency_ms": round(latency_ms, 1),
+                }
+                self._stats["total_failed"] += 1
+                _get_gateway_trace_store().record(result)
+                logger.error(
+                    "CommandRouter.route_command executor error | command_id=%s error=%s",
+                    command_id, exc,
+                )
+                return result
+
+        # ── 3. 无 executor：尝试 WebSocket 连接管理器 ─────────────────────
+        try:
+            from core.routes._shared import connection_manager
+            if device_id not in connection_manager.active_devices:
+                latency_ms = (time.monotonic() - t0) * 1000
+                result = {
+                    **trace_base,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.DEVICE_OFFLINE.value,
+                    "error_message": f"设备 {device_id} 未连接",
+                    "latency_ms": round(latency_ms, 1),
+                }
+                _get_gateway_trace_store().record(result)
+                return result
+
+            sent = await connection_manager.send_to_device(
+                device_id,
+                {
+                    "type": "command",
+                    "command": command,
+                    "payload": payload,
+                    "command_id": command_id,
+                    "task_id": task_id,
+                    "request_id": request_id,
+                },
+            )
+            latency_ms = (time.monotonic() - t0) * 1000
+            result = {
+                **trace_base,
+                "success": sent,
+                "result": f"命令已发送到 {device_id}" if sent else f"发送失败: {device_id}",
+                "error_code": None if sent else GatewayErrorCode.DEVICE_OFFLINE.value,
+                "error_message": None if sent else f"设备 {device_id} 发送失败",
+                "latency_ms": round(latency_ms, 1),
+            }
+            _get_gateway_trace_store().record(result)
+            return result
+
+        except (asyncio.TimeoutError, ConnectionError, OSError) as exc:
+            latency_ms = (time.monotonic() - t0) * 1000
+            error_code = (
+                GatewayErrorCode.COMMAND_TIMEOUT.value
+                if isinstance(exc, asyncio.TimeoutError)
+                else GatewayErrorCode.DISCONNECT.value
+            )
+            result = {
+                **trace_base,
+                "success": False,
+                "result": None,
+                "error_code": error_code,
+                "error_message": str(exc),
+                "latency_ms": round(latency_ms, 1),
+            }
+            _get_gateway_trace_store().record(result)
+            return result
+
+        except Exception as exc:  # pylint: disable=broad-except
+            latency_ms = (time.monotonic() - t0) * 1000
+            result = {
+                **trace_base,
+                "success": False,
+                "result": None,
+                "error_code": GatewayErrorCode.INTERNAL_ERROR.value,
+                "error_message": str(exc),
+                "latency_ms": round(latency_ms, 1),
+            }
+            _get_gateway_trace_store().record(result)
+            return result
+
+    # ------------------------------------------------------------------
     # 内部调度
     # ------------------------------------------------------------------
 
@@ -503,3 +811,95 @@ def get_command_router(**kwargs) -> CommandRouter:
         if "cache_backend" in kwargs and kwargs["cache_backend"] is not None:
             _command_router._cache = kwargs["cache_backend"]
     return _command_router
+
+
+# ============================================================================
+# 网关 Trace 存储（PR-C 可观测性）
+# ============================================================================
+
+class GatewayTraceStore:
+    """
+    轻量级内存 trace 存储。
+
+    - 保存最近 _MAX_ENTRIES 条 route_command 调用记录
+    - 支持按 task_id 或 command_id 快速查询
+    - stats() 使用 O(1) 计数器，避免全表扫描
+    - 线程安全（asyncio 单线程模型，无需额外锁）
+    """
+
+    _MAX_ENTRIES = 1000
+
+    def __init__(self) -> None:
+        # 顺序列表（最旧在前），同时维护两个索引
+        self._entries: List[Dict[str, Any]] = []
+        self._by_command_id: Dict[str, Dict[str, Any]] = {}
+        self._by_task_id: Dict[str, List[Dict[str, Any]]] = {}
+        # O(1) counters
+        self._total_recorded: int = 0
+        self._total_failed: int = 0
+
+    def record(self, trace: Dict[str, Any]) -> None:
+        """记录一条 trace 条目"""
+        entry = {**trace, "recorded_at": datetime.now(timezone.utc).isoformat()}
+        self._entries.append(entry)
+        self._total_recorded += 1
+        if not trace.get("success"):
+            self._total_failed += 1
+
+        # 超出上限时，淘汰最旧的条目
+        if len(self._entries) > self._MAX_ENTRIES:
+            oldest = self._entries.pop(0)
+            self._by_command_id.pop(oldest.get("command_id", ""), None)
+            old_tid = oldest.get("task_id", "")
+            if old_tid and old_tid in self._by_task_id:
+                lst = self._by_task_id[old_tid]
+                if oldest in lst:
+                    lst.remove(oldest)
+                if not lst:
+                    del self._by_task_id[old_tid]
+
+        cmd_id = entry.get("command_id", "")
+        if cmd_id:
+            self._by_command_id[cmd_id] = entry
+
+        task_id = entry.get("task_id", "")
+        if task_id:
+            self._by_task_id.setdefault(task_id, []).append(entry)
+
+    def lookup_by_command_id(self, command_id: str) -> Optional[Dict[str, Any]]:
+        """按 command_id 查询 trace"""
+        return self._by_command_id.get(command_id)
+
+    def lookup_by_task_id(self, task_id: str) -> List[Dict[str, Any]]:
+        """按 task_id 查询 trace 列表"""
+        return list(self._by_task_id.get(task_id, []))
+
+    def recent(self, n: int = 50) -> List[Dict[str, Any]]:
+        """返回最近 n 条 trace（最新在前）"""
+        return list(reversed(self._entries[-n:]))
+
+    def stats(self) -> Dict[str, Any]:
+        """返回 trace 存储统计（O(1) 计数器）"""
+        return {
+            "total_recorded": self._total_recorded,
+            "total_failed": self._total_failed,
+            "total_success": self._total_recorded - self._total_failed,
+            "unique_command_ids": len(self._by_command_id),
+            "unique_task_ids": len(self._by_task_id),
+        }
+
+
+_gateway_trace_store: Optional[GatewayTraceStore] = None
+
+
+def _get_gateway_trace_store() -> GatewayTraceStore:
+    """获取全局 GatewayTraceStore 单例"""
+    global _gateway_trace_store
+    if _gateway_trace_store is None:
+        _gateway_trace_store = GatewayTraceStore()
+    return _gateway_trace_store
+
+
+def get_gateway_trace_store() -> GatewayTraceStore:
+    """公开接口：获取全局 GatewayTraceStore 单例"""
+    return _get_gateway_trace_store()
