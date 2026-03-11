@@ -95,7 +95,7 @@ class CapabilityRegistry:
             return
         self._initialized = True
         self._items: Dict[str, CapabilityItem] = {}
-        self._refresh_lock = asyncio.Lock()
+        self._refresh_lock: Optional[asyncio.Lock] = None  # created lazily in async context
         self._last_refresh: float = 0.0
         self._refresh_interval: float = 120.0  # 2 分钟自动刷新
         logger.info("CapabilityRegistry 已初始化")
@@ -160,8 +160,12 @@ class CapabilityRegistry:
         if not force and (now - self._last_refresh) < self._refresh_interval:
             return
 
+        # 惰性创建 asyncio.Lock（确保在事件循环中创建）
+        if self._refresh_lock is None:
+            self._refresh_lock = asyncio.Lock()
+
         async with self._refresh_lock:
-            # 双重检查
+            # 双重检查（重新获取当前时间）
             now = time.monotonic()
             if not force and (now - self._last_refresh) < self._refresh_interval:
                 return

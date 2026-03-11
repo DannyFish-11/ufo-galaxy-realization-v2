@@ -94,7 +94,8 @@ class PolicyLoader:
                 return content
 
         with self._reload_lock:
-            # 双重检查：另一个线程可能刚刚完成加载
+            # 双重检查：另一个线程可能刚刚完成加载（重新获取当前时间）
+            now = time.monotonic()
             cached = self._cache.get(name)
             if cached is not None:
                 content, loaded_at = cached

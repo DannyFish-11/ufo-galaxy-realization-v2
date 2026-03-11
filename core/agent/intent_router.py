@@ -121,24 +121,24 @@ def _classify_by_rules(message: str) -> IntentResult:
     chat_hit = any(kw in msg for kw in _CHAT_KW)
     low_hit = any(kw in msg for kw in _TASK_KW_LOW)
 
+    # 缓存第一个命中的任务关键词（避免重复遍历）
+    task_kw = next((kw for kw in _TASK_KW_HIGH if kw in msg), "").strip()
+
     if high_hit and chat_hit:
         # 同时命中任务词和聊天词 → hybrid
-        # 取主要的任务意图关键词作为 task_hint
-        task_kw = next((kw for kw in _TASK_KW_HIGH if kw in msg), "")
         return IntentResult(
             mode=IntentMode.HYBRID,
             confidence=0.75,
-            task_hint=task_kw.strip(),
+            task_hint=task_kw,
             raw_intent="hybrid",
             method="rules",
         )
 
     if high_hit:
-        task_kw = next((kw for kw in _TASK_KW_HIGH if kw in msg), "")
         return IntentResult(
             mode=IntentMode.TASK_EXECUTE,
             confidence=0.9,
-            task_hint=task_kw.strip(),
+            task_hint=task_kw,
             raw_intent="task_execute",
             method="rules",
         )

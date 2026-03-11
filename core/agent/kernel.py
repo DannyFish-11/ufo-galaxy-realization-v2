@@ -236,6 +236,11 @@ class AgentKernel:
             return result
 
         # task_execute 或 hybrid：加载 SOUL（仅此时注入）
+        # 显式断言：确保此代码路径只在执行模式下被触发
+        assert intent.mode in (IntentMode.TASK_EXECUTE, IntentMode.HYBRID), (
+            f"SOUL 只能在 task_execute/hybrid 模式加载，当前 mode={intent.mode}"
+        )
+        logger.debug("SOUL 注入: 执行路径 mode=%s", intent.mode)
         soul_policy = _safe_load(get_soul, "SOUL")
 
         plan = ExecutionPlan(
