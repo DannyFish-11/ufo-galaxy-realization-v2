@@ -69,22 +69,25 @@ async def test_process_basic_chat():
     """基本聊天消息处理 — mock 意图解析和 LLM"""
     oc = OpenClawd()
 
-    # Mock _parse_intent 返回 None (回退到 chat)
-    with patch.object(oc, "_parse_intent", new_callable=AsyncMock) as mock_parse:
-        mock_parse.return_value = None
+    # PR86: 禁用 kernel 路径，以便测试直接路径
+    with patch.object(oc, "_get_kernel", return_value=None):
+        with patch.object(oc, "sync_device_capabilities", return_value=0):
+            # Mock _parse_intent 返回 None (回退到 chat)
+            with patch.object(oc, "_parse_intent", new_callable=AsyncMock) as mock_parse:
+                mock_parse.return_value = None
 
-        with patch.object(oc, "_dispatch_chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = {
-                "response": "你好！",
-                "intent": "chat",
-            }
+                with patch.object(oc, "_dispatch_chat", new_callable=AsyncMock) as mock_chat:
+                    mock_chat.return_value = {
+                        "response": "你好！",
+                        "intent": "chat",
+                    }
 
-            result = await oc.process("你好", session_id="test_session")
+                    result = await oc.process("你好", session_id="test_session")
 
-            assert result["success"] is True
-            assert "response" in result
-            mock_parse.assert_called_once()
-            mock_chat.assert_called_once()
+                    assert result["success"] is True
+                    assert "response" in result
+                    mock_parse.assert_called_once()
+                    mock_chat.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -92,10 +95,12 @@ async def test_process_returns_session_id():
     """process() 应返回 session_id"""
     oc = OpenClawd()
 
-    with patch.object(oc, "_parse_intent", new_callable=AsyncMock, return_value=None):
-        with patch.object(oc, "_dispatch_chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = {"response": "OK"}
+    with patch.object(oc, "_get_kernel", return_value=None):
+        with patch.object(oc, "sync_device_capabilities", return_value=0):
+            with patch.object(oc, "_parse_intent", new_callable=AsyncMock, return_value=None):
+                with patch.object(oc, "_dispatch_chat", new_callable=AsyncMock) as mock_chat:
+                    mock_chat.return_value = {"response": "OK"}
 
-            result = await oc.process("test", session_id="sid_123")
+                    result = await oc.process("test", session_id="sid_123")
 
-            assert result.get("metadata", {}).get("session_id") == "sid_123"
+                    assert result.get("metadata", {}).get("session_id") == "sid_123"

@@ -122,17 +122,25 @@ def _estimate_complexity(message: str) -> float:
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
 
+    # PR86: 工具摘要中展示的最大工具数（避免 prompt 过长）
+    _MAX_TOOL_SUMMARY_COUNT = 20
+    # PR86: 能力注入标记（用于防止重复注入）
+    _CAPABILITY_HINT_MARKER = "[CapabilityRegistry]"
+
     def __init__(self, llm_router: Optional[Any] = None) -> None:
         self._llm_router = llm_router
 
     async def execute(self, plan: ExecutionPlan) -> ExecutionResult:
         """
-        执行计划入口。
+        执行计划入口。（PR86）
 
-        根据意图选择执行策略：
-          - 低复杂度任务 → 单 Agent
-          - 高复杂度任务 → Team (SPECIALIZED) 或 Swarm
-          - 涉及多设备 → Team + Gateway
+        约束：
+        - 执行前必须从 CapabilityRegistry 刷新并拉取可用工具列表
+        - 不允许绕过 CapabilityRegistry 直接硬编码工具调用
+        - 执行策略选择：
+            - 低复杂度任务 → 单 Agent
+            - 高复杂度任务 → Team (SPECIALIZED) 或 Swarm
+            - 涉及多设备 → Team + Gateway
         """
         t0 = time.monotonic()
         steps: List[StepRecord] = []
@@ -148,6 +156,46 @@ class ExecutionPlanner:
             plan.intent.mode,
         )
 
+        # PR86 强制要求：从 CapabilityRegistry 拉取工具（禁止旁路）
+        available_tools: List[Any] = []
+        cap_stats: Dict[str, Any] = {}
+        try:
+            from core.agent.capability_registry import get_capability_registry
+            registry = get_capability_registry()
+            await registry.refresh()  # 确保最新
+            available_tools = registry.list_tools()
+            cap_stats = registry.stats()
+            logger.info(
+                "ExecutionPlanner: CapabilityRegistry 已刷新 | "
+                "total=%d available=%d (mcp=%d skill=%d gateway=%d)",
+                cap_stats.get("total", 0),
+                cap_stats.get("available", 0),
+                cap_stats.get("by_source", {}).get("mcp", 0),
+                cap_stats.get("by_source", {}).get("skill", 0),
+                cap_stats.get("by_source", {}).get("gateway", 0),
+            )
+            # 将工具 schema 注入到执行计划上下文，供 Agent 使用
+            if available_tools and not plan.context:
+                plan.context = []
+            # 提供工具信息给 plan（通过 context 传递工具摘要）
+            tool_summary = ", ".join(t.name for t in available_tools[:self._MAX_TOOL_SUMMARY_COUNT])
+            if available_tools:
+                plan.context = plan.context or []
+                # 在上下文中注入工具列表提示（不覆盖已有对话历史）
+                _tool_hint = {
+                    "role": "system",
+                    "content": f"{self._CAPABILITY_HINT_MARKER} 可用工具: {tool_summary}"
+                    + (f"... 共 {len(available_tools)} 项"
+                       if len(available_tools) > self._MAX_TOOL_SUMMARY_COUNT else ""),
+                }
+                # 只在没有同类 hint 时才插入
+                if not any(
+                    self._CAPABILITY_HINT_MARKER in c.get("content", "") for c in plan.context
+                ):
+                    plan.context = [_tool_hint] + plan.context
+        except Exception as e:
+            logger.warning("ExecutionPlanner: CapabilityRegistry 刷新失败（继续执行）: %s", e)
+
         try:
             result = await asyncio.wait_for(
                 self._dispatch(plan, strategy, steps, tool_calls),
@@ -157,6 +205,10 @@ class ExecutionPlanner:
             result.agent_steps = steps
             result.tool_calls = tool_calls
             result.duration_ms = duration_ms
+            # 在结果中记录工具来源
+            if result.task_result is None:
+                result.task_result = {}
+            result.task_result["capability_stats"] = cap_stats
             return result
 
         except asyncio.TimeoutError:
