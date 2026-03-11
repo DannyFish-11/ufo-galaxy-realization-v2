@@ -24,7 +24,6 @@ import type {
 export class GalaxyAPI {
   private baseUrl: string;
   private ws: WebSocket | null = null;
-  private wsHandlers: Map<string, (data: any) => void> = new Map();
 
   constructor(baseUrl: string = 'http://localhost:8080') {
     this.baseUrl = baseUrl;

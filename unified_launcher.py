@@ -497,18 +497,42 @@ class NodeSystemLauncher:
         self.node_configs = self._load_node_configs()
         
     def _load_node_configs(self) -> Dict[str, Any]:
-        """加载节点配置"""
-        config_file = PROJECT_ROOT / "node_dependencies.json"
-        if config_file.exists():
-            with open(config_file, 'r') as f:
-                return json.load(f)
+        """加载节点配置
+
+        优先从 node_dependencies.json 的 "nodes" 键读取；
+        若文件不存在则回退到 config/node_registry.json。
+        两个文件都不存在时记录可观测诊断日志并返回空字典。
+        """
+        primary = PROJECT_ROOT / "node_dependencies.json"
+        fallback = PROJECT_ROOT / "config" / "node_registry.json"
+
+        for cfg_path in (primary, fallback):
+            if cfg_path.exists():
+                try:
+                    with open(cfg_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    # node_dependencies.json 将节点放在 "nodes" 子键下
+                    nodes = data.get("nodes", data) if isinstance(data, dict) else {}
+                    if nodes:
+                        logger.info("节点配置已加载: %s (%d 个节点)", cfg_path, len(nodes))
+                        return nodes
+                    logger.warning("节点配置文件为空或格式异常: %s", cfg_path)
+                except Exception as exc:
+                    logger.warning("读取节点配置失败 %s: %s", cfg_path, exc)
+
+        logger.error(
+            "未找到节点配置文件。已检查路径: %s, %s。"
+            "请确保 node_dependencies.json 存在于项目根目录，"
+            "或在 config/node_registry.json 中提供备用配置。",
+            primary, fallback,
+        )
         return {}
-        
+
     def get_core_nodes(self) -> List[str]:
         """获取核心节点列表"""
         core_nodes = []
         for name, config in self.node_configs.items():
-            if config.get("group") == "core":
+            if isinstance(config, dict) and config.get("group") == "core":
                 core_nodes.append(name)
         return sorted(core_nodes, key=lambda x: self.node_configs.get(x, {}).get("priority", 99))
         
@@ -561,7 +585,11 @@ class NodeSystemLauncher:
             nodes = self.get_core_nodes()
             
         if not nodes:
-            logger.warning("未找到核心节点配置")
+            logger.error(
+                "核心节点列表为空。"
+                "请检查 node_dependencies.json 中各节点是否设置了 \"group\": \"core\"，"
+                "或运行 `python -m scripts.scan_nodes` 重新生成配置文件。"
+            )
             return {}
             
         print_status(f"启动 {len(nodes)} 个核心节点...", "step")
@@ -655,6 +683,19 @@ class UnifiedWebUI:
         
     async def start(self):
         """启动 Web UI 和完整 API 服务"""
+        # 检查前端静态资源是否已构建
+        frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
+        frontend_dist = PROJECT_ROOT / "dashboard" / "frontend" / "dist"
+        if not frontend_index.exists():
+            logger.warning(
+                "Dashboard 静态资源未找到: %s\n"
+                "  → API 服务仍将启动，但浏览器访问 / 时将显示降级页面。\n"
+                "  → 如需完整 Dashboard，请先构建前端:\n"
+                "       cd dashboard/frontend && npm install && npm run build",
+                frontend_index,
+            )
+            if frontend_dist.exists():
+                logger.info("检测到构建产物目录 %s，但缺少 public/index.html", frontend_dist)
         try:
             from fastapi import FastAPI
             from fastapi.responses import HTMLResponse, JSONResponse
@@ -929,7 +970,8 @@ class GalaxyUnified:
         
         print_section("系统就绪")
         print_status("Galaxy 统一系统已启动！", "success")
-        print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
+        if self.config.enable_web_ui:
+            print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
         print_status("按 Ctrl+C 停止系统", "info")
