@@ -101,7 +101,8 @@
     "app_version": "1.0.0",
     "registered_at": "2026-03-10T02:28:51.830969",
     "last_seen": "2026-03-10T02:28:51.830979",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "min-f39cb53a": {
     "device_id": "min-f39cb53a",
@@ -112,7 +113,8 @@
     "app_version": "",
     "registered_at": "2026-03-10T02:28:51.833710",
     "last_seen": "2026-03-10T02:28:51.833717",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "list-1888a0a8": {
     "device_id": "list-1888a0a8",
@@ -123,7 +125,8 @@
     "app_version": "",
     "registered_at": "2026-03-10T02:28:51.835724",
     "last_seen": "2026-03-10T02:28:51.835730",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "hb-4337c84b": {
     "device_id": "hb-4337c84b",
@@ -134,10 +137,11 @@
     "app_version": "",
     "registered_at": "2026-03-10T02:28:51.839166",
     "last_seen": "2026-03-10T02:28:51.840756",
-    "status": "registered",
+    "status": "offline",
     "status_detail": {
       "battery": 80
-    }
+    },
+    "online": false
   },
   "unreg-9d66d2e0": {
     "device_id": "unreg-9d66d2e0",
@@ -148,7 +152,8 @@
     "app_version": "",
     "registered_at": "2026-03-10T02:28:51.844460",
     "last_seen": "2026-03-10T02:28:51.845966",
-    "status": "offline"
+    "status": "offline",
+    "online": false
   },
   "leg-e567fe08": {
     "device_id": "leg-e567fe08",
@@ -159,7 +164,8 @@
     "app_version": "",
     "registered_at": "2026-03-10T02:28:51.849783",
     "last_seen": "2026-03-10T02:28:51.849789",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "v1-513da5b0": {
     "device_id": "v1-513da5b0",
@@ -170,6 +176,450 @@
     "app_version": "",
     "registered_at": "2026-03-10T02:28:51.851433",
     "last_seen": "2026-03-10T02:28:51.851439",
+    "status": "offline",
+    "online": false
+  },
+  "test-e3a9e631": {
+    "device_id": "test-e3a9e631",
+    "device_type": "android_phone",
+    "device_name": "TestDevice",
+    "capabilities": [
+      "screen",
+      "touch"
+    ],
+    "os_version": "Android 13",
+    "app_version": "1.0.0",
+    "registered_at": "2026-03-10T23:42:44.491516",
+    "last_seen": "2026-03-10T23:42:44.491527",
+    "status": "offline",
+    "online": false
+  },
+  "min-1b03b1b9": {
+    "device_id": "min-1b03b1b9",
+    "device_type": "android",
+    "device_name": "Device-min-1b03",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:42:44.495039",
+    "last_seen": "2026-03-10T23:42:44.495045",
+    "status": "offline",
+    "online": false
+  },
+  "list-dee52476": {
+    "device_id": "list-dee52476",
+    "device_type": "android",
+    "device_name": "Device-list-dee",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:42:44.497310",
+    "last_seen": "2026-03-10T23:42:44.497314",
+    "status": "offline",
+    "online": false
+  },
+  "hb-dacc09c9": {
+    "device_id": "hb-dacc09c9",
+    "device_type": "android",
+    "device_name": "Device-hb-dacc0",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:42:44.500863",
+    "last_seen": "2026-03-10T23:42:44.502553",
+    "status": "offline",
+    "status_detail": {
+      "battery": 80
+    },
+    "online": false
+  },
+  "unreg-0d1bc0fc": {
+    "device_id": "unreg-0d1bc0fc",
+    "device_type": "android",
+    "device_name": "Device-unreg-0d",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:42:44.506315",
+    "last_seen": "2026-03-10T23:42:44.507643",
+    "status": "offline",
+    "online": false
+  },
+  "leg-fa08fe0f": {
+    "device_id": "leg-fa08fe0f",
+    "device_type": "android",
+    "device_name": "Device-leg-fa08",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:42:44.511027",
+    "last_seen": "2026-03-10T23:42:44.511031",
+    "status": "offline",
+    "online": false
+  },
+  "v1-a189d3f1": {
+    "device_id": "v1-a189d3f1",
+    "device_type": "android",
+    "device_name": "Device-v1-a189d",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:42:44.512714",
+    "last_seen": "2026-03-10T23:42:44.512720",
+    "status": "offline",
+    "online": false
+  },
+  "test-03e8e084": {
+    "device_id": "test-03e8e084",
+    "device_type": "android_phone",
+    "device_name": "TestDevice",
+    "capabilities": [
+      "screen",
+      "touch"
+    ],
+    "os_version": "Android 13",
+    "app_version": "1.0.0",
+    "registered_at": "2026-03-10T23:43:47.144021",
+    "last_seen": "2026-03-10T23:43:47.144033",
+    "status": "offline",
+    "online": false
+  },
+  "min-77f3d78a": {
+    "device_id": "min-77f3d78a",
+    "device_type": "android",
+    "device_name": "Device-min-77f3",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:43:47.146924",
+    "last_seen": "2026-03-10T23:43:47.146930",
+    "status": "offline",
+    "online": false
+  },
+  "list-338b3d7b": {
+    "device_id": "list-338b3d7b",
+    "device_type": "android",
+    "device_name": "Device-list-338",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:43:47.149159",
+    "last_seen": "2026-03-10T23:43:47.149164",
+    "status": "offline",
+    "online": false
+  },
+  "hb-766d6a0b": {
+    "device_id": "hb-766d6a0b",
+    "device_type": "android",
+    "device_name": "Device-hb-766d6",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:43:47.152539",
+    "last_seen": "2026-03-10T23:43:47.154045",
+    "status": "offline",
+    "status_detail": {
+      "battery": 80
+    },
+    "online": false
+  },
+  "unreg-55d2af3d": {
+    "device_id": "unreg-55d2af3d",
+    "device_type": "android",
+    "device_name": "Device-unreg-55",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:43:47.157502",
+    "last_seen": "2026-03-10T23:43:47.158791",
+    "status": "offline",
+    "online": false
+  },
+  "leg-a61f7583": {
+    "device_id": "leg-a61f7583",
+    "device_type": "android",
+    "device_name": "Device-leg-a61f",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:43:47.162073",
+    "last_seen": "2026-03-10T23:43:47.162081",
+    "status": "offline",
+    "online": false
+  },
+  "v1-94f3882d": {
+    "device_id": "v1-94f3882d",
+    "device_type": "android",
+    "device_name": "Device-v1-94f38",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-10T23:43:47.163604",
+    "last_seen": "2026-03-10T23:43:47.163609",
+    "status": "offline",
+    "online": false
+  },
+  "test-0ad1e5d8": {
+    "device_id": "test-0ad1e5d8",
+    "device_type": "android_phone",
+    "device_name": "TestDevice",
+    "capabilities": [
+      "screen",
+      "touch"
+    ],
+    "os_version": "Android 13",
+    "app_version": "1.0.0",
+    "registered_at": "2026-03-11T00:44:15.016851",
+    "last_seen": "2026-03-11T00:44:15.016872",
+    "status": "offline",
+    "online": false
+  },
+  "min-a719ead4": {
+    "device_id": "min-a719ead4",
+    "device_type": "android",
+    "device_name": "Device-min-a719",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:44:15.020276",
+    "last_seen": "2026-03-11T00:44:15.020283",
+    "status": "offline",
+    "online": false
+  },
+  "list-dad9655b": {
+    "device_id": "list-dad9655b",
+    "device_type": "android",
+    "device_name": "Device-list-dad",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:44:15.022537",
+    "last_seen": "2026-03-11T00:44:15.022542",
+    "status": "offline",
+    "online": false
+  },
+  "hb-38e32bbd": {
+    "device_id": "hb-38e32bbd",
+    "device_type": "android",
+    "device_name": "Device-hb-38e32",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:44:15.026371",
+    "last_seen": "2026-03-11T00:44:15.027913",
+    "status": "offline",
+    "status_detail": {
+      "battery": 80
+    },
+    "online": false
+  },
+  "unreg-a7d2139f": {
+    "device_id": "unreg-a7d2139f",
+    "device_type": "android",
+    "device_name": "Device-unreg-a7",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:44:15.031805",
+    "last_seen": "2026-03-11T00:44:15.033522",
+    "status": "offline",
+    "online": false
+  },
+  "leg-45017cb3": {
+    "device_id": "leg-45017cb3",
+    "device_type": "android",
+    "device_name": "Device-leg-4501",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:44:15.037336",
+    "last_seen": "2026-03-11T00:44:15.037342",
+    "status": "offline",
+    "online": false
+  },
+  "v1-3a6c9f14": {
+    "device_id": "v1-3a6c9f14",
+    "device_type": "android",
+    "device_name": "Device-v1-3a6c9",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:44:15.039133",
+    "last_seen": "2026-03-11T00:44:15.039138",
+    "status": "offline",
+    "online": false
+  },
+  "test-94c8dd1c": {
+    "device_id": "test-94c8dd1c",
+    "device_type": "android_phone",
+    "device_name": "TestDevice",
+    "capabilities": [
+      "screen",
+      "touch"
+    ],
+    "os_version": "Android 13",
+    "app_version": "1.0.0",
+    "registered_at": "2026-03-11T00:47:18.000243",
+    "last_seen": "2026-03-11T00:47:18.000258",
+    "status": "offline",
+    "online": false
+  },
+  "min-9a89eb61": {
+    "device_id": "min-9a89eb61",
+    "device_type": "android",
+    "device_name": "Device-min-9a89",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:47:18.003312",
+    "last_seen": "2026-03-11T00:47:18.003321",
+    "status": "offline",
+    "online": false
+  },
+  "list-39091982": {
+    "device_id": "list-39091982",
+    "device_type": "android",
+    "device_name": "Device-list-390",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:47:18.005388",
+    "last_seen": "2026-03-11T00:47:18.005394",
+    "status": "offline",
+    "online": false
+  },
+  "hb-d21e7dee": {
+    "device_id": "hb-d21e7dee",
+    "device_type": "android",
+    "device_name": "Device-hb-d21e7",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:47:18.010156",
+    "last_seen": "2026-03-11T00:47:18.011772",
+    "status": "offline",
+    "status_detail": {
+      "battery": 80
+    },
+    "online": false
+  },
+  "unreg-a12fb51b": {
+    "device_id": "unreg-a12fb51b",
+    "device_type": "android",
+    "device_name": "Device-unreg-a1",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:47:18.015693",
+    "last_seen": "2026-03-11T00:47:18.017353",
+    "status": "offline",
+    "online": false
+  },
+  "leg-afdb7bbd": {
+    "device_id": "leg-afdb7bbd",
+    "device_type": "android",
+    "device_name": "Device-leg-afdb",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:47:18.021043",
+    "last_seen": "2026-03-11T00:47:18.021049",
+    "status": "offline",
+    "online": false
+  },
+  "v1-7bd1e8c0": {
+    "device_id": "v1-7bd1e8c0",
+    "device_type": "android",
+    "device_name": "Device-v1-7bd1e",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:47:18.023466",
+    "last_seen": "2026-03-11T00:47:18.023471",
+    "status": "offline",
+    "online": false
+  },
+  "test-ac701b1f": {
+    "device_id": "test-ac701b1f",
+    "device_type": "android_phone",
+    "device_name": "TestDevice",
+    "capabilities": [
+      "screen",
+      "touch"
+    ],
+    "os_version": "Android 13",
+    "app_version": "1.0.0",
+    "registered_at": "2026-03-11T00:51:26.261861",
+    "last_seen": "2026-03-11T00:51:26.261870",
+    "status": "registered"
+  },
+  "min-af14e8eb": {
+    "device_id": "min-af14e8eb",
+    "device_type": "android",
+    "device_name": "Device-min-af14",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:51:26.264320",
+    "last_seen": "2026-03-11T00:51:26.264325",
+    "status": "registered"
+  },
+  "list-339402da": {
+    "device_id": "list-339402da",
+    "device_type": "android",
+    "device_name": "Device-list-339",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:51:26.266193",
+    "last_seen": "2026-03-11T00:51:26.266198",
+    "status": "registered"
+  },
+  "hb-97c10e19": {
+    "device_id": "hb-97c10e19",
+    "device_type": "android",
+    "device_name": "Device-hb-97c10",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:51:26.269786",
+    "last_seen": "2026-03-11T00:51:26.271193",
+    "status": "registered",
+    "status_detail": {
+      "battery": 80
+    }
+  },
+  "unreg-be61d580": {
+    "device_id": "unreg-be61d580",
+    "device_type": "android",
+    "device_name": "Device-unreg-be",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:51:26.274567",
+    "last_seen": "2026-03-11T00:51:26.275985",
+    "status": "offline"
+  },
+  "leg-a6d1afd2": {
+    "device_id": "leg-a6d1afd2",
+    "device_type": "android",
+    "device_name": "Device-leg-a6d1",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:51:26.279230",
+    "last_seen": "2026-03-11T00:51:26.279235",
+    "status": "registered"
+  },
+  "v1-bfb5eaf9": {
+    "device_id": "v1-bfb5eaf9",
+    "device_type": "android",
+    "device_name": "Device-v1-bfb5e",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T00:51:26.280736",
+    "last_seen": "2026-03-11T00:51:26.280741",
     "status": "registered"
   }
 }
