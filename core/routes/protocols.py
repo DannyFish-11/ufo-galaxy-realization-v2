@@ -10,10 +10,14 @@ Routes:
   DELETE /api/v1/protocols/mcp/{name}            - 卸载/停止 MCP 服务器
   GET    /api/v1/protocols/mcp/{name}/tools      - 列出 MCP 服务器工具
   POST   /api/v1/protocols/mcp/{name}/call       - 调用 MCP 工具
+  POST   /api/v1/protocols/mcp/{name}/reload     - 热重载 MCP 服务器（带协议校验）
   GET    /api/v1/protocols/skills               - 列出所有技能
   POST   /api/v1/protocols/skills/load          - 加载技能
   POST   /api/v1/protocols/skills/{name}/execute - 执行技能
   DELETE /api/v1/protocols/skills/{name}         - 卸载技能
+  POST   /api/v1/protocols/skills/{name}/reload  - 热重载 Skill（带 manifest/schema 校验）
+  POST   /api/v1/protocols/reload-all            - 热重载所有 MCP + Skill
+  GET    /api/v1/protocols/load-status           - 可观测加载状态（供 Dashboard 消费）
   GET    /api/v1/protocols/status               - 协议整体健康状态
 """
 
@@ -392,6 +396,89 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 {"success": False, "error": str(e)},
                 status_code=500,
             )
+
+    # ========================================================================
+    # 热重载端点（PR88: MCP/Skill hot-reload + 协议校验）
+    # ========================================================================
+
+    @router.post("/api/v1/protocols/mcp/{name}/reload")
+    async def reload_mcp_server(name: str):
+        """热重载指定 MCP 服务器，执行协议握手 + 工具 schema 校验。
+
+        返回：
+          {server_id, loaded, validated, tool_count, errors, capability_stats}
+        """
+        server_id = _find_mcp_server_id(name) or name
+        try:
+            from core.mcp_skill_reload import reload_mcp
+            result = await reload_mcp(server_id)
+            logger.info(
+                "MCP 热重载: %s -> loaded=%s validated=%s tool_count=%d",
+                server_id, result.get("loaded"), result.get("validated"), result.get("tool_count", 0),
+            )
+            status_code = 200 if result.get("loaded") else 500
+            return JSONResponse(result, status_code=status_code)
+        except Exception as e:
+            logger.error("MCP 热重载异常: %s: %s", name, e)
+            return JSONResponse({"success": False, "server_id": server_id, "error": str(e)}, status_code=500)
+
+    @router.post("/api/v1/protocols/skills/{name}/reload")
+    async def reload_skill_handler(name: str):
+        """热重载指定 Skill，执行 manifest/schema/entrypoint 校验。
+
+        返回：
+          {skill_id, loaded, validated, errors}
+        """
+        skill_id = _find_skill_id(name) or name
+        try:
+            from core.mcp_skill_reload import reload_skill
+            result = await reload_skill(skill_id)
+            logger.info(
+                "Skill 热重载: %s -> loaded=%s validated=%s",
+                skill_id, result.get("loaded"), result.get("validated"),
+            )
+            status_code = 200 if result.get("loaded") else 500
+            return JSONResponse(result, status_code=status_code)
+        except Exception as e:
+            logger.error("Skill 热重载异常: %s: %s", name, e)
+            return JSONResponse({"success": False, "skill_id": skill_id, "error": str(e)}, status_code=500)
+
+    @router.post("/api/v1/protocols/reload-all")
+    async def reload_all_handler():
+        """热重载所有 MCP 服务器 + Skill，返回逐项状态。
+
+        返回：
+          {mcp: {server_id: {...}}, skills: {skill_id: {...}}, total_errors: int}
+        """
+        try:
+            from core.mcp_skill_reload import reload_all
+            result = await reload_all()
+            logger.info(
+                "全量热重载完成: mcp=%d skills=%d errors=%d",
+                len(result.get("mcp", {})), len(result.get("skills", {})), result.get("total_errors", 0),
+            )
+            return JSONResponse({"success": True, **result})
+        except Exception as e:
+            logger.error("全量热重载异常: %s", e)
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/protocols/load-status")
+    async def get_load_status():
+        """可观测加载状态 — 供 Dashboard 消费。
+
+        每个条目包含：
+          loaded (bool), validated (bool), tool_count (int), error (str), last_updated (float)
+
+        返回：
+          {mcp: {server_id: {...}}, skills: {skill_id: {...}}}
+        """
+        try:
+            from core.mcp_skill_reload import get_load_status
+            status = get_load_status()
+            return JSONResponse({"success": True, **status})
+        except Exception as e:
+            logger.error("获取加载状态异常: %s", e)
+            return JSONResponse({"success": False, "error": str(e), "mcp": {}, "skills": {}}, status_code=500)
 
     # ========================================================================
     # 协议整体状态
