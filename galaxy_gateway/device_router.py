@@ -144,7 +144,20 @@ class DeviceRouter:
             device = Device(device_id, device_type, capabilities)
             device.websocket = websocket
             self.devices[device_id] = device
-            
+
+            # 同步设备能力到 CapabilityRegistry
+            try:
+                from core.routes.devices import _sync_device_to_capability_registry
+                device_info = {
+                    "device_id": device_id,
+                    "device_type": device_type,
+                    "device_name": device_id,
+                    "capabilities": capabilities,
+                }
+                _sync_device_to_capability_registry(device_info)
+            except Exception as _sync_err:
+                logger.warning(f"设备能力同步到 CapabilityRegistry 失败（不影响注册）: {_sync_err}")
+
             logger.info(f"✅ 设备注册成功: {device_id} ({device_type})")
             return True
             
