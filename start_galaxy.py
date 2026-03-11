@@ -3,6 +3,19 @@
 Galaxy — Quick Start (Dashboard / WebUI)
 =============================================
 
+.. deprecated::
+    This script is retained for backwards compatibility only.
+    The recommended entrypoint is ``main.py`` (or ``unified_launcher.py``
+    directly), which manages the full Galaxy system including all subsystems.
+
+    Migration::
+
+        # Before (lightweight dashboard only):
+        python start_galaxy.py [--port PORT] [--desktop] [--all]
+
+        # After (full system, preferred):
+        python main.py [--no-l4] [--no-ui]    # unified_launcher flags apply
+
 Lightweight launcher for the Dashboard web UI.
 For full system launch, use unified_launcher.py or deploy.sh.
 
@@ -18,6 +31,7 @@ import sys
 import asyncio
 import argparse
 import logging
+import warnings
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
@@ -107,6 +121,17 @@ def start_desktop():
 
 
 def main():
+    warnings.warn(
+        "start_galaxy.py is deprecated. Use 'python main.py' (or 'python unified_launcher.py') "
+        "as the standard entrypoint. start_galaxy.py will continue to work but may be removed "
+        "in a future release.",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+    logger.warning(
+        "⚠  DEPRECATED: start_galaxy.py — use 'python main.py' instead. "
+        "See unified_launcher.py for the full feature set."
+    )
     parser = argparse.ArgumentParser(description='Galaxy Quick Start')
     parser.add_argument('--desktop', action='store_true', help='Launch desktop UI')
     parser.add_argument('--all', action='store_true', help='Launch Dashboard + desktop')

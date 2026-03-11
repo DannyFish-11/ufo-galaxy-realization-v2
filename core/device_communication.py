@@ -234,6 +234,10 @@ class DeviceCommunication:
     
     @classmethod
     def get_instance(cls) -> "DeviceCommunication":
+        # NOTE: This singleton is used for process-wide state sharing.
+        # Avoid adding new call sites — prefer dependency injection where
+        # possible to improve testability.  See ARCHITECTURE_REVIEW.md
+        # (Singleton Guardrails section) for the planned refactor strategy.
         if cls._instance is None:
             cls._instance = DeviceCommunication()
         return cls._instance

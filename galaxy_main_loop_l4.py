@@ -1,6 +1,19 @@
 """
 Galaxy 主循环 L4 版本
 集成了所有 L4 级自主性智能组件
+
+.. deprecated::
+    Direct import/use of this module is deprecated.  L4 capabilities are now
+    managed by ``unified_launcher.py``.  The recommended entrypoint is
+    ``main.py`` (or ``unified_launcher.py``).
+
+    Migration::
+
+        # Before:
+        python start_l4.py   # which imports GalaxyMainLoopL4 from here
+
+        # After (full system with L4 enabled):
+        python main.py
 """
 
 import asyncio
@@ -8,6 +21,7 @@ import logging
 import signal
 import time
 import sys
+import warnings
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +33,9 @@ sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 
 # L4 组件 —— 核心模块（每个模块独立降级，缺少任一不影响其他模块）
 _logger = logging.getLogger(__name__)
+_logger.warning(
+    "galaxy_main_loop_l4.py is deprecated; use unified_launcher.py (via main.py) instead."
+)
 
 try:
     from enhancements.perception.environment_scanner import EnvironmentScanner
