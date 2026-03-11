@@ -1,7 +1,7 @@
 {
   "agents": {
-    "agent_c8c1acfed78d": {
-      "id": "agent_c8c1acfed78d",
+    "agent_fed411732c6b": {
+      "id": "agent_fed411732c6b",
       "config": {
         "role": "analyst",
         "name": "数据分析 Agent",
@@ -17,8 +17,8 @@
       "children_ids": [],
       "creation_mode": "template",
       "depth": 0,
-      "created_at": 1773215127.82683,
-      "last_active": 1773215127.82683,
+      "created_at": 1773216283.91127,
+      "last_active": 1773216283.91127,
       "metrics": {
         "tasks_completed": 0,
         "tasks_failed": 0,
@@ -28,5 +28,5 @@
     }
   },
   "agent_tree": {},
-  "timestamp": 1773215127.8268611
+  "timestamp": 1773216283.9112995
 }

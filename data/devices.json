@@ -44,9 +44,9 @@
       "endpoint": "",
       "location": "",
       "metadata": {},
-      "registered_at": 1773215150.7084694,
-      "last_seen": 1773215150.7084694,
-      "last_heartbeat": 1773215150.7084694,
+      "registered_at": 1773216287.6668599,
+      "last_seen": 1773216287.6668599,
+      "last_heartbeat": 1773216287.6668599,
       "total_commands": 0,
       "successful_commands": 0,
       "failed_commands": 0,
@@ -79,5 +79,5 @@
     ],
     "touch": []
   },
-  "saved_at": 1773215151.2739532
+  "saved_at": 1773216293.9353423
 }
