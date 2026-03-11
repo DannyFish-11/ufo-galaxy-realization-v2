@@ -378,4 +378,136 @@ DeviceCapability.COMM_BLUETOOTH | DeviceCapability.COMM_NFC | DeviceCapability.C
 
 ---
 
-*最后更新：2026-03-07*
+## 9. Android↔Server 完整集成说明
+
+本节描述从 Android 设备连接到自然语言命令执行的完整闭环路径。
+
+### 9.1 官方 WebSocket 入口（唯一权威来源）
+
+| 路径 | 说明 | 推荐度 |
+|------|------|--------|
+| `ws://<host>:8765/ws/device/{device_id}` | **主通道**（推荐）：设备注册后的专属通道 | ✅ 推荐 |
+| `ws://<host>:8765/ws/android` | 初始连接端点：自动分配设备 ID | ✅ 支持 |
+| `ws://<host>:8765/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） | ⚠️ 兼容 |
+
+> **Android 客户端应统一使用主通道 `/ws/device/{device_id}`。**
+> 以上所有路径均路由到 `galaxy_gateway/app.py` 中同一个 `WebSocketManager.handle_connection()` 处理器。
+
+### 9.2 AIP v3.0 必填字段
+
+每条消息（无论方向）必须包含以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `version` | `string` | 协议版本，固定为 `"3.0"` |
+| `type` | `string` | 消息类型（见第 1 节完整列表） |
+| `message_id` | `string` | 消息唯一 ID（UUID） |
+| `device_id` | `string` | 发送方设备 ID |
+| `timestamp` | `integer` | 毫秒级 Unix 时间戳 |
+
+**缺少 `type` 或 `device_id` 时，服务端返回 `error` 消息（`error_code: MISSING_REQUIRED_FIELDS`）。**  
+缺少 `version`、`timestamp`、`message_id` 时，服务端自动补全（向后兼容旧客户端）。
+
+### 9.3 Legacy AIP/1.0 兼容映射
+
+`galaxy_gateway/android_bridge.py` 的 `handle_message()` 通过
+`galaxy_gateway/protocol/compat.py` 自动规范化旧协议消息：
+
+| AIP/1.0 type 字段 | 规范化为（AIP v3.0） |
+|-------------------|---------------------|
+| `register` / `agent_register` / `registration` | `device_register` |
+| `heartbeat` / `agent_heartbeat` | `heartbeat` |
+| `task_execute` | `task_submit` |
+| `command_result` | `task_result` |
+| `status_update` / `update_status` | `device_status` |
+
+规范化时同时自动补全 `version: "3.0"`、`timestamp`、`message_id`（如缺失）。
+
+### 9.4 能力同步到 LLM（capability → CapabilityRegistry → tool schema）
+
+```
+Android 设备
+  │
+  ├─ device_register  ──────────► AndroidBridge._handle_device_register()
+  │                                └─ 设备存入 AndroidBridge._devices
+  │
+  └─ capability_report ─────────► AndroidBridge._handle_capability_report()
+                                   ├─ 更新 device.supported_actions
+                                   └─ CapabilityRegistry.register(CapabilityItem)
+                                        能力名: gateway__<device_id>__<action>
+                                        来源:   source="gateway"
+                                             │
+                                             ▼
+                                      ExecutionPlanner.prepare()
+                                        ├─ CapabilityRegistry.refresh()
+                                        └─ to_tool_schemas() → LLM function calling
+```
+
+**能力命名规则**（稳定、可预测，适用于 LLM tool schema）：
+
+```
+gateway__<device_id>__<action_name>
+```
+
+示例：
+- `gateway__pixel9-001__screenshot`
+- `gateway__pixel9-001__tap`
+- `gateway__pixel9-001__swipe`
+
+### 9.5 自然语言 → 设备执行完整链路
+
+```
+用户输入 (自然语言)
+  │
+  ▼
+POST /api/v1/chat
+  │
+  ▼
+OpenClawd.handle_request()
+  │
+  ▼
+ExecutionPlanner.prepare()
+  ├─ CapabilityRegistry.refresh()   ← 拉取最新设备能力
+  └─ to_tool_schemas()              ← 注入 LLM function calling
+  │
+  ▼
+LLM 推理 → tool_call: { "name": "gateway__<id>__screenshot", "arguments": {...} }
+  │
+  ▼
+OpenClawd._dispatch_tool_call()
+  │
+  ▼
+send_gateway_command(device_id, command, payload)
+  │
+  ▼
+CommandRouter.route_command()
+  │
+  ▼
+AndroidBridge.assign_task(device_id, task_id, task_type, payload)
+  │
+  ▼
+WebSocket push → Android 设备执行
+  │
+  ▼
+task_result → AndroidBridge._handle_task_result() → 返回结果
+```
+
+### 9.6 Android 仓库需要的适配说明（PR Notes）
+
+本 PR 仅修改服务端（`ufo-galaxy-realization-v2`）。Android 仓库（`ufo-galaxy-android`）
+如需完整对接，应确认以下内容（无需在本 PR 内修改）：
+
+1. **统一使用 AIPMessageBuilder**，并确保发送完整 v3 字段：
+   `version: "3.0"`、`message_id`（UUID）、`timestamp`（毫秒）、`device_id`、`type`。
+
+2. **连接路径**：统一配置为 `ws://<host>:8765/ws/device/{device_id}`。
+
+3. **capability_report 消息**在设备连接后立即发送，`supported_actions` 列表应枚举
+   设备实际支持的操作名称（如 `["screenshot", "tap", "swipe", "input_text"]`）。
+
+4. **task_result 回执**：任务执行完毕后及时发送 `task_result`，包含 `task_id`
+   和 `status` 字段，使服务端可解析并通知 LLM。
+
+---
+
+*最后更新：2026-03-11*

@@ -604,11 +604,74 @@ class AndroidBridge:
             "note": "No specific handler registered for this message type",
         }
 
+    # Fields that are hard requirements — a message without these cannot be
+    # meaningfully processed at all.
+    _V3_MANDATORY_FIELDS: tuple = ("type", "device_id")
+
+    # Fields that are required by the full AIP v3.0 spec but can be
+    # auto-generated for backward compatibility when absent.
+    _V3_AUTO_FILL_FIELDS: tuple = ("version", "timestamp", "message_id")
+
     async def handle_message(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """处理来自安卓设备的消息"""
-        msg_type_str = message.get("type")
+        """处理来自安卓设备的消息。
+
+        验证流程：
+        1. 通过 compat 层规范化 legacy AIP/1.0 或 AIP/2.0 消息（type 别名映射、
+           version 字段补全）。
+        2. 自动补全 AIP/3.0 的可选元数据字段（timestamp、message_id）——
+           当这些字段在 legacy 消息中缺失时进行填充，保持向后兼容。
+        3. 检查强制字段（type、device_id）——缺失时返回带明确错误码的 error 消息。
+        4. 派发到对应处理器。
+        """
+        # Step 1 — Normalise legacy protocol versions to v3 field names in-place.
+        try:
+            from galaxy_gateway.protocol.compat import _detect_version, _normalise_v1, _normalise_v2
+            detected = _detect_version(message)
+            if detected == "1.0":
+                message = _normalise_v1(message)
+                logger.debug("handle_message: AIP/1.0 message normalised to v3")
+            elif detected == "2.0":
+                message = _normalise_v2(message)
+                logger.debug("handle_message: AIP/2.0 message normalised to v3")
+        except Exception as norm_err:
+            logger.debug("handle_message: normalisation skipped (%s)", norm_err)
+
         device_id = message.get("device_id")
-        
+        msg_type_str = message.get("type")
+
+        # Step 2 — Auto-fill metadata fields that may be absent in legacy messages.
+        # This keeps backward compatibility while ensuring all internal handlers
+        # receive a complete v3-shaped dict.  Copy once, then fill in-place.
+        needs_fill = (
+            not message.get("version")
+            or not message.get("timestamp")
+            or not message.get("message_id")
+        )
+        if needs_fill:
+            message = dict(message)
+            if not message.get("version"):
+                message["version"] = "3.0"
+            if not message.get("timestamp"):
+                message["timestamp"] = int(time.time() * 1000)
+            if not message.get("message_id"):
+                message["message_id"] = str(uuid.uuid4())
+
+        # Step 3 — Validate hard-required fields; return an explicit error when absent.
+        missing = [f for f in self._V3_MANDATORY_FIELDS if not message.get(f)]
+        if missing:
+            logger.warning(
+                "handle_message: malformed message from %s — missing required fields: %s",
+                device_id or "unknown",
+                missing,
+            )
+            return MessageBuilder.error(
+                device_id or "unknown",
+                "MISSING_REQUIRED_FIELDS",
+                f"AIP v3.0 required fields missing: {missing}",
+                details={"missing_fields": missing, "received_type": msg_type_str},
+            )
+
+        # Step 4 — Resolve the MessageType enum value.
         try:
             msg_type = MessageType(msg_type_str)
         except ValueError:
@@ -618,7 +681,7 @@ class AndroidBridge:
                 "UNKNOWN_MESSAGE_TYPE",
                 f"Unknown message type: {msg_type_str}"
             )
-        
+
         handler = self._message_handlers.get(msg_type)
         if handler:
             return await handler(websocket, message)
@@ -735,7 +798,11 @@ class AndroidBridge:
         return MessageBuilder.heartbeat_ack(device_id)
 
     async def _handle_capability_report(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理设备能力上报，并持久化 supported_actions"""
+        """处理设备能力上报，持久化 supported_actions 并同步到 CapabilityRegistry。
+
+        能力命名规则（稳定且可被 LLM tool schema 使用）：
+            ``gateway__<device_id>__<action_name>``
+        """
         device_id = message.get("device_id")
         platform = message.get("platform")
         supported_actions = message.get("supported_actions", [])
@@ -747,6 +814,31 @@ class AndroidBridge:
             if device_id in self._devices:
                 self._devices[device_id].supported_actions = list(supported_actions)
                 self._devices[device_id].last_heartbeat = time.time()
+
+        # Sync reported capabilities into the global CapabilityRegistry so the
+        # LLM can discover and dispatch to this device via natural language.
+        if device_id and supported_actions:
+            try:
+                from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+                reg = CapabilityRegistry.get_instance()
+                for action in supported_actions:
+                    action_str = action if isinstance(action, str) else str(action)
+                    cap_name = f"gateway__{device_id}__{action_str}"
+                    reg.register(CapabilityItem(
+                        name=cap_name,
+                        description=f"Android device {device_id} action: {action_str} (platform={platform})",
+                        source="gateway",
+                        source_id=device_id,
+                        available=True,
+                        metadata={"device_id": device_id, "platform": platform, "action": action_str},
+                    ))
+                logger.info(
+                    "capability_report: synced %d actions for device %s to CapabilityRegistry",
+                    len(supported_actions),
+                    device_id,
+                )
+            except Exception as sync_err:
+                logger.warning("capability_report: CapabilityRegistry sync failed: %s", sync_err)
 
         return MessageBuilder.capability_report_ack(
             device_id=device_id or "unknown",
