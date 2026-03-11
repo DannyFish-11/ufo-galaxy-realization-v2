@@ -6,7 +6,7 @@
       "name": "测试电脑",
       "status": "online",
       "manufacturer": "",
-      "model": "",
+      "model_name": "",
       "os_version": "",
       "app_version": "",
       "capabilities": [
@@ -14,18 +14,21 @@
           "name": "screen",
           "description": "",
           "available": true,
+          "version": "1.0",
           "params": {}
         },
         {
           "name": "keyboard",
           "description": "",
           "available": true,
+          "version": "1.0",
           "params": {}
         },
         {
           "name": "mouse",
           "description": "",
           "available": true,
+          "version": "1.0",
           "params": {}
         }
       ],
@@ -38,13 +41,16 @@
       "ip_address": "",
       "port": 0,
       "mac_address": "",
+      "endpoint": "",
+      "location": "",
       "metadata": {},
-      "registered_at": 1773190313.4660807,
-      "last_seen": 1773190313.4660811,
-      "last_heartbeat": 1773190313.4660814,
+      "registered_at": 1773215150.7084694,
+      "last_seen": 1773215150.7084694,
+      "last_heartbeat": 1773215150.7084694,
       "total_commands": 0,
       "successful_commands": 0,
-      "failed_commands": 0
+      "failed_commands": 0,
+      "current_task": null
     }
   },
   "groups": {
@@ -73,5 +79,5 @@
     ],
     "touch": []
   },
-  "saved_at": 1773190540.1932878
+  "saved_at": 1773215151.2739532
 }
