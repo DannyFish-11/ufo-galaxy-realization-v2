@@ -39,6 +39,50 @@ from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 logger = logging.getLogger("Galaxy.API")
 
 
+def _sync_device_to_capability_registry(device_info: Dict) -> int:
+    """PR88: 将单个设备的能力同步注册到 CapabilityRegistry。
+
+    每次设备注册时调用，确保新设备能力立即作为可调用工具出现在 capability bus 中。
+    返回同步的能力条目数量。
+    """
+    count = 0
+    try:
+        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        reg = CapabilityRegistry.get_instance()
+
+        device_id = device_info.get("device_id", "")
+        d_name = device_info.get("device_name", device_id)
+        d_type = device_info.get("device_type", "unknown")
+        caps = device_info.get("capabilities", [])
+
+        for cap in caps:
+            if isinstance(cap, str):
+                cap_name = cap
+            elif isinstance(cap, dict):
+                cap_name = cap.get("name", "")
+            else:
+                logger.warning(
+                    "_sync_device_to_capability_registry: 设备 %s 中存在未知类型能力 %r，已跳过",
+                    device_id, type(cap),
+                )
+                continue
+            if not cap_name:
+                continue
+            key = f"gateway__{device_id}__{cap_name}"
+            reg.register(CapabilityItem(
+                name=key,
+                description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
+                source="gateway",
+                source_id=str(device_id),
+                available=True,
+                metadata={"device_name": d_name, "device_type": d_type},
+            ))
+            count += 1
+    except Exception as exc:
+        logger.debug("_sync_device_to_capability_registry 失败: %s", exc)
+    return count
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create device management routes router."""
     router = APIRouter()
@@ -60,6 +104,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         registered_devices[req.device_id] = device_info
         _save_registered_devices(registered_devices)
         logger.info(f"设备注册: {req.device_id} ({req.device_type})")
+
+        # PR88: 设备注册后立即同步能力到 CapabilityRegistry，使新设备成为可调用工具
+        synced_caps = _sync_device_to_capability_registry(device_info)
+        if synced_caps:
+            logger.info("设备 %s 已同步 %d 个能力到 CapabilityRegistry", req.device_id, synced_caps)
 
         return JSONResponse({
             "success": True,
