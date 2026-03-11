@@ -5,7 +5,7 @@
  * 类型安全的前端组件
  */
 
-import type { Device, Agent, LLMProvider } from './types';
+import type { Device, Agent, LLMProvider, LiveStatus } from './types';
 import { galaxyAPI } from './api';
 
 /**
@@ -282,5 +282,169 @@ export class LLMProviderComponent {
         `).join('')}
       </div>
     `;
+  }
+}
+
+/**
+ * 实时状态面板组件
+ *
+ * 轮询 /api/v1/observability/live-status 并展示：
+ *   - 能力加载状态（CapabilityRegistry 工具数量）
+ *   - 网关追踪统计（CommandRouter 路由数 + 近期 3 条调用）
+ *   - 设备健康（注册数 / 在线数）
+ *   - 活跃模型路由
+ */
+export class LiveStatusPanel {
+  private container: HTMLElement;
+  private pollInterval: number;
+  private timerId: ReturnType<typeof setInterval> | null = null;
+  private status: LiveStatus | null = null;
+  private errorMessage: string | null = null;
+
+  /**
+   * @param container   挂载面板的 DOM 元素
+   * @param pollInterval 轮询间隔（毫秒，默认 5000）
+   */
+  constructor(container: HTMLElement, pollInterval: number = 5000) {
+    this.container = container;
+    this.pollInterval = pollInterval;
+  }
+
+  /** 启动自动轮询并立即渲染一次 */
+  start(): void {
+    this.fetch();
+    this.timerId = setInterval(() => this.fetch(), this.pollInterval);
+  }
+
+  /** 停止轮询 */
+  stop(): void {
+    if (this.timerId !== null) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+  }
+
+  private async fetch(): Promise<void> {
+    try {
+      this.status = await galaxyAPI.getLiveStatus();
+      this.errorMessage = null;
+    } catch (err) {
+      this.errorMessage = err instanceof Error ? err.message : String(err);
+    }
+    this.render();
+  }
+
+  private render(): void {
+    if (this.errorMessage) {
+      this.container.innerHTML = `
+        <div class="live-status-panel error">
+          <p class="live-status-error">⚠️ 实时状态加载失败: ${this.escapeHtml(this.errorMessage)}</p>
+        </div>`;
+      return;
+    }
+
+    if (!this.status) {
+      this.container.innerHTML = `<div class="live-status-panel loading"><p>加载中…</p></div>`;
+      return;
+    }
+
+    const s = this.status;
+    const updated = new Date(s.timestamp * 1000).toLocaleTimeString();
+
+    this.container.innerHTML = `
+      <div class="live-status-panel">
+        <div class="live-status-header">
+          <h3>🔴 实时状态面板</h3>
+          <span class="live-status-updated">更新于 ${updated}</span>
+        </div>
+
+        <div class="live-status-grid">
+
+          <!-- 能力加载 -->
+          <div class="live-status-card ${s.capability_load.error ? 'card-error' : 'card-ok'}">
+            <div class="card-title">⚡ 能力加载</div>
+            ${s.capability_load.error
+              ? `<p class="card-error-msg">${this.escapeHtml(s.capability_load.error)}</p>`
+              : `<div class="card-stat">${s.capability_load.count} 个工具已注册</div>
+                 <ul class="card-list">
+                   ${s.capability_load.tools.slice(0, 5).map(t =>
+                     `<li><span class="tool-name">${this.escapeHtml(t.name)}</span>
+                          <span class="tool-source">[${this.escapeHtml(t.source)}]</span></li>`
+                   ).join('')}
+                   ${s.capability_load.count > 5
+                     ? `<li class="more">…还有 ${s.capability_load.count - 5} 个</li>`
+                     : ''}
+                 </ul>`
+            }
+          </div>
+
+          <!-- 网关追踪 -->
+          <div class="live-status-card ${s.gateway_trace.error ? 'card-error' : 'card-ok'}">
+            <div class="card-title">🌐 网关追踪</div>
+            ${s.gateway_trace.error
+              ? `<p class="card-error-msg">${this.escapeHtml(s.gateway_trace.error)}</p>`
+              : `<div class="card-stat">
+                   路由总数: ${s.gateway_trace.stats['total_routed'] ?? '—'}
+                 </div>
+                 <ul class="card-list">
+                   ${s.gateway_trace.recent_calls.slice(0, 3).map((c: any) =>
+                     `<li>${this.escapeHtml(c.command_id ?? '?')} → ${this.escapeHtml(c.status ?? '?')}</li>`
+                   ).join('')}
+                 </ul>`
+            }
+          </div>
+
+          <!-- 设备健康 -->
+          <div class="live-status-card ${s.device_health.error ? 'card-error' : 'card-ok'}">
+            <div class="card-title">📱 设备健康</div>
+            ${s.device_health.error
+              ? `<p class="card-error-msg">${this.escapeHtml(s.device_health.error)}</p>`
+              : `<div class="card-stat">
+                   注册: ${s.device_health.registered} &nbsp;|&nbsp;
+                   在线: <span class="online-count">${s.device_health.online}</span>
+                 </div>
+                 <ul class="card-list">
+                   ${s.device_health.devices.slice(0, 5).map(d =>
+                     `<li>
+                       <span class="device-status-dot ${d.online ? 'dot-online' : 'dot-offline'}">●</span>
+                       ${this.escapeHtml(d.device_id)} (${this.escapeHtml(d.device_type)})
+                     </li>`
+                   ).join('')}
+                   ${s.device_health.registered > 5
+                     ? `<li class="more">…还有 ${s.device_health.registered - 5} 台</li>`
+                     : ''}
+                 </ul>`
+            }
+          </div>
+
+          <!-- 模型路由 -->
+          <div class="live-status-card ${s.model_route.error ? 'card-error' : 'card-ok'}">
+            <div class="card-title">🤖 模型路由</div>
+            ${s.model_route.error
+              ? `<p class="card-error-msg">${this.escapeHtml(s.model_route.error)}</p>`
+              : `<div class="card-stat">
+                   活跃: ${this.escapeHtml(s.model_route.active_provider ?? '—')}
+                 </div>
+                 <div class="card-detail">
+                   默认模型: ${this.escapeHtml(s.model_route.default_model ?? '—')}
+                 </div>
+                 ${s.model_route.fallbacks.length > 0
+                   ? `<div class="card-detail">
+                        Fallback: ${s.model_route.fallbacks.map((f: any) =>
+                          this.escapeHtml(f.provider ?? f)
+                        ).join(', ')}
+                      </div>`
+                   : ''}`
+            }
+          </div>
+
+        </div>
+      </div>`;
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }

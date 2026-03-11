@@ -47,8 +47,9 @@ missing_requirements=()
 
 for node_dir in "$NODES_DIR"/*/; do
     node_name=$(basename "$node_dir")
-    # Skip the shared 'common' directory — it is not a deployable node.
+    # Skip the shared 'common' directory and Python cache — not deployable nodes.
     [ "$node_name" = "common" ] && continue
+    [ "$node_name" = "__pycache__" ] && continue
 
     [ -f "$node_dir/Dockerfile" ]       || missing_dockerfile+=("$node_name")
     [ -f "$node_dir/requirements.txt" ] || missing_requirements+=("$node_name")

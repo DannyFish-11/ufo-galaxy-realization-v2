@@ -821,7 +821,8 @@
     "app_version": "1.0.0",
     "registered_at": "2026-03-11T08:04:44.258189",
     "last_seen": "2026-03-11T08:04:44.258200",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "min-2b4c325a": {
     "device_id": "min-2b4c325a",
@@ -832,7 +833,8 @@
     "app_version": "",
     "registered_at": "2026-03-11T08:04:44.261437",
     "last_seen": "2026-03-11T08:04:44.261445",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "list-783d3cb3": {
     "device_id": "list-783d3cb3",
@@ -843,7 +845,8 @@
     "app_version": "",
     "registered_at": "2026-03-11T08:04:44.264019",
     "last_seen": "2026-03-11T08:04:44.264026",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "hb-b509e16f": {
     "device_id": "hb-b509e16f",
@@ -854,10 +857,11 @@
     "app_version": "",
     "registered_at": "2026-03-11T08:04:44.268431",
     "last_seen": "2026-03-11T08:04:44.270561",
-    "status": "registered",
+    "status": "offline",
     "status_detail": {
       "battery": 80
-    }
+    },
+    "online": false
   },
   "unreg-2da5956b": {
     "device_id": "unreg-2da5956b",
@@ -868,7 +872,8 @@
     "app_version": "",
     "registered_at": "2026-03-11T08:04:44.274806",
     "last_seen": "2026-03-11T08:04:44.276586",
-    "status": "offline"
+    "status": "offline",
+    "online": false
   },
   "leg-553b7775": {
     "device_id": "leg-553b7775",
@@ -879,7 +884,8 @@
     "app_version": "",
     "registered_at": "2026-03-11T08:04:44.280991",
     "last_seen": "2026-03-11T08:04:44.281001",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "v1-90241b10": {
     "device_id": "v1-90241b10",
@@ -890,6 +896,84 @@
     "app_version": "",
     "registered_at": "2026-03-11T08:04:44.283131",
     "last_seen": "2026-03-11T08:04:44.283137",
+    "status": "offline",
+    "online": false
+  },
+  "e2e-9a61b8e2": {
+    "device_id": "e2e-9a61b8e2",
+    "device_type": "android_phone",
+    "device_name": "E2E-TestDevice",
+    "capabilities": [
+      "screen",
+      "touch",
+      "camera"
+    ],
+    "os_version": "Android 14",
+    "app_version": "2.3.0",
+    "registered_at": "2026-03-11T10:34:12.834426",
+    "last_seen": "2026-03-11T10:34:12.834434",
+    "status": "offline",
+    "online": false
+  },
+  "e2e-list-0dfac496": {
+    "device_id": "e2e-list-0dfac496",
+    "device_type": "windows_pc",
+    "device_name": "E2E-ListDevice",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T10:34:12.857717",
+    "last_seen": "2026-03-11T10:34:12.857723",
+    "status": "offline",
+    "online": false
+  },
+  "cmd-dev-b8b642bb": {
+    "device_id": "cmd-dev-b8b642bb",
+    "device_type": "android_phone",
+    "device_name": "Device-cmd-dev-",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T10:34:12.863569",
+    "last_seen": "2026-03-11T10:34:12.863582",
+    "status": "offline",
+    "online": false
+  },
+  "e2e-6711a769": {
+    "device_id": "e2e-6711a769",
+    "device_type": "android_phone",
+    "device_name": "E2E-TestDevice",
+    "capabilities": [
+      "screen",
+      "touch",
+      "camera"
+    ],
+    "os_version": "Android 14",
+    "app_version": "2.3.0",
+    "registered_at": "2026-03-11T10:35:07.968999",
+    "last_seen": "2026-03-11T10:35:07.969006",
+    "status": "registered"
+  },
+  "e2e-list-2678fc99": {
+    "device_id": "e2e-list-2678fc99",
+    "device_type": "windows_pc",
+    "device_name": "E2E-ListDevice",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T10:35:07.981904",
+    "last_seen": "2026-03-11T10:35:07.981913",
+    "status": "registered"
+  },
+  "cmd-dev-c449f1c1": {
+    "device_id": "cmd-dev-c449f1c1",
+    "device_type": "android_phone",
+    "device_name": "Device-cmd-dev-",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-11T10:35:07.986971",
+    "last_seen": "2026-03-11T10:35:07.986991",
     "status": "registered"
   }
 }
