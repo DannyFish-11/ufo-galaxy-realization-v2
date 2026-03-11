@@ -442,6 +442,89 @@ class SkillLoader:
             "loaded_skills": len(self.skills),
         }
 
+    # ========================================================================
+    # MCP Tool 桥接 — 将 Skill 暴露为 MCP 标准工具
+    # ========================================================================
+
+    def to_mcp_tool_schema(self, skill_id: str) -> Optional[Dict[str, Any]]:
+        """
+        将 Skill 转换为 MCP 标准工具定义。
+
+        生成符合 MCP 规范的 ``inputSchema`` (JSON Schema)，使外部 MCP
+        客户端（如 Claude Desktop）可以通过标准 MCP 协议发现和调用
+        Galaxy Skill。
+
+        Args:
+            skill_id: 技能 ID
+
+        Returns:
+            MCP 工具定义字典（包含 name, description, inputSchema），
+            或 None（技能不存在）。
+        """
+        skill = self.skills.get(skill_id)
+        if not skill:
+            return None
+
+        # 构建 JSON Schema properties
+        properties: Dict[str, Any] = {}
+        required: List[str] = []
+
+        type_map = {
+            "string": "string",
+            "str": "string",
+            "int": "integer",
+            "integer": "integer",
+            "float": "number",
+            "number": "number",
+            "bool": "boolean",
+            "boolean": "boolean",
+            "list": "array",
+            "array": "array",
+            "dict": "object",
+            "object": "object",
+        }
+
+        for param in skill.parameters:
+            json_type = type_map.get(param.type.lower(), "string")
+            prop: Dict[str, Any] = {
+                "type": json_type,
+                "description": param.description or param.name,
+            }
+            if param.default is not None:
+                prop["default"] = param.default
+            properties[param.name] = prop
+            if param.required:
+                required.append(param.name)
+
+        input_schema: Dict[str, Any] = {
+            "type": "object",
+            "properties": properties,
+        }
+        if required:
+            input_schema["required"] = required
+
+        return {
+            "name": f"galaxy_skill_{skill_id}",
+            "description": f"[Galaxy Skill] {skill.description or skill.name}",
+            "inputSchema": input_schema,
+        }
+
+    def list_as_mcp_tools(self) -> List[Dict[str, Any]]:
+        """
+        将所有已加载的 Skill 导出为 MCP 标准工具列表。
+
+        Returns:
+            MCP 工具定义列表（用于 tools/list 响应）。
+        """
+        tools = []
+        for skill_id, skill in self.skills.items():
+            if skill.status != SkillStatus.LOADED:
+                continue
+            schema = self.to_mcp_tool_schema(skill_id)
+            if schema:
+                tools.append(schema)
+        return tools
+
 
 # ============================================================================
 # 全局实例

@@ -424,11 +424,13 @@ class MCPLoader:
             server_id,
             "initialize",
             {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
+                "protocolVersion": "2025-11-25",
+                "capabilities": {
+                    "roots": {"listChanged": True},
+                },
                 "clientInfo": {
                     "name": "Galaxy",
-                    "version": "1.0.0",
+                    "version": "2.0.0",
                 },
             },
         )
@@ -538,11 +540,19 @@ class MCPLoader:
         
         if response:
             if response.error:
-                return {"success": False, "error": response.error}
-            return {"success": True, "result": response.result}
-        
-        return {"success": False, "error": "请求失败"}
-    
+                return {"success": False, "error": response.error, "isError": True}
+            # 提取 MCP 标准 isError 字段（工具执行错误 vs 协议错误）
+            is_error = False
+            if isinstance(response.result, dict):
+                is_error = response.result.get("isError", False)
+            return {
+                "success": not is_error,
+                "result": response.result,
+                "isError": is_error,
+            }
+
+        return {"success": False, "error": "请求失败", "isError": True}
+
     async def read_resource(
         self,
         server_id: str,
@@ -644,6 +654,119 @@ class MCPLoader:
         if server_id in self.servers:
             return self.servers[server_id].to_dict()
         return None
+
+    # ========================================================================
+    # 配置加载（兼容 Galaxy 格式 + Claude Desktop 格式）
+    # ========================================================================
+
+    async def load_from_config(self, config_path: str) -> Dict[str, Any]:
+        """
+        从配置文件加载 MCP 服务器。
+
+        同时支持两种配置格式：
+        1. Galaxy 格式::
+
+            {
+              "servers": [
+                {"name": "fs", "command": "npx -y @modelcontextprotocol/server-filesystem", ...}
+              ]
+            }
+
+        2. Claude Desktop 格式 (claude_desktop_config.json)::
+
+            {
+              "mcpServers": {
+                "filesystem": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"], ...}
+              }
+            }
+
+        Args:
+            config_path: 配置文件路径
+
+        Returns:
+            {"loaded": int, "errors": [...]}
+        """
+        config_file = Path(config_path)
+        if not config_file.exists():
+            return {"loaded": 0, "errors": [f"配置文件不存在: {config_path}"]}
+
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        server_defs: List[Dict[str, Any]] = []
+
+        # 检测格式：Claude Desktop 格式（mcpServers 是 dict）
+        if "mcpServers" in config and isinstance(config["mcpServers"], dict):
+            for name, spec in config["mcpServers"].items():
+                cmd = spec.get("command", "")
+                args = spec.get("args", [])
+                server_defs.append({
+                    "name": name,
+                    "command": cmd,
+                    "args": args,
+                    "env": spec.get("env", {}),
+                    "cwd": spec.get("cwd", ""),
+                    "auto_start": spec.get("auto_start", False),
+                })
+
+        # Galaxy 格式（servers 是 list）
+        elif "servers" in config and isinstance(config["servers"], list):
+            for spec in config["servers"]:
+                name = spec.get("name", "")
+                cmd = spec.get("command", "")
+                args = spec.get("args", [])
+                server_defs.append({
+                    "name": name,
+                    "command": cmd,
+                    "args": args,
+                    "env": spec.get("env", {}),
+                    "cwd": spec.get("cwd", ""),
+                    "auto_start": spec.get("auto_start", False),
+                })
+        else:
+            return {"loaded": 0, "errors": ["未知配置格式：需要 'mcpServers' 或 'servers' 键"]}
+
+        loaded = 0
+        errors = []
+        for sd in server_defs:
+            if not sd["name"] or not sd["command"]:
+                continue
+            try:
+                result = await self.load(
+                    name=sd["name"],
+                    command=sd["command"],
+                    args=sd["args"],
+                    env=sd["env"],
+                    cwd=sd["cwd"],
+                    auto_start=sd["auto_start"],
+                )
+                if result.get("success"):
+                    loaded += 1
+                else:
+                    errors.append(f"{sd['name']}: {result.get('error', '未知错误')}")
+            except Exception as e:
+                errors.append(f"{sd['name']}: {e}")
+
+        return {"loaded": loaded, "errors": errors}
+
+    # ========================================================================
+    # MCP 标准通知
+    # ========================================================================
+
+    async def notify_tools_list_changed(self, server_id: str):
+        """
+        向 MCP 服务器发送 tools/list_changed 通知。
+
+        当工具列表变更（如 Self-Tool-Making 注册新工具后）调用此方法，
+        通知所有连接的客户端刷新工具列表。
+        """
+        await self._send_notification(
+            server_id,
+            "notifications/tools/list_changed",
+        )
+        # 同时刷新本地缓存
+        await self._refresh_tools(server_id)
+        logger.info(f"已发送 tools/list_changed 通知: {server_id}")
 
 
 # ============================================================================
