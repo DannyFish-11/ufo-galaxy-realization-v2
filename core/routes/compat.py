@@ -76,6 +76,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         }
         registered_devices[req.device_id] = device_info
 
+        # 同步设备能力到 CapabilityRegistry，与 /api/v1/devices/register 保持一致
+        try:
+            from core.routes.devices import _sync_device_to_capability_registry
+            synced_caps = _sync_device_to_capability_registry(device_info)
+            if synced_caps:
+                logger.info(
+                    "Legacy 设备 %s 已同步 %d 个能力到 CapabilityRegistry",
+                    req.device_id, synced_caps,
+                )
+        except Exception as _sync_err:
+            logger.debug("Legacy 设备能力同步失败（不影响注册）: %s", _sync_err)
+
         return JSONResponse({
             "success": True,
             "device_id": req.device_id,

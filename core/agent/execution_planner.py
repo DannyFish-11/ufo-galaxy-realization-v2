@@ -80,6 +80,9 @@ class ExecutionPlan(BaseModel):
     context: List[Dict[str, str]] = Field(default_factory=list)
     """对话历史"""
 
+    tool_schemas: List[Dict[str, Any]] = Field(default_factory=list)
+    """OpenAI function calling 格式的工具 schema 列表，由 ExecutionPlanner 从 CapabilityRegistry 注入"""
+
     timeout: float = 60.0
     """任务执行超时（秒）"""
 
@@ -165,6 +168,7 @@ class ExecutionPlanner:
             await registry.refresh()  # 确保最新
             available_tools = registry.list_tools()
             cap_stats = registry.stats()
+            tool_schemas = registry.to_tool_schemas()
             logger.info(
                 "ExecutionPlanner: CapabilityRegistry 已刷新 | "
                 "total=%d available=%d (mcp=%d skill=%d gateway=%d)",
@@ -174,6 +178,8 @@ class ExecutionPlanner:
                 cap_stats.get("by_source", {}).get("skill", 0),
                 cap_stats.get("by_source", {}).get("gateway", 0),
             )
+            # 将工具 schema 存储到 plan，供 LLM function calling 使用
+            plan.tool_schemas = tool_schemas
             # 将工具 schema 注入到执行计划上下文，供 Agent 使用
             if available_tools and not plan.context:
                 plan.context = []
@@ -303,6 +309,7 @@ class ExecutionPlanner:
                 "description": plan.message,
                 "context": {"soul": plan.soul_policy, "agents_policy": plan.agents_policy},
                 "session_id": plan.session_id,
+                "tools": plan.tool_schemas,
             }
             exec_result = await factory.execute_agent_task(agent.id, task_dict)
             exec_step.duration_ms = (time.monotonic() - t1) * 1000
@@ -379,6 +386,7 @@ class ExecutionPlanner:
                 "soul": plan.soul_policy,
                 "agents_policy": plan.agents_policy,
                 "session_id": plan.session_id,
+                "tools": plan.tool_schemas,
             }
             team_result = await manager.execute_team(team.team_id, plan.message, context)
             exec_step.duration_ms = (time.monotonic() - t1) * 1000

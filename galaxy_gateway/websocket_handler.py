@@ -190,6 +190,18 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
         if success:
             connection_manager.device_connections[device_id] = connection_id
 
+            # 同步设备能力到 CapabilityRegistry
+            try:
+                from core.routes.devices import _sync_device_to_capability_registry
+                _sync_device_to_capability_registry({
+                    "device_id": device_id,
+                    "device_type": device_type_raw,
+                    "device_name": device_info.get("name", device_info.get("model", f"Device-{device_id[:8]}")),
+                    "capabilities": capabilities,
+                })
+            except Exception as _sync_err:
+                logger.warning(f"WebSocket 设备能力同步到 CapabilityRegistry 失败: {_sync_err}")
+
         # 发送 AIP v3 注册确认响应
         response = {
             "version": "3.0",

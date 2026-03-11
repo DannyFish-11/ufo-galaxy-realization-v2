@@ -436,13 +436,27 @@ class OpenClawd:
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
     ) -> dict:
-        """设备操控分派"""
+        """设备操控分派 — 经由 send_gateway_command → CommandRouter → trace"""
         if not device_id:
             return {
                 "success": False,
                 "response": "设备操控需要指定 device_id，请连接设备后重试。",
             }
-        return await self.handle_device_command(intent, device_id)
+        command = intent.command if intent else "device_control"
+        params = intent.params if intent else {}
+        result = await self.send_gateway_command(
+            device_id=device_id,
+            command=command,
+            payload=params,
+            session_id=session_id,
+        )
+        # 统一响应字段（send_gateway_command 返回 response/success，保持 handle_device_command 兼容）
+        if "response" not in result:
+            if result.get("success"):
+                result["response"] = result.get("result") or f"设备命令 '{command}' 已发送到 {device_id}"
+            else:
+                result["response"] = result.get("result") or f"无法向设备 {device_id} 发送命令 '{command}'"
+        return result
 
     async def _dispatch_agent(
         self,
