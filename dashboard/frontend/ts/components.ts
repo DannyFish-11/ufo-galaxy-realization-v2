@@ -5,8 +5,8 @@
  * 类型安全的前端组件
  */
 
-import type { SystemInfo, Device, Agent, LLMProvider, ChatResponse } from './types';
-import { GalaxyAPI, galaxyAPI } from './api';
+import type { Device, Agent, LLMProvider } from './types';
+import { galaxyAPI } from './api';
 
 /**
  * ASCII 艺术字组件

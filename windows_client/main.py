@@ -22,6 +22,64 @@ import urllib.error
 import threading
 from typing import Dict, Any, Optional
 
+
+def _preflight_checks() -> bool:
+    """Windows 客户端启动前置检查
+
+    检测已知的运行时兼容性问题，给出清晰提示。
+    返回 True 表示检查全部通过；返回 False 表示发现严重问题（不强制退出，由调用方决定）。
+    """
+    ok = True
+
+    # --- 1. 检测非 ASCII 用户名/路径 ---
+    try:
+        home = os.path.expanduser("~")
+        home.encode("ascii")
+    except UnicodeEncodeError:
+        print("⚠️  警告: 用户目录路径包含非 ASCII 字符（如中文用户名）")
+        print(f"   当前路径: {home}")
+        print("   这可能导致 comtypes / PyQt5 插件加载失败。")
+        print("   建议操作:")
+        print("     1. 新建一个纯英文用户名账户（如 galaxy）并从该账户运行")
+        print("     2. 或设置环境变量: set USERPROFILE=C:\\Users\\english_name")
+        print("     3. 或将项目复制到纯 ASCII 路径（如 C:\\galaxy\\）")
+        print()
+        ok = False
+
+    # --- 2. 设置 QT_PLUGIN_PATH 避免 PyQt5 插件搜索失败 ---
+    if sys.platform == 'win32':
+        try:
+            import PyQt5
+            qt_dir = os.path.dirname(PyQt5.__file__)
+            plugins_path = os.path.join(qt_dir, "Qt5", "plugins")
+            if not os.path.isdir(plugins_path):
+                # 兼容不同安装布局
+                plugins_path = os.path.join(qt_dir, "plugins")
+            if os.path.isdir(plugins_path):
+                existing = os.environ.get("QT_PLUGIN_PATH", "")
+                if plugins_path not in existing:
+                    os.environ["QT_PLUGIN_PATH"] = (
+                        plugins_path + os.pathsep + existing if existing else plugins_path
+                    )
+        except Exception:
+            pass  # PyQt5 未安装时跳过，后续 PYQT5_AVAILABLE 检查会处理
+
+    # --- 3. 检测 comtypes 缓存目录可写性 ---
+    if sys.platform == 'win32':
+        try:
+            import tempfile
+            test_dir = tempfile.gettempdir()
+            test_file = os.path.join(test_dir, ".galaxy_comtypes_test")
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.remove(test_file)
+        except Exception as exc:
+            print(f"⚠️  警告: 临时目录不可写 ({exc})")
+            print("   comtypes 可能无法生成缓存，建议检查磁盘空间和权限。")
+            print()
+
+    return ok
+
 try:
     from PyQt5.QtWidgets import QApplication
     from PyQt5.QtCore import QThread, pyqtSignal, QTimer
@@ -413,6 +471,8 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
+    _preflight_checks()
+
     if not PYQT5_AVAILABLE:
         print("错误: 无法加载 OPPO 光场 UI 模块 — PyQt5 未安装")
         print("请安装依赖: pip install PyQt5 PyQtWebEngine")
@@ -431,7 +491,20 @@ def main():
         app.aboutToQuit.connect(client.stop)
         sys.exit(app.exec_())
     except Exception as e:
-        logger.error(f"Windows Client 启动失败: {e}")
+        err_msg = str(e)
+        logger.error(f"Windows Client 启动失败: {err_msg}")
+        print(f"\n❌ 启动失败: {err_msg}")
+        if "comtypes" in err_msg.lower() or "typelib" in err_msg.lower():
+            print("  可能原因: comtypes 缓存与当前 Python 版本不兼容。")
+            print("  修复建议: 删除 comtypes 缓存目录后重试")
+            print("    cmd.exe:    del /s /q %LOCALAPPDATA%\\Temp\\comtypes_cache")
+            print("    PowerShell: Remove-Item -Recurse -Force $env:LOCALAPPDATA\\Temp\\comtypes_cache")
+        elif "plugin" in err_msg.lower() or "qt" in err_msg.lower():
+            print("  可能原因: PyQt5 插件路径未找到。")
+            print("  修复建议: pip install --force-reinstall PyQt5 PyQtWebEngine")
+        elif "ascii" in err_msg.lower() or "encode" in err_msg.lower() or "codec" in err_msg.lower():
+            print("  可能原因: 路径包含非 ASCII 字符（中文用户名）。")
+            print("  修复建议: 使用纯英文用户账户运行，或将项目放在 C:\\galaxy\\ 等 ASCII 路径下。")
         sys.exit(1)
 
 
