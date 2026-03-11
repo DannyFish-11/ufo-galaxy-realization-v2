@@ -89,17 +89,49 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def chat(req: ChatRequest):
         """
         统一对话接口 — 智能分流:
-        0. OpenClawd 统一入口（优先，如可用）
-        1. IntentParser 解析意图（规则 + LLM 增强）
-        2. 操作指令 → ReAct Agent 调度 (LLM + tool_call → 节点执行)
-        3. 纯聊天 → LLM 对话回复
+        0. AgentKernel 统一主干（优先）— 聊天/执行一体化，SOUL 仅注入执行链路
+        1. OpenClawd 母体智能体（降级）
+        2. Scheduler ReAct 模式（兜底）
 
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
-        # ── 层 0: OpenClawd 母体智能体 — 主入口 ──
-        # OpenClawd 是全系统唯一交互中枢，集成意图解析 + 多模型路由 +
-        # ReAct 工具调用 + Agent 协作。仅在 OpenClawd 不可用时降级到旧逻辑。
+        # ── 层 0: AgentKernel — 统一智能体主干 ──
+        # 聊天/执行一体化入口：自动判定意图，SOUL 仅在 task_execute/hybrid 注入。
+        try:
+            from core.agent.kernel import handle_message as kernel_handle
+            kernel_result = await kernel_handle(
+                message=req.message,
+                session_id=req.session_id,
+                device_id=req.device_id,
+                context=req.context,
+            )
+            api_dict = kernel_result.to_api_dict()
+            resp = UnifiedChatResponse(
+                success=kernel_result.success,
+                response=kernel_result.reply,
+                intent=kernel_result.intent.raw_intent,
+                confidence=kernel_result.intent.confidence,
+                mode=kernel_result.mode,
+                model=kernel_result.model,
+                session_id=kernel_result.session_id,
+                data={
+                    "agent_steps": api_dict["agent_steps"],
+                    "tool_calls": api_dict["tool_calls"],
+                    "task_result": api_dict["task_result"],
+                    "latency_ms": kernel_result.latency_ms,
+                },
+                error=kernel_result.error,
+            )
+            resp_dict = resp.to_json_response()
+            resp_dict["reply"] = kernel_result.reply
+            return JSONResponse(resp_dict)
+        except ImportError:
+            logger.info("AgentKernel 未可用，降级到 OpenClawd 模式")
+        except Exception as e:
+            logger.warning(f"AgentKernel 处理异常，降级到 OpenClawd 模式: {e}")
+
+        # ── 层 1: OpenClawd 母体智能体 ──
         try:
             from core.openclawd import get_openclawd
             clawd = get_openclawd()
