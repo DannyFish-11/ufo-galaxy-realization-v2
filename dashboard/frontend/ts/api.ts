@@ -16,6 +16,7 @@ import type {
   WSMessage,
   DeviceCommand,
   ParallelExecuteResponse,
+  LiveStatus,
 } from './types';
 
 /**
@@ -177,6 +178,52 @@ export class GalaxyAPI {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  // ===========================================================================
+  // 可观测性 / 实时状态面板 API
+  // ===========================================================================
+
+  /**
+   * 获取实时状态面板聚合数据（一次调用，涵盖能力加载、网关追踪、设备健康、模型路由）
+   */
+  async getLiveStatus(): Promise<LiveStatus> {
+    const response = await fetch(`${this.baseUrl}/api/v1/observability/live-status`);
+    return response.json();
+  }
+
+  /**
+   * 获取活跃 LLM 路由及 Fallback 状态
+   */
+  async getModelRouteStatus(): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/api/v1/observability/model-route`);
+    return response.json();
+  }
+
+  /**
+   * 获取网关及设备在线状态汇总
+   */
+  async getGatewayStatus(): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/api/v1/observability/gateway`);
+    return response.json();
+  }
+
+  /**
+   * 获取近期工具 / 设备调用记录
+   */
+  async getRecentCalls(limit: number = 20): Promise<{ count: number; calls: any[] }> {
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/observability/recent-calls?limit=${limit}`
+    );
+    return response.json();
+  }
+
+  /**
+   * 获取可观测性统计信息
+   */
+  async getObservabilityStats(): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/api/v1/observability/stats`);
+    return response.json();
   }
 }
 

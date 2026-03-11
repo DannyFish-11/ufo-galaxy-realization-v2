@@ -211,6 +211,121 @@ gunicorn -w 4 -k uvicorn.workers.UvicornWorker dashboard.backend.main:app --bind
 2. 检查后端日志
 3. 刷新页面重新连接
 
+---
+
+## 实时状态面板（PR-95 新增）
+
+### 数据来源
+
+实时状态面板由前端 `LiveStatusPanel` 组件驱动，每 5 秒轮询一次后端聚合端点：
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/v1/observability/live-status` | 聚合四项状态，一次请求返回所有面板数据 |
+| `GET /api/v1/observability/model-route` | 活跃 LLM 路由及 Fallback 提供商 |
+| `GET /api/v1/observability/gateway` | 网关 / 设备在线状态汇总 |
+| `GET /api/v1/observability/recent-calls` | 近期工具 / 设备调用记录（最多 50 条） |
+| `GET /api/v1/observability/stats` | GatewayTraceStore 统计 |
+| `GET /api/v1/observability/trace/{id}` | 按 task_id 或 command_id 查询追踪记录 |
+
+### 面板四大区块
+
+1. **⚡ 能力加载**（`capability_load`）  
+   显示 `CapabilityRegistry` 已注册的工具总数及列表（最多展示 5 条）。
+
+2. **🌐 网关追踪**（`gateway_trace`）  
+   显示 `CommandRouter` 路由总数及最近 3 条调用记录（`command_id` + `status`）。
+
+3. **📱 设备健康**（`device_health`）  
+   显示 `DeviceRegistry` 中注册设备数 / 在线设备数，以及各设备的在线状态。
+
+4. **🤖 模型路由**（`model_route`）  
+   显示当前活跃 LLM 提供商、默认模型名称及 Fallback 列表。
+
+### 前端使用
+
+```typescript
+import { LiveStatusPanel } from './ts/components';
+
+const panel = new LiveStatusPanel(
+  document.getElementById('live-status')!,
+  5000  // 轮询间隔（毫秒）
+);
+panel.start();   // 启动轮询
+// panel.stop();  // 停止轮询
+```
+
+---
+
+## 节点打包标准（PR-95 新增）
+
+所有节点（`nodes/Node_XX_*`）必须包含：
+
+| 文件 | 说明 |
+|------|------|
+| `requirements.txt` | pip 依赖声明。若无外部依赖，保留注释行而非空文件。 |
+| `Dockerfile` | 基于 `python:3.11-slim`，使用非 root `galaxy` 用户。 |
+
+### 检查覆盖率
+
+从仓库根目录运行：
+
+```bash
+bash tools/check_node_packaging.sh
+# Exit 0 = 所有节点均已完成打包（110/110）
+```
+
+### Dockerfile 模板
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE <端口号>
+
+RUN addgroup --system --gid 1000 galaxy \
+    && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy \
+    && chown -R galaxy:galaxy /app
+USER galaxy
+
+CMD ["python", "main.py"]
+```
+
+### requirements.txt 规范
+
+- 列出所有非标准库依赖（`fastapi`、`uvicorn`、`pydantic` 等）。
+- 若节点无第三方依赖，添加注释行：  
+  `# No external dependencies beyond the Python standard library`
+- 禁止引用不存在的包名。
+- 建议锁定大版本：`fastapi>=0.109.0`、`uvicorn>=0.27.0`、`pydantic>=2.5.3`。
+
+---
+
+## 端到端集成测试（PR-95 新增）
+
+正式集成测试位于 `tests/test_e2e_stack.py`，覆盖四个测试套件：
+
+| 套件 | 覆盖范围 |
+|------|---------|
+| `TestDeviceRegistrationAndCapabilitySync` | 设备注册 → 设备列表 → CapabilityRegistry 查询 |
+| `TestCommandRoutingWithTrace` | 命令提交 → 路由统计 → 网关可观测性 |
+| `TestObservabilityEndpoints` | 模型路由 / 近期调用 / 统计 / Trace 查询 |
+| `TestDashboardLiveStatusEndpoint` | 聚合实时状态端点（四区块 JSON 契约验证） |
+
+### 本地运行
+
+```bash
+# 从仓库根目录运行（无需外部服务）
+pip install pytest httpx fastapi
+pytest tests/test_e2e_stack.py -v
+```
+
 ## 许可证
 
 MIT License

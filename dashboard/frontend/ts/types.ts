@@ -221,6 +221,63 @@ export interface TwinCommandConfig {
 }
 
 // ============================================================================
+// 可观测性 / 实时状态面板类型
+// ============================================================================
+
+export interface CapabilityTool {
+  name: string;
+  source: string;
+}
+
+export interface CapabilityLoadStatus {
+  count: number;
+  tools: CapabilityTool[];
+  error: string | null;
+}
+
+export interface GatewayStats {
+  [key: string]: any;
+}
+
+export interface GatewayTrace {
+  stats: GatewayStats;
+  recent_calls: any[];
+  error: string | null;
+}
+
+export interface DeviceHealthEntry {
+  device_id: string;
+  device_type: string;
+  online: boolean;
+  status: string;
+  last_seen: string;
+}
+
+export interface DeviceHealth {
+  registered: number;
+  online: number;
+  devices: DeviceHealthEntry[];
+  error: string | null;
+}
+
+export interface ModelRouteStatus {
+  default_model: string | null;
+  active_provider: string | null;
+  fallbacks: any[];
+  router_stats?: any;
+  error: string | null;
+}
+
+export interface LiveStatus {
+  timestamp: number;
+  observability_available: boolean;
+  capability_load: CapabilityLoadStatus;
+  gateway_trace: GatewayTrace;
+  device_health: DeviceHealth;
+  model_route: ModelRouteStatus;
+}
+
+// ============================================================================
 // 提供商健康详情
 // ============================================================================
 

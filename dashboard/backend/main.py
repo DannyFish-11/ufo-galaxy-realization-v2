@@ -145,6 +145,14 @@ except ImportError:
     PROTOCOLS_ROUTES_AVAILABLE = False
     protocols_routes = None
 
+# 导入可观测性路由
+try:
+    from core.routes import observability as observability_routes
+    OBSERVABILITY_ROUTES_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_ROUTES_AVAILABLE = False
+    observability_routes = None
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -194,6 +202,16 @@ if PROTOCOLS_ROUTES_AVAILABLE and protocols_routes:
         logger.info("已注册协议管理路由 (/api/v1/protocols/*)")
     except Exception as _e:
         logger.warning(f"协议管理路由注册失败: {_e}")
+
+# 注册可观测性路由（实时状态面板数据源）
+_OBSERVABILITY_REGISTERED = False
+if OBSERVABILITY_ROUTES_AVAILABLE and observability_routes:
+    try:
+        app.include_router(observability_routes.create_router())
+        _OBSERVABILITY_REGISTERED = True
+        logger.info("已注册可观测性路由 (/api/v1/observability/*)")
+    except Exception as _e:
+        logger.warning(f"可观测性路由注册失败: {_e}")
 
 # 静态文件
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")
@@ -2178,6 +2196,106 @@ async def get_env_status():
         }
     
     return {"status": status}
+
+
+# ============================================================================
+# 实时状态面板 — 聚合端点
+# ============================================================================
+
+@app.get("/api/v1/observability/live-status")
+async def get_live_status():
+    """
+    实时状态面板聚合端点。
+
+    一次调用返回面板所需的全部实时数据：
+      - capability_load: CapabilityRegistry 中已注册的工具数量及列表
+      - gateway_trace:   CommandRouter 路由统计 + 近期 3 条调用记录
+      - device_health:   设备注册数 / 在线数 / 各设备状态
+      - model_route:     当前活跃 LLM 路由及 Fallback 状态
+      - observability_available: 是否已注册可观测性子路由
+    """
+    import time as _time
+
+    # ── Capability load status ────────────────────────────────────────────
+    capability_info: dict = {"count": 0, "tools": [], "error": None}
+    try:
+        from core.agent.capability_registry import CapabilityRegistry
+        reg = CapabilityRegistry.get_instance()
+        tools = [
+            {"name": name, "source": item.source}
+            for name, item in reg._items.items()
+        ]
+        capability_info = {"count": len(tools), "tools": tools, "error": None}
+    except Exception as exc:
+        capability_info["error"] = str(exc)
+
+    # ── Gateway trace / command router ────────────────────────────────────
+    gateway_info: dict = {"stats": {}, "recent_calls": [], "error": None}
+    try:
+        from core.command_router import get_command_router, get_gateway_trace_store
+        gateway_info["stats"] = get_command_router().get_stats()
+        gateway_info["recent_calls"] = get_gateway_trace_store().recent(3)
+    except Exception as exc:
+        gateway_info["error"] = str(exc)
+
+    # ── Device health ─────────────────────────────────────────────────────
+    device_info: dict = {
+        "registered": 0, "online": 0, "devices": [], "error": None
+    }
+    try:
+        from core.device_registry import DeviceRegistry
+        registry = DeviceRegistry.get_instance()
+        device_list = []
+        for dev in registry.list_devices():
+            online = dev.is_online()
+            device_list.append({
+                "device_id": dev.device_id,
+                "device_type": dev.device_type,
+                "online": online,
+                "status": dev.status.value,
+                "last_seen": dev.last_seen,
+            })
+        online_count = sum(1 for d in device_list if d["online"])
+        device_info = {
+            "registered": len(device_list),
+            "online": online_count,
+            "devices": device_list,
+            "error": None,
+        }
+    except Exception as exc:
+        device_info["error"] = str(exc)
+
+    # ── Model route ───────────────────────────────────────────────────────
+    model_info: dict = {
+        "default_model": None, "active_provider": None,
+        "fallbacks": [], "error": None,
+    }
+    try:
+        from core.multi_llm_router import get_llm_router
+        router_inst = get_llm_router()
+        status = router_inst.get_status()
+        providers = router_inst.get_provider_status()
+        model_info = {
+            "default_model": router_inst.get_default_model(),
+            "active_provider": status.get("active_provider"),
+            "fallbacks": [
+                p for p in providers
+                if not p.get("is_primary", False) and p.get("available", False)
+            ],
+            "router_stats": status,
+            "error": None,
+        }
+    except Exception as exc:
+        model_info["error"] = str(exc)
+
+    return {
+        "timestamp": _time.time(),
+        "observability_available": _OBSERVABILITY_REGISTERED,
+        "capability_load": capability_info,
+        "gateway_trace": gateway_info,
+        "device_health": device_info,
+        "model_route": model_info,
+    }
 
 
 # ============================================================================
