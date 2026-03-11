@@ -4,8 +4,11 @@ Configuration Manager for Galaxy Launcher
 Manages unified configuration from multiple sources:
 - node_dependencies.json
 - NODE_CONFIG in galaxy_launcher.py
-- Environment variables
+- Environment variables (delegated to core.unified.config_manager.UnifiedConfigManager)
 - User overrides
+
+Note: Global (non-node) configuration is delegated to
+`core.unified.config_manager.UnifiedConfigManager` (统一入口).
 """
 
 import os
@@ -72,7 +75,7 @@ class ConfigManager:
     def __init__(self, base_path: Optional[Path] = None):
         """
         Initialize configuration manager
-        
+
         Args:
             base_path: Base path for configuration files
         """
@@ -80,7 +83,15 @@ class ConfigManager:
         self.nodes: Dict[str, NodeConfig] = {}
         self.groups: Dict[str, Dict[str, Any]] = {}
         self.global_config: Dict[str, Any] = {}
-        
+
+        # Delegate global config to UnifiedConfigManager (统一入口)
+        try:
+            from core.unified.config_manager import get_unified_config
+            self._unified_config = get_unified_config()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("UnifiedConfigManager 不可用，回退到本地配置: %s", exc)
+            self._unified_config = None
+
         # Initialize with defaults
         self._init_defaults()
     
@@ -338,7 +349,16 @@ class ConfigManager:
             return False
     
     def load_from_env(self):
-        """Load configuration from environment variables"""
+        """Load configuration from environment variables (delegated to UnifiedConfigManager)"""
+        # Delegate env loading to UnifiedConfigManager (统一入口)
+        if self._unified_config is not None:
+            # Ensure UnifiedConfigManager has loaded env vars into os.environ
+            try:
+                self._unified_config._load_env()
+            except Exception as exc:
+                logger.warning("UnifiedConfigManager._load_env 失败: %s", exc)
+
+        # Apply Galaxy-specific env mappings from the now-populated os.environ
         env_mappings = {
             "GALAXY_LOG_DIR": "log_dir",
             "GALAXY_NODES_DIR": "nodes_dir",
@@ -347,7 +367,7 @@ class ConfigManager:
             "GALAXY_MAX_PARALLEL": ("max_parallel_starts", int),
             "GALAXY_AUTO_RESTART": ("restart_on_failure", lambda x: x.lower() == "true")
         }
-        
+
         for env_var, config_key in env_mappings.items():
             value = os.environ.get(env_var)
             if value:
@@ -355,21 +375,28 @@ class ConfigManager:
                     key, converter = config_key
                     try:
                         self.global_config[key] = converter(value)
-                    except Exception as e:
-                        logger.warning(f"Error converting {env_var}: {e}")
+                    except Exception as exc:
+                        logger.warning("Error converting %s: %s", env_var, exc)
                 else:
                     self.global_config[config_key] = value
-    
+
+        # Mirror selected global settings from UnifiedConfigManager into global_config
+        if self._unified_config is not None:
+            for key in ("log_level", "log_dir"):
+                val = self._unified_config.get(key)
+                if val and key not in self.global_config:
+                    self.global_config[key] = val
+
     def load_all(self):
         """Load configuration from all sources"""
         # Load from node_dependencies.json if exists
         deps_file = self.base_path / "node_dependencies.json"
         if deps_file.exists():
             self.load_from_json(deps_file)
-        
-        # Load from environment
+
+        # Load from environment (via UnifiedConfigManager)
         self.load_from_env()
-        
+
         # Load from user config if exists
         user_config = self.base_path / "config" / "launcher.json"
         if user_config.exists():

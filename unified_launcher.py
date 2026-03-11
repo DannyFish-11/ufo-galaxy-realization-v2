@@ -179,25 +179,44 @@ class SystemConfig:
     
     @classmethod
     def load_from_env(cls) -> 'SystemConfig':
-        """从环境变量加载配置"""
+        """
+        从统一配置管理器加载系统配置
+
+        读取顺序（UnifiedConfigManager 内部保证）:
+          1. config/unified_ports.yaml — 端口分配
+          2. config.json — 主配置
+          3. .env — 环境变量覆盖
+        """
+        # 通过统一配置管理器加载所有配置源
+        try:
+            from core.unified.config_manager import get_unified_config
+            ucfg = get_unified_config()
+        except Exception as exc:
+            logger.warning("UnifiedConfigManager 不可用，回退到直接读取 .env: %s", exc)
+            ucfg = None
+
         config = cls()
-        
-        # 加载 .env 文件
-        env_file = PROJECT_ROOT / ".env"
-        if env_file.exists():
-            with open(env_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        key, value = line.split('=', 1)
-                        os.environ[key.strip()] = value.strip()
+
+        if ucfg is None:
+            # Fallback：直接读取 .env（与旧行为一致）
+            env_file = PROJECT_ROOT / ".env"
+            if env_file.exists():
+                with open(env_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            os.environ[key.strip()] = value.strip()
+            else:
+                logger.warning(
+                    ".env file not found. Copy .env.example to .env and configure: "
+                    "cp .env.example .env"
+                )
         else:
-            logger.warning(
-                ".env file not found. Copy .env.example to .env and configure: "
-                "cp .env.example .env"
-            )
-        
-        # 从环境变量读取
+            # UnifiedConfigManager 已在初始化时完成 .env + config.json + yaml 加载
+            pass
+
+        # 从（已被 UnifiedConfigManager 填充的）环境变量读取
         config.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
         config.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         config.openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -207,7 +226,16 @@ class SystemConfig:
         config.database_url = os.environ.get("DATABASE_URL", "")
         config.redis_url = os.environ.get("REDIS_URL", "")
         config.qdrant_url = os.environ.get("QDRANT_URL", "")
-        
+
+        # 从统一端口配置读取端口（unified_ports.yaml 中定义的优先）
+        if ucfg is not None:
+            web_ui_port = ucfg.get("web_ui_port")
+            if web_ui_port:
+                try:
+                    config.web_ui_port = int(web_ui_port)
+                except (ValueError, TypeError):
+                    pass
+
         return config
     
     def _get_tailscale_ip(self) -> Optional[str]:

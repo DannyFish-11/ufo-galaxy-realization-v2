@@ -1,7 +1,8 @@
 """
-DEPRECATED — 请使用 core.multi_llm_router.get_llm_router() 替代。
+Legacy LLM Manager — 保留旧接口以兼容旧版测试代码。
 
-此模块仅保留供旧版测试引用。所有生产代码已迁移至 MultiLLMRouter。
+内部委派至 `core.unified.llm_router.UnifiedLLMRouter`（统一入口）。
+新代码请直接使用 `from core.unified import get_unified_llm_router`。
 """
 
 import os
@@ -58,7 +59,10 @@ _ENV_PROVIDER_CHAIN = [
 
 class LLMManager:
     """
-    统一 LLM 管理器
+    Legacy LLM 管理器（保留旧接口兼容性）
+
+    内部委派至 `core.unified.llm_router.UnifiedLLMRouter`（统一入口）。
+    新代码请直接使用 `from core.unified import get_unified_llm_router`。
 
     客户端获取优先级:
     1. config.json 中的 OneAPI 聚合层 (如已配置)
@@ -73,12 +77,17 @@ class LLMManager:
         self.usage_log: List[TokenUsage] = []
         self.default_model = "gpt-4o"
 
-        # 环境变量 fallback 客户端链
+        # 委派至统一路由器
+        from core.unified.llm_router import get_unified_llm_router
+        self._unified_router = get_unified_llm_router()
+
+        # 环境变量 fallback 客户端链（保留以供旧接口使用）
         self._env_clients: List[Dict[str, Any]] = []
 
         self._load_env_file()
         self._load_config()
         self._build_env_client_chain()
+        logger.info("LLMManager (legacy): 已委派至 UnifiedLLMRouter")
 
     # ================================================================
     # 初始化
@@ -170,11 +179,14 @@ class LLMManager:
             )
 
     # ================================================================
-    # 核心 API
+    # 核心 API（委派至 UnifiedLLMRouter）
     # ================================================================
 
     def get_client(self) -> Any:
-        """获取可用客户端 (OneAPI 优先, 否则 env chain 第一个)"""
+        """获取可用客户端（委派至 UnifiedLLMRouter 底层路由器）"""
+        if self._unified_router.is_available():
+            return self._unified_router.underlying
+        # 本地 fallback：OneAPI > env clients
         if self.oneapi_client:
             return self.oneapi_client
         if self._env_clients:
@@ -186,12 +198,8 @@ class LLMManager:
         )
 
     def get_default_model(self) -> str:
-        """获取当前默认模型名"""
-        if self.oneapi_client:
-            return self.default_model
-        if self._env_clients:
-            return self._env_clients[0]["model"]
-        return self.default_model
+        """获取当前默认模型名（委派至 UnifiedLLMRouter）"""
+        return self._unified_router.get_default_model()
 
     async def chat_completion(
         self,
@@ -201,73 +209,16 @@ class LLMManager:
         **kwargs,
     ) -> Any:
         """
-        统一 Chat Completion — 自动 fallback:
-        1. OneAPI (如已配置)
-        2. 环境变量 Provider 链 (逐个尝试)
+        统一 Chat Completion（委派至 UnifiedLLMRouter）
+
+        兼容旧接口签名，内部转发至 `UnifiedLLMRouter.chat_completion`。
         """
-        # 构建候选列表
-        candidates = []
-
-        if self.oneapi_client:
-            candidates.append({
-                "provider": "oneapi",
-                "client": self.oneapi_client,
-                "model": model_alias or self.default_model,
-                "supports_tools": True,
-            })
-
-        for ec in self._env_clients:
-            candidates.append({
-                "provider": ec["provider"],
-                "client": ec["client"],
-                "model": model_alias or ec["model"],
-                "supports_tools": ec["supports_tools"],
-            })
-
-        if not candidates:
-            raise ValueError(
-                "无可用 LLM Provider。请在 Dashboard API CONFIG 中设置 API Key。"
-            )
-
-        last_error = None
-        for cand in candidates:
-            try:
-                start_time = datetime.now()
-
-                # 如果 provider 不支持 tools 且 tools 被传入, 跳过
-                call_tools = tools if (tools and cand["supports_tools"]) else None
-
-                call_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-                response = await cand["client"].chat.completions.create(
-                    model=cand["model"],
-                    messages=messages,
-                    tools=call_tools,
-                    **call_kwargs,
-                )
-
-                # 记录 usage
-                if response.usage:
-                    usage_record = TokenUsage(
-                        model=cand["model"],
-                        input_tokens=response.usage.prompt_tokens or 0,
-                        output_tokens=response.usage.completion_tokens or 0,
-                        total_cost=0.0,
-                        timestamp=start_time.isoformat(),
-                    )
-                    self.usage_log.append(usage_record)
-                    logger.info(
-                        f"LLM 调用成功: [{cand['provider']}] {cand['model']}, "
-                        f"Tokens: {response.usage.prompt_tokens}/{response.usage.completion_tokens}"
-                    )
-
-                return response
-
-            except Exception as e:
-                last_error = e
-                logger.warning(f"LLM [{cand['provider']}] {cand['model']} 调用失败: {e}")
-                continue
-
-        raise ValueError(f"所有 LLM Provider 均失败。最后错误: {last_error}")
+        return await self._unified_router.chat_completion(
+            messages=messages,
+            tools=tools,
+            model_alias=model_alias,
+            **kwargs,
+        )
 
     # ================================================================
     # 便捷方法
@@ -284,37 +235,33 @@ class LLMManager:
         return response.choices[0].message.content or ""
 
     def reload(self):
-        """热重载: 重新读取环境变量并重建客户端链"""
+        """热重载: 刷新统一路由器并重建本地 env clients"""
         self.oneapi_client = None
         self._env_clients = []
         self._load_config()
         self._build_env_client_chain()
-        logger.info(f"LLMManager reload: {len(self._env_clients)} env clients, "
-                     f"oneapi={'yes' if self.oneapi_client else 'no'}")
+        # 同步刷新统一路由器
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self._unified_router.refresh_providers())
+            else:
+                loop.run_until_complete(self._unified_router.refresh_providers())
+        except Exception as exc:
+            logger.warning("UnifiedLLMRouter 刷新失败 (非致命): %s", exc)
+        logger.info(
+            "LLMManager reload: unified_router=%s",
+            "available" if self._unified_router.is_available() else "unavailable",
+        )
 
     def is_available(self) -> bool:
-        """检查是否有可用的 LLM Provider"""
-        return bool(self.oneapi_client or self._env_clients)
+        """检查是否有可用的 LLM Provider（委派至 UnifiedLLMRouter）"""
+        return self._unified_router.is_available()
 
     def get_provider_status(self) -> List[Dict[str, Any]]:
-        """获取所有 Provider 状态"""
-        result = []
-        if self.oneapi_client:
-            result.append({
-                "provider": "oneapi",
-                "model": self.default_model,
-                "source": "config.json",
-                "active": True,
-            })
-        for ec in self._env_clients:
-            result.append({
-                "provider": ec["provider"],
-                "model": ec["model"],
-                "source": f".env ({ec['env_key']})",
-                "active": True,
-                "supports_tools": ec["supports_tools"],
-            })
-        return result
+        """获取所有 Provider 状态（委派至 UnifiedLLMRouter）"""
+        return self._unified_router.get_provider_status()
 
     def get_usage_summary(self) -> Dict[str, Any]:
         """获取 Token 使用统计"""

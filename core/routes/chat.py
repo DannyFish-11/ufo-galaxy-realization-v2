@@ -61,10 +61,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
 
     from core.scheduler import AutonomousScheduler
-    from core.multi_llm_router import get_llm_router
+    from core.unified import get_unified_llm_router
 
     scheduler = AutonomousScheduler(nodes_root)
-    llm_router = get_llm_router()  # 统一使用 MultiLLMRouter（任务感知路由+成本追踪+故障转移）
+    llm_router = get_unified_llm_router()  # 统一 LLM Router 入口（委派至 MultiLLMRouter）
 
     # 注入 Skill 和 MCP 工具到 scheduler
     try:
