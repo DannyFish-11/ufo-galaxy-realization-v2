@@ -153,7 +153,7 @@ class SystemConfig:
     
     # 服务配置（默认值从 PortConfig 读取，回退到硬编码值）
     host: str = "0.0.0.0"
-    web_ui_port: int = 8080
+    web_ui_port: int = 8085
     device_api_port: int = 8766
     ufo_api_port: int = 8767
 
@@ -161,8 +161,8 @@ class SystemConfig:
         """从 PortConfig 加载端口默认值（如果可用）"""
         try:
             from core.port_config import get_service_port
-            if self.web_ui_port == 8080:
-                self.web_ui_port = get_service_port("dashboard_backend")
+            if self.web_ui_port == 8085:
+                self.web_ui_port = get_service_port("unified_launcher")
             if self.device_api_port == 8766:
                 self.device_api_port = get_service_port("device_api")
             if self.ufo_api_port == 8767:
@@ -1084,7 +1084,7 @@ def main():
     parser.add_argument("--status", action="store_true", help="查看系统状态")
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
-    parser.add_argument("--port", "-p", type=int, default=8080, help="Web UI 端口")
+    parser.add_argument("--port", "-p", type=int, default=8085, help="Web UI 端口")
     
     args = parser.parse_args()
     

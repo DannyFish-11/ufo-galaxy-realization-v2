@@ -34,7 +34,7 @@ _PORTS_YAML_PATH = _PROJECT_ROOT / "config" / "unified_ports.yaml"
 _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "redis": 6379,
     "qdrant": 6333,
-    "dashboard": 8080,        # Dashboard Web UI (unified_launcher serves here)
+    "dashboard": 8080,        # Dashboard Backend Web UI
     "oneapi_web": 3001,
     "api_gateway": 9000,      # Galaxy Gateway
     "state_machine": 8000,
@@ -45,6 +45,8 @@ _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "health_monitor": 9100,    # Avoid conflict with gateway
     "device_api": 8766,
     "ufo_api": 8767,
+    "unified_launcher": 8085,  # Unified Launcher Web UI
+    "dockerfile_default": 8086, # Docker container default port
 }
 
 

@@ -922,7 +922,17 @@ infrastructure:
     dashboard:
       port: 8080
       name: "Dashboard"
-      description: "可视化监控面板 (Dashboard Backend / Web UI)"
+      description: "可视化监控面板 (Dashboard Backend)"
+      
+    unified_launcher:
+      port: 8085
+      name: "UnifiedLauncher"
+      description: "统一启动器 Web UI"
+      
+    dockerfile_default:
+      port: 8086
+      name: "DockerfileDefault"
+      description: "Docker 容器默认启动端口"
       
     gateway:
       port: 9000
@@ -968,6 +978,12 @@ port_conflicts_resolved:
   - old: "HealthMonitor: 9000 (conflict with Gateway)"
     new: "HealthMonitor: 9100"
 
+  - old: "UnifiedLauncher: 8080 (conflict with Dashboard Backend)"
+    new: "UnifiedLauncher: 8085"
+
+  - old: "Dockerfile CMD: 8080 (conflict with Dashboard Backend)"
+    new: "Dockerfile CMD: 8086"
+
 # =============================================================================
 # Docker 宿主端口映射（防止冲突参考）
 # =============================================================================
@@ -976,7 +992,9 @@ port_conflicts_resolved:
 docker_host_ports:
   description: "Docker 宿主机端口映射（避免冲突）"
   mappings:
-    galaxy_main: 8080
+    galaxy_main: 8086
+    dashboard: 8080
+    unified_launcher: 8085
     gateway: 9000
     memos: 8180
     agentcpm: 8401
