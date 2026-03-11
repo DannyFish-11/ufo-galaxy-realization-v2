@@ -133,10 +133,31 @@ class ExecutionPlanner:
           - 低复杂度任务 → 单 Agent
           - 高复杂度任务 → Team (SPECIALIZED) 或 Swarm
           - 涉及多设备 → Team + Gateway
+
+        CapabilityRegistry 为强制依赖：每次执行前刷新注册表并将工具 schema
+        注入到计划上下文，确保 LLM 始终获得最新能力列表，不允许绕过。
         """
         t0 = time.monotonic()
         steps: List[StepRecord] = []
         tool_calls: List[ToolCallRecord] = []
+
+        # ── 强制刷新 CapabilityRegistry ──────────────────────────────
+        tool_schemas: List[dict] = []
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            registry = CapabilityRegistry.get_instance()
+            await registry.refresh()
+            tool_schemas = registry.to_tool_schemas()
+            logger.debug(
+                "ExecutionPlanner: CapabilityRegistry 已刷新，可用工具 %d 项", len(tool_schemas)
+            )
+        except Exception as _cap_exc:
+            logger.warning("ExecutionPlanner: CapabilityRegistry 刷新失败（继续执行）: %s", _cap_exc)
+
+        # 将 tool_schemas 注入 plan context（供 Agent 使用）
+        if tool_schemas and not any(c.get("role") == "__tool_schemas__" for c in plan.context):
+            plan.context.append({"role": "__tool_schemas__", "content": str(tool_schemas)})
+        # ─────────────────────────────────────────────────────────────
 
         complexity = _estimate_complexity(plan.message)
         strategy = self._pick_strategy(plan.message, complexity)

@@ -96,6 +96,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         from core.routes import protocols
     except ImportError:
         protocols = None
+    try:
+        from core.routes import capabilities as cap_routes
+    except ImportError:
+        cap_routes = None
 
     router = APIRouter()
 
@@ -120,6 +124,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(sessions.create_router(service_manager=service_manager, config=config))
     if protocols:
         router.include_router(protocols.create_router(service_manager=service_manager, config=config))
+    if cap_routes:
+        router.include_router(cap_routes.create_router(service_manager=service_manager, config=config))
     @router.get("/api/config")
     async def get_frontend_config(request: Request = None):
         """

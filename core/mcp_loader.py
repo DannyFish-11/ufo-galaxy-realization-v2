@@ -607,6 +607,13 @@ class MCPLoader:
             }
             for t in server.tools
         ]
+
+    async def refresh_tools(self, server_id: str) -> bool:
+        """重新拉取服务器工具列表（公开接口）。返回是否成功。"""
+        if server_id not in self.servers:
+            return False
+        await self._refresh_tools(server_id)
+        return True
     
     async def list_resources(self, server_id: str) -> List[Dict]:
         """列出服务器的资源"""

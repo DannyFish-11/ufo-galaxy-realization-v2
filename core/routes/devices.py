@@ -61,6 +61,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         _save_registered_devices(registered_devices)
         logger.info(f"设备注册: {req.device_id} ({req.device_type})")
 
+        # 立即将新设备能力同步到 CapabilityRegistry（设备可被 LLM 立即选中）
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            registry = CapabilityRegistry.get_instance()
+            device_name = req.device_name or f"Device-{req.device_id[:8]}"
+            added = registry.sync_device(req.device_id, device_name, req.capabilities or [])
+            logger.info("设备 %s 能力已同步到 CapabilityRegistry: +%d 项", req.device_id, added)
+        except Exception as _sync_exc:
+            logger.warning("设备能力同步到 CapabilityRegistry 失败: %s", _sync_exc)
+
         return JSONResponse({
             "success": True,
             "device_id": req.device_id,

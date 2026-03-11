@@ -14,6 +14,10 @@ core/agent/capability_registry.py
     CapabilityRegistry.list_tools()   -> List[CapabilityItem]
     CapabilityRegistry.find(query)    -> List[CapabilityItem]
     CapabilityRegistry.get(name)      -> Optional[CapabilityItem]
+    CapabilityRegistry.get_load_status() -> Dict  — Dashboard 可观测状态
+    CapabilityRegistry.sync_device()  — 设备注册事件立即同步
+    CapabilityRegistry.validate_mcp_tool_schema() — MCP 协议校验
+    CapabilityRegistry.validate_skill_manifest()  — Skill 协议校验
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.Agent.CapabilityRegistry")
 
@@ -98,6 +102,16 @@ class CapabilityRegistry:
         self._refresh_lock: Optional[asyncio.Lock] = None  # created lazily in async context
         self._last_refresh: float = 0.0
         self._refresh_interval: float = 120.0  # 2 分钟自动刷新
+
+        # 可观测加载状态（Dashboard 用）
+        self._load_status: Dict[str, Any] = {
+            "loaded": False,
+            "last_refresh_ts": 0.0,
+            "tool_count": 0,
+            "by_source": {},
+            "validated": {"mcp": 0, "skill": 0},
+            "errors": [],
+        }
         logger.info("CapabilityRegistry 已初始化")
 
     @classmethod
@@ -136,6 +150,10 @@ class CapabilityRegistry:
         """返回所有可用能力的 OpenAI function calling 格式 schema 列表。"""
         return [item.to_tool_schema() for item in self.list_tools()]
 
+    def get_load_status(self) -> Dict[str, Any]:
+        """返回 Dashboard 可观测的加载状态（loaded/validated/errors/tool_count）。"""
+        return dict(self._load_status)
+
     def stats(self) -> Dict[str, Any]:
         """返回注册表统计信息。"""
         total = len(self._items)
@@ -172,30 +190,47 @@ class CapabilityRegistry:
 
             logger.info("CapabilityRegistry: 开始刷新能力列表 …")
             new_items: Dict[str, CapabilityItem] = {}
+            errors: List[str] = []
+            validated_counts: Dict[str, int] = {"mcp": 0, "skill": 0}
 
             await asyncio.gather(
-                self._load_mcp(new_items),
-                self._load_skills(new_items),
-                self._load_gateway(new_items),
+                self._load_mcp(new_items, errors, validated_counts),
+                self._load_skills(new_items, errors, validated_counts),
+                self._load_gateway(new_items, errors),
                 return_exceptions=True,
             )
 
             self._items = new_items
             self._last_refresh = time.monotonic()
+
+            by_source: Dict[str, int] = {}
+            for i in new_items.values():
+                by_source[i.source] = by_source.get(i.source, 0) + 1
+
+            self._load_status.update({
+                "loaded": True,
+                "last_refresh_ts": self._last_refresh,
+                "tool_count": len(new_items),
+                "by_source": by_source,
+                "validated": validated_counts,
+                "errors": errors,
+            })
+
             logger.info(
-                "CapabilityRegistry: 刷新完成，共 %d 项能力 (mcp=%d skill=%d gateway=%d)",
+                "CapabilityRegistry: 刷新完成，共 %d 项能力 (mcp=%d skill=%d gateway=%d) 错误=%d",
                 len(new_items),
-                sum(1 for i in new_items.values() if i.source == "mcp"),
-                sum(1 for i in new_items.values() if i.source == "skill"),
-                sum(1 for i in new_items.values() if i.source == "gateway"),
+                by_source.get("mcp", 0),
+                by_source.get("skill", 0),
+                by_source.get("gateway", 0),
+                len(errors),
             )
 
     # ──────────────────────────────────────────────────────────────────
     # 分源加载
     # ──────────────────────────────────────────────────────────────────
 
-    async def _load_mcp(self, target: Dict[str, CapabilityItem]) -> None:
-        """从 MCPLoader 加载工具列表。"""
+    async def _load_mcp(self, target: Dict[str, CapabilityItem], errors: Optional[List[str]] = None, validated: Optional[Dict[str, int]] = None) -> None:
+        """从 MCPLoader 加载工具列表（含标准协议 schema 校验）。"""
         try:
             from core.mcp_loader import MCPLoader
             loader = MCPLoader.get_instance()
@@ -204,15 +239,37 @@ class CapabilityRegistry:
             if not servers:
                 return
 
-            for server_id, server in servers.items():
-                tools = getattr(server, "tools", []) or []
-                for tool in tools:
-                    tool_name = getattr(tool, "name", None) or tool.get("name", "")
-                    tool_desc = getattr(tool, "description", "") or tool.get("description", "")
+            for server in (servers if isinstance(servers, list) else servers.values()):
+                # list_servers() returns list of dicts
+                if isinstance(server, dict):
+                    server_id = server.get("id", "")
+                    tools_raw = []  # tools are on the instance, not the dict
+                    # get real instance
+                    inst = loader.servers.get(server_id) if hasattr(loader, "servers") else None
+                    tools_raw = inst.tools if inst else []
+                else:
+                    server_id = getattr(server, "id", "")
+                    tools_raw = getattr(server, "tools", []) or []
+
+                for tool in tools_raw:
+                    tool_name = getattr(tool, "name", None) or (tool.get("name", "") if isinstance(tool, dict) else "")
+                    tool_desc = getattr(tool, "description", "") or (tool.get("description", "") if isinstance(tool, dict) else "")
                     if not tool_name:
                         continue
+                    params = getattr(tool, "inputSchema", None) or (tool.get("inputSchema", {}) if isinstance(tool, dict) else {})
+
+                    # 协议校验
+                    ok, err = self.validate_mcp_tool_schema({"name": tool_name, "description": tool_desc, "inputSchema": params})
+                    if not ok:
+                        msg = f"MCP server={server_id} tool={tool_name}: {err}"
+                        logger.warning("MCP tool schema 校验失败: %s", msg)
+                        if errors is not None:
+                            errors.append(msg)
+                        continue
+                    if validated is not None:
+                        validated["mcp"] = validated.get("mcp", 0) + 1
+
                     key = f"mcp__{server_id}__{tool_name}"
-                    params = getattr(tool, "input_schema", None) or tool.get("input_schema", {})
                     target[key] = CapabilityItem(
                         name=key,
                         description=f"[MCP:{server_id}] {tool_desc}",
@@ -223,21 +280,36 @@ class CapabilityRegistry:
                     )
             logger.debug("MCP 能力加载: %d 项", sum(1 for i in target.values() if i.source == "mcp"))
         except Exception as exc:
-            logger.warning("MCP 能力加载失败: %s", exc)
+            msg = f"MCP 能力加载失败: {exc}"
+            logger.warning(msg)
+            if errors is not None:
+                errors.append(msg)
 
-    async def _load_skills(self, target: Dict[str, CapabilityItem]) -> None:
-        """从 SkillLoader 加载技能列表。"""
+    async def _load_skills(self, target: Dict[str, CapabilityItem], errors: Optional[List[str]] = None, validated: Optional[Dict[str, int]] = None) -> None:
+        """从 SkillLoader 加载技能列表（含 manifest 校验）。"""
         try:
             from core.skill_loader import SkillLoader
             loader = SkillLoader.get_instance()
             skills = loader.list_skills() if hasattr(loader, "list_skills") else []
 
             for skill in skills:
-                skill_id = getattr(skill, "skill_id", None) or skill.get("skill_id", "")
-                skill_name = getattr(skill, "name", None) or skill.get("name", skill_id)
-                skill_desc = getattr(skill, "description", "") or skill.get("description", "")
+                skill_id = getattr(skill, "skill_id", None) or (skill.get("id", "") if isinstance(skill, dict) else "")
+                skill_name = getattr(skill, "name", None) or (skill.get("name", skill_id) if isinstance(skill, dict) else skill_id)
+                skill_desc = getattr(skill, "description", "") or (skill.get("description", "") if isinstance(skill, dict) else "")
                 if not skill_id:
                     continue
+
+                # manifest 校验
+                ok, err = self.validate_skill_manifest(skill if isinstance(skill, dict) else {"id": skill_id, "name": skill_name, "description": skill_desc})
+                if not ok:
+                    msg = f"Skill id={skill_id}: {err}"
+                    logger.warning("Skill manifest 校验失败: %s", msg)
+                    if errors is not None:
+                        errors.append(msg)
+                    continue
+                if validated is not None:
+                    validated["skill"] = validated.get("skill", 0) + 1
+
                 key = f"skill__{skill_id}"
                 target[key] = CapabilityItem(
                     name=key,
@@ -248,9 +320,12 @@ class CapabilityRegistry:
                 )
             logger.debug("Skill 能力加载: %d 项", sum(1 for i in target.values() if i.source == "skill"))
         except Exception as exc:
-            logger.warning("Skill 能力加载失败: %s", exc)
+            msg = f"Skill 能力加载失败: {exc}"
+            logger.warning(msg)
+            if errors is not None:
+                errors.append(msg)
 
-    async def _load_gateway(self, target: Dict[str, CapabilityItem]) -> None:
+    async def _load_gateway(self, target: Dict[str, CapabilityItem], errors: Optional[List[str]] = None) -> None:
         """从设备注册表加载 Gateway 能力。"""
         try:
             from core.device_registry import DeviceRegistry
@@ -284,7 +359,89 @@ class CapabilityRegistry:
                     )
             logger.debug("Gateway 能力加载: %d 项", sum(1 for i in target.values() if i.source == "gateway"))
         except Exception as exc:
-            logger.warning("Gateway 能力加载失败: %s", exc)
+            msg = f"Gateway 能力加载失败: {exc}"
+            logger.warning(msg)
+            if errors is not None:
+                errors.append(msg)
+
+
+    # ──────────────────────────────────────────────────────────────────
+    # 协议校验
+    # ──────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def validate_mcp_tool_schema(tool: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        校验 MCP 标准工具 schema。
+
+        要求字段: name (str), description (str), inputSchema (dict)。
+        返回 (ok, error_message)。
+        """
+        if not isinstance(tool, dict):
+            return False, "tool must be a dict"
+        name = tool.get("name", "")
+        if not name or not isinstance(name, str):
+            return False, "missing or invalid 'name' field"
+        desc = tool.get("description", "")
+        if not isinstance(desc, str):
+            return False, "'description' must be a string"
+        schema = tool.get("inputSchema") or tool.get("input_schema")  # MCP standard: inputSchema; legacy alias: input_schema
+        if schema is not None and not isinstance(schema, dict):
+            return False, "'inputSchema' must be a dict"
+        return True, ""
+
+    @staticmethod
+    def validate_skill_manifest(manifest: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        校验 Skill manifest（skill.json / SkillInstance dict）。
+
+        要求字段: id 或 skill_id, name, description。
+        返回 (ok, error_message)。
+        """
+        if not isinstance(manifest, dict):
+            return False, "manifest must be a dict"
+        skill_id = manifest.get("id") or manifest.get("skill_id", "")
+        if not skill_id:
+            return False, "missing 'id' or 'skill_id' field"
+        name = manifest.get("name", "")
+        if not name:
+            return False, "missing 'name' field"
+        # description is recommended but not hard-required
+        return True, ""
+
+    # ──────────────────────────────────────────────────────────────────
+    # 设备即时同步
+    # ──────────────────────────────────────────────────────────────────
+
+    def sync_device(self, device_id: str, device_name: str, capabilities: List[str]) -> int:
+        """
+        立即将新注册设备的能力同步到注册表（无需等待下次完整刷新）。
+
+        当设备注册事件触发时调用，确保新设备立即可被 LLM 选中。
+        返回新增的能力条目数量。
+        """
+        added = 0
+        for cap in capabilities:
+            key = f"gateway__{device_id}__{cap}"
+            if key not in self._items:
+                self._items[key] = CapabilityItem(
+                    name=key,
+                    description=f"[Gateway:{device_name}] 设备能力: {cap}",
+                    source="gateway",
+                    source_id=device_id,
+                    available=True,
+                )
+                added += 1
+        if added:
+            # 更新 load_status 计数
+            by_source = self._load_status.get("by_source", {})
+            by_source["gateway"] = by_source.get("gateway", 0) + added
+            self._load_status["by_source"] = by_source
+            self._load_status["tool_count"] = len(self._items)
+            logger.info(
+                "CapabilityRegistry.sync_device: 设备 %s 新增 %d 项能力", device_id, added
+            )
+        return added
 
 
 # ──────────────────────────────────────────────────────────────────────────────
