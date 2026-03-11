@@ -179,36 +179,62 @@ class SystemConfig:
     
     @classmethod
     def load_from_env(cls) -> 'SystemConfig':
-        """从环境变量加载配置"""
-        config = cls()
-        
-        # 加载 .env 文件
-        env_file = PROJECT_ROOT / ".env"
-        if env_file.exists():
-            with open(env_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        key, value = line.split('=', 1)
-                        os.environ[key.strip()] = value.strip()
-        else:
-            logger.warning(
-                ".env file not found. Copy .env.example to .env and configure: "
-                "cp .env.example .env"
+        """从统一配置管理器加载配置（.env / config.json / config/unified_ports.yaml）"""
+        instance = cls()
+
+        # 使用 UnifiedConfigManager 统一读取 .env + config.json
+        try:
+            from core.unified.config_manager import get_unified_config_manager  # noqa: PLC0415
+            mgr = get_unified_config_manager()
+
+            # API Keys — 优先使用 UnifiedConfigManager（已合并 .env + config.json）
+            def _get_key(unified_key: str, env_key: str) -> str:
+                v = mgr.get(unified_key) or mgr.get(unified_key.upper()) or os.environ.get(env_key, "")
+                return v or ""
+
+            instance.openai_api_key = _get_key("openai_api_key", "OPENAI_API_KEY")
+            instance.gemini_api_key = _get_key("gemini_api_key", "GEMINI_API_KEY")
+            instance.openrouter_api_key = _get_key("openrouter_api_key", "OPENROUTER_API_KEY")
+            instance.xai_api_key = _get_key("xai_api_key", "XAI_API_KEY")
+            instance.deepseek_api_key = _get_key("deepseek_api_key", "DEEPSEEK_API_KEY")
+            instance.anthropic_api_key = _get_key("anthropic_api_key", "ANTHROPIC_API_KEY")
+            instance.database_url = _get_key("database_url", "DATABASE_URL")
+            instance.redis_url = _get_key("redis_url", "REDIS_URL")
+            instance.qdrant_url = _get_key("qdrant_url", "QDRANT_URL")
+
+            logger.info(
+                "SystemConfig loaded via UnifiedConfigManager",
+                extra={"event": "config_loaded", "source": "UnifiedConfigManager"},
             )
-        
-        # 从环境变量读取
-        config.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        config.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        config.openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-        config.xai_api_key = os.environ.get("XAI_API_KEY", "")
-        config.deepseek_api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        config.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        config.database_url = os.environ.get("DATABASE_URL", "")
-        config.redis_url = os.environ.get("REDIS_URL", "")
-        config.qdrant_url = os.environ.get("QDRANT_URL", "")
-        
-        return config
+        except Exception as exc:
+            # 回退：直接读取 .env 和 os.environ
+            logger.warning(
+                "UnifiedConfigManager not available, falling back to direct .env and environment variable read: %s", exc
+            )
+            env_file = PROJECT_ROOT / ".env"
+            if env_file.exists():
+                with open(env_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            os.environ[key.strip()] = value.strip()
+            else:
+                logger.warning(
+                    ".env file not found. Copy .env.example to .env and configure: "
+                    "cp .env.example .env"
+                )
+            instance.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+            instance.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+            instance.openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
+            instance.xai_api_key = os.environ.get("XAI_API_KEY", "")
+            instance.deepseek_api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+            instance.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            instance.database_url = os.environ.get("DATABASE_URL", "")
+            instance.redis_url = os.environ.get("REDIS_URL", "")
+            instance.qdrant_url = os.environ.get("QDRANT_URL", "")
+
+        return instance
     
     def _get_tailscale_ip(self) -> Optional[str]:
         """获取 Tailscale IPv4 地址"""

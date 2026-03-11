@@ -374,6 +374,25 @@ class ConfigManager:
         user_config = self.base_path / "config" / "launcher.json"
         if user_config.exists():
             self.load_from_json(user_config)
+
+        # Overlay global config with values from UnifiedConfigManager (if available)
+        try:
+            from core.unified.config_manager import get_unified_config_manager  # noqa: PLC0415
+            mgr = get_unified_config_manager()
+            _overrides = {
+                "log_dir": mgr.get("log_dir"),
+                "nodes_dir": mgr.get("nodes_dir"),
+                "health_check_interval": mgr.get("health_check_interval"),
+                "startup_timeout": mgr.get("startup_timeout"),
+                "max_parallel_starts": mgr.get("max_parallel_starts"),
+            }
+            for k, v in _overrides.items():
+                if v is not None:
+                    self.global_config[k] = v
+            _overlaid = [k for k, v in _overrides.items() if v is not None]
+            logger.debug("ConfigManager: overlaid global_config from UnifiedConfigManager: %s", _overlaid)
+        except Exception as exc:
+            logger.debug("ConfigManager: UnifiedConfigManager not available (%s)", exc)
     
     def get_node(self, node_id: str) -> Optional[NodeConfig]:
         """Get node configuration by ID"""

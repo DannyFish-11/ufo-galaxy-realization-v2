@@ -27,7 +27,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass, field
 import threading
 
@@ -337,5 +337,30 @@ class UnifiedConfig:
         logger.info("配置已重新加载")
 
 
-# 全局实例
-config = UnifiedConfig()
+# ---------------------------------------------------------------------------
+# 全局 config 单例 — legacy 兼容入口，委派到 UnifiedConfigManager
+#
+# 优先返回 UnifiedConfigManager（统一入口），回退到 UnifiedConfig 实例。
+# 注意：UnifiedConfigManager._load_backend() 导入 UnifiedConfig 类（非此变量），
+# 因此不存在循环引用。
+# ---------------------------------------------------------------------------
+
+def _create_config_singleton() -> "Union[Any, UnifiedConfig]":
+    """工厂函数：优先使用 UnifiedConfigManager，否则回退到 UnifiedConfig。"""
+    try:
+        from core.unified.config_manager import get_unified_config_manager  # noqa: PLC0415
+        mgr = get_unified_config_manager()
+        logger.info(
+            "core.unified_config: config singleton delegates to UnifiedConfigManager",
+            extra={"event": "singleton_init", "backend": "UnifiedConfigManager"},
+        )
+        return mgr
+    except Exception as exc:
+        logger.warning(
+            "core.unified_config: UnifiedConfigManager not available, using UnifiedConfig directly",
+            extra={"event": "singleton_fallback", "reason": str(exc)},
+        )
+        return UnifiedConfig()
+
+
+config: Any = _create_config_singleton()

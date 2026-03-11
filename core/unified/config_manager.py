@@ -59,10 +59,16 @@ class UnifiedConfigManager:
 
     @staticmethod
     def _load_backend() -> Any:
-        """加载后端配置实现（优先使用 core.unified_config）。"""
+        """加载后端配置实现（优先使用 core.unified_config.UnifiedConfig）。"""
         try:
-            from core.unified_config import config as _uc  # type: ignore
-            return _uc
+            # 导入 UnifiedConfig 类（非单例变量）以避免循环导入
+            from core.unified_config import UnifiedConfig  # type: ignore
+            backend = UnifiedConfig()  # UnifiedConfig 是单例，返回同一实例
+            logger.info(
+                "Using core.unified_config.UnifiedConfig as config backend",
+                extra={"event": "backend_loaded"},
+            )
+            return backend
         except Exception as exc:
             logger.warning(
                 "core.unified_config not available, falling back to env-only config",
