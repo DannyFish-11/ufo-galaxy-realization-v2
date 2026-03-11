@@ -483,19 +483,19 @@ class DeviceAgentManager:
     3. 状态监控和心跳检测
     4. 提供统一的设备访问接口
     """
-    
+
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
-        
+
         self._agents: Dict[str, BaseDeviceAgent] = {}
         self._agent_types: Dict[DeviceType, Type[BaseDeviceAgent]] = {
             DeviceType.ANDROID: AndroidDeviceAgent,
@@ -505,8 +505,14 @@ class DeviceAgentManager:
         self._event_handlers: Dict[str, List[Callable]] = {}
         self._heartbeat_task = None
         self._initialized = True
-        
+
         logger.info("DeviceAgentManager initialized")
+
+    @staticmethod
+    def _unified():
+        """懒加载统一设备管理器（避免循环导入）。"""
+        from core.unified.device_manager import get_unified_device_manager
+        return get_unified_device_manager()
     
     async def initialize(self) -> bool:
         """初始化设备管理器"""
@@ -536,37 +542,70 @@ class DeviceAgentManager:
         logger.info(f"Registered agent type: {device_type.value}")
     
     async def register_device(self, device_info: DeviceInfo, **kwargs) -> Optional[BaseDeviceAgent]:
-        """注册设备并创建 Agent"""
+        """注册设备并创建 Agent（同步到统一设备管理器）。"""
         if device_info.device_id in self._agents:
             logger.warning(f"Device {device_info.device_id} already registered")
             return self._agents[device_info.device_id]
-        
+
         agent_class = self._agent_types.get(device_info.device_type)
         if not agent_class:
             logger.error(f"Unknown device type: {device_info.device_type}")
             return None
-        
+
         agent = agent_class(device_info, **kwargs)
         self._agents[device_info.device_id] = agent
         device_info.registered_at = datetime.now()
-        
+
+        # 同步到统一设备管理器
+        try:
+            from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
+            utype_str = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
+            try:
+                utype = UnifiedDeviceType(utype_str.lower())
+            except ValueError:
+                utype = UnifiedDeviceType.UNKNOWN
+            # Safely extract capability names from various formats
+            raw_caps = getattr(device_info, "capabilities", []) or []
+            if isinstance(raw_caps, (list, tuple)):
+                caps = [c.value if hasattr(c, "value") else str(c) for c in raw_caps]
+            else:
+                caps = []
+            ud = UnifiedDevice(
+                device_id=device_info.device_id,
+                device_name=device_info.device_name,
+                device_type=utype,
+                status=UnifiedDeviceStatus.ONLINE,
+                capabilities=caps,
+                metadata=device_info.metadata,
+                source="device_agent_manager",
+            )
+            self._unified().register_device(ud)
+        except Exception as exc:
+            logger.warning(f"Failed to sync device {device_info.device_id} to UnifiedDeviceManager: {exc}")
+
         logger.info(f"Device registered: {device_info.device_id} ({device_info.device_type.value})")
         await self._emit("device_registered", device_info)
-        
+
         return agent
-    
+
     async def unregister_device(self, device_id: str) -> bool:
-        """注销设备"""
+        """注销设备（同步到统一设备管理器）。"""
         if device_id not in self._agents:
             return False
-        
+
         agent = self._agents[device_id]
         await agent.disconnect()
         del self._agents[device_id]
-        
+
+        # 同步到统一设备管理器
+        try:
+            self._unified().unregister_device(device_id)
+        except Exception as exc:
+            logger.warning(f"Failed to unregister device {device_id} from UnifiedDeviceManager: {exc}")
+
         logger.info(f"Device unregistered: {device_id}")
         await self._emit("device_unregistered", device_id)
-        
+
         return True
     
     def get_agent(self, device_id: str) -> Optional[BaseDeviceAgent]:

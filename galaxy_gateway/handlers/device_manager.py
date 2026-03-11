@@ -6,11 +6,17 @@
 2. 设备信息存储
 3. 设备能力查询
 4. 设备状态管理
+
+适配层：将本地 DeviceInfo/DeviceType 模型转换为统一模型，
+委托 core.unified.UnifiedDeviceManager 管理设备生命周期。
 """
 
 import logging
-from typing import Dict, List, Optional, Set
 from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+if TYPE_CHECKING:
+    from core.unified.models import UnifiedDevice
 
 from ..protocol import (
     DeviceInfo, DeviceType, DevicePlatform, DeviceCapability,
@@ -20,47 +26,104 @@ from ..protocol import (
 logger = logging.getLogger(__name__)
 
 
+def _to_unified_device(device_info: DeviceInfo) -> "UnifiedDevice":
+    """将 gateway DeviceInfo 转换为 UnifiedDevice。"""
+    from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
+    device_type_str = "unknown"
+    if device_info.device_type:
+        raw = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
+        # 取第一段（如 android_phone → android）
+        device_type_str = raw.split("_")[0] if "_" in raw else raw
+    try:
+        utype = UnifiedDeviceType(device_type_str)
+    except ValueError:
+        utype = UnifiedDeviceType.UNKNOWN
+
+    return UnifiedDevice(
+        device_id=device_info.device_id,
+        device_name=getattr(device_info, "device_name", device_info.device_id),
+        device_type=utype,
+        status=UnifiedDeviceStatus.ONLINE,
+        capabilities=[
+            c.name for c in DeviceCapability
+            if getattr(device_info, "capabilities", 0) & c.value
+        ] if hasattr(device_info, "capabilities") else [],
+        metadata=getattr(device_info, "metadata", {}),
+        source="galaxy_gateway",
+    )
+
+
 class DeviceManager:
-    """设备管理器"""
-    
+    """
+    设备管理器（适配层）。
+
+    委托 core.unified.UnifiedDeviceManager 管理设备生命周期，
+    同时维护本地 self.devices 字典供 gateway 内部协议代码使用。
+    """
+
     def __init__(self):
         self.devices: Dict[str, DeviceInfo] = {}
         self.device_status: Dict[str, str] = {}  # device_id -> status
         self.device_last_seen: Dict[str, datetime] = {}
-        
+
+    @staticmethod
+    def _unified():
+        from core.unified.device_manager import get_unified_device_manager
+        return get_unified_device_manager()
+
     def register_device(self, device_info: DeviceInfo) -> bool:
-        """注册设备"""
+        """注册设备（同步到统一设备管理器）。"""
         device_id = device_info.device_id
-        
+
         if device_id in self.devices:
             logger.info(f"Device {device_id} re-registered, updating info")
         else:
             logger.info(f"New device registered: {device_id}")
-        
+
         self.devices[device_id] = device_info
         self.device_status[device_id] = "online"
         self.device_last_seen[device_id] = datetime.utcnow()
-        
+
+        # 同步到统一设备管理器
+        try:
+            self._unified().register_device(_to_unified_device(device_info))
+        except Exception as exc:
+            logger.warning(f"Failed to sync device {device_id} to UnifiedDeviceManager: {exc}")
+
         return True
-    
+
     def unregister_device(self, device_id: str) -> bool:
-        """注销设备"""
+        """注销设备（同步到统一设备管理器）。"""
         if device_id not in self.devices:
             logger.warning(f"Device {device_id} not found for unregistration")
             return False
-        
+
         del self.devices[device_id]
         self.device_status.pop(device_id, None)
         self.device_last_seen.pop(device_id, None)
-        
+
+        # 同步到统一设备管理器
+        try:
+            self._unified().unregister_device(device_id)
+        except Exception as exc:
+            logger.warning(f"Failed to unregister device {device_id} from UnifiedDeviceManager: {exc}")
+
         logger.info(f"Device unregistered: {device_id}")
         return True
-    
+
     def update_device_status(self, device_id: str, status: str):
-        """更新设备状态"""
+        """更新设备状态（同步到统一设备管理器）。"""
         if device_id in self.devices:
             self.device_status[device_id] = status
             self.device_last_seen[device_id] = datetime.utcnow()
+
+        # 同步到统一设备管理器
+        try:
+            from core.unified.models import UnifiedDeviceStatus
+            ustat = UnifiedDeviceStatus(status.lower()) if status else UnifiedDeviceStatus.OFFLINE
+            self._unified().update_device_status(device_id, ustat)
+        except Exception as exc:
+            logger.warning(f"Failed to update device status in UnifiedDeviceManager: {exc}")
     
     def get_device(self, device_id: str) -> Optional[DeviceInfo]:
         """获取设备信息"""

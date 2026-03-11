@@ -508,3 +508,38 @@ def get_connection_manager() -> ConnectionManager:
     if _connection_manager is None:
         _connection_manager = ConnectionManager()
     return _connection_manager
+
+
+# ============================================================================
+# 统一连接管理器桥接
+# ============================================================================
+# core/connection_manager.py 管理 HTTP 服务连接（节点/网关），
+# core/unified/connection_manager.py 管理设备 WebSocket 连接。
+# 两者通过以下便捷函数协同工作，外部代码无需感知差异。
+
+def get_unified_ws_manager():
+    """
+    返回统一设备 WebSocket 连接管理器单例。
+
+    封装导入，避免循环引用。用于需要向设备发送消息的旧代码调用。
+    """
+    from core.unified.connection_manager import get_unified_connection_manager
+    return get_unified_connection_manager()
+
+
+async def send_to_device(device_id: str, message: dict, **kwargs) -> bool:
+    """
+    向指定设备发送消息（委托统一连接管理器）。
+
+    向后兼容包装，供旧代码直接调用。
+    """
+    return await get_unified_ws_manager().send_to_device(device_id, message, **kwargs)
+
+
+def get_all_connected_devices() -> dict:
+    """
+    返回所有已连接设备的合并字典（委托统一连接管理器）。
+
+    向后兼容包装，供旧代码直接调用。
+    """
+    return get_unified_ws_manager().get_all_devices()

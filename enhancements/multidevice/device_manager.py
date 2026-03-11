@@ -255,11 +255,13 @@ class DeviceHealthRecord:
 class DeviceManager:
     """
     Device Manager for Galaxy
-    
+
     Manages device registration, discovery, heartbeat monitoring,
     and health tracking for distributed devices.
+
+    适配层：注册/注销时同步到 core.unified.UnifiedDeviceManager。
     """
-    
+
     def __init__(
         self,
         heartbeat_interval: float = 5.0,
@@ -270,11 +272,11 @@ class DeviceManager:
         self.health_records: Dict[str, DeviceHealthRecord] = {}
         self.groups: Dict[str, Set[str]] = defaultdict(set)
         self.tags: Dict[str, Set[str]] = defaultdict(set)
-        
+
         self.heartbeat_interval = heartbeat_interval
         self.heartbeat_timeout = heartbeat_timeout
         self.discovery_timeout = discovery_timeout
-        
+
         self._lock = asyncio.Lock()
         self._callbacks: Dict[str, List[Callable]] = {
             'device_registered': [],
@@ -283,11 +285,17 @@ class DeviceManager:
             'heartbeat_received': [],
             'health_changed': []
         }
-        
+
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
-        
+
         logger.info("DeviceManager initialized")
+
+    @staticmethod
+    def _unified():
+        """懒加载统一设备管理器（避免循环导入）。"""
+        from core.unified.device_manager import get_unified_device_manager
+        return get_unified_device_manager()
     
     def register_callback(self, event: str, callback: Callable) -> None:
         """Register event callback"""
@@ -370,19 +378,16 @@ class DeviceManager:
         request: DeviceRegistrationRequest
     ) -> DeviceInfo:
         """
-        Register a new device
-        
+        Register a new device（同步到 core.unified.UnifiedDeviceManager）。
+
         Args:
             request: Device registration request
-            
+
         Returns:
             Registered device info
-            
-        Raises:
-            ValueError: If device already registered with different info
         """
         device_id = str(uuid.uuid4())
-        
+
         async with self._lock:
             # Check if device with same IP:port exists
             for existing_id, existing in self.devices.items():
@@ -391,9 +396,9 @@ class DeviceManager:
                     # Update existing device
                     device_id = existing_id
                     break
-            
+
             capabilities = DeviceCapabilities(**request.capabilities)
-            
+
             device = DeviceInfo(
                 device_id=device_id,
                 device_type=request.device_type,
@@ -409,30 +414,55 @@ class DeviceManager:
                 metadata=request.metadata,
                 status=DeviceStatus.ONLINE
             )
-            
+
             self.devices[device_id] = device
-            
+
             # Create health record
             self.health_records[device_id] = DeviceHealthRecord(device_id=device_id)
-            
+
             # Update groups and tags
             for group in request.groups:
                 self.groups[group].add(device_id)
             for tag in request.tags:
                 self.tags[tag].add(device_id)
-            
+
             logger.info(f"Device registered: {device_id} ({request.device_name})")
-        
+
+        # 同步到统一设备管理器
+        try:
+            from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
+            dtype_raw = request.device_type.value if hasattr(request.device_type, "value") else str(request.device_type)
+            # 取第一段（如 android_phone → android），与 galaxy_gateway 适配层保持一致
+            dtype_segment = dtype_raw.split("_")[0] if "_" in dtype_raw else dtype_raw
+            try:
+                utype = UnifiedDeviceType(dtype_segment.lower())
+            except ValueError:
+                utype = UnifiedDeviceType.UNKNOWN
+            ud = UnifiedDevice(
+                device_id=device_id,
+                device_name=request.device_name,
+                device_type=utype,
+                status=UnifiedDeviceStatus.ONLINE,
+                ip_address=request.ip_address,
+                port=request.port,
+                capabilities=list(request.capabilities.keys()) if request.capabilities else [],
+                metadata=request.metadata or {},
+                source="enhancements_multidevice",
+            )
+            self._unified().register_device(ud)
+        except Exception as exc:
+            logger.warning(f"Failed to sync device {device_id} to UnifiedDeviceManager: {exc}")
+
         await self._notify('device_registered', device)
         return device
-    
+
     async def unregister_device(self, device_id: str) -> bool:
         """
-        Unregister a device
-        
+        Unregister a device（同步到 core.unified.UnifiedDeviceManager）。
+
         Args:
             device_id: Device ID to unregister
-            
+
         Returns:
             True if unregistered, False if not found
         """
@@ -440,20 +470,26 @@ class DeviceManager:
             device = self.devices.pop(device_id, None)
             if not device:
                 return False
-            
+
             # Remove from groups
             for group in device.groups:
                 self.groups[group].discard(device_id)
-            
+
             # Remove from tags
             for tag in device.tags:
                 self.tags[tag].discard(device_id)
-            
+
             # Remove health record
             self.health_records.pop(device_id, None)
-            
+
             logger.info(f"Device unregistered: {device_id}")
-        
+
+        # 同步到统一设备管理器
+        try:
+            self._unified().unregister_device(device_id)
+        except Exception as exc:
+            logger.warning(f"Failed to unregister device {device_id} from UnifiedDeviceManager: {exc}")
+
         await self._notify('device_unregistered', device)
         return True
     
