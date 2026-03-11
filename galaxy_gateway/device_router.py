@@ -70,24 +70,62 @@ class TaskType:
 
 
 class Device:
-    """设备信息"""
-    
+    """设备信息 — gateway 运行时包装层。
+
+    内部使用 core.schemas.device.DeviceModel 存储设备数据，
+    额外维护 WebSocket 连接引用（不可序列化，不放入 Pydantic 模型）。
+    """
+
     def __init__(self, device_id: str, device_type: str, capabilities: List[str]):
-        self.device_id = device_id
-        self.device_type = device_type
-        self.capabilities = capabilities
-        self.status = "online"
-        self.last_seen = datetime.now()
+        from core.schemas.device import DeviceModel, DeviceCapabilityModel
+        from core.device_types import DeviceStatus
+
+        cap_models = [DeviceCapabilityModel(name=c) for c in capabilities]
+        self._model = DeviceModel(
+            device_id=device_id,
+            device_type=device_type,
+            name=device_id,
+            status=DeviceStatus.ONLINE,
+            capabilities=cap_models,
+        )
         self.websocket = None
-    
+
+    @property
+    def device_id(self) -> str:
+        return self._model.device_id
+
+    @property
+    def device_type(self) -> str:
+        return self._model.device_type.value
+
+    @property
+    def capabilities(self) -> List[str]:
+        return self._model.capability_names()
+
+    @property
+    def status(self) -> str:
+        return self._model.status.value
+
+    @status.setter
+    def status(self, value: str) -> None:
+        from core.device_types import DeviceStatus
+        try:
+            self._model.status = DeviceStatus(value.lower())
+        except ValueError:
+            self._model.status = DeviceStatus.UNKNOWN
+
+    @property
+    def last_seen(self) -> datetime:
+        return datetime.fromtimestamp(self._model.last_seen)
+
+    @last_seen.setter
+    def last_seen(self, value: datetime) -> None:
+        self._model.last_seen = value.timestamp()
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "device_id": self.device_id,
-            "device_type": self.device_type,
-            "capabilities": self.capabilities,
-            "status": self.status,
-            "last_seen": self.last_seen.isoformat()
-        }
+        d = self._model.to_api_dict()
+        d["last_seen"] = datetime.fromtimestamp(self._model.last_seen).isoformat()
+        return d
 
 
 class DeviceRouter:

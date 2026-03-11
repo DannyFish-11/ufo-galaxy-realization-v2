@@ -40,7 +40,6 @@ import os
 import socket
 import time
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
 
 from pathlib import Path
@@ -50,110 +49,14 @@ logger = logging.getLogger("Galaxy.DeviceRegistry")
 
 
 # ============================================================================
-# 数据模型
+# 数据模型 — 统一使用 core.schemas.device 中的 Pydantic V2 模型
 # ============================================================================
 
 from core.device_types import DeviceType, DeviceStatus  # noqa: E402 — 单一事实来源
-
-
-@dataclass
-class DeviceCapability:
-    """设备能力"""
-    name: str
-    description: str = ""
-    available: bool = True
-    params: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "available": self.available,
-            "params": self.params,
-        }
-
-
-@dataclass
-class Device:
-    """设备定义"""
-    device_id: str
-    device_type: DeviceType
-    name: str
-    status: DeviceStatus = DeviceStatus.OFFLINE
-    
-    # 基本信息
-    manufacturer: str = ""
-    model: str = ""
-    os_version: str = ""
-    app_version: str = ""
-    
-    # 能力
-    capabilities: List[DeviceCapability] = field(default_factory=list)
-    
-    # 分组和标签
-    groups: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    
-    # 网络
-    ip_address: str = ""
-    port: int = 0
-    mac_address: str = ""
-    
-    # 元数据
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    # 时间戳
-    registered_at: float = field(default_factory=time.time)
-    last_seen: float = field(default_factory=time.time)
-    last_heartbeat: float = field(default_factory=time.time)
-    
-    # 统计
-    total_commands: int = 0
-    successful_commands: int = 0
-    failed_commands: int = 0
-    
-    def is_online(self) -> bool:
-        """检查设备是否在线"""
-        return self.status == DeviceStatus.ONLINE
-    
-    def is_capability_available(self, capability: str) -> bool:
-        """检查能力是否可用"""
-        for cap in self.capabilities:
-            if cap.name == capability:
-                return cap.available
-        return False
-    
-    def get_capability(self, capability: str) -> Optional[DeviceCapability]:
-        """获取能力"""
-        for cap in self.capabilities:
-            if cap.name == capability:
-                return cap
-        return None
-    
-    def to_dict(self) -> Dict:
-        return {
-            "device_id": self.device_id,
-            "device_type": self.device_type.value,
-            "name": self.name,
-            "status": self.status.value,
-            "manufacturer": self.manufacturer,
-            "model": self.model,
-            "os_version": self.os_version,
-            "app_version": self.app_version,
-            "capabilities": [cap.to_dict() for cap in self.capabilities],
-            "groups": self.groups,
-            "tags": self.tags,
-            "ip_address": self.ip_address,
-            "port": self.port,
-            "mac_address": self.mac_address,
-            "metadata": self.metadata,
-            "registered_at": self.registered_at,
-            "last_seen": self.last_seen,
-            "last_heartbeat": self.last_heartbeat,
-            "total_commands": self.total_commands,
-            "successful_commands": self.successful_commands,
-            "failed_commands": self.failed_commands,
-        }
+from core.schemas.device import (  # noqa: E402
+    DeviceModel as Device,
+    DeviceCapabilityModel as DeviceCapability,
+)
 
 
 # ============================================================================
@@ -265,22 +168,28 @@ class DeviceRegistry:
                 details = {}
                 if capability_details and i < len(capability_details):
                     details = capability_details[i]
-                
+
                 cap_list.append(DeviceCapability(
                     name=cap_name,
                     description=details.get("description", ""),
                     available=details.get("available", True),
                     params=details.get("params", {}),
                 ))
-        
-        # 创建设备对象
+
+        # 合并额外字段到 metadata
+        _metadata = metadata or {}
+        for key, value in kwargs.items():
+            _metadata[key] = value
+
+        # 创建设备对象（Pydantic V2 模型）
+        now = time.time()
         device = Device(
             device_id=device_id,
             device_type=dev_type,
             name=name or f"{device_type}_{device_id[:8]}",
             status=DeviceStatus.ONLINE,
             manufacturer=manufacturer,
-            model=model,
+            model_name=model,
             os_version=os_version,
             app_version=app_version,
             capabilities=cap_list,
@@ -289,15 +198,11 @@ class DeviceRegistry:
             ip_address=ip_address,
             port=port,
             mac_address=mac_address,
-            metadata=metadata or {},
-            registered_at=time.time(),
-            last_seen=time.time(),
-            last_heartbeat=time.time(),
+            metadata=_metadata,
+            registered_at=now,
+            last_seen=now,
+            last_heartbeat=now,
         )
-        
-        # 添加额外字段
-        for key, value in kwargs.items():
-            device.metadata[key] = value
         
         # 存储
         self.devices[device_id] = device
@@ -686,7 +591,7 @@ class DeviceRegistry:
         """保存到文件"""
         try:
             data = {
-                "devices": {did: d.to_dict() for did, d in self.devices.items()},
+                "devices": {did: d.to_api_dict() for did, d in self.devices.items()},
                 "groups": self.groups,
                 "tag_index": self.tag_index,
                 "capability_index": self.capability_index,
@@ -707,48 +612,20 @@ class DeviceRegistry:
             with open(self.storage_path, encoding="utf-8") as f:
                 data = json.load(f)
             
-            # 加载设备
+            # 加载设备（Pydantic V2 模型，自动验证和类型转换）
             for did, ddata in data.get("devices", {}).items():
                 try:
-                    device_type = DeviceType(ddata.get("device_type", "custom"))
-                except ValueError:
-                    device_type = DeviceType.CUSTOM
-                
-                capabilities = [
-                    DeviceCapability(
-                        name=cap.get("name", ""),
-                        description=cap.get("description", ""),
-                        available=cap.get("available", True),
-                        params=cap.get("params", {}),
-                    )
-                    for cap in ddata.get("capabilities", [])
-                ]
-                
-                device = Device(
-                    device_id=ddata.get("device_id", did),
-                    device_type=device_type,
-                    name=ddata.get("name", ""),
-                    status=DeviceStatus.OFFLINE,  # 加载时默认离线
-                    manufacturer=ddata.get("manufacturer", ""),
-                    model=ddata.get("model", ""),
-                    os_version=ddata.get("os_version", ""),
-                    app_version=ddata.get("app_version", ""),
-                    capabilities=capabilities,
-                    groups=ddata.get("groups", []),
-                    tags=ddata.get("tags", []),
-                    ip_address=ddata.get("ip_address", ""),
-                    port=ddata.get("port", 0),
-                    mac_address=ddata.get("mac_address", ""),
-                    metadata=ddata.get("metadata", {}),
-                    registered_at=ddata.get("registered_at", time.time()),
-                    last_seen=ddata.get("last_seen", time.time()),
-                    last_heartbeat=ddata.get("last_heartbeat", time.time()),
-                    total_commands=ddata.get("total_commands", 0),
-                    successful_commands=ddata.get("successful_commands", 0),
-                    failed_commands=ddata.get("failed_commands", 0),
-                )
-                
-                self.devices[did] = device
+                    # 兼容旧格式：model → model_name
+                    if "model" in ddata and "model_name" not in ddata:
+                        ddata["model_name"] = ddata.pop("model")
+                    # 加载时强制离线
+                    ddata["status"] = DeviceStatus.OFFLINE
+                    if "device_id" not in ddata:
+                        ddata["device_id"] = did
+                    device = Device.model_validate(ddata)
+                    self.devices[did] = device
+                except Exception as load_err:
+                    logger.warning("跳过无效设备 %s: %s", did, load_err)
             
             # 加载索引
             self.groups = data.get("groups", {})
