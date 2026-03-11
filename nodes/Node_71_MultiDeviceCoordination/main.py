@@ -30,8 +30,12 @@ app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_crede
 from core.device_types import DeviceType  # noqa: F811,E402
 
 
+from core.device_types import DeviceStatus  # noqa: F811,E402
+from core.schemas.device import DeviceModel  # noqa: E402
+
+
 class DeviceState(str, Enum):
-    """设备状态"""
+    """设备状态 — Node_71 扩展状态（含 IDLE/MAINTENANCE），向下兼容 DeviceStatus。"""
     ONLINE = "online"
     OFFLINE = "offline"
     BUSY = "busy"
@@ -52,7 +56,11 @@ class TaskState(str, Enum):
 
 @dataclass
 class Device:
-    """设备"""
+    """设备 — Node_71 运行时包装层。
+
+    内部委托到 DeviceModel（Pydantic V2 统一模型），
+    但保留 state/endpoint 等 Node_71 特有字段。
+    """
     device_id: str
     name: str
     device_type: DeviceType
@@ -63,6 +71,54 @@ class Device:
     last_heartbeat: Optional[datetime] = None
     current_task: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_unified_model(self) -> DeviceModel:
+        """转换为统一 DeviceModel。"""
+        from core.schemas.device import DeviceCapabilityModel
+        # 映射 DeviceState → DeviceStatus
+        status_map = {
+            DeviceState.ONLINE: DeviceStatus.ONLINE,
+            DeviceState.OFFLINE: DeviceStatus.OFFLINE,
+            DeviceState.BUSY: DeviceStatus.BUSY,
+            DeviceState.IDLE: DeviceStatus.ONLINE,
+            DeviceState.ERROR: DeviceStatus.ERROR,
+            DeviceState.MAINTENANCE: DeviceStatus.BUSY,
+        }
+        return DeviceModel(
+            device_id=self.device_id,
+            name=self.name,
+            device_type=self.device_type,
+            status=status_map.get(self.state, DeviceStatus.UNKNOWN),
+            capabilities=[DeviceCapabilityModel(name=c) for c in self.capabilities],
+            location=self.location or "",
+            endpoint=self.endpoint or "",
+            current_task=self.current_task,
+            metadata=self.metadata,
+            last_heartbeat=self.last_heartbeat.timestamp() if self.last_heartbeat else 0.0,
+        )
+
+    @classmethod
+    def from_unified_model(cls, model: DeviceModel) -> "Device":
+        """从统一 DeviceModel 创建 Node_71 Device。"""
+        status_map = {
+            DeviceStatus.ONLINE: DeviceState.ONLINE,
+            DeviceStatus.OFFLINE: DeviceState.OFFLINE,
+            DeviceStatus.BUSY: DeviceState.BUSY,
+            DeviceStatus.ERROR: DeviceState.ERROR,
+            DeviceStatus.UNKNOWN: DeviceState.OFFLINE,
+        }
+        return cls(
+            device_id=model.device_id,
+            name=model.name,
+            device_type=model.device_type,
+            state=status_map.get(model.status, DeviceState.OFFLINE),
+            capabilities=model.capability_names(),
+            location=model.location,
+            endpoint=model.endpoint,
+            current_task=model.current_task,
+            metadata=model.metadata,
+            last_heartbeat=datetime.fromtimestamp(model.last_heartbeat) if model.last_heartbeat else None,
+        )
 
 
 @dataclass

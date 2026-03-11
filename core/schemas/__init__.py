@@ -12,11 +12,23 @@ platform.  Import from this package for convenience::
 
 # -- Device schemas ----------------------------------------------------------
 from core.schemas.device import (
+    DeviceModel,
+    DeviceCapabilityModel,
     DeviceRegisterSchema,
     DeviceStatusSchema,
     DeviceCapabilitySchema,
     DeviceCommandSchema,
     DeviceCommandResultSchema,
+)
+
+# -- Orchestration schemas ---------------------------------------------------
+from core.schemas.orchestration import (
+    SubTask,
+    SubTaskStatus,
+    TaskDecomposition,
+    OrchestrationRequest,
+    OrchestrationResult,
+    OrchestrationStatus,
 )
 
 # -- Agent schemas -----------------------------------------------------------
@@ -121,7 +133,10 @@ from core.schemas.contracts import (
 )
 
 __all__ = [
-    # device
+    # device (unified models)
+    "DeviceModel",
+    "DeviceCapabilityModel",
+    # device (API schemas)
     "DeviceRegisterSchema",
     "DeviceStatusSchema",
     "DeviceCapabilitySchema",
@@ -207,4 +222,11 @@ __all__ = [
     "AgentEventModel",
     # contracts — envelope
     "AgentMessageModel",
+    # orchestration
+    "SubTask",
+    "SubTaskStatus",
+    "TaskDecomposition",
+    "OrchestrationRequest",
+    "OrchestrationResult",
+    "OrchestrationStatus",
 ]
