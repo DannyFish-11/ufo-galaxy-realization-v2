@@ -354,9 +354,9 @@ class ConfigManager:
         if self._unified_config is not None:
             # Ensure UnifiedConfigManager has loaded env vars into os.environ
             try:
-                self._unified_config._load_env()
+                self._unified_config.reload_env()
             except Exception as exc:
-                logger.warning("UnifiedConfigManager._load_env 失败: %s", exc)
+                logger.warning("UnifiedConfigManager.reload_env 失败: %s", exc)
 
         # Apply Galaxy-specific env mappings from the now-populated os.environ
         env_mappings = {

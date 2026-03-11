@@ -234,7 +234,11 @@ class SystemConfig:
                 try:
                     config.web_ui_port = int(web_ui_port)
                 except (ValueError, TypeError):
-                    pass
+                    logger.warning(
+                        "无效的 web_ui_port 值 '%s' (来自 UnifiedConfigManager)，使用默认值 %d",
+                        web_ui_port,
+                        config.web_ui_port,
+                    )
 
         return config
     

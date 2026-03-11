@@ -135,7 +135,8 @@ class UnifiedConfigManager:
                             continue
                         k, v = line.split("=", 1)
                         k, v = k.strip(), v.strip()
-                        if k and k not in os.environ:
+                        # 仅接受合法变量名（字母/数字/下划线），防止异常键注入
+                        if k and k.replace("_", "").isalnum() and k not in os.environ:
                             os.environ[k] = v
                 logger.info("已加载 .env: %s", self.env_file)
             except Exception as exc:
@@ -163,6 +164,10 @@ class UnifiedConfigManager:
             val = os.environ.get(env_k)
             if val:
                 self._config[cfg_k] = val
+
+    def reload_env(self) -> None:
+        """公共接口：重新加载 .env 并同步至内部配置"""
+        self._load_env()
 
     # ──────────────────── 工具方法 ────────────────────
 

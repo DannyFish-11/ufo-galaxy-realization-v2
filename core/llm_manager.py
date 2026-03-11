@@ -240,14 +240,14 @@ class LLMManager:
         self._env_clients = []
         self._load_config()
         self._build_env_client_chain()
-        # 同步刷新统一路由器
+        # 异步刷新统一路由器（在已运行的事件循环中安排任务）
         import asyncio
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self._unified_router.refresh_providers())
-            else:
-                loop.run_until_complete(self._unified_router.refresh_providers())
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._unified_router.refresh_providers())
+        except RuntimeError:
+            # 没有正在运行的事件循环 — 在同步上下文中跳过异步刷新
+            pass
         except Exception as exc:
             logger.warning("UnifiedLLMRouter 刷新失败 (非致命): %s", exc)
         logger.info(
