@@ -153,6 +153,10 @@ class OpenClawd:
         self._node_actions_cache: Dict[str, Dict[str, str]] = {}
         # Node registry 缓存: {node_id: node_key}
         self._node_id_to_key: Dict[str, str] = {}
+        # PR86: 持有 Router 实例（单一来源）
+        self._router = None
+        # PR86: 内嵌 AgentKernel（懒加载）
+        self._kernel = None
 
         # Phase 9: 工具权限检查器
         self._tool_permission_checker = None
@@ -170,6 +174,30 @@ class OpenClawd:
             self._initialized = True
             logger.info("OpenClawd 就绪 — 所有模块将按需懒加载")
 
+    def _get_router(self):
+        """获取 OpenClawd 持有的 LLM 路由器（单例，Dashboard > ENV > defaults）"""
+        if self._router is None:
+            try:
+                from core.multi_llm_router import get_llm_router
+                self._router = get_llm_router()
+            except Exception as e:
+                logger.warning(f"LLM 路由器加载失败: {e}")
+        return self._router
+
+    def _get_kernel(self):
+        """获取内嵌的 AgentKernel（懒加载，由 OpenClawd 独占管理）"""
+        if self._kernel is None:
+            try:
+                from core.agent.kernel import AgentKernel
+                self._kernel = AgentKernel()
+                # 将 OpenClawd 持有的 router 注入到 Kernel
+                router = self._get_router()
+                if router is not None:
+                    self._kernel._llm_router = router
+            except Exception as e:
+                logger.warning(f"AgentKernel 加载失败: {e}")
+        return self._kernel
+
     # ========================================================================
     # 主入口
     # ========================================================================
@@ -179,13 +207,22 @@ class OpenClawd:
         message: str,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        context: Optional[List[Dict]] = None,
     ) -> dict:
-        """主入口 — 解析意图并路由到对应处理器
+        """主入口 — PR86 架构：OpenClawd 是唯一入口，内嵌 AgentKernel
+
+        架构约束（PR86）：
+        - OpenClawd 是 /api/v1/chat 的唯一处理器
+        - AgentKernel 由本方法内部调用（Kernel 不再对外作为主入口）
+        - SOUL 注入规则：chat_only 不注 SOUL；task_execute/hybrid 强制注入
+        - 多模型路由由本实例持有的 _router 统一管理
+        - 每次请求携带 request_id (trace ID)
 
         Args:
             message: 用户输入的自然语言消息
             device_id: 设备 ID (可选，用于设备操控场景)
             session_id: 会话 ID (可选，用于上下文管理)
+            context: 对话历史上下文（可选）
 
         Returns:
             统一响应 dict: {success, response, intent, metadata}
@@ -193,18 +230,87 @@ class OpenClawd:
         self._ensure_initialized()
         self._request_count += 1
         t0 = time.monotonic()
+        request_id = uuid.uuid4().hex
 
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
 
+        # 同步新设备能力（确保 OpenClawd 始终感知最新设备）
         try:
-            # Step 1: 意图解析
+            self.sync_device_capabilities()
+        except Exception:
+            pass
+
+        try:
+            # Step 1: 尝试通过内嵌 AgentKernel 处理（chat_only / task_execute / hybrid）
+            kernel = self._get_kernel()
+            if kernel is not None:
+                try:
+                    kernel_result = await kernel.handle_message(
+                        message=message,
+                        session_id=session_id,
+                        device_id=device_id or "",
+                        context=context or [],
+                    )
+                    api_dict = kernel_result.to_api_dict()
+                    mode = kernel_result.mode
+                    # 记录路由决策日志
+                    router = self._get_router()
+                    provider_info = {}
+                    if router:
+                        try:
+                            provider_info = {
+                                "provider": getattr(router, "_last_provider", ""),
+                                "model": kernel_result.model or router.get_default_model(),
+                                "available_providers": [
+                                    p for p in getattr(router, "providers", {}).keys()
+                                ],
+                            }
+                        except Exception:
+                            pass
+                    logger.info(
+                        "OpenClawd request | request_id=%s session=%s mode=%s "
+                        "provider=%s model=%s",
+                        request_id,
+                        session_id,
+                        mode,
+                        provider_info.get("provider", ""),
+                        provider_info.get("model", ""),
+                    )
+                    latency_ms = (time.monotonic() - t0) * 1000
+                    await self._record_turn(session_id, "user", message)
+                    await self._record_turn(session_id, "assistant", kernel_result.reply)
+                    return {
+                        "success": kernel_result.success,
+                        "response": kernel_result.reply,
+                        "intent": kernel_result.intent.raw_intent,
+                        "error": kernel_result.error,
+                        "metadata": {
+                            "request_id": request_id,
+                            "session_id": session_id,
+                            "device_id": device_id,
+                            "latency_ms": round(latency_ms, 1),
+                            "confidence": kernel_result.intent.confidence,
+                            "mode": mode,
+                            "model": kernel_result.model,
+                            "handler": "agent_kernel",
+                            **provider_info,
+                            "agent_steps": api_dict["agent_steps"],
+                            "tool_calls": api_dict["tool_calls"],
+                            "task_result": api_dict["task_result"],
+                        },
+                    }
+                except Exception as e:
+                    logger.warning("AgentKernel 处理异常，降级到 OpenClawd 直接处理: %s", e)
+
+            # Step 2: AgentKernel 不可用时，OpenClawd 直接处理
+            # Step 2a: 意图解析
             parsed_intent = await self._parse_intent(message, session_id)
 
-            # Step 2: 记录用户消息到会话记忆
+            # Step 2b: 记录用户消息到会话记忆
             await self._record_turn(session_id, "user", message)
 
-            # Step 3: 根据意图路由到对应处理器
+            # Step 2c: 根据意图路由到对应处理器
             intent_type = parsed_intent.intent if parsed_intent else "chat"
             handler_name = self._INTENT_HANDLER_MAP.get(intent_type, "_dispatch_chat")
             if not hasattr(self, handler_name):
@@ -219,7 +325,28 @@ class OpenClawd:
                 session_id=session_id,
             )
 
-            # Step 4: 记录助手回复到会话记忆
+            # Step 2d: 记录路由决策
+            router = self._get_router()
+            provider_info = {}
+            if router:
+                try:
+                    provider_info = {
+                        "provider": getattr(router, "_last_provider", ""),
+                        "model": router.get_default_model(),
+                    }
+                except Exception:
+                    pass
+            logger.info(
+                "OpenClawd request | request_id=%s session=%s intent=%s "
+                "provider=%s model=%s",
+                request_id,
+                session_id,
+                intent_type,
+                provider_info.get("provider", ""),
+                provider_info.get("model", ""),
+            )
+
+            # Step 2e: 记录助手回复到会话记忆
             response_text = result.get("response", "")
             await self._record_turn(session_id, "assistant", response_text)
 
@@ -230,12 +357,14 @@ class OpenClawd:
                 "response": response_text,
                 "intent": intent_type,
                 "metadata": {
+                    "request_id": request_id,
                     "session_id": session_id,
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
                     "confidence": parsed_intent.confidence if parsed_intent else 0.0,
                     "suggestions": parsed_intent.suggestions if parsed_intent else [],
                     "handler": handler_name,
+                    **provider_info,
                     **(result.get("metadata", {})),
                 },
             }
@@ -249,6 +378,7 @@ class OpenClawd:
                 "response": f"处理请求时发生错误: {str(e)}",
                 "intent": "error",
                 "metadata": {
+                    "request_id": request_id,
                     "session_id": session_id,
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
@@ -1498,6 +1628,189 @@ class OpenClawd:
                 "last_message": turns[-1]["content"][:100] if turns else "",
             })
         return sessions
+
+    # ========================================================================
+    # 设备感知 — PR86: 设备注册可见性，新设备自动进入 capability bus
+    # ========================================================================
+
+    def sync_device_capabilities(self) -> int:
+        """将 DeviceRegistry 中的设备同步为 CapabilityRegistry 条目。
+
+        新设备注册后调用此方法，可立即让 OpenClawd 感知并将其纳入 capability bus。
+        返回同步的能力条目数量。
+        """
+        count = 0
+        try:
+            from core.device_registry import DeviceRegistry
+            from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+
+            reg = CapabilityRegistry.get_instance()
+
+            registry_instance = None
+            try:
+                registry_instance = DeviceRegistry.get_instance()
+            except Exception:
+                try:
+                    registry_instance = DeviceRegistry()
+                except Exception:
+                    pass
+
+            if registry_instance is None:
+                return 0
+
+            devices = (
+                registry_instance.list_devices()
+                if hasattr(registry_instance, "list_devices") else {}
+            )
+            if not devices:
+                return 0
+
+            items = devices.items() if isinstance(devices, dict) else enumerate(devices)
+            for device_id, device in items:
+                if isinstance(device, dict):
+                    caps = device.get("capabilities", [])
+                    d_name = device.get("device_name", str(device_id))
+                    d_type = device.get("device_type", "unknown")
+                else:
+                    caps = getattr(device, "capabilities", [])
+                    d_name = getattr(device, "device_name", str(device_id))
+                    d_type = getattr(device, "device_type", "unknown")
+
+                for cap in caps:
+                    cap_name = cap if isinstance(cap, str) else getattr(cap, "name", str(cap))
+                    key = f"gateway__{device_id}__{cap_name}"
+                    reg.register(CapabilityItem(
+                        name=key,
+                        description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
+                        source="gateway",
+                        source_id=str(device_id),
+                        available=True,
+                        metadata={"device_name": d_name, "device_type": d_type},
+                    ))
+                    count += 1
+
+            if count:
+                logger.info("OpenClawd: 已同步 %d 个设备能力到 CapabilityRegistry", count)
+        except Exception as e:
+            logger.debug("sync_device_capabilities 失败: %s", e)
+        return count
+
+    # ========================================================================
+    # 网关统一命令路径 — PR86: OpenClawd -> command_router -> gateway -> device -> result
+    # ========================================================================
+
+    async def send_gateway_command(
+        self,
+        device_id: str,
+        command: str,
+        payload: Optional[Dict] = None,
+        task_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> Dict:
+        """统一网关命令路径（带 trace ID）。
+
+        链路：OpenClawd → command_router → gateway/device_router → device → result
+        每次调用生成唯一 command_id，所有日志均含 trace 字段。
+        """
+        command_id = uuid.uuid4().hex
+        task_id = task_id or uuid.uuid4().hex
+        t0 = time.monotonic()
+        logger.info(
+            "OpenClawd.send_gateway_command | command_id=%s task_id=%s "
+            "session_id=%s device_id=%s command=%s",
+            command_id, task_id, session_id, device_id, command,
+        )
+
+        result: Dict = {
+            "success": False,
+            "command_id": command_id,
+            "task_id": task_id,
+            "session_id": session_id,
+            "device_id": device_id,
+            "command": command,
+        }
+
+        # 尝试通过 command_router 发送
+        try:
+            from core.command_router import get_command_router
+            cr = get_command_router()
+            cr_result = await cr.route_command(
+                device_id=device_id,
+                command=command,
+                payload=payload or {},
+                command_id=command_id,
+                task_id=task_id,
+            )
+            latency_ms = (time.monotonic() - t0) * 1000
+            result.update({
+                "success": cr_result.get("success", False),
+                "response": cr_result.get("response") or cr_result.get("result"),
+                "latency_ms": round(latency_ms, 1),
+                "via": "command_router",
+            })
+            logger.info(
+                "OpenClawd.send_gateway_command done | command_id=%s success=%s latency=%.1fms",
+                command_id, result["success"], latency_ms,
+            )
+            return result
+        except Exception as e:
+            logger.debug("command_router 不可用，尝试 DeviceOrchestrator: %s", e)
+
+        # 降级：DeviceOrchestrator
+        try:
+            from core.device_orchestrator import get_device_orchestrator
+            orch = get_device_orchestrator()
+            orch_result = await orch.execute_command(
+                device_id=device_id,
+                command=command,
+                params=payload or {},
+            )
+            latency_ms = (time.monotonic() - t0) * 1000
+            result.update({
+                "success": orch_result.get("success", False) if isinstance(orch_result, dict) else bool(orch_result),
+                "response": orch_result.get("message", "") if isinstance(orch_result, dict) else str(orch_result),
+                "latency_ms": round(latency_ms, 1),
+                "via": "device_orchestrator",
+            })
+            return result
+        except Exception as e:
+            logger.debug("DeviceOrchestrator 不可用，尝试 WebSocket: %s", e)
+
+        # 最终降级：WebSocket
+        try:
+            from core.routes._shared import connection_manager
+            sent = await connection_manager.send_to_device(
+                device_id,
+                {
+                    "type": "command",
+                    "command": command,
+                    "payload": payload or {},
+                    "command_id": command_id,
+                    "task_id": task_id,
+                },
+            )
+            latency_ms = (time.monotonic() - t0) * 1000
+            result.update({
+                "success": sent,
+                "response": f"命令已通过 WebSocket 发送到 {device_id}" if sent else f"设备 {device_id} 未连接",
+                "latency_ms": round(latency_ms, 1),
+                "via": "websocket",
+            })
+        except Exception as e:
+            latency_ms = (time.monotonic() - t0) * 1000
+            result.update({
+                "success": False,
+                "response": f"无法向设备 {device_id} 发送命令: {e}",
+                "latency_ms": round(latency_ms, 1),
+                "error": str(e),
+            })
+
+        logger.info(
+            "OpenClawd.send_gateway_command done | command_id=%s success=%s via=%s latency=%.1fms",
+            command_id, result.get("success"), result.get("via", "none"),
+            result.get("latency_ms", 0),
+        )
+        return result
 
 
 # ============================================================================

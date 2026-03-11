@@ -60,78 +60,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create chat routes router."""
     router = APIRouter()
 
-    from core.scheduler import AutonomousScheduler
     from core.unified import get_unified_llm_router
 
-    scheduler = AutonomousScheduler(nodes_root)
     llm_router = get_unified_llm_router()  # 统一 LLM 路由器入口（委派到 MultiLLMRouter）
-
-    # 注入 Skill 和 MCP 工具到 scheduler
-    try:
-        scheduler.inject_skill_tools()
-        logger.info("Scheduler: Skill 工具已注入")
-    except Exception as e:
-        logger.debug(f"Scheduler skill injection skipped: {e}")
-    try:
-        scheduler.inject_mcp_tools()
-        logger.info("Scheduler: MCP 工具已注入")
-    except Exception as e:
-        logger.debug(f"Scheduler MCP tool injection skipped: {e}")
-
-    # 意图解析器 — 注入 LLM 路由器以支持深度意图理解
-    try:
-        from core.ai_intent import IntentParser
-        intent_parser = IntentParser(llm_client=llm_router)
-    except Exception:
-        intent_parser = None
 
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
         """
-        统一对话接口 — 智能分流:
-        0. AgentKernel 统一主干（优先）— 聊天/执行一体化，SOUL 仅注入执行链路
-        1. OpenClawd 母体智能体（降级）
-        2. Scheduler ReAct 模式（兜底）
+        统一对话接口 — OpenClawd 唯一入口。
+
+        架构约束（PR86）：
+        - /api/v1/chat 只调用 OpenClawd.process()
+        - AgentKernel 由 OpenClawd 内部调用，不在此处直接使用
+        - 所有 UI (Dashboard / Windows / Android) 统一调用此端点
+        - SOUL 注入规则由 OpenClawd 内部统一控制
 
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
-        # ── 层 0: AgentKernel — 统一智能体主干 ──
-        # 聊天/执行一体化入口：自动判定意图，SOUL 仅在 task_execute/hybrid 注入。
-        try:
-            from core.agent.kernel import handle_message as kernel_handle
-            kernel_result = await kernel_handle(
-                message=req.message,
-                session_id=req.session_id,
-                device_id=req.device_id,
-                context=req.context,
-            )
-            api_dict = kernel_result.to_api_dict()
-            resp = UnifiedChatResponse(
-                success=kernel_result.success,
-                response=kernel_result.reply,
-                intent=kernel_result.intent.raw_intent,
-                confidence=kernel_result.intent.confidence,
-                mode=kernel_result.mode,
-                model=kernel_result.model,
-                session_id=kernel_result.session_id,
-                data={
-                    "agent_steps": api_dict["agent_steps"],
-                    "tool_calls": api_dict["tool_calls"],
-                    "task_result": api_dict["task_result"],
-                    "latency_ms": kernel_result.latency_ms,
-                },
-                error=kernel_result.error,
-            )
-            resp_dict = resp.to_json_response()
-            resp_dict["reply"] = kernel_result.reply
-            return JSONResponse(resp_dict)
-        except ImportError:
-            logger.info("AgentKernel 未可用，降级到 OpenClawd 模式")
-        except Exception as e:
-            logger.warning(f"AgentKernel 处理异常，降级到 OpenClawd 模式: {e}")
-
-        # ── 层 1: OpenClawd 母体智能体 ──
+        # ── 唯一入口: OpenClawd 母体智能体 ──
+        # OpenClawd 内部嵌入 AgentKernel；SOUL 注入规则由 OpenClawd 统一管理。
         try:
             from core.openclawd import get_openclawd
             clawd = get_openclawd()
@@ -139,18 +87,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 message=req.message,
                 device_id=req.device_id,
                 session_id=req.session_id,
+                context=req.context,
             )
-            # OpenClawd 处理结果（无论成功失败都走这里）
             metadata = result.get("metadata", {})
             resp = UnifiedChatResponse(
                 success=result.get("success", False),
                 response=result.get("response", ""),
                 intent=result.get("intent", "chat"),
                 confidence=metadata.get("confidence", 1.0),
-                mode="openclawd",
+                mode=metadata.get("mode", "openclawd"),
                 model=metadata.get("model", ""),
                 session_id=metadata.get("session_id", req.session_id or ""),
                 data=metadata,
+                error=result.get("error", ""),
             )
             resp_dict = resp.to_json_response()
             resp_dict["reply"] = result.get("response", "")
@@ -164,84 +113,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except Exception:
                 pass
             return JSONResponse(resp_dict)
-        except ImportError:
-            logger.info("OpenClawd 未安装，降级到 Scheduler 模式")
         except Exception as e:
-            logger.warning(f"OpenClawd 处理异常，降级到 Scheduler 模式: {e}")
-
-        # ── 统一会话管理 ──
-        try:
-            from core.session_manager import get_session_manager
-            sm = get_session_manager()
-            user_id = req.user_id or req.device_id or "default"
-            if req.session_id:
-                session = sm.get_session(req.session_id)
-                if session and req.device_id:
-                    sm.join_session(req.session_id, req.device_id)
-            else:
-                session = sm.get_or_create_session(user_id, req.device_id)
-            session_id = session.id if session else (req.device_id or "default")
-            # 记录用户消息
-            sm.add_message(session_id, "user", req.message, req.device_id)
-            # 从会话历史补充 context（如果客户端没传）
-            if not req.context and session:
-                req.context = sm.get_history(session_id, max_turns=10)
-        except Exception as e:
-            logger.debug(f"SessionManager 不可用，降级到 device_id 模式: {e}")
-            session_id = req.device_id or "default"
-
-        try:
-            # === 融合对话记忆 ===
-            context_dict = None
-            try:
-                from core.ai_intent import get_conversation_memory
-                memory = get_conversation_memory()
-                await memory.add_turn(session_id, "user", req.message)
-                if not req.context:
-                    req.context = await memory.get_context(session_id, max_turns=10)
-                context_dict = {"history": req.context} if req.context else None
-            except Exception as e:
-                logger.debug(f"Conversation memory unavailable: {e}")
-
-            # === 意图分流（IntentParser 优先，关键词匹配兜底） ===
-            is_action = False
-            parsed_intent = None
-
-            if intent_parser and llm_router.is_available():
-                try:
-                    parsed_intent = await intent_parser.parse(req.message, context_dict)
-                    is_action = (
-                        parsed_intent.intent != "chat"
-                        and parsed_intent.confidence >= 0.4
-                    )
-                    if is_action:
-                        logger.info(
-                            f"IntentParser: {parsed_intent.intent} "
-                            f"(conf={parsed_intent.confidence:.2f}, "
-                            f"cmd={parsed_intent.command})"
-                        )
-                except Exception as e:
-                    logger.debug(f"IntentParser failed, falling back to keywords: {e}")
-                    is_action = _is_action_intent(req.message)
-            else:
-                is_action = _is_action_intent(req.message) and llm_router.is_available()
-
-            if is_action:
-                result = await _handle_agent_action(
-                    req, session_id, scheduler, llm_router, parsed_intent
-                )
-                return result
-            else:
-                result = await _handle_pure_chat(req, session_id, llm_router)
-                return result
-
-        except Exception as e:
-            logger.error(f"对话失败: {e}")
+            logger.error(f"OpenClawd 处理异常: {e}", exc_info=True)
             resp = UnifiedChatResponse(
                 success=False,
                 response=f"处理消息时出错: {str(e)}",
                 error=str(e),
-                session_id=session_id,
+                session_id=req.session_id or "",
             )
             return JSONResponse(resp.to_json_response())
 

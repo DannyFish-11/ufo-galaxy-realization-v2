@@ -460,13 +460,28 @@ class MultiLLMRouter:
         self.circuit_breakers: Dict[str, ProviderCircuitBreaker] = {}
         self.call_history: List[Dict] = []
         self._lock = asyncio.Lock()
+        # PR86: 最近一次路由决策（供 OpenClawd 日志使用）
+        self._last_provider: str = ""
+        self._last_model: str = ""
         self._discover_providers()
         # 为每个提供商创建断路器
         for name in self.providers:
             self.circuit_breakers[name] = ProviderCircuitBreaker(name)
 
     def _get_key(self, key_name: str) -> str:
-        """优先从 CredentialVault 获取密钥，若不可用则回退环境变量"""
+        """配置优先级: Dashboard > CredentialVault > ENV（PR86）"""
+        # 1. Dashboard 配置（最高优先级）— 通过 UnifiedConfig 获取
+        try:
+            from core.unified_config import config as _cfg
+            # Dashboard 将 API keys 存储在 llm.providers.<name>.api_key 路径
+            val = _cfg.get(f"llm.providers.{key_name}.api_key", "")
+            if not val:
+                val = _cfg.get(f"api_keys.{key_name}", "")
+            if val and not str(val).startswith("your-"):
+                return str(val)
+        except Exception:
+            pass
+        # 2. CredentialVault
         try:
             from core.credential_vault import get_vault
             val = get_vault().get_credential(key_name, actor="llm_router")
@@ -474,10 +489,11 @@ class MultiLLMRouter:
                 return val
         except Exception:
             pass
+        # 3. 环境变量（兜底）
         return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
 
     def _discover_providers(self):
-        """从环境变量（或 CredentialVault）自动发现并注册提供商"""
+        """从配置源自动发现并注册提供商（Dashboard > ENV > defaults）（PR86）"""
 
         # OpenAI
         key = self._get_key("openai")
@@ -573,7 +589,7 @@ class MultiLLMRouter:
             self.adapters["oneapi"] = OpenAIAdapter(cfg)
 
         logger.info(
-            f"LLM 路由器已初始化，发现 {len(self.providers)} 个提供商: "
+            f"LLM 路由器已初始化（配置优先级: Dashboard > ENV），发现 {len(self.providers)} 个提供商: "
             f"{list(self.providers.keys())}"
         )
 
@@ -938,6 +954,16 @@ class MultiLLMRouter:
                     self.providers[prov_name].status = ProviderStatus.HEALTHY
                 if cb:
                     cb.record_success()
+
+                # PR86: 记录本次调用的 provider/model，供 OpenClawd 日志使用
+                self._last_provider = prov_name
+                self._last_model = mdl
+                fallback_used = len(tried_providers) > 1
+                if fallback_used:
+                    logger.info(
+                        "LLM 路由 fallback 生效 | 尝试顺序: %s -> 最终: %s:%s",
+                        tried_providers[:-1], prov_name, mdl,
+                    )
 
                 # 记录成本（非阻塞，失败不影响主流程）
                 try:
