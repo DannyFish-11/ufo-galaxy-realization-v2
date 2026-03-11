@@ -586,10 +586,12 @@ class AgentKernel:
             import asyncio
             from core.ai_intent import get_conversation_memory
             memory = get_conversation_memory()
-            # 在事件循环中异步执行，失败不影响主流程
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            # 在已运行的事件循环中异步执行，失败不影响主流程
+            try:
+                loop = asyncio.get_running_loop()
                 loop.create_task(memory.add_turn(session_id, role, content))
+            except RuntimeError:
+                pass  # 不在事件循环中，跳过记录
         except Exception:
             pass
 

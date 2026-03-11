@@ -387,12 +387,26 @@ class IntentRouter:
 
         # 解析 JSON 响应
         import json
-        # 提取 JSON 块（防止 LLM 在 JSON 前后加了文字）
-        json_match = re.search(r'\{[^{}]+\}', raw, re.DOTALL)
-        if not json_match:
-            raise ValueError(f"LLM 未返回有效 JSON: {raw[:200]}")
 
-        data = json.loads(json_match.group())
+        def _extract_json(text: str) -> dict:
+            """从 LLM 响应中提取 JSON 对象，支持嵌套结构和前后有多余文字的情况。"""
+            # 先尝试直接解析
+            text = text.strip()
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+            # 找到第一个 { 和最后一个 } 之间的内容
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                try:
+                    return json.loads(text[start:end + 1])
+                except json.JSONDecodeError:
+                    pass
+            raise ValueError(f"LLM 未返回有效 JSON: {text[:200]}")
+
+        data = _extract_json(raw)
         mode_str = data.get("mode", "chat_only")
         try:
             mode = IntentMode(mode_str)

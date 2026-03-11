@@ -225,8 +225,10 @@ class CapabilityRegistry:
                 tools = await mcp_loader.list_tools(server_name)
                 for tool in tools:
                     tool_name = f"mcp_{server_name}_{tool.get('name', 'unknown')}"
+                    _sname = server_name
+                    _tname = tool.get("name", "")
 
-                    async def _make_mcp_fn(sname: str, tname: str):
+                    def _make_mcp_fn(sname: str = _sname, tname: str = _tname):
                         async def _fn(**kw: Any) -> Any:
                             return await mcp_loader.call_tool(sname, tname, kw)
                         return _fn
@@ -237,7 +239,7 @@ class CapabilityRegistry:
                         description=tool.get("description", ""),
                         parameters=tool.get("inputSchema", {}),
                         source_id=server_name,
-                        invoke_fn=await _make_mcp_fn(server_name, tool.get("name", "")),
+                        invoke_fn=_make_mcp_fn(),
                     ))
                     counts["mcp"] += 1
         except Exception as e:
@@ -250,7 +252,7 @@ class CapabilityRegistry:
                 skill_id = skill.get("id", "")
                 skill_name = f"skill_{skill_id}"
 
-                def _make_skill_fn(sid: str):
+                def _make_skill_fn(sid: str = skill_id):
                     async def _fn(**kw: Any) -> Any:
                         return await skill_loader.execute(sid, **kw)
                     return _fn
@@ -260,7 +262,7 @@ class CapabilityRegistry:
                     capability_type=CapabilityType.SKILL,
                     description=skill.get("description", ""),
                     source_id=skill_id,
-                    invoke_fn=_make_skill_fn(skill_id),
+                    invoke_fn=_make_skill_fn(),
                 ))
                 counts["skill"] += 1
         except Exception as e:
@@ -275,8 +277,8 @@ class CapabilityRegistry:
                 dev_id = device.get("device_id", "")
                 cap_name = f"gateway_device_{dev_id}"
 
-                def _make_gw_fn(did: str):
-                    async def _fn(action: str = "", params: dict = None, **kw: Any) -> Any:
+                def _make_gw_fn(did: str = dev_id):
+                    async def _fn(action: str = "", params: Optional[dict] = None, **kw: Any) -> Any:
                         from galaxy_gateway.device_router import get_device_router as _get_dr
                         dr = _get_dr()
                         return await dr.execute(did, action, params or {})
@@ -287,7 +289,7 @@ class CapabilityRegistry:
                     capability_type=CapabilityType.GATEWAY,
                     description=f"Gateway device control: {dev_id}",
                     source_id=dev_id,
-                    invoke_fn=_make_gw_fn(dev_id),
+                    invoke_fn=_make_gw_fn(),
                 ))
                 counts["gateway"] += 1
         except Exception as e:

@@ -245,12 +245,23 @@ class ExecutionPlanner:
         )
         raw = response.choices[0].message.content or ""
 
-        # 提取 JSON
-        json_match = re.search(r'\{[\s\S]*\}', raw)
-        if not json_match:
-            raise ValueError(f"LLM 未返回有效 JSON: {raw[:300]}")
+        # 提取 JSON（处理 LLM 在 JSON 前后添加说明文字的情况）
+        def _extract_json(text: str) -> dict:
+            text = text.strip()
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                try:
+                    return json.loads(text[start:end + 1])
+                except json.JSONDecodeError:
+                    pass
+            raise ValueError(f"LLM 未返回有效 JSON: {text[:300]}")
 
-        data = json.loads(json_match.group())
+        data = _extract_json(raw)
 
         steps = []
         for i, s in enumerate(data.get("steps", [])):
