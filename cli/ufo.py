@@ -161,7 +161,7 @@ async def skill_search(query: str):
                             print(f"  • {skill['id']}: {skill['name']} - {skill.get('description', '')[:50]}")
                 else:
                     print_info("无法连接到技能市场")
-        except:
+        except Exception:
             print_info("无法连接到技能市场")
             
     except Exception as e:
@@ -371,7 +371,7 @@ async def onboard():
             print_info(f"Node.js: {result.stdout.strip()}")
         else:
             print_info("Node.js: 未安装 (MCP 服务器需要)")
-    except:
+    except Exception:
         print_info("Node.js: 未安装 (MCP 服务器需要)")
     
     print()
@@ -438,7 +438,7 @@ async def status():
                 print_info(f"状态: {data.get('status', 'unknown')}")
             else:
                 print_error("服务异常")
-    except:
+    except Exception:
         print_info("服务未运行")
     
     # 检查技能
@@ -446,7 +446,7 @@ async def status():
         from core.skill_loader import skill_loader
         skills = skill_loader.list_skills()
         print_info(f"已加载技能: {len(skills)} 个")
-    except:
+    except Exception:
         pass
     
     # 检查 MCP
@@ -454,7 +454,7 @@ async def status():
         from core.mcp_loader import mcp_loader
         servers = mcp_loader.list_servers()
         print_info(f"已加载 MCP: {len(servers)} 个")
-    except:
+    except Exception:
         pass
 
 

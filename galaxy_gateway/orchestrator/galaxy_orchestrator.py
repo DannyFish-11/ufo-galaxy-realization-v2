@@ -66,7 +66,28 @@ class Node:
 
 
 class AIGateway:
-    """AI 网关 - 处理意图理解和任务分解，支持真实LLM调用"""
+    """AI 网关 - 处理意图理解和任务分解
+
+    集成层级（懒加载，任何模块缺失自动降级）：
+    - core.multi_llm_router.MultiLLMRouter → 多提供商 LLM 路由 + 熔断 + 故障转移
+    - core.ai_intent.IntentParser          → 两级意图解析（规则 + LLM）
+    - core.fractal_agent.FractalAgent      → 递归任务分解
+    - core.agent_team.TeamManager          → 异构 Agent 团队协作
+    - core.rag_memory.RAGMemory            → Agent 记忆增强
+    """
+
+    # IntentParser intent → GalaxyOrchestrator intent_type 映射
+    _INTENT_TYPE_MAP = {
+        "task_manage": "control",
+        "device_control": "device_control",
+        "file_operation": "control",
+        "search": "query",
+        "chat": "general",
+        "ocr": "control",
+        "system_status": "query",
+        "network": "control",
+        "code": "creation",
+    }
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -75,25 +96,109 @@ class AIGateway:
         self.llm_enabled = config.get("llm_enabled", True)
         self._http_client: Optional[httpx.AsyncClient] = None
 
+        # ── Phase 1: 接入 MultiLLMRouter ──
+        self._llm_router = None
+        self._task_type_cls = None
+        try:
+            from core.multi_llm_router import get_llm_router, TaskType
+            self._llm_router = get_llm_router()
+            self._task_type_cls = TaskType
+            logger.info("AIGateway: MultiLLMRouter 已接入")
+        except Exception as e:
+            logger.warning(f"AIGateway: MultiLLMRouter 不可用，降级到直接 HTTP 调用: {e}")
+
+        # ── Phase 2: 接入 IntentParser ──
+        self._intent_parser = None
+        try:
+            from core.ai_intent import get_intent_parser
+            self._intent_parser = get_intent_parser()
+            logger.info("AIGateway: IntentParser 已接入")
+        except Exception as e:
+            logger.warning(f"AIGateway: IntentParser 不可用，降级到本地规则引擎: {e}")
+
+        # ── Phase 4: 接入 FractalAgent ──
+        self._fractal_agent = None
+        try:
+            from core.fractal_agent import FractalAgent
+            self._fractal_agent = FractalAgent(llm_router=self._llm_router)
+            logger.info("AIGateway: FractalAgent 已接入")
+        except Exception as e:
+            logger.warning(f"AIGateway: FractalAgent 不可用，降级到规则分解: {e}")
+
+        # ── Phase 4: 接入 TeamManager ──
+        self._team_manager = None
+        try:
+            from core.agent_team import TeamManager
+            from core.agent_factory import get_agent_factory
+            factory = get_agent_factory(self._llm_router)
+            self._team_manager = TeamManager(
+                agent_factory=factory, llm_router=self._llm_router,
+            )
+            logger.info("AIGateway: TeamManager 已接入")
+        except Exception as e:
+            logger.warning(f"AIGateway: TeamManager 不可用: {e}")
+
+        # ── Phase 7: 接入 RAGMemory ──
+        self._rag_memory = None
+        try:
+            from core.rag_memory import get_rag_memory
+            self._rag_memory = get_rag_memory()
+            logger.info("AIGateway: RAGMemory 已接入")
+        except Exception as e:
+            logger.warning(f"AIGateway: RAGMemory 不可用: {e}")
+
     async def _get_http_client(self) -> httpx.AsyncClient:
         if self._http_client is None or self._http_client.is_closed:
             self._http_client = httpx.AsyncClient(timeout=30.0)
         return self._http_client
 
-    async def _call_llm(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """调用LLM API进行推理"""
+    async def _call_llm(self, prompt: str, system_prompt: str = "",
+                         task_type: str = "reasoning") -> Optional[str]:
+        """调用LLM API进行推理 — 优先使用 MultiLLMRouter，失败降级到直接 HTTP"""
+
+        # ── 优先使用 MultiLLMRouter（多提供商 + 熔断 + 故障转移）──
+        if self._llm_router:
+            try:
+                messages = []
+                if system_prompt:
+                    messages.append({"role": "system", "content": system_prompt})
+                messages.append({"role": "user", "content": prompt})
+
+                tt = task_type
+                if self._task_type_cls:
+                    tt = getattr(self._task_type_cls, task_type.upper(), None)
+                    if tt is None:
+                        tt = self._task_type_cls.GENERAL
+
+                resp = await self._llm_router.chat(
+                    messages=messages,
+                    task_type=tt.value if hasattr(tt, 'value') else str(tt),
+                    temperature=0.3,
+                    max_tokens=1024,
+                )
+                if resp and resp.content and resp.provider != "none":
+                    return resp.content
+            except Exception as e:
+                logger.warning(f"MultiLLMRouter 调用失败，降级到直接 HTTP: {e}")
+
+        # ── Fallback: 原始 HTTP 调用（保持向后兼容）──
+        return await self._call_llm_http(prompt, system_prompt)
+
+    async def _call_llm_http(self, prompt: str, system_prompt: str = "") -> Optional[str]:
+        """原始 HTTP LLM 调用（OpenAI 兼容格式）"""
         try:
             client = await self._get_http_client()
-            # 尝试 OpenAI 兼容格式 (OneAPI/Ollama/vLLM 等)
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
             response = await client.post(
                 f"{self.model_endpoint}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 json={
                     "model": self.config.get("model", "gpt-4"),
-                    "messages": [
-                        {"role": "system", "content": system_prompt} if system_prompt else None,
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": messages,
                     "temperature": 0.3,
                     "max_tokens": 1024
                 },
@@ -103,26 +208,51 @@ class AIGateway:
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
         except Exception as e:
-            logger.warning(f"LLM调用失败，回退到规则引擎: {e}")
+            logger.warning(f"LLM HTTP 调用失败，回退到规则引擎: {e}")
         return None
 
     async def understand_intent(self, request: str, context: Dict = None) -> Dict[str, Any]:
-        """理解用户意图 - 先尝试LLM，失败则回退到规则引擎"""
+        """理解用户意图 — 优先使用 core.IntentParser，失败降级到本地规则引擎"""
         logger.info(f"理解意图: {request}")
 
+        # ── 优先使用 IntentParser（两级架构：规则 + LLM）──
+        if self._intent_parser:
+            try:
+                parsed = await self._intent_parser.parse(request, context=context)
+                if parsed and parsed.confidence >= 0.3:
+                    # 转换为 GalaxyOrchestrator 兼容的 intent dict 格式
+                    mapped_type = self._INTENT_TYPE_MAP.get(parsed.intent, parsed.intent)
+                    intent = {
+                        "original_request": request,
+                        "intent_type": mapped_type,
+                        "entities": [{"type": "target", "value": t} for t in parsed.targets] if parsed.targets else self._extract_entities(request),
+                        "confidence": parsed.confidence,
+                        "timestamp": time.time(),
+                        "command": parsed.command,
+                        "suggestions": parsed.suggestions,
+                        "source": "intent_parser",
+                    }
+                    if context:
+                        intent["context"] = context
+                    logger.info(f"IntentParser 解析成功: type={mapped_type}, confidence={parsed.confidence}")
+                    return intent
+            except Exception as e:
+                logger.warning(f"IntentParser 失败，降级到本地规则引擎: {e}")
+
+        # ── Fallback: 本地规则引擎 + LLM 增强 ──
         intent_type = self._classify_intent(request)
         entities = self._extract_entities(request)
         confidence = 0.6  # 规则引擎基础置信度
 
         # 尝试LLM增强意图理解
-        if self.llm_enabled and self.api_key:
+        if self.llm_enabled and (self._llm_router or self.api_key):
             llm_result = await self._call_llm(
                 prompt=f"分析以下用户请求的意图。返回JSON格式: {{\"intent_type\": \"query|control|analysis|creation|device_control|cross_device|chat\", \"entities\": [{{\"type\": \"...\", \"value\": \"...\"}}], \"target_device\": \"android|windows|ios|linux|null\", \"confidence\": 0.0-1.0}}\n\n用户请求: {request}",
-                system_prompt="你是一个意图识别引擎。只返回JSON，不要其他文字。"
+                system_prompt="你是一个意图识别引擎。只返回JSON，不要其他文字。",
+                task_type="reasoning",
             )
             if llm_result:
                 try:
-                    # 尝试从LLM响应中提取JSON
                     import re
                     json_match = re.search(r'\{.*\}', llm_result, re.DOTALL)
                     if json_match:
@@ -139,7 +269,8 @@ class AIGateway:
             "intent_type": intent_type,
             "entities": entities,
             "confidence": confidence,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "source": "rule_engine",
         }
 
         if context:
@@ -187,16 +318,43 @@ class AIGateway:
         return entities
 
     async def decompose_task(self, intent: Dict[str, Any]) -> List[Dict]:
-        """分解任务为子任务 - 支持LLM动态分解"""
+        """分解任务为子任务 — FractalAgent → LLM → 规则引擎（三级降级）"""
         logger.info(f"分解任务: {intent.get('intent_type')}")
 
         intent_type = intent.get("intent_type", "general")
 
-        # 尝试LLM动态分解复杂任务
-        if self.llm_enabled and self.api_key and intent_type in ("device_control", "cross_device"):
+        # ── 优先使用 FractalAgent（递归分解，支持复杂度评估）──
+        if self._fractal_agent and intent.get("confidence", 0) > 0.7:
+            try:
+                from core.fractal_agent import FractalTask
+                result = await self._fractal_agent.execute(FractalTask(
+                    id=str(uuid.uuid4()),
+                    description=intent.get("original_request", ""),
+                    context=intent,
+                ))
+                if result and result.success and result.subtask_results:
+                    subtasks = []
+                    for i, sr in enumerate(result.subtask_results):
+                        subtasks.append({
+                            "type": sr.task_id,
+                            "priority": i + 1,
+                            "subtask_id": f"subtask_{uuid.uuid4().hex[:8]}",
+                            "dependencies": [],
+                            "status": "completed" if sr.success else "pending",
+                            "result": sr.output,
+                        })
+                    if subtasks:
+                        logger.info(f"FractalAgent 分解完成: {len(subtasks)} 子任务")
+                        return subtasks
+            except Exception as e:
+                logger.warning(f"FractalAgent 分解失败，降级到 LLM: {e}")
+
+        # ── LLM 动态分解复杂任务 ──
+        if self.llm_enabled and (self._llm_router or self.api_key) and intent_type in ("device_control", "cross_device"):
             llm_result = await self._call_llm(
                 prompt=f"将以下任务分解为执行步骤。返回JSON数组: [{{\"type\": \"...\", \"priority\": N, \"target_device\": \"...\", \"action\": \"...\", \"params\": {{}}}}]\n\n任务: {intent.get('original_request', '')}\n意图类型: {intent_type}\n实体: {json.dumps(intent.get('entities', []), ensure_ascii=False)}",
-                system_prompt="你是一个任务分解引擎。只返回JSON数组，不要其他文字。"
+                system_prompt="你是一个任务分解引擎。只返回JSON数组，不要其他文字。",
+                task_type="planning",
             )
             if llm_result:
                 try:
@@ -548,13 +706,63 @@ class GalaxyOrchestrator:
         })
 
         try:
+            # 0. RAGMemory 增强（注入历史经验和知识上下文）
+            rag_context = None
+            if self.gateway._rag_memory:
+                try:
+                    rag_context = await self.gateway._rag_memory.enhance_agent_prompt(
+                        instruction=request,
+                        device_id=context.get("device_id") if context else None,
+                        include_experience=True,
+                        include_knowledge=True,
+                    )
+                except Exception as e:
+                    logger.debug(f"RAGMemory 增强跳过: {e}")
+
             # 1. 意图理解
             logger.info(f"[{task_id}] 步骤1: 意图理解")
             intent = await self.gateway.understand_intent(request, context)
             task.intent = intent
 
-            # 2. 任务分解
+            # 2. 任务分解（TeamManager 可接管复杂多设备任务）
             logger.info(f"[{task_id}] 步骤2: 任务分解")
+            intent_type = intent.get("intent_type", "general")
+
+            # 对 cross_device / analysis 类型尝试 TeamManager 协作执行
+            if intent_type in ("cross_device", "analysis") and self.gateway._team_manager:
+                try:
+                    from core.agent_team import TeamStrategy
+                    strategy = TeamStrategy.SPECIALIZED if intent_type == "cross_device" else TeamStrategy.PARALLEL
+                    team_result = await self.gateway._team_manager.execute_team_task(
+                        task=request,
+                        strategy=strategy,
+                        context={"devices": self.device_manager.list_devices()},
+                    )
+                    task.status = TaskStatus.COMPLETED
+                    task.completed_at = time.time()
+                    self.stats["completed_tasks"] += 1
+                    final_result = {
+                        "intent_type": intent_type,
+                        "subtask_results": [],
+                        "summary": {"total_subtasks": 1, "successful": 1, "failed": 0},
+                        "output": team_result if isinstance(team_result, str) else json.dumps(team_result, ensure_ascii=False, default=str),
+                        "source": "team_manager",
+                    }
+                    task.result = final_result
+                    self._publish_event("ORCHESTRATION_COMPLETED", {
+                        "task_id": task_id, "success": True,
+                        "execution_time": task.completed_at - task.created_at,
+                    })
+                    # 记录经验
+                    await self._log_experience(request, final_result, True)
+                    return {
+                        "success": True, "task_id": task_id,
+                        "intent": intent, "result": final_result,
+                        "execution_time": task.completed_at - task.created_at,
+                    }
+                except Exception as e:
+                    logger.warning(f"TeamManager 执行失败，降级到常规分解: {e}")
+
             subtasks = await self.gateway.decompose_task(intent)
             task.subtasks = subtasks
 
@@ -582,6 +790,9 @@ class GalaxyOrchestrator:
                 "execution_time": task.completed_at - task.created_at,
             })
 
+            # 记录经验到 RAGMemory
+            await self._log_experience(request, final_result, True)
+
             return {
                 "success": True,
                 "task_id": task_id,
@@ -600,11 +811,29 @@ class GalaxyOrchestrator:
                 "task_id": task_id, "success": False, "error": str(e),
             })
 
+            # 记录失败经验
+            await self._log_experience(request, {"error": str(e)}, False)
+
             return {
                 "success": False,
                 "task_id": task_id,
                 "error": str(e)
             }
+
+    async def _log_experience(self, request: str, result: Any, success: bool):
+        """记录执行经验到 RAGMemory（非阻塞，失败不影响主流程）"""
+        if not self.gateway._rag_memory:
+            return
+        try:
+            await self.gateway._rag_memory.log_experience(
+                agent_name="GalaxyOrchestrator",
+                instruction=request,
+                steps=[],
+                final_output=str(result)[:500] if result else "",
+                success=success,
+            )
+        except Exception as e:
+            logger.debug(f"RAGMemory 记录经验跳过: {e}")
 
     async def _execute_subtasks(self, task: Task) -> List[Dict]:
         """执行子任务"""

@@ -30,6 +30,7 @@ from .webrtc_proxy import (
     proxy_webrtc_signaling,
 )
 from nodes.common.cors_config import get_cors_origins
+from typing import Dict, Any
 
 # 配置日志
 logging.basicConfig(
@@ -43,6 +44,8 @@ device_manager: Optional[DeviceManager] = None
 message_handler: Optional[MessageHandler] = None
 websocket_manager: Optional[WebSocketManager] = None
 task_orchestrator: Optional[TaskOrchestrator] = None
+openclawd_instance: Optional[Any] = None  # Phase 3: OpenClawd 统一智能入口
+llm_router_instance: Optional[Any] = None  # Phase 6: LLM 路由器（用于统计）
 
 
 @asynccontextmanager
@@ -84,7 +87,24 @@ async def lifespan(app: FastAPI):
     
     await websocket_manager.start()
     await task_orchestrator.start()
-    
+
+    # ── Phase 3: 初始化 OpenClawd 统一智能入口 ──
+    global openclawd_instance, llm_router_instance
+    try:
+        from core.openclawd import OpenClawd
+        openclawd_instance = OpenClawd()
+        logger.info("OpenClawd 已初始化")
+    except Exception as e:
+        logger.warning(f"OpenClawd 不可用，智能聊天端点将降级: {e}")
+
+    # ── Phase 6: 获取 LLM 路由器引用（用于统计）──
+    try:
+        from core.multi_llm_router import get_llm_router
+        llm_router_instance = get_llm_router()
+        logger.info("MultiLLMRouter 引用已获取")
+    except Exception as e:
+        logger.warning(f"MultiLLMRouter 不可用: {e}")
+
     logger.info("Galaxy Gateway initialized successfully")
     
     yield
@@ -558,6 +578,114 @@ async def webrtc_signaling_proxy(websocket: WebSocket, device_id: str):
     unreachable so the client can fall back gracefully.
     """
     await proxy_webrtc_signaling(websocket, device_id)
+
+
+# ============================================================================
+# Phase 3: 智能聊天端点 — OpenClawd 统一入口
+# ============================================================================
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    device_id: Optional[str] = None
+    context: Optional[dict] = None
+
+
+@app.post("/api/v1/chat")
+async def chat_endpoint(request: ChatRequest):
+    """智能对话端点 — 委托给 OpenClawd 统一智能入口
+
+    支持对话记忆（通过 session_id），自动意图识别和 Agent 调度。
+    当 OpenClawd 不可用时降级到 GalaxyOrchestrator。
+    """
+    if openclawd_instance:
+        try:
+            result = await openclawd_instance.process(
+                message=request.message,
+                session_id=request.session_id or "gateway_default",
+                device_id=request.device_id,
+                context=request.context or {},
+            )
+            return result
+        except Exception as e:
+            logger.warning(f"OpenClawd 处理失败，降级到 Orchestrator: {e}")
+
+    # Fallback: 使用 GalaxyOrchestrator
+    if task_orchestrator:
+        try:
+            from .orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+            orch = GalaxyOrchestrator(config={})
+            result = await orch.process_request(request.message, request.context)
+            return result
+        except Exception as e:
+            logger.error(f"Orchestrator 降级也失败: {e}")
+
+    raise HTTPException(status_code=503, detail="AI service not available")
+
+
+# ============================================================================
+# Phase 4.2: 挂载 AI Agent 路由（AgentTeam + Swarm + Intent + Memory）
+# ============================================================================
+
+try:
+    from core.routes.ai import create_router as _create_ai_router
+    _ai_router = _create_ai_router()
+    app.include_router(_ai_router, tags=["ai-agents"])
+    logger.info("AI Agent 路由已挂载 (/api/v1/agents/*, /api/v1/ai/*)")
+except Exception as _ai_err:
+    logger.warning(f"AI Agent 路由挂载跳过: {_ai_err}")
+
+
+# ============================================================================
+# Phase 5: 挂载 Gateway Service v5.0 路由
+# ============================================================================
+
+try:
+    from .gateway_service import router as _gateway_v5_router
+    app.include_router(_gateway_v5_router, tags=["gateway-v5"])
+    logger.info("Gateway v5.0 路由已挂载")
+except Exception as _gw5_err:
+    logger.warning(f"Gateway v5.0 路由挂载跳过: {_gw5_err}")
+
+
+# ============================================================================
+# Phase 6: 成本/性能追踪端点
+# ============================================================================
+
+@app.get("/api/v1/llm/stats")
+async def llm_stats():
+    """LLM 路由器统计 — 成本、延迟、提供商状态"""
+    if not llm_router_instance:
+        raise HTTPException(status_code=503, detail="LLM Router not available")
+    try:
+        return llm_router_instance.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 增强 health 端点 — 原 /health 已定义，此处扩展 /api/v1/health
+@app.get("/api/v1/health")
+async def enhanced_health_check():
+    """增强版健康检查 — 包含 LLM 和 AI 模块状态"""
+    result: Dict[str, Any] = {
+        "status": "healthy",
+        "version": "3.0.0",
+        "devices_connected": websocket_manager.get_device_count() if websocket_manager else 0,
+        "ai_modules": {
+            "openclawd": "available" if openclawd_instance else "unavailable",
+            "llm_router": "available" if llm_router_instance else "unavailable",
+        },
+    }
+    if llm_router_instance:
+        try:
+            status = llm_router_instance.get_status()
+            result["llm"] = {
+                "providers": status.get("providers", {}),
+                "total_calls": status.get("total_calls", 0),
+            }
+        except Exception:
+            pass
+    return result
 
 
 # ============================================================================

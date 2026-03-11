@@ -312,6 +312,63 @@ class AutonomousScheduler:
     def get_tools(self) -> List[Dict[str, Any]]:
         return self.tools_cache
 
+    def get_tool_definitions(self) -> List["ToolDefinition"]:
+        """返回统一的 ToolDefinition 注册表
+
+        将 tools_cache 中 4 种来源的工具全部转为 ToolDefinition 格式，
+        供 Agent 系统统一查询。
+        """
+        try:
+            from core.schemas.node_protocol import ToolDefinition
+        except ImportError:
+            logger.debug("ToolDefinition 不可用，跳过统一注册")
+            return []
+
+        definitions: List[ToolDefinition] = []
+        for tool in self.tools_cache:
+            func = tool.get("function", {})
+            name = func.get("name", "")
+            desc = func.get("description", "")
+            params = func.get("parameters", {})
+
+            # 推断来源和节点 ID
+            source = "config"
+            node_id = ""
+            category = "general"
+            requires_device = False
+
+            if name.startswith("mcp_") or name.startswith("mcp__"):
+                source = "mcp"
+                category = "mcp"
+            elif name.startswith("skill_") or name.startswith("skill__"):
+                source = "skill"
+                category = "skill"
+            elif name.startswith("call_Node_"):
+                source = "config"
+                # 提取 node_id: call_Node_06_Filesystem → Node_06
+                parts = name.replace("call_", "").split("_")
+                if len(parts) >= 2:
+                    node_id = f"{parts[0]}_{parts[1]}"
+                category = "node"
+            elif name.startswith("node__"):
+                source = "hardcoded"
+                parts = name.split("__")
+                if len(parts) >= 2:
+                    node_id = parts[1]
+                category = "node"
+
+            definitions.append(ToolDefinition(
+                name=name,
+                description=desc,
+                node_id=node_id,
+                parameters=params,
+                category=category,
+                requires_device=requires_device,
+                source=source,
+            ))
+
+        return definitions
+
     def inject_mcp_tools(self):
         """将 mcp_loader 中已加载的所有 MCP 工具注入到工具列表（可在加载新 MCP Server 后调用）"""
         try:

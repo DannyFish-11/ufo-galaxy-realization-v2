@@ -33,6 +33,8 @@ try:
     from aiohttp import ClientSession, ClientTimeout
 except ImportError:
     aiohttp = None
+    ClientSession = None
+    ClientTimeout = None
 
 # Configure logging
 logging.basicConfig(
@@ -197,7 +199,7 @@ class SearchIntegrator:
         
         logger.info("SearchIntegrator initialized")
     
-    async def _get_session(self) -> ClientSession:
+    async def _get_session(self) -> "ClientSession":
         """Get or create HTTP session."""
         if self._session is None or self._session.closed:
             timeout = ClientTimeout(total=30)

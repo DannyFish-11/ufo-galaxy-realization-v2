@@ -16,6 +16,7 @@ Galaxy Fusion - Unified Node Gateway (Standardized)
 
 import os
 import sys
+import time
 import importlib
 import logging
 import asyncio
@@ -23,6 +24,7 @@ from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from core.port_config import get_service_port
+from core.schemas.node_protocol import NodeRequest, NodeResponse, NodeHealthResponse
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -119,6 +121,153 @@ async def execute_on_node(node_id: str, request: ExecuteRequest):
     except Exception as e:
         logger.error(f"❌ Error executing on {node_id}: {e}")
         return {"success": False, "node_id": node_id, "error": str(e)}
+
+# ============================================================================
+# 标准化节点调用适配层 (Phase 8.3)
+# ============================================================================
+
+async def call_node_standardized(
+    node_id: str, action: str, params: Optional[Dict[str, Any]] = None,
+    caller: str = "gateway", timeout: float = 30.0,
+) -> NodeResponse:
+    """标准化节点调用 — Agent 和 Gateway 统一入口
+
+    将任意格式的节点调用和响应标准化为 NodeRequest/NodeResponse，
+    兼容旧格式节点（裸数据、dict 等）自动包装。
+
+    Args:
+        node_id: 节点 ID，如 "Node_06" 或 "Node_06_Filesystem"
+        action: 执行动作名称
+        params: 动作参数
+        caller: 调用者标识 (gateway/agent/scheduler)
+        timeout: 超时秒数
+
+    Returns:
+        NodeResponse 标准格式
+    """
+    request = NodeRequest(
+        action=action,
+        params=params or {},
+        caller=caller,
+        timeout=timeout,
+    )
+    t0 = time.time()
+
+    # 查找节点实例
+    instance = node_instances.get(node_id)
+    if instance is None:
+        # 尝试短 ID 匹配（如 "Node_06" 匹配 "Node_06_Filesystem"）
+        for key, inst in node_instances.items():
+            if key.startswith(node_id):
+                instance = inst
+                node_id = key
+                break
+
+    if instance is None:
+        return NodeResponse(
+            success=False,
+            error=f"节点 {node_id} 未加载",
+            error_code="NOT_FOUND",
+            request_id=request.request_id,
+            node_id=node_id,
+            latency_ms=(time.time() - t0) * 1000,
+        )
+
+    try:
+        # 确定执行方法
+        if hasattr(instance, "execute"):
+            method = instance.execute
+        elif hasattr(instance, "process"):
+            method = instance.process
+        else:
+            return NodeResponse(
+                success=False,
+                error=f"节点 {node_id} 无可执行方法 (execute/process)",
+                error_code="INTERNAL",
+                request_id=request.request_id,
+                node_id=node_id,
+                latency_ms=(time.time() - t0) * 1000,
+            )
+
+        # 执行（带超时保护）
+        if asyncio.iscoroutinefunction(method):
+            raw_result = await asyncio.wait_for(
+                method(request.action, **request.params),
+                timeout=request.timeout,
+            )
+        else:
+            raw_result = method(request.action, **request.params)
+
+        elapsed_ms = (time.time() - t0) * 1000
+
+        # 使用 NodeResponse.from_raw 自动适配旧格式
+        return NodeResponse.from_raw(
+            node_id=node_id,
+            raw=raw_result,
+            request_id=request.request_id,
+            latency_ms=round(elapsed_ms, 1),
+        )
+
+    except asyncio.TimeoutError:
+        return NodeResponse(
+            success=False,
+            error=f"节点 {node_id} 执行超时 ({request.timeout}s)",
+            error_code="TIMEOUT",
+            request_id=request.request_id,
+            node_id=node_id,
+            latency_ms=(time.time() - t0) * 1000,
+        )
+    except Exception as e:
+        logger.error(f"标准化调用 {node_id}.{action} 失败: {e}")
+        return NodeResponse(
+            success=False,
+            error=str(e),
+            error_code="INTERNAL",
+            request_id=request.request_id,
+            node_id=node_id,
+            latency_ms=(time.time() - t0) * 1000,
+        )
+
+
+async def health_check_node_standardized(node_id: str) -> NodeHealthResponse:
+    """标准化节点健康检查"""
+    instance = node_instances.get(node_id)
+    if instance is None:
+        return NodeHealthResponse(status="unhealthy", node_id=node_id)
+
+    if hasattr(instance, "health") and callable(instance.health):
+        try:
+            raw = instance.health()
+            if asyncio.iscoroutinefunction(instance.health):
+                raw = await raw
+            return NodeHealthResponse.from_raw(node_id, raw)
+        except Exception:
+            return NodeHealthResponse(status="degraded", node_id=node_id)
+
+    # 节点已加载但无 health 方法 → 视为 healthy
+    return NodeHealthResponse(status="healthy", node_id=node_id)
+
+
+# 暴露标准化 API 端点
+@app.post("/api/nodes/{node_id}/execute_standardized")
+async def execute_standardized(node_id: str, request: NodeRequest):
+    """标准化节点执行端点 — 返回 NodeResponse 格式"""
+    response = await call_node_standardized(
+        node_id=node_id,
+        action=request.action,
+        params=request.params,
+        caller=request.caller,
+        timeout=request.timeout,
+    )
+    return response.model_dump()
+
+
+@app.get("/api/nodes/{node_id}/health_standardized")
+async def health_standardized(node_id: str):
+    """标准化节点健康检查端点"""
+    response = await health_check_node_standardized(node_id)
+    return response.model_dump()
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -172,6 +172,7 @@ def gw_client():
     which require a running event loop.  Using TestClient as a context manager
     starts/stops the lifespan automatically.
     """
+    pytest.importorskip("websockets", reason="websockets required for gateway WS tests")
     from galaxy_gateway.app import app as gateway_app
     with TestClient(gateway_app) as c:
         yield c

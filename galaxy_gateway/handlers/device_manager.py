@@ -114,9 +114,37 @@ class DeviceManager:
         return candidates[0] if candidates else None
     
     def handle_register_message(self, message: AIPMessage) -> AIPMessage:
-        """处理设备注册消息"""
+        """处理设备注册消息
+
+        Phase 9: 设备注册时进行服务端能力白名单校验，
+        过滤非法声明的能力。
+        """
         payload = message.payload
         device_info_data = payload.get("device_info", {})
+
+        # Phase 9: 校验设备声明的能力
+        reported_capabilities = payload.get(
+            "supported_actions",
+            payload.get("capabilities", []),
+        )
+        device_type_str = ""
+        if message.device_type:
+            device_type_str = message.device_type.value
+        if reported_capabilities and device_type_str:
+            try:
+                from core.tool_permissions import validate_device_capabilities
+                validated = validate_device_capabilities(
+                    device_type_str, reported_capabilities
+                )
+                if len(validated) != len(reported_capabilities):
+                    logger.info(
+                        f"设备 {message.device_id} 能力校验: "
+                        f"{len(reported_capabilities)} 声明 → {len(validated)} 通过"
+                    )
+                # 将校验后的能力写回 payload
+                device_info_data["validated_capabilities"] = validated
+            except Exception as e:
+                logger.debug(f"设备能力校验跳过: {e}")
         
         # 构建 DeviceInfo
         device_info = DeviceInfo(

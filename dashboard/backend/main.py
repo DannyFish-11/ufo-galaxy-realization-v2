@@ -155,8 +155,26 @@ logger = logging.getLogger("Galaxy")
 # 打印 ASCII 艺术字
 print(GALAXY_ASCII_MINIMAL)
 
-# 创建应用
-app = FastAPI(title="Galaxy Dashboard", version="2.3.23")
+# 创建应用 (使用 lifespan 替代 deprecated on_event)
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def _lifespan(app):
+    # startup
+    logger.info("=" * 60)
+    print(GALAXY_ASCII_MINIMAL)
+    logger.info("Galaxy Dashboard v2.3.23")
+    logger.info("=" * 60)
+    if NODE_PROTOCOL_AVAILABLE:
+        logger.info("✅ node_protocol 已加载")
+    if DEVICE_PROTOCOL_AVAILABLE:
+        logger.info("✅ device_protocol 已加载")
+    if GALAXY_CORE_AVAILABLE:
+        logger.info("✅ galaxy_core 已加载")
+    yield
+    # shutdown (nothing needed)
+
+app = FastAPI(title="Galaxy Dashboard", version="2.3.23", lifespan=_lifespan)
 
 # CORS 配置
 app.add_middleware(
@@ -1527,24 +1545,8 @@ async def websocket_endpoint(websocket: WebSocket):
         active_websockets.remove(websocket)
 
 # ============================================================================
-# 启动事件
+# 启动事件 (已迁移到 _lifespan context manager)
 # ============================================================================
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("=" * 60)
-    print(GALAXY_ASCII_MINIMAL)
-    logger.info("Galaxy Dashboard v2.3.23")
-    logger.info("=" * 60)
-    
-    if NODE_PROTOCOL_AVAILABLE:
-        logger.info("✅ node_protocol 已加载")
-    
-    if DEVICE_PROTOCOL_AVAILABLE:
-        logger.info("✅ device_protocol 已加载")
-    
-    if GALAXY_CORE_AVAILABLE:
-        logger.info("✅ galaxy_core 已加载")
 
 # ============================================================================
 # 协议路由降级 — 当 core.routes.protocols 不可用时提供 /api/v1/protocols/* 端点

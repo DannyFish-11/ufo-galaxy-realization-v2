@@ -59,10 +59,73 @@ class NodeConfig:
     endpoint: str = ""
 
 
+
+# =========================================================================
+# Provider 默认配置 — set_api_key 保存 Key 时自动补全 enabled/models/base_url
+# =========================================================================
+PROVIDER_DEFAULTS: Dict[str, Dict[str, Any]] = {
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "env_key": "OPENAI_API_KEY",
+        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1-mini"],
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com/v1",
+        "env_key": "ANTHROPIC_API_KEY",
+        "models": ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"],
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "env_key": "DEEPSEEK_API_KEY",
+        "models": ["deepseek-chat", "deepseek-reasoner"],
+    },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "env_key": "GEMINI_API_KEY",
+        "models": ["gemini-2.0-flash", "gemini-2.5-pro"],
+    },
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "env_key": "GROQ_API_KEY",
+        "models": ["llama-3.3-70b-versatile"],
+    },
+    "zhipu": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "env_key": "ZHIPU_API_KEY",
+        "models": ["glm-4-flash"],
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "env_key": "OPENROUTER_API_KEY",
+        "models": ["auto"],
+    },
+    "qwen": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "env_key": "QWEN_API_KEY",
+        "models": ["qwen-turbo", "qwen-plus"],
+    },
+    "xai": {
+        "base_url": "https://api.x.ai/v1",
+        "env_key": "XAI_API_KEY",
+        "models": ["grok-2"],
+    },
+    "together": {
+        "base_url": "https://api.together.xyz/v1",
+        "env_key": "TOGETHER_API_KEY",
+        "models": ["meta-llama/Llama-3-70b-chat-hf"],
+    },
+    "perplexity": {
+        "base_url": "https://api.perplexity.ai",
+        "env_key": "PERPLEXITY_API_KEY",
+        "models": ["sonar"],
+    },
+}
+
+
 class APIManager:
     """
     API 管理器
-    
+
     统一管理所有 API 配置
     支持双并行策略
     支持工具类 API
@@ -308,7 +371,20 @@ class APIManager:
             if category == "oneapi":
                 self.config.setdefault("oneapi", {})["api_key"] = api_key
             elif category == "direct_models":
-                self.config.setdefault("direct_models", {}).setdefault(key_name, {})["api_key"] = api_key
+                provider_cfg = self.config.setdefault("direct_models", {}).setdefault(key_name, {})
+                provider_cfg["api_key"] = api_key
+                # 自动补全 enabled / models / base_url，让 _parse_config 能正确注册模型
+                if key_name in PROVIDER_DEFAULTS:
+                    defaults = PROVIDER_DEFAULTS[key_name]
+                    provider_cfg.setdefault("enabled", True)
+                    provider_cfg.setdefault("base_url", defaults["base_url"])
+                    provider_cfg.setdefault("models", defaults["models"])
+                    provider_cfg.setdefault("env_key", defaults["env_key"])
+                else:
+                    # 未知 provider 也启用，但没有默认模型列表
+                    provider_cfg.setdefault("enabled", True)
+                    provider_cfg.setdefault("env_key", f"{key_name.upper()}_API_KEY")
+                    logger.info(f"未知 provider '{key_name}'，已启用但需手动配置 models 列表")
             elif category == "tools":
                 self.config.setdefault("tools", {}).setdefault(key_name, {})["api_key"] = api_key
             

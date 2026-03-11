@@ -16,11 +16,17 @@ Galaxy Fusion - Topology Manager
 
 import json
 import logging
-import networkx as nx
 from typing import Dict, List, Optional, Tuple, Set, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from enum import Enum
+
+try:
+    import networkx as nx
+    NX_AVAILABLE = True
+except ImportError:
+    nx = None  # type: ignore
+    NX_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +76,15 @@ class TopologyManager:
     def __init__(self, topology_config_path: str):
         """
         初始化拓扑管理器
-        
+
         Args:
             topology_config_path: 拓扑配置文件路径 (JSON)
         """
+        if not NX_AVAILABLE:
+            raise ImportError(
+                "networkx is required for TopologyManager. "
+                "Install it with: pip install networkx"
+            )
         self.config_path = Path(topology_config_path)
         self.graph = nx.DiGraph()  # 有向图
         self.nodes: Dict[str, NodeInfo] = {}

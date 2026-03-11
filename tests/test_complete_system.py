@@ -22,7 +22,7 @@ def test_all_modules():
         'enhancements.learning.autonomous_learning_engine',
         'enhancements.multidevice.cross_device_scheduler',
         'enhancements.multidevice.failover_manager',
-        'fusion.unified_orchestrator',
+        'galaxy_gateway.orchestrator',
         'galaxy_gateway.android_bridge',
     ]
     
@@ -65,7 +65,7 @@ def test_all_modules():
     # 测试 3: UI 文件完整性
     print("\n[测试 3] UI 文件完整性")
     ui_files = [
-        'dashboard/frontend/public/index_v2.html',
+        'dashboard/frontend/public/index.html',
     ]
     
     for ui_file in ui_files:
@@ -87,8 +87,10 @@ def test_all_modules():
         for item in results["failed"]:
             print(f"  - {item}")
     
-    return len(results["failed"]) == 0
+    assert len(results["failed"]) == 0, f"Failed modules: {results['failed']}"
 
 if __name__ == "__main__":
-    success = test_all_modules()
-    sys.exit(0 if success else 1)
+    try:
+        test_all_modules()
+    except AssertionError:
+        sys.exit(1)

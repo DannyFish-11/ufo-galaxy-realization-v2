@@ -17,10 +17,17 @@ Version: 1.3.0 (增强版)
 
 import asyncio
 import logging
-import aiohttp
 import time
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
+
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    aiohttp = None  # type: ignore
+    AIOHTTP_AVAILABLE = False
+
 from core.port_config import get_service_port
 
 # 配置日志
@@ -43,6 +50,11 @@ class ExecutionPool:
     """
 
     def __init__(self, gateway_url: str = f"http://localhost:{get_service_port('state_machine')}"):
+        if not AIOHTTP_AVAILABLE:
+            raise ImportError(
+                "aiohttp is required for ExecutionPool. "
+                "Install it with: pip install aiohttp"
+            )
         self.gateway_url = gateway_url.rstrip('/')
         self.session: Optional[aiohttp.ClientSession] = None
         self._node_status: Dict[str, bool] = {}

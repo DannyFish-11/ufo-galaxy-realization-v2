@@ -31,6 +31,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
 
+from fastapi import APIRouter
+
+# APIRouter 供主网关 app.py 挂载（Phase 5 集成）
+router = APIRouter(prefix="/api/v5", tags=["gateway-v5"])
+
+# 独立运行时的 FastAPI 应用（保留向后兼容）
 app = FastAPI(title="Galaxy Gateway v5.0", version="5.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -287,10 +293,8 @@ programming_engine = AutonomousProgrammingEngine()
 # API 端点
 # ============================================================================
 
-@app.get("/health")
-async def health():
-    """健康检查"""
-    # 检查所有节点服务
+async def _health_impl():
+    """健康检查实现"""
     services_status = {}
     for name, url in NODE_SERVICES.items():
         try:
@@ -299,7 +303,6 @@ async def health():
             services_status[name] = result.get("status") == "healthy"
         except Exception:
             services_status[name] = False
-    
     return {
         "status": "healthy",
         "version": "5.0.0",
@@ -308,33 +311,26 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
-@app.post("/learn_from_experience")
-async def learn_from_experience(request: LearnFromExperienceRequest) -> Dict[str, Any]:
-    """从经验中学习"""
+
+async def _learn_impl(request: LearnFromExperienceRequest) -> Dict[str, Any]:
     return await learning_engine.learn_from_experience(request)
 
-@app.post("/generate_code")
-async def generate_code(request: GenerateCodeRequest) -> Dict[str, Any]:
-    """生成代码"""
+
+async def _generate_code_impl(request: GenerateCodeRequest) -> Dict[str, Any]:
     return await code_client.post("/generate_code", {
         "requirement": request.requirement,
         "language": request.language,
         "context": request.context
     })
 
-@app.post("/debug_code")
-async def debug_code(request: DebugCodeRequest) -> Dict[str, Any]:
-    """调试代码"""
-    # 检测错误
+
+async def _debug_code_impl(request: DebugCodeRequest) -> Dict[str, Any]:
     error_result = await debug_client.post("/detect_errors", {
         "code": request.code,
         "language": request.language
     })
-    
     if not error_result.get("success"):
         return error_result
-    
-    # 如果有错误，尝试修复
     if error_result.get("error_count", 0) > 0:
         first_error = error_result["errors"][0]
         fix_result = await debug_client.post("/auto_fix", {
@@ -342,54 +338,63 @@ async def debug_code(request: DebugCodeRequest) -> Dict[str, Any]:
             "error": json.dumps(first_error),
             "language": request.language
         })
-        
         return {
             "success": True,
             "errors": error_result["errors"],
             "fix": fix_result.get("fix")
         }
-    
-    return {
-        "success": True,
-        "errors": [],
-        "message": "未发现错误"
-    }
+    return {"success": True, "errors": [], "message": "未发现错误"}
 
-@app.post("/optimize_code")
-async def optimize_code(request: OptimizeCodeRequest) -> Dict[str, Any]:
-    """优化代码"""
+
+async def _optimize_code_impl(request: OptimizeCodeRequest) -> Dict[str, Any]:
     return await debug_client.post("/optimize_code", {
         "code": request.code,
         "target": request.target,
         "language": request.language
     })
 
-@app.post("/reason")
-async def reason(request: ReasonRequest) -> Dict[str, Any]:
-    """推理"""
+
+async def _reason_impl(request: ReasonRequest) -> Dict[str, Any]:
     return await knowledge_client.post("/reason", {
         "facts": request.facts,
         "question": request.question
     })
 
-@app.post("/autonomous_programming")
-async def autonomous_programming(request: AutonomousProgrammingRequest) -> Dict[str, Any]:
-    """自主编程"""
+
+async def _auto_program_impl(request: AutonomousProgrammingRequest) -> Dict[str, Any]:
     return await programming_engine.program(request)
 
-@app.get("/stats")
-async def stats() -> Dict[str, Any]:
-    """统计信息"""
-    # 获取各个服务的统计信息
+
+async def _stats_impl() -> Dict[str, Any]:
     memory_stats = await memory_client.get("/stats")
     knowledge_stats = await knowledge_client.get("/stats")
-    
     return {
         "success": True,
         "memory": memory_stats,
         "knowledge": knowledge_stats,
         "timestamp": datetime.now().isoformat()
     }
+
+
+# ── 注册到独立 app（原有路径，向后兼容）──
+app.get("/health")(_health_impl)
+app.post("/learn_from_experience")(_learn_impl)
+app.post("/generate_code")(_generate_code_impl)
+app.post("/debug_code")(_debug_code_impl)
+app.post("/optimize_code")(_optimize_code_impl)
+app.post("/reason")(_reason_impl)
+app.post("/autonomous_programming")(_auto_program_impl)
+app.get("/stats")(_stats_impl)
+
+# ── 注册到 APIRouter（供主网关挂载，路径带 /api/v5 前缀）──
+router.get("/health")(_health_impl)
+router.post("/learn_from_experience")(_learn_impl)
+router.post("/generate_code")(_generate_code_impl)
+router.post("/debug_code")(_debug_code_impl)
+router.post("/optimize_code")(_optimize_code_impl)
+router.post("/reason")(_reason_impl)
+router.post("/autonomous_programming")(_auto_program_impl)
+router.get("/stats")(_stats_impl)
 
 # ============================================================================
 # 启动服务

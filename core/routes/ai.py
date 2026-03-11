@@ -18,6 +18,7 @@ import logging
 import uuid
 from typing import Dict, List, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -265,6 +266,48 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=501, detail="agent_factory 模块不可用")
         except Exception as e:
             logger.error(f"Agent 分裂失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
+
+    # ─────── Agent 辩论推理端点 ─────────
+
+    class DebateRequest(BaseModel):
+        question: str = Field(..., description="需要辩论推理的问题")
+        strategies: List[str] = Field(
+            default_factory=lambda: ["COT", "TOT"],
+            description="辩论策略列表: COT/TOT/PAL/CRITIQUE/RETRIEVAL",
+        )
+        rounds: int = Field(default=3, ge=1, le=10, description="辩论轮次")
+
+    @router.post("/api/v1/agents/debate")
+    async def run_agent_debate(req: DebateRequest):
+        """多 Agent 辩论式推理 — 调用 Node_126_AgentSwarm 的锦标赛辩论引擎"""
+        try:
+            from core.port_config import get_service_port
+            port = get_service_port("agent_swarm")
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(
+                    f"http://localhost:{port}/debate",
+                    json={
+                        "question": req.question,
+                        "strategies": req.strategies,
+                        "rounds": req.rounds,
+                    },
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+                return JSONResponse(
+                    {"success": False, "error": f"Node_126 返回 HTTP {resp.status_code}"},
+                    status_code=resp.status_code,
+                )
+        except httpx.ConnectError:
+            raise HTTPException(
+                status_code=503,
+                detail="Node_126_AgentSwarm 服务不可达，请确认已启动",
+            )
+        except Exception as e:
+            logger.error(f"Agent 辩论推理失败: {e}")
             return JSONResponse(
                 {"success": False, "error": str(e)}, status_code=500
             )

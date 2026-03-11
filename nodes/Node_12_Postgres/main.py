@@ -21,7 +21,17 @@ try:
 except ImportError:
     ASYNCPG_AVAILABLE = False
 
-app = FastAPI(title="Node 12 - PostgreSQL", version="2.0.0")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def _lifespan(app):
+    if ASYNCPG_AVAILABLE:
+        await pg_manager.connect()
+    yield
+    if ASYNCPG_AVAILABLE:
+        await pg_manager.disconnect()
+
+app = FastAPI(title="Node 12 - PostgreSQL", version="2.0.0", lifespan=_lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # PostgreSQL配置
@@ -146,15 +156,7 @@ class PostgresManager:
 # 全局PostgreSQL管理器
 pg_manager = PostgresManager()
 
-@app.on_event("startup")
-async def startup():
-    if ASYNCPG_AVAILABLE:
-        await pg_manager.connect()
-
-@app.on_event("shutdown")
-async def shutdown():
-    if ASYNCPG_AVAILABLE:
-        await pg_manager.disconnect()
+# startup/shutdown 已迁移到 _lifespan context manager
 
 # ============ API 端点 ============
 

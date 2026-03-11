@@ -35,53 +35,79 @@ License: MIT
 __version__ = "5.0.0"
 __author__ = "Galaxy Team"
 
-# Core components
-from .autonomous_learning_engine import (
-    LearningStage,
-    PatternType,
-    LearningObservation,
-    DiscoveredPattern,
-    LearningExperiment,
-    LearningCycle,
-    PatternRecognizer,
-    KnowledgeAccumulator,
-    AutonomousLearningEngine
-)
+import logging as _logging
+_logger = _logging.getLogger(__name__)
 
-from .knowledge_graph import (
-    EntityType,
-    RelationshipType,
-    Entity,
-    Relationship,
-    KnowledgeGraph
-)
+# Core components — conditional imports for graceful degradation
+try:
+    from .autonomous_learning_engine import (
+        LearningStage,
+        PatternType,
+        LearningObservation,
+        DiscoveredPattern,
+        LearningExperiment,
+        LearningCycle,
+        PatternRecognizer,
+        KnowledgeAccumulator,
+        AutonomousLearningEngine
+    )
+except ImportError as _e:
+    _logger.warning(f"autonomous_learning_engine 不可用: {_e}")
+    LearningStage = PatternType = LearningObservation = DiscoveredPattern = None
+    LearningExperiment = LearningCycle = PatternRecognizer = KnowledgeAccumulator = None
+    AutonomousLearningEngine = None
 
-from .emergence_detector import (
-    EmergenceType,
-    EmergenceEvent,
-    MetricBaseline,
-    StatisticalAnomalyDetector,
-    EmergenceDetector
-)
+try:
+    from .knowledge_graph import (
+        EntityType,
+        RelationshipType,
+        Entity,
+        Relationship,
+        KnowledgeGraph
+    )
+except ImportError as _e:
+    _logger.warning(f"knowledge_graph 不可用: {_e}")
+    EntityType = RelationshipType = Entity = Relationship = KnowledgeGraph = None
 
-from .search_integrator import (
-    SearchSource,
-    SearchResult,
-    SearchQuery,
-    RateLimiter,
-    ResultCache,
-    SearchIntegrator
-)
+try:
+    from .emergence_detector import (
+        EmergenceType,
+        EmergenceEvent,
+        MetricBaseline,
+        StatisticalAnomalyDetector,
+        EmergenceDetector
+    )
+except ImportError as _e:
+    _logger.warning(f"emergence_detector 不可用: {_e}")
+    EmergenceType = EmergenceEvent = MetricBaseline = StatisticalAnomalyDetector = EmergenceDetector = None
 
-from .feedback_loop import (
-    FeedbackType,
-    FeedbackTarget,
-    FeedbackRecord,
-    PerformanceMetric,
-    MetricsTracker,
-    ReinforcementLearner,
-    FeedbackLoop
-)
+try:
+    from .search_integrator import (
+        SearchSource,
+        SearchResult,
+        SearchQuery,
+        RateLimiter,
+        ResultCache,
+        SearchIntegrator
+    )
+except ImportError as _e:
+    _logger.warning(f"search_integrator 不可用: {_e}")
+    SearchSource = SearchResult = SearchQuery = RateLimiter = ResultCache = SearchIntegrator = None
+
+try:
+    from .feedback_loop import (
+        FeedbackType,
+        FeedbackTarget,
+        FeedbackRecord,
+        PerformanceMetric,
+        MetricsTracker,
+        ReinforcementLearner,
+        FeedbackLoop
+    )
+except ImportError as _e:
+    _logger.warning(f"feedback_loop 不可用: {_e}")
+    FeedbackType = FeedbackTarget = FeedbackRecord = PerformanceMetric = None
+    MetricsTracker = ReinforcementLearner = FeedbackLoop = None
 
 # Version info
 def get_version() -> str:
