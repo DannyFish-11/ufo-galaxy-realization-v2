@@ -84,4 +84,74 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return {"success": True}
         raise HTTPException(status_code=404, detail="任务未找到")
 
+    @router.delete("/api/v1/tasks/{task_id}/cancel")
+    @router.post("/api/v1/tasks/{task_id}/cancel")
+    async def cancel_task(task_id: str):
+        """取消任务 (幂等 — 重复取消同一 task_id 安全).
+
+        同时向 OpenClawd cancel_registry 注册取消，确保进行中的
+        goal_execution / parallel_subtask 在下一个检查点终止。
+        """
+        already_terminal = False
+
+        # Mark in task_queue if present
+        if task_id in task_queue:
+            current_status = task_queue[task_id].get("status", "")
+            if current_status in ("completed", "failed", "cancelled"):
+                already_terminal = True
+            else:
+                task_queue[task_id]["status"] = "cancelled"
+                task_queue[task_id]["cancelled_at"] = datetime.now().isoformat()
+
+        # Register cancellation in OpenClawd (idempotent)
+        try:
+            from core.openclawd import get_openclawd
+            clawd = get_openclawd()
+            clawd.cancel_task(task_id)
+        except Exception as _e:
+            logger.warning(
+                "cancel_task: OpenClawd cancel_registry update failed — "
+                "task_queue status was updated but in-flight goal_execution "
+                "may not be interrupted immediately: %s",
+                _e,
+            )
+
+        if already_terminal:
+            return JSONResponse({
+                "success": True,
+                "task_id": task_id,
+                "message": f"任务 {task_id} 已处于终态，取消为幂等操作",
+                "idempotent": True,
+            })
+
+        return JSONResponse({
+            "success": True,
+            "task_id": task_id,
+            "message": f"任务 {task_id} 已标记为取消",
+            "idempotent": False,
+        })
+
+    @router.delete("/api/v1/tasks/groups/{group_id}/cancel")
+    @router.post("/api/v1/tasks/groups/{group_id}/cancel")
+    async def cancel_group(group_id: str):
+        """取消整个并行任务组 (幂等).
+
+        向 OpenClawd cancel_registry 注册 group_id，所有属于该组的
+        parallel_subtask 在下一个检查点终止。
+        """
+        try:
+            from core.openclawd import get_openclawd
+            clawd = get_openclawd()
+            newly_cancelled = clawd.cancel_group(group_id)
+        except Exception as _e:
+            logger.warning("cancel_group: OpenClawd cancel_registry update failed: %s", _e)
+            newly_cancelled = False
+
+        return JSONResponse({
+            "success": True,
+            "group_id": group_id,
+            "message": f"任务组 {group_id} 已标记为取消",
+            "idempotent": not newly_cancelled,
+        })
+
     return router

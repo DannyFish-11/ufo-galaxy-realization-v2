@@ -36,11 +36,12 @@ logger = logging.getLogger("Galaxy.OpenClawd")
 # ============================================================================
 
 class _SubtaskStatus(str, enum.Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED  = "failed"
-    TIMEOUT = "timeout"
+    PENDING   = "pending"
+    RUNNING   = "running"
+    SUCCESS   = "success"
+    FAILED    = "failed"
+    TIMEOUT   = "timeout"
+    CANCELLED = "cancelled"
 
 
 @dataclasses.dataclass
@@ -63,9 +64,10 @@ class ParallelResult:
     """Aggregated result for a parallel_group execution."""
     group_id:       str
     device_results: List[Dict]
-    summary_status: str          # "success" | "partial" | "failed"
+    summary_status: str          # "success" | "partial" | "failed" | "cancelled"
     succeeded:      int
     failed:         int
+    cancelled:      int
     total:          int
 
     def to_dict(self) -> Dict:
@@ -134,6 +136,14 @@ class ParallelGroupTracker:
             entry.finished_at = time.monotonic()
             entry.error = "timeout"
 
+    def mark_cancelled(self, group_id: str, task_id: str) -> None:
+        """Mark a subtask as cancelled (idempotent — safe to call multiple times)."""
+        entry = self._get_entry(group_id, task_id)
+        if entry and entry.status != _SubtaskStatus.CANCELLED:
+            entry.status = _SubtaskStatus.CANCELLED
+            entry.finished_at = time.monotonic()
+            entry.error = "cancelled"
+
     # ------------------------------------------------------------------
     # Retry helpers
     # ------------------------------------------------------------------
@@ -186,13 +196,16 @@ class ParallelGroupTracker:
                 "latency_ms":    latency_ms,
             })
 
-        succeeded = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
-        failed = len(entries) - succeeded
+        succeeded  = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
+        cancelled  = sum(1 for e in entries if e.status == _SubtaskStatus.CANCELLED)
+        failed     = len(entries) - succeeded - cancelled  # only actual failures/timeouts
 
         if succeeded == len(entries):
             summary = "success"
         elif succeeded > 0:
             summary = "partial"
+        elif cancelled == len(entries):
+            summary = "cancelled"
         else:
             summary = "failed"
 
@@ -202,6 +215,7 @@ class ParallelGroupTracker:
             summary_status=summary,
             succeeded=succeeded,
             failed=failed,
+            cancelled=cancelled,
             total=len(entries),
         )
 
@@ -332,6 +346,13 @@ class OpenClawd:
     # 从静态目录提取节点 ID 白名单
     _CORE_NODE_IDS = set(_CORE_NODE_ACTIONS.keys())
 
+    # ── Timeout / Cancel configuration ──────────────────────────────────────
+    # Timeout for a single goal_execution dispatch (seconds). Override via
+    # subclass or instance attribute for test / production tuning.
+    GOAL_EXECUTION_TIMEOUT: float = 60.0
+    # Timeout for each parallel_subtask dispatch (seconds).
+    PARALLEL_SUBTASK_TIMEOUT: float = 60.0
+
     def __init__(self):
         self._initialized = False
         self._session_memory: Dict[str, List[Dict]] = {}
@@ -346,6 +367,12 @@ class OpenClawd:
         self._router = None
         # PR86: 内嵌 AgentKernel（懒加载）
         self._kernel = None
+        # Cancel registry — set of task_ids or group_ids that have been cancelled.
+        # Using a set makes repeated cancel() calls idempotent.
+        # task_ids follow the pattern "goal_<hex12>" or "<group_id>_sub<idx>";
+        # group_ids are short hex strings (uuid4().hex[:8]).  The distinct
+        # prefixes prevent accidental collisions between the two namespaces.
+        self._cancel_registry: set = set()
 
         # Phase 9: 工具权限检查器
         self._tool_permission_checker = None
@@ -386,6 +413,53 @@ class OpenClawd:
             except Exception as e:
                 logger.warning(f"AgentKernel 加载失败: {e}")
         return self._kernel
+
+    # ========================================================================
+    # Cancel / Abort API
+    # ========================================================================
+
+    def cancel_task(self, task_id: str) -> bool:
+        """Mark a task (by task_id) as cancelled.
+
+        Idempotent — calling multiple times for the same task_id is safe.
+
+        Returns:
+            True  if the task_id was newly added to the cancel registry.
+            False if it was already cancelled (idempotent no-op).
+        """
+        if task_id in self._cancel_registry:
+            logger.debug("cancel_task: %s already cancelled (idempotent)", task_id)
+            return False
+        self._cancel_registry.add(task_id)
+        logger.info("cancel_task: %s added to cancel registry", task_id)
+        return True
+
+    def cancel_group(self, group_id: str) -> bool:
+        """Mark an entire parallel group (by group_id) as cancelled.
+
+        Adds the group_id itself to the cancel registry so that any
+        in-flight subtask that checks ``_is_cancelled(entry)`` will abort.
+
+        Idempotent — safe to call multiple times.
+
+        Returns:
+            True  if the group_id was newly added to the cancel registry.
+            False if it was already cancelled.
+        """
+        if group_id in self._cancel_registry:
+            logger.debug("cancel_group: %s already cancelled (idempotent)", group_id)
+            return False
+        self._cancel_registry.add(group_id)
+        logger.info("cancel_group: %s added to cancel registry", group_id)
+        return True
+
+    def _is_cancelled(self, task_id: str, group_id: Optional[str] = None) -> bool:
+        """Return True if task_id or its group_id is in the cancel registry."""
+        if task_id in self._cancel_registry:
+            return True
+        if group_id and group_id in self._cancel_registry:
+            return True
+        return False
 
     # ========================================================================
     # 主入口
@@ -790,22 +864,59 @@ class OpenClawd:
             )
             return await self._dispatch_agent(message, intent, device_id, session_id)
 
-        result = await self.send_gateway_command(
-            device_id=target_device_id,
-            command="goal_execution",
-            payload={
-                "task_type": "goal_execution",
-                "goal": goal,
-                **params,
-            },
-            session_id=session_id,
-        )
+        # Generate a task_id so callers can cancel before / during execution
+        task_id = f"goal_{uuid.uuid4().hex[:12]}"
+
+        # ── Cancel check before dispatch ──────────────────────────────────
+        if self._is_cancelled(task_id):
+            logger.info("goal_execution: task %s cancelled before dispatch", task_id)
+            return {
+                "success": False,
+                "response": f"目标任务 '{goal}' 已被取消（取消发生在执行前）",
+                "intent": "goal_execution",
+                "task_id": task_id,
+                "cancelled": True,
+            }
+
+        try:
+            result = await _asyncio_module.wait_for(
+                self.send_gateway_command(
+                    device_id=target_device_id,
+                    command="goal_execution",
+                    payload={
+                        "task_type": "goal_execution",
+                        "goal": goal,
+                        "task_id": task_id,
+                        **params,
+                    },
+                    task_id=task_id,
+                    session_id=session_id,
+                ),
+                timeout=self.GOAL_EXECUTION_TIMEOUT,
+            )
+        except _asyncio_module.TimeoutError:
+            logger.warning(
+                "goal_execution timed out after %.1fs | device=%s task_id=%s",
+                self.GOAL_EXECUTION_TIMEOUT, target_device_id, task_id,
+            )
+            return {
+                "success": False,
+                "response": (
+                    f"目标任务 '{goal}' 执行超时（超过 {self.GOAL_EXECUTION_TIMEOUT:.0f} 秒），"
+                    "请稍后重试或检查设备状态。"
+                ),
+                "intent": "goal_execution",
+                "task_id": task_id,
+                "timed_out": True,
+            }
+
         if "response" not in result:
             result["response"] = (
                 result.get("result")
                 or f"目标任务 '{goal}' 已提交至设备 {target_device_id}"
             )
         result["intent"] = "goal_execution"
+        result.setdefault("task_id", task_id)
         logger.info(
             "goal_execution dispatched | device=%s success=%s",
             target_device_id,
@@ -900,21 +1011,33 @@ class OpenClawd:
         tracker.register_group(task_id_base, entries)
 
         async def _execute_entry(entry: _SubtaskEntry) -> None:
-            """Execute one subtask with retry/backoff, updating tracker in-place."""
+            """Execute one subtask with retry/backoff, timeout, and cancel support."""
             while True:
+                # ── Cancel check (before each attempt) ──────────────────────
+                if self._is_cancelled(entry.task_id, entry.group_id):
+                    logger.info(
+                        "parallel_goal: subtask %d on device %s cancelled",
+                        entry.subtask_index, entry.device_id,
+                    )
+                    tracker.mark_cancelled(entry.group_id, entry.task_id)
+                    return
+
                 tracker.mark_running(entry.group_id, entry.task_id)
                 try:
-                    r = await self.send_gateway_command(
-                        device_id=entry.device_id,
-                        command="goal_execution",
-                        payload={
-                            "task_type": "parallel_subtask",
-                            "goal": entry.subtask,
-                            "parallel_group": entry.group_id,
-                            "subtask_index": entry.subtask_index,
-                        },
-                        task_id=entry.task_id,
-                        session_id=session_id,
+                    r = await _asyncio_module.wait_for(
+                        self.send_gateway_command(
+                            device_id=entry.device_id,
+                            command="goal_execution",
+                            payload={
+                                "task_type": "parallel_subtask",
+                                "goal": entry.subtask,
+                                "parallel_group": entry.group_id,
+                                "subtask_index": entry.subtask_index,
+                            },
+                            task_id=entry.task_id,
+                            session_id=session_id,
+                        ),
+                        timeout=self.PARALLEL_SUBTASK_TIMEOUT,
                     )
                     # Propagate command_id / task_id into result
                     r.setdefault("command_id", "")
@@ -929,6 +1052,18 @@ class OpenClawd:
                             entry.subtask_index, entry.device_id,
                             delay, entry.retry_count + 1, ParallelGroupTracker._MAX_RETRIES,
                         )
+                        tracker.increment_retry(entry.group_id, entry.task_id)
+                        await _asyncio_module.sleep(delay)
+                        continue
+                    return
+                except _asyncio_module.TimeoutError:
+                    logger.warning(
+                        "parallel_goal: subtask %d on device %s timed out after %.1fs",
+                        entry.subtask_index, entry.device_id, self.PARALLEL_SUBTASK_TIMEOUT,
+                    )
+                    tracker.mark_timeout(entry.group_id, entry.task_id)
+                    if tracker.needs_retry(entry.group_id, entry.task_id):
+                        delay = tracker.backoff_delay(entry.group_id, entry.task_id)
                         tracker.increment_retry(entry.group_id, entry.task_id)
                         await _asyncio_module.sleep(delay)
                         continue
@@ -963,16 +1098,20 @@ class OpenClawd:
         )
 
         parallel_result = tracker.aggregate(task_id_base)
+        cancelled_count = parallel_result.cancelled
         summary_text = (
             f"并行任务 '{goal}' 已分发至 {len(parallel_devices)} 台设备："
-            f"{parallel_result.succeeded} 成功，{parallel_result.failed} 失败。"
+            f"{parallel_result.succeeded} 成功，"
+            f"{parallel_result.failed} 失败，"
+            f"{cancelled_count} 已取消。"
         )
         logger.info(
-            "parallel_goal done | group=%s devices=%d succeeded=%d failed=%d status=%s",
+            "parallel_goal done | group=%s devices=%d succeeded=%d failed=%d cancelled=%d status=%s",
             task_id_base,
             len(parallel_devices),
             parallel_result.succeeded,
             parallel_result.failed,
+            cancelled_count,
             parallel_result.summary_status,
         )
         return {
@@ -984,6 +1123,7 @@ class OpenClawd:
                 "subtask_results": parallel_result.device_results,
                 "device_count": len(parallel_devices),
                 "parallel_result": parallel_result.to_dict(),
+                "cancelled_count": cancelled_count,
             },
         }
 
