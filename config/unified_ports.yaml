@@ -555,6 +555,22 @@ layer_intelligence:
       dependencies: ["Node_01_OneAPI"]
       description: "概率编程"
 
+    Node_60_ReinforcementLearning:
+      port: 8160
+      name: "ReinforcementLearning"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "强化学习引擎"
+
+    Node_63_FuzzyLogicEngine:
+      port: 8163
+      name: "FuzzyLogicEngine"
+      group: "intelligence"
+      critical: false
+      dependencies: []
+      description: "模糊逻辑推理引擎"
+
 # =============================================================================
 # LAYER 4: MONITORING - 监控与日志 (8063-8069)
 # =============================================================================
@@ -664,7 +680,39 @@ layer_advanced:
       critical: true
       dependencies: []
       description: "本地大语言模型"
-      
+
+    Node_75_DataPipeline:
+      port: 8075
+      name: "DataPipeline"
+      group: "advanced"
+      critical: false
+      dependencies: []
+      description: "数据处理管道"
+
+    Node_76_AlertManager:
+      port: 8076
+      name: "AlertManager"
+      group: "advanced"
+      critical: false
+      dependencies: []
+      description: "告警管理器"
+
+    Node_77_TaskScheduler:
+      port: 8077
+      name: "TaskScheduler"
+      group: "advanced"
+      critical: false
+      dependencies: []
+      description: "任务调度器"
+
+    Node_78_DataValidator:
+      port: 8078
+      name: "DataValidator"
+      group: "advanced"
+      critical: false
+      dependencies: []
+      description: "数据校验服务"
+
     Node_80_MemorySystem:
       port: 8180
       name: "MemorySystem"
@@ -719,6 +767,38 @@ layer_orchestration:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "提示词库"
+
+    Node_86_SpeechProcessor:
+      port: 8086
+      name: "SpeechProcessor"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "语音处理服务"
+
+    Node_87_ImageAnalysis:
+      port: 8087
+      name: "ImageAnalysis"
+      group: "orchestration"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "图像分析服务"
+
+    Node_88_WorkflowEngine:
+      port: 8088
+      name: "WorkflowEngine"
+      group: "orchestration"
+      critical: false
+      dependencies: []
+      description: "工作流引擎"
+
+    Node_89_APIGateway:
+      port: 8089
+      name: "APIGateway"
+      group: "orchestration"
+      critical: false
+      dependencies: []
+      description: "API网关"
 
 # =============================================================================
 # LAYER 7: MULTIMODAL - 多模态处理 (8090-8099)

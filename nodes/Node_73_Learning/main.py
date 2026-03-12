@@ -1,398 +1,389 @@
 # -*- coding: utf-8 -*-
 
 """
-Node_73_Learning: 机器学习服务节点
+Node_73_Learning: 机器学习服务节点 (FastAPI)
 
-本节点提供一个完整的机器学习服务，支持模型的训练和推理。
-它包含配置加载、服务初始化、核心业务逻辑、健康检查和状态查询等功能。
+支持模型注册、训练任务调度和推理。
 """
 
 import asyncio
+import json
 import logging
 import os
-import json
+import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, List, Optional
 
-# --- 日志配置 ---
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
+
+# ---------------------------------------------------------------------------
+# Port / CORS config (optional dependencies)
+# ---------------------------------------------------------------------------
+
+try:
+    from core.port_config import get_service_port
+    PORT = get_service_port("node_73") or 8073
+except Exception:
+    PORT = int(os.getenv("PORT", "8073"))
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+    CORS_ORIGINS = get_cors_origins()
+except Exception:
+    CORS_ORIGINS = ["*"]
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("node_73_learning.log")
-    ]
+    format="[Node_73] %(asctime)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger("Node_73_Learning")
 
-logger = logging.getLogger(__name__)
-
-# --- 枚举定义 ---
+# ---------------------------------------------------------------------------
+# Enums & Data classes
+# ---------------------------------------------------------------------------
 
 class ServiceStatus(Enum):
-    """服务状态枚举"""
-    UNINITIALIZED = "未初始化"
-    INITIALIZING = "初始化中"
-    RUNNING = "运行中"
-    STOPPED = "已停止"
-    ERROR = "错误"
+    UNINITIALIZED = "uninitialized"
+    INITIALIZING  = "initializing"
+    RUNNING       = "running"
+    STOPPED       = "stopped"
+    ERROR         = "error"
+
 
 class ModelType(Enum):
-    """支持的模型类型"""
-    CLASSIFICATION = "分类"
-    REGRESSION = "回归"
-    CLUSTERING = "聚类"
+    CLASSIFICATION = "classification"
+    REGRESSION     = "regression"
+    CLUSTERING     = "clustering"
+    CUSTOM         = "custom"
+
 
 class TaskStatus(Enum):
-    """任务状态枚举"""
-    PENDING = "待处理"
-    TRAINING = "训练中"
-    INFERENCING = "推理中"
-    COMPLETED = "已完成"
-    FAILED = "失败"
+    PENDING     = "pending"
+    TRAINING    = "training"
+    INFERENCING = "inferencing"
+    COMPLETED   = "completed"
+    FAILED      = "failed"
 
-# --- 配置类定义 ---
 
 @dataclass
-class ModelConfig:
-    """模型配置"""
+class ModelInfo:
     name: str
-    path: str
-    model_type: ModelType
+    model_type: str
+    config: Dict[str, Any]
     version: str = "1.0.0"
+    path: str = ""
+    registered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    status: str = "registered"
+
 
 @dataclass
-class NodeConfig:
-    """节点主配置类"""
-    node_name: str = "Node_73_Learning"
-    log_level: str = "INFO"
-    api_port: int = 8073
-    max_concurrent_tasks: int = 10
-    models: Dict[str, ModelConfig] = field(default_factory=dict)
+class TrainingJob:
+    job_id: str
+    model_name: str
+    dataset: Any
+    hyperparams: Dict[str, Any]
+    status: TaskStatus = TaskStatus.PENDING
+    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    completed_at: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "NodeConfig":
-        """从字典加载配置"""
-        models_data = data.get("models", {})
-        models = {
-            name: ModelConfig(
-                name=model_data["name"],
-                path=model_data["path"],
-                model_type=ModelType[model_data["model_type"].upper()],
-                version=model_data.get("version", "1.0.0")
-            ) for name, model_data in models_data.items()
-        }
-        return cls(
-            node_name=data.get("node_name", "Node_73_Learning"),
-            log_level=data.get("log_level", "INFO"),
-            api_port=data.get("api_port", 8073),
-            max_concurrent_tasks=data.get("max_concurrent_tasks", 10),
-            models=models
-        )
 
-# --- 主服务类 ---
+@dataclass
+class InferenceResult:
+    result_id: str
+    model_name: str
+    input_data: Any
+    prediction: Optional[Any] = None
+    confidence: Optional[float] = None
+    status: TaskStatus = TaskStatus.PENDING
+    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    completed_at: Optional[str] = None
+    error: Optional[str] = None
+
+# ---------------------------------------------------------------------------
+# Core service
+# ---------------------------------------------------------------------------
 
 class LearningService:
-    """机器学习主服务类"""
+    """机器学习主服务"""
 
-    def __init__(self, config: NodeConfig):
-        """
-        初始化服务。
+    def __init__(self):
+        self.status = ServiceStatus.RUNNING
+        self._models: Dict[str, ModelInfo] = {}
+        self._jobs: Dict[str, TrainingJob] = {}
+        self._results: List[InferenceResult] = []
+        self._max_results = 100  # keep last 100 inference results
+        logger.info("LearningService 初始化完成")
 
-        :param config: 节点配置实例
-        """
-        self.config = config
-        self.status = ServiceStatus.UNINITIALIZED
-        self.models: Dict[str, Any] = {}
-        self.task_queue = asyncio.Queue()
-        self.active_tasks = 0
+    # -- model management ----------------------------------------------------
 
-        self._update_logger_level()
-        logger.info(f"节点 {self.config.node_name} 正在初始化...")
+    def register_model(self, name: str, model_type: str, config: Dict[str, Any], version: str = "1.0.0", path: str = "") -> ModelInfo:
+        info = ModelInfo(name=name, model_type=model_type, config=config, version=version, path=path)
+        self._models[name] = info
+        logger.info(f"模型已注册: {name} (type={model_type})")
+        return info
 
-    def _update_logger_level(self):
-        """根据配置更新日志级别"""
-        level = getattr(logging, self.config.log_level.upper(), logging.INFO)
-        logger.setLevel(level)
+    def get_model(self, name: str) -> Optional[ModelInfo]:
+        return self._models.get(name)
 
-    async def initialize(self):
-        """
-        异步初始化服务，加载所有配置的模型。
-        """
-        self.status = ServiceStatus.INITIALIZING
-        logger.info("开始加载机器学习模型...")
+    def list_models(self) -> List[ModelInfo]:
+        return list(self._models.values())
+
+    # -- training ------------------------------------------------------------
+
+    async def start_training(self, model_name: str, dataset: Any, hyperparams: Dict[str, Any]) -> TrainingJob:
+        job_id = str(uuid.uuid4())
+        job = TrainingJob(job_id=job_id, model_name=model_name, dataset=dataset, hyperparams=hyperparams)
+        self._jobs[job_id] = job
+        # Run asynchronously in background
+        asyncio.create_task(self._run_training(job))
+        return job
+
+    async def _run_training(self, job: TrainingJob):
+        """模拟训练过程"""
         try:
-            for model_name, model_config in self.config.models.items():
-                await self._load_model(model_name, model_config)
-            self.status = ServiceStatus.RUNNING
-            logger.info(f"服务初始化完成，当前状态: {self.status.value}")
-        except Exception as e:
-            self.status = ServiceStatus.ERROR
-            logger.error(f"服务初始化失败: {e}", exc_info=True)
-            raise
-
-    async def _load_model(self, model_name: str, model_config: ModelConfig):
-        """
-        模拟加载单个模型。
-        在实际应用中，这里会是加载序列化模型文件（如 pickle, onnx）的逻辑。
-
-        :param model_name: 模型名称
-        :param model_config: 模型配置
-        """
-        logger.info(f"正在加载模型 '{model_name}' (类型: {model_config.model_type.value}) 从路径: {model_config.path}")
-        # 模拟耗时操作
-        await asyncio.sleep(1)
-        if not os.path.exists(model_config.path):
-            logger.warning(f"模型文件 {model_config.path} 不存在。将使用模拟模型。")
-            # 创建一个模拟模型对象
-            self.models[model_name] = f"Simulated_{model_config.model_type.name}_Model"
-        else:
-            # 在实际场景中，这里会用类似 joblib.load() 的方法
-            # with open(model_config.path, 'rb') as f:
-            #     self.models[model_name] = pickle.load(f)
-            self.models[model_name] = f"Loaded_{model_config.model_type.name}_Model_From_{model_config.path}"
-        
-        logger.info(f"模型 '{model_name}' 加载成功。")
-
-    async def schedule_task(self, task_type: str, model_name: str, data: Any) -> Dict[str, Any]:
-        """
-        将任务加入队列，等待执行。
-
-        :param task_type: 任务类型 ('train' 或 'inference')
-        :param model_name: 使用的模型名称
-        :param data: 任务数据
-        :return: 任务状态信息
-        """
-        if self.status != ServiceStatus.RUNNING:
-            raise Exception("服务未运行，无法接受新任务。")
-        
-        if self.active_tasks >= self.config.max_concurrent_tasks:
-            logger.warning("任务队列已满，请稍后重试。")
-            return {"status": TaskStatus.FAILED.value, "message": "任务队列已满"}
-
-        task_id = f"task_{int(asyncio.get_running_loop().time())}"
-        task = {"id": task_id, "type": task_type, "model": model_name, "data": data, "status": TaskStatus.PENDING}
-        await self.task_queue.put(task)
-        self.active_tasks += 1
-        logger.info(f"任务 {task_id} 已加入队列。")
-        return {"task_id": task_id, "status": TaskStatus.PENDING.value}
-
-    async def _process_tasks(self):
-        """
-        循环处理任务队列中的任务。
-        """
-        while self.status == ServiceStatus.RUNNING:
-            try:
-                task = await self.task_queue.get()
-                logger.info(f"开始处理任务 {task['id']}...")
-                if task['type'] == 'train':
-                    result = await self._train(task['model'], task['data'])
-                elif task['type'] == 'inference':
-                    result = await self._inference(task['model'], task['data'])
-                else:
-                    result = {"status": TaskStatus.FAILED.value, "error": "未知的任务类型"}
-                
-                logger.info(f"任务 {task['id']} 处理完成，结果: {result['status']}. ")
-                # 实际应用中可能会将结果存入数据库或通知其他服务
-
-            except Exception as e:
-                logger.error(f"处理任务时发生错误: {e}", exc_info=True)
-            finally:
-                self.active_tasks -= 1
-                self.task_queue.task_done()
-
-    async def _train(self, model_name: str, data: Any) -> Dict[str, Any]:
-        """
-        模拟模型训练过程。
-
-        :param model_name: 模型名称
-        :param data: 训练数据
-        :return: 训练结果
-        """
-        logger.info(f"开始使用模型 '{model_name}' 进行训练...")
-        # 模拟耗时的训练过程
-        await asyncio.sleep(10)
-        logger.info(f"模型 '{model_name}' 训练完成。")
-        return {"status": TaskStatus.COMPLETED.value, "message": "模型训练成功"}
-
-    async def _inference(self, model_name: str, data: Any) -> Dict[str, Any]:
-        """
-        模拟模型推理过程。
-
-        :param model_name: 模型名称
-        :param data: 推理数据
-        :return: 推理结果
-        """
-        logger.info(f"开始使用模型 '{model_name}' 进行推理...")
-        if model_name not in self.models:
-            return {"status": TaskStatus.FAILED.value, "error": f"模型 {model_name} 未找到"}
-        
-        # 模拟耗时的推理过程
-        await asyncio.sleep(2)
-        # 模拟推理结果
-        prediction = {"label": "positive", "confidence": 0.95}
-        logger.info(f"模型 '{model_name}' 推理完成。")
-        return {"status": TaskStatus.COMPLETED.value, "prediction": prediction}
-
-    def get_status(self) -> Dict[str, Any]:
-        """
-        获取服务的当前状态。
-
-        :return: 包含服务状态、模型和任务信息的字典
-        """
-        return {
-            "service_status": self.status.value,
-            "node_name": self.config.node_name,
-            "loaded_models": list(self.models.keys()),
-            "active_tasks": self.active_tasks,
-            "queued_tasks": self.task_queue.qsize(),
-            "max_concurrent_tasks": self.config.max_concurrent_tasks
-        }
-
-    def get_health(self) -> Dict[str, Any]:
-        """
-        健康检查接口。
-
-        :return: 健康状态字典
-        """
-        is_healthy = self.status == ServiceStatus.RUNNING
-        return {
-            "status": "healthy" if is_healthy else "unhealthy",
-            "details": self.get_status()
-        }
-
-    async def shutdown(self):
-        """
-        优雅地关闭服务。
-        """
-        logger.info("开始关闭服务...")
-        self.status = ServiceStatus.STOPPED
-        # 等待所有任务完成
-        await self.task_queue.join()
-        logger.info("所有任务已处理完毕，服务已关闭。")
-
-# --- 辅助函数和主程序 ---
-
-def load_config(path: str = "config.json") -> NodeConfig:
-    """
-    从 JSON 文件加载配置。
-
-    :param path: 配置文件路径
-    :return: 节点配置实例
-    """
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-        return NodeConfig.from_dict(config_data)
-    except FileNotFoundError:
-        logger.warning(f"配置文件 {path} 未找到，将使用默认配置并生成示例文件。")
-        default_config = NodeConfig(
-            models={
-                "classifier_a": ModelConfig(
-                    name="ImageClassifier",
-                    path="./models/classifier_a.pkl",
-                    model_type=ModelType.CLASSIFICATION
-                ),
-                "regressor_b": ModelConfig(
-                    name="PriceRegressor",
-                    path="./models/regressor_b.onnx",
-                    model_type=ModelType.REGRESSION
-                )
+            job.status = TaskStatus.TRAINING
+            logger.info(f"开始训练任务 {job.job_id} (model={job.model_name})")
+            # Simulate training delay
+            await asyncio.sleep(5)
+            job.status = TaskStatus.COMPLETED
+            job.completed_at = datetime.utcnow().isoformat()
+            job.result = {
+                "accuracy": round(0.85 + len(job.model_name) % 10 * 0.01, 4),
+                "loss": round(0.15 - len(job.model_name) % 10 * 0.005, 4),
+                "epochs": job.hyperparams.get("epochs", 10),
             }
-        )
-        # 创建示例配置文件
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            # 需要一个辅助函数将dataclass转为可序列化的dict
-            import dataclasses
-            config_dict = dataclasses.asdict(default_config)
-            # 枚举需要转为字符串
-            for model in config_dict['models'].values():
-                model['model_type'] = model['model_type'].name
-            json.dump(config_dict, f, ensure_ascii=False, indent=4)
-        return default_config
-    except Exception as e:
-        logger.error(f"加载配置文件时出错: {e}", exc_info=True)
+            # Update model status if it exists
+            if job.model_name in self._models:
+                self._models[job.model_name].status = "trained"
+            logger.info(f"训练任务 {job.job_id} 完成")
+        except asyncio.CancelledError:
+            job.status = TaskStatus.FAILED
+            job.error = "任务被取消"
+        except Exception as e:
+            job.status = TaskStatus.FAILED
+            job.error = str(e)
+            logger.error(f"训练任务 {job.job_id} 失败: {e}")
+
+    def get_training_job(self, job_id: str) -> Optional[TrainingJob]:
+        return self._jobs.get(job_id)
+
+    # -- inference -----------------------------------------------------------
+
+    async def run_inference(self, model_name: str, input_data: Any) -> InferenceResult:
+        result_id = str(uuid.uuid4())
+        result = InferenceResult(result_id=result_id, model_name=model_name, input_data=input_data)
+        self._results.append(result)
+        # trim history
+        if len(self._results) > self._max_results:
+            self._results = self._results[-self._max_results:]
+        # Run asynchronously in background
+        asyncio.create_task(self._run_inference_task(result))
+        return result
+
+    async def _run_inference_task(self, result: InferenceResult):
+        """模拟推理过程"""
+        try:
+            result.status = TaskStatus.INFERENCING
+            logger.info(f"开始推理 {result.result_id} (model={result.model_name})")
+            if result.model_name not in self._models:
+                raise ValueError(f"模型未注册: {result.model_name}")
+            await asyncio.sleep(1)  # simulate inference latency
+            model = self._models[result.model_name]
+            mt = model.model_type.lower()
+            if mt == "classification":
+                result.prediction = {"label": "positive", "confidence": 0.92}
+            elif mt == "regression":
+                result.prediction = {"value": round(42.0 + hash(str(result.input_data)) % 100 * 0.1, 4)}
+            elif mt == "clustering":
+                result.prediction = {"cluster": hash(str(result.input_data)) % 5}
+            else:
+                result.prediction = {"output": str(result.input_data)}
+            result.confidence = 0.92
+            result.status = TaskStatus.COMPLETED
+            result.completed_at = datetime.utcnow().isoformat()
+            logger.info(f"推理 {result.result_id} 完成")
+        except Exception as e:
+            result.status = TaskStatus.FAILED
+            result.error = str(e)
+            logger.error(f"推理 {result.result_id} 失败: {e}")
+
+    def get_recent_results(self, limit: int = 20) -> List[InferenceResult]:
+        return list(reversed(self._results[-limit:]))
+
+    def to_dict(self, obj) -> Dict[str, Any]:
+        from dataclasses import asdict
+        d = asdict(obj)
+        for k, v in list(d.items()):
+            if isinstance(v, Enum):
+                d[k] = v.value
+        return d
+
+
+# ---------------------------------------------------------------------------
+# Pydantic request models
+# ---------------------------------------------------------------------------
+
+class RegisterModelRequest(BaseModel):
+    name: str
+    model_type: str = "classification"
+    config: Dict[str, Any] = {}
+    version: str = "1.0.0"
+    path: str = ""
+
+class TrainRequest(BaseModel):
+    model_name: str
+    dataset: Any
+    hyperparams: Dict[str, Any] = {}
+
+class InferRequest(BaseModel):
+    model_name: str
+    input_data: Any
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: Dict[str, Any] = {}
+
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+
+_svc = LearningService()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Node_73_Learning FastAPI 启动")
+    # Register a couple of default demo models
+    _svc.register_model("classifier_a", "classification", {"layers": 3, "units": 128})
+    _svc.register_model("regressor_b", "regression", {"layers": 2, "units": 64})
+    yield
+    logger.info("Node_73_Learning FastAPI 关闭")
+
+app = FastAPI(
+    title="Node_73_Learning",
+    description="机器学习服务 API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -- routes ------------------------------------------------------------------
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "node": "Node_73_Learning", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/status")
+def status():
+    return {
+        "status": _svc.status.value,
+        "node": "Node_73_Learning",
+        "model_count": len(_svc._models),
+        "active_jobs": sum(1 for j in _svc._jobs.values() if j.status in (TaskStatus.PENDING, TaskStatus.TRAINING)),
+        "total_jobs": len(_svc._jobs),
+        "total_inference_results": len(_svc._results),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/models")
+def list_models():
+    models = _svc.list_models()
+    return {"models": [_svc.to_dict(m) for m in models], "count": len(models)}
+
+
+@app.post("/model/register", status_code=201)
+def register_model(req: RegisterModelRequest):
+    info = _svc.register_model(req.name, req.model_type, req.config, req.version, req.path)
+    return _svc.to_dict(info)
+
+
+@app.get("/model/{name}")
+def get_model(name: str):
+    info = _svc.get_model(name)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"模型不存在: {name}")
+    return _svc.to_dict(info)
+
+
+@app.post("/train", status_code=202)
+async def start_train(req: TrainRequest):
+    if _svc.get_model(req.model_name) is None:
+        raise HTTPException(status_code=404, detail=f"模型未注册: {req.model_name}")
+    job = await _svc.start_training(req.model_name, req.dataset, req.hyperparams)
+    return _svc.to_dict(job)
+
+
+@app.get("/train/{job_id}")
+def get_training_job(job_id: str):
+    job = _svc.get_training_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"训练任务不存在: {job_id}")
+    return _svc.to_dict(job)
+
+
+@app.post("/infer", status_code=202)
+async def run_infer(req: InferRequest):
+    if _svc.get_model(req.model_name) is None:
+        raise HTTPException(status_code=404, detail=f"模型未注册: {req.model_name}")
+    result = await _svc.run_inference(req.model_name, req.input_data)
+    return _svc.to_dict(result)
+
+
+@app.get("/results")
+def get_results(limit: int = 20):
+    results = _svc.get_recent_results(limit)
+    return {"results": [_svc.to_dict(r) for r in results], "count": len(results)}
+
+
+@app.post("/mcp/call")
+async def mcp_call(req: MCPCallRequest):
+    p = req.params
+    try:
+        if req.tool == "register_model":
+            info = _svc.register_model(p["name"], p.get("model_type","classification"), p.get("config",{}), p.get("version","1.0.0"), p.get("path",""))
+            return {"result": _svc.to_dict(info)}
+        elif req.tool == "list_models":
+            return {"result": [_svc.to_dict(m) for m in _svc.list_models()]}
+        elif req.tool == "get_model":
+            info = _svc.get_model(p["name"])
+            if not info:
+                raise HTTPException(status_code=404, detail="not found")
+            return {"result": _svc.to_dict(info)}
+        elif req.tool == "train":
+            job = await _svc.start_training(p["model_name"], p.get("dataset"), p.get("hyperparams",{}))
+            return {"result": _svc.to_dict(job)}
+        elif req.tool == "infer":
+            result = await _svc.run_inference(p["model_name"], p.get("input_data"))
+            return {"result": _svc.to_dict(result)}
+        elif req.tool == "get_status":
+            return {"result": _svc.status.value}
+        else:
+            raise HTTPException(status_code=404, detail=f"未知工具: {req.tool}")
+    except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-async def main():
-    """
-    主执行函数
-    """
-    # 1. 加载配置
-    config = load_config()
 
-    # 2. 创建和初始化服务
-    service = LearningService(config)
-    await service.initialize()
-
-    # 3. 启动任务处理协程
-    task_processor = asyncio.create_task(service._process_tasks())
-
-    # 4. 模拟API调用和任务调度
-    if service.status == ServiceStatus.RUNNING:
-        logger.info("--- 模拟API调用 ---")
-        # 模拟健康检查
-        health = service.get_health()
-        logger.info(f"健康检查结果: {health['status']}")
-
-        # 模拟状态查询
-        status = service.get_status()
-        logger.info(f"服务状态: {json.dumps(status, indent=2, ensure_ascii=False)}")
-
-        # 模拟提交推理任务
-        inference_task = await service.schedule_task(
-            task_type='inference',
-            model_name='classifier_a',
-            data={"image_url": "http://example.com/image.jpg"}
-        )
-        logger.info(f"提交推理任务: {inference_task}")
-
-        # 模拟提交训练任务
-        train_task = await service.schedule_task(
-            task_type='train',
-            model_name='regressor_b',
-            data={"dataset_path": "/data/training_data.csv"}
-        )
-        logger.info(f"提交训练任务: {train_task}")
-
-    # 5. 等待一段时间让任务处理
-    await asyncio.sleep(15)
-
-    # 6. 关闭服务
-    await service.shutdown()
-    task_processor.cancel()
-    try:
-        await task_processor
-    except asyncio.CancelledError:
-        logger.info("任务处理器已成功取消。")
-# ---------------------------------------------------------------------------
-# HTTP 健康检查服务器
-# ---------------------------------------------------------------------------
-import threading as _threading
-try:
-    from fastapi import FastAPI as _FastAPI
-    import uvicorn as _uvicorn
-    _health_app = _FastAPI(title="Node_73_Learning")
-
-    @_health_app.get("/health")
-    def _health_endpoint():
-        return {"status": "ok", "node": "Node_73_Learning"}
-
-    @_health_app.get("/status")
-    def _status_endpoint():
-        return {"status": "ok", "node": "Node_73_Learning"}
-
-    def _start_health_server():
-        _uvicorn.run(_health_app, host="0.0.0.0", port=8073, log_level="error")
-except ImportError:
-    _health_app = None
-    def _start_health_server():
-        pass
 if __name__ == "__main__":
-    if _health_app is not None:
-        _threading.Thread(target=_start_health_server, daemon=True).start()
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("程序被用户中断。")
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

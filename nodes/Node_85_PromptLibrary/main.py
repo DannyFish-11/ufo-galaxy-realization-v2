@@ -553,6 +553,11 @@ async def delete_prompt(prompt_id: str):
     library.delete_prompt(prompt_id)
     return {"message": "Prompt deleted", "prompt_id": prompt_id}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "85", "name": "PromptLibrary", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.post("/prompts/{prompt_id}/render")
 async def render_prompt(prompt_id: str, variables: Dict[str, Any]):
     """渲染提示词"""

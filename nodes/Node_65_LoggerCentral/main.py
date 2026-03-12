@@ -599,6 +599,11 @@ async def get_log_levels():
     """Get available log levels."""
     return {"levels": [l.value for l in LogLevel]}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "65", "name": "LoggerCentral", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.get("/categories")
 async def get_log_categories():
     """Get available log categories."""

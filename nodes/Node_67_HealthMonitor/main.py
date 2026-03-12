@@ -596,6 +596,11 @@ async def reset_node(node_id: str):
     await monitor.reset_node(node_id)
     return {"status": "reset", "node_id": node_id}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "67", "name": "HealthMonitor", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.get("/history")
 async def get_recovery_history(node_id: Optional[str] = None, limit: int = 50):
     """Get recovery attempt history."""

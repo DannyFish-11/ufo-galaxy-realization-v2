@@ -716,6 +716,11 @@ async def delete_backup(backup_id: str):
     
     return {"status": "deleted", "backup_id": backup_id}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "69", "name": "BackupRestore", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.get("/stats")
 async def get_stats():
     """Get backup statistics."""

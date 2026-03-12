@@ -32,6 +32,11 @@ class MCMCRequest(BaseModel):
 async def health():
     return {"status": "healthy", "node_id": "62", "name": "ProbabilisticProgramming", "timestamp": datetime.now().isoformat()}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "62", "name": "ProbabilisticProgramming", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.post("/bayes")
 async def bayes_theorem(request: BayesRequest):
     """贝叶斯定理: P(A|B) = P(B|A) * P(A) / P(B)"""

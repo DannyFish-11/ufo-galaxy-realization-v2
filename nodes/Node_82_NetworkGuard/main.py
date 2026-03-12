@@ -361,6 +361,11 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def get_status():
+    from datetime import datetime as _dt
+    return {"status": "ok", "node_id": NODE_ID, "name": NODE_NAME, "timestamp": _dt.now().isoformat()}
+
 @app.get("/interfaces")
 async def get_interfaces():
     """获取网络接口"""
