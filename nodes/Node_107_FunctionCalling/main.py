@@ -67,13 +67,63 @@ def _builtin_get_current_time(timezone: str = "UTC") -> Dict[str, Any]:
     }
 
 
+import ast as _ast
+
+_SAFE_MATH_NAMES: Dict[str, Any] = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
+_SAFE_MATH_NAMES.update({"abs": abs, "round": round, "int": int, "float": float})
+
+_SAFE_BINOPS = {
+    _ast.Add: lambda a, b: a + b,
+    _ast.Sub: lambda a, b: a - b,
+    _ast.Mult: lambda a, b: a * b,
+    _ast.Div: lambda a, b: a / b,
+    _ast.FloorDiv: lambda a, b: a // b,
+    _ast.Mod: lambda a, b: a % b,
+    _ast.Pow: lambda a, b: a ** b,
+}
+
+
+def _ast_eval(node: _ast.AST) -> float:
+    """Recursively evaluate a safe arithmetic AST node."""
+    if isinstance(node, _ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return node.value
+        raise ValueError(f"Unsupported constant type: {type(node.value).__name__}")
+    if isinstance(node, _ast.BinOp):
+        op_fn = _SAFE_BINOPS.get(type(node.op))
+        if op_fn is None:
+            raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+        return op_fn(_ast_eval(node.left), _ast_eval(node.right))
+    if isinstance(node, _ast.UnaryOp):
+        operand = _ast_eval(node.operand)
+        if isinstance(node.op, _ast.USub):
+            return -operand
+        if isinstance(node.op, _ast.UAdd):
+            return operand
+        raise ValueError(f"Unsupported unary op: {type(node.op).__name__}")
+    if isinstance(node, _ast.Call):
+        if not isinstance(node.func, _ast.Name):
+            raise ValueError("Only simple function calls are allowed")
+        name = node.func.id
+        if name not in _SAFE_MATH_NAMES:
+            raise ValueError(f"Function not allowed: {name}")
+        args = [_ast_eval(arg) for arg in node.args]
+        return _SAFE_MATH_NAMES[name](*args)
+    if isinstance(node, _ast.Name):
+        if node.id in _SAFE_MATH_NAMES:
+            val = _SAFE_MATH_NAMES[node.id]
+            if callable(val):
+                raise ValueError(f"'{node.id}' is a function, not a constant")
+            return val
+        raise ValueError(f"Name not allowed: {node.id}")
+    raise ValueError(f"Unsupported AST node: {type(node).__name__}")
+
+
 def _builtin_calculate(expression: str) -> Dict[str, Any]:
-    """Safe arithmetic evaluator using math module only."""
-    allowed_names = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
-    allowed_names["abs"] = abs
-    allowed_names["round"] = round
+    """Safe arithmetic evaluator using AST walking — no eval() call."""
     try:
-        result = eval(expression, {"__builtins__": {}}, allowed_names)  # noqa: S307
+        tree = _ast.parse(expression, mode="eval")
+        result = _ast_eval(tree.body)
         return {"expression": expression, "result": result}
     except Exception as exc:
         return {"expression": expression, "error": str(exc)}
