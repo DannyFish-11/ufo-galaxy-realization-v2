@@ -296,6 +296,40 @@ async def get_system_info():
     return info
 
 # ============================================================================
+# 运行时节点注册表（内存结构，供 launcher 注册并供前端查询）
+# ============================================================================
+
+_runtime_nodes: Dict[str, Dict[str, Any]] = {}
+
+
+class RuntimeNodeRegisterRequest(BaseModel):
+    node_id: str
+    name: str
+    port: Optional[int] = None
+    status: str = "running"
+
+
+@app.post("/api/v1/nodes/register")
+async def register_runtime_node(request: RuntimeNodeRegisterRequest):
+    """launcher 启动节点后调用，注册运行时节点信息"""
+    _runtime_nodes[request.node_id] = {
+        "node_id": request.node_id,
+        "name": request.name,
+        "port": request.port,
+        "status": request.status,
+        "registered_at": datetime.now().isoformat(),
+    }
+    logger.info("运行时节点已注册: %s (port=%s)", request.node_id, request.port)
+    return {"success": True, "node_id": request.node_id}
+
+
+@app.get("/api/v1/nodes/runtime")
+async def list_runtime_nodes():
+    """返回运行时节点列表（launcher 注册的节点）"""
+    return {"nodes": list(_runtime_nodes.values()), "total": len(_runtime_nodes)}
+
+
+# ============================================================================
 # 节点 API - 使用已有协议
 # ============================================================================
 

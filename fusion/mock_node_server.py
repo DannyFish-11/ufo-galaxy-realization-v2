@@ -6,7 +6,7 @@ Galaxy Fusion - Mock Node Server
 
 用于演示和测试，模拟 102 个节点的 API 响应
 
-作者: Manus AI
+作者: Galaxy Team
 日期: 2026-01-25
 版本: 1.0.0
 """

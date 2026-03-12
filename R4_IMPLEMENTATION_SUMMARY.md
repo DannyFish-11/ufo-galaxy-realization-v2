@@ -317,4 +317,4 @@ Galaxy 系统已成功集成：
 ---
 
 *实施时间: 2026-02-11*  
-*实施者: Manus AI (Round 2 - R-4)*
+*实施者: Galaxy Team (Round 2 - R-4)*

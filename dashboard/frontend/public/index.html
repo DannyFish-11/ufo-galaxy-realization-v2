@@ -574,7 +574,18 @@
 
                 const loadConfigStatus = async () => { try { configStatus.value = (await axios.get('/api/v1/config/status')).data; } catch (e) {} };
                 const loadTools = async () => { try { tools.value = ((await axios.get('/api/v1/config/tools')).data.tools || []).map(t => ({ ...t, status: '' })); } catch (e) {} };
-                const loadNodes = async () => { try { nodes.value = (await axios.get('/api/v1/config/nodes')).data.nodes || []; } catch (e) {} };
+                const loadNodes = async () => {
+                    try {
+                        const rt = (await axios.get('/api/v1/nodes/runtime')).data.nodes || [];
+                        if (rt.length > 0) {
+                            nodes.value = rt;
+                            return;
+                        }
+                    } catch (e) { /* fall through to config nodes */ }
+                    try {
+                        nodes.value = (await axios.get('/api/v1/config/nodes')).data.nodes || [];
+                    } catch (e) {}
+                };
                 const loadNodeApis = async () => {
                     try {
                         const data = (await axios.get('/api/v1/config/node-apis')).data;
