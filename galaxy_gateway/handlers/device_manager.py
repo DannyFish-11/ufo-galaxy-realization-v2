@@ -22,35 +22,9 @@ from ..protocol import (
     DeviceInfo, DeviceType, DevicePlatform, DeviceCapability,
     AIPMessage, MessageType
 )
+from ..ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
 logger = logging.getLogger(__name__)
-
-
-def _to_unified_device(device_info: DeviceInfo) -> "UnifiedDevice":
-    """将 gateway DeviceInfo 转换为 UnifiedDevice。"""
-    from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
-    device_type_str = "unknown"
-    if device_info.device_type:
-        raw = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
-        # 取第一段（如 android_phone → android）
-        device_type_str = raw.split("_")[0] if "_" in raw else raw
-    try:
-        utype = UnifiedDeviceType(device_type_str)
-    except ValueError:
-        utype = UnifiedDeviceType.UNKNOWN
-
-    return UnifiedDevice(
-        device_id=device_info.device_id,
-        device_name=getattr(device_info, "device_name", device_info.device_id),
-        device_type=utype,
-        status=UnifiedDeviceStatus.ONLINE,
-        capabilities=[
-            c.name for c in DeviceCapability
-            if getattr(device_info, "capabilities", 0) & c.value
-        ] if hasattr(device_info, "capabilities") else [],
-        metadata=getattr(device_info, "metadata", {}),
-        source="galaxy_gateway",
-    )
 
 
 class DeviceManager:
@@ -66,11 +40,6 @@ class DeviceManager:
         self.device_status: Dict[str, str] = {}  # device_id -> status
         self.device_last_seen: Dict[str, datetime] = {}
 
-    @staticmethod
-    def _unified():
-        from core.unified.device_manager import get_unified_device_manager
-        return get_unified_device_manager()
-
     def register_device(self, device_info: DeviceInfo) -> bool:
         """注册设备（同步到统一设备管理器）。"""
         device_id = device_info.device_id
@@ -81,17 +50,23 @@ class DeviceManager:
             logger.info(f"New device registered: {device_id}")
 
         # ── SSOT guardrail: write-through to UDM FIRST ──
-        # If the UDM write fails, do NOT update local state so that
-        # self.devices never diverges from the single source of truth.
-        try:
-            self._unified().register_device(_to_unified_device(device_info))
-        except Exception as exc:
-            logger.warning(
-                "SSOT guardrail: UDM write failed for device %s — "
-                "local DeviceManager state NOT updated. error=%s",
-                device_id, exc,
-                extra={"event": "ssot_dm_write_failed", "device_id": device_id},
-            )
+        # Derive a plain capability list from the DeviceCapability bitmask.
+        raw_caps = getattr(device_info, "capabilities", None) or 0
+        cap_list = [c.name for c in DeviceCapability if raw_caps & c.value]
+        device_type_raw = ""
+        if device_info.device_type:
+            raw = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
+            device_type_raw = raw
+        device_name = getattr(device_info, "device_name", device_id)
+
+        if not udm_write_register(
+            device_id=device_id,
+            device_name=device_name,
+            device_type_raw=device_type_raw,
+            capabilities=cap_list,
+            metadata=getattr(device_info, "metadata", {}),
+            source="galaxy_gateway",
+        ):
             return False
 
         self.devices[device_id] = device_info
@@ -107,15 +82,8 @@ class DeviceManager:
             return False
 
         # ── SSOT guardrail: remove from UDM first ──
-        try:
-            self._unified().unregister_device(device_id)
-        except Exception as exc:
-            logger.warning(
-                "SSOT guardrail: UDM unregister failed for device %s — "
-                "local state NOT removed. error=%s",
-                device_id, exc,
-                extra={"event": "ssot_dm_unregister_failed", "device_id": device_id},
-            )
+        if not udm_write_unregister(device_id):
+            # Warning already logged by helper; do NOT remove local state.
             return False
 
         del self.devices[device_id]
@@ -128,19 +96,10 @@ class DeviceManager:
     def update_device_status(self, device_id: str, status: str):
         """更新设备状态（同步到统一设备管理器）。"""
         # ── SSOT guardrail: write-through to UDM FIRST ──
-        udm_ok = False
-        try:
-            from core.unified.models import UnifiedDeviceStatus
-            ustat = UnifiedDeviceStatus(status.lower()) if status else UnifiedDeviceStatus.OFFLINE
-            self._unified().update_device_status(device_id, ustat)
-            udm_ok = True
-        except Exception as exc:
-            logger.warning(
-                "SSOT guardrail: UDM status update failed for device %s — "
-                "local status NOT updated as truth. error=%s",
-                device_id, exc,
-                extra={"event": "ssot_dm_status_failed", "device_id": device_id},
-            )
+        if status and status.lower() in ("online", "busy"):
+            udm_ok = udm_write_heartbeat(device_id)
+        else:
+            udm_ok = udm_write_unregister(device_id)
 
         if udm_ok and device_id in self.devices:
             self.device_status[device_id] = status
