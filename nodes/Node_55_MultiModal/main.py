@@ -133,7 +133,6 @@ async def process(request: ProcessRequest):
             if request.model:
                 kwargs["model"] = request.model
             if TORCH_AVAILABLE:
-                import torch
                 kwargs["device"] = 0 if torch.cuda.is_available() else -1
             _pipelines[cache_key] = hf_pipeline(**kwargs)
 

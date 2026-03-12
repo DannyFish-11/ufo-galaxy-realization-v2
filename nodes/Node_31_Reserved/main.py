@@ -3,6 +3,7 @@ Node 31: Reserved - Plugin Framework Service
 """
 import os
 import sys
+import asyncio
 import importlib.util
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -93,7 +94,6 @@ async def execute_plugin(request: ExecutePluginRequest):
         params = request.params or {}
         if hasattr(module, request.action):
             fn = getattr(module, request.action)
-            import asyncio
             if asyncio.iscoroutinefunction(fn):
                 result = await fn(**params)
             else:
@@ -101,7 +101,6 @@ async def execute_plugin(request: ExecutePluginRequest):
             return {"success": True, "result": result}
         elif hasattr(module, "execute"):
             fn = module.execute
-            import asyncio
             if asyncio.iscoroutinefunction(fn):
                 result = await fn(action=request.action, **params)
             else:
