@@ -121,13 +121,28 @@ class MessageHandler:
                     await task_info["callback"](task_id, message)
                 except Exception as e:
                     logger.error(f"Task callback error: {e}")
-        
+
+        # ── 并行闭环：将子任务结果记录到共享 ParallelGroupTracker ──
+        try:
+            from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
+            await record_parallel_fields(message.payload)
+        except Exception as _pt_err:
+            logger.warning("parallel_tracker[B/task]: record failed: %s", _pt_err)
+
         return None
     
     async def _handle_command_result(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """处理命令结果"""
         for result in message.results:
             logger.info(f"Command {result.command_id} result: {result.status}")
+
+        # ── 并行闭环：将子任务结果记录到共享 ParallelGroupTracker ──
+        try:
+            from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
+            await record_parallel_fields(message.payload)
+        except Exception as _pt_err:
+            logger.warning("parallel_tracker[B/cmd]: record failed: %s", _pt_err)
+
         return None
     
     async def _handle_screen_content(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:

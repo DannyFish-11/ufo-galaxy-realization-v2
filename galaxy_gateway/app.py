@@ -597,7 +597,8 @@ async def chat_endpoint(request: ChatRequest):
 
     所有对话请求经由 OpenClawd.process() 路由，确保 CapabilityRegistry
     和 Agent 调度逻辑的一致性。响应包含向后兼容字段 (reply, response,
-    intent)，供老版本客户端使用。
+    intent)，供老版本客户端使用。响应中的 parallel_result 由并行闭环
+    ParallelGroupTracker 填充（当可用时）。
     """
     if not openclawd_instance:
         logger.warning("OpenClawd 未初始化，chat 端点不可用")
@@ -613,10 +614,51 @@ async def chat_endpoint(request: ChatRequest):
         # 确保向后兼容字段存在（reply 是 response 的别名，供旧版客户端使用）
         if isinstance(result, dict) and "reply" not in result:
             result = {**result, "reply": result.get("response", "")}
+        # 附加 parallel_result（仅当可用且未重复时）
+        result = _merge_parallel_result(result)
         return result
     except Exception as e:
         logger.error("OpenClawd 处理失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat processing error: {e}")
+
+
+def _merge_parallel_result(result: dict) -> dict:
+    """将 parallel_result 提升到响应顶层（如可用），不影响现有 reply 行为。
+
+    优先级：
+    1. result 已含顶层 parallel_result → 原样返回
+    2. result.metadata.parallel_result 存在（来自 OpenClawd 同步并行流）→ 提升至顶层
+    3. result 或 result.metadata 含 group_id → 查询网关 ParallelGroupTracker
+    """
+    if not isinstance(result, dict):
+        return result
+
+    if "parallel_result" in result:
+        return result
+
+    metadata = result.get("metadata") or {}
+
+    # Case 2: OpenClawd 同步并行结果已嵌在 metadata 中
+    if isinstance(metadata, dict) and "parallel_result" in metadata:
+        return {**result, "parallel_result": metadata["parallel_result"]}
+
+    # Case 3: 通过 group_id 查询网关 tracker
+    group_id = None
+    if isinstance(metadata, dict):
+        group_id = metadata.get("parallel_group") or metadata.get("group_id")
+    if not group_id:
+        group_id = result.get("group_id")
+
+    if group_id:
+        try:
+            from galaxy_gateway.orchestrator.parallel_tracker import get_tracker
+            gs = get_tracker().get_group_status(str(group_id))
+            if gs is not None:
+                return {**result, "parallel_result": gs.to_dict()}
+        except Exception as _err:
+            logger.debug("parallel_tracker merge skipped: %s", _err)
+
+    return result
 
 
 # ============================================================================
