@@ -9,7 +9,7 @@
 
 import logging
 import uuid
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, Set, Tuple
 from datetime import datetime
 
 from ..protocol import (
@@ -28,6 +28,9 @@ class MessageHandler:
         self.device_manager = device_manager
         self.task_handlers: Dict[str, Callable] = {}
         self.pending_tasks: Dict[str, dict] = {}  # task_id -> task_info
+        # Idempotency: seen task-result IDs and parallel subtask keys.
+        self._seen_task_result_ids: Set[str] = set()
+        self._seen_parallel_keys: Set[Tuple[str, int]] = set()  # (group_id, subtask_index)
         
     def register_task_handler(self, task_type: str, handler: Callable):
         """注册任务处理器"""
@@ -102,11 +105,43 @@ class MessageHandler:
         return None
     
     async def _handle_task_result(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
-        """处理任务结果"""
+        """处理任务结果（幂等：同一 task_id 的重复回包将被忽略）。"""
         task_id = message.task_id
         if not task_id:
             return create_error_message(device_id, "Missing task_id", message.message_id)
-        
+
+        # ── Idempotency: check for duplicate task result ──
+        if task_id in self._seen_task_result_ids:
+            logger.info(
+                "Duplicate task result ignored",
+                extra={
+                    "event": "task_result_duplicate_ignored",
+                    "task_id": task_id,
+                    "device_id": device_id,
+                },
+            )
+            return None
+        self._seen_task_result_ids.add(task_id)
+
+        # ── Parallel subtask dedup (group_id + subtask_index) ──
+        payload = message.payload or {}
+        group_id = payload.get("group_id")
+        subtask_index = payload.get("subtask_index")
+        if group_id is not None and subtask_index is not None:
+            parallel_key = (str(group_id), int(subtask_index))
+            if parallel_key in self._seen_parallel_keys:
+                logger.info(
+                    "Duplicate parallel subtask result ignored",
+                    extra={
+                        "event": "parallel_subtask_result_duplicate_ignored",
+                        "group_id": group_id,
+                        "subtask_index": subtask_index,
+                        "device_id": device_id,
+                    },
+                )
+                return None
+            self._seen_parallel_keys.add(parallel_key)
+
         if task_id in self.pending_tasks:
             task_info = self.pending_tasks[task_id]
             task_info["status"] = message.task_status or TaskStatus.COMPLETED

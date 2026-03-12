@@ -145,6 +145,8 @@ class DeviceRouter:
         self.task_queue: Dict[str, Dict] = {}
         self.task_results: Dict[str, Dict] = {}
         self._task_events: Dict[str, asyncio.Event] = {}
+        # Idempotency: seen task-result IDs.
+        self._seen_task_result_ids: set = set()
     
     def register_device(self, device_id: str, device_type: str,
                        capabilities: List[str], websocket=None,
@@ -471,8 +473,20 @@ class DeviceRouter:
         return [task.copy() for _ in devices]
     
     async def handle_task_result(self, task_id: str, result: Dict):
-        """处理任务执行结果"""
+        """处理任务执行结果（幂等：同一 task_id 的重复结果将被忽略）。"""
         try:
+            # ── Idempotency: ignore duplicate task results ──
+            if task_id in self._seen_task_result_ids:
+                logger.info(
+                    "Duplicate task result ignored by device_router",
+                    extra={
+                        "event": "task_result_duplicate_ignored",
+                        "task_id": task_id,
+                    },
+                )
+                return
+            self._seen_task_result_ids.add(task_id)
+
             self.task_results[task_id] = result
 
             # Signal the waiting event if any
