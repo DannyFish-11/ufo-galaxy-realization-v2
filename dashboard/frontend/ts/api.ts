@@ -10,6 +10,7 @@ import type {
   Device,
   DeviceRegisterRequest,
   Agent,
+  AgentPermissions,
   LLMProvider,
   ChatRequest,
   ChatResponse,
@@ -107,6 +108,30 @@ export class GalaxyAPI {
    */
   async getLLMProviders(): Promise<{ providers: LLMProvider[] }> {
     const response = await fetch(`${this.baseUrl}/api/v1/llm/providers`);
+    return response.json();
+  }
+
+  /**
+   * 从模板创建 Agent（含权限）
+   */
+  async createAgent(template: string, permissions: AgentPermissions): Promise<{ success: boolean; agent: Agent }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/agents/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template, permissions }),
+    });
+    return response.json();
+  }
+
+  /**
+   * 动态生成 Agent（含权限）
+   */
+  async createAgentDynamic(taskDescription: string, permissions: AgentPermissions): Promise<{ success: boolean; agent: Agent }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/agents/create/dynamic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_description: taskDescription, permissions }),
+    });
     return response.json();
   }
 

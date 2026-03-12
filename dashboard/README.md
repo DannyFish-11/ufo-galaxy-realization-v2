@@ -32,6 +32,21 @@
 - 记忆统计
 - 用户画像
 
+### 6. Agent 权限管理（P0 新增）
+
+在 **🤖 Agent** 标签页的「创建 Agent」面板中，新增了 4 个能力权限开关：
+
+| 权限 | 图标 | 说明 |
+|------|------|------|
+| `filesystem` | 📁 | 允许 Agent 读写本地文件系统 |
+| `terminal` | ⌨️ | 允许 Agent 执行终端 / Shell 命令 |
+| `network` | 🌐 | 允许 Agent 访问外部网络（HTTP / API） |
+| `browser` | 🖥️ | 允许 Agent 控制浏览器进行 Web 自动化 |
+
+**默认全部关闭**，仅勾选确实需要的权限后再创建 Agent，以最小化执行风险。
+
+权限信息在创建时随请求体一同发送至后端，持久化存储在 `AgentConfig.permissions` 字段中，并可通过 `GET /api/v1/agents/{id}` 接口中的 `agent.permissions` 字段读回。
+
 ## 快速开始
 
 ### 1. 启动后端

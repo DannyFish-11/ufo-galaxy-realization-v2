@@ -184,6 +184,12 @@ class AgentConfig:
     split_threshold: int = 3  # 积压任务超过此数触发分裂
     ttl: int = 3600           # 生存时间（秒）
     metadata: Dict = field(default_factory=dict)
+    permissions: Dict = field(default_factory=lambda: {
+        "filesystem": False,
+        "terminal": False,
+        "network": False,
+        "browser": False,
+    })
 
 
 @dataclass
@@ -220,6 +226,7 @@ class TaskAgent:
             "completed": len(self.completed_tasks),
             "creation_mode": self.creation_mode.value,
             "metrics": self.metrics,
+            "permissions": self.config.permissions,
         }
 
 
