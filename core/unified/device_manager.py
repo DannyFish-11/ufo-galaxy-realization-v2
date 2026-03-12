@@ -17,13 +17,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .exceptions import DeviceAlreadyRegisteredError, DeviceManagerError, DeviceNotFoundError
 from .models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
 
 logger = logging.getLogger("Galaxy.Unified.DeviceManager")
+
+# Default heartbeat-timeout and grace-period constants (seconds).
+_DEFAULT_HEARTBEAT_TIMEOUT_SECS: float = 60.0
+_DEFAULT_HEARTBEAT_GRACE_SECS: float = 30.0
 
 
 class UnifiedDeviceManager:
@@ -68,7 +72,12 @@ class UnifiedDeviceManager:
 
     def register_device(self, device: UnifiedDevice) -> None:
         """
-        注册设备。若设备已存在则更新信息（重新注册语义）。
+        注册设备。若设备已存在则仅更新可变字段（去重语义）。
+
+        - 相同 device_id 重复注册不会创建重复条目。
+        - 若 metadata / capabilities 等可变字段发生变化，则更新已有条目。
+        - registered_at 保持首次注册时间不变。
+        - 本方法即为 UDM SSOT 写入点；调用成功后调用方才可更新本地缓存。
 
         Args:
             device: UnifiedDevice Pydantic 模型实例。
@@ -78,21 +87,39 @@ class UnifiedDeviceManager:
                 f"register_device requires a UnifiedDevice instance, got {type(device).__name__}"
             )
 
-        is_new = device.device_id not in self._devices
-        if is_new:
-            device.registered_at = datetime.utcnow()
-        device.status = UnifiedDeviceStatus.ONLINE
-        self._devices[device.device_id] = device
-
-        logger.info(
-            "Device registered" if is_new else "Device re-registered",
-            extra={
-                "event": "register_device",
-                "device_id": device.device_id,
-                "device_type": device.device_type,
-                "is_new": is_new,
-            },
-        )
+        existing = self._devices.get(device.device_id)
+        if existing is not None:
+            # Preserve the original registration timestamp to avoid identity drift.
+            device.registered_at = existing.registered_at
+            # Detect metadata / capability changes for structured logging.
+            meta_changed = existing.metadata != device.metadata
+            caps_changed = existing.capabilities != device.capabilities
+            self._devices[device.device_id] = device
+            self._devices[device.device_id].status = UnifiedDeviceStatus.ONLINE
+            logger.info(
+                "Device re-registered (dedup)",
+                extra={
+                    "event": "register_device_dedup",
+                    "device_id": device.device_id,
+                    "device_type": device.device_type,
+                    "is_new": False,
+                    "meta_changed": meta_changed,
+                    "caps_changed": caps_changed,
+                },
+            )
+        else:
+            device.registered_at = datetime.now(timezone.utc)
+            device.status = UnifiedDeviceStatus.ONLINE
+            self._devices[device.device_id] = device
+            logger.info(
+                "Device registered",
+                extra={
+                    "event": "register_device",
+                    "device_id": device.device_id,
+                    "device_type": device.device_type,
+                    "is_new": True,
+                },
+            )
 
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
@@ -160,21 +187,82 @@ class UnifiedDeviceManager:
             return
 
         device.status = status
-        device.last_heartbeat = datetime.utcnow()
+        device.last_heartbeat = datetime.now(timezone.utc)
         logger.debug(
             "Device status updated",
             extra={"event": "status_update", "device_id": device_id, "status": status},
         )
 
     def heartbeat(self, device_id: str) -> None:
-        """记录设备心跳。"""
+        """记录设备心跳；若设备处于离线/错误态则自动恢复为 ONLINE。"""
         device = self._devices.get(device_id)
         if device is not None:
-            device.last_heartbeat = datetime.utcnow()
+            device.last_heartbeat = datetime.now(timezone.utc)
             active = {UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.ONLINE.value,
                       UnifiedDeviceStatus.BUSY, UnifiedDeviceStatus.BUSY.value}
             if device.status not in active:
                 device.status = UnifiedDeviceStatus.ONLINE
+                logger.info(
+                    "Device recovered to ONLINE on heartbeat",
+                    extra={"event": "heartbeat_recovery", "device_id": device_id},
+                )
+
+    async def check_heartbeat_timeouts(
+        self,
+        timeout_secs: float = _DEFAULT_HEARTBEAT_TIMEOUT_SECS,
+        grace_secs: float = _DEFAULT_HEARTBEAT_GRACE_SECS,
+    ) -> List[str]:
+        """检查所有在线设备的心跳超时，对超时设备自动标记为离线。
+
+        避免 flapping：仅当超过 ``timeout_secs + grace_secs`` 无心跳时才标记离线。
+        设备收到新心跳（调用 :meth:`heartbeat`）后会自动恢复为 ONLINE。
+
+        Args:
+            timeout_secs: 基础心跳超时阈值（秒）。
+            grace_secs:   额外宽限期（秒），减少 flapping。
+
+        Returns:
+            被标记为离线的设备 ID 列表。
+        """
+        threshold = timeout_secs + grace_secs
+        now = datetime.now(timezone.utc)
+        marked_offline: List[str] = []
+
+        online_values = {
+            UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.ONLINE.value,
+            UnifiedDeviceStatus.BUSY, UnifiedDeviceStatus.BUSY.value,
+        }
+
+        for device in list(self._devices.values()):
+            if device.status not in online_values:
+                continue
+            if device.last_heartbeat is None:
+                # 从未收到心跳，从注册时间起算
+                ref = device.registered_at
+            else:
+                ref = device.last_heartbeat
+
+            # Ensure ref is timezone-aware for comparison.
+            # Backward-compatibility guard: devices registered before the
+            # UTC-aware migration may still carry naive datetimes.
+            if ref.tzinfo is None:
+                ref = ref.replace(tzinfo=timezone.utc)
+
+            elapsed = (now - ref).total_seconds()
+            if elapsed > threshold:
+                device.status = UnifiedDeviceStatus.OFFLINE
+                marked_offline.append(device.device_id)
+                logger.warning(
+                    "Device auto-offline: no heartbeat within timeout+grace",
+                    extra={
+                        "event": "heartbeat_timeout_offline",
+                        "device_id": device.device_id,
+                        "elapsed_secs": round(elapsed, 1),
+                        "threshold_secs": threshold,
+                    },
+                )
+
+        return marked_offline
 
     # ------------------------------------------------------------------
     # 查询
