@@ -107,10 +107,12 @@ async def emit_signal(request: DBusSignalRequest):
     if not DBUS_AVAILABLE:
         return {"success": False, "error": "dbus-python not installed. Run: pip install dbus-python"}
     try:
-        import dbus.service
-        import dbus.mainloop.glib
-        # Signals require a running main loop and registered service; return guidance
-        return {"success": False, "error": "Signal emission requires a registered D-Bus service with a running main loop. Use /call for method invocation."}
+        # Signals require a running main loop and registered service with a service name
+        # Return guidance instead of attempting a partial implementation
+        return {
+            "success": False,
+            "error": "Signal emission requires a registered D-Bus service with a running main loop. Use /call for method invocation."
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
 

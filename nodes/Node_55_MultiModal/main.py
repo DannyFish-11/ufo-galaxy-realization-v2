@@ -4,6 +4,7 @@ Node 55: MultiModal - Multimodal AI Processing Node
 import os
 import base64
 import io
+import statistics
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
@@ -42,6 +43,8 @@ except ImportError:
 
 app = FastAPI(title="Node 55 - MultiModal", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+_ERR_NO_TRANSFORMERS = "transformers not installed. Run: pip install transformers torch"
 
 # Cached pipelines
 _pipelines: Dict[str, Any] = {}
@@ -120,7 +123,7 @@ async def list_models():
 @app.post("/process")
 async def process(request: ProcessRequest):
     if not TRANSFORMERS_AVAILABLE:
-        return {"success": False, "error": "transformers not installed. Run: pip install transformers torch"}
+        return {"success": False, "error": _ERR_NO_TRANSFORMERS}
 
     try:
         task = request.task
@@ -156,7 +159,7 @@ async def process(request: ProcessRequest):
 @app.post("/embed")
 async def embed(request: EmbedRequest):
     if not TRANSFORMERS_AVAILABLE:
-        return {"success": False, "error": "transformers not installed. Run: pip install transformers torch"}
+        return {"success": False, "error": _ERR_NO_TRANSFORMERS}
     try:
         model_name = request.model or "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -169,7 +172,6 @@ async def embed(request: EmbedRequest):
         if request.text:
             result = pipe(request.text)
             # Flatten to 1D embedding (mean pool)
-            import statistics
             flat = result[0]  # shape: (seq_len, hidden_size)
             if isinstance(flat[0], list):
                 embedding = [statistics.mean(x[i] for x in flat) for i in range(len(flat[0]))]
