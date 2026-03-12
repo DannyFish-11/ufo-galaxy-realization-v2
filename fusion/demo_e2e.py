@@ -6,7 +6,7 @@ Galaxy Fusion - End-to-End Demo
 
 展示融合系统的完整工作流程（使用模拟执行）
 
-作者: Manus AI
+作者: Galaxy Team
 日期: 2026-01-25
 版本: 1.0.0
 """

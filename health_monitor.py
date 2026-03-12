@@ -11,7 +11,7 @@ Galaxy 健康监控系统
 4. 生成健康报告
 5. Web 仪表板
 
-作者：Manus AI
+作者：Galaxy Team
 日期：2026-01-23
 """
 

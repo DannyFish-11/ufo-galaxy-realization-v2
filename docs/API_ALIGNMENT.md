@@ -281,4 +281,4 @@ curl http://localhost:8766/api/devices/test_device/status
 
 **文档版本**: 2.0.0  
 **最后更新**: 2026-02-06  
-**作者**: Manus AI
+**作者**: Galaxy Team

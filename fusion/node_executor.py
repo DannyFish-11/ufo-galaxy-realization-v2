@@ -10,7 +10,7 @@ Galaxy Fusion - Node Executor (Gateway Optimized & Reinforced)
 3. 智能负载均衡，支持 102 节点动态调度
 4. 实时监控与告警
 
-Author: Manus AI
+Author: Galaxy Team
 Created: 2026-01-26
 Version: 1.3.0 (增强版)
 """

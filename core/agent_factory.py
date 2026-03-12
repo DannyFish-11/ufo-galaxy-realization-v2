@@ -351,7 +351,10 @@ class AgentFactory:
             CircuitBreaker(name="agent_llm", failure_threshold=5, recovery_timeout=30.0)
             if CircuitBreaker else None
         )
-        self._load_state()
+        try:
+            self._load_state()
+        except Exception as _load_err:
+            logger.warning("Agent 状态加载失败，以全新状态启动: %s", _load_err)
         logger.info("AgentFactory 已初始化")
 
     # ─────── 模式 1: 模板创建 ─────────

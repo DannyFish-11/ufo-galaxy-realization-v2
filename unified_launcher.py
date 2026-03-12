@@ -5,12 +5,12 @@ Galaxy - 统一启动器
 ======================
 
 融合性整合所有模块的统一入口：
-1. 核心服务层（Device Agent、设备状态、UFO 集成）
+1. 核心服务层（Device Agent、设备状态）
 2. 节点系统（108+ 节点）
 3. L4 增强模块（感知、推理、学习、执行）
 4. Web UI 和 API 服务
 
-作者：Manus AI
+作者：Galaxy Team
 日期：2026-02-06
 版本：2.0
 """
@@ -65,19 +65,19 @@ def print_banner():
     """打印启动横幅"""
     banner = f"""
 {Colors.CYAN}{Colors.BOLD}
-    ╔═══════════════════════════════════════════════════════════════════╗
-    ║                                                                   ║
-    ║     ██╗   ██╗███████╗ ██████╗      ██████╗  █████╗ ██╗      ██╗  ║
-    ║     ██║   ██║██╔════╝██╔═══██╗    ██╔════╝ ██╔══██╗██║      ██║  ║
-    ║     ██║   ██║█████╗  ██║   ██║    ██║  ███╗███████║██║      ██║  ║
-    ║     ██║   ██║██╔══╝  ██║   ██║    ██║   ██║██╔══██║██║      ██║  ║
-    ║     ╚██████╔╝██║     ╚██████╔╝    ╚██████╔╝██║  ██║███████╗ ██║  ║
-    ║      ╚═════╝ ╚═╝      ╚═════╝      ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═╝  ║
-    ║                                                                   ║
-    ║                  L4 级自主性智能系统 v2.0                         ║
-    ║                     统一融合版                                    ║
-    ║                                                                   ║
-    ╚═══════════════════════════════════════════════════════════════════╝
+    ╔══════════════════════════════════════════════════════════╗
+    ║                                                          ║
+    ║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║
+    ║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║
+    ║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║
+    ║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║
+    ║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║
+    ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║
+    ║                                                          ║
+    ║           L4 级自主性智能系统 v2.0                       ║
+    ║                统一融合版                                ║
+    ║                                                          ║
+    ╚══════════════════════════════════════════════════════════╝
 {Colors.ENDC}
     """
     print(banner)
@@ -326,7 +326,7 @@ class ServiceManager:
             port=port
         )
         
-    async def start_service(self, name: str, command: List[str], cwd: Optional[Path] = None) -> bool:
+    async def start_service(self, name: str, command: List[str], cwd: Optional[Path] = None, extra_env: Optional[Dict[str, str]] = None) -> bool:
         """启动服务"""
         if name not in self.services:
             logger.error(f"服务未注册: {name}")
@@ -335,12 +335,15 @@ class ServiceManager:
         service = self.services[name]
         
         try:
+            env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT)}
+            if extra_env:
+                env.update(extra_env)
             process = subprocess.Popen(
                 command,
                 cwd=str(cwd) if cwd else str(PROJECT_ROOT),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env={**os.environ, "PYTHONPATH": str(PROJECT_ROOT)}
+                env=env,
             )
             
             service.process = process
@@ -570,20 +573,121 @@ class NodeSystemLauncher:
         ])
         
     async def start_node(self, node_name: str) -> bool:
-        """启动单个节点"""
+        """启动单个节点，传递关键环境变量并轮询健康检查。"""
+        import aiohttp
         node_dir = self.nodes_dir / node_name
         main_py = node_dir / "main.py"
-        
+
         if not main_py.exists():
+            logger.warning("节点 %s 缺少 main.py，跳过启动", node_name)
             return False
-            
-        self.service_manager.register_service(node_name, ServiceType.NODE)
-        
-        return await self.service_manager.start_service(
+
+        # 从节点配置或 port_config 获取端口
+        node_cfg = self.node_configs.get(node_name, {})
+        port: Optional[int] = node_cfg.get("port") if isinstance(node_cfg, dict) else None
+        if port is None:
+            try:
+                from core.port_config import get_node_port
+                port = get_node_port(node_name)
+            except Exception:
+                port = None
+
+        # 关键环境变量
+        state_machine_url = os.environ.get(
+            "STATE_MACHINE_URL",
+            f"http://127.0.0.1:{self.node_configs.get('Node_00_StateMachine', {}).get('port', 8000)}"
+            if isinstance(self.node_configs.get('Node_00_StateMachine'), dict)
+            else "http://127.0.0.1:8000",
+        )
+        extra_env: Dict[str, str] = {
+            "NODE_ID": node_name,
+            "NODE_NAME": node_name,
+            "STATE_MACHINE_URL": state_machine_url,
+            "LOG_LEVEL": os.environ.get("LOG_LEVEL", "INFO"),
+            "USE_MEMORY_STORE": os.environ.get("USE_MEMORY_STORE", "true"),
+            "USE_MOCK_DRIVERS": os.environ.get("USE_MOCK_DRIVERS", "false"),
+        }
+        if port is not None:
+            extra_env["PORT"] = str(port)
+
+        self.service_manager.register_service(node_name, ServiceType.NODE, port)
+
+        ok = await self.service_manager.start_service(
             node_name,
             [sys.executable, str(main_py)],
-            cwd=node_dir
+            cwd=node_dir,
+            extra_env=extra_env,
         )
+        if not ok:
+            logger.error("节点 %s 进程启动失败", node_name)
+            return False
+
+        # 健康检查轮询（最多 10 次，每次间隔 1 秒）
+        if port is not None:
+            health_url = f"http://127.0.0.1:{port}/health"
+            for attempt in range(1, 11):
+                await asyncio.sleep(1)
+                try:
+                    async with aiohttp.ClientSession(
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as session:
+                        async with session.get(health_url) as resp:
+                            if resp.status < 400:
+                                logger.info(
+                                    "节点 %s 健康检查通过 (尝试 %d/10, 端口 %d)",
+                                    node_name, attempt, port,
+                                )
+                                await self._register_node_with_dashboard(node_name, port)
+                                return True
+                except Exception:
+                    pass
+                logger.debug("节点 %s 健康检查等待 (尝试 %d/10)", node_name, attempt)
+
+            # 10 次均失败时输出 stderr 辅助排查（非阻塞读取）
+            svc = self.service_manager.services.get(node_name)
+            if svc and svc.process and svc.process.stderr:
+                try:
+                    import select as _select
+                    if _select.select([svc.process.stderr], [], [], 0.5)[0]:
+                        stderr_out = svc.process.stderr.read1(4096)  # type: ignore[attr-defined]
+                        if stderr_out:
+                            logger.error(
+                                "节点 %s 健康检查失败，stderr:\n%s",
+                                node_name, stderr_out.decode(errors="replace"),
+                            )
+                except Exception:
+                    pass
+            logger.warning(
+                "节点 %s 健康检查超时（10 次），视为启动失败", node_name
+            )
+            return False
+
+        # 无端口信息时降级：进程已启动即认为成功
+        logger.info("节点 %s 已启动（无端口，跳过健康检查）", node_name)
+        await self._register_node_with_dashboard(node_name, port)
+        return True
+
+    async def _register_node_with_dashboard(self, node_name: str, port: Optional[int]) -> None:
+        """向 Dashboard 运行时注册表注册已启动的节点（失败时静默忽略）。"""
+        try:
+            import aiohttp
+            dashboard_port = self.config.web_ui_port
+            dashboard_host = os.environ.get("DASHBOARD_HOST", "127.0.0.1")
+            url = f"http://{dashboard_host}:{dashboard_port}/api/v1/nodes/register"
+            payload = {
+                "node_id": node_name,
+                "name": node_name,
+                "port": port,
+                "status": "running",
+            }
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=2)
+            ) as session:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status < 400:
+                        logger.debug("节点 %s 已注册到 Dashboard", node_name)
+        except Exception as _exc:
+            logger.debug("注册节点 %s 到 Dashboard 失败（可忽略）: %s", node_name, _exc)
         
     async def start_nodes(self, nodes: List[str], parallel: bool = True) -> Dict[str, bool]:
         """启动多个节点"""
@@ -602,32 +706,40 @@ class NodeSystemLauncher:
         return results
         
     async def start_all(self, minimal: bool = False) -> Dict[str, bool]:
-        """启动核心节点集合。
+        """启动节点集合。
 
-        若节点配置中未标记任何 "group": "core" 节点，自动回退为
-        按目录名升序排列的前 10 个节点（Node_00–Node_09），确保最小
-        核心节点集始终能够启动而不静默跳过。
+        优先使用 "group": "core" 标记的节点；若为空则自动回退为
+        get_all_nodes() 的完整列表（非 minimal 模式）或前 10 个节点
+        （minimal 模式），并记录 warning，确保系统始终能够启动而不
+        静默返回空字典。
 
         Args:
-            minimal: True 时强制只启动前 10 个节点（最小模式）。
+            minimal: True 时最多启动前 10 个节点。
         """
-        if minimal:
-            nodes = self.get_core_nodes()[:10]
-            logger.info("最小启动模式：将启动前 %d 个核心节点", len(nodes))
-        else:
-            nodes = self.get_core_nodes()
+        nodes = self.get_core_nodes()
 
         if not nodes:
-            logger.error(
-                "核心节点列表为空，节点系统将不会启动。"
-                "请检查 node_dependencies.json 中各节点是否设置了 \"group\": \"core\"，"
-                "或确认 nodes/ 目录下存在包含 main.py 的子目录。"
-                "可运行 `python -m scripts.scan_nodes` 重新生成配置文件。"
-            )
-            return {}
+            fallback = self.get_all_nodes()
+            if fallback:
+                logger.warning(
+                    "核心节点列表为空（node_dependencies.json 中无 'group': 'core' 标记），"
+                    "自动回退为全量节点列表（共 %d 个）。",
+                    len(fallback),
+                )
+                nodes = fallback
+            else:
+                logger.error(
+                    "核心节点与全量节点列表均为空，节点系统将不会启动。"
+                    "请确认 nodes/ 目录下存在包含 main.py 的子目录。"
+                )
+                return {}
 
-        logger.info("即将启动 %d 个核心节点: %s", len(nodes), nodes)
-        print_status(f"启动 {len(nodes)} 个核心节点...", "step")
+        if minimal:
+            nodes = nodes[:10]
+            logger.info("最小启动模式：将启动前 %d 个节点", len(nodes))
+
+        logger.info("即将启动 %d 个节点: %s", len(nodes), nodes)
+        print_status(f"启动 {len(nodes)} 个节点...", "step")
         results = await self.start_nodes(nodes, parallel=True)
 
         success_nodes = [n for n, ok in results.items() if ok]

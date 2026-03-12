@@ -470,29 +470,32 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     # 9. 动态 Agent 工厂 + 分形执行器
     # ====================================================================
-    try:
-        from core.agent_factory import get_agent_factory
-        from core.fractal_agent import get_fractal_executor
+    if not _deps_ok("agent_system"):
+        logger.warning("跳过 Agent 系统初始化：依赖未满足，已标记为 skipped")
+    else:
+        try:
+            from core.agent_factory import get_agent_factory
+            from core.fractal_agent import get_fractal_executor
 
-        agent_factory = get_agent_factory(llm_router=llm_router)
-        fractal_executor = get_fractal_executor(
-            llm_router=llm_router, agent_factory=agent_factory
-        )
-        # 启动 Agent TTL 清理循环
-        await agent_factory.start_cleanup_loop()
-        results["agent_system"] = {
-            "status": "ok",
-            "llm_enabled": llm_router is not None,
-            "restored_agents": len(agent_factory.agents),
-        }
-        logger.info(
-            f"Agent 系统已初始化 (工厂 + 分形执行器, "
-            f"LLM: {'启用' if llm_router else '降级'}, "
-            f"恢复 {len(agent_factory.agents)} 个 Agent)"
-        )
-    except Exception as e:
-        results["agent_system"] = {"status": "degraded", "error": str(e)}
-        logger.warning(f"Agent 系统初始化失败: {e}")
+            agent_factory = get_agent_factory(llm_router=llm_router)
+            fractal_executor = get_fractal_executor(
+                llm_router=llm_router, agent_factory=agent_factory
+            )
+            # 启动 Agent TTL 清理循环
+            await agent_factory.start_cleanup_loop()
+            results["agent_system"] = {
+                "status": "ok",
+                "llm_enabled": llm_router is not None,
+                "restored_agents": len(agent_factory.agents),
+            }
+            logger.info(
+                f"Agent 系统已初始化 (工厂 + 分形执行器, "
+                f"LLM: {'启用' if llm_router else '降级'}, "
+                f"恢复 {len(agent_factory.agents)} 个 Agent)"
+            )
+        except Exception as e:
+            results["agent_system"] = {"status": "degraded", "error": str(e)}
+            logger.warning(f"Agent 系统初始化失败: {e}")
 
     # ====================================================================
     # 9a. 统一会话管理 + 全链路编排器
