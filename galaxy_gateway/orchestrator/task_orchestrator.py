@@ -173,17 +173,43 @@ class TaskOrchestrator:
             task.completed_at = datetime.utcnow()
     
     async def _select_device(self, task: Task) -> Optional[str]:
-        """选择执行任务的设备"""
+        """选择执行任务的设备（优先选择自主执行能力的设备）"""
         # 如果已指定设备
         if task.assigned_device:
             if self.websocket_manager.is_device_connected(task.assigned_device):
                 return task.assigned_device
             else:
                 logger.warning(f"Assigned device {task.assigned_device} not connected")
-        
+
         # 获取所有在线设备
         connected_devices = self.websocket_manager.get_connected_devices()
         if not connected_devices:
+            return None
+
+        # ── 自主优先过滤器 ──
+        # 尝试从 DeviceRouter 获取设备元数据，筛选自主设备
+        try:
+            from galaxy_gateway.autonomous_filter import filter_autonomous_devices
+            from galaxy_gateway.device_router import device_router as _dr
+
+            def _get_meta(device_id: str):
+                d = _dr.get_device(device_id)
+                return d.metadata if d is not None else {}
+
+            def _get_status(device_id: str):
+                # Treat all websocket-connected devices as online
+                return "online"
+
+            preferred = filter_autonomous_devices(
+                connected_devices,
+                get_metadata=_get_meta,
+                get_status=_get_status,
+            )
+        except Exception as _fe:
+            logger.debug("autonomous_filter unavailable in orchestrator: %s", _fe)
+            preferred = list(connected_devices)
+
+        if not preferred:
             return None
 
         # 负载均衡策略
@@ -197,24 +223,24 @@ class TaskOrchestrator:
 
         if preferred_type and hasattr(self.websocket_manager, "get_device_type"):
             typed_devices = [
-                d for d in connected_devices
+                d for d in preferred
                 if self.websocket_manager.get_device_type(d) == preferred_type
             ]
             if typed_devices:
-                connected_devices = typed_devices
+                preferred = typed_devices
 
         # 2. 最少任务优先: 选择当前负载最低的设备
         if not hasattr(self, "_device_task_counts"):
             self._device_task_counts = {}
             self._rr_index = 0
 
-        connected_devices_sorted = sorted(
-            connected_devices,
+        preferred_sorted = sorted(
+            preferred,
             key=lambda d: self._device_task_counts.get(d, 0)
         )
 
         # 3. 轮询 (在同等负载中轮询)
-        selected = connected_devices_sorted[self._rr_index % len(connected_devices_sorted)]
+        selected = preferred_sorted[self._rr_index % len(preferred_sorted)]
         self._rr_index += 1
         self._device_task_counts[selected] = self._device_task_counts.get(selected, 0) + 1
 

@@ -74,9 +74,16 @@ class Device:
 
     内部使用 core.schemas.device.DeviceModel 存储设备数据，
     额外维护 WebSocket 连接引用（不可序列化，不放入 Pydantic 模型）。
+    ``metadata`` 存储设备注册时上报的任意扩展字段（如自主执行能力标志）。
     """
 
-    def __init__(self, device_id: str, device_type: str, capabilities: List[str]):
+    def __init__(
+        self,
+        device_id: str,
+        device_type: str,
+        capabilities: List[str],
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
         from core.schemas.device import DeviceModel, DeviceCapabilityModel
         from core.device_types import DeviceStatus
 
@@ -89,6 +96,8 @@ class Device:
             capabilities=cap_models,
         )
         self.websocket = None
+        # Free-form metadata dict (e.g. goal_execution_enabled, device_role)
+        self.metadata: Dict[str, Any] = metadata or {}
 
     @property
     def device_id(self) -> str:
@@ -137,11 +146,12 @@ class DeviceRouter:
         self.task_results: Dict[str, Dict] = {}
         self._task_events: Dict[str, asyncio.Event] = {}
     
-    def register_device(self, device_id: str, device_type: str, 
-                       capabilities: List[str], websocket=None) -> bool:
+    def register_device(self, device_id: str, device_type: str,
+                       capabilities: List[str], websocket=None,
+                       metadata: Optional[Dict[str, Any]] = None) -> bool:
         """注册设备"""
         try:
-            device = Device(device_id, device_type, capabilities)
+            device = Device(device_id, device_type, capabilities, metadata=metadata)
             device.websocket = websocket
             self.devices[device_id] = device
 
@@ -290,24 +300,39 @@ class DeviceRouter:
         return analysis
     
     def _select_devices(self, analysis: Dict) -> List[Device]:
-        """选择合适的设备"""
+        """选择合适的设备（优先选择自主执行能力的设备）"""
         target_device_type = analysis["target_device_type"]
-        
+
         if target_device_type == DeviceType.UNKNOWN:
             # 如果未指定设备，默认选择 Windows
             target_device_type = DeviceType.WINDOWS
-        
-        # 获取该类型的所有在线设备
+
+        # 获取该类型的所有设备
         devices = self.get_devices_by_type(target_device_type)
-        online_devices = [d for d in devices if d.status == "online"]
-        
-        if not online_devices:
+
+        # 使用自主优先过滤器（有 fallback 保证）
+        try:
+            from galaxy_gateway.autonomous_filter import filter_autonomous_devices
+            require_cross = analysis.get("requires_cross_device", False)
+            task_role = analysis.get("task_role")
+            preferred = filter_autonomous_devices(
+                devices,
+                get_metadata=lambda d: d.metadata,
+                get_status=lambda d: d.status,
+                require_cross_device=require_cross,
+                task_role=task_role,
+            )
+        except Exception as _filter_err:
+            logger.warning("autonomous_filter unavailable, using online-only fallback: %s", _filter_err)
+            preferred = [d for d in devices if d.status == "online"]
+
+        if not preferred:
             logger.warning(f"⚠️ 没有在线的 {target_device_type} 设备")
             return []
-        
-        # 简单策略：返回第一个在线设备
+
+        # 简单策略：返回第一个设备
         # 实际可以根据设备负载、能力等进行智能选择
-        return [online_devices[0]]
+        return [preferred[0]]
     
     def _create_task(self, command: str, analysis: Dict, target_devices: List[Device]) -> Dict:
         """创建任务"""

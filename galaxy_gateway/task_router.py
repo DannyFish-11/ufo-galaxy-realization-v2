@@ -16,11 +16,14 @@ from core.port_config import get_service_port
 
 import asyncio
 import json
+import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
 from datetime import datetime
 import aiohttp
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # 数据结构定义
@@ -140,7 +143,10 @@ class TaskRouter:
     async def execute_tasks(self, tasks: List[Any]) -> List[TaskResult]:
         """
         执行任务列表
-        
+
+        当 prefer_autonomous 为 True 时，在构建执行计划前检查各任务分配的设备
+        是否具备自主执行能力，并记录降级日志（不影响执行）。
+
         Args:
             tasks: 任务列表
         
@@ -149,7 +155,25 @@ class TaskRouter:
         """
         if not tasks:
             return []
-        
+
+        # ── 自主优先检查：记录不具备自主能力的设备（仅日志，不阻断执行）──
+        try:
+            from galaxy_gateway.autonomous_filter import is_autonomous_device, _prefer_autonomous
+            if _prefer_autonomous():
+                for task in tasks:
+                    device = self.device_registry.get_device(task.device_id)
+                    if device is None:
+                        continue
+                    meta = getattr(device, "metadata", {}) or {}
+                    if not is_autonomous_device(meta):
+                        logger.warning(
+                            "autonomous-first: task %s assigned to non-autonomous device %s; "
+                            "downgrading to legacy execution on this device.",
+                            task.task_id, task.device_id,
+                        )
+        except Exception:
+            pass
+
         # 创建执行计划
         plan = self.scheduler.create_execution_plan(tasks)
         
