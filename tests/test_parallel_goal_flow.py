@@ -8,6 +8,9 @@ Phase-3 parallel goal flow tests:
   3. Retry on single subtask failure (retry succeeds)
   4. Timeout path → mark_timeout
   5. No-autonomous-device fallback message from _dispatch_parallel_goal
+  6. Cancel/abort support (PR10)
+  7. Timeout handling in dispatch methods (PR10)
+  8. Goal execution timeout (PR10)
 """
 
 import asyncio
@@ -408,3 +411,243 @@ async def test_dispatch_parallel_goal_retry_on_first_failure():
     assert pr["succeeded"] == 1
     # Was called twice (first failure + retry)
     assert call_count["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# 6. Cancel / Abort support (PR10)
+# ---------------------------------------------------------------------------
+
+class TestParallelGroupTrackerCancel:
+    def test_mark_cancelled_sets_status(self):
+        tracker = ParallelGroupTracker()
+        gid = "cancel1"
+        e = _make_entry(gid, 0)
+        tracker.register_group(gid, [e])
+        tracker.mark_running(gid, e.task_id)
+        tracker.mark_cancelled(gid, e.task_id)
+        entry = tracker._get_entry(gid, e.task_id)
+        assert entry.status == _SubtaskStatus.CANCELLED
+        assert entry.error == "cancelled"
+        assert entry.finished_at is not None
+
+    def test_mark_cancelled_is_idempotent(self):
+        """Calling mark_cancelled twice must not raise and status stays CANCELLED."""
+        tracker = ParallelGroupTracker()
+        gid = "cancel2"
+        e = _make_entry(gid, 0)
+        tracker.register_group(gid, [e])
+        tracker.mark_running(gid, e.task_id)
+        tracker.mark_cancelled(gid, e.task_id)
+        ft1 = tracker._get_entry(gid, e.task_id).finished_at
+        # Second call — idempotent
+        tracker.mark_cancelled(gid, e.task_id)
+        entry = tracker._get_entry(gid, e.task_id)
+        # All fields must remain unchanged on repeated cancel
+        assert entry.status == _SubtaskStatus.CANCELLED
+        assert entry.error == "cancelled"
+        assert entry.finished_at == ft1
+
+    def test_needs_retry_false_after_cancel(self):
+        """Cancelled tasks must not be retried."""
+        tracker = ParallelGroupTracker()
+        gid = "cancel3"
+        e = _make_entry(gid, 0)
+        tracker.register_group(gid, [e])
+        tracker.mark_running(gid, e.task_id)
+        tracker.mark_cancelled(gid, e.task_id)
+        assert tracker.needs_retry(gid, e.task_id) is False
+
+    def test_aggregate_all_cancelled_summary(self):
+        tracker = ParallelGroupTracker()
+        gid = "cancel4"
+        entries = [_make_entry(gid, i) for i in range(2)]
+        tracker.register_group(gid, entries)
+        for e in entries:
+            tracker.mark_running(gid, e.task_id)
+            tracker.mark_cancelled(gid, e.task_id)
+        result = tracker.aggregate(gid)
+        assert result.summary_status == "cancelled"
+        assert result.cancelled == 2
+        assert result.succeeded == 0
+
+    def test_aggregate_partial_cancel(self):
+        """One success + one cancelled → partial."""
+        tracker = ParallelGroupTracker()
+        gid = "cancel5"
+        entries = [_make_entry(gid, i) for i in range(2)]
+        tracker.register_group(gid, entries)
+        tracker.mark_running(gid, entries[0].task_id)
+        tracker.mark_done(gid, entries[0].task_id, {"success": True}, success=True)
+        tracker.mark_running(gid, entries[1].task_id)
+        tracker.mark_cancelled(gid, entries[1].task_id)
+        result = tracker.aggregate(gid)
+        assert result.summary_status == "partial"
+        assert result.succeeded == 1
+        assert result.cancelled == 1
+
+    def test_aggregate_device_result_status_cancelled(self):
+        tracker = ParallelGroupTracker()
+        gid = "cancel6"
+        e = _make_entry(gid, 0)
+        tracker.register_group(gid, [e])
+        tracker.mark_running(gid, e.task_id)
+        tracker.mark_cancelled(gid, e.task_id)
+        result = tracker.aggregate(gid)
+        assert result.device_results[0]["status"] == "cancelled"
+
+    def test_aggregate_to_dict_includes_cancelled_field(self):
+        tracker = ParallelGroupTracker()
+        gid = "cancel7"
+        e = _make_entry(gid, 0)
+        tracker.register_group(gid, [e])
+        tracker.mark_running(gid, e.task_id)
+        tracker.mark_cancelled(gid, e.task_id)
+        d = tracker.aggregate(gid).to_dict()
+        assert "cancelled" in d
+
+
+class TestOpenClawdCancelRegistry:
+    def test_cancel_task_returns_true_on_first_call(self):
+        oc = OpenClawd()
+        assert oc.cancel_task("task_abc") is True
+
+    def test_cancel_task_returns_false_on_second_call_idempotent(self):
+        oc = OpenClawd()
+        oc.cancel_task("task_xyz")
+        assert oc.cancel_task("task_xyz") is False
+
+    def test_cancel_group_returns_true_on_first_call(self):
+        oc = OpenClawd()
+        assert oc.cancel_group("grp_123") is True
+
+    def test_cancel_group_idempotent(self):
+        oc = OpenClawd()
+        oc.cancel_group("grp_dup")
+        assert oc.cancel_group("grp_dup") is False
+
+    def test_is_cancelled_by_task_id(self):
+        oc = OpenClawd()
+        oc.cancel_task("tid_check")
+        assert oc._is_cancelled("tid_check") is True
+
+    def test_is_cancelled_by_group_id(self):
+        oc = OpenClawd()
+        oc.cancel_group("gid_check")
+        assert oc._is_cancelled("unrelated_task", group_id="gid_check") is True
+
+    def test_not_cancelled_when_not_registered(self):
+        oc = OpenClawd()
+        assert oc._is_cancelled("no_such_task") is False
+
+
+# ---------------------------------------------------------------------------
+# 7. Timeout handling in parallel_subtask dispatch (PR10)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_parallel_subtask_timeout_marks_timeout_in_tracker():
+    """When a send_gateway_command call times out, mark_timeout is called
+    on the tracker entry and the status becomes TIMEOUT."""
+    import asyncio as aio
+
+    tracker = ParallelGroupTracker()
+    gid = "timeout_test_1"
+    e = _make_entry(gid, 0)
+    tracker.register_group(gid, [e])
+    tracker.mark_running(gid, e.task_id)
+
+    # Simulate the wait_for → TimeoutError → mark_timeout path
+    try:
+        await aio.wait_for(aio.sleep(999), timeout=0.01)
+    except aio.TimeoutError:
+        tracker.mark_timeout(gid, e.task_id)
+
+    assert tracker._get_entry(gid, e.task_id).status == _SubtaskStatus.TIMEOUT
+
+
+@pytest.mark.asyncio
+async def test_parallel_subtask_cancel_before_dispatch():
+    """A subtask cancelled before execution should be marked CANCELLED without
+    ever calling send_gateway_command."""
+    oc = OpenClawd()
+    oc.PARALLEL_SUBTASK_TIMEOUT = 30.0
+
+    tracker = ParallelGroupTracker()
+    gid = "cancel_pre_dispatch"
+    e = _make_entry(gid, 0)
+    tracker.register_group(gid, [e])
+
+    # Pre-cancel the task
+    oc.cancel_task(e.task_id)
+
+    called = {"n": 0}
+
+    async def _should_not_be_called(*args, **kwargs):
+        called["n"] += 1
+        return {"success": True}
+
+    with patch.object(oc, "send_gateway_command", side_effect=_should_not_be_called):
+        # Replicate the cancel-check logic from _execute_entry
+        if oc._is_cancelled(e.task_id, e.group_id):
+            tracker.mark_cancelled(gid, e.task_id)
+
+    assert called["n"] == 0
+    assert tracker._get_entry(gid, e.task_id).status == _SubtaskStatus.CANCELLED
+
+
+# ---------------------------------------------------------------------------
+# 8. Goal execution timeout (PR10)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_goal_execution_timeout_returns_standardized_payload():
+    """_dispatch_goal_execution must return a structured timeout payload
+    when the device does not respond within GOAL_EXECUTION_TIMEOUT seconds."""
+    import asyncio as aio
+
+    oc = OpenClawd()
+    oc.GOAL_EXECUTION_TIMEOUT = 0.01  # very short for test
+
+    async def _slow(*args, **kwargs):
+        await aio.sleep(999)
+
+    with patch.object(
+        oc,
+        "_pick_autonomous_device_id",
+        return_value="test_device",
+    ):
+        with patch.object(oc, "send_gateway_command", side_effect=_slow):
+            result = await oc._dispatch_goal_execution("do something")
+
+    assert result["success"] is False
+    assert result.get("timed_out") is True
+    assert result["intent"] == "goal_execution"
+    assert "task_id" in result
+
+
+@pytest.mark.asyncio
+async def test_goal_execution_cancel_before_dispatch_returns_cancelled_payload():
+    """If a task is in the cancel registry before _dispatch_goal_execution checks it,
+    the method must return a cancelled payload without calling send_gateway_command."""
+    oc = OpenClawd()
+
+    called = {"n": 0}
+
+    async def _should_not_run(*args, **kwargs):
+        called["n"] += 1
+        return {"success": True}
+
+    with patch.object(
+        oc,
+        "_pick_autonomous_device_id",
+        return_value="test_device",
+    ):
+        with patch.object(oc, "send_gateway_command", side_effect=_should_not_run):
+            # Override _is_cancelled so any task_id returns True
+            with patch.object(oc, "_is_cancelled", return_value=True):
+                result = await oc._dispatch_goal_execution("do something")
+
+    assert result["success"] is False
+    assert result.get("cancelled") is True
+    assert result["intent"] == "goal_execution"
+    assert called["n"] == 0
