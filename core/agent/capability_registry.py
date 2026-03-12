@@ -98,6 +98,7 @@ class CapabilityRegistry:
         self._refresh_lock: Optional[asyncio.Lock] = None  # created lazily in async context
         self._last_refresh: float = 0.0
         self._refresh_interval: float = 120.0  # 2 分钟自动刷新
+        self._validation_errors: list = []  # schema 校验错误记录
         logger.info("CapabilityRegistry 已初始化")
 
     @classmethod
@@ -137,7 +138,7 @@ class CapabilityRegistry:
         return [item.to_tool_schema() for item in self.list_tools()]
 
     def stats(self) -> Dict[str, Any]:
-        """返回注册表统计信息。"""
+        """返回注册表统计信息（含校验错误，可观测能力总线状态）。"""
         total = len(self._items)
         available = sum(1 for i in self._items.values() if i.available)
         by_source: Dict[str, int] = {}
@@ -148,7 +149,84 @@ class CapabilityRegistry:
             "available": available,
             "by_source": by_source,
             "last_refresh": self._last_refresh,
+            "validation_errors": list(self._validation_errors),
         }
+
+    # ──────────────────────────────────────────────────────────────────
+    # 快速注入 API（跳过全量刷新，供 mcp_loader / skill_loader 在加载后调用）
+    # ──────────────────────────────────────────────────────────────────
+
+    def _validate_parameters_schema(
+        self,
+        parameters: Any,
+        source: str,
+        entity_id: str,
+    ) -> bool:
+        """校验 parameters 必须为 dict（JSON Schema 格式）。
+
+        Returns:
+            True  — 校验通过
+            False — 校验失败（已记录错误，调用方应跳过注入）
+        """
+        if parameters is not None and not isinstance(parameters, dict):
+            msg = f"{source} {entity_id}: parameters schema 必须为 dict，跳过注入"
+            logger.warning(msg)
+            self._validation_errors.append({"source": source, "id": entity_id, "error": msg})
+            return False
+        return True
+
+    def inject_mcp_tool(
+        self,
+        server_id: str,
+        tool_name: str,
+        description: str,
+        parameters: Dict[str, Any],
+        server_name: str = "",
+    ) -> None:
+        """将单个 MCP 工具直接注入能力总线（schema 校验 → 不通过则记录错误并跳过）。"""
+        if not tool_name:
+            return
+        if not self._validate_parameters_schema(parameters, "mcp", f"{server_id}/{tool_name}"):
+            return
+        key = f"mcp__{server_id}__{tool_name}"
+        self._items[key] = CapabilityItem(
+            name=key,
+            description=f"[MCP:{server_name or server_id}] {description}",
+            source="mcp",
+            source_id=server_id,
+            parameters=parameters or {},
+            available=True,
+        )
+        logger.debug("MCP 工具已注入能力总线: %s", key)
+
+    def inject_skill(
+        self,
+        skill_id: str,
+        skill_name: str,
+        description: str,
+        parameters: Dict[str, Any],
+    ) -> None:
+        """将单个 Skill 直接注入能力总线（schema 校验 → 不通过则记录错误并跳过）。"""
+        if not skill_id:
+            return
+        if not self._validate_parameters_schema(parameters, "skill", skill_id):
+            return
+        key = f"skill__{skill_id}"
+        self._items[key] = CapabilityItem(
+            name=key,
+            description=f"[Skill] {description or skill_name}",
+            source="skill",
+            source_id=skill_id,
+            parameters=parameters or {},
+            available=True,
+        )
+        logger.debug("Skill 已注入能力总线: %s", key)
+
+    def eject(self, name: str) -> None:
+        """从能力总线移除一个条目（用于 MCP/Skill 卸载时清理）。"""
+        removed = self._items.pop(name, None)
+        if removed:
+            logger.debug("能力已从总线移除: %s", name)
 
     # ──────────────────────────────────────────────────────────────────
     # 刷新逻辑
@@ -199,28 +277,34 @@ class CapabilityRegistry:
     async def _load_mcp(self, target: Dict[str, CapabilityItem]) -> None:
         """从 MCPLoader 加载工具列表。"""
         try:
-            from core.mcp_loader import MCPLoader
+            from core.mcp_loader import MCPLoader, MCPServerStatus
             loader = MCPLoader.get_instance()
-            servers = loader.list_servers() if hasattr(loader, "list_servers") else {}
+            # 直接访问 servers 字典（MCPServerInstance 对象）
+            servers: Dict = getattr(loader, "servers", {})
 
             if not servers:
                 return
 
             for server_id, server in servers.items():
+                # 只加载运行中的服务器
+                if getattr(server, "status", None) != MCPServerStatus.RUNNING:
+                    continue
+                server_name = getattr(server, "name", server_id)
                 tools = getattr(server, "tools", []) or []
                 for tool in tools:
-                    tool_name = getattr(tool, "name", None) or tool.get("name", "")
-                    tool_desc = getattr(tool, "description", "") or tool.get("description", "")
+                    tool_name = getattr(tool, "name", "")
+                    tool_desc = getattr(tool, "description", "")
                     if not tool_name:
                         continue
                     key = f"mcp__{server_id}__{tool_name}"
-                    params = getattr(tool, "input_schema", None) or tool.get("input_schema", {})
+                    # MCPTool 使用 inputSchema（不是 input_schema）
+                    params = getattr(tool, "inputSchema", {}) or {}
                     target[key] = CapabilityItem(
                         name=key,
-                        description=f"[MCP:{server_id}] {tool_desc}",
+                        description=f"[MCP:{server_name}] {tool_desc}",
                         source="mcp",
                         source_id=server_id,
-                        parameters=params or {},
+                        parameters=params,
                         available=True,
                     )
             logger.debug("MCP 能力加载: %d 项", sum(1 for i in target.values() if i.source == "mcp"))
@@ -230,22 +314,28 @@ class CapabilityRegistry:
     async def _load_skills(self, target: Dict[str, CapabilityItem]) -> None:
         """从 SkillLoader 加载技能列表。"""
         try:
-            from core.skill_loader import SkillLoader
+            from core.skill_loader import SkillLoader, SkillStatus
             loader = SkillLoader.get_instance()
-            skills = loader.list_skills() if hasattr(loader, "list_skills") else []
+            # 直接访问 skills 字典（SkillInstance 对象）
+            skills: Dict = getattr(loader, "skills", {})
 
-            for skill in skills:
-                skill_id = getattr(skill, "skill_id", None) or skill.get("skill_id", "")
-                skill_name = getattr(skill, "name", None) or skill.get("name", skill_id)
-                skill_desc = getattr(skill, "description", "") or skill.get("description", "")
-                if not skill_id:
+            for skill_id, skill in skills.items():
+                # ERROR 状态的技能（schema 校验失败 / handler 缺失）不注入
+                if getattr(skill, "status", None) == SkillStatus.ERROR:
+                    logger.debug("Skill %s 状态为 ERROR，跳过注入能力总线", skill_id)
                     continue
                 key = f"skill__{skill_id}"
+                # 通过 to_mcp_tool_schema 获取标准 JSON Schema
+                mcp_schema = loader.to_mcp_tool_schema(skill_id)
+                params = mcp_schema.get("inputSchema", {}) if mcp_schema else {}
+                skill_desc = getattr(skill, "description", "") or ""
+                skill_name = getattr(skill, "name", skill_id) or skill_id
                 target[key] = CapabilityItem(
                     name=key,
                     description=f"[Skill] {skill_desc or skill_name}",
                     source="skill",
                     source_id=skill_id,
+                    parameters=params,
                     available=True,
                 )
             logger.debug("Skill 能力加载: %d 项", sum(1 for i in target.values() if i.source == "skill"))

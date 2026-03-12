@@ -238,6 +238,15 @@ class SkillLoader:
             self.skills[skill_id] = skill
             
             logger.info(f"加载技能: {skill.name} ({skill_id})")
+
+            # 加载成功后自动注入能力总线（仅 LOADED 状态注入）
+            if skill.status == SkillStatus.LOADED:
+                self._inject_skill_to_registry(skill_id)
+            else:
+                logger.warning(
+                    "技能 %s (%s) 状态为 ERROR（%s），跳过注入能力总线",
+                    skill.name, skill_id, skill.error,
+                )
             
             return {
                 "success": True,
@@ -299,6 +308,13 @@ class SkillLoader:
             return {"success": False, "error": "技能不存在"}
         
         skill = self.skills.pop(skill_id)
+
+        # 从能力总线移除
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            CapabilityRegistry.get_instance().eject(f"skill__{skill_id}")
+        except Exception as exc:
+            logger.debug("Skill 从能力总线移除失败: %s", exc)
         
         logger.info(f"卸载技能: {skill.name} ({skill_id})")
         
@@ -307,6 +323,26 @@ class SkillLoader:
             "skill_id": skill_id,
             "name": skill.name,
         }
+
+    def _inject_skill_to_registry(self, skill_id: str) -> None:
+        """将 Skill 注入能力总线（在加载成功后调用）。"""
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            reg = CapabilityRegistry.get_instance()
+            mcp_schema = self.to_mcp_tool_schema(skill_id)
+            params = mcp_schema.get("inputSchema", {}) if mcp_schema else {}
+            skill = self.skills.get(skill_id)
+            if not skill:
+                return
+            reg.inject_skill(
+                skill_id=skill_id,
+                skill_name=skill.name,
+                description=skill.description,
+                parameters=params,
+            )
+            logger.info("Skill %s (%s) 已注入能力总线", skill.name, skill_id)
+        except Exception as exc:
+            logger.debug("Skill 注入能力总线失败（不影响正常运行）: %s", exc)
     
     async def _load_handler(
         self,
