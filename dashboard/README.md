@@ -32,7 +32,85 @@
 - 记忆统计
 - 用户画像
 
-### 6. Agent 权限管理（P0 新增）
+### 7. 自动 Agent 创建（P1 新增）
+
+OpenClawd 现在能够**自动理解任务意图并创建合适的 Agent 执行任务**，无需用户发出任何特殊指令。
+
+#### 工作原理
+
+```
+用户消息 → IntentRouter (规则分类)
+              │
+              ├─ chat_only  → 直接 LLM 对话
+              │
+              └─ task_execute / hybrid
+                              │
+                              ▼
+                   ExecutionPlanner._auto_select_template()
+                              │ 根据消息关键词自动选择模板
+                              ▼
+                   AgentFactory.create_from_template(template)
+                              │
+                              ▼
+                   Agent 执行任务 → ExecutionResult
+                              │
+                              └─ auto_agent_id + auto_agent_template
+```
+
+#### 自动模板选择逻辑
+
+| 关键词（中英文） | 选中模板 |
+|-----------------|---------|
+| 代码、编程、code、script、写代码 | `code_executor` |
+| 分析、数据、统计、analyze、data、图表 | `data_analyst` |
+| 设备、控制、手机、device、截图 | `device_controller` |
+| 搜索、调研、research、查找 | `research` |
+| 计划、规划、plan、策略、步骤 | `planner` |
+| 其他（默认） | `coordinator` |
+
+#### API 响应中的新字段
+
+任务执行成功后，`/api/v1/chat` 响应的 `data` 字段中包含以下可选字段：
+
+```json
+{
+  "success": true,
+  "response": "分析完成：...",
+  "data": {
+    "auto_agent_id": "agent_abc123456",
+    "auto_agent_template": "data_analyst",
+    "task_result": { ... }
+  }
+}
+```
+
+> ⚠️ 这些字段是**可选的** — 纯聊天消息（不触发 Agent 路径）不包含这些字段，保持向后兼容。
+
+#### Dashboard UI 展示
+
+在 **🧪 测试** 标签页的「简单对话测试」中，当系统自动为任务创建了 Agent，对话回复上方会显示一个紫色标签栏，展示：
+
+- 🤖 **自动创建 Agent**（标题）
+- Agent 模板名称（如 `data_analyst`）
+- Agent ID（短 ID）
+
+示例：
+
+```
+┌─────────────────────────────────────────┐
+│ 🤖 自动创建 Agent  [data_analyst]  agent_abc123  │
+├─────────────────────────────────────────┤
+│ 分析结果：数据显示增长趋势明显...               │
+└─────────────────────────────────────────┘
+```
+
+#### 注意事项
+
+- 仅在 `AGENT_FACTORY_AVAILABLE` 为 `True` 时才会触发自动 Agent 路径。
+- 意图路由使用**规则引擎**（`use_llm=False`），延迟极低（<5ms）。
+- 如果 Agent 执行失败，系统会自动降级到直接 LLM 对话。
+
+
 
 在 **🤖 Agent** 标签页的「创建 Agent」面板中，新增了 4 个能力权限开关：
 

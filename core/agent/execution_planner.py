@@ -99,6 +99,9 @@ class ExecutionResult(BaseModel):
     error: str = ""
     model: str = ""
     duration_ms: float = 0.0
+    # Auto-created agent info (optional, for UI surfacing)
+    auto_agent_id: Optional[str] = None
+    auto_agent_template: Optional[str] = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -130,8 +133,39 @@ class ExecutionPlanner:
     # PR86: 能力注入标记（用于防止重复注入）
     _CAPABILITY_HINT_MARKER = "[CapabilityRegistry]"
 
+    # Auto-agent template selection mapping: (keywords, template_name)
+    # Type: List[Tuple[List[str], str]]
+    _TEMPLATE_MAP: List[tuple] = [
+        (["设备", "控制", "device", "hardware", "phone", "手机", "电脑", "平板",
+          "screenshot", "截图", "截屏", "click", "点击", "swipe", "滑动"], "device_controller"),
+        (["代码", "编程", "code", "script", "program", "写代码", "写脚本",
+          "python", "javascript", "java", "function", "函数", "调试"], "code_executor"),
+        (["分析", "数据", "统计", "analyze", "analyse", "data", "stat",
+          "报告", "report", "insight", "chart", "图表"], "data_analyst"),
+        (["搜索", "调研", "research", "search", "查找", "find",
+          "信息", "news", "latest", "最新"], "research"),
+        (["计划", "规划", "plan", "strategy", "策略", "步骤", "steps",
+          "schedule", "路线图", "roadmap"], "planner"),
+        (["协调", "team", "并行", "parallel", "分工", "多个", "组织"], "coordinator"),
+    ]
+
     def __init__(self, llm_router: Optional[Any] = None) -> None:
         self._llm_router = llm_router
+
+    def _auto_select_template(self, message: str, intent: IntentResult) -> str:
+        """根据消息内容和意图自动选择最合适的 Agent 模板。"""
+        msg = message.lower()
+        for keywords, template in self._TEMPLATE_MAP:
+            if any(kw in msg for kw in keywords):
+                return template
+        # Fallback: check task_hint from intent result
+        if intent.task_hint:
+            hint = intent.task_hint.lower()
+            for keywords, template in self._TEMPLATE_MAP:
+                if any(kw in hint for kw in keywords):
+                    return template
+        # Default: coordinator handles general/complex tasks
+        return "coordinator"
 
     async def execute(self, plan: ExecutionPlan) -> ExecutionResult:
         """
@@ -290,16 +324,36 @@ class ExecutionPlanner:
             # 构建带策略注入的任务描述
             task_with_policy = self._build_task_prompt(plan)
 
-            # 尝试 LLM 生成 Agent，失败降级到模板
-            try:
-                agent = await factory.create_from_llm(
-                    task_description=task_with_policy,
-                    context={"session_id": plan.session_id},
-                )
-            except Exception:
-                agent = factory.create_from_template("executor")
+            # 自动选择最合适的 Agent 模板
+            selected_template = self._auto_select_template(plan.message, plan.intent)
+            agent = None
 
-            step.output = {"agent_id": agent.id, "agent_name": agent.config.name}
+            # 优先从模板创建（快速、确定）
+            try:
+                agent = factory.create_from_template(selected_template)
+                logger.info(
+                    "ExecutionPlanner: 自动选择模板 '%s' → Agent %s",
+                    selected_template, agent.id,
+                )
+            except Exception as tmpl_err:
+                logger.debug("模板创建失败 (%s)，尝试 LLM 生成: %s", selected_template, tmpl_err)
+                # 回退到 LLM 动态生成
+                try:
+                    agent = await factory.create_from_llm(
+                        task_description=task_with_policy,
+                        context={"session_id": plan.session_id},
+                    )
+                    selected_template = ""  # LLM-generated, no fixed template
+                except Exception:
+                    # 最终降级: coordinator 模板
+                    selected_template = "coordinator"
+                    agent = factory.create_from_template(selected_template)
+
+            step.output = {
+                "agent_id": agent.id,
+                "agent_name": agent.config.name,
+                "template": selected_template,
+            }
             steps.append(step)
 
             # 执行任务
@@ -334,6 +388,8 @@ class ExecutionPlanner:
                 reply=exec_result.get("reply") or exec_result.get("result") or "任务已完成",
                 task_result=exec_result,
                 model=exec_result.get("model", ""),
+                auto_agent_id=agent.id,
+                auto_agent_template=selected_template or None,
             )
 
         except Exception as exc:

@@ -81,9 +81,17 @@ _TASK_KW_HIGH: List[str] = [
     "跨设备", "同步剪贴板", "设备间",
     # 中文 — 任务/工具
     "帮我写", "帮我生成", "帮我分析", "帮我总结", "帮我查",
+    "帮我做", "帮我完成", "帮我处理", "帮我创建", "帮我规划",
     "执行", "运行代码", "调用", "生成", "创建文件", "创建目录",
     "读取文件", "写入文件", "删除文件", "搜索文件",
     "提交", "部署", "构建", "测试",
+    # 中文 — 通用任务动词（带明确宾语场景）
+    "做一个", "做个", "做一份", "制作一个", "制作一份",
+    "写一个", "写一段", "写代码", "写脚本", "写报告",
+    "创建一个", "创建一份", "生成一个", "生成一份",
+    "分析一下", "分析这个", "分析数据", "分析代码",
+    "总结一下", "整理一下", "规划一下",
+    "实现一个", "实现功能", "完成任务",
     # 英文
     "open ", "close ", "launch ", "run ", "install ", "uninstall ",
     "click ", "swipe ", "type ", "screenshot", "send ", "download ",
@@ -92,12 +100,18 @@ _TASK_KW_HIGH: List[str] = [
     "take photo", "record ", "play ", "pause ", "stop ",
     "write code", "generate ", "create file", "read file", "delete ",
     "search for", "find file", "deploy ", "build ", "commit ",
+    # 英文 — 通用任务动词
+    "write a ", "write me ", "create a ", "create an ", "make a ", "make me ",
+    "build a ", "build me ", "implement ", "develop ", "design a ",
+    "analyze ", "analyse ", "summarize ", "summarise ", "plan ", "schedule ",
+    "help me with", "do this ", "do the ", "complete ",
 ]
 
 # 低置信度任务词（结合上下文判断，单独出现可能是聊天）
+# 注意：末尾空格是有意为之，防止"please" 匹配 "displeased" 等词的部分字符串
 _TASK_KW_LOW: List[str] = [
-    "帮我", "我想", "能不能", "可以", "请",
-    "help me", "can you", "please ",
+    "帮我", "我想", "能不能", "可以帮", "请帮",
+    "help me", "can you", "could you", "please ",
 ]
 
 # 强聊天指示词（命中则倾向 chat_only，除非同时有高置信度任务词）
@@ -113,17 +127,13 @@ def _classify_by_rules(message: str) -> IntentResult:
     """基于关键词规则快速分类意图。"""
     msg = message.lower().strip()
 
-    # 极短消息 → 聊天
-    if len(msg) < 4:
-        return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.9, method="rules")
-
     high_hit = any(kw in msg for kw in _TASK_KW_HIGH)
     chat_hit = any(kw in msg for kw in _CHAT_KW)
-    low_hit = any(kw in msg for kw in _TASK_KW_LOW)
 
     # 缓存第一个命中的任务关键词（避免重复遍历）
     task_kw = next((kw for kw in _TASK_KW_HIGH if kw in msg), "").strip()
 
+    # ① 高置信度任务词优先判定（即使消息极短，如"截图"、"截屏"）
     if high_hit and chat_hit:
         # 同时命中任务词和聊天词 → hybrid
         return IntentResult(
@@ -143,16 +153,25 @@ def _classify_by_rules(message: str) -> IntentResult:
             method="rules",
         )
 
+    # ② 极短消息（无高置信度任务词）→ 聊天
+    if len(msg) < 4:
+        return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.9, method="rules")
+
+    # ③ 低置信度任务词检查（消息已 >= 4 字符）
+    low_hit = any(kw in msg for kw in _TASK_KW_LOW)
+
     if chat_hit and not low_hit:
         return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.85, method="rules")
 
     if low_hit:
-        # 弱任务信号 → 需要 LLM 判定，暂时返回 hybrid 低置信度
+        # 弱任务信号 → 倾向任务执行（如 "帮我…"、"help me…"），但不够确定
+        # 使用 task_execute 而非 chat_only，以触发 Agent 创建链路
+        task_kw_low = next((kw for kw in _TASK_KW_LOW if kw in msg), "").strip()
         return IntentResult(
-            mode=IntentMode.HYBRID,
-            confidence=0.4,
-            task_hint="",
-            raw_intent="ambiguous",
+            mode=IntentMode.TASK_EXECUTE,
+            confidence=0.65,
+            task_hint=task_kw_low,
+            raw_intent="task_execute",
             method="rules",
         )
 

@@ -478,6 +478,11 @@
                                 <button @click="sendMessage" class="send-btn px-4 py-2" style="font-size: 12px;">发送</button>
                             </div>
                             <div v-if="chatReply" class="mt-2 p-3" style="background: rgba(0,0,0,0.3); border-radius: 12px; font-size: 12px;">
+                                <div v-if="chatMeta && (chatMeta.auto_agent_template || chatMeta.auto_agent_id)" class="mb-2 px-2 py-1.5 flex items-center space-x-2" style="background: rgba(124,92,252,0.1); border: 1px solid rgba(124,92,252,0.2); border-radius: 8px;">
+                                    <span style="font-size: 10px; color: #7c5cfc; font-weight: 600;">🤖 自动创建 Agent</span>
+                                    <span v-if="chatMeta.auto_agent_template" style="font-size: 10px; background: rgba(124,92,252,0.2); color: #a888ff; padding: 1px 6px; border-radius: 4px;">{{ chatMeta.auto_agent_template }}</span>
+                                    <span v-if="chatMeta.auto_agent_id" style="font-size: 9px; color: rgba(255,255,255,0.3); font-family: monospace;">{{ chatMeta.auto_agent_id }}</span>
+                                </div>
                                 <div style="white-space: pre-wrap; color: rgba(255,255,255,0.7);">{{ chatReply }}</div>
                             </div>
                         </div>
@@ -581,6 +586,7 @@
                 const testResult = ref('');
                 const inputMessage = ref('');
                 const chatReply = ref('');
+                const chatMeta = ref(null);
 
                 const configuredCount = computed(() => {
                     let count = 0;
@@ -731,9 +737,18 @@
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim()) return;
                     chatReply.value = '处理中...';
+                    chatMeta.value = null;
                     try {
                         const r = await axios.post('/api/v1/chat', { message: inputMessage.value.trim() });
                         chatReply.value = r.data.response || r.data.reply || '处理完成';
+                        // Surface auto-created agent info if present
+                        const data = r.data.data || {};
+                        if (data.auto_agent_id || data.auto_agent_template) {
+                            chatMeta.value = {
+                                auto_agent_id: data.auto_agent_id || null,
+                                auto_agent_template: data.auto_agent_template || null,
+                            };
+                        }
                         inputMessage.value = '';
                     } catch (e) { chatReply.value = '连接失败: ' + e.message; }
                 };
@@ -749,7 +764,7 @@
                     selectedTemplate, agentTaskDesc, agentCreateStatus, agentPermissions, permissionDefs,
                     twinTask, twinStrategy, twinCount, twinResult, swarmTask, swarmCount, swarmResult,
                     mcpServers, skills, deviceList, crossDeviceSource, transferSource, transferTarget,
-                    tools, nodes, testMessage, testResult, inputMessage, chatReply, configuredCount,
+                    tools, nodes, testMessage, testResult, inputMessage, chatReply, chatMeta, configuredCount,
                     loadNodeApis, saveNodeApiKey, loadAgents, createAgentFromTemplate, createAgentDynamic, deleteAgent,
                     createTwin, createSwarm,
                     loadProtocols, toggleMcpTools, unloadMcp, loadSkill, unloadSkill,
