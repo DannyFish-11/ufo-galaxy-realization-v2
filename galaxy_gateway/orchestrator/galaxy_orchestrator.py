@@ -688,7 +688,24 @@ class GalaxyOrchestrator:
             处理结果字典
         """
         task_id = f"task_{uuid.uuid4().hex[:12]}"
+        # Extract or generate trace_id for end-to-end correlation
+        trace_id: str = (context or {}).get("trace_id") or uuid.uuid4().hex
         logger.info(f"[{task_id}] 开始处理请求: {request}")
+
+        # ── Lifecycle log: task received ─────────────────────────────────────
+        try:
+            from core.task_logger import emit_task_log as _emit_task_log
+            device_id_ctx = (context or {}).get("device_id", "")
+            _emit_task_log(
+                "task_received",
+                task_id=task_id,
+                trace_id=trace_id,
+                device_id=device_id_ctx,
+                task_type="orchestrator",
+                status="received",
+            )
+        except Exception:
+            pass
 
         # 创建任务
         task = Task(
@@ -702,7 +719,7 @@ class GalaxyOrchestrator:
 
         # 发布编排开始事件
         self._publish_event("ORCHESTRATION_STARTED", {
-            "task_id": task_id, "request": request,
+            "task_id": task_id, "trace_id": trace_id, "request": request,
         })
 
         try:
@@ -749,16 +766,29 @@ class GalaxyOrchestrator:
                         "source": "team_manager",
                     }
                     task.result = final_result
+                    exec_time = task.completed_at - task.created_at
                     self._publish_event("ORCHESTRATION_COMPLETED", {
-                        "task_id": task_id, "success": True,
-                        "execution_time": task.completed_at - task.created_at,
+                        "task_id": task_id, "trace_id": trace_id, "success": True,
+                        "execution_time": exec_time,
                     })
                     # 记录经验
                     await self._log_experience(request, final_result, True)
+                    try:
+                        _emit_task_log(
+                            "task_completed",
+                            task_id=task_id,
+                            trace_id=trace_id,
+                            task_type="orchestrator",
+                            latency_ms=round(exec_time * 1000, 1),
+                            status="success",
+                        )
+                    except Exception:
+                        pass
                     return {
                         "success": True, "task_id": task_id,
+                        "trace_id": trace_id,
                         "intent": intent, "result": final_result,
-                        "execution_time": task.completed_at - task.created_at,
+                        "execution_time": exec_time,
                     }
                 except Exception as e:
                     logger.warning(f"TeamManager 执行失败，降级到常规分解: {e}")
@@ -767,7 +797,7 @@ class GalaxyOrchestrator:
             task.subtasks = subtasks
 
             self._publish_event("ORCHESTRATION_PROGRESS", {
-                "task_id": task_id, "phase": "subtasks_ready",
+                "task_id": task_id, "trace_id": trace_id, "phase": "subtasks_ready",
                 "subtask_count": len(subtasks),
             })
 
@@ -785,20 +815,34 @@ class GalaxyOrchestrator:
 
             logger.info(f"[{task_id}] 请求处理完成")
 
+            exec_time = task.completed_at - task.created_at
             self._publish_event("ORCHESTRATION_COMPLETED", {
-                "task_id": task_id, "success": True,
-                "execution_time": task.completed_at - task.created_at,
+                "task_id": task_id, "trace_id": trace_id, "success": True,
+                "execution_time": exec_time,
             })
 
             # 记录经验到 RAGMemory
             await self._log_experience(request, final_result, True)
 
+            try:
+                _emit_task_log(
+                    "task_completed",
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    task_type="orchestrator",
+                    latency_ms=round(exec_time * 1000, 1),
+                    status="success",
+                )
+            except Exception:
+                pass
+
             return {
                 "success": True,
                 "task_id": task_id,
+                "trace_id": trace_id,
                 "intent": intent,
                 "result": final_result,
-                "execution_time": task.completed_at - task.created_at
+                "execution_time": exec_time,
             }
 
         except Exception as e:
@@ -808,15 +852,28 @@ class GalaxyOrchestrator:
             self.stats["failed_tasks"] += 1
 
             self._publish_event("ORCHESTRATION_COMPLETED", {
-                "task_id": task_id, "success": False, "error": str(e),
+                "task_id": task_id, "trace_id": trace_id, "success": False, "error": str(e),
             })
 
             # 记录失败经验
             await self._log_experience(request, {"error": str(e)}, False)
 
+            try:
+                _emit_task_log(
+                    "task_failed",
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    task_type="orchestrator",
+                    status="failed",
+                    error=str(e),
+                )
+            except Exception:
+                pass
+
             return {
                 "success": False,
                 "task_id": task_id,
+                "trace_id": trace_id,
                 "error": str(e)
             }
 
