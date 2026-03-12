@@ -167,6 +167,19 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "20",
+        "name": "Qdrant",
+        "port": 8020,
+        "configured": bool(QDRANT_API_KEY),
+        "connected": qdrant_manager._connected,
+        "host": QDRANT_HOST,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/collections")
 async def create_collection(request: CollectionRequest):
     """创建集合"""

@@ -151,6 +151,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "13",
+        "name": "SQLite",
+        "port": 8013,
+        "db_path": SQLITE_DB_PATH,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/query")
 async def execute_query(request: QueryRequest):
     """执行SQL查询"""

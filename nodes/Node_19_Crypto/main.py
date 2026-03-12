@@ -204,6 +204,16 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "19",
+        "name": "Crypto",
+        "port": 8019,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/hash")
 async def hash_data(request: HashRequest):
     """计算哈希"""

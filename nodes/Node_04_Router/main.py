@@ -323,6 +323,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "04",
+        "name": "Router",
+        "port": 8004,
+        "routes_count": len(router.nodes),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/register")
 async def register_node(request: RegisterRequest):
     """注册节点"""

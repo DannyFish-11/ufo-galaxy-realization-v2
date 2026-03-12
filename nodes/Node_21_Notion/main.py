@@ -304,6 +304,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "21",
+        "name": "Notion",
+        "port": 8021,
+        "configured": bool(NOTION_API_KEY),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/tools")
 async def list_tools():
     """列出可用工具"""

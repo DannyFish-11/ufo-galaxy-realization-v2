@@ -94,6 +94,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "09",
+        "name": "Sandbox",
+        "port": 8009,
+        "active_sandboxes": 0,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/execute")
 async def execute_code(request: ExecuteRequest):
     """执行代码"""

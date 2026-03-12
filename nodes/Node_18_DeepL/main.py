@@ -143,6 +143,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "18",
+        "name": "DeepL",
+        "port": 8018,
+        "configured": bool(DEEPL_API_KEY),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/translate")
 async def translate(request: TranslateRequest):
     """翻译文本"""

@@ -212,6 +212,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "24",
+        "name": "Weather",
+        "port": 8025,
+        "configured": bool(OPENWEATHER_API_KEY),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/current")
 async def get_current_weather(city: str, units: str = "metric", lang: str = "zh_cn"):
     """获取当前天气"""

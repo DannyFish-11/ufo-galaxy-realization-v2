@@ -263,6 +263,21 @@ async def health_check():
         "store_type": "redis" if redis_client else "memory"
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    locks = await store.get_locks() if store else {}
+    nodes = await store.get_nodes() if store else {}
+    return {
+        "node_id": "00",
+        "name": "StateMachine",
+        "port": 8000,
+        "redis_available": redis_client is not None,
+        "lock_count": len(locks),
+        "nodes_registered": len(nodes),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/lock/acquire", response_model=LockResponse)
 async def acquire_lock(request: LockRequest):
     """Acquire a lock on a resource."""

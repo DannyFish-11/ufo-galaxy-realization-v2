@@ -275,6 +275,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "05",
+        "name": "Auth",
+        "port": 8005,
+        "active_tokens": len(auth_manager._refresh_tokens),
+        "timestamp": datetime.now().isoformat()
+    }
+
 class LoginRequest(BaseModel):
     username: str
     password: str

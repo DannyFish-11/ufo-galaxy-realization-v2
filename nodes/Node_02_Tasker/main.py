@@ -229,6 +229,20 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    active_tasks = len([t for t in task_manager.tasks.values() if t.status == TaskStatus.RUNNING])
+    completed_tasks = len([t for t in task_manager.tasks.values() if t.status == TaskStatus.COMPLETED])
+    return {
+        "node_id": "02",
+        "name": "Tasker",
+        "port": 8002,
+        "active_tasks": active_tasks,
+        "completed_tasks": completed_tasks,
+        "timestamp": datetime.now().isoformat()
+    }
+
 class CreateTaskRequest(BaseModel):
     name: str
     command: str

@@ -53,6 +53,16 @@ async def health():
         'git_version': git_version.stdout.strip()
     }
 
+@app.get('/status')
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "07",
+        "name": "Git",
+        "port": 8007,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post('/init')
 async def init_repo(path: str, bare: bool = False):
     """初始化 Git 仓库"""
