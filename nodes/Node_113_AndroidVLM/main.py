@@ -6,6 +6,8 @@ FastAPI 服务器
 版本：1.1.0
 日期：2026-03-07
 """
+import asyncio
+
 
 import os
 import sys
@@ -245,6 +247,30 @@ async def get_supported_providers():
 # ============================================================================
 # 启动服务
 # ============================================================================
+
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_113_AndroidVLM"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_113_AndroidVLM",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8113,
+    }
 
 if __name__ == "__main__":
     import uvicorn

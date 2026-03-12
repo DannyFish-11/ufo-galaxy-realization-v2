@@ -830,6 +830,22 @@ layer_multimodal:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "自动控制"
+
+    Node_93_VideoProcessor:
+      port: 8093
+      name: "VideoProcessor"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI", "Node_90_MultimodalVision"]
+      description: "视频处理与分析"
+
+    Node_94_AudioAnalysis:
+      port: 8094
+      name: "AudioAnalysis"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "音频分析与转录"
       
     Node_95_WebRTC_Receiver:
       port: 8095
@@ -854,6 +870,22 @@ layer_multimodal:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "学术搜索"
+
+    Node_98_MultimodalFusion:
+      port: 8098
+      name: "MultimodalFusion"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI", "Node_90_MultimodalVision", "Node_94_AudioAnalysis"]
+      description: "多模态融合"
+
+    Node_99_EmbeddingService:
+      port: 8099
+      name: "EmbeddingService"
+      group: "multimodal"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "嵌入向量服务"
 
 # =============================================================================
 # LAYER 8: ACADEMIC - 学术研究 (8100-8119)
@@ -917,6 +949,14 @@ layer_academic:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "GitHub工作流"
+
+    Node_107_FunctionCalling:
+      port: 8107
+      name: "FunctionCalling"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "函数调用调度器"
       
     Node_108_MetaCognition:
       port: 8108
@@ -965,6 +1005,22 @@ layer_academic:
       critical: false
       dependencies: ["Node_90_MultimodalVision"]
       description: "Android视觉语言模型"
+
+    Node_114_DocumentIntelligence:
+      port: 8114
+      name: "DocumentIntelligence"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "文档智能解析与理解"
+
+    Node_115_PluginManager:
+      port: 8115
+      name: "PluginManager"
+      group: "academic"
+      critical: false
+      dependencies: []
+      description: "插件管理器"
       
     Node_116_ExternalToolWrapper:
       port: 8116
@@ -989,6 +1045,14 @@ layer_academic:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "节点工厂"
+
+    Node_119_BenchmarkEval:
+      port: 8119
+      name: "BenchmarkEval"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "基准评测系统"
 
     Node_120_File:
       port: 8120

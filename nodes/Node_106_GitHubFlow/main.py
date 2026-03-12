@@ -459,6 +459,29 @@ async def workflow_issue_to_pr(repo: str, issue_number: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_106_GitHubFlow"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_106_GitHubFlow",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8106,
+    }
+
 # ============================================================================
 # 启动服务
 # ============================================================================

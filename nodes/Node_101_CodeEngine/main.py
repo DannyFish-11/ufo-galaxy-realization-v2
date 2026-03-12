@@ -18,6 +18,8 @@ Node_101_CodeEngine - 代码理解和生成系统
 日期：2026-01-22
 作者：Manus AI
 """
+import asyncio
+
 
 import os
 import ast
@@ -580,6 +582,30 @@ async def review_code(request: ReviewCodeRequest) -> Dict[str, Any]:
 # ============================================================================
 # 启动服务
 # ============================================================================
+
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_101_CodeEngine"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_101_CodeEngine",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8101,
+    }
 
 if __name__ == "__main__":
     import uvicorn

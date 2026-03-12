@@ -434,6 +434,30 @@ async def list_devices():
 # 主程序
 # ============================================================================
 
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_95_WebRTC_Receiver"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_95_WebRTC_Receiver",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8095,
+    }
+
 if __name__ == "__main__":
     logger.info("="*80)
     logger.info("Node_95: WebRTC Receiver v2.0 (完整实现)")
