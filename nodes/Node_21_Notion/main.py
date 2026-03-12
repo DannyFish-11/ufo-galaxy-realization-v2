@@ -326,6 +326,8 @@ async def mcp_call(request: Dict[str, Any]):
     tool = request.get("tool", "")
     params = request.get("params", {})
     
+    if not NOTION_API_KEY:
+        raise HTTPException(status_code=503, detail={"error": "NOTION_API_KEY not configured", "success": False})
     try:
         result = await tools.call_tool(tool, params)
         return {"success": True, "result": result}
