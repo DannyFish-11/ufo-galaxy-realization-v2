@@ -1,308 +1,303 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-Node_11_GitHub: Galaxy 系统中的 GitHub API 集成节点。
-
-该节点提供与 GitHub API 的交互能力，支持对仓库（Repository）和议题（Issue）的
-管理操作。它被设计为一个异步服务，能够高效地处理 API 请求。
-
-主要功能:
-- 从配置文件或环境变量加载 GitHub API 令牌和默认仓库设置。
-- 提供异步方法来获取仓库信息、创建、查询和关闭议题。
-- 包含健康检查和状态查询接口，用于监控节点运行状况。
-- 使用结构化日志记录所有操作和潜在错误。
-- 支持通过 HTTP 服务器（如 aiohttp）暴露服务接口（此部分为示例）。
+Node 11: GitHub - GitHub API 集成节点
+======================================
+提供 GitHub REST API v3 集成：仓库、Issues、Pull Requests、提交记录等
 """
-
-import asyncio
-import logging
 import os
-import json
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, Dict, Any, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-import aiohttp
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
-# --- 常量定义 ---
-NODE_NAME = "Node_11_GitHub"
-CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "config.json")
-LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
 
-# --- 枚举类型定义 ---
+# ── 配置 ──────────────────────────────────────────────────────────────────────
+PORT = 8011
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GITHUB_DEFAULT_OWNER = os.getenv("GITHUB_DEFAULT_OWNER", "")
+GITHUB_DEFAULT_REPO = os.getenv("GITHUB_DEFAULT_REPO", "")
+GITHUB_API_BASE = "https://api.github.com"
 
-class NodeStatus(Enum):
-    """定义节点的健康状态"""
-    HEALTHY = "HEALTHY"      # 节点正常运行
-    DEGRADED = "DEGRADED"    # 节点功能部分受限
-    UNHEALTHY = "UNHEALTHY"  # 节点完全无法工作
+# ── 应用初始化 ────────────────────────────────────────────────────────────────
+app = FastAPI(title="Node 11 - GitHub", version="2.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-class IssueState(Enum):
-    """定义 GitHub 议题的状态"""
-    OPEN = "open"
-    CLOSED = "closed"
-    ALL = "all"
+# ── 统计 ──────────────────────────────────────────────────────────────────────
+_stats: Dict[str, int] = {"total_requests": 0, "success_count": 0}
 
-# --- 数据类定义 ---
+# ── 辅助函数 ──────────────────────────────────────────────────────────────────
 
-@dataclass
-class GitHubConfig:
-    """存储 GitHub 节点的配置信息"""
-    api_token: str = field(default="")
-    default_owner: str = field(default="")
-    default_repo: str = field(default="")
-    api_base_url: str = field(default="https://api.github.com")
+def _require_token() -> None:
+    if not GITHUB_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "GITHUB_TOKEN not configured", "success": False},
+        )
+    if not HTTPX_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "httpx not installed", "success": False},
+        )
 
-    def __post_init__(self):
-        """在初始化后进行数据验证"""
-        if not self.api_token:
-            raise ValueError("GitHub API token (api_token) 未在配置中设置。")
-        if not self.default_owner or not self.default_repo:
-            logging.warning("未设置默认的 owner 或 repo，每次调用时都需要指定。")
 
-# --- 主服务类 ---
-
-class GitHubNodeService:
-    """GitHub 节点主服务类，封装了所有核心业务逻辑"""
-
-    def __init__(self, config: Optional[GitHubConfig] = None):
-        """初始化服务，加载配置并设置日志"""
-        self._setup_logging()
-        self.logger.info(f"正在初始化节点: {NODE_NAME}")
-        try:
-            self.config = config if config else self._load_config()
-            self.status = NodeStatus.HEALTHY
-            self.status_message = "节点初始化成功。"
-            self.headers = {
-                "Authorization": f"token {self.config.api_token}",
-                "Accept": "application/vnd.github.v3+json",
-            }
-            self.logger.info("GitHub 配置加载成功。")
-        except (ValueError, FileNotFoundError) as e:
-            self.config = None
-            self.status = NodeStatus.UNHEALTHY
-            self.status_message = f"节点初始化失败: {e}"
-            self.logger.error(self.status_message)
-
-    def _setup_logging(self):
-        """配置结构化日志记录器"""
-        self.logger = logging.getLogger(NODE_NAME)
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(LOG_FORMAT)
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-
-    def _load_config(self) -> GitHubConfig:
-        """从环境变量或配置文件加载配置"""
-        self.logger.info("正在加载配置...")
-        # 优先从环境变量读取
-        api_token = os.getenv("GITHUB_API_TOKEN")
-        default_owner = os.getenv("GITHUB_DEFAULT_OWNER")
-        default_repo = os.getenv("GITHUB_DEFAULT_REPO")
-
-        if api_token:
-            self.logger.info("从环境变量中成功加载 GitHub 配置。")
-            return GitHubConfig(
-                api_token=api_token,
-                default_owner=default_owner or "",
-                default_repo=default_repo or ""
-            )
-        
-        # 如果环境变量中没有，则尝试从文件读取
-        self.logger.info(f"未找到环境变量配置，尝试从 {CONFIG_FILE_PATH} 文件加载。")
-        if os.path.exists(CONFIG_FILE_PATH):
-            with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-                self.logger.info("从配置文件中成功加载 GitHub 配置。")
-                return GitHubConfig(**config_data)
-        
-        raise FileNotFoundError(f"配置文件 {CONFIG_FILE_PATH} 未找到，且未设置相关环境变量。")
-
-    async def _make_api_request(
-        self, method: str, url: str, data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """通用的异步 API 请求方法"""
-        if self.status == NodeStatus.UNHEALTHY:
-            raise ConnectionError("节点处于不健康状态，无法处理请求。")
-
-        async with aiohttp.ClientSession(headers=self.headers) as session:
-            self.logger.info(f"发送 API 请求: {method} {url}")
-            try:
-                async with session.request(method, url, json=data) as response:
-                    response.raise_for_status()  # 如果状态码是 4xx 或 5xx，则抛出异常
-                    result = await response.json()
-                    self.logger.info(f"成功接收到 API 响应，状态码: {response.status}")
-                    return result
-            except aiohttp.ClientResponseError as e:
-                self.logger.error(f"API 请求失败: {e.status} {e.message}")
-                self.status = NodeStatus.DEGRADED
-                self.status_message = f"最近一次 API 请求失败: {e.message}"
-                raise
-            except Exception as e:
-                self.logger.error(f"发生未知网络错误: {e}")
-                self.status = NodeStatus.DEGRADED
-                self.status_message = f"发生未知网络错误: {e}"
-                raise
-
-    def get_health(self) -> Dict[str, str]:
-        """提供节点的健康检查接口"""
-        self.logger.info("执行健康检查。")
-        return {
-            "node_name": NODE_NAME,
-            "status": self.status.value,
-            "message": self.status_message
-        }
-
-    def get_status(self) -> Dict[str, Any]:
-        """提供节点详细状态的查询接口"""
-        self.logger.info("查询节点状态。")
-        return {
-            "node_name": NODE_NAME,
-            "status": self.status.value,
-            "config": {
-                "default_owner": self.config.default_owner if self.config else None,
-                "default_repo": self.config.default_repo if self.config else None,
-                "api_base_url": self.config.api_base_url if self.config else None,
-            },
-            "timestamp": asyncio.get_event_loop().time()
-        }
-
-    async def get_repository_info(
-        self, owner: Optional[str] = None, repo: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """获取指定仓库的详细信息"""
-        owner = owner or self.config.default_owner
-        repo = repo or self.config.default_repo
-        if not owner or not repo:
-            raise ValueError("必须提供仓库所有者 (owner) 和仓库名称 (repo)。")
-        
-        url = f"{self.config.api_base_url}/repos/{owner}/{repo}"
-        self.logger.info(f"正在获取仓库信息: {owner}/{repo}")
-        return await self._make_api_request("GET", url)
-
-    async def create_issue(
-        self, title: str, body: str, owner: Optional[str] = None, repo: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """在指定仓库中创建一个新的议题"""
-        owner = owner or self.config.default_owner
-        repo = repo or self.config.default_repo
-        if not owner or not repo:
-            raise ValueError("必须提供仓库所有者 (owner) 和仓库名称 (repo)。")
-
-        url = f"{self.config.api_base_url}/repos/{owner}/{repo}/issues"
-        data = {"title": title, "body": body}
-        self.logger.info(f"正在创建新议题: '{title}' 于 {owner}/{repo}")
-        return await self._make_api_request("POST", url, data=data)
-
-    async def list_issues(
-        self, state: IssueState = IssueState.OPEN, owner: Optional[str] = None, repo: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """列出指定仓库中的议题"""
-        owner = owner or self.config.default_owner
-        repo = repo or self.config.default_repo
-        if not owner or not repo:
-            raise ValueError("必须提供仓库所有者 (owner) 和仓库名称 (repo)。")
-
-        url = f"{self.config.api_base_url}/repos/{owner}/{repo}/issues?state={state.value}"
-        self.logger.info(f"正在列出 '{state.value}' 状态的议题于 {owner}/{repo}")
-        return await self._make_api_request("GET", url)
-
-    async def close_issue(
-        self, issue_number: int, owner: Optional[str] = None, repo: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """关闭一个指定的议题"""
-        owner = owner or self.config.default_owner
-        repo = repo or self.config.default_repo
-        if not owner or not repo:
-            raise ValueError("必须提供仓库所有者 (owner) 和仓库名称 (repo)。")
-
-        url = f"{self.config.api_base_url}/repos/{owner}/{repo}/issues/{issue_number}"
-        data = {"state": IssueState.CLOSED.value}
-        self.logger.info(f"正在关闭议题 #{issue_number} 于 {owner}/{repo}")
-        return await self._make_api_request("PATCH", url, data=data)
-
-async def main():
-    """主函数，用于演示和测试 GitHubNodeService 的功能"""
-    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
-    logger = logging.getLogger()
-    
-    logger.info("--- GitHub 节点服务演示 ---")
-
-    # 准备一个模拟的配置文件，实际使用时应从环境变量或真实文件加载
-    # 为避免真实 Token 泄露，这里使用占位符
-    # 请在使用时替换为真实的 GitHub Personal Access Token
-    # 并确保该 Token 具有 repo 权限
-    mock_config_data = {
-        "api_token": os.getenv("GITHUB_API_TOKEN", "YOUR_GITHUB_TOKEN_HERE"),
-        "default_owner": "octocat",
-        "default_repo": "Hello-World"
+def _headers() -> Dict[str, str]:
+    return {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+        "X-GitHub-Api-Version": "2022-11-28",
     }
-    
-    # 检查占位符
-    if mock_config_data["api_token"] == "YOUR_GITHUB_TOKEN_HERE":
-        logger.error("请在代码中或通过 GITHUB_API_TOKEN 环境变量设置您的 GitHub API Token。")
-        return
 
-    # 创建配置对象和节点服务实例
-    try:
-        config = GitHubConfig(**mock_config_data)
-        service = GitHubNodeService(config=config)
-    except ValueError as e:
-        logger.error(f"配置错误: {e}")
-        return
 
-    # 1. 检查健康状态
-    logger.info("\n1. 健康检查:")
-    health_status = service.get_health()
-    logger.info(json.dumps(health_status, indent=2, ensure_ascii=False))
-    if health_status['status'] != NodeStatus.HEALTHY.value:
-        logger.error("节点不健康，演示中止。")
-        return
+def _resolve(owner: Optional[str], repo: Optional[str]):
+    o = owner or GITHUB_DEFAULT_OWNER
+    r = repo or GITHUB_DEFAULT_REPO
+    if not o or not r:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "owner and repo are required (or set GITHUB_DEFAULT_OWNER / GITHUB_DEFAULT_REPO)",
+                "success": False,
+            },
+        )
+    return o, r
 
-    # 2. 获取仓库信息
-    try:
-        logger.info("\n2. 获取仓库信息 (octocat/Hello-World):")
-        repo_info = await service.get_repository_info()
-        logger.info(f"仓库名称: {repo_info['full_name']}")
-        logger.info(f"仓库描述: {repo_info['description']}")
-        logger.info(f"Stars: {repo_info['stargazers_count']}")
-    except Exception as e:
-        logger.error(f"获取仓库信息失败: {e}")
 
-    # 3. 列出仓库的开放议题
-    try:
-        logger.info("\n3. 列出开放的议题:")
-        issues = await service.list_issues(state=IssueState.OPEN)
-        logger.info(f"找到 {len(issues)} 个开放的议题。")
-        for issue in issues[:3]: # 只显示前3个
-            logger.info(f"  - #{issue['number']}: {issue['title']}")
-    except Exception as e:
-        logger.error(f"列出议题失败: {e}")
+async def _get(path: str) -> Any:
+    _stats["total_requests"] += 1
+    async with httpx.AsyncClient(base_url=GITHUB_API_BASE, timeout=30.0) as client:
+        resp = await client.get(path, headers=_headers())
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail={"error": resp.text, "success": False},
+        )
+    _stats["success_count"] += 1
+    return resp.json()
 
-    # 4. 创建一个新议题 (此部分默认注释，以免在公共仓库中创建垃圾信息)
-    # try:
-    #     logger.info("\n4. 创建一个新议题:")
-    #     new_issue = await service.create_issue(
-    #         title="[Test] 来自 Galaxy 节点的问候",
-    #         body="这是一个通过 Node_11_GitHub 自动创建的测试议题。"
-    #     )
-    #     logger.info(f"成功创建议题 #{new_issue['number']}: {new_issue['html_url']}")
-    #     issue_to_close = new_issue['number']
-    #
-    #     # 5. 关闭刚刚创建的议题
-    #     logger.info(f"\n5. 关闭议题 #{issue_to_close}:")
-    #     closed_issue = await service.close_issue(issue_number=issue_to_close)
-    #     logger.info(f"议题 #{closed_issue['number']} 状态已更新为: {closed_issue['state']}")
-    # except Exception as e:
-    #     logger.error(f"创建或关闭议题失败: {e}")
 
-    logger.info("\n--- 演示结束 ---")
+async def _post(path: str, body: Dict[str, Any]) -> Any:
+    _stats["total_requests"] += 1
+    async with httpx.AsyncClient(base_url=GITHUB_API_BASE, timeout=30.0) as client:
+        resp = await client.post(path, headers=_headers(), json=body)
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail={"error": resp.text, "success": False},
+        )
+    _stats["success_count"] += 1
+    return resp.json()
+
+
+async def _patch(path: str, body: Dict[str, Any]) -> Any:
+    _stats["total_requests"] += 1
+    async with httpx.AsyncClient(base_url=GITHUB_API_BASE, timeout=30.0) as client:
+        resp = await client.patch(path, headers=_headers(), json=body)
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail={"error": resp.text, "success": False},
+        )
+    _stats["success_count"] += 1
+    return resp.json()
+
+# ── 请求模型 ──────────────────────────────────────────────────────────────────
+
+class RepoInfoRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+
+
+class IssueListRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    state: str = "open"
+    labels: Optional[str] = None
+    limit: int = 30
+
+
+class IssueCreateRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    title: str
+    body: str = ""
+    labels: List[str] = []
+
+
+class IssueUpdateRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    issue_number: int
+    title: Optional[str] = None
+    body: Optional[str] = None
+    state: Optional[str] = None
+    labels: Optional[List[str]] = None
+
+
+class PullListRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    state: str = "open"
+
+
+class PullCreateRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    title: str
+    body: str = ""
+    head: str
+    base: str
+
+
+class CommitListRequest(BaseModel):
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    sha: Optional[str] = None
+    limit: int = 30
+
+# ── 端点 ──────────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    return {
+        "success": True,
+        "status": "healthy",
+        "node_id": "11",
+        "name": "GitHub",
+        "port": PORT,
+        "configured": bool(GITHUB_TOKEN),
+        "httpx_available": HTTPX_AVAILABLE,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.get("/status")
+async def status():
+    rate_limit_info = None
+    if GITHUB_TOKEN and HTTPX_AVAILABLE:
+        try:
+            rate_limit_info = await _get("/rate_limit")
+        except Exception:
+            pass
+    return {
+        "success": True,
+        "token_set": bool(GITHUB_TOKEN),
+        "default_owner": GITHUB_DEFAULT_OWNER or None,
+        "default_repo": GITHUB_DEFAULT_REPO or None,
+        "rate_limit_info": rate_limit_info,
+        "stats": _stats,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.post("/repos/info")
+async def repo_info(request: RepoInfoRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    data = await _get(f"/repos/{owner}/{repo}")
+    return {"success": True, "data": data}
+
+
+@app.get("/repos/list")
+async def repos_list(owner: str = Query(..., description="GitHub user or org name")):
+    _require_token()
+    data = await _get(f"/users/{owner}/repos?per_page=100&sort=updated")
+    return {"success": True, "owner": owner, "repos": data, "count": len(data)}
+
+
+@app.post("/issues/list")
+async def issues_list(request: IssueListRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    params = f"?state={request.state}&per_page={min(request.limit, 100)}"
+    if request.labels:
+        params += f"&labels={request.labels}"
+    data = await _get(f"/repos/{owner}/{repo}/issues{params}")
+    return {"success": True, "owner": owner, "repo": repo, "issues": data, "count": len(data)}
+
+
+@app.post("/issues/create")
+async def issues_create(request: IssueCreateRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    body: Dict[str, Any] = {"title": request.title, "body": request.body}
+    if request.labels:
+        body["labels"] = request.labels
+    data = await _post(f"/repos/{owner}/{repo}/issues", body)
+    return {"success": True, "issue": data}
+
+
+@app.post("/issues/update")
+async def issues_update(request: IssueUpdateRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    body: Dict[str, Any] = {}
+    if request.title is not None:
+        body["title"] = request.title
+    if request.body is not None:
+        body["body"] = request.body
+    if request.state is not None:
+        body["state"] = request.state
+    if request.labels is not None:
+        body["labels"] = request.labels
+    if not body:
+        raise HTTPException(status_code=400, detail={"error": "No fields to update", "success": False})
+    data = await _patch(f"/repos/{owner}/{repo}/issues/{request.issue_number}", body)
+    return {"success": True, "issue": data}
+
+
+@app.post("/pulls/list")
+async def pulls_list(request: PullListRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    data = await _get(f"/repos/{owner}/{repo}/pulls?state={request.state}&per_page=100")
+    return {"success": True, "owner": owner, "repo": repo, "pulls": data, "count": len(data)}
+
+
+@app.post("/pulls/create")
+async def pulls_create(request: PullCreateRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    body = {
+        "title": request.title,
+        "body": request.body,
+        "head": request.head,
+        "base": request.base,
+    }
+    data = await _post(f"/repos/{owner}/{repo}/pulls", body)
+    return {"success": True, "pull_request": data}
+
+
+@app.post("/commits/list")
+async def commits_list(request: CommitListRequest):
+    _require_token()
+    owner, repo = _resolve(request.owner, request.repo)
+    params = f"?per_page={min(request.limit, 100)}"
+    if request.sha:
+        params += f"&sha={request.sha}"
+    data = await _get(f"/repos/{owner}/{repo}/commits{params}")
+    return {"success": True, "owner": owner, "repo": repo, "commits": data, "count": len(data)}
+
+
+@app.get("/rate-limit")
+async def rate_limit():
+    _require_token()
+    data = await _get("/rate_limit")
+    return {"success": True, "rate_limit": data}
+
 
 if __name__ == "__main__":
-    # 设置事件循环策略以兼容 Windows 环境
-    if os.name == 'nt':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
