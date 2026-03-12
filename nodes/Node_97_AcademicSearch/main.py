@@ -562,6 +562,30 @@ async def analyze_with_agentcpm(request: AgentCPMAnalysisRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # 启动服务
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_97_AcademicSearch"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_97_AcademicSearch",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8097,
+    }
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("NODE_97_PORT", "8097"))

@@ -572,6 +572,30 @@ async def get_reflections(limit: int = 10):
     return [asdict(r) for r in reflections]
 
 
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_108_MetaCognition"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_108_MetaCognition",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8108,
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8108)

@@ -1,3 +1,4 @@
+import asyncio
 """
 Node_100_MemorySystem - 记忆和学习系统
 
@@ -658,6 +659,30 @@ async def stats() -> Dict[str, Any]:
 # ============================================================================
 # 启动服务
 # ============================================================================
+
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_100_MemorySystem"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
+
+@app.get("/status")
+async def get_status():
+    """节点状态"""
+    return {
+        "node": "Node_100_MemorySystem",
+        "status": "running",
+        "version": "1.0.0",
+        "port": 8100,
+    }
 
 if __name__ == "__main__":
     import uvicorn

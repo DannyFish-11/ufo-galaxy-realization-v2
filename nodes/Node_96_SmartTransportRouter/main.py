@@ -19,7 +19,8 @@ from enum import Enum, auto
 from typing import Dict, Any, Optional, List, Type
 
 # 第三方库，需要预先安装：pip install fastapi uvicorn python-multipart
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI
+from pydantic import BaseModel, HTTPException, status
 import uvicorn
 
 # --- 1. 日志配置 ---
@@ -382,6 +383,19 @@ async def route_new_message(message: Dict[str, Any]):
         raise HTTPException(status_code=500, detail="Failed to route message.")
 
 # --- 7. 主程序入口 ---
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    params: dict = {}
+
+@app.post("/mcp/call")
+async def mcp_call(request: MCPCallRequest):
+    """MCP tool call dispatcher"""
+    if request.tool == "health":
+        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_96_SmartTransportRouter"}}
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
 if __name__ == "__main__":
     """
     主程序入口，启动 FastAPI 服务。
