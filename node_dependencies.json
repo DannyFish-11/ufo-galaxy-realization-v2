@@ -682,6 +682,16 @@
       "optional_dependencies": [],
       "description": "Auto-generated config for Node_54_SymbolicMath"
     },
+    "Node_55_MultiModal": {
+      "port": 8055,
+      "group": "extended",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "description": "Multimodal AI processing node supporting text and image embeddings via transformers"
+    },
     "Node_126_AgentSwarm": {
       "port": 8126,
       "group": "extended",

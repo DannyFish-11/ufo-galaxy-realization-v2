@@ -1,311 +1,195 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-Node_40_SFTP: Galaxy 系统中的 SFTP 文件传输节点
-
-该节点负责通过 SFTP (SSH File Transfer Protocol) 安全地进行文件上传、下载和管理。
-它支持异步操作，并提供了健康检查和状态查询接口。
+Node 40: SFTP - Secure File Transfer Protocol
 """
-
-import asyncio
-import logging
 import os
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, List, Dict, Any
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
-import asyncssh
+try:
+    from core.port_config import get_node_port
+    PORT = get_node_port("Node_40_SFTP")
+except Exception:
+    PORT = int(os.getenv("PORT", "8040"))
 
-# --- 配置和枚举 --- #
+try:
+    import asyncssh
+    ASYNCSSH_AVAILABLE = True
+except ImportError:
+    asyncssh = None
+    ASYNCSSH_AVAILABLE = False
 
-# 配置日志记录器
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-logger = logging.getLogger("Node_40_SFTP")
+app = FastAPI(title="Node 40 - SFTP", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-class NodeStatus(Enum):
-    """定义节点的运行状态"""
-    INITIALIZING = "INITIALIZING"  # 初始化中
-    RUNNING = "RUNNING"          # 运行中
-    STOPPED = "STOPPED"          # 已停止
-    ERROR = "ERROR"              # 发生错误
-    DEGRADED = "DEGRADED"        # 降级运行
+# Active connections: conn_id -> asyncssh connection
+connections: Dict[str, Any] = {}
 
-class OperationType(Enum):
-    """定义支持的 SFTP 操作类型"""
-    UPLOAD = "UPLOAD"
-    DOWNLOAD = "DOWNLOAD"
-    LIST_DIR = "LIST_DIR"
-
-@dataclass
-class SFTPConfig:
-    """SFTP 连接的配置信息"""
+class ConnectRequest(BaseModel):
     host: str
     port: int = 22
-    username: str = "anonymous"
+    username: str
     password: Optional[str] = None
-    private_key_path: Optional[str] = None
-    known_hosts_path: Optional[str] = None
-    connection_timeout: int = 10  # 连接超时时间（秒）
-    keepalive_interval: int = 30  # Keep-alive 间隔
+    private_key: Optional[str] = None
+    conn_id: Optional[str] = None
 
-# --- 主服务类 --- #
+class DisconnectRequest(BaseModel):
+    conn_id: str
 
-class SFTPNodeService:
-    """
-    SFTP 节点主服务类，封装了所有核心业务逻辑。
-    """
+class UploadRequest(BaseModel):
+    conn_id: str
+    local_path: str
+    remote_path: str
 
-    def __init__(self, config: SFTPConfig):
-        """初始化服务，加载配置"""
-        self.config = config
-        self._status = NodeStatus.INITIALIZING
-        self._connection: Optional[asyncssh.SSHClientConnection] = None
-        self._sftp_client: Optional[asyncssh.SFTPClient] = None
-        self._lock = asyncio.Lock()
-        logger.info(f"节点 {self.get_node_name()} 正在初始化...")
-        self._status = NodeStatus.STOPPED
+class DownloadRequest(BaseModel):
+    conn_id: str
+    remote_path: str
+    local_path: str
 
-    @staticmethod
-    def get_node_name() -> str:
-        """返回节点的标准名称"""
-        return "Node_40_SFTP"
+class ListRequest(BaseModel):
+    conn_id: str
+    remote_path: str = "."
 
-    async def _connect(self) -> None:
-        """内部方法，用于建立 SSH 和 SFTP 连接"""
-        if self._connection and not self._connection.is_closing():
-            logger.info("已存在有效连接，无需重复建立。")
-            return
+class MkdirRequest(BaseModel):
+    conn_id: str
+    remote_path: str
 
-        logger.info(f"正在连接到 SFTP 服务器: {self.config.host}:{self.config.port}")
-        try:
-            client_keys = [self.config.private_key_path] if self.config.private_key_path else None
-            known_hosts = self.config.known_hosts_path if self.config.known_hosts_path else None
+class DeleteRequest(BaseModel):
+    conn_id: str
+    remote_path: str
 
-            self._connection = await asyncio.wait_for(
-                asyncssh.connect(
-                    self.config.host,
-                    port=self.config.port,
-                    username=self.config.username,
-                    password=self.config.password,
-                    client_keys=client_keys,
-                    known_hosts=known_hosts,
-                    server_host_key_algs=["ssh-rsa"], # 兼容旧服务器
-                    keepalive_interval=self.config.keepalive_interval
-                ),
-                timeout=self.config.connection_timeout
-            )
-            self._sftp_client = await self._connection.start_sftp_client()
-            self._status = NodeStatus.RUNNING
-            logger.info("SFTP 连接成功建立。")
-        except asyncio.TimeoutError:
-            self._status = NodeStatus.ERROR
-            logger.error(f"连接 SFTP 服务器超时 ({self.config.connection_timeout}秒)。")
-            raise ConnectionError("SFTP connection timed out.")
-        except Exception as e:
-            self._status = NodeStatus.ERROR
-            logger.error(f"建立 SFTP 连接时发生未知错误: {e}", exc_info=True)
-            raise ConnectionError(f"Failed to connect to SFTP server: {e}")
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy" if ASYNCSSH_AVAILABLE else "degraded",
+        "node_id": "40",
+        "name": "SFTP",
+        "asyncssh_available": ASYNCSSH_AVAILABLE,
+        "degraded": not ASYNCSSH_AVAILABLE,
+        "degraded_reason": None if ASYNCSSH_AVAILABLE else "asyncssh not installed",
+        "active_connections": len(connections),
+        "timestamp": datetime.now().isoformat()
+    }
 
-    async def disconnect(self) -> None:
-        """断开 SFTP 连接"""
-        async with self._lock:
-            if self._sftp_client:
-                self._sftp_client.exit()
-                self._sftp_client = None
-            if self._connection and not self._connection.is_closing():
-                self._connection.close()
-                await self._connection.wait_closed()
-                self._connection = None
-            self._status = NodeStatus.STOPPED
-            logger.info("SFTP 连接已断开。")
+@app.get("/status")
+async def status():
+    return {
+        "status": "running",
+        "node_id": "40",
+        "name": "SFTP",
+        "asyncssh_available": ASYNCSSH_AVAILABLE,
+        "active_connections": list(connections.keys()),
+        "timestamp": datetime.now().isoformat()
+    }
 
-    async def upload_file(self, local_path: str, remote_path: str) -> bool:
-        """上传单个文件到 SFTP 服务器"""
-        async with self._lock:
-            if not self._sftp_client:
-                await self._connect()
-            
-            if not self._sftp_client:
-                logger.error("无法获取 SFTP 客户端，上传失败。")
-                return False
-
-            try:
-                logger.info(f"开始上传文件: {local_path} -> {remote_path}")
-                await self._sftp_client.put(local_path, remote_path)
-                logger.info("文件上传成功。")
-                return True
-            except Exception as e:
-                logger.error(f"上传文件时发生错误: {e}", exc_info=True)
-                self._status = NodeStatus.DEGRADED
-                return False
-
-    async def download_file(self, remote_path: str, local_path: str) -> bool:
-        """从 SFTP 服务器下载单个文件"""
-        async with self._lock:
-            if not self._sftp_client:
-                await self._connect()
-
-            if not self._sftp_client:
-                logger.error("无法获取 SFTP 客户端，下载失败。")
-                return False
-
-            try:
-                logger.info(f"开始下载文件: {remote_path} -> {local_path}")
-                await self._sftp_client.get(remote_path, local_path)
-                logger.info("文件下载成功。")
-                return True
-            except Exception as e:
-                logger.error(f"下载文件时发生错误: {e}", exc_info=True)
-                self._status = NodeStatus.DEGRADED
-                return False
-
-    async def list_directory(self, remote_path: str) -> Optional[List[str]]:
-        """列出远程目录的内容"""
-        async with self._lock:
-            if not self._sftp_client:
-                await self._connect()
-
-            if not self._sftp_client:
-                logger.error("无法获取 SFTP 客户端，列出目录失败。")
-                return None
-
-            try:
-                logger.info(f"正在列出远程目录: {remote_path}")
-                files = await self._sftp_client.listdir(remote_path)
-                logger.info(f"成功列出 {len(files)} 个文件/目录。")
-                return files
-            except Exception as e:
-                logger.error(f"列出目录时发生错误: {e}", exc_info=True)
-                self._status = NodeStatus.DEGRADED
-                return None
-
-    async def health_check(self) -> bool:
-        """执行健康检查，尝试连接服务器"""
-        logger.info("执行健康检查...")
-        try:
-            async with self._lock:
-                await self._connect()
-                if self._sftp_client and await self._sftp_client.exists("."):
-                    logger.info("健康检查通过。")
-                    return True
-                else:
-                    logger.warning("健康检查失败：无法验证 SFTP 客户端状态。")
-                    return False
-        except Exception as e:
-            logger.error(f"健康检查失败: {e}", exc_info=True)
-            return False
-        finally:
-            await self.disconnect()
-
-    def get_status(self) -> Dict[str, Any]:
-        """查询当前节点的状态"""
-        return {
-            "node_name": self.get_node_name(),
-            "status": self._status.value,
-            "connection": "connected" if self._connection and not self._connection.is_closing() else "disconnected",
-            "config": self.config.__dict__
-        }
-
-# --- 示例和主程序入口 --- #
-
-async def main():
-    """主函数，用于演示节点功能"""
-    logger.info("--- SFTP 节点功能演示 ---")
-
-    # 注意：请根据你的 SFTP 服务器信息修改以下配置
-    # 这是一个示例配置，你需要一个可用的 SFTP 测试服务器
-    # 你可以使用 `python -m http.server` 启动一个本地服务器，但这不适用于 SFTP
-    # 可以使用 `docker run -p 2222:22 -d atmoz/sftp user:pass:::upload` 快速启动一个测试服务器
-    sftp_config = SFTPConfig(
-        host=os.environ.get("SFTP_HOST", "localhost"),
-        port=int(os.environ.get("SFTP_PORT", "2222")),
-        username=os.environ.get("SFTP_USER", "user"),
-        password=os.environ.get("SFTP_PASSWORD", ""),
-    )
-
-    service = SFTPNodeService(sftp_config)
-
-    # 1. 健康检查
-    is_healthy = await service.health_check()
-    logger.info(f"初始健康检查结果: {'通过' if is_healthy else '失败'}")
-    if not is_healthy:
-        logger.error("无法连接到 SFTP 服务器，请检查配置或服务器状态。演示终止。")
-        return
-
-    # 2. 状态查询
-    logger.info(f"当前状态: {service.get_status()}")
-
-    # 3. 创建一个本地测试文件并上传
-    local_file = "test_upload.txt"
-    remote_file = "upload/test_remote.txt"
-    with open(local_file, "w") as f:
-        f.write("Hello, SFTP from Node_40_SFTP!")
-    
-    upload_success = await service.upload_file(local_file, remote_file)
-    if upload_success:
-        logger.info(f"文件 '{local_file}' 成功上传到 '{remote_file}'")
-    else:
-        logger.error("文件上传失败。")
-
-    # 4. 列出远程目录
-    remote_dir_contents = await service.list_directory("upload")
-    if remote_dir_contents:
-        logger.info(f"远程目录 'upload' 内容: {remote_dir_contents}")
-
-    # 5. 下载文件
-    local_download_file = "test_download.txt"
-    if upload_success: # 只有上传成功才尝试下载
-        download_success = await service.download_file(remote_file, local_download_file)
-        if download_success:
-            logger.info(f"文件 '{remote_file}' 成功下载到 '{local_download_file}'")
-            with open(local_download_file, "r") as f:
-                logger.info(f"下载的文件内容: '{f.read()}'")
-        else:
-            logger.error("文件下载失败。")
-
-    # 6. 清理本地文件和断开连接
-    if os.path.exists(local_file):
-        os.remove(local_file)
-    if os.path.exists(local_download_file):
-        os.remove(local_download_file)
-
-    await service.disconnect()
-    logger.info(f"最终状态: {service.get_status()}")
-    logger.info("--- 演示结束 ---")
-# ---------------------------------------------------------------------------
-# HTTP 健康检查服务器
-# ---------------------------------------------------------------------------
-import threading as _threading
-try:
-    from fastapi import FastAPI as _FastAPI
-    import uvicorn as _uvicorn
-    _health_app = _FastAPI(title="Node_40_SFTP")
-
-    @_health_app.get("/health")
-    def _health_endpoint():
-        return {"status": "ok", "node": "Node_40_SFTP"}
-
-    @_health_app.get("/status")
-    def _status_endpoint():
-        return {"status": "ok", "node": "Node_40_SFTP"}
-
-    def _start_health_server():
-        _uvicorn.run(_health_app, host="0.0.0.0", port=8040, log_level="error")
-except ImportError:
-    _health_app = None
-    def _start_health_server():
-        pass
-if __name__ == "__main__":
-    if _health_app is not None:
-        _threading.Thread(target=_start_health_server, daemon=True).start()
+@app.post("/connect")
+async def connect(request: ConnectRequest):
+    if not ASYNCSSH_AVAILABLE:
+        return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("程序被用户中断。")
+        conn_id = request.conn_id or f"{request.username}@{request.host}:{request.port}"
+        kwargs = {"host": request.host, "port": request.port, "username": request.username, "known_hosts": None}
+        if request.password:
+            kwargs["password"] = request.password
+        if request.private_key:
+            kwargs["client_keys"] = [asyncssh.import_private_key(request.private_key)]
+        conn = await asyncssh.connect(**kwargs)
+        connections[conn_id] = conn
+        return {"success": True, "conn_id": conn_id}
     except Exception as e:
-        logger.critical(f"主程序发生未捕获的异常: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+@app.post("/disconnect")
+async def disconnect(request: DisconnectRequest):
+    if request.conn_id not in connections:
+        return {"success": False, "error": f"Connection '{request.conn_id}' not found"}
+    try:
+        connections[request.conn_id].close()
+        await connections[request.conn_id].wait_closed()
+        del connections[request.conn_id]
+        return {"success": True, "conn_id": request.conn_id}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/upload")
+async def upload(request: UploadRequest):
+    if not ASYNCSSH_AVAILABLE:
+        return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
+    if request.conn_id not in connections:
+        return {"success": False, "error": f"Connection '{request.conn_id}' not found"}
+    if not os.path.exists(request.local_path):
+        return {"success": False, "error": f"Local file not found: {request.local_path}"}
+    try:
+        async with connections[request.conn_id].start_sftp_client() as sftp:
+            await sftp.put(request.local_path, request.remote_path)
+        return {"success": True, "local_path": request.local_path, "remote_path": request.remote_path}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/download")
+async def download(request: DownloadRequest):
+    if not ASYNCSSH_AVAILABLE:
+        return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
+    if request.conn_id not in connections:
+        return {"success": False, "error": f"Connection '{request.conn_id}' not found"}
+    try:
+        async with connections[request.conn_id].start_sftp_client() as sftp:
+            await sftp.get(request.remote_path, request.local_path)
+        return {"success": True, "remote_path": request.remote_path, "local_path": request.local_path}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/list")
+async def list_directory(conn_id: str, remote_path: str = "."):
+    if not ASYNCSSH_AVAILABLE:
+        return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
+    if conn_id not in connections:
+        return {"success": False, "error": f"Connection '{conn_id}' not found"}
+    try:
+        async with connections[conn_id].start_sftp_client() as sftp:
+            entries = await sftp.readdir(remote_path)
+        files = []
+        for entry in entries:
+            attrs = entry.attrs
+            files.append({
+                "name": entry.filename,
+                "size": attrs.size if attrs.size is not None else 0,
+                "permissions": oct(attrs.permissions) if attrs.permissions is not None else None,
+                "mtime": attrs.mtime
+            })
+        return {"success": True, "path": remote_path, "entries": files, "count": len(files)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/mkdir")
+async def mkdir(request: MkdirRequest):
+    if not ASYNCSSH_AVAILABLE:
+        return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
+    if request.conn_id not in connections:
+        return {"success": False, "error": f"Connection '{request.conn_id}' not found"}
+    try:
+        async with connections[request.conn_id].start_sftp_client() as sftp:
+            await sftp.mkdir(request.remote_path)
+        return {"success": True, "remote_path": request.remote_path}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.delete("/delete")
+async def delete_file(conn_id: str, remote_path: str):
+    if not ASYNCSSH_AVAILABLE:
+        return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
+    if conn_id not in connections:
+        return {"success": False, "error": f"Connection '{conn_id}' not found"}
+    try:
+        async with connections[conn_id].start_sftp_client() as sftp:
+            await sftp.remove(remote_path)
+        return {"success": True, "remote_path": remote_path}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
