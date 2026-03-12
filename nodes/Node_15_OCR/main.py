@@ -139,7 +139,7 @@ def _ocr_tesseract(image: "Image.Image") -> Dict[str, Any]:
     try:
         data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
         text = pytesseract.image_to_string(image)
-        confidences = [int(c) for c in data["conf"] if str(c).lstrip("-").isdigit() and int(c) >= 0]
+        confidences = [v for c in data["conf"] if str(c).lstrip("-").isdigit() and (v := int(c)) >= 0]
         avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
         return {"text": text.strip(), "engine_used": "tesseract", "confidence": round(avg_conf, 2)}
     except Exception as exc:
@@ -258,9 +258,15 @@ async def detect_language(request: DetectLanguageRequest):
     )
 
     if DEEPSEEK_API_KEY and HTTPX_AVAILABLE:
+        import json as _json
         result = await _ocr_deepseek(request.image_base64, prompt)
         _stats["success_count"] += 1
-        return {"success": True, "engine_used": result["engine_used"], "detection": result["text"]}
+        raw = result["text"].strip()
+        try:
+            detection = _json.loads(raw)
+        except (_json.JSONDecodeError, ValueError):
+            detection = raw
+        return {"success": True, "engine_used": result["engine_used"], "detection": detection}
     elif TESSERACT_AVAILABLE:
         image = _decode_image(request.image_base64)
         try:
