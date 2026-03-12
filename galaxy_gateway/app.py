@@ -79,7 +79,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        from core.auth import is_auth_enabled
+        from core.auth import is_auth_enabled, get_active_tokens
         import hmac
 
         if not is_auth_enabled():
@@ -89,11 +89,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in _AUTH_EXEMPT_PATHS:
             return await call_next(request)
 
-        expected_token = os.getenv("GALAXY_API_TOKEN", "").strip()
-        if not expected_token:
-            # Auth enabled but no token configured — fail safe
+        active_tokens = get_active_tokens()
+        if not active_tokens:
+            # Auth enabled but no active tokens configured — fail safe
             logger.error(
-                "GALAXY_AUTH_ENABLED=true but GALAXY_API_TOKEN is not set; "
+                "GALAXY_AUTH_ENABLED=true but no active API tokens are configured; "
                 "rejecting request to %s", request.url.path
             )
             return JSONResponse(
@@ -110,15 +110,25 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if not token:
             token = request.query_params.get("token", "").strip() or None
 
-        if not token or not hmac.compare_digest(token, expected_token):
-            logger.debug("Unauthorized request to %s (invalid or missing token)", request.url.path)
+        if not token:
+            logger.debug("Unauthorized request to %s (missing token)", request.url.path)
             return JSONResponse(
                 status_code=401,
                 content={"error": "unauthorized", "detail": "Invalid or missing Bearer token"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        return await call_next(request)
+        # Accept if token matches any active key (constant-time comparison for each)
+        for expected in active_tokens:
+            if hmac.compare_digest(token, expected):
+                return await call_next(request)
+
+        logger.debug("Unauthorized request to %s (invalid token)", request.url.path)
+        return JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "detail": "Invalid or missing Bearer token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 @asynccontextmanager
@@ -181,14 +191,18 @@ async def lifespan(app: FastAPI):
     logger.info("Galaxy Gateway initialized successfully")
 
     # ── Log security posture at startup ──
-    from core.auth import is_auth_enabled
+    from core.auth import is_auth_enabled, get_active_tokens
     if is_auth_enabled():
-        if os.getenv("GALAXY_API_TOKEN", "").strip():
-            logger.info("🔒 Bearer token auth: ENABLED (GALAXY_AUTH_ENABLED=true)")
+        active = get_active_tokens()
+        if active:
+            logger.info(
+                "🔒 Bearer token auth: ENABLED (%d active token(s)) — key rotation supported",
+                len(active),
+            )
         else:
             logger.warning(
-                "⚠️  Bearer token auth: ENABLED but GALAXY_API_TOKEN is not set — "
-                "all requests will be rejected until a token is configured."
+                "⚠️  Bearer token auth: ENABLED but no active tokens are configured — "
+                "all requests will be rejected until a token is set."
             )
     else:
         logger.info(
