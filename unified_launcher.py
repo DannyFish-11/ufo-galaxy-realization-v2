@@ -602,22 +602,43 @@ class NodeSystemLauncher:
         return results
         
     async def start_all(self, minimal: bool = False) -> Dict[str, bool]:
-        """启动所有节点"""
+        """启动核心节点集合。
+
+        若节点配置中未标记任何 "group": "core" 节点，自动回退为
+        按目录名升序排列的前 10 个节点（Node_00–Node_09），确保最小
+        核心节点集始终能够启动而不静默跳过。
+
+        Args:
+            minimal: True 时强制只启动前 10 个节点（最小模式）。
+        """
         if minimal:
             nodes = self.get_core_nodes()[:10]
+            logger.info("最小启动模式：将启动前 %d 个核心节点", len(nodes))
         else:
             nodes = self.get_core_nodes()
-            
+
         if not nodes:
             logger.error(
-                "核心节点列表为空。"
+                "核心节点列表为空，节点系统将不会启动。"
                 "请检查 node_dependencies.json 中各节点是否设置了 \"group\": \"core\"，"
-                "或运行 `python -m scripts.scan_nodes` 重新生成配置文件。"
+                "或确认 nodes/ 目录下存在包含 main.py 的子目录。"
+                "可运行 `python -m scripts.scan_nodes` 重新生成配置文件。"
             )
             return {}
-            
+
+        logger.info("即将启动 %d 个核心节点: %s", len(nodes), nodes)
         print_status(f"启动 {len(nodes)} 个核心节点...", "step")
-        return await self.start_nodes(nodes, parallel=True)
+        results = await self.start_nodes(nodes, parallel=True)
+
+        success_nodes = [n for n, ok in results.items() if ok]
+        failed_nodes  = [n for n, ok in results.items() if not ok]
+        logger.info(
+            "节点启动完成: %d 成功 / %d 失败%s",
+            len(success_nodes),
+            len(failed_nodes),
+            f"  失败节点: {failed_nodes}" if failed_nodes else "",
+        )
+        return results
 
 
 # ============================================================================
