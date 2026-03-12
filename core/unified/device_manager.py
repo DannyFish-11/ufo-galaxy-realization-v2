@@ -201,6 +201,30 @@ class UnifiedDeviceManager:
         }
         return [d for d in self._devices.values() if d.status in online_values]
 
+    def get_autonomous_devices(self) -> List[UnifiedDevice]:
+        """返回声明了高层自治能力的在线设备（metadata.goal_execution_enabled=True）。"""
+        result = []
+        for device in self.get_online_devices():
+            meta = device.metadata or {}
+            if meta.get("goal_execution_enabled") or meta.get("local_model_enabled"):
+                result.append(device)
+        return result
+
+    def get_devices_with_capability(self, capability_name: str) -> List[UnifiedDevice]:
+        """按能力名称筛选在线设备（capabilities 列表或 metadata 中声明）。"""
+        cap_lower = capability_name.lower()
+        result = []
+        for device in self.get_online_devices():
+            # 检查低层能力列表
+            if any(cap_lower == str(c).lower() for c in (device.capabilities or [])):
+                result.append(device)
+                continue
+            # 检查高层自治能力（metadata key）
+            meta = device.metadata or {}
+            if meta.get(cap_lower) or meta.get(capability_name):
+                result.append(device)
+        return result
+
     def get_device_count(self) -> int:
         """设备总数。"""
         return len(self._devices)
@@ -223,12 +247,9 @@ class UnifiedDeviceManager:
 # ============================================================================
 
 
-_manager: Optional[UnifiedDeviceManager] = None
+def get_unified_device_manager() -> "UnifiedDeviceManager":
+    """返回进程级 UnifiedDeviceManager 单例。
 
-
-def get_unified_device_manager() -> UnifiedDeviceManager:
-    """返回进程级 UnifiedDeviceManager 单例。"""
-    global _manager
-    if _manager is None:
-        _manager = UnifiedDeviceManager()
-    return _manager
+    直接委托给类自身的 __new__ 单例机制，避免双重 cache 导致的测试隔离问题。
+    """
+    return UnifiedDeviceManager()

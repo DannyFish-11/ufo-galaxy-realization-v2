@@ -215,6 +215,14 @@ class MessageType(str, Enum):
     VISION_REQUEST = "vision_request"
     VISION_RESULT = "vision_result"
 
+    # === 高层自治目标执行 ===
+    GOAL_EXECUTION = "goal_execution"
+    GOAL_EXECUTION_RESULT = "goal_execution_result"
+
+    # === 多设备并行任务 ===
+    PARALLEL_SUBTASK = "parallel_subtask"
+    PARALLEL_RESULT = "parallel_result"
+
     # === 错误处理 ===
     ERROR = "error"
     ERROR_RECOVERY = "error_recovery"
@@ -335,7 +343,9 @@ class AIPMessage(BaseModel):
     # 任务相关
     task_id: Optional[str] = None
     task_status: Optional[TaskStatus] = None
-    
+    # task_type 用于区分 goal_execution / parallel_subtask 等高层任务类型
+    task_type: Optional[str] = None
+
     # 命令相关
     commands: List[Command] = Field(default_factory=list)
     results: List[CommandResult] = Field(default_factory=list)
