@@ -1133,8 +1133,152 @@
     ],
     "os_version": "Android 14",
     "app_version": "2.1.0",
-    "registered_at": "2026-03-12T05:49:21.943754",
-    "last_seen": "2026-03-12T05:49:21.943762",
+    "registered_at": "2026-03-12T08:45:29.445521",
+    "last_seen": "2026-03-12T08:45:29.445527",
     "status": "registered"
+  },
+  "test-c6a676a4": {
+    "device_id": "test-c6a676a4",
+    "device_type": "android_phone",
+    "device_name": "TestDevice",
+    "capabilities": [
+      "screen",
+      "touch"
+    ],
+    "os_version": "Android 13",
+    "app_version": "1.0.0",
+    "registered_at": "2026-03-12T08:39:00.394015",
+    "last_seen": "2026-03-12T08:39:00.394021",
+    "status": "offline",
+    "online": false
+  },
+  "min-464dc318": {
+    "device_id": "min-464dc318",
+    "device_type": "android",
+    "device_name": "Device-min-464d",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:00.395944",
+    "last_seen": "2026-03-12T08:39:00.395948",
+    "status": "offline",
+    "online": false
+  },
+  "list-14f887e2": {
+    "device_id": "list-14f887e2",
+    "device_type": "android",
+    "device_name": "Device-list-14f",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:00.397363",
+    "last_seen": "2026-03-12T08:39:00.397366",
+    "status": "offline",
+    "online": false
+  },
+  "hb-b790994a": {
+    "device_id": "hb-b790994a",
+    "device_type": "android",
+    "device_name": "Device-hb-b7909",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:00.400032",
+    "last_seen": "2026-03-12T08:39:00.400925",
+    "status": "offline",
+    "status_detail": {
+      "battery": 80
+    },
+    "online": false
+  },
+  "unreg-4ea08029": {
+    "device_id": "unreg-4ea08029",
+    "device_type": "android",
+    "device_name": "Device-unreg-4e",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:00.403589",
+    "last_seen": "2026-03-12T08:39:00.404408",
+    "status": "offline",
+    "online": false
+  },
+  "leg-fac11a91": {
+    "device_id": "leg-fac11a91",
+    "device_type": "android",
+    "device_name": "Device-leg-fac1",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:00.407122",
+    "last_seen": "2026-03-12T08:39:00.407126",
+    "status": "offline",
+    "online": false
+  },
+  "v1-85391904": {
+    "device_id": "v1-85391904",
+    "device_type": "android",
+    "device_name": "Device-v1-85391",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:00.408339",
+    "last_seen": "2026-03-12T08:39:00.408343",
+    "status": "offline",
+    "online": false
+  },
+  "e2e_ws_d91447c5": {
+    "device_id": "e2e_ws_d91447c5",
+    "device_type": "android",
+    "device_name": "WS Device d91447c5",
+    "capabilities": [
+      "microphone"
+    ],
+    "os_version": "",
+    "registered_at": "2026-03-12T08:39:23.111981",
+    "last_seen": "2026-03-12T08:39:23.111988",
+    "status": "offline",
+    "online": false,
+    "source": "gateway_ws"
+  },
+  "e2e-0e654b21": {
+    "device_id": "e2e-0e654b21",
+    "device_type": "android_phone",
+    "device_name": "E2E-TestDevice",
+    "capabilities": [
+      "screen",
+      "touch",
+      "camera"
+    ],
+    "os_version": "Android 14",
+    "app_version": "2.3.0",
+    "registered_at": "2026-03-12T08:39:24.047726",
+    "last_seen": "2026-03-12T08:39:24.047733",
+    "status": "offline",
+    "online": false
+  },
+  "e2e-list-63f1129e": {
+    "device_id": "e2e-list-63f1129e",
+    "device_type": "windows_pc",
+    "device_name": "E2E-ListDevice",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:24.050667",
+    "last_seen": "2026-03-12T08:39:24.050671",
+    "status": "offline",
+    "online": false
+  },
+  "cmd-dev-d4ba7b1c": {
+    "device_id": "cmd-dev-d4ba7b1c",
+    "device_type": "android_phone",
+    "device_name": "Device-cmd-dev-",
+    "capabilities": [],
+    "os_version": "",
+    "app_version": "",
+    "registered_at": "2026-03-12T08:39:24.055778",
+    "last_seen": "2026-03-12T08:39:24.055782",
+    "status": "offline",
+    "online": false
   }
 }

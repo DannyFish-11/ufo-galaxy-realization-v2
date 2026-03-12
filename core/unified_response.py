@@ -12,6 +12,13 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class ParallelGroupSummary(BaseModel):
+    """并行任务组汇总（parallel_goal 执行后附加到响应中）。"""
+    group_id: str = ""
+    device_results: List[Dict[str, Any]] = Field(default_factory=list)
+    summary_status: str = ""     # "success" | "partial" | "failed"
+
+
 class UnifiedChatResponse(BaseModel):
     """
     统一聊天响应格式
@@ -30,6 +37,7 @@ class UnifiedChatResponse(BaseModel):
     session_id: str = ""                        # 会话 ID
     model: str = ""                             # 使用的 LLM 模型名称
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    parallel_group: Optional[ParallelGroupSummary] = None  # 并行任务组汇总（仅 parallel_goal）
 
     def to_json_response(self):
         """转换为 FastAPI JSONResponse 兼容的 dict"""

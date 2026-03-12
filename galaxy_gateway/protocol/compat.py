@@ -69,6 +69,8 @@ _LEGACY_TYPE_MAP: dict = {
     "goal_execute": MessageType.GOAL_EXECUTION,
     "goal": MessageType.GOAL_EXECUTION,
     "parallel_task": MessageType.PARALLEL_SUBTASK,
+    # parallel result alias – devices/nodes may send "parallel_result"
+    "parallel_result": MessageType.PARALLEL_RESULT,
 }
 
 
@@ -145,3 +147,43 @@ def parse_message_compat(data: Union[str, dict]) -> AIPMessage:
         data.get("type"),
     )
     return parse_message(_normalise_v1(data))
+
+
+# ---------------------------------------------------------------------------
+# Parallel-result payload extraction helper
+# ---------------------------------------------------------------------------
+
+def extract_parallel_result_payload(message: AIPMessage):
+    """
+    Extract a :class:`~galaxy_gateway.protocol.aip_v3.ParallelResultPayload`
+    from an :class:`AIPMessage` of type ``parallel_result``.
+
+    Works for both AIP v3 messages that carry the full payload dict and for
+    legacy messages that may carry a flat ``group_id`` / ``subtask_results``
+    structure.
+
+    Returns ``None`` if the message is not a ``parallel_result`` type or the
+    payload cannot be parsed.
+    """
+    from .aip_v3 import ParallelResultPayload
+
+    if message.type != MessageType.PARALLEL_RESULT:
+        return None
+
+    payload = message.payload or {}
+
+    # Normalise: some legacy senders put subtask_results at top-level payload
+    data: dict = dict(payload)
+    if "group_id" not in data and message.task_id:
+        data["group_id"] = message.task_id
+    data.setdefault("group_id", "unknown")
+
+    # subtask_results vs device_results compatibility
+    if "subtask_results" in data and "device_results" not in data:
+        data["device_results"] = data.pop("subtask_results")
+
+    try:
+        return ParallelResultPayload.from_tracker_dict(data)
+    except Exception as exc:
+        logger.warning("extract_parallel_result_payload: parse failed: %s", exc)
+        return None

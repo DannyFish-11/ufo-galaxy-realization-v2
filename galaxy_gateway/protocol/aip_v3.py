@@ -461,8 +461,60 @@ def create_error_message(
 
 
 # ============================================================================
-# 消息解析和验证
+# Parallel-result aggregation payload (Phase-3)
 # ============================================================================
+
+class ParallelSubtaskItem(BaseModel):
+    """单个并行子任务结果条目。"""
+    model_config = ConfigDict(extra="allow")
+
+    group_id:      str
+    subtask_index: int
+    device_id:     str
+    task_id:       Optional[str] = None
+    status:        str = "unknown"   # pending / running / success / failed / timeout
+    result:        Optional[Dict[str, Any]] = None
+    error:         Optional[str] = None
+    latency_ms:    Optional[float] = None
+
+
+class ParallelResultPayload(BaseModel):
+    """
+    AIP v3 ``parallel_result`` 消息的 payload 结构。
+
+    用于在设备与服务端之间传递并行任务组的聚合结果，
+    也作为 OpenClawd 返回给调用方的规范格式。
+    """
+    model_config = ConfigDict(extra="allow")
+
+    group_id:       str
+    subtask_results: List[ParallelSubtaskItem] = Field(default_factory=list)
+    summary_status: str = "unknown"   # "success" | "partial" | "failed"
+    succeeded:      int = 0
+    failed:         int = 0
+    total:          int = 0
+
+    @classmethod
+    def from_tracker_dict(cls, data: Dict[str, Any]) -> "ParallelResultPayload":
+        """
+        从 ``ParallelGroupTracker.aggregate().to_dict()`` 转换而来的工厂方法。
+        兼容 compat 层直接传入已规范化字典。
+        """
+        items = [
+            ParallelSubtaskItem(**item)
+            for item in data.get("device_results", [])
+        ]
+        return cls(
+            group_id=data.get("group_id", ""),
+            subtask_results=items,
+            summary_status=data.get("summary_status", "unknown"),
+            succeeded=data.get("succeeded", 0),
+            failed=data.get("failed", 0),
+            total=data.get("total", len(items)),
+        )
+
+
+
 
 def parse_message(data: Union[str, dict]) -> AIPMessage:
     """解析 AIP 消息"""
