@@ -1,6 +1,6 @@
 """
-Tests for gateway security hardening (PR4)
-==========================================
+Tests for gateway security hardening (PR4) and key rotation (PR12)
+===================================================================
 
 Covers:
 1. Bearer token auth middleware — disabled (default) and enabled modes.
@@ -9,6 +9,7 @@ Covers:
 4. TURN/STUN/Tailscale metadata in /api/v1/webrtc/endpoint.
 5. TLS startup log logic (unit).
 6. core.auth.is_auth_enabled helper.
+7. Key rotation: multiple active tokens, token expiry, token revocation.
 """
 
 import os
@@ -362,3 +363,167 @@ class TestTLSStartupLog:
             uvicorn.run = original
 
         assert "ssl_certfile" not in called_with
+
+
+# ---------------------------------------------------------------------------
+# Tests: Key Rotation — core.auth helpers (PR12)
+# ---------------------------------------------------------------------------
+
+class TestGetActiveTokens:
+    """Unit tests for the multi-key get_active_tokens() helper."""
+
+    def test_single_token_returned(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-single")
+        monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+        from core.auth import get_active_tokens
+        assert get_active_tokens() == ["tok-single"]
+
+    def test_multi_tokens_returned(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_API_TOKEN", raising=False)
+        monkeypatch.setenv("GALAXY_API_TOKENS", "tok-a,tok-b,tok-c")
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+        from core.auth import get_active_tokens
+        assert get_active_tokens() == ["tok-a", "tok-b", "tok-c"]
+
+    def test_single_and_multi_tokens_combined(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-legacy")
+        monkeypatch.setenv("GALAXY_API_TOKENS", "tok-new")
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+        from core.auth import get_active_tokens
+        tokens = get_active_tokens()
+        assert "tok-legacy" in tokens
+        assert "tok-new" in tokens
+
+    def test_revoked_token_excluded(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-good")
+        monkeypatch.setenv("GALAXY_API_TOKENS", "tok-bad")
+        monkeypatch.setenv("GALAXY_REVOKED_TOKENS", "tok-bad")
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+        from core.auth import get_active_tokens
+        tokens = get_active_tokens()
+        assert "tok-good" in tokens
+        assert "tok-bad" not in tokens
+
+    def test_expired_single_token_excluded(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-old")
+        monkeypatch.setenv("GALAXY_API_TOKEN_EXPIRY", "2020-01-01T00:00:00Z")
+        monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        from core.auth import get_active_tokens
+        tokens = get_active_tokens()
+        assert "tok-old" not in tokens
+        assert tokens == []
+
+    def test_future_expiry_token_included(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-future")
+        monkeypatch.setenv("GALAXY_API_TOKEN_EXPIRY", "2099-01-01T00:00:00Z")
+        monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        from core.auth import get_active_tokens
+        assert "tok-future" in get_active_tokens()
+
+    def test_duplicate_tokens_deduplicated(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-dup")
+        monkeypatch.setenv("GALAXY_API_TOKENS", "tok-dup")
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+        from core.auth import get_active_tokens
+        tokens = get_active_tokens()
+        assert tokens.count("tok-dup") == 1
+
+    def test_empty_when_no_tokens_set(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_API_TOKEN", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+        from core.auth import get_active_tokens
+        assert get_active_tokens() == []
+
+    def test_invalid_expiry_treated_as_not_expired(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN", "tok-ok")
+        monkeypatch.setenv("GALAXY_API_TOKEN_EXPIRY", "not-a-date")
+        monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        from core.auth import get_active_tokens
+        # Unparseable expiry is ignored; token remains active
+        assert "tok-ok" in get_active_tokens()
+
+
+class TestMiddlewareKeyRotation:
+    """BearerAuthMiddleware accepts any token in the active set."""
+
+    TOKEN_OLD = "tok-old-key"
+    TOKEN_NEW = "tok-new-key"
+
+    @pytest.fixture(autouse=True)
+    def _enable_auth(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+        # Both old and new token active during overlap window
+        monkeypatch.setenv("GALAXY_API_TOKEN", self.TOKEN_OLD)
+        monkeypatch.setenv("GALAXY_API_TOKENS", self.TOKEN_NEW)
+        monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
+        monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
+
+    def test_old_token_accepted_during_overlap(self):
+        app = _make_app()
+        with TestClient(app) as c:
+            resp = c.get(
+                "/api/v1/protected",
+                headers={"Authorization": f"Bearer {self.TOKEN_OLD}"},
+            )
+        assert resp.status_code == 200
+
+    def test_new_token_accepted_during_overlap(self):
+        app = _make_app()
+        with TestClient(app) as c:
+            resp = c.get(
+                "/api/v1/protected",
+                headers={"Authorization": f"Bearer {self.TOKEN_NEW}"},
+            )
+        assert resp.status_code == 200
+
+    def test_revoked_token_rejected(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_REVOKED_TOKENS", self.TOKEN_OLD)
+        app = _make_app()
+        with TestClient(app) as c:
+            resp = c.get(
+                "/api/v1/protected",
+                headers={"Authorization": f"Bearer {self.TOKEN_OLD}"},
+            )
+        assert resp.status_code == 401
+
+    def test_unknown_token_still_rejected(self):
+        app = _make_app()
+        with TestClient(app) as c:
+            resp = c.get(
+                "/api/v1/protected",
+                headers={"Authorization": "Bearer totally-unknown"},
+            )
+        assert resp.status_code == 401
+
+    def test_expired_primary_token_rejected(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_API_TOKEN_EXPIRY", "2020-01-01T00:00:00Z")
+        # Only the expired primary token is configured; GALAXY_API_TOKENS is cleared
+        monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
+        app = _make_app()
+        with TestClient(app) as c:
+            resp = c.get(
+                "/api/v1/protected",
+                headers={"Authorization": f"Bearer {self.TOKEN_OLD}"},
+            )
+        assert resp.status_code == 401
+
+    def test_new_token_valid_after_old_token_expires(self, monkeypatch):
+        """After old key expires, the new key in GALAXY_API_TOKENS still works."""
+        monkeypatch.setenv("GALAXY_API_TOKEN_EXPIRY", "2020-01-01T00:00:00Z")
+        app = _make_app()
+        with TestClient(app) as c:
+            resp = c.get(
+                "/api/v1/protected",
+                headers={"Authorization": f"Bearer {self.TOKEN_NEW}"},
+            )
+        assert resp.status_code == 200
