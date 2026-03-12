@@ -60,6 +60,13 @@ export type TaskComplexity = 'low' | 'medium' | 'high' | 'critical';
 
 export type AgentState = 'created' | 'running' | 'completed' | 'failed';
 
+export interface AgentPermissions {
+  filesystem: boolean;
+  terminal: boolean;
+  network: boolean;
+  browser: boolean;
+}
+
 export interface Agent {
   agent_id: string;
   name: string;
@@ -70,6 +77,7 @@ export interface Agent {
   llm_provider: string;
   device_id: string;
   target_device_id: string;
+  permissions?: AgentPermissions;
 }
 
 // ============================================================================

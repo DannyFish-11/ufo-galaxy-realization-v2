@@ -16,6 +16,19 @@ from pydantic import BaseModel, Field
 
 # ───────── Agent CRUD ─────────
 
+class AgentPermissions(BaseModel):
+    """Agent 能力权限开关
+
+    对应 MCP/Skill 四大能力类别，默认全部关闭以最小化权限。
+    """
+    filesystem: bool = Field(default=False, description="允许读写本地文件系统")
+    terminal: bool = Field(default=False, description="允许执行终端/Shell 命令")
+    network: bool = Field(default=False, description="允许访问外部网络（HTTP/API）")
+    browser: bool = Field(default=False, description="允许控制浏览器进行 Web 自动化")
+
+    model_config = {"from_attributes": True}
+
+
 class AgentCreateSchema(BaseModel):
     """Agent 创建请求"""
 
@@ -27,6 +40,10 @@ class AgentCreateSchema(BaseModel):
     provider: str = Field(default="openai", description="LLM 提供商")
     model: str = Field(default="gpt-4", description="LLM 模型名称")
     system_prompt: str = Field(default="", description="系统提示词")
+    permissions: AgentPermissions = Field(
+        default_factory=AgentPermissions,
+        description="Agent 能力权限: filesystem / terminal / network / browser",
+    )
 
     model_config = {"from_attributes": True}
 

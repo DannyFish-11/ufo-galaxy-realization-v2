@@ -368,9 +368,23 @@
                                 </select>
                                 <button @click="createAgentFromTemplate" class="btn-sm btn-purple" :disabled="!selectedTemplate">从模板创建</button>
                             </div>
-                            <div class="flex space-x-2 items-center">
+                            <div class="flex space-x-2 items-center mb-3">
                                 <input v-model="agentTaskDesc" type="text" placeholder="描述任务，LLM 自动生成 Agent..." class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;" @keypress.enter="createAgentDynamic">
                                 <button @click="createAgentDynamic" class="btn-sm btn-blue" :disabled="!agentTaskDesc.trim()">智能创建</button>
+                            </div>
+                            <!-- 权限开关 -->
+                            <div style="margin-bottom: 8px;">
+                                <div style="font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); margin-bottom: 6px; letter-spacing: 0.04em;">🔐 能力权限</div>
+                                <div class="grid grid-cols-4 gap-2">
+                                    <label v-for="pd in permissionDefs" :key="pd.key"
+                                        class="provider-chip flex flex-col items-center cursor-pointer"
+                                        style="padding: 6px 4px; gap: 4px;"
+                                        :style="{ background: agentPermissions[pd.key] ? 'rgba(124,92,252,0.18)' : 'rgba(255,255,255,0.04)', borderColor: agentPermissions[pd.key] ? 'rgba(124,92,252,0.5)' : 'rgba(255,255,255,0.08)' }">
+                                        <span style="font-size: 16px;">{{ pd.icon }}</span>
+                                        <span style="font-size: 9px; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.03em;">{{ pd.key }}</span>
+                                        <input type="checkbox" v-model="agentPermissions[pd.key]" style="width: 14px; height: 14px; accent-color: #7c5cfc; cursor: pointer;">
+                                    </label>
+                                </div>
                             </div>
                             <div v-if="agentCreateStatus" class="mt-2" style="font-size: 11px;" :class="agentCreateStatus.success ? 'valid' : 'invalid'">{{ agentCreateStatus.message }}</div>
                         </div>
@@ -534,6 +548,13 @@
                 const selectedTemplate = ref('');
                 const agentTaskDesc = ref('');
                 const agentCreateStatus = ref(null);
+                const agentPermissions = ref({ filesystem: false, terminal: false, network: false, browser: false });
+                const permissionDefs = [
+                    { key: 'filesystem', icon: '📁' },
+                    { key: 'terminal',   icon: '⌨️' },
+                    { key: 'network',    icon: '🌐' },
+                    { key: 'browser',    icon: '🖥️' },
+                ];
 
                 // Twin / Swarm
                 const twinTask = ref('');
@@ -663,7 +684,7 @@
                     if (!selectedTemplate.value) return;
                     agentCreateStatus.value = null;
                     try {
-                        const r = await axios.post('/api/v1/agents/create', { template: selectedTemplate.value });
+                        const r = await axios.post('/api/v1/agents/create', { template: selectedTemplate.value, permissions: agentPermissions.value });
                         agentCreateStatus.value = { success: true, message: `Agent "${r.data.agent.name}" 创建成功` };
                         selectedTemplate.value = '';
                         loadAgents();
@@ -673,7 +694,7 @@
                     if (!agentTaskDesc.value.trim()) return;
                     agentCreateStatus.value = { success: true, message: '智能生成中...' };
                     try {
-                        const r = await axios.post('/api/v1/agents/create/dynamic', { task_description: agentTaskDesc.value.trim() });
+                        const r = await axios.post('/api/v1/agents/create/dynamic', { task_description: agentTaskDesc.value.trim(), permissions: agentPermissions.value });
                         agentCreateStatus.value = { success: true, message: `Agent "${r.data.agent.name}" 智能生成成功` };
                         agentTaskDesc.value = '';
                         loadAgents();
@@ -725,7 +746,7 @@
                 return {
                     isExpanded, tab, currentTime, configStatus, oneapiUrl, oneapiKey, oneapiStatus,
                     directProviders, nodeApis, nodeApiCategories, agents, agentTemplates,
-                    selectedTemplate, agentTaskDesc, agentCreateStatus,
+                    selectedTemplate, agentTaskDesc, agentCreateStatus, agentPermissions, permissionDefs,
                     twinTask, twinStrategy, twinCount, twinResult, swarmTask, swarmCount, swarmResult,
                     mcpServers, skills, deviceList, crossDeviceSource, transferSource, transferTarget,
                     tools, nodes, testMessage, testResult, inputMessage, chatReply, configuredCount,

@@ -184,6 +184,14 @@ async def _lifespan(app):
 
 app = FastAPI(title="Galaxy Dashboard", version="2.3.23", lifespan=_lifespan)
 
+# Default permission set for newly created Agents — all capabilities disabled
+DEFAULT_AGENT_PERMISSIONS: Dict[str, bool] = {
+    "filesystem": False,
+    "terminal": False,
+    "network": False,
+    "browser": False,
+}
+
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
@@ -612,8 +620,10 @@ async def create_agent_from_template(request: dict):
     template_name = request.get("template", "")
     overrides = request.get("overrides", None)
     parent_id = request.get("parent_id", None)
+    permissions = request.get("permissions", {})
     try:
         agent = agent_factory.create_from_template(template_name, parent_id=parent_id, overrides=overrides)
+        agent.config.permissions = {**DEFAULT_AGENT_PERMISSIONS, **{k: bool(v) for k, v in permissions.items() if k in DEFAULT_AGENT_PERMISSIONS}}
         return {"success": True, "agent": agent.to_dict()}
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
@@ -629,8 +639,10 @@ async def create_agent_dynamic(request: dict):
     task_description = request.get("task_description", "")
     if not task_description:
         return JSONResponse(status_code=400, content={"error": "task_description is required"})
+    permissions = request.get("permissions", {})
     try:
         agent = await agent_factory.create_from_llm(task_description, context=request.get("context"))
+        agent.config.permissions = {**DEFAULT_AGENT_PERMISSIONS, **{k: bool(v) for k, v in permissions.items() if k in DEFAULT_AGENT_PERMISSIONS}}
         return {"success": True, "agent": agent.to_dict()}
     except RuntimeError as e:
         return JSONResponse(status_code=503, content={"error": str(e)})
