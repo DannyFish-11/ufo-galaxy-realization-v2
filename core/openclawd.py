@@ -494,9 +494,27 @@ class OpenClawd:
         self._request_count += 1
         t0 = time.monotonic()
         request_id = uuid.uuid4().hex
+        # trace_id is the stable end-to-end identifier for this request.
+        # It equals request_id at the top level and is threaded through all
+        # internal dispatch hops so that every lifecycle log entry can be
+        # correlated back to the originating request.
+        trace_id = request_id
 
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
+
+        # ── Lifecycle log: task received ─────────────────────────────────────
+        try:
+            from core.task_logger import emit_task_log
+            emit_task_log(
+                "task_received",
+                trace_id=trace_id,
+                session_id=session_id,
+                device_id=device_id,
+                status="received",
+            )
+        except Exception:
+            pass
 
         # 同步新设备能力（确保 OpenClawd 始终感知最新设备）
         try:
@@ -548,8 +566,10 @@ class OpenClawd:
                         "response": kernel_result.reply,
                         "intent": kernel_result.intent.raw_intent,
                         "error": kernel_result.error,
+                        "trace_id": trace_id,
                         "metadata": {
                             "request_id": request_id,
+                            "trace_id": trace_id,
                             "session_id": session_id,
                             "device_id": device_id,
                             "latency_ms": round(latency_ms, 1),
@@ -586,6 +606,7 @@ class OpenClawd:
                 intent=parsed_intent,
                 device_id=device_id,
                 session_id=session_id,
+                trace_id=trace_id,
             )
 
             # Step 2d: 记录路由决策
@@ -619,8 +640,10 @@ class OpenClawd:
                 "success": result.get("success", True),
                 "response": response_text,
                 "intent": intent_type,
+                "trace_id": trace_id,
                 "metadata": {
                     "request_id": request_id,
+                    "trace_id": trace_id,
                     "session_id": session_id,
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
@@ -640,8 +663,10 @@ class OpenClawd:
                 "success": False,
                 "response": f"处理请求时发生错误: {str(e)}",
                 "intent": "error",
+                "trace_id": trace_id,
                 "metadata": {
                     "request_id": request_id,
+                    "trace_id": trace_id,
                     "session_id": session_id,
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
@@ -688,6 +713,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """纯聊天分派"""
         return await self.handle_chat(message, session_id or "default")
@@ -698,6 +724,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """设备操控分派 — 经由 send_gateway_command → CommandRouter → trace"""
         if not device_id:
@@ -727,6 +754,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """Agent 任务分派"""
         return await self.handle_agent_task(message, intent)
@@ -737,6 +765,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """工具调用分派"""
         return await self.handle_tool_call(intent)
@@ -747,6 +776,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """系统状态分派"""
         status = await self.get_status()
@@ -837,6 +867,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """Priority D: 高层自治目标执行分派。
 
@@ -846,6 +877,8 @@ class OpenClawd:
           2. 若 CapabilityRegistry 无结果，回退到 UnifiedDeviceManager 自治设备列表。
           3. 若仍无可用自治设备，降级到普通 _dispatch_agent 并记录明确消息。
         """
+        from core.task_logger import emit_task_log
+
         goal = message
         params = {}
         if intent:
@@ -870,13 +903,32 @@ class OpenClawd:
         # ── Cancel check before dispatch ──────────────────────────────────
         if self._is_cancelled(task_id):
             logger.info("goal_execution: task %s cancelled before dispatch", task_id)
+            emit_task_log(
+                "task_cancelled",
+                task_id=task_id,
+                trace_id=trace_id,
+                device_id=target_device_id,
+                task_type="goal_execution",
+                status="cancelled",
+            )
             return {
                 "success": False,
                 "response": f"目标任务 '{goal}' 已被取消（取消发生在执行前）",
                 "intent": "goal_execution",
                 "task_id": task_id,
+                "trace_id": trace_id,
                 "cancelled": True,
             }
+
+        emit_task_log(
+            "task_dispatched",
+            task_id=task_id,
+            trace_id=trace_id,
+            device_id=target_device_id,
+            task_type="goal_execution",
+            status="dispatched",
+        )
+        t_dispatch = time.monotonic()
 
         try:
             result = await _asyncio_module.wait_for(
@@ -887,6 +939,7 @@ class OpenClawd:
                         "task_type": "goal_execution",
                         "goal": goal,
                         "task_id": task_id,
+                        "trace_id": trace_id,
                         **params,
                     },
                     task_id=task_id,
@@ -895,9 +948,19 @@ class OpenClawd:
                 timeout=self.GOAL_EXECUTION_TIMEOUT,
             )
         except _asyncio_module.TimeoutError:
+            latency_ms = (time.monotonic() - t_dispatch) * 1000
             logger.warning(
                 "goal_execution timed out after %.1fs | device=%s task_id=%s",
                 self.GOAL_EXECUTION_TIMEOUT, target_device_id, task_id,
+            )
+            emit_task_log(
+                "task_timeout",
+                task_id=task_id,
+                trace_id=trace_id,
+                device_id=target_device_id,
+                task_type="goal_execution",
+                latency_ms=round(latency_ms, 1),
+                status="timeout",
             )
             return {
                 "success": False,
@@ -907,9 +970,11 @@ class OpenClawd:
                 ),
                 "intent": "goal_execution",
                 "task_id": task_id,
+                "trace_id": trace_id,
                 "timed_out": True,
             }
 
+        latency_ms = (time.monotonic() - t_dispatch) * 1000
         if "response" not in result:
             result["response"] = (
                 result.get("result")
@@ -917,10 +982,21 @@ class OpenClawd:
             )
         result["intent"] = "goal_execution"
         result.setdefault("task_id", task_id)
+        result.setdefault("trace_id", trace_id)
+        success = result.get("success", False)
         logger.info(
             "goal_execution dispatched | device=%s success=%s",
             target_device_id,
-            result.get("success"),
+            success,
+        )
+        emit_task_log(
+            "task_completed" if success else "task_failed",
+            task_id=task_id,
+            trace_id=trace_id,
+            device_id=target_device_id,
+            task_type="goal_execution",
+            latency_ms=round(latency_ms, 1),
+            status="success" if success else "failed",
         )
         return result
 
@@ -930,6 +1006,7 @@ class OpenClawd:
         intent=None,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> dict:
         """Priority E: 多设备并行任务拆分与下发（Phase-3 状态机 + 重试）。
 
@@ -941,6 +1018,8 @@ class OpenClawd:
           4. 对失败子任务执行最多 1 次指数退避重试（上限 30 s）。
           5. 所有子任务完成后聚合 ParallelResult 并返回统一结构。
         """
+        from core.task_logger import emit_task_log
+
         goal = message
         params = {}
         if intent:
@@ -1010,6 +1089,8 @@ class OpenClawd:
             ))
         tracker.register_group(task_id_base, entries)
 
+        t_parallel_start = time.monotonic()
+
         async def _execute_entry(entry: _SubtaskEntry) -> None:
             """Execute one subtask with retry/backoff, timeout, and cancel support."""
             while True:
@@ -1020,9 +1101,30 @@ class OpenClawd:
                         entry.subtask_index, entry.device_id,
                     )
                     tracker.mark_cancelled(entry.group_id, entry.task_id)
+                    emit_task_log(
+                        "task_cancelled",
+                        task_id=entry.task_id,
+                        trace_id=trace_id,
+                        device_id=entry.device_id,
+                        group_id=entry.group_id,
+                        subtask_index=entry.subtask_index,
+                        task_type="parallel_subtask",
+                        status="cancelled",
+                    )
                     return
 
                 tracker.mark_running(entry.group_id, entry.task_id)
+                emit_task_log(
+                    "task_dispatched",
+                    task_id=entry.task_id,
+                    trace_id=trace_id,
+                    device_id=entry.device_id,
+                    group_id=entry.group_id,
+                    subtask_index=entry.subtask_index,
+                    task_type="parallel_subtask",
+                    status="dispatched",
+                )
+                t_sub = time.monotonic()
                 try:
                     r = await _asyncio_module.wait_for(
                         self.send_gateway_command(
@@ -1033,17 +1135,31 @@ class OpenClawd:
                                 "goal": entry.subtask,
                                 "parallel_group": entry.group_id,
                                 "subtask_index": entry.subtask_index,
+                                "trace_id": trace_id,
                             },
                             task_id=entry.task_id,
                             session_id=session_id,
                         ),
                         timeout=self.PARALLEL_SUBTASK_TIMEOUT,
                     )
-                    # Propagate command_id / task_id into result
+                    sub_latency_ms = (time.monotonic() - t_sub) * 1000
+                    # Propagate command_id / task_id / trace_id into result
                     r.setdefault("command_id", "")
                     r.setdefault("task_id", entry.task_id)
+                    r.setdefault("trace_id", trace_id)
                     success = bool(r.get("success"))
                     tracker.mark_done(entry.group_id, entry.task_id, r, success=success)
+                    emit_task_log(
+                        "task_completed" if success else "task_failed",
+                        task_id=entry.task_id,
+                        trace_id=trace_id,
+                        device_id=entry.device_id,
+                        group_id=entry.group_id,
+                        subtask_index=entry.subtask_index,
+                        task_type="parallel_subtask",
+                        latency_ms=round(sub_latency_ms, 1),
+                        status="success" if success else "failed",
+                    )
                     if not success and tracker.needs_retry(entry.group_id, entry.task_id):
                         delay = tracker.backoff_delay(entry.group_id, entry.task_id)
                         logger.warning(
@@ -1057,11 +1173,23 @@ class OpenClawd:
                         continue
                     return
                 except _asyncio_module.TimeoutError:
+                    sub_latency_ms = (time.monotonic() - t_sub) * 1000
                     logger.warning(
                         "parallel_goal: subtask %d on device %s timed out after %.1fs",
                         entry.subtask_index, entry.device_id, self.PARALLEL_SUBTASK_TIMEOUT,
                     )
                     tracker.mark_timeout(entry.group_id, entry.task_id)
+                    emit_task_log(
+                        "task_timeout",
+                        task_id=entry.task_id,
+                        trace_id=trace_id,
+                        device_id=entry.device_id,
+                        group_id=entry.group_id,
+                        subtask_index=entry.subtask_index,
+                        task_type="parallel_subtask",
+                        latency_ms=round(sub_latency_ms, 1),
+                        status="timeout",
+                    )
                     if tracker.needs_retry(entry.group_id, entry.task_id):
                         delay = tracker.backoff_delay(entry.group_id, entry.task_id)
                         tracker.increment_retry(entry.group_id, entry.task_id)
@@ -1069,13 +1197,27 @@ class OpenClawd:
                         continue
                     return
                 except Exception as exc:
+                    sub_latency_ms = (time.monotonic() - t_sub) * 1000
                     err_result = {
                         "success": False,
                         "response": str(exc),
                         "task_id": entry.task_id,
+                        "trace_id": trace_id,
                         "device_id": entry.device_id,
                     }
                     tracker.mark_done(entry.group_id, entry.task_id, err_result, success=False)
+                    emit_task_log(
+                        "task_failed",
+                        task_id=entry.task_id,
+                        trace_id=trace_id,
+                        device_id=entry.device_id,
+                        group_id=entry.group_id,
+                        subtask_index=entry.subtask_index,
+                        task_type="parallel_subtask",
+                        latency_ms=round(sub_latency_ms, 1),
+                        status="failed",
+                        error=str(exc),
+                    )
                     if tracker.needs_retry(entry.group_id, entry.task_id):
                         delay = tracker.backoff_delay(entry.group_id, entry.task_id)
                         logger.warning(
@@ -1099,6 +1241,7 @@ class OpenClawd:
 
         parallel_result = tracker.aggregate(task_id_base)
         cancelled_count = parallel_result.cancelled
+        parallel_latency_ms = (time.monotonic() - t_parallel_start) * 1000
         summary_text = (
             f"并行任务 '{goal}' 已分发至 {len(parallel_devices)} 台设备："
             f"{parallel_result.succeeded} 成功，"
@@ -1114,16 +1257,30 @@ class OpenClawd:
             cancelled_count,
             parallel_result.summary_status,
         )
+        emit_task_log(
+            "aggregation_done",
+            trace_id=trace_id,
+            group_id=task_id_base,
+            task_type="parallel_goal",
+            total=parallel_result.total,
+            succeeded=parallel_result.succeeded,
+            failed=parallel_result.failed,
+            cancelled=cancelled_count,
+            latency_ms=round(parallel_latency_ms, 1),
+            status=parallel_result.summary_status,
+        )
         return {
             "success": parallel_result.succeeded > 0,
             "response": summary_text,
             "intent": "parallel_goal",
+            "trace_id": trace_id,
             "metadata": {
                 "parallel_group": task_id_base,
                 "subtask_results": parallel_result.device_results,
                 "device_count": len(parallel_devices),
                 "parallel_result": parallel_result.to_dict(),
                 "cancelled_count": cancelled_count,
+                "trace_id": trace_id,
             },
         }
 

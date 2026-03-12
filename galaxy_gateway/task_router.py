@@ -140,7 +140,7 @@ class TaskRouter:
         self.scheduler = TaskScheduler()
         self.active_tasks: Dict[str, TaskResult] = {}
     
-    async def execute_tasks(self, tasks: List[Any]) -> List[TaskResult]:
+    async def execute_tasks(self, tasks: List[Any], trace_id: Optional[str] = None) -> List[TaskResult]:
         """
         执行任务列表
 
@@ -149,12 +149,16 @@ class TaskRouter:
 
         Args:
             tasks: 任务列表
+            trace_id: 端到端追踪 ID（如未提供则自动生成）
         
         Returns:
             任务结果列表
         """
         if not tasks:
             return []
+
+        import uuid as _uuid_mod
+        _trace_id = trace_id or _uuid_mod.uuid4().hex
 
         # ── 自主优先检查：记录不具备自主能力的设备（仅日志，不阻断执行）──
         try:
@@ -192,7 +196,7 @@ class TaskRouter:
             # 并行执行当前层的所有任务
             layer_tasks = [task for task in tasks if task.task_id in layer]
             layer_results = await asyncio.gather(
-                *[self._execute_single_task(task) for task in layer_tasks],
+                *[self._execute_single_task(task, trace_id=_trace_id) for task in layer_tasks],
                 return_exceptions=True
             )
             
@@ -206,22 +210,51 @@ class TaskRouter:
         
         return all_results
     
-    async def _execute_single_task(self, task: Any) -> TaskResult:
+    async def _execute_single_task(self, task: Any, trace_id: Optional[str] = None) -> TaskResult:
         """
         执行单个任务
         
         Args:
             task: 任务对象
+            trace_id: 端到端追踪 ID
         
         Returns:
             任务结果
         """
         start_time = datetime.now()
+
+        # ── Lifecycle log: task dispatched ───────────────────────────────────
+        try:
+            from core.task_logger import emit_task_log
+            emit_task_log(
+                "task_dispatched",
+                task_id=task.task_id,
+                trace_id=trace_id,
+                device_id=task.device_id,
+                task_type="task_router",
+                status="dispatched",
+            )
+        except Exception:
+            pass
         
         # 获取目标设备
         device = self.device_registry.get_device(task.device_id)
         
         if not device:
+            try:
+                from core.task_logger import emit_task_log
+                emit_task_log(
+                    "task_failed",
+                    task_id=task.task_id,
+                    trace_id=trace_id,
+                    device_id=task.device_id,
+                    task_type="task_router",
+                    latency_ms=0.0,
+                    status="failed",
+                    error=f"设备 {task.device_id} 不存在",
+                )
+            except Exception:
+                pass
             return TaskResult(
                 task_id=task.task_id,
                 device_id=task.device_id,
@@ -235,6 +268,20 @@ class TaskRouter:
         
         # 检查设备状态
         if device.status.value != "online":
+            try:
+                from core.task_logger import emit_task_log
+                emit_task_log(
+                    "task_failed",
+                    task_id=task.task_id,
+                    trace_id=trace_id,
+                    device_id=task.device_id,
+                    task_type="task_router",
+                    latency_ms=0.0,
+                    status="failed",
+                    error=f"设备 {device.device_name} 离线",
+                )
+            except Exception:
+                pass
             return TaskResult(
                 task_id=task.task_id,
                 device_id=task.device_id,
@@ -246,10 +293,11 @@ class TaskRouter:
                 duration=0.0
             )
         
-        # 构建任务消息
+        # 构建任务消息（包含 trace_id）
         task_message = {
             "type": "task",
             "task_id": task.task_id,
+            "trace_id": trace_id,
             "intent_type": task.intent_type.value,
             "action": task.action,
             "target": task.target,
@@ -262,6 +310,20 @@ class TaskRouter:
             
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
+
+            try:
+                from core.task_logger import emit_task_log
+                emit_task_log(
+                    "task_completed",
+                    task_id=task.task_id,
+                    trace_id=trace_id,
+                    device_id=task.device_id,
+                    task_type="task_router",
+                    latency_ms=round(duration * 1000, 1),
+                    status="success",
+                )
+            except Exception:
+                pass
             
             return TaskResult(
                 task_id=task.task_id,
@@ -277,6 +339,21 @@ class TaskRouter:
         except Exception as e:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
+
+            try:
+                from core.task_logger import emit_task_log
+                emit_task_log(
+                    "task_failed",
+                    task_id=task.task_id,
+                    trace_id=trace_id,
+                    device_id=task.device_id,
+                    task_type="task_router",
+                    latency_ms=round(duration * 1000, 1),
+                    status="failed",
+                    error=str(e),
+                )
+            except Exception:
+                pass
             
             return TaskResult(
                 task_id=task.task_id,

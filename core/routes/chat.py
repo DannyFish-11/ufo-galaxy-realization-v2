@@ -78,6 +78,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         所有 UI (Dashboard / Windows / Android) 统一调用此端点。
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
+        import time as _time
+        _t0 = _time.monotonic()
+
         # ── 唯一入口: OpenClawd 母体智能体 ──
         # OpenClawd 内部嵌入 AgentKernel；SOUL 注入规则由 OpenClawd 统一管理。
         try:
@@ -90,6 +93,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 context=req.context,
             )
             metadata = result.get("metadata", {})
+            trace_id = result.get("trace_id") or metadata.get("trace_id") or metadata.get("request_id", "")
+
             resp = UnifiedChatResponse(
                 success=result.get("success", False),
                 response=result.get("response", ""),
@@ -103,6 +108,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             resp_dict = resp.to_json_response()
             resp_dict["reply"] = result.get("response", "")
+            resp_dict["trace_id"] = trace_id
+
+            # ── Aggregation log: emit when parallel_result is present ────────
+            parallel_result = metadata.get("parallel_result")
+            if parallel_result is not None:
+                _latency_ms = (_time.monotonic() - _t0) * 1000
+                try:
+                    from core.task_logger import emit_task_log
+                    emit_task_log(
+                        "aggregation_done",
+                        trace_id=trace_id,
+                        group_id=metadata.get("parallel_group", ""),
+                        device_id=req.device_id,
+                        session_id=req.session_id or "",
+                        total=parallel_result.get("total", 0),
+                        succeeded=parallel_result.get("succeeded", 0),
+                        failed=parallel_result.get("failed", 0),
+                        cancelled=parallel_result.get("cancelled", 0),
+                        latency_ms=round(_latency_ms, 1),
+                        status=parallel_result.get("summary_status", ""),
+                        task_type="parallel_goal",
+                    )
+                except Exception as _le:
+                    logger.debug("Aggregation log skipped: %s", _le)
+
             # 记录到会话管理器
             try:
                 from core.session_manager import get_session_manager
