@@ -134,6 +134,7 @@ class ExecutionPlanner:
     _CAPABILITY_HINT_MARKER = "[CapabilityRegistry]"
 
     # Auto-agent template selection mapping: (keywords, template_name)
+    # Type: List[Tuple[List[str], str]]
     _TEMPLATE_MAP: List[tuple] = [
         (["设备", "控制", "device", "hardware", "phone", "手机", "电脑", "平板",
           "screenshot", "截图", "截屏", "click", "点击", "swipe", "滑动"], "device_controller"),

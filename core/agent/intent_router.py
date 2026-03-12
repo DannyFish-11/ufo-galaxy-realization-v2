@@ -108,6 +108,7 @@ _TASK_KW_HIGH: List[str] = [
 ]
 
 # 低置信度任务词（结合上下文判断，单独出现可能是聊天）
+# 注意：末尾空格是有意为之，防止"please" 匹配 "displeased" 等词的部分字符串
 _TASK_KW_LOW: List[str] = [
     "帮我", "我想", "能不能", "可以帮", "请帮",
     "help me", "can you", "could you", "please ",

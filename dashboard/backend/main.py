@@ -1491,6 +1491,7 @@ async def dashboard_chat(request: dict):
                 )
                 planner = ExecutionPlanner(llm_router=llm_router if LLM_ROUTER_AVAILABLE else None)
                 # 将已有对话历史传入计划
+                # Keep only dict items - expected structure: {role: str, content: str}
                 _ctx = [m for m in (context or []) if isinstance(m, dict)]
                 _plan = ExecutionPlan(
                     message=message,
