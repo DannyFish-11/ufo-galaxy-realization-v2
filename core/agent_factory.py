@@ -1017,7 +1017,7 @@ class AgentFactory:
                     "last_active": agent.last_active,
                     "metrics": agent.metrics,
                 }
-            with open(self.STATE_FILE, "w") as f:
+            with open(self.STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"Agent 状态持久化失败: {e}")
@@ -1028,7 +1028,7 @@ class AgentFactory:
         if not _os.path.exists(self.STATE_FILE):
             return
         try:
-            with open(self.STATE_FILE) as f:
+            with open(self.STATE_FILE, encoding="utf-8") as f:
                 state = json.load(f)
 
             self.agent_tree = state.get("agent_tree", {})

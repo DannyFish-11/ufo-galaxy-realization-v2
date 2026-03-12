@@ -1645,7 +1645,7 @@ if __name__ == "__main__":
         from core.port_config import get_service_port
         _dashboard_port = get_service_port("dashboard_backend")
     except Exception:
-        _dashboard_port = 8080
+        _dashboard_port = 8085
     uvicorn.run(app, host="0.0.0.0", port=_dashboard_port)
 
 

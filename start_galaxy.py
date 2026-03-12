@@ -1,42 +1,37 @@
 #!/usr/bin/env python3
 """
-Galaxy — Quick Start (Dashboard / WebUI)
+Galaxy — Quick Start (compatibility wrapper)
 =============================================
 
 .. deprecated::
-    This script is retained for backwards compatibility only.
-    The recommended entrypoint is ``main.py`` (or ``unified_launcher.py``
-    directly), which manages the full Galaxy system including all subsystems.
+    This script is a **compatibility wrapper** that delegates all work to
+    ``unified_launcher.py``.  The two dashboard instances (previously on port
+    8080 and 8085) have been merged.  Everything now runs on port **8085**
+    through the single unified entry point.
 
     Migration::
 
-        # Before (lightweight dashboard only):
+        # Legacy (kept for backward compatibility — redirects to unified_launcher):
         python start_galaxy.py [--port PORT] [--desktop] [--all]
 
-        # After (full system, preferred):
-        python main.py [--no-l4] [--no-ui]    # unified_launcher flags apply
+        # Preferred (full system, all subsystems, port 8085):
+        python unified_launcher.py [--no-l4] [--no-ui] [--port PORT]
+        # or the delegating wrapper:
+        python main.py [--no-l4] [--no-ui]
 
-Lightweight launcher for the Dashboard web UI.
-For full system launch, use unified_launcher.py or deploy.sh.
-
-Usage:
-    python start_galaxy.py              # Dashboard on :8080
-    python start_galaxy.py --port 9000  # Custom port
-    python start_galaxy.py --desktop    # Windows desktop UI
-    python start_galaxy.py --all        # Dashboard + Desktop
+All flags understood by this script are translated to their unified_launcher
+equivalents and passed through.  The ``--desktop`` flag still launches the
+Windows desktop UI after unified_launcher hands off control.
 """
 
 import os
 import sys
-import asyncio
-import argparse
 import logging
 import warnings
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
-from core.port_config import get_service_port
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,74 +41,8 @@ logging.basicConfig(
 logger = logging.getLogger("Galaxy")
 
 
-def check_dependencies():
-    """Check that minimal dependencies are installed."""
-    required = ['fastapi', 'uvicorn', 'httpx', 'pydantic']
-    missing = []
-    for pkg in required:
-        try:
-            __import__(pkg)
-        except ImportError:
-            missing.append(pkg)
-    if missing:
-        logger.error(f"Missing dependencies: {missing}")
-        logger.info("Install: pip install " + " ".join(missing))
-        return False
-    return True
-
-
-def print_banner():
-    """Print startup banner."""
-    try:
-        from core.ascii_art import GALAXY_ASCII_MINIMAL
-        print(GALAXY_ASCII_MINIMAL)
-    except ImportError:
-        print("=" * 50)
-        print("  Galaxy — L4 Autonomous Intelligence System")
-        print("=" * 50)
-    print()
-
-
-def init_system():
-    """Initialize core subsystems."""
-    logger.info("Initializing system...")
-    try:
-        from core.unified_config import config
-        logger.info(f"Config loaded: {len(config.get_all())} entries")
-    except Exception:
-        logger.warning("unified_config not available, using defaults")
-
-    try:
-        from core.device_registry import device_registry
-        logger.info("Device registry ready")
-    except Exception:
-        pass
-
-    try:
-        from core.device_communication import device_comm
-        logger.info("Device communication ready")
-    except Exception:
-        pass
-
-    return True
-
-
-def start_dashboard(port: int = get_service_port("dashboard")):
-    """Start Dashboard web UI."""
-    import uvicorn
-    logger.info(f"Starting Dashboard on http://0.0.0.0:{port}")
-
-    try:
-        from dashboard.backend.main import app
-    except ImportError:
-        logger.error("dashboard.backend.main not found")
-        sys.exit(1)
-
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
-
-
-def start_desktop():
-    """Start Windows desktop UI."""
+def _start_desktop():
+    """Launch the Windows desktop UI (Windows-only)."""
     if sys.platform != "win32":
         logger.warning("Desktop UI is currently Windows-only")
         return
@@ -122,44 +51,53 @@ def start_desktop():
 
 def main():
     warnings.warn(
-        "start_galaxy.py is deprecated. Use 'python main.py' (or 'python unified_launcher.py') "
-        "as the standard entrypoint. start_galaxy.py will continue to work but may be removed "
-        "in a future release.",
+        "start_galaxy.py is a compatibility wrapper. "
+        "Use 'python unified_launcher.py' (or 'python main.py') as the primary entry point. "
+        "Both dashboards have been merged to port 8085.",
         DeprecationWarning,
         stacklevel=1,
     )
     logger.warning(
-        "⚠  DEPRECATED: start_galaxy.py — use 'python main.py' instead. "
-        "See unified_launcher.py for the full feature set."
+        "⚠  COMPATIBILITY WRAPPER: start_galaxy.py delegates to unified_launcher.py. "
+        "Use 'python unified_launcher.py' directly. All services run on port 8085."
     )
-    parser = argparse.ArgumentParser(description='Galaxy Quick Start')
-    parser.add_argument('--desktop', action='store_true', help='Launch desktop UI')
-    parser.add_argument('--all', action='store_true', help='Launch Dashboard + desktop')
-    parser.add_argument('--port', type=int, default=get_service_port("dashboard"), help='Dashboard port')
+
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Galaxy Quick Start (compatibility wrapper → unified_launcher.py)"
+    )
+    parser.add_argument("--desktop", action="store_true", help="Also launch Windows desktop UI")
+    parser.add_argument("--all", action="store_true", help="Dashboard + desktop UI")
+    parser.add_argument("--port", type=int, default=8085, help="Dashboard port (default: 8085)")
+    # Accept (and ignore) any extra unified_launcher flags so existing scripts don't break
+    parser.add_argument("--no-l4", action="store_true", help="Pass through to unified_launcher")
+    parser.add_argument("--no-nodes", action="store_true", help="Pass through to unified_launcher")
+    parser.add_argument("--no-ui", action="store_true", help="Pass through to unified_launcher")
+    parser.add_argument("--minimal", "-m", action="store_true",
+                        help="Pass through to unified_launcher")
     args = parser.parse_args()
 
-    print_banner()
+    # Build the forwarded argv for unified_launcher
+    fwd_args = ["--port", str(args.port)]
+    if getattr(args, "no_l4", False):
+        fwd_args.append("--no-l4")
+    if getattr(args, "no_nodes", False):
+        fwd_args.append("--no-nodes")
+    if getattr(args, "no_ui", False):
+        fwd_args.append("--no-ui")
+    if getattr(args, "minimal", False):
+        fwd_args.append("--minimal")
 
-    if not check_dependencies():
-        sys.exit(1)
-
-    init_system()
-
-    logger.info("System ready")
-    print()
-
-    if args.all:
+    # Optionally start desktop UI in a background process before handing over
+    if args.desktop or args.all:
         import multiprocessing
-        p1 = multiprocessing.Process(target=start_dashboard, args=(args.port,))
-        p2 = multiprocessing.Process(target=start_desktop)
-        p1.start()
-        p2.start()
-        p1.join()
-        p2.join()
-    elif args.desktop:
-        start_desktop()
-    else:
-        start_dashboard(args.port)
+        desktop_proc = multiprocessing.Process(target=_start_desktop)
+        desktop_proc.start()
+
+    # Delegate to unified_launcher
+    sys.argv = [sys.argv[0]] + fwd_args
+    from unified_launcher import main as unified_main
+    unified_main()
 
 
 if __name__ == "__main__":

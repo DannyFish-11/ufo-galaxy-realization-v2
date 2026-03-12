@@ -529,12 +529,36 @@ class NodeSystemLauncher:
         return {}
 
     def get_core_nodes(self) -> List[str]:
-        """获取核心节点列表"""
+        """获取核心节点列表。
+
+        优先使用节点配置中标记 "group": "core" 的节点。
+        若无任何节点具有该标记（如 node_registry.json 未设置），则回退为
+        按节点目录名称升序排列的前 10 个基础节点（Node_00–Node_09），确保
+        系统始终能自动启动最核心的节点而不报告"节点数量为 0"。
+        """
+        import re as _re
         core_nodes = []
-        for name, config in self.node_configs.items():
-            if isinstance(config, dict) and config.get("group") == "core":
+        for name, cfg in self.node_configs.items():
+            if isinstance(cfg, dict) and cfg.get("group") == "core":
                 core_nodes.append(name)
-        return sorted(core_nodes, key=lambda x: self.node_configs.get(x, {}).get("priority", 99))
+        if core_nodes:
+            return sorted(core_nodes,
+                          key=lambda x: self.node_configs.get(x, {}).get("priority", 99))
+
+        # 回退：node_registry 未设置 group 字段时，选取最基础的节点
+        all_nodes = self.get_all_nodes()
+        if not all_nodes:
+            return []
+        def _node_key(name: str) -> int:
+            m = _re.match(r"Node_0*(\d+)", name)
+            return int(m.group(1)) if m else 999
+        fundamental = sorted(all_nodes, key=_node_key)[:10]
+        logger.info(
+            "节点配置中未找到 'group': 'core' 标记，"
+            "自动回退为前 10 个基础节点: %s",
+            fundamental,
+        )
+        return fundamental
         
     def get_all_nodes(self) -> List[str]:
         """获取所有节点列表"""
@@ -682,7 +706,15 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动 Web UI 和完整 API 服务"""
+        """启动统一 Web UI 和完整 API 服务（合并自 dashboard/backend/main.py）
+
+        架构说明：
+          1. 以 dashboard.backend.main.app 为基础应用（包含所有 Dashboard 路由）
+          2. 在其上叠加 core.api_routes（系统管理、监控、观测性等扩展路由）
+          3. 在其上叠加 core.startup 引导的子系统中间件
+          4. 添加统一启动器专属路由（/api/status、/api/services）
+          5. 统一在 8085 端口提供服务
+        """
         # 检查前端静态资源是否已构建
         frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
         frontend_dist = PROJECT_ROOT / "dashboard" / "frontend" / "dist"
@@ -697,138 +729,139 @@ class UnifiedWebUI:
             if frontend_dist.exists():
                 logger.info("检测到构建产物目录 %s，但缺少 public/index.html", frontend_dist)
         try:
-            from fastapi import FastAPI
             from fastapi.responses import HTMLResponse, JSONResponse
-            from fastapi.middleware.cors import CORSMiddleware
             import uvicorn
-            
-            self.app = FastAPI(
-                title="Galaxy",
-                description="L4 级自主性智能系统",
-                version="2.0"
-            )
-            
-            from nodes.common.cors_config import get_cors_origins
-            self.app.add_middleware(
-                CORSMiddleware,
-                allow_origins=get_cors_origins(),
-                allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"]
-            )
-            
-            # === 引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
+
+            # === 步骤 1：以 dashboard/backend/main.py 的完整 app 为基础 ===
+            # 这一步确保原 8080 Dashboard 的所有路由（agents、devices、LLM providers、
+            # MCP、twins、config、observability 等 60+ 端点）全部纳入统一服务。
+            try:
+                from dashboard.backend.main import app as _dashboard_app
+                self.app = _dashboard_app
+                logger.info("Dashboard 路由已加载（来自 dashboard/backend/main.py）")
+            except Exception as _e:
+                logger.warning("dashboard.backend.main 加载失败，回退到内建 FastAPI 应用: %s", _e)
+                from fastapi import FastAPI
+                from fastapi.middleware.cors import CORSMiddleware
+                from nodes.common.cors_config import get_cors_origins
+                self.app = FastAPI(
+                    title="Galaxy",
+                    description="L4 级自主性智能系统",
+                    version="2.0"
+                )
+                self.app.add_middleware(
+                    CORSMiddleware,
+                    allow_origins=get_cors_origins(),
+                    allow_credentials=True,
+                    allow_methods=["*"],
+                    allow_headers=["*"]
+                )
+
+            # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
             try:
                 from core.startup import bootstrap_subsystems
                 bootstrap_results = await bootstrap_subsystems(self.app, self.config)
-
                 ok = sum(1 for v in bootstrap_results.values() if v.get("status") == "ok")
                 total = len(bootstrap_results)
-                logger.info(f"核心子系统: {ok}/{total} 正常")
-                for name, info in bootstrap_results.items():
-                    status_icon = "OK" if info.get("status") == "ok" else "DEGRADED"
-                    logger.info(f"  [{status_icon}] {name}: {info}")
+                logger.info("核心子系统: %d/%d 正常", ok, total)
+                for _name, _info in bootstrap_results.items():
+                    _icon = "OK" if _info.get("status") == "ok" else "DEGRADED"
+                    logger.info("  [%s] %s: %s", _icon, _name, _info)
             except Exception as e:
-                logger.warning(f"核心子系统引导失败（系统仍可运行）: {e}")
+                logger.warning("核心子系统引导失败（系统仍可运行）: %s", e)
 
-            # === 集成完整 API 路由 ===
+            # === 步骤 3：叠加 core.api_routes（系统管理 + 扩展路由） ===
+            # 这些路由补充了 dashboard/backend/main.py 中缺少的系统层路由
+            # （monitoring、vision、relay、hybrid、vault、cost、channels、
+            #   federation、sessions、concurrency、errors 等）
             try:
                 from core.api_routes import create_api_routes, create_websocket_routes
-
-                # 注册 REST API 路由
                 api_router = create_api_routes(
                     service_manager=self.service_manager,
                     config=self.config
                 )
                 self.app.include_router(api_router)
-                logger.info("完整 API 路由已加载")
+                logger.info("扩展 API 路由已加载（来自 core.api_routes）")
 
-                # 注册 WebSocket 端点
                 create_websocket_routes(
                     self.app,
                     service_manager=self.service_manager
                 )
                 logger.info("WebSocket 端点已加载")
-
             except ImportError as e:
-                logger.warning(f"API 路由模块加载失败，使用基础路由: {e}")
+                logger.warning("API 路由模块加载失败: %s", e)
 
-            # === 健康检查路由 ===
+            # === 步骤 4：健康检查路由 ===
             try:
                 from core.health_check import create_health_routes
-                health_router, health_checker = create_health_routes(
+                health_router, _health_checker = create_health_routes(
                     service_manager=self.service_manager,
                     config=self.config
                 )
                 self.app.include_router(health_router)
                 logger.info("健康检查路由已加载")
             except ImportError as e:
-                logger.warning(f"健康检查模块加载失败: {e}")
-            
-            # === 静态文件挂载 (API Manager) ===
+                logger.warning("健康检查模块加载失败: %s", e)
+
+            # === 步骤 5：静态文件挂载 (API Manager) ===
             from fastapi.staticfiles import StaticFiles
             from fastapi.responses import FileResponse
-            
-            # 尝试查找正确的静态文件目录
+
             base_static_dir = PROJECT_ROOT / "static" / "api-manager"
             static_dir = base_static_dir
-            
-            # 检查是否在 public 子目录下 (适配当前目录结构)
             if (base_static_dir / "public").exists():
                 static_dir = base_static_dir / "public"
-            
+
             if static_dir.exists() and (static_dir / "assets").exists():
-                # 挂载静态资源
-                self.app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
-                
-                # API Manager 入口
+                self.app.mount(
+                    "/assets",
+                    StaticFiles(directory=str(static_dir / "assets")),
+                    name="assets"
+                )
+
                 @self.app.get("/api-manager", response_class=HTMLResponse)
                 async def api_manager_index():
                     index_path = static_dir / "index.html"
                     if index_path.exists():
                         return FileResponse(str(index_path))
                     return JSONResponse({"error": "index.html not found"}, status_code=404)
-                
-                logger.info(f"API Manager 已挂载: {static_dir}")
-            else:
-                logger.warning(f"API Manager 静态文件未找到: {static_dir}")
 
-            # === 基础路由（始终可用）===
-            @self.app.get("/", response_class=HTMLResponse)
-            async def index():
-                return self._get_dashboard_html()
-                
+                logger.info("API Manager 已挂载: %s", static_dir)
+            else:
+                logger.warning("API Manager 静态文件未找到: %s", static_dir)
+
+            # === 步骤 6：统一启动器专属路由（不覆盖 dashboard 的 / 路由） ===
             @self.app.get("/api/status")
-            async def status():
+            async def launcher_status():
                 return JSONResponse({
                     "status": "running",
                     "version": "2.0",
                     "state": self.service_manager.state.name,
                     "services": self.service_manager.get_status(),
-                    "config": self.config.get_status_dict()
+                    "config": self.config.get_status_dict(),
                 })
-                
+
             @self.app.get("/api/services")
-            async def services():
+            async def launcher_services():
                 return JSONResponse(self.service_manager.get_status())
-            
-            @self.app.get("/api/health")
-            async def health():
-                return {"status": "healthy"}
-                
-            config = uvicorn.Config(
+
+            # === 步骤 7：启动 uvicorn ===
+            _uvi_config = uvicorn.Config(
                 self.app,
                 host=self.config.host,
                 port=self.config.web_ui_port,
                 log_level="warning"
             )
-            server = uvicorn.Server(config)
-            logger.info(f"API 服务启动: http://{self.config.host}:{self.config.web_ui_port}")
-            logger.info(f"API 文档: http://localhost:{self.config.web_ui_port}/docs")
+            server = uvicorn.Server(_uvi_config)
+            logger.info(
+                "统一 Dashboard 启动: http://%s:%d",
+                self.config.host, self.config.web_ui_port
+            )
+            logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
             await server.serve()
-            
+
         except ImportError as e:
-            logger.error(f"Web UI 依赖未安装: {e}")
+            logger.error("Web UI 依赖未安装: %s", e)
             
     def _get_dashboard_html(self) -> str:
         """获取仪表板 HTML — 从 dashboard/frontend/public/ 读取
@@ -1177,6 +1210,47 @@ def main():
         asyncio.run(_run_check_only(galaxy))
         return
 
+    # ── 前置检查（Pre-flight checks）──────────────────────────────────────
+    # 端口冲突检测：如果目标端口已被占用，提前告知用户并退出
+    if galaxy.config.enable_web_ui:
+        import socket as _socket
+        _port = galaxy.config.web_ui_port
+        _host = galaxy.config.host if galaxy.config.host != "0.0.0.0" else "127.0.0.1"
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as _s:
+            _s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            try:
+                _s.bind((_host, _port))
+            except OSError:
+                print_status(
+                    f"端口 {_port} 已被占用！请先停止占用该端口的进程，"
+                    f"或使用 --port 指定其他端口（如 --port 8086）。",
+                    "error"
+                )
+                sys.exit(1)
+
+    # 配置缺失检测：没有 LLM API Key 时给出明确提示
+    if not galaxy.config.has_llm_api():
+        env_file = PROJECT_ROOT / ".env"
+        if not env_file.exists():
+            print_status(
+                ".env 文件不存在！请执行: cp .env.example .env "
+                "并在 .env 中配置至少一个 LLM API Key（如 OPENAI_API_KEY）。",
+                "warning"
+            )
+        else:
+            print_status(
+                "未检测到有效的 LLM API Key。"
+                "请在 .env 中配置至少一个 Key（OPENAI_API_KEY、ANTHROPIC_API_KEY 等），"
+                "否则聊天和 AI 功能将不可用。",
+                "warning"
+            )
+
+    # 节点目录检测
+    if galaxy.config.enable_nodes and not (PROJECT_ROOT / "nodes").exists():
+        print_status("nodes/ 目录未找到，节点系统将被跳过。", "warning")
+        galaxy.config.enable_nodes = False
+
+    # ── 信号处理 ───────────────────────────────────────────────────────────
     # 设置信号处理
     def signal_handler(sig, frame):
         galaxy.stop()

@@ -42,13 +42,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
-后端将在 `http://localhost:8080` 启动。
+后端将在 `http://localhost:8085` 启动。
 
 ### 2. 访问前端
 
 直接在浏览器中打开：
 ```
-http://localhost:8080/
+http://localhost:8085/
 ```
 
 前端 `index.html` 由后端静态文件路由直接提供服务，无需单独的 HTTP 服务器。
@@ -72,14 +72,14 @@ npm run build     # 编译 TypeScript
 
 ## WebSocket 实时连接
 
-后端 WebSocket 端点：`ws://localhost:8080/ws`
+后端 WebSocket 端点：`ws://localhost:8085/ws`
 
 前端 TypeScript 客户端示例（`dashboard/frontend/ts/api.ts`）：
 
 ```typescript
 import { GalaxyAPI } from './api';
 
-const api = new GalaxyAPI('http://localhost:8080');
+const api = new GalaxyAPI('http://localhost:8085');
 api.connectWebSocket((msg) => {
   console.log('WS message:', msg);
 });
@@ -149,7 +149,7 @@ WS /ws
 ## 技术栈
 
 ### 后端
-- FastAPI - Web 框架（端口 8080）
+- FastAPI - Web 框架（端口 8085）
 - httpx - HTTP 客户端
 - WebSocket - 实时通信
 
@@ -196,7 +196,7 @@ docker run -d -p 8080:8080 galaxy-dashboard
 
 ```bash
 # 使用 Gunicorn + Uvicorn workers
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker dashboard.backend.main:app --bind 0.0.0.0:8080
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker dashboard.backend.main:app --bind 0.0.0.0:8085
 ```
 
 ## 故障排查

@@ -26,7 +26,7 @@ export class GalaxyAPI {
   private baseUrl: string;
   private ws: WebSocket | null = null;
 
-  constructor(baseUrl: string = 'http://localhost:8080') {
+  constructor(baseUrl: string = 'http://localhost:8085') {
     this.baseUrl = baseUrl;
   }
 
