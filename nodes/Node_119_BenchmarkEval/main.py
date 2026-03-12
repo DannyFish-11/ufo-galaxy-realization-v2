@@ -113,7 +113,7 @@ def _bleu_score(prediction: str, reference: str, max_n: int = 4) -> float:
     pred_tokens = _tokenize(prediction)
     ref_tokens = _tokenize(reference)
     # Guard ensures len(pred_tokens) > 0 before the brevity-penalty division below.
-    if not pred_tokens:
+    if not pred_tokens or len(pred_tokens) == 0:
         return 0.0
     # Brevity penalty: safe because pred_tokens is non-empty at this point.
     bp = 1.0 if len(pred_tokens) >= len(ref_tokens) else math.exp(1 - len(ref_tokens) / len(pred_tokens))

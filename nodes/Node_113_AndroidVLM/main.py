@@ -1,4 +1,3 @@
-import asyncio
 """
 Node 113: AndroidVLM - Android GUI 理解服务
 
@@ -7,6 +6,8 @@ FastAPI 服务器
 版本：1.1.0
 日期：2026-03-07
 """
+import asyncio
+
 
 import os
 import sys

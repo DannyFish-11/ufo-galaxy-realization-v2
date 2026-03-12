@@ -96,7 +96,7 @@ docker run -e OPENAI_API_KEY=sk-... -p 8107:8107 node_107_functioncalling
 
 ## Security Notes
 
-- The `calculate` tool uses a sandboxed `eval` restricted to `math` module functions and basic arithmetic — no arbitrary code execution.
+- The `calculate` tool uses AST parsing and walking (not `eval()`), restricting execution to `math` module functions and basic arithmetic operators — no arbitrary code execution.
 - External `handler_url` values are called with the arguments provided by OpenAI. Validate/sanitise handler endpoints before registering untrusted URLs.
 
 ## Related Nodes

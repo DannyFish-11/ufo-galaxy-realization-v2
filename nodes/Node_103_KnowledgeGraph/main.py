@@ -1,4 +1,3 @@
-import asyncio
 """
 Node_103_KnowledgeGraph - 知识图谱和推理引擎
 
@@ -18,6 +17,8 @@ Node_103_KnowledgeGraph - 知识图谱和推理引擎
 日期：2026-01-22
 作者：Manus AI
 """
+import asyncio
+
 
 import os
 import json

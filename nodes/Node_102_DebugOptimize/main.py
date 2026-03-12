@@ -1,4 +1,3 @@
-import asyncio
 """
 Node_102_DebugOptimize - 自主调试和优化系统
 
@@ -19,6 +18,8 @@ Node_102_DebugOptimize - 自主调试和优化系统
 日期：2026-01-22
 作者：Manus AI
 """
+import asyncio
+
 
 import os
 import ast

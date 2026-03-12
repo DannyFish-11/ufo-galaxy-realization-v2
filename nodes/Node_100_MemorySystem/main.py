@@ -1,4 +1,3 @@
-import asyncio
 """
 Node_100_MemorySystem - 记忆和学习系统
 
@@ -18,6 +17,8 @@ Node_100_MemorySystem - 记忆和学习系统
 日期：2026-01-22
 作者：Manus AI
 """
+import asyncio
+
 
 import os
 import json

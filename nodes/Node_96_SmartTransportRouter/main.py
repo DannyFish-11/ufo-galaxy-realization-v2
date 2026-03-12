@@ -19,8 +19,8 @@ from enum import Enum, auto
 from typing import Dict, Any, Optional, List, Type
 
 # 第三方库，需要预先安装：pip install fastapi uvicorn python-multipart
-from fastapi import FastAPI
-from pydantic import BaseModel, HTTPException, status
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel
 import uvicorn
 
 # --- 1. 日志配置 ---
