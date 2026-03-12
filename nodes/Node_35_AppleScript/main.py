@@ -233,8 +233,32 @@ async def main():
         if service:
             await service.stop()
         logger.info("--- Node_35_AppleScript 服务演示结束 ---")
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_35_AppleScript")
 
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_35_AppleScript"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_35_AppleScript"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8035, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     # 注意：此脚本需要在 macOS 环境下运行才能成功执行 AppleScript
     # 在非 macOS 环境下，初始化会失败并打印错误信息
     try:

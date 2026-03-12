@@ -253,8 +253,32 @@ async def main():
     finally:
         # 停止服务
         await service.stop()
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_37_LinuxDBus")
 
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_37_LinuxDBus"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_37_LinuxDBus"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8037, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     # 在某些环境中，直接运行asyncio.run()可能会因嵌套事件循环而出错
     # 例如在Jupyter或某些框架中。标准Python脚本中是安全的。
     try:

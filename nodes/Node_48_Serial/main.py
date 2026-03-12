@@ -304,8 +304,32 @@ async def main():
             logger.info(f"最终状态: {service.get_status()}")
     else:
         logger.error("服务未能成功启动，请检查配置和硬件连接。")
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_48_Serial")
 
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_48_Serial"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_48_Serial"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8048, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     # 注意：在没有物理串口或虚拟串口对的情况下运行此脚本可能会失败。
     # 可以使用 `socat` 创建虚拟串口对进行测试:
     # socat -d -d pty,raw,echo=0 pty,raw,echo=0
