@@ -68,17 +68,17 @@ def _apply_step(data: List[Dict], step: Dict[str, Any]) -> List[Dict]:
             field = step.get("field", "")
             value = step.get("value")
             op_type = step.get("op", "eq")
-            def match(row):
-                v = row.get(field)
-                if op_type == "eq": return v == value
-                if op_type == "neq": return v != value
-                if op_type == "gt": return v is not None and v > value
-                if op_type == "lt": return v is not None and v < value
-                if op_type == "gte": return v is not None and v >= value
-                if op_type == "lte": return v is not None and v <= value
-                if op_type == "contains": return value in str(v)
-                return True
-            return [row for row in data if match(row)]
+            _ops = {
+                "eq": lambda v: v == value,
+                "neq": lambda v: v != value,
+                "gt": lambda v: v is not None and v > value,
+                "lt": lambda v: v is not None and v < value,
+                "gte": lambda v: v is not None and v >= value,
+                "lte": lambda v: v is not None and v <= value,
+                "contains": lambda v: value in str(v),
+            }
+            match_fn = _ops.get(op_type, lambda v: True)
+            return [row for row in data if match_fn(row.get(field))]
         elif op == "select":
             fields = step.get("fields", [])
             return [{f: row.get(f) for f in fields} for row in data]

@@ -127,8 +127,9 @@ async def _run_job(job: Dict[str, Any]) -> None:
                         "body": resp.text[:500],
                     }
             elif job_type == "python":
-                # Execute a simple Python expression (safe subset)
-                result = eval(command, {"__builtins__": {}})  # noqa: S307
+                # Safe evaluation of Python literals only (no arbitrary code execution)
+                import ast
+                result = ast.literal_eval(command)
                 run_record["result"] = str(result)
             else:
                 # Default: echo job

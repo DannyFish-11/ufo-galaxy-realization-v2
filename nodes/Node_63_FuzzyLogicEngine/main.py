@@ -192,6 +192,8 @@ class FuzzyEngine:
         aggregated = [0.0] * len(x_vals)
 
         for key, mf in self.fuzzy_sets.items():
+            if "." not in key:
+                continue
             var, _ = key.split(".", 1)
             if var != variable:
                 continue
@@ -303,6 +305,8 @@ async def infer(request: InferRequest):
     try:
         results: Dict[str, float] = {}
         for key in engine.fuzzy_sets:
+            if "." not in key:
+                continue
             var, term = key.split(".", 1)
             if var in request.inputs:
                 results[key] = round(
