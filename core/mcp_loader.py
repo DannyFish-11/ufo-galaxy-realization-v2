@@ -302,6 +302,10 @@ class MCPLoader:
         # 先停止
         await self.stop(server_id)
         
+        # 从能力总线移除该服务器的所有工具
+        server = self.servers[server_id]
+        self._eject_server_from_registry(server_id, server)
+
         # 移除
         server = self.servers.pop(server_id)
         
@@ -310,6 +314,40 @@ class MCPLoader:
             "server_id": server_id,
             "name": server.name,
         }
+
+    def _inject_server_to_registry(self, server_id: str) -> None:
+        """将 MCP 服务器的工具注入能力总线（在初始化完成后调用）。"""
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            server = self.servers.get(server_id)
+            if not server:
+                return
+            reg = CapabilityRegistry.get_instance()
+            for tool in getattr(server, "tools", []):
+                reg.inject_mcp_tool(
+                    server_id=server_id,
+                    tool_name=tool.name,
+                    description=tool.description,
+                    parameters=tool.inputSchema or {},
+                    server_name=server.name,
+                )
+            logger.info(
+                "MCP 服务器 %s (%s) 的 %d 个工具已注入能力总线",
+                server.name, server_id, len(server.tools),
+            )
+        except Exception as exc:
+            logger.debug("MCP 工具注入能力总线失败（不影响正常运行）: %s", exc)
+
+    def _eject_server_from_registry(self, server_id: str, server: "MCPServerInstance") -> None:
+        """从能力总线移除 MCP 服务器的所有工具。"""
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            reg = CapabilityRegistry.get_instance()
+            for tool in getattr(server, "tools", []):
+                reg.eject(f"mcp__{server_id}__{tool.name}")
+            logger.info("MCP 服务器 %s 的工具已从能力总线移除", server_id)
+        except Exception as exc:
+            logger.debug("MCP 工具从能力总线移除失败: %s", exc)
     
     async def start(self, server_id: str) -> bool:
         """启动服务器"""
@@ -451,7 +489,10 @@ class MCPLoader:
             
             # 获取提示列表
             await self._refresh_prompts(server_id)
-            
+
+            # 加载完成后自动注入能力总线
+            self._inject_server_to_registry(server_id)
+
             return True
         
         return False

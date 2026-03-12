@@ -227,6 +227,15 @@ class ParallelGroupTracker:
         return self._groups.get(group_id, {}).get(task_id)
 
 
+# 当能力总线和直接加载路径均无法提供 Skill 参数 schema 时使用的默认值
+_DEFAULT_SKILL_SCHEMA: Dict = {
+    "type": "object",
+    "properties": {
+        "input": {"type": "string", "description": "输入参数"}
+    },
+}
+
+
 class OpenClawd:
     """Galaxy-Nexus 星枢核心智能体 — 统一智能交互入口
 
@@ -1292,39 +1301,82 @@ class OpenClawd:
           - mcp__<server_id>__<tool_name>   → MCP 协议工具
           - skill__<skill_id>               → Skill 技能
           - node__<node_id>__<action>       → Node 节点操作
+
+        执行链路：MCP/Skill 工具优先从能力总线 (CapabilityRegistry) 取，
+        确保加载后立即可用且经过 schema 校验；Node 工具沿用直接加载路径。
         """
         tools: List[Dict] = []
 
-        # ── 层 1: MCP 服务器工具 ──
+        # ── 能力总线: CapabilityRegistry (MCP + Skill SSOT) ──
+        # 优先从能力总线取 MCP/Skill 工具；若总线为空则回退直接加载路径
+        _bus_loaded = False
         try:
-            from core.mcp_loader import mcp_loader
-            import asyncio
+            from core.agent.capability_registry import CapabilityRegistry
+            reg = CapabilityRegistry.get_instance()
+            bus_tools = [
+                item.to_tool_schema()
+                for item in reg.list_tools()
+                if item.source in ("mcp", "skill")
+            ]
+            if bus_tools:
+                tools.extend(bus_tools)
+                _bus_loaded = True
+                logger.debug("_collect_tools: 从能力总线获取 %d 个 MCP/Skill 工具", len(bus_tools))
+        except Exception as e:
+            logger.debug("能力总线不可用，回退直接加载: %s", e)
 
-            for server_info in mcp_loader.list_servers():
-                server_id = server_info.get("id", "")
-                if server_info.get("status") != "running":
-                    continue
-                # list_tools 是 async，但 _collect_tools 是 sync
-                # 使用已缓存的 tools 列表（如果可用）
-                cached_tools = server_info.get("tools", [])
-                for tool in cached_tools:
-                    tool_name = tool.get("name", "")
-                    if not tool_name:
+        if not _bus_loaded:
+            # ── 回退层 1: MCP 服务器工具 (直接加载) ──
+            try:
+                from core.mcp_loader import mcp_loader
+
+                for server_info in mcp_loader.list_servers():
+                    server_id = server_info.get("id", "")
+                    if server_info.get("status") != "running":
                         continue
+                    # list_tools 是 async，但 _collect_tools 是 sync
+                    # 使用已缓存的 tools 列表（如果可用）
+                    cached_tools = server_info.get("tools", [])
+                    for tool in cached_tools:
+                        tool_name = tool.get("name", "")
+                        if not tool_name:
+                            continue
+                        tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": f"mcp__{server_id}__{tool_name}",
+                                "description": tool.get("description", f"MCP tool: {tool_name}"),
+                                "parameters": tool.get("inputSchema", tool.get("parameters", {
+                                    "type": "object", "properties": {}
+                                })),
+                            },
+                        })
+            except Exception as e:
+                logger.debug(f"收集 MCP 工具失败: {e}")
+
+            # ── 回退层 2: Skill 技能 (直接加载) ──
+            try:
+                from core.skill_loader import skill_loader
+
+                for skill_info in skill_loader.list_skills():
+                    skill_id = skill_info.get("id", "")
+                    if not skill_id or skill_info.get("status") == "error":
+                        continue
+                    # 使用 to_mcp_tool_schema 获取正确的 JSON Schema
+                    mcp_schema = skill_loader.to_mcp_tool_schema(skill_id)
+                    params = mcp_schema.get("inputSchema", _DEFAULT_SKILL_SCHEMA) if mcp_schema else _DEFAULT_SKILL_SCHEMA
                     tools.append({
                         "type": "function",
                         "function": {
-                            "name": f"mcp__{server_id}__{tool_name}",
-                            "description": tool.get("description", f"MCP tool: {tool_name}"),
-                            "parameters": tool.get("inputSchema", tool.get("parameters", {
-                                "type": "object", "properties": {}
-                            })),
+                            "name": f"skill__{skill_id}",
+                            "description": skill_info.get("description", f"Skill: {skill_id}"),
+                            "parameters": params,
                         },
                     })
-        except Exception as e:
-            logger.debug(f"收集 MCP 工具失败: {e}")
+            except Exception as e:
+                logger.debug(f"收集 Skill 工具失败: {e}")
 
-        # ── 层 1.5: MCP Gateway 自造工具 ──
+        # ── 层 1.5: MCP Gateway 自造工具 (始终收集，不在能力总线) ──
         try:
             from core.mcp_gateway import get_mcp_gateway
             gateway = get_mcp_gateway()
@@ -1344,30 +1396,6 @@ class OpenClawd:
                 })
         except Exception as e:
             logger.debug(f"收集 MCP Gateway 工具失败: {e}")
-
-        # ── 层 2: Skill 技能 ──
-        try:
-            from core.skill_loader import skill_loader
-
-            for skill_info in skill_loader.list_skills():
-                skill_id = skill_info.get("id", "")
-                if not skill_id or skill_info.get("status") == "error":
-                    continue
-                tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": f"skill__{skill_id}",
-                        "description": skill_info.get("description", f"Skill: {skill_id}"),
-                        "parameters": skill_info.get("parameters", {
-                            "type": "object",
-                            "properties": {
-                                "input": {"type": "string", "description": "输入参数"}
-                            },
-                        }),
-                    },
-                })
-        except Exception as e:
-            logger.debug(f"收集 Skill 工具失败: {e}")
 
         # ── 层 3: Node 节点操作 (静态 action 目录 + 注册表验证) ──
         try:
