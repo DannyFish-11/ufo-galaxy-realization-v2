@@ -747,6 +747,11 @@ async def save_conversation(request: SaveConversationRequest):
     success = await memory_service.save_conversation(request)
     return {"success": success}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "80", "name": "MemorySystem", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.get("/conversation/{session_id}")
 async def get_conversation(session_id: str, limit: int = Query(default=20, ge=1, le=100)):
     """获取对话历史"""

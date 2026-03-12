@@ -254,12 +254,17 @@ class SpeechService:
             "audio": {"content": audio_b64},
         }
         async with httpx.AsyncClient(timeout=120) as client:
-            # Obtain access token via metadata server or service account
-            token_resp = await client.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-                headers={"Metadata-Flavor": "Google"}, timeout=5
-            )
-            access_token = token_resp.json().get("access_token", "")
+            # Try to obtain access token via metadata server (GCP env) or GOOGLE_CLOUD_TOKEN env
+            access_token = os.getenv("GOOGLE_CLOUD_TOKEN", "")
+            if not access_token:
+                try:
+                    token_resp = await client.get(
+                        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+                        headers={"Metadata-Flavor": "Google"}, timeout=5
+                    )
+                    access_token = token_resp.json().get("access_token", "")
+                except Exception:
+                    return {"success": False, "error": "Google Cloud credentials not available. Set GOOGLE_CLOUD_TOKEN env var or run in GCP environment."}
             resp = await client.post(
                 "https://speech.googleapis.com/v1/speech:recognize",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -614,11 +619,11 @@ async def mcp_call(req: MCPCallRequest):
             detail=f"Unknown tool '{tool}'. Available: {list(dispatch.keys())}"
         )
 
-    fn = dispatch[tool]()
-    if asyncio.iscoroutine(fn):
-        result = await fn
+    coro_or_val = dispatch[tool]()
+    if asyncio.iscoroutine(coro_or_val):
+        result = await coro_or_val
     else:
-        result = fn
+        result = coro_or_val
     return result
 
 

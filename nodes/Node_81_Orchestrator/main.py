@@ -564,6 +564,10 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def get_status():
+    return {"status": "ok", "node_id": NODE_ID, "name": NODE_NAME, "timestamp": __import__("datetime").datetime.now().isoformat()}
+
 @app.post("/workflow")
 async def execute_workflow(request: WorkflowRequest, background_tasks: BackgroundTasks):
     """执行工作流"""

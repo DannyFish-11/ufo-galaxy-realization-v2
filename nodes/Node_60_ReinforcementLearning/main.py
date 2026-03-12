@@ -17,7 +17,7 @@ try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_60_ReinforcementLearning")
 except Exception:
-    PORT = int(os.getenv("PORT", "8060"))
+    PORT = int(os.getenv("NODE_PORT", os.getenv("PORT", "8160")))
 
 LEARNING_RATE = float(os.getenv("RL_LEARNING_RATE", "0.01"))
 DISCOUNT_FACTOR = float(os.getenv("RL_DISCOUNT_FACTOR", "0.99"))

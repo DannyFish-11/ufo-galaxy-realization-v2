@@ -366,6 +366,11 @@ async def health_check():
         "events_logged": len(security_enforcer.security_events) if security_enforcer else 0
     }
 
+
+@app.get("/status")
+async def get_status():
+    return {"status": "ok", "node_id": NODE_ID, "name": NODE_NAME, "timestamp": datetime.now().isoformat(), "version": "2.0.0"}
+
 @app.post("/check", response_model=AccessCheckResponse)
 async def check_access(request: AccessCheckRequest):
     """Check if access is allowed between two nodes."""

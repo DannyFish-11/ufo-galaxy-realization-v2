@@ -34,6 +34,11 @@ class CircleRequest(BaseModel):
 async def health():
     return {"status": "healthy", "node_id": "61", "name": "GeometricReasoning", "timestamp": datetime.now().isoformat()}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "61", "name": "GeometricReasoning", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 def distance(p1: Point, p2: Point) -> float:
     return math.sqrt((p2.x - p1.x)**2 + (p2.y - p1.y)**2 + (p2.z - p1.z)**2)
 

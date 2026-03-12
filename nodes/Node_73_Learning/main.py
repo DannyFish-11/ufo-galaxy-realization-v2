@@ -225,7 +225,7 @@ class LearningService:
     def to_dict(self, obj) -> Dict[str, Any]:
         from dataclasses import asdict
         d = asdict(obj)
-        for k, v in d.items():
+        for k, v in list(d.items()):
             if isinstance(v, Enum):
                 d[k] = v.value
         return d

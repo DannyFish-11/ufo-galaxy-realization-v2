@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 VISION_PROVIDER = os.getenv("VISION_PROVIDER", "openai").lower()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_CHAT_API_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com") + "/v1/chat/completions"
 AZURE_VISION_KEY = os.getenv("AZURE_VISION_KEY", "")
 AZURE_VISION_ENDPOINT = os.getenv("AZURE_VISION_ENDPOINT", "")
 
@@ -144,7 +145,7 @@ class ImageAnalysisService:
             "Content-Type": "application/json",
         }
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+            resp = await client.post(OPENAI_CHAT_API_URL, headers=headers, json=payload)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
 
@@ -421,7 +422,7 @@ class ImageAnalysisService:
                     "Content-Type": "application/json",
                 }
                 async with httpx.AsyncClient(timeout=60) as client:
-                    resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+                    resp = await client.post(OPENAI_CHAT_API_URL, headers=headers, json=payload)
                     resp.raise_for_status()
                     text = resp.json()["choices"][0]["message"]["content"]
                 try:

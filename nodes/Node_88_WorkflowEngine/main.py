@@ -15,6 +15,8 @@ Step types:
 import os
 import json
 import uuid
+import ast
+import operator as _op
 import logging
 import asyncio
 from typing import Dict, List, Optional, Any, Literal
@@ -60,6 +62,89 @@ WORKFLOW_TIMEOUT = int(os.getenv("WORKFLOW_TIMEOUT", "300"))
 START_TIME = datetime.now()
 
 STEP_TYPES = ["transform", "condition", "http", "delay", "log", "set"]
+
+# =============================================================================
+# Safe Expression Evaluator (no eval/exec of arbitrary code)
+# =============================================================================
+
+# Supported operators for safe expression evaluation
+_SAFE_OPERATORS = {
+    ast.Add: _op.add, ast.Sub: _op.sub, ast.Mult: _op.mul,
+    ast.Div: _op.truediv, ast.FloorDiv: _op.floordiv, ast.Mod: _op.mod,
+    ast.Pow: _op.pow, ast.USub: _op.neg, ast.UAdd: _op.pos,
+    ast.Eq: _op.eq, ast.NotEq: _op.ne, ast.Lt: _op.lt, ast.LtE: _op.le,
+    ast.Gt: _op.gt, ast.GtE: _op.ge,
+    ast.And: lambda a, b: a and b, ast.Or: lambda a, b: a or b,
+    ast.Not: _op.not_,
+    ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
+}
+
+def _safe_eval(expr: str, ctx: Dict[str, Any]) -> Any:
+    """Evaluate a simple arithmetic/comparison expression safely using AST (no eval/exec)."""
+    def _eval_node(node):
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            if node.id in ("True", "true"):
+                return True
+            if node.id in ("False", "false"):
+                return False
+            if node.id in ("None", "null"):
+                return None
+            if node.id in ctx:
+                return ctx[node.id]
+            raise ValueError(f"Unknown variable: {node.id!r}")
+        if isinstance(node, ast.BinOp):
+            op_fn = _SAFE_OPERATORS.get(type(node.op))
+            if op_fn is None:
+                raise ValueError(f"Unsupported binary operator: {type(node.op).__name__}")
+            return op_fn(_eval_node(node.left), _eval_node(node.right))
+        if isinstance(node, ast.UnaryOp):
+            op_fn = _SAFE_OPERATORS.get(type(node.op))
+            if op_fn is None:
+                raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+            return op_fn(_eval_node(node.operand))
+        if isinstance(node, ast.BoolOp):
+            op_fn = _SAFE_OPERATORS.get(type(node.op))
+            if op_fn is None:
+                raise ValueError(f"Unsupported bool operator")
+            result = _eval_node(node.values[0])
+            for val in node.values[1:]:
+                result = op_fn(result, _eval_node(val))
+            return result
+        if isinstance(node, ast.Compare):
+            left = _eval_node(node.left)
+            for op, comparator in zip(node.ops, node.comparators):
+                op_fn = _SAFE_OPERATORS.get(type(op))
+                if op_fn is None:
+                    raise ValueError(f"Unsupported comparator: {type(op).__name__}")
+                right = _eval_node(comparator)
+                if not op_fn(left, right):
+                    return False
+                left = right
+            return True
+        if isinstance(node, ast.Attribute):
+            obj = _eval_node(node.value)
+            attr = node.attr
+            # Only allow safe attribute access (e.g., list.len via len() is covered elsewhere)
+            if attr.startswith("_"):
+                raise ValueError(f"Access to private attribute {attr!r} is not allowed")
+            return getattr(obj, attr)
+        if isinstance(node, ast.Subscript):
+            obj = _eval_node(node.value)
+            key = _eval_node(node.slice)
+            return obj[key]
+        if isinstance(node, ast.List):
+            return [_eval_node(e) for e in node.elts]
+        if isinstance(node, ast.Dict):
+            return {_eval_node(k): _eval_node(v) for k, v in zip(node.keys, node.values)}
+        raise ValueError(f"Unsupported expression node: {type(node).__name__}")
+
+    try:
+        tree = ast.parse(expr.strip(), mode="eval")
+        return _eval_node(tree.body)
+    except (SyntaxError, ValueError) as e:
+        raise RuntimeError(f"Expression error: {e}")
 
 # =============================================================================
 # Pydantic Models
@@ -275,40 +360,15 @@ class WorkflowEngine:
             return None
 
         elif stype == "transform":
-            # Evaluate a simple Python expression; result stored in output_key
+            # Evaluate a simple expression safely; result stored in output_key
             expression = params.get("expression", "")
             output_key = params.get("output_key", "result")
-            local_ns = {k: v for k, v in ctx.items()}
-            _safe_builtins = {
-                "len": len, "str": str, "int": int, "float": float, "bool": bool,
-                "list": list, "dict": dict, "tuple": tuple, "set": set,
-                "sorted": sorted, "reversed": reversed, "enumerate": enumerate,
-                "zip": zip, "range": range, "min": min, "max": max, "sum": sum,
-                "abs": abs, "round": round, "type": type, "isinstance": isinstance,
-                "repr": repr, "format": format, "hasattr": hasattr, "getattr": getattr,
-                "True": True, "False": False, "None": None,
-            }
-            try:
-                result = eval(expression, {"__builtins__": _safe_builtins}, local_ns)  # noqa: S307
-            except Exception as e:
-                raise RuntimeError(f"transform expression error: {e}")
-            ctx[output_key] = result
+            ctx[output_key] = _safe_eval(expression, ctx)
             return None
 
         elif stype == "condition":
             expression = params.get("expression", "True")
-            local_ns = {k: v for k, v in ctx.items()}
-            _safe_builtins = {
-                "len": len, "str": str, "int": int, "float": float, "bool": bool,
-                "list": list, "dict": dict, "tuple": tuple, "set": set,
-                "min": min, "max": max, "sum": sum, "abs": abs, "round": round,
-                "isinstance": isinstance, "hasattr": hasattr,
-                "True": True, "False": False, "None": None,
-            }
-            try:
-                result = bool(eval(expression, {"__builtins__": _safe_builtins}, local_ns))  # noqa: S307
-            except Exception as e:
-                raise RuntimeError(f"condition expression error: {e}")
+            result = bool(_safe_eval(expression, ctx))
             ctx["__last_condition__"] = result
             return step.get("next_true") if result else step.get("next_false")
 

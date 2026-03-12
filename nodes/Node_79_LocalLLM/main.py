@@ -638,6 +638,10 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def get_status():
+    return {"status": "ok", "node_id": NODE_ID, "name": NODE_NAME, "ollama_url": OLLAMA_URL, "timestamp": datetime.now().isoformat(), "version": "2.0.0"}
+
 @app.get("/models")
 async def list_models():
     """列出所有可用模型"""

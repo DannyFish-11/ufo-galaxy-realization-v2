@@ -739,6 +739,11 @@ async def report_metrics(report: MetricReport):
     await service.report_metrics(report)
     return {"status": "received", "node_id": report.node_id}
 
+@app.get("/status")
+async def status():
+    return {"status": "ok", "node_id": "64", "name": "Telemetry", "timestamp": __import__("datetime").datetime.now().isoformat(), "version": "2.0.0"}
+
+
 @app.get("/metrics/{node_id}/{metric_type}")
 async def get_metrics(
     node_id: str,
