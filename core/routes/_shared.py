@@ -241,6 +241,9 @@ ConnectionManager = RouteConnectionPool
 connection_manager = RouteConnectionPool()
 
 # 设备注册表（启动时从磁盘加载）
+# ⚠️  LEGACY COMPAT CACHE — 不是事实源（SSOT）。
+# 事实源已迁移到 core.unified.device_manager.UnifiedDeviceManager（UDM）。
+# 此字典仅供遗留代码只读兼容使用；所有写操作应优先通过 UDM 进行。
 registered_devices: Dict[str, Dict[str, Any]] = _load_registered_devices()
 registered_devices_lock = asyncio.Lock()
 
