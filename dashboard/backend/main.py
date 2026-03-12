@@ -1470,6 +1470,56 @@ async def dashboard_chat(request: dict):
             # 降级到 LLM
             pass
 
+    # ── Auto-Agent 创建路径 ────────────────────────────────────────────────────
+    # 使用 IntentRouter 判定意图；若为 task_execute / hybrid，
+    # 则通过 ExecutionPlanner 自动选择模板并创建 Agent 执行任务。
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        try:
+            from core.agent.intent_router import IntentRouter
+            from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+
+            _router = IntentRouter(llm_router=llm_router if LLM_ROUTER_AVAILABLE else None)
+            # rules-only 快速分类（不调用 LLM，保持低延迟）
+            _intent_result = await _router.route(message, use_llm=False)
+
+            if _intent_result.is_execution():
+                logger.info(
+                    "Auto-Agent 路径: intent=%s confidence=%.2f task_hint=%s",
+                    _intent_result.mode,
+                    _intent_result.confidence,
+                    _intent_result.task_hint,
+                )
+                planner = ExecutionPlanner(llm_router=llm_router if LLM_ROUTER_AVAILABLE else None)
+                # 将已有对话历史传入计划
+                _ctx = [m for m in (context or []) if isinstance(m, dict)]
+                _plan = ExecutionPlan(
+                    message=message,
+                    intent=_intent_result,
+                    session_id=session_id,
+                    context=_ctx,
+                )
+                exec_result = await planner.execute(_plan)
+
+                agent_steps_data = [s.model_dump() for s in exec_result.agent_steps]
+                extra: Dict[str, Any] = {"task_result": exec_result.task_result or {}}
+                if exec_result.auto_agent_id:
+                    extra["auto_agent_id"] = exec_result.auto_agent_id
+                if exec_result.auto_agent_template:
+                    extra["auto_agent_template"] = exec_result.auto_agent_template
+
+                reply = exec_result.reply or "任务已完成"
+                await _save_assistant_reply(reply)
+                return _make_response(
+                    reply,
+                    success=exec_result.success,
+                    mode=exec_result.mode or "task_execute",
+                    extra_data=extra,
+                    agent_steps=agent_steps_data,
+                    error=exec_result.error if not exec_result.success else "",
+                )
+        except Exception as _ae:
+            logger.warning("Auto-Agent 执行失败，降级到 LLM: %s", _ae)
+
     # 优先使用 MultiLLMRouter（智能路由 + 故障转移 + 断路器）
     if LLM_ROUTER_AVAILABLE and llm_router and llm_router.is_available():
         try:
