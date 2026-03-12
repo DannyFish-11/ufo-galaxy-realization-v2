@@ -326,6 +326,7 @@ async def test_dispatch_goal_execution_with_device():
 async def test_dispatch_goal_execution_auto_selects_autonomous_device():
     """goal_execution auto-selects first autonomous device when no device_id given."""
     _reset_udm()
+    _reset_cap_registry()
     from core.openclawd import OpenClawd
     from core.unified.device_manager import UnifiedDeviceManager
     from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
@@ -351,6 +352,7 @@ async def test_dispatch_goal_execution_auto_selects_autonomous_device():
 async def test_dispatch_goal_execution_falls_back_to_agent_when_no_device():
     """goal_execution falls back to _dispatch_agent when no autonomous device exists."""
     _reset_udm()
+    _reset_cap_registry()
     from core.openclawd import OpenClawd
     from core.unified.device_manager import UnifiedDeviceManager
 
@@ -400,20 +402,34 @@ async def test_dispatch_parallel_goal_distributes_to_all_devices():
 
 @pytest.mark.asyncio
 async def test_dispatch_parallel_goal_falls_back_to_goal_execution_when_no_devices():
-    """parallel_goal falls back to _dispatch_goal_execution when no parallel devices."""
+    """parallel_goal returns a structured failure message (not a silent fallback to
+    goal_execution) when no parallel-capable autonomous devices are registered.
+
+    Phase-3 spec: 'If no autonomous device found, degrade gracefully with explicit
+    message and avoid parallel path.'
+    """
     _reset_udm()
     from core.openclawd import OpenClawd
     from core.unified.device_manager import UnifiedDeviceManager
+    import core.agent.capability_registry as cap_reg_mod
 
     UnifiedDeviceManager()  # empty
 
     oc = OpenClawd()
-    with patch.object(oc, "_dispatch_goal_execution", new_callable=AsyncMock) as mock_ge:
-        mock_ge.return_value = {"success": True, "response": "fallback"}
-        result = await oc._dispatch_parallel_goal("Do something parallel")
+    with patch.object(
+        cap_reg_mod.CapabilityRegistry,
+        "get_instance",
+        return_value=MagicMock(list_tools=MagicMock(return_value=[])),
+    ):
+        with patch.object(oc, "_dispatch_goal_execution", new_callable=AsyncMock) as mock_ge:
+            result = await oc._dispatch_parallel_goal("Do something parallel")
 
-    mock_ge.assert_called_once()
-    assert result["success"] is True
+    # _dispatch_goal_execution must NOT be called — we return an explicit message instead
+    mock_ge.assert_not_called()
+    assert result["success"] is False
+    assert result.get("intent") == "parallel_goal"
+    # Response should clearly indicate the lack of autonomous devices
+    assert "parallel_execution_enabled" in result.get("response", "")
 
 
 @pytest.mark.asyncio

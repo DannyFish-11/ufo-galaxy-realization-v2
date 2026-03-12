@@ -185,32 +185,69 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
         device_info = aip_msg.payload.get("device_info", {})
         device_type_raw = (aip_msg.device_type.value if aip_msg.device_type else None) or device_info.get("device_type", "unknown")
         capabilities = device_info.get("capabilities", [])
+        metadata = device_info.get("metadata", {})
+        device_name = device_info.get("name", device_info.get("model", f"Device-{device_id[:8]}"))
 
         # 映射为路由层平台大类
         platform = map_device_type_to_platform(device_type_raw)
 
-        # 注册设备
-        success = device_router.register_device(
-            device_id=device_id,
-            device_type=platform,
-            capabilities=capabilities,
-            websocket=websocket
-        )
-
-        if success:
-            connection_manager.device_connections[device_id] = connection_id
-
-            # 同步设备能力到 CapabilityRegistry
+        # ── SSOT: write-through to UnifiedDeviceManager FIRST ──
+        udm_success = False
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+            from core.unified.models import (
+                UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus,
+            )
             try:
-                from core.routes.devices import _sync_device_to_capability_registry
-                _sync_device_to_capability_registry({
-                    "device_id": device_id,
-                    "device_type": device_type_raw,
-                    "device_name": device_info.get("name", device_info.get("model", f"Device-{device_id[:8]}")),
-                    "capabilities": capabilities,
-                })
-            except Exception as _sync_err:
-                logger.warning(f"WebSocket 设备能力同步到 CapabilityRegistry 失败: {_sync_err}")
+                utype = UnifiedDeviceType(device_type_raw.split("_")[0] if "_" in device_type_raw else device_type_raw)
+            except ValueError:
+                utype = UnifiedDeviceType.UNKNOWN
+            udm_device = UnifiedDevice(
+                device_id=device_id,
+                device_name=device_name,
+                device_type=utype,
+                status=UnifiedDeviceStatus.ONLINE,
+                capabilities=capabilities if isinstance(capabilities, list) else list(capabilities),
+                metadata=metadata,
+                source="gateway_ws",
+            )
+            get_unified_device_manager().register_device(udm_device)
+            udm_success = True
+        except Exception as udm_err:
+            # SSOT guardrail: if UDM write fails, emit structured warning and
+            # do NOT treat local state as truth.
+            logger.warning(
+                "SSOT guardrail: UDM write failed for device %s — "
+                "local gateway state will NOT be used as truth. error=%s",
+                device_id, udm_err,
+                extra={"event": "ssot_udm_write_failed", "device_id": device_id},
+            )
+
+        # 注册设备（local gateway router — secondary, only when UDM succeeded）
+        success = False
+        if udm_success:
+            success = device_router.register_device(
+                device_id=device_id,
+                device_type=platform,
+                capabilities=capabilities,
+                websocket=websocket
+            )
+
+            if success:
+                connection_manager.device_connections[device_id] = connection_id
+
+                # 同步设备能力到 CapabilityRegistry
+                try:
+                    from core.routes.devices import _sync_device_to_capability_registry
+                    _sync_device_to_capability_registry({
+                        "device_id": device_id,
+                        "device_type": device_type_raw,
+                        "device_name": device_name,
+                        "capabilities": capabilities,
+                        "metadata": metadata,
+                    })
+                except Exception as _sync_err:
+                    logger.warning(f"WebSocket 设备能力同步到 CapabilityRegistry 失败: {_sync_err}")
 
         # 发送 AIP v3 注册确认响应
         response = {
@@ -229,14 +266,15 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
 
         await websocket.send_json(response)
 
-        # 同步到 core 的 registered_devices，打通 chat→device 链路
-        if success:
+        # 兼容层: read-only fallback write to core registered_devices
+        # (only after UDM write succeeds — this is a secondary cache, not truth)
+        if success and udm_success:
             try:
                 from core.routes._shared import registered_devices as core_registered_devices
                 core_registered_devices[device_id] = {
                     "device_id": device_id,
                     "device_type": device_type_raw,
-                    "device_name": device_info.get("name", device_info.get("model", f"Device-{device_id[:8]}")),
+                    "device_name": device_name,
                     "capabilities": capabilities,
                     "os_version": device_info.get("os_version", ""),
                     "registered_at": datetime.utcnow().isoformat(),
@@ -248,7 +286,7 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
             except Exception as sync_err:
                 logger.debug(f"同步设备到 core registered_devices 失败: {sync_err}")
 
-        logger.info(f"✅ 设备注册完成: {device_id} (type={device_type_raw})")
+        logger.info(f"✅ 设备注册完成: {device_id} (type={device_type_raw}, udm={udm_success})")
 
     except Exception as e:
         logger.error(f"❌ 处理注册失败: {e}")
@@ -259,11 +297,26 @@ async def handle_heartbeat(connection_id: str, aip_msg):
     try:
         device_id = aip_msg.device_id
 
-        # 更新设备最后活跃时间
-        device = device_router.get_device(device_id)
-        if device:
-            device.last_seen = datetime.now()
-            device.status = "online"
+        # ── SSOT: write-through to UnifiedDeviceManager FIRST ──
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+            from core.unified.models import UnifiedDeviceStatus
+            udm = get_unified_device_manager()
+            udm.update_device_status(device_id, UnifiedDeviceStatus.ONLINE)
+        except Exception as udm_err:
+            logger.warning(
+                "SSOT guardrail: UDM heartbeat write failed for device %s — "
+                "local gateway status NOT updated as truth. error=%s",
+                device_id, udm_err,
+                extra={"event": "ssot_udm_heartbeat_failed", "device_id": device_id},
+            )
+            # Do not update local device state when UDM write fails
+        else:
+            # Update local device state only when UDM write succeeded
+            device = device_router.get_device(device_id)
+            if device:
+                device.last_seen = datetime.now()
+                device.status = "online"
 
         # 发送 AIP v3 心跳确认响应
         response = {

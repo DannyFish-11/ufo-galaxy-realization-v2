@@ -80,15 +80,23 @@ class DeviceManager:
         else:
             logger.info(f"New device registered: {device_id}")
 
-        self.devices[device_id] = device_info
-        self.device_status[device_id] = "online"
-        self.device_last_seen[device_id] = datetime.utcnow()
-
-        # 同步到统一设备管理器
+        # ── SSOT guardrail: write-through to UDM FIRST ──
+        # If the UDM write fails, do NOT update local state so that
+        # self.devices never diverges from the single source of truth.
         try:
             self._unified().register_device(_to_unified_device(device_info))
         except Exception as exc:
-            logger.warning(f"Failed to sync device {device_id} to UnifiedDeviceManager: {exc}")
+            logger.warning(
+                "SSOT guardrail: UDM write failed for device %s — "
+                "local DeviceManager state NOT updated. error=%s",
+                device_id, exc,
+                extra={"event": "ssot_dm_write_failed", "device_id": device_id},
+            )
+            return False
+
+        self.devices[device_id] = device_info
+        self.device_status[device_id] = "online"
+        self.device_last_seen[device_id] = datetime.utcnow()
 
         return True
 
@@ -98,32 +106,45 @@ class DeviceManager:
             logger.warning(f"Device {device_id} not found for unregistration")
             return False
 
-        del self.devices[device_id]
-        self.device_status.pop(device_id, None)
-        self.device_last_seen.pop(device_id, None)
-
-        # 同步到统一设备管理器
+        # ── SSOT guardrail: remove from UDM first ──
         try:
             self._unified().unregister_device(device_id)
         except Exception as exc:
-            logger.warning(f"Failed to unregister device {device_id} from UnifiedDeviceManager: {exc}")
+            logger.warning(
+                "SSOT guardrail: UDM unregister failed for device %s — "
+                "local state NOT removed. error=%s",
+                device_id, exc,
+                extra={"event": "ssot_dm_unregister_failed", "device_id": device_id},
+            )
+            return False
+
+        del self.devices[device_id]
+        self.device_status.pop(device_id, None)
+        self.device_last_seen.pop(device_id, None)
 
         logger.info(f"Device unregistered: {device_id}")
         return True
 
     def update_device_status(self, device_id: str, status: str):
         """更新设备状态（同步到统一设备管理器）。"""
-        if device_id in self.devices:
-            self.device_status[device_id] = status
-            self.device_last_seen[device_id] = datetime.utcnow()
-
-        # 同步到统一设备管理器
+        # ── SSOT guardrail: write-through to UDM FIRST ──
+        udm_ok = False
         try:
             from core.unified.models import UnifiedDeviceStatus
             ustat = UnifiedDeviceStatus(status.lower()) if status else UnifiedDeviceStatus.OFFLINE
             self._unified().update_device_status(device_id, ustat)
+            udm_ok = True
         except Exception as exc:
-            logger.warning(f"Failed to update device status in UnifiedDeviceManager: {exc}")
+            logger.warning(
+                "SSOT guardrail: UDM status update failed for device %s — "
+                "local status NOT updated as truth. error=%s",
+                device_id, exc,
+                extra={"event": "ssot_dm_status_failed", "device_id": device_id},
+            )
+
+        if udm_ok and device_id in self.devices:
+            self.device_status[device_id] = status
+            self.device_last_seen[device_id] = datetime.utcnow()
     
     def get_device(self, device_id: str) -> Optional[DeviceInfo]:
         """获取设备信息"""

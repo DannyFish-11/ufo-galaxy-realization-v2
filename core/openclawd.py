@@ -20,12 +20,197 @@ Galaxy-Nexus 星枢核心智能体 — OpenClawd
   4. 统一响应 — 所有方法返回标准 dict 格式
 """
 
+import asyncio as _asyncio_module
+import dataclasses
+import enum
 import logging
 import time
 import uuid
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 logger = logging.getLogger("Galaxy.OpenClawd")
+
+
+# ============================================================================
+# Parallel-group state machine
+# ============================================================================
+
+class _SubtaskStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED  = "failed"
+    TIMEOUT = "timeout"
+
+
+@dataclasses.dataclass
+class _SubtaskEntry:
+    task_id:       str
+    group_id:      str
+    subtask_index: int
+    device_id:     str
+    subtask:       str
+    status:        _SubtaskStatus = _SubtaskStatus.PENDING
+    started_at:    Optional[float] = None
+    finished_at:   Optional[float] = None
+    result:        Optional[Dict] = None
+    error:         Optional[str] = None
+    retry_count:   int = 0
+
+
+@dataclasses.dataclass
+class ParallelResult:
+    """Aggregated result for a parallel_group execution."""
+    group_id:       str
+    device_results: List[Dict]
+    summary_status: str          # "success" | "partial" | "failed"
+    succeeded:      int
+    failed:         int
+    total:          int
+
+    def to_dict(self) -> Dict:
+        return dataclasses.asdict(self)
+
+
+class ParallelGroupTracker:
+    """
+    State machine for tracking parallel subtask groups.
+
+    Lifecycle per group:
+      register_group() → mark_running() → mark_done() (or mark_timeout()) → aggregate()
+
+    Retry policy: 1 retry per subtask, exponential backoff starting at 2 s, capped at 30 s.
+    """
+
+    _MAX_RETRIES: int = 1
+    _BACKOFF_BASE: float = 2.0
+    _BACKOFF_CAP: float = 30.0
+
+    def __init__(self) -> None:
+        # group_id → {task_id → _SubtaskEntry}
+        self._groups: Dict[str, Dict[str, _SubtaskEntry]] = {}
+
+    # ------------------------------------------------------------------
+    # Registration
+    # ------------------------------------------------------------------
+
+    def register_group(
+        self,
+        group_id: str,
+        entries: List[_SubtaskEntry],
+    ) -> None:
+        self._groups[group_id] = {e.task_id: e for e in entries}
+        logger.debug(
+            "ParallelGroupTracker: registered group=%s subtasks=%d",
+            group_id, len(entries),
+        )
+
+    def mark_running(self, group_id: str, task_id: str) -> None:
+        entry = self._get_entry(group_id, task_id)
+        if entry:
+            entry.status = _SubtaskStatus.RUNNING
+            entry.started_at = time.monotonic()
+
+    def mark_done(
+        self,
+        group_id: str,
+        task_id: str,
+        result: Dict,
+        *,
+        success: bool,
+    ) -> None:
+        entry = self._get_entry(group_id, task_id)
+        if entry:
+            entry.status = _SubtaskStatus.SUCCESS if success else _SubtaskStatus.FAILED
+            entry.finished_at = time.monotonic()
+            entry.result = result
+            if not success:
+                entry.error = result.get("response") or result.get("error") or "unknown error"
+
+    def mark_timeout(self, group_id: str, task_id: str) -> None:
+        entry = self._get_entry(group_id, task_id)
+        if entry:
+            entry.status = _SubtaskStatus.TIMEOUT
+            entry.finished_at = time.monotonic()
+            entry.error = "timeout"
+
+    # ------------------------------------------------------------------
+    # Retry helpers
+    # ------------------------------------------------------------------
+
+    def needs_retry(self, group_id: str, task_id: str) -> bool:
+        entry = self._get_entry(group_id, task_id)
+        if entry is None:
+            return False
+        return (
+            entry.status in (_SubtaskStatus.FAILED, _SubtaskStatus.TIMEOUT)
+            and entry.retry_count < self._MAX_RETRIES
+        )
+
+    def backoff_delay(self, group_id: str, task_id: str) -> float:
+        entry = self._get_entry(group_id, task_id)
+        if entry is None:
+            return 0.0
+        delay = self._BACKOFF_BASE ** (entry.retry_count + 1)
+        return min(delay, self._BACKOFF_CAP)
+
+    def increment_retry(self, group_id: str, task_id: str) -> None:
+        entry = self._get_entry(group_id, task_id)
+        if entry:
+            entry.retry_count += 1
+            entry.status = _SubtaskStatus.PENDING
+            entry.started_at = None
+            entry.finished_at = None
+            entry.result = None
+            entry.error = None
+
+    # ------------------------------------------------------------------
+    # Aggregation
+    # ------------------------------------------------------------------
+
+    def aggregate(self, group_id: str) -> ParallelResult:
+        entries = list(self._groups.get(group_id, {}).values())
+        device_results: List[Dict] = []
+        for e in entries:
+            latency_ms: Optional[float] = None
+            if e.started_at is not None and e.finished_at is not None:
+                latency_ms = round((e.finished_at - e.started_at) * 1000, 1)
+            device_results.append({
+                "group_id":      group_id,
+                "subtask_index": e.subtask_index,
+                "device_id":     e.device_id,
+                "task_id":       e.task_id,
+                "status":        e.status.value,
+                "result":        e.result,
+                "error":         e.error,
+                "latency_ms":    latency_ms,
+            })
+
+        succeeded = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
+        failed = len(entries) - succeeded
+
+        if succeeded == len(entries):
+            summary = "success"
+        elif succeeded > 0:
+            summary = "partial"
+        else:
+            summary = "failed"
+
+        return ParallelResult(
+            group_id=group_id,
+            device_results=device_results,
+            summary_status=summary,
+            succeeded=succeeded,
+            failed=failed,
+            total=len(entries),
+        )
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _get_entry(self, group_id: str, task_id: str) -> Optional[_SubtaskEntry]:
+        return self._groups.get(group_id, {}).get(task_id)
 
 
 class OpenClawd:
@@ -513,6 +698,65 @@ class OpenClawd:
             "metadata": {"status_detail": status},
         }
 
+    @staticmethod
+    def _pick_autonomous_device_id(
+        device_id: Optional[str],
+        capability_key: str = "goal_execution_enabled",
+    ) -> Optional[str]:
+        """
+        Select the best device for autonomous execution.
+
+        Priority order:
+          1. Explicit ``device_id`` if provided (caller takes responsibility for
+             the device being capable).
+          2. CapabilityRegistry autonomous__* entries matching ``capability_key``
+             (Phase-3 SSOT, preferred over raw UDM when no explicit device is given).
+          3. UnifiedDeviceManager.get_autonomous_devices() (UDM-based fallback).
+
+        Returns None when no suitable device can be identified so the caller
+        can degrade gracefully.
+        """
+        # 1. Caller-supplied device_id takes highest priority
+        if device_id:
+            logger.debug(
+                "_pick_autonomous_device_id: using caller-supplied device_id=%s", device_id,
+            )
+            return device_id
+
+        # 2. Try CapabilityRegistry (autonomous__* prefix = Phase-3 SSOT)
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            reg = CapabilityRegistry.get_instance()
+            items = [
+                item for item in reg.list_tools(source="autonomous")
+                if item.available
+                and capability_key in item.name
+            ]
+            if items:
+                selected_id = items[0].metadata.get("device_id") or items[0].source_id
+                logger.info(
+                    "_pick_autonomous_device_id: CapabilityRegistry selected device=%s (cap=%s)",
+                    selected_id, capability_key,
+                )
+                return selected_id
+        except Exception as exc:
+            logger.debug("_pick_autonomous_device_id: CapabilityRegistry lookup failed: %s", exc)
+
+        # 3. Fallback to UDM
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+            auto_devices = get_unified_device_manager().get_autonomous_devices()
+            if auto_devices:
+                selected_id = auto_devices[0].device_id
+                logger.info(
+                    "_pick_autonomous_device_id: UDM selected device=%s", selected_id,
+                )
+                return selected_id
+        except Exception as exc:
+            logger.debug("_pick_autonomous_device_id: UDM lookup failed: %s", exc)
+
+        return None
+
     async def _dispatch_goal_execution(
         self,
         message: str,
@@ -523,10 +767,10 @@ class OpenClawd:
         """Priority D: 高层自治目标执行分派。
 
         流程：
-          1. 若指定了 device_id 且该设备声明 goal_execution_enabled，
-             通过 send_gateway_command 以 task_type=goal_execution 下发整体目标。
-          2. 否则查询 UnifiedDeviceManager 的自治设备列表，选择第一个可用设备。
-          3. 若无自治设备，降级到普通 _dispatch_agent。
+          1. 优先从 CapabilityRegistry autonomous__* 条目选择支持
+             goal_execution_enabled 的设备（Phase-3 SSOT）。
+          2. 若 CapabilityRegistry 无结果，回退到 UnifiedDeviceManager 自治设备列表。
+          3. 若仍无可用自治设备，降级到普通 _dispatch_agent 并记录明确消息。
         """
         goal = message
         params = {}
@@ -534,23 +778,16 @@ class OpenClawd:
             goal = getattr(intent, "goal", None) or getattr(intent, "command", None) or message
             params = getattr(intent, "params", {}) or {}
 
-        # 确定目标设备
-        target_device_id = device_id
-        if not target_device_id:
-            try:
-                from core.unified.device_manager import get_unified_device_manager
-                auto_devices = get_unified_device_manager().get_autonomous_devices()
-                if auto_devices:
-                    target_device_id = auto_devices[0].device_id
-                    logger.info(
-                        "goal_execution: 自动选择自治设备 device_id=%s",
-                        target_device_id,
-                    )
-            except Exception as exc:
-                logger.debug("goal_execution: 自治设备查询失败: %s", exc)
+        # 确定目标设备（自治能力感知）
+        target_device_id = self._pick_autonomous_device_id(
+            device_id, capability_key="goal_execution_enabled"
+        )
 
         if not target_device_id:
-            logger.info("goal_execution: 无可用自治设备，降级为 agent 执行")
+            logger.info(
+                "goal_execution: 无可用自治设备（CapabilityRegistry autonomous__* 和 UDM 均未返回结果），"
+                "降级为 agent 执行"
+            )
             return await self._dispatch_agent(message, intent, device_id, session_id)
 
         result = await self.send_gateway_command(
@@ -583,108 +820,170 @@ class OpenClawd:
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
     ) -> dict:
-        """Priority E: 多设备并行任务拆分与下发。
+        """Priority E: 多设备并行任务拆分与下发（Phase-3 状态机 + 重试）。
 
         流程：
-          1. 从 UnifiedDeviceManager 查询所有支持 parallel_execution_enabled 的在线设备。
-          2. 将自然语言目标按设备数量拆分为若干并行子任务（当前实现：每台设备执行相同目标，
-             后续可集成 LLM 进行语义拆分）。
-          3. 使用 asyncio.gather 并行向所有设备下发子任务。
-          4. 收集各设备结果，汇总后返回。
+          1. 优先从 CapabilityRegistry 选择声明 autonomous__* / parallel_execution_enabled
+             能力的设备；回退到 UDM get_autonomous_devices()。
+          2. 若无可用设备，降级并返回明确降级消息（不走 goal_execution）。
+          3. 使用 ParallelGroupTracker 追踪每个子任务状态。
+          4. 对失败子任务执行最多 1 次指数退避重试（上限 30 s）。
+          5. 所有子任务完成后聚合 ParallelResult 并返回统一结构。
         """
-        import asyncio as _asyncio
-
         goal = message
         params = {}
         if intent:
             goal = getattr(intent, "goal", None) or getattr(intent, "command", None) or message
             params = getattr(intent, "params", {}) or {}
 
-        # 查找支持并行执行的设备
+        # 查找支持并行执行的设备（autonomous__* 优先）
         parallel_devices = []
         try:
-            from core.unified.device_manager import get_unified_device_manager
-            udm = get_unified_device_manager()
-            parallel_devices = udm.get_devices_with_capability("parallel_execution_enabled")
-            if not parallel_devices:
-                # 回退到所有自治设备
-                parallel_devices = udm.get_autonomous_devices()
+            from core.agent.capability_registry import CapabilityRegistry
+            reg = CapabilityRegistry.get_instance()
+            # devices with parallel_execution_enabled in autonomous__* items
+            auto_items = [
+                item for item in reg.list_tools(source="autonomous")
+                if item.available and "parallel_execution_enabled" in item.name
+            ]
+            seen_ids: set = set()
+            for item in auto_items:
+                did = item.metadata.get("device_id") or item.source_id
+                if did and did not in seen_ids:
+                    seen_ids.add(did)
+                    parallel_devices.append(did)
         except Exception as exc:
-            logger.debug("parallel_goal: 设备查询失败: %s", exc)
+            logger.debug("parallel_goal: CapabilityRegistry 查询失败: %s", exc)
+
+        # Fallback: UDM
+        if not parallel_devices:
+            try:
+                from core.unified.device_manager import get_unified_device_manager
+                udm = get_unified_device_manager()
+                devs = udm.get_devices_with_capability("parallel_execution_enabled")
+                if not devs:
+                    devs = udm.get_autonomous_devices()
+                parallel_devices = [d.device_id for d in devs]
+            except Exception as exc:
+                logger.debug("parallel_goal: UDM 设备查询失败: %s", exc)
 
         if not parallel_devices:
-            logger.info("parallel_goal: 无支持并行的设备，降级为单设备 goal_execution")
-            return await self._dispatch_goal_execution(message, intent, device_id, session_id)
+            logger.info(
+                "parallel_goal: 无支持并行执行的自治设备（autonomous__* 和 UDM 均无结果），"
+                "降级：无法执行并行任务"
+            )
+            return {
+                "success": False,
+                "response": (
+                    "当前无支持并行执行的自治设备。"
+                    "请确保至少一台设备注册了 parallel_execution_enabled 能力后重试。"
+                ),
+                "intent": "parallel_goal",
+                "metadata": {"parallel_group": None, "device_count": 0},
+            }
 
         subtasks = params.get("subtasks") or [goal] * len(parallel_devices)
         task_id_base = uuid.uuid4().hex[:8]
 
-        async def _dispatch_subtask(idx: int, dev, subtask: str) -> dict:
+        # ── 初始化状态追踪 ──
+        tracker = ParallelGroupTracker()
+        entries: List[_SubtaskEntry] = []
+        for idx, dev_id in enumerate(parallel_devices):
             sub_task_id = f"{task_id_base}_sub{idx}"
-            try:
-                r = await self.send_gateway_command(
-                    device_id=dev.device_id,
-                    command="goal_execution",
-                    payload={
-                        "task_type": "parallel_subtask",
-                        "goal": subtask,
-                        "parallel_group": task_id_base,
-                        "subtask_index": idx,
-                    },
-                    task_id=sub_task_id,
-                    session_id=session_id,
-                )
-                return {"device_id": dev.device_id, "subtask": subtask, **r}
-            except Exception as exc:
-                logger.warning(
-                    "parallel_goal: subtask %d on device %s failed: %s",
-                    idx, dev.device_id, exc,
-                )
-                return {
-                    "device_id": dev.device_id,
-                    "subtask": subtask,
-                    "success": False,
-                    "response": str(exc),
-                }
+            entries.append(_SubtaskEntry(
+                task_id=sub_task_id,
+                group_id=task_id_base,
+                subtask_index=idx,
+                device_id=dev_id,
+                subtask=subtasks[idx % len(subtasks)],
+            ))
+        tracker.register_group(task_id_base, entries)
 
-        coros = [
-            _dispatch_subtask(i, dev, subtasks[i % len(subtasks)])
-            for i, dev in enumerate(parallel_devices)
-        ]
-        # return_exceptions=True: allow all subtasks to complete even if some fail;
-        # _dispatch_subtask already converts exceptions to failure dicts, but this
-        # provides an additional safety net for unexpected raises.
-        raw_results = await _asyncio.gather(*coros, return_exceptions=True)
-        sub_results = [
-            r if isinstance(r, dict) else {
-                "success": False,
-                "response": str(r),
-                "device_id": parallel_devices[i].device_id if i < len(parallel_devices) else "",
-            }
-            for i, r in enumerate(raw_results)
-        ]
+        async def _execute_entry(entry: _SubtaskEntry) -> None:
+            """Execute one subtask with retry/backoff, updating tracker in-place."""
+            while True:
+                tracker.mark_running(entry.group_id, entry.task_id)
+                try:
+                    r = await self.send_gateway_command(
+                        device_id=entry.device_id,
+                        command="goal_execution",
+                        payload={
+                            "task_type": "parallel_subtask",
+                            "goal": entry.subtask,
+                            "parallel_group": entry.group_id,
+                            "subtask_index": entry.subtask_index,
+                        },
+                        task_id=entry.task_id,
+                        session_id=session_id,
+                    )
+                    # Propagate command_id / task_id into result
+                    r.setdefault("command_id", "")
+                    r.setdefault("task_id", entry.task_id)
+                    success = bool(r.get("success"))
+                    tracker.mark_done(entry.group_id, entry.task_id, r, success=success)
+                    if not success and tracker.needs_retry(entry.group_id, entry.task_id):
+                        delay = tracker.backoff_delay(entry.group_id, entry.task_id)
+                        logger.warning(
+                            "parallel_goal: subtask %d on device %s failed, "
+                            "retry in %.1fs (attempt %d/%d)",
+                            entry.subtask_index, entry.device_id,
+                            delay, entry.retry_count + 1, ParallelGroupTracker._MAX_RETRIES,
+                        )
+                        tracker.increment_retry(entry.group_id, entry.task_id)
+                        await _asyncio_module.sleep(delay)
+                        continue
+                    return
+                except Exception as exc:
+                    err_result = {
+                        "success": False,
+                        "response": str(exc),
+                        "task_id": entry.task_id,
+                        "device_id": entry.device_id,
+                    }
+                    tracker.mark_done(entry.group_id, entry.task_id, err_result, success=False)
+                    if tracker.needs_retry(entry.group_id, entry.task_id):
+                        delay = tracker.backoff_delay(entry.group_id, entry.task_id)
+                        logger.warning(
+                            "parallel_goal: subtask %d on device %s raised %s, "
+                            "retry in %.1fs",
+                            entry.subtask_index, entry.device_id, exc, delay,
+                        )
+                        tracker.increment_retry(entry.group_id, entry.task_id)
+                        await _asyncio_module.sleep(delay)
+                        continue
+                    logger.warning(
+                        "parallel_goal: subtask %d on device %s permanently failed: %s",
+                        entry.subtask_index, entry.device_id, exc,
+                    )
+                    return
 
-        succeeded = sum(1 for r in sub_results if r.get("success"))
-        failed = len(sub_results) - succeeded
-        summary = (
+        await _asyncio_module.gather(
+            *[_execute_entry(e) for e in entries],
+            return_exceptions=True,
+        )
+
+        parallel_result = tracker.aggregate(task_id_base)
+        summary_text = (
             f"并行任务 '{goal}' 已分发至 {len(parallel_devices)} 台设备："
-            f"{succeeded} 成功，{failed} 失败。"
+            f"{parallel_result.succeeded} 成功，{parallel_result.failed} 失败。"
         )
         logger.info(
-            "parallel_goal done | group=%s devices=%d succeeded=%d failed=%d",
+            "parallel_goal done | group=%s devices=%d succeeded=%d failed=%d status=%s",
             task_id_base,
             len(parallel_devices),
-            succeeded,
-            failed,
+            parallel_result.succeeded,
+            parallel_result.failed,
+            parallel_result.summary_status,
         )
         return {
-            "success": succeeded > 0,
-            "response": summary,
+            "success": parallel_result.succeeded > 0,
+            "response": summary_text,
             "intent": "parallel_goal",
             "metadata": {
                 "parallel_group": task_id_base,
-                "subtask_results": list(sub_results),
+                "subtask_results": parallel_result.device_results,
                 "device_count": len(parallel_devices),
+                "parallel_result": parallel_result.to_dict(),
             },
         }
 
