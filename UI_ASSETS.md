@@ -1,0 +1,98 @@
+# UI 资产来源与入口路径说明
+
+> 本文档说明 Galaxy 系统中各前端 UI 的风格来源、设计理念及入口路径，
+> 以便开发者快速定位正确的 UI 入口，避免命名/路径混乱。
+
+---
+
+## 1. Web Dashboard UI（浏览器访问，8085 端口）
+
+| 属性 | 详情 |
+| ---- | ---- | | `dashboard/frontend/public/index.html` |
+| **类型** | 纯 HTML/CSS/JS（Vue 3 + TailwindCSS） |
+| **后端** | `dashboard/backend/main.py`（FastAPI，默认端口 **8085**） |
+| **启动方式** | `python unified_launcher.py` 或 `python start_galaxy.py` |
+| **UI 风格** | **Galaxy 深空科幻控制台（Sci-fi Console）** — 自主设计 |
+| **主要设计元素** | 纯黑背景 + 径向星空渐变、灵动岛（Dynamic Island）交互组件、霓虹蓝紫描边、磨砂玻璃卡片、流畅过渡动画 |
+| **字体** | Inter（正文）+ Orbitron（标题/数字，科技感） |
+| **配色** | 黑 `#000000` 背景 + 蓝 `#0a84ff` / 紫 `#7c5cfc` 渐变主色 |
+| **TypeScript 类型层** | `dashboard/frontend/ts/` |
+
+**访问地址：**
+
+```
+http://localhost:8085
+```
+
+---
+
+## 2. Windows 客户端 UI（桌面原生，PyQt5）
+
+| 属性 | 详情 |
+| ---- | ---- |
+| **主入口文件** | `windows_client/main.py` |
+| **UI 核心实现** | `windows_client/ui/galaxy_client_ui.py` |
+| **侧边栏变体** | `windows_client/ui/sidebar_ui.py`（F12 呼出侧栏模式） |
+| **兼容旧入口** | `enhancements/clients/windows_client/run_ui.py`（已废弃，自动重定向到 `windows_client/main.py`） |
+| **启动方式** | `python windows_client/main.py` 或 `windows_client/START_CLIENT.bat` |
+| **UI 风格** | **OPPO 光场（Light Field）设计风格** |
+| **设计灵感** | OPPO ColorOS 光场美学（ColorOS 14+） |
+| **主要设计元素** | 流光渐变背景 + 径向光晕、磨砂半透明面板、圆角 + 柔阴影、流体动画、F12 快速唤出侧边栏 |
+| **配色方案** | 纯黑/白/灰梯度（`COLORS["bg_dark"]="#000000"`），光场效果色（蓝 `#4FC3F7`、紫 `#B39DDB` 等） |
+| **框架** | PyQt5 |
+
+**启动命令：**
+
+```bash
+# Windows 命令行
+python windows_client/main.py
+
+# 或双击批处理文件
+windows_client/START_CLIENT.bat
+```
+
+---
+
+## 3. 入口路径总结与修复说明
+
+| 入口 | 状态 | 正确目标 |
+| ---- | ---- | -------- |
+| `python unified_launcher.py` | ✅ **推荐** | Web Dashboard（8085） |
+| `python start_galaxy.py` | ✅ 兼容 | 委托到 `unified_launcher.py` |
+| `python windows_client/main.py` | ✅ **推荐** | 桌面原生 UI（OPPO 光场） |
+| `python enhancements/clients/windows_client/run_ui.py` | ⚠️ **已废弃** | 自动重定向到 `windows_client/main.py` |
+| `python start_galaxy.py --desktop` | ✅ | 启动桌面原生客户端 |
+
+> **注意**：旧路径 `enhancements/clients/windows_client/run_ui.py` 
+> 仅作兼容跳转，不应直接依赖。新代码请使用 `windows_client/main.py`。
+
+---
+
+## 4. 风格来源声明
+
+- **Web Dashboard UI**：由项目团队自主设计，灵感来源于科幻控制台美学（Sci-fi HUD），未引用任何第三方 UI 框架商业授权内容。TailwindCSS 和 Vue 3 均为开源 MIT 许可。
+
+- **Windows 客户端 UI（OPPO 光场）**：设计灵感来源于 OPPO ColorOS 光场美学（公开设计语言），代码为项目团队基于 PyQt5 自主实现，未使用 OPPO 官方代码或专有资源。字体、图标均来自系统自带或开源资源。
+
+---
+
+## 5. 如何运行安全扫描
+
+详见 `.github/workflows/codeql.yml`，CodeQL 分析会在每次推送 `main` 分支、
+PR 以及每周一自动触发。也可在 GitHub Actions 页面手动触发（`workflow_dispatch`）。
+
+本地静态检查：
+
+```bash
+# 安装开发依赖
+pip install -r requirements-dev.txt
+
+# Flake8 静态检查
+flake8 core/ --max-line-length=120
+
+# 格式化检查
+black --check core/ tests/
+
+# 导入顺序检查
+isort --check-only core/ tests/
+```

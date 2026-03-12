@@ -312,6 +312,29 @@ Node_113_AndroidVLM                ← VLM 分析节点（本仓库）
 
 协议详细说明见 [docs/ANDROID_PROTOCOL_ALIGNMENT.md](docs/ANDROID_PROTOCOL_ALIGNMENT.md)。
 
+## 安全扫描 / Security Scanning
+
+项目已集成 **GitHub CodeQL** 静态安全分析（见 `.github/workflows/codeql.yml`），
+在每次推送 `main` 分支及 PR 时自动运行 Python 代码安全扫描。
+
+**本地运行静态检查：**
+
+```bash
+# 安装开发依赖
+pip install -r requirements-dev.txt
+
+# Flake8 代码风格与错误检查
+flake8 core/ --max-line-length=120
+
+# Black 格式化检查
+black --check core/ tests/
+
+# isort 导入顺序检查
+isort --check-only core/ tests/
+```
+
+详细 UI 资产来源与入口路径说明见 [UI_ASSETS.md](UI_ASSETS.md)。
+
 ## 许可证
 
 MIT License

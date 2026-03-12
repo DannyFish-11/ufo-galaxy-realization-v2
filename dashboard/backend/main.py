@@ -240,6 +240,38 @@ async def get_ascii_art(style: str = "minimal"):
     """获取 ASCII 艺术字"""
     return {"ascii": GALAXY_ASCII_MINIMAL}
 
+
+# ============================================================================
+# 健康检查端点 (标准 /health 与 /api/v1/health)
+# ============================================================================
+
+@app.get("/health")
+@app.get("/api/v1/health")
+async def health_check():
+    """标准健康检查端点，供负载均衡、Kubernetes 存活探针等使用。
+
+    返回:
+        status: "ok" 表示服务正常运行
+        version: 当前 API 版本
+        timestamp: UTC ISO-8601 时间戳
+        components: 关键子组件的可用状态
+    """
+    components = {
+        "galaxy_core": GALAXY_CORE_AVAILABLE,
+        "llm_router":  LLM_ROUTER_AVAILABLE,
+        "agent_factory": AGENT_FACTORY_AVAILABLE,
+        "node_protocol": NODE_PROTOCOL_AVAILABLE,
+        "device_protocol": DEVICE_PROTOCOL_AVAILABLE,
+    }
+    logger.debug("Health check: %s", components)
+    return {
+        "status": "ok",
+        "version": "2.3.23",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "components": components,
+    }
+
+
 @app.get("/api/v1/system/info")
 async def get_system_info():
     """获取系统信息"""
@@ -1096,24 +1128,51 @@ async def set_node_api_key(request: dict):
 
 @app.get("/api/v1/llm/providers")
 async def list_llm_providers():
-    """列出可用的 LLM 提供商"""
+    """列出可用的 LLM 提供商。
+
+    Key lookup priority:
+    1. UnifiedConfigManager (merges .env + config.json + unified_ports.yaml)
+    2. os.environ (covers keys already exported to the environment)
+    """
+    # Initialise UnifiedConfigManager once for this request
+    _unified_mgr = None
+    try:
+        from core.unified_config import UnifiedConfigManager
+        _unified_mgr = UnifiedConfigManager()
+    except Exception as _exc:
+        logger.debug("UnifiedConfigManager 不可用，降级为 os.environ: %s", _exc)
+
+    def _resolve_key(unified_key: str, env_key: str) -> str:
+        if _unified_mgr is not None:
+            val = _unified_mgr.get(unified_key) or _unified_mgr.get(unified_key.upper())
+            if val:
+                return str(val)
+        return os.environ.get(env_key, "")
+
     providers = []
     llm_env_map = [
-        ("openai", "OPENAI_API_KEY", "gpt-4o", 8, 9),
-        ("anthropic", "ANTHROPIC_API_KEY", "claude-3-5-sonnet-20241022", 7, 10),
-        ("deepseek", "DEEPSEEK_API_KEY", "deepseek-chat", 9, 8),
-        ("zhipu", "ZHIPU_API_KEY", "glm-4", 8, 8),
-        ("groq", "GROQ_API_KEY", "llama-3.3-70b-versatile", 10, 8),
-        ("gemini", "GEMINI_API_KEY", "gemini-1.5-pro", 8, 9),
+        ("openai",     "openai_api_key",     "OPENAI_API_KEY",     "gpt-4o",                      8, 9),
+        ("anthropic",  "anthropic_api_key",   "ANTHROPIC_API_KEY",  "claude-3-5-sonnet-20241022",   7, 10),
+        ("deepseek",   "deepseek_api_key",    "DEEPSEEK_API_KEY",   "deepseek-chat",               9, 8),
+        ("zhipu",      "zhipu_api_key",       "ZHIPU_API_KEY",      "glm-4",                       8, 8),
+        ("groq",       "groq_api_key",        "GROQ_API_KEY",       "llama-3.3-70b-versatile",     10, 8),
+        ("gemini",     "gemini_api_key",      "GEMINI_API_KEY",     "gemini-1.5-pro",              8, 9),
+        ("openrouter", "openrouter_api_key",  "OPENROUTER_API_KEY", "openrouter/auto",             7, 8),
+        ("xai",        "xai_api_key",         "XAI_API_KEY",        "grok-beta",                   8, 8),
     ]
-    for provider, env_key, model, speed, quality in llm_env_map:
+    for provider, unified_key, env_key, model, speed, quality in llm_env_map:
+        api_key = _resolve_key(unified_key, env_key)
         providers.append({
             "provider": provider,
             "model": model,
             "speed_score": speed,
             "quality_score": quality,
-            "available": bool(os.environ.get(env_key, "")),
+            "available": bool(api_key),
         })
+    logger.debug(
+        "LLM providers status: %s",
+        {p["provider"]: p["available"] for p in providers},
+    )
     return {"providers": providers}
 
 # ============================================================================
