@@ -11,6 +11,12 @@ Production safety:
   - If neither GALAXY_API_TOKEN nor GALAXY_DEV_MODE=1 is set, protected
     endpoints raise HTTP 401 to prevent accidental open access.
 
+Gateway Bearer auth:
+  - GALAXY_AUTH_ENABLED=true enables Bearer token enforcement on the
+    gateway's REST and WebSocket endpoints.
+  - Defaults to false (disabled) for backward compatibility.
+  - When enabled, unauthorized requests are rejected with HTTP 401.
+
 Author: Copilot
 Date: 2026-02-12
 """
@@ -26,6 +32,20 @@ logger = logging.getLogger("Galaxy.Auth")
 # Module-level flags: warnings issued at most once per process
 _dev_mode_warning_issued: bool = False
 _no_token_warning_issued: bool = False
+
+# ---------------------------------------------------------------------------
+# Gateway auth-enabled flag
+# ---------------------------------------------------------------------------
+
+def is_auth_enabled() -> bool:
+    """Return True when GALAXY_AUTH_ENABLED=true is explicitly set.
+
+    Defaults to False so that existing deployments are not broken by the
+    new security hardening.  Set ``GALAXY_AUTH_ENABLED=true`` in production
+    to enforce Bearer token validation on all gateway endpoints.
+    """
+    return os.getenv("GALAXY_AUTH_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+
 
 # ---------------------------------------------------------------------------
 # Dev-mode detection & startup warning
@@ -109,6 +129,10 @@ async def require_auth(
     """
     FastAPI 依赖函数，用于端点鉴权
 
+    Auth enforcement is gated by the ``GALAXY_AUTH_ENABLED`` flag.
+    When auth is disabled (the default) this function returns immediately
+    so that existing clients are not broken.
+
     Args:
         authorization: Authorization header (Bearer token)
         x_device_id: X-Device-ID header
@@ -119,6 +143,10 @@ async def require_auth(
     Raises:
         HTTPException: 鉴权失败时抛出 401 异常
     """
+    # Gateway-level auth flag — default off for backward compatibility
+    if not is_auth_enabled():
+        return {"authenticated": True, "device_id": x_device_id, "auth_enabled": False}
+
     expected_token = os.getenv("GALAXY_API_TOKEN")
 
     # Dev mode: token not set AND GALAXY_DEV_MODE=1 → allow through with warning

@@ -15,6 +15,9 @@ from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 from .protocol import (
@@ -46,6 +49,76 @@ websocket_manager: Optional[WebSocketManager] = None
 task_orchestrator: Optional[TaskOrchestrator] = None
 openclawd_instance: Optional[Any] = None  # Phase 3: OpenClawd 统一智能入口
 llm_router_instance: Optional[Any] = None  # Phase 6: LLM 路由器（用于统计）
+
+
+# ============================================================================
+# Bearer Auth Middleware
+# ============================================================================
+
+# Paths that are always public regardless of auth setting
+_AUTH_EXEMPT_PATHS = {"/health", "/api/v1/health"}
+
+
+class BearerAuthMiddleware(BaseHTTPMiddleware):
+    """
+    Optional Bearer token middleware for the Galaxy Gateway.
+
+    Enabled when ``GALAXY_AUTH_ENABLED=true`` and ``GALAXY_API_TOKEN`` is set.
+    All HTTP requests (REST and the WebSocket upgrade handshake) that carry a
+    path not in the exempt list must include::
+
+        Authorization: Bearer <token>
+
+    Alternatively WebSocket clients may pass the token as a query parameter::
+
+        /ws/device/my_device?token=<token>
+
+    Rejected requests receive HTTP 401 with a JSON error payload.
+    The middleware is transparent (no-op) when auth is disabled so that
+    existing clients continue to work without modification.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        from core.auth import is_auth_enabled
+        import hmac
+
+        if not is_auth_enabled():
+            return await call_next(request)
+
+        # Health probes are always public
+        if request.url.path in _AUTH_EXEMPT_PATHS:
+            return await call_next(request)
+
+        expected_token = os.getenv("GALAXY_API_TOKEN", "").strip()
+        if not expected_token:
+            # Auth enabled but no token configured — fail safe
+            logger.error(
+                "GALAXY_AUTH_ENABLED=true but GALAXY_API_TOKEN is not set; "
+                "rejecting request to %s", request.url.path
+            )
+            return JSONResponse(
+                status_code=401,
+                content={"error": "unauthorized", "detail": "Server auth token not configured"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Accept token from Authorization header or ?token= query param (for WS)
+        token: Optional[str] = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if not token:
+            token = request.query_params.get("token", "").strip() or None
+
+        if not token or not hmac.compare_digest(token, expected_token):
+            logger.debug("Unauthorized request to %s (invalid or missing token)", request.url.path)
+            return JSONResponse(
+                status_code=401,
+                content={"error": "unauthorized", "detail": "Invalid or missing Bearer token"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return await call_next(request)
 
 
 @asynccontextmanager
@@ -106,7 +179,29 @@ async def lifespan(app: FastAPI):
         logger.warning(f"MultiLLMRouter 不可用: {e}")
 
     logger.info("Galaxy Gateway initialized successfully")
-    
+
+    # ── Log security posture at startup ──
+    from core.auth import is_auth_enabled
+    if is_auth_enabled():
+        if os.getenv("GALAXY_API_TOKEN", "").strip():
+            logger.info("🔒 Bearer token auth: ENABLED (GALAXY_AUTH_ENABLED=true)")
+        else:
+            logger.warning(
+                "⚠️  Bearer token auth: ENABLED but GALAXY_API_TOKEN is not set — "
+                "all requests will be rejected until a token is configured."
+            )
+    else:
+        logger.info(
+            "🔓 Bearer token auth: DISABLED (set GALAXY_AUTH_ENABLED=true to enable)"
+        )
+
+    _tls_cert = os.getenv("GALAXY_TLS_CERT", "").strip()
+    _tls_key = os.getenv("GALAXY_TLS_KEY", "").strip()
+    if _tls_cert and _tls_key:
+        logger.info("🔐 TLS: ENABLED (cert=%s)", _tls_cert)
+    else:
+        logger.info("🔓 TLS: DISABLED (set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable)")
+
     yield
     
     # 关闭时清理
@@ -132,6 +227,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Bearer token auth middleware (no-op unless GALAXY_AUTH_ENABLED=true)
+app.add_middleware(BearerAuthMiddleware)
 
 
 # ============================================================================
@@ -733,7 +831,7 @@ async def enhanced_health_check():
 def main():
     """主入口函数"""
     import uvicorn
-    
+
     try:
         from core.port_config import get_service_port
         _default_gw_port = str(get_service_port("gateway"))
@@ -741,9 +839,24 @@ def main():
         _default_gw_port = "8000"
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", _default_gw_port))
-    
-    logger.info(f"Starting Galaxy Gateway on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+
+    # TLS configuration — both cert and key must be provided to enable HTTPS
+    tls_cert = os.getenv("GALAXY_TLS_CERT", "").strip()
+    tls_key = os.getenv("GALAXY_TLS_KEY", "").strip()
+
+    if tls_cert and tls_key:
+        logger.info(
+            "Starting Galaxy Gateway on %s:%s (TLS ENABLED, cert=%s)",
+            host, port, tls_cert,
+        )
+        uvicorn.run(app, host=host, port=port, ssl_certfile=tls_cert, ssl_keyfile=tls_key)
+    else:
+        logger.info(
+            "Starting Galaxy Gateway on %s:%s (TLS DISABLED — "
+            "set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable HTTPS)",
+            host, port,
+        )
+        uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

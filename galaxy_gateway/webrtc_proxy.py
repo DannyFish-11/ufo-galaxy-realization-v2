@@ -14,14 +14,21 @@ Public helpers
 
 Environment variables
 ---------------------
-NODE_95_URL   HTTP base URL of Node_95_WebRTC_Receiver (default: http://localhost:8095)
-GATEWAY_URL   HTTP base URL of this gateway service      (default: http://localhost:8000)
+NODE_95_URL              HTTP base URL of Node_95_WebRTC_Receiver (default: http://localhost:8095)
+GATEWAY_URL              HTTP base URL of this gateway service      (default: http://localhost:8000)
+GALAXY_STUN_URLS         Comma-separated STUN server URLs (e.g. stun:stun.l.google.com:19302)
+GALAXY_TURN_URLS         Comma-separated TURN server URLs (e.g. turn:turn.example.com:3478)
+GALAXY_TURN_USERNAME     TURN server credential username
+GALAXY_TURN_CREDENTIAL   TURN server credential password
+GALAXY_TAILSCALE_ENABLED true/1/yes to signal that Tailscale networking is active
+GALAXY_TAILSCALE_HOST    Tailscale tailnet hostname or MagicDNS name for this gateway node
+GALAXY_TAILSCALE_TAG     Optional Tailscale ACL tag for this node
 """
 
 import asyncio
 import logging
 import os
-from typing import Dict, Any
+from typing import Any, Dict, List, Optional
 
 import httpx
 import websockets
@@ -50,6 +57,65 @@ def _http_to_ws(url: str) -> str:
     return url.replace("https://", "wss://").replace("http://", "ws://")
 
 
+def _get_ice_servers() -> List[Dict[str, Any]]:
+    """
+    Build an ICE server list from environment variables.
+
+    Returns a list in the format expected by RTCPeerConnection.iceServers:
+    [{"urls": [...], "username": "...", "credential": "..."}, ...]
+
+    When no STUN/TURN env vars are set an empty list is returned so that
+    callers can detect the absence of configuration and fall back to browser
+    defaults.
+    """
+    servers: List[Dict[str, Any]] = []
+
+    raw_stun = os.getenv("GALAXY_STUN_URLS", "").strip()
+    if raw_stun:
+        stun_urls = [u.strip() for u in raw_stun.split(",") if u.strip()]
+        if stun_urls:
+            servers.append({"urls": stun_urls})
+
+    raw_turn = os.getenv("GALAXY_TURN_URLS", "").strip()
+    if raw_turn:
+        turn_urls = [u.strip() for u in raw_turn.split(",") if u.strip()]
+        if turn_urls:
+            entry: Dict[str, Any] = {"urls": turn_urls}
+            username = os.getenv("GALAXY_TURN_USERNAME", "").strip()
+            credential = os.getenv("GALAXY_TURN_CREDENTIAL", "").strip()
+            if username:
+                entry["username"] = username
+            if credential:
+                entry["credential"] = credential
+            servers.append(entry)
+
+    return servers
+
+
+def _get_tailscale_info() -> Optional[Dict[str, Any]]:
+    """
+    Return Tailscale metadata when Tailscale is configured.
+
+    Returns None when Tailscale is not enabled, or a dict with available
+    metadata fields when it is.
+    """
+    enabled = os.getenv("GALAXY_TAILSCALE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+    if not enabled:
+        return None
+
+    info: Dict[str, Any] = {"enabled": True}
+
+    host = os.getenv("GALAXY_TAILSCALE_HOST", "").strip()
+    if host:
+        info["host"] = host
+
+    tag = os.getenv("GALAXY_TAILSCALE_TAG", "").strip()
+    if tag:
+        info["tag"] = tag
+
+    return info
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -76,15 +142,29 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
     Callers may choose to connect to Node_95 directly (``node95_url`` +
     ``ws_signaling_path``) or to route through the gateway
     (``gateway_ws_path``).
+
+    When STUN/TURN servers or Tailscale are configured their metadata is
+    included under ``ice_servers`` and ``tailscale`` keys respectively so
+    that clients can immediately apply the correct ICE configuration.
     """
     node95_url = _get_node95_url()
     gateway_url = _get_gateway_url()
-    return {
+    info: Dict[str, Any] = {
         "node95_url": node95_url,
         "ws_signaling_path": "/signaling/{device_id}",
         "gateway_ws_url": gateway_url,
         "gateway_ws_path": "/ws/webrtc/{device_id}",
     }
+
+    ice_servers = _get_ice_servers()
+    if ice_servers:
+        info["ice_servers"] = ice_servers
+
+    tailscale = _get_tailscale_info()
+    if tailscale is not None:
+        info["tailscale"] = tailscale
+
+    return info
 
 
 async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
