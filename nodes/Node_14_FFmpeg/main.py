@@ -166,6 +166,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "14",
+        "name": "FFmpeg",
+        "port": 8014,
+        "ffmpeg_available": ffmpeg_manager.ffmpeg_available,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/convert")
 async def convert_video(request: ConvertRequest):
     """转换视频"""

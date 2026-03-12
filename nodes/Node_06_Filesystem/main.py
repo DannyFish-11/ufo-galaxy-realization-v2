@@ -256,6 +256,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "06",
+        "name": "Filesystem",
+        "port": 8006,
+        "base_path": str(fs_manager.base_dir),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/list")
 async def list_directory(path: str = ""):
     """列出目录内容"""

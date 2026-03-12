@@ -304,6 +304,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "21",
+        "name": "Notion",
+        "port": 8021,
+        "configured": bool(NOTION_API_KEY),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/tools")
 async def list_tools():
     """列出可用工具"""
@@ -315,6 +326,8 @@ async def mcp_call(request: Dict[str, Any]):
     tool = request.get("tool", "")
     params = request.get("params", {})
     
+    if not NOTION_API_KEY:
+        raise HTTPException(status_code=503, detail={"error": "NOTION_API_KEY not configured", "success": False})
     try:
         result = await tools.call_tool(tool, params)
         return {"success": True, "result": result}

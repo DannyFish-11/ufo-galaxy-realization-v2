@@ -383,6 +383,32 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    providers = []
+    if LOCAL_LLM_ENABLED:
+        try:
+            resp = requests.get(f"{LOCAL_LLM_URL}/health", timeout=2)
+            if resp.status_code == 200:
+                providers.append("local")
+        except Exception:
+            pass
+    if OPENROUTER_API_KEY: providers.append("openrouter")
+    if ZHIPU_API_KEY: providers.append("zhipu")
+    if GROQ_API_KEY: providers.append("groq")
+    if TOGETHER_API_KEY: providers.append("together")
+    if PERPLEXITY_API_KEY: providers.append("perplexity")
+    if CLAUDE_API_KEY: providers.append("claude")
+    return {
+        "node_id": "01",
+        "name": "OneAPI",
+        "port": 8001,
+        "providers": providers,
+        "request_count": 0,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/v1/models")
 async def list_models():
     """列出可用模型"""

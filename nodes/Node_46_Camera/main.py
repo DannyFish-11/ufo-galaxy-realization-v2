@@ -1,4 +1,3 @@
-'''
 # -*- coding: utf-8 -*-
 
 """
@@ -415,10 +414,36 @@ async def main():
         await service_task
         logger.info("服务已关闭。")
 
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_46_Camera")
+
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_46_Camera"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_46_Camera"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8046, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
+
+
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("接收到手动中断信号，程序退出。")
 
-'''

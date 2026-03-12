@@ -152,6 +152,18 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "16",
+        "name": "Email",
+        "port": 8016,
+        "configured": bool(SMTP_USER and SMTP_PASSWORD),
+        "smtp_host": SMTP_HOST,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/send")
 async def send_email(request: EmailRequest):
     """发送邮件"""

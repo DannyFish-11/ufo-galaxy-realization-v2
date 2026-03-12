@@ -366,8 +366,32 @@ async def main():
         await task_processor
     except asyncio.CancelledError:
         logger.info("任务处理器已成功取消。")
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_73_Learning")
 
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_73_Learning"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_73_Learning"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8073, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

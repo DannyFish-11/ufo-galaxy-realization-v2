@@ -131,6 +131,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "22",
+        "name": "BraveSearch",
+        "port": 8022,
+        "configured": bool(BRAVE_API_KEY),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/search")
 async def search(request: SearchRequest):
     """执行搜索"""

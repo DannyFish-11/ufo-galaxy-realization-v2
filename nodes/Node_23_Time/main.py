@@ -152,6 +152,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "23",
+        "name": "Time",
+        "port": 8024,
+        "default_timezone": "UTC",
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/now")
 async def get_current_time(timezone: str = "UTC"):
     """获取当前时间"""

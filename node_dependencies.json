@@ -1145,6 +1145,41 @@
       "priority": 40,
       "group": "enhancement",
       "description": "Android GUI 理解引擎（VLM + 无障碍服务）"
+    },
+    "Node_26_Discord": {
+      "port": 8023,
+      "group": "tools",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "description": "Discord 集成节点，通过 REST API v10 支持消息发送、频道管理、表情反应等",
+      "capabilities": [
+        "send_message",
+        "list_messages",
+        "channel_info",
+        "guild_info",
+        "add_reaction",
+        "webhook_send"
+      ]
+    },
+    "Node_27_SmartHome": {
+      "port": 8027,
+      "group": "tools",
+      "priority": 3,
+      "dependencies": [],
+      "optional_dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "description": "智能家居控制节点，支持 Home Assistant 直连及 in-memory 设备回退",
+      "capabilities": [
+        "device_control",
+        "scene_trigger",
+        "ha_service_call",
+        "ha_states",
+        "device_registry"
+      ]
     }
   }
 }

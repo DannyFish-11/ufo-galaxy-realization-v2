@@ -7,8 +7,15 @@ from enum import Enum
 from typing import List, Dict, Any, Optional
 
 import uvicorn
+import httpx
 from fastapi import FastAPI, HTTPException
-from googlesearch import search as google_search
+
+try:
+    from googlesearch import search as google_search
+    _GOOGLESEARCH_AVAILABLE = True
+except ImportError:
+    google_search = None  # type: ignore
+    _GOOGLESEARCH_AVAILABLE = False
 
 # 配置日志记录器
 logging.basicConfig(
@@ -50,7 +57,7 @@ class SearchConfig:
 class APIConfig:
     """存储API服务器的配置"""
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8026
 
 @dataclass
 class NodeConfig:
@@ -91,6 +98,9 @@ class GoogleSearchNode:
         self._app.post("/search", tags=["核心功能"], summary="执行搜索")(
             self.perform_search
         )
+        self._app.post("/search/images", tags=["核心功能"], summary="图片搜索")(
+            self.perform_image_search
+        )
         self.logger.info("API路由设置完成")
 
     async def health_check(self) -> Dict[str, Any]:
@@ -107,69 +117,113 @@ class GoogleSearchNode:
             "config": self.config
         }
 
-    async def perform_search(self, query: str, search_type: SearchType = SearchType.WEB, num_results: Optional[int] = None) -> Dict[str, Any]:
-        """
-        核心业务逻辑：执行Google搜索
-
-        Args:
-            query (str): 搜索查询词
-            search_type (SearchType): 搜索类型 (web/image)
-            num_results (Optional[int]): 需要返回的结果数量，如果未提供则使用默认配置
-
-        Returns:
-            Dict[str, Any]: 包含搜索结果的字典
-        """
-        self.logger.info(f"收到新的搜索请求: 类型='{search_type.value}', 查询='{query}'")
-
-        if search_type == SearchType.IMAGE:
-            self.logger.warning("图片搜索功能当前为模拟实现，返回结果为网页搜索结果。")
-            # 实际项目中，这里应该替换为一个真正的图片搜索API或库
-            # return await self._perform_image_search(query, num_results)
-
+    async def perform_search(self, query: str, num_results: Optional[int] = None) -> Dict[str, Any]:
+        """执行 Google 网页搜索。优先使用 Custom Search API，否则回退至 googlesearch-python 库。"""
+        self.logger.info(f"收到网页搜索请求: 查询='{query}'")
         try:
-            results = await self._perform_web_search(query, num_results)
+            results = await self._perform_search_impl(query, num_results, search_type="web")
             self.logger.info(f"为查询 '{query}' 成功获取 {len(results)} 条结果")
-            return {"query": query, "search_type": search_type.value, "results": results}
+            return {"query": query, "search_type": "web", "results": results}
         except Exception as e:
             self.logger.error(f"执行搜索时发生严重错误: {e}", exc_info=True)
             self.status = NodeStatus.ERROR
             raise HTTPException(status_code=500, detail=f"搜索服务内部错误: {e}")
 
-    async def _perform_web_search(self, query: str, num_results: Optional[int]) -> List[str]:
-        """
-        执行实际的网页搜索操作
-        由于 `googlesearch` 库是同步的，我们在异步函数中通过 `run_in_executor` 运行它以避免阻塞事件循环
-        """
+    async def perform_image_search(self, query: str, num_results: Optional[int] = None) -> Dict[str, Any]:
+        """执行 Google 图片搜索（需要 GOOGLE_API_KEY 和 GOOGLE_CSE_ID）。"""
+        self.logger.info(f"收到图片搜索请求: 查询='{query}'")
+        api_key = os.getenv("GOOGLE_API_KEY", "")
+        cse_id = os.getenv("GOOGLE_CSE_ID", "")
+        if not api_key or not cse_id:
+            raise HTTPException(
+                status_code=503,
+                detail="图片搜索需要 GOOGLE_API_KEY 和 GOOGLE_CSE_ID 环境变量",
+            )
+        try:
+            results = await self._perform_search_impl(query, num_results, search_type="image")
+            return {"query": query, "search_type": "image", "results": results}
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"图片搜索时发生错误: {e}", exc_info=True)
+            self.status = NodeStatus.ERROR
+            raise HTTPException(status_code=500, detail=f"图片搜索服务内部错误: {e}")
+
+    async def _perform_search_impl(self, query: str, num_results: Optional[int], search_type: str = "web") -> List[str]:
+        """统一搜索实现：优先 Custom Search API，回退 googlesearch-python（仅限网页）。"""
+        cfg = self.config.search_config
+        effective_num = num_results if num_results is not None else cfg.num_results
+        api_key = os.getenv("GOOGLE_API_KEY", "")
+        cse_id = os.getenv("GOOGLE_CSE_ID", "")
+
+        if api_key and cse_id:
+            return await self._perform_custom_search(query, effective_num, api_key, cse_id, search_type)
+
+        if search_type == "image":
+            raise HTTPException(
+                status_code=503,
+                detail="图片搜索需要 GOOGLE_API_KEY 和 GOOGLE_CSE_ID 环境变量",
+            )
+        return await self._perform_web_search(query, effective_num)
+
+    async def _perform_custom_search(
+        self, query: str, num_results: int, api_key: str, cse_id: str, search_type: str
+    ) -> List[str]:
+        """使用 Google Custom Search JSON API 执行搜索。"""
+        self.logger.info(f"使用 Custom Search API 执行 {search_type} 搜索，结果数: {num_results}")
+        params: Dict[str, Any] = {
+            "key": api_key,
+            "cx": cse_id,
+            "q": query,
+            "num": min(num_results, 10),
+        }
+        if search_type == "image":
+            params["searchType"] = "image"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        items = data.get("items", [])
+        if search_type == "image":
+            return [item.get("link", "") for item in items]
+        return [item.get("link", "") for item in items]
+
+    async def _perform_web_search(self, query: str, num_results: int) -> List[str]:
+        """使用 googlesearch-python 库执行网页搜索（同步库，通过 run_in_executor 包装）。"""
+        if not _GOOGLESEARCH_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="googlesearch-python 库不可用，且未配置 GOOGLE_API_KEY/GOOGLE_CSE_ID",
+            )
         loop = asyncio.get_running_loop()
         cfg = self.config.search_config
-        
-        effective_num_results = num_results if num_results is not None else cfg.num_results
-        
-        self.logger.info(f"开始执行网页搜索，目标结果数: {effective_num_results}")
-
+        self.logger.info(f"使用 googlesearch-python 搜索，目标结果数: {num_results}")
         try:
-            # 在默认的executor中运行同步的搜索函数
             search_results = await loop.run_in_executor(
-                None,  # 使用默认的ThreadPoolExecutor
+                None,
                 lambda: list(google_search(
                     query=query,
-                    num=effective_num_results,
-                    stop=effective_num_results,
+                    num=num_results,
+                    stop=num_results,
                     pause=cfg.pause,
                     lang=cfg.lang,
-                    user_agent=cfg.user_agent
-                ))
+                    user_agent=cfg.user_agent,
+                )),
             )
             return search_results
         except Exception as e:
             self.logger.error(f"googlesearch库调用失败: {e}", exc_info=True)
-            # 这里可以根据错误类型进行更细致的处理，例如区分网络问题和请求被阻止
             if "HTTP Error 429" in str(e):
-                self.logger.warning("收到HTTP 429 Too Many Requests错误，可能需要增加pause时间或更换IP")
+                self.logger.warning("收到HTTP 429，可能需要增加 pause 时间或更换 IP")
                 self.status = NodeStatus.DEGRADED
             else:
                 self.status = NodeStatus.ERROR
-            raise  # 重新抛出异常，由上层处理
+            raise
 
     def run(self):
         """启动节点服务，运行FastAPI应用"""
@@ -199,7 +253,7 @@ def load_config_from_env() -> NodeConfig:
     )
     api_cfg = APIConfig(
         host=os.getenv("API_HOST", "0.0.0.0"),
-        port=int(os.getenv("API_PORT", 8000))
+        port=int(os.getenv("API_PORT", 8026))
     )
     return NodeConfig(
         search_config=search_cfg,

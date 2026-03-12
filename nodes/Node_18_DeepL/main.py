@@ -6,6 +6,12 @@ Node 18: DeepL - 翻译服务节点
 import os
 import requests
 from datetime import datetime
+
+try:
+    import deepl
+    DEEPL_SDK_AVAILABLE = True
+except ImportError:
+    DEEPL_SDK_AVAILABLE = False
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,6 +70,24 @@ class DeepLManager:
                   source_lang: Optional[str] = None,
                   formality: Optional[str] = None) -> Dict:
         """翻译文本"""
+        if not self.api_key:
+            raise RuntimeError("DeepL API key not configured")
+
+        if DEEPL_SDK_AVAILABLE:
+            translator = deepl.Translator(self.api_key)
+            kwargs = {}
+            if source_lang:
+                kwargs["source_lang"] = source_lang.upper()
+            if formality:
+                kwargs["formality"] = formality
+            result = translator.translate_text(text, target_lang=target_lang.upper(), **kwargs)
+            detected = result.detected_source_lang.code if hasattr(result, "detected_source_lang") else source_lang
+            return {
+                "translated_text": result.text,
+                "detected_source_language": detected,
+                "source_lang": source_lang or detected
+            }
+
         data = {
             "text": text,
             "target_lang": target_lang.upper()
@@ -140,12 +164,27 @@ async def health():
         "node_id": "18",
         "name": "DeepL",
         "api_configured": bool(DEEPL_API_KEY),
+        "deepl_sdk_available": DEEPL_SDK_AVAILABLE,
+        "configured": bool(DEEPL_API_KEY),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "18",
+        "name": "DeepL",
+        "port": 8018,
+        "configured": bool(DEEPL_API_KEY),
         "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/translate")
 async def translate(request: TranslateRequest):
     """翻译文本"""
+    if not DEEPL_API_KEY:
+        raise HTTPException(status_code=503, detail={"error": "DEEPL_API_KEY not configured", "success": False})
     try:
         result = deepl_manager.translate(
             text=request.text,

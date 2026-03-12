@@ -221,6 +221,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "03",
+        "name": "SecretVault",
+        "port": 8003,
+        "secrets_count": len(vault._secrets),
+        "timestamp": datetime.now().isoformat()
+    }
+
 class SetSecretRequest(BaseModel):
     key: str
     value: str

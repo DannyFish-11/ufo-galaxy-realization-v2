@@ -98,6 +98,17 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "17",
+        "name": "EdgeTTS",
+        "port": 8017,
+        "edge_tts_available": EDGE_TTS_AVAILABLE,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/synthesize")
 async def synthesize(request: TTSRequest):
     """合成语音"""

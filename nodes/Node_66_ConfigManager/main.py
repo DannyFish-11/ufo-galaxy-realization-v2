@@ -306,8 +306,32 @@ async def main():
         await run_task
     except asyncio.CancelledError:
         print("服务运行循环已成功取消。")
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_66_ConfigManager")
 
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_66_ConfigManager"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_66_ConfigManager"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8066, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     # 设置全局日志级别
     logging.basicConfig(level=logging.INFO)
     # 检查并安装依赖

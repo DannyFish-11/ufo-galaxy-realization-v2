@@ -1,4 +1,3 @@
-'''
 # -*- coding: utf-8 -*-
 
 """
@@ -285,9 +284,35 @@ async def main():
     logger.info("--- 所有测试通过 ---")
 
 
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_30_Reserved")
+
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_30_Reserved"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_30_Reserved"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8030, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
+
+
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("程序被用户中断。")
-'''

@@ -355,8 +355,32 @@ async def main():
         except asyncio.CancelledError:
             pass # 任务取消是预期的
         logger.info("--- Node_38_BLE 演示结束 ---")
+# ---------------------------------------------------------------------------
+# HTTP 健康检查服务器
+# ---------------------------------------------------------------------------
+import threading as _threading
+try:
+    from fastapi import FastAPI as _FastAPI
+    import uvicorn as _uvicorn
+    _health_app = _FastAPI(title="Node_38_BLE")
 
+    @_health_app.get("/health")
+    def _health_endpoint():
+        return {"status": "ok", "node": "Node_38_BLE"}
+
+    @_health_app.get("/status")
+    def _status_endpoint():
+        return {"status": "ok", "node": "Node_38_BLE"}
+
+    def _start_health_server():
+        _uvicorn.run(_health_app, host="0.0.0.0", port=8038, log_level="error")
+except ImportError:
+    _health_app = None
+    def _start_health_server():
+        pass
 if __name__ == "__main__":
+    if _health_app is not None:
+        _threading.Thread(target=_start_health_server, daemon=True).start()
     # 在Windows上，需要不同的事件循环策略
     if platform.system() == "Windows":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

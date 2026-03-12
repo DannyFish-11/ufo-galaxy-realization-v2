@@ -1,506 +1,303 @@
-#!/usr/bin/env python3
 """
-Node_27_SmartHome - Smart Home Control Node
-
-Provides unified control for smart home devices:
-- HomeKit (Apple)
-- Google Home
-- Amazon Alexa
-- Zigbee devices
-- Z-Wave devices
-- Matter/Thread
-- Tuya/Smart Life
-- Mi Home
-
-Capabilities:
-- Device discovery
-- Device control (on/off, brightness, color, temperature)
-- Scene/scenario management
-- Automation rules
-- Status monitoring
-
-Author: Galaxy Team
-Version: 3.0.0
+Node 27: SmartHome - 智能家居控制服务节点
+==========================================
+通过 Home Assistant REST API 及内存设备注册表提供智能家居控制功能。
+支持 Home Assistant 直连、Tuya 配置，并提供本地 in-memory 设备回退。
 """
-
-import asyncio
-import json
+import os
 import logging
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, field, asdict
-from enum import Enum
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-logging.basicConfig(level=logging.INFO)
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
+
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
+PORT = 8027
 
-class SmartHomeDeviceType(Enum):
-    """Smart home device types"""
-    LIGHT = "light"
-    SWITCH = "switch"
-    THERMOSTAT = "thermostat"
-    LOCK = "lock"
-    CAMERA = "camera"
-    SENSOR = "sensor"
-    CURTAIN = "curtain"
-    FAN = "fan"
-    OUTLET = "outlet"
-    SPEAKER = "speaker"
-    TV = "tv"
-    APPLIANCE = "appliance"
+HA_URL = os.getenv("HOME_ASSISTANT_URL", "").rstrip("/")
+HA_TOKEN = os.getenv("HOME_ASSISTANT_TOKEN", "")
+TUYA_API_KEY = os.getenv("TUYA_API_KEY", "")
+TUYA_API_SECRET = os.getenv("TUYA_API_SECRET", "")
+TUYA_REGION = os.getenv("TUYA_REGION", "cn")
 
+# In-memory device registry and scene store (fallback / standalone mode).
+# _devices: {device_id: {device_id, name, type, protocol, ip_address, state, online, registered_at}}
+# _scenes:  {scene_id: {scene_id, ...}} — populated externally or via HA.
+# Note: contents are lost on process restart.
+_devices: Dict[str, Dict[str, Any]] = {}
+_scenes: Dict[str, Dict[str, Any]] = {}
 
-class ProtocolType(Enum):
-    """Communication protocols"""
-    HOMEKIT = "homekit"
-    GOOGLE_HOME = "google_home"
-    ALEXA = "alexa"
-    ZIGBEE = "zigbee"
-    ZWAVE = "zwave"
-    MATTER = "matter"
-    TUYA = "tuya"
-    MI_HOME = "mi_home"
-    MQTT = "mqtt"
+stats: Dict[str, int] = {"commands_sent": 0, "ha_calls": 0, "error_count": 0}
+
+app = FastAPI(title="Node 27 - SmartHome", version="2.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-@dataclass
-class SmartDevice:
-    """Smart device information"""
+# ─── 工具函数 ─────────────────────────────────────────────────────────────────
+
+def _ha_headers() -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {HA_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+
+def _require_ha():
+    if not HA_URL or not HA_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "HOME_ASSISTANT_URL or HOME_ASSISTANT_TOKEN not configured", "success": False},
+        )
+    if not HTTPX_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "httpx not installed. Run: pip install httpx", "success": False},
+        )
+
+
+async def _ha_get(path: str) -> Any:
+    _require_ha()
+    stats["ha_calls"] += 1
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{HA_URL}/api{path}", headers=_ha_headers(), timeout=15.0)
+    if response.status_code >= 400:
+        stats["error_count"] += 1
+        raise HTTPException(
+            status_code=response.status_code,
+            detail={"error": f"Home Assistant error: {response.text}", "success": False},
+        )
+    return response.json()
+
+
+async def _ha_post(path: str, payload: Dict[str, Any]) -> Any:
+    _require_ha()
+    stats["ha_calls"] += 1
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{HA_URL}/api{path}", headers=_ha_headers(), json=payload, timeout=15.0
+        )
+    if response.status_code >= 400:
+        stats["error_count"] += 1
+        raise HTTPException(
+            status_code=response.status_code,
+            detail={"error": f"Home Assistant error: {response.text}", "success": False},
+        )
+    return response.json()
+
+
+# ─── 请求模型 ────────────────────────────────────────────────────────────────
+
+class RegisterDeviceRequest(BaseModel):
     device_id: str
     name: str
-    device_type: SmartHomeDeviceType
-    protocol: ProtocolType
-    manufacturer: str = ""
-    model: str = ""
-    room: str = ""
-    online: bool = False
-    properties: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "device_id": self.device_id,
-            "name": self.name,
-            "device_type": self.device_type.value,
-            "protocol": self.protocol.value,
-            "manufacturer": self.manufacturer,
-            "model": self.model,
-            "room": self.room,
-            "online": self.online,
-            "properties": self.properties
+    type: str
+    protocol: str
+    ip_address: Optional[str] = None
+
+
+class ControlDeviceRequest(BaseModel):
+    device_id: str
+    action: str
+    params: Dict[str, Any] = {}
+
+
+class TriggerSceneRequest(BaseModel):
+    scene_id: str
+
+
+class HACallRequest(BaseModel):
+    domain: str
+    service: str
+    entity_id: Optional[str] = None
+    data: Dict[str, Any] = {}
+
+
+# ─── 端点 ─────────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "node_id": "27",
+        "name": "SmartHome",
+        "port": PORT,
+        "ha_configured": bool(HA_URL and HA_TOKEN),
+        "tuya_configured": bool(TUYA_API_KEY and TUYA_API_SECRET),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.get("/status")
+async def status():
+    integrations: List[str] = []
+    if HA_URL and HA_TOKEN:
+        integrations.append("home_assistant")
+    if TUYA_API_KEY and TUYA_API_SECRET:
+        integrations.append("tuya")
+    if not integrations:
+        integrations.append("in_memory_mock")
+
+    return {
+        "node_id": "27",
+        "name": "SmartHome",
+        "configured": bool(HA_URL and HA_TOKEN),
+        "config_summary": {
+            "ha_url": HA_URL or None,
+            "ha_token_set": bool(HA_TOKEN),
+            "tuya_key_set": bool(TUYA_API_KEY),
+            "tuya_region": TUYA_REGION,
+        },
+        "device_count": len(_devices),
+        "scene_count": len(_scenes),
+        "integrations_available": integrations,
+        "stats": stats,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.get("/devices")
+async def list_devices():
+    """列出所有已知设备。"""
+    return {
+        "success": True,
+        "devices": list(_devices.values()),
+        "count": len(_devices),
+    }
+
+
+@app.post("/devices/register")
+async def register_device(request: RegisterDeviceRequest):
+    """注册新设备到内存注册表。"""
+    device = {
+        "device_id": request.device_id,
+        "name": request.name,
+        "type": request.type,
+        "protocol": request.protocol,
+        "ip_address": request.ip_address,
+        "state": {},
+        "online": True,
+        "registered_at": datetime.now().isoformat(),
+    }
+    _devices[request.device_id] = device
+    return {"success": True, "device": device}
+
+
+@app.get("/devices/{device_id}")
+async def get_device(device_id: str):
+    """获取指定设备的详细信息。"""
+    device = _devices.get(device_id)
+    if not device:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Device '{device_id}' not found", "success": False},
+        )
+    return {"success": True, "device": device}
+
+
+@app.post("/devices/control")
+async def control_device(request: ControlDeviceRequest):
+    """控制设备（on/off/set_brightness 等）。如果配置了 HA，优先转发。"""
+    stats["commands_sent"] += 1
+    device = _devices.get(request.device_id)
+
+    # Home Assistant path
+    if HA_URL and HA_TOKEN:
+        action_map = {
+            "on": ("homeassistant", "turn_on"),
+            "off": ("homeassistant", "turn_off"),
+            "toggle": ("homeassistant", "toggle"),
+            "set_brightness": ("light", "turn_on"),
+            "set_temperature": ("climate", "set_temperature"),
         }
+        domain_service = action_map.get(request.action)
+        if domain_service:
+            domain, service = domain_service
+            payload: Dict[str, Any] = {"entity_id": request.device_id}
+            payload.update(request.params)
+            result = await _ha_post(f"/services/{domain}/{service}", payload)
+            return {"success": True, "result": result, "source": "home_assistant"}
+
+    # In-memory fallback
+    if not device:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Device '{request.device_id}' not found", "success": False},
+        )
+
+    if request.action in ("on",):
+        device["state"]["power"] = True
+    elif request.action == "toggle":
+        device["state"]["power"] = not device["state"].get("power", False)
+    elif request.action == "off":
+        device["state"]["power"] = False
+    elif request.action == "set_brightness":
+        device["state"]["brightness"] = request.params.get("brightness", 100)
+    elif request.action == "set_temperature":
+        device["state"]["temperature"] = request.params.get("temperature", 22.0)
+    else:
+        device["state"].update(request.params)
+
+    device["state"]["last_action"] = request.action
+    device["state"]["updated_at"] = datetime.now().isoformat()
+
+    return {"success": True, "device_id": request.device_id, "action": request.action, "state": device["state"], "source": "in_memory"}
 
 
-# ============================================================================
-# Protocol Adapters
-# ============================================================================
-
-class HomeKitAdapter:
-    """HomeKit protocol adapter"""
-    
-    def __init__(self):
-        self.devices: Dict[str, SmartDevice] = {}
-        
-    async def discover(self) -> List[SmartDevice]:
-        """Discover HomeKit devices"""
-        try:
-            # HAP-python (pyhap) or a compatible library is required for real discovery.
-            # When available, replace this with:
-            #   from pyhap.accessory_driver import AccessoryDriver
-            #   driver = AccessoryDriver()
-            #   discovered = driver.discover()
-            logger.info("Discovering HomeKit devices...")
-            return []
-            
-        except Exception as e:
-            logger.error(f"HomeKit discovery failed: {e}")
-            return []
-    
-    async def control(self, device_id: str, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Control HomeKit device"""
-        try:
-            logger.info(f"HomeKit control: {device_id} - {command}")
-            return {"success": True, "message": f"HomeKit command executed"}
-        except Exception as e:
-            logger.error(f"HomeKit control failed: {e}")
-            return {"success": False, "error": str(e)}
+@app.get("/scenes")
+async def list_scenes():
+    """列出所有场景。"""
+    return {"success": True, "scenes": list(_scenes.values()), "count": len(_scenes)}
 
 
-class TuyaAdapter:
-    """Tuya/Smart Life protocol adapter"""
-    
-    def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.devices: Dict[str, SmartDevice] = {}
-        
-    async def discover(self) -> List[SmartDevice]:
-        """Discover Tuya devices"""
-        try:
-            # Use tuya-connector-python
-            # from tuya_connector import TuyaOpenAPI
-            logger.info("Discovering Tuya devices...")
-            return []
-        except Exception as e:
-            logger.error(f"Tuya discovery failed: {e}")
-            return []
-    
-    async def control(self, device_id: str, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Control Tuya device"""
-        try:
-            logger.info(f"Tuya control: {device_id} - {command}")
-            return {"success": True, "message": f"Tuya command executed"}
-        except Exception as e:
-            logger.error(f"Tuya control failed: {e}")
-            return {"success": False, "error": str(e)}
+@app.post("/scenes/trigger")
+async def trigger_scene(request: TriggerSceneRequest):
+    """触发指定场景。如果配置了 HA，优先通过 HA 触发。"""
+    if HA_URL and HA_TOKEN:
+        result = await _ha_post(f"/services/scene/turn_on", {"entity_id": request.scene_id})
+        return {"success": True, "result": result, "source": "home_assistant"}
+
+    scene = _scenes.get(request.scene_id)
+    if not scene:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Scene '{request.scene_id}' not found", "success": False},
+        )
+    return {"success": True, "scene_id": request.scene_id, "triggered_at": datetime.now().isoformat(), "source": "in_memory"}
 
 
-class MiHomeAdapter:
-    """Mi Home/Xiaomi protocol adapter"""
-    
-    def __init__(self, token: str = None):
-        self.token = token
-        self.devices: Dict[str, SmartDevice] = {}
-        
-    async def discover(self) -> List[SmartDevice]:
-        """Discover Mi Home devices"""
-        try:
-            # Use miio library
-            # import miio
-            logger.info("Discovering Mi Home devices...")
-            return []
-        except Exception as e:
-            logger.error(f"Mi Home discovery failed: {e}")
-            return []
-    
-    async def control(self, device_id: str, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Control Mi Home device"""
-        try:
-            logger.info(f"Mi Home control: {device_id} - {command}")
-            return {"success": True, "message": f"Mi Home command executed"}
-        except Exception as e:
-            logger.error(f"Mi Home control failed: {e}")
-            return {"success": False, "error": str(e)}
+@app.post("/ha/call")
+async def ha_call(request: HACallRequest):
+    """直接调用 Home Assistant 服务。需要 HA 配置。"""
+    payload: Dict[str, Any] = dict(request.data)
+    if request.entity_id:
+        payload["entity_id"] = request.entity_id
+    result = await _ha_post(f"/services/{request.domain}/{request.service}", payload)
+    return {"success": True, "result": result}
 
 
-class ZigbeeAdapter:
-    """Zigbee protocol adapter (via Zigbee2MQTT)"""
-    
-    def __init__(self, mqtt_broker: str = "localhost", mqtt_port: int = 1883):
-        self.mqtt_broker = mqtt_broker
-        self.mqtt_port = mqtt_port
-        self.devices: Dict[str, SmartDevice] = {}
-        
-    async def discover(self) -> List[SmartDevice]:
-        """Discover Zigbee devices"""
-        try:
-            # Connect to MQTT and query Zigbee2MQTT
-            logger.info("Discovering Zigbee devices...")
-            return []
-        except Exception as e:
-            logger.error(f"Zigbee discovery failed: {e}")
-            return []
-    
-    async def control(self, device_id: str, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Control Zigbee device"""
-        try:
-            logger.info(f"Zigbee control: {device_id} - {command}")
-            return {"success": True, "message": f"Zigbee command executed"}
-        except Exception as e:
-            logger.error(f"Zigbee control failed: {e}")
-            return {"success": False, "error": str(e)}
-
-
-# ============================================================================
-# Smart Home Controller
-# ============================================================================
-
-class SmartHomeController:
-    """Unified Smart Home Controller"""
-    
-    def __init__(self):
-        self.adapters: Dict[ProtocolType, Any] = {}
-        self.devices: Dict[str, SmartDevice] = {}
-        self.scenes: Dict[str, Dict[str, Any]] = {}
-        self.automations: Dict[str, Dict[str, Any]] = {}
-        
-        # Initialize adapters
-        self.adapters[ProtocolType.HOMEKIT] = HomeKitAdapter()
-        self.adapters[ProtocolType.TUYA] = TuyaAdapter()
-        self.adapters[ProtocolType.MI_HOME] = MiHomeAdapter()
-        self.adapters[ProtocolType.ZIGBEE] = ZigbeeAdapter()
-    
-    async def discover_all(self) -> List[SmartDevice]:
-        """Discover all smart home devices"""
-        all_devices = []
-        
-        for protocol, adapter in self.adapters.items():
-            try:
-                devices = await adapter.discover()
-                for device in devices:
-                    self.devices[device.device_id] = device
-                all_devices.extend(devices)
-                logger.info(f"Discovered {len(devices)} {protocol.value} devices")
-            except Exception as e:
-                logger.error(f"Failed to discover {protocol.value} devices: {e}")
-        
-        return all_devices
-    
-    async def control_device(
-        self,
-        device_id: str,
-        command: str,
-        params: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
-        """Control a device"""
-        params = params or {}
-        
-        device = self.devices.get(device_id)
-        if not device:
-            return {"success": False, "error": f"Device not found: {device_id}"}
-        
-        adapter = self.adapters.get(device.protocol)
-        if not adapter:
-            return {"success": False, "error": f"No adapter for protocol: {device.protocol}"}
-        
-        return await adapter.control(device_id, command, params)
-    
-    async def turn_on(self, device_id: str) -> Dict[str, Any]:
-        """Turn on device"""
-        return await self.control_device(device_id, "turn_on", {})
-    
-    async def turn_off(self, device_id: str) -> Dict[str, Any]:
-        """Turn off device"""
-        return await self.control_device(device_id, "turn_off", {})
-    
-    async def set_brightness(self, device_id: str, brightness: int) -> Dict[str, Any]:
-        """Set light brightness (0-100)"""
-        return await self.control_device(device_id, "set_brightness", {"brightness": brightness})
-    
-    async def set_color(self, device_id: str, r: int, g: int, b: int) -> Dict[str, Any]:
-        """Set light color"""
-        return await self.control_device(device_id, "set_color", {"r": r, "g": g, "b": b})
-    
-    async def set_temperature(self, device_id: str, temperature: float) -> Dict[str, Any]:
-        """Set thermostat temperature"""
-        return await self.control_device(device_id, "set_temperature", {"temperature": temperature})
-    
-    async def lock(self, device_id: str) -> Dict[str, Any]:
-        """Lock device"""
-        return await self.control_device(device_id, "lock", {})
-    
-    async def unlock(self, device_id: str) -> Dict[str, Any]:
-        """Unlock device"""
-        return await self.control_device(device_id, "unlock", {})
-    
-    # ========================================================================
-    # Scene Management
-    # ========================================================================
-    
-    async def create_scene(self, scene_name: str, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Create a scene"""
-        self.scenes[scene_name] = {
-            "name": scene_name,
-            "actions": actions,
-            "created_at": datetime.now().isoformat()
-        }
-        return {"success": True, "scene": scene_name}
-    
-    async def activate_scene(self, scene_name: str) -> Dict[str, Any]:
-        """Activate a scene"""
-        scene = self.scenes.get(scene_name)
-        if not scene:
-            return {"success": False, "error": f"Scene not found: {scene_name}"}
-        
-        results = []
-        for action in scene["actions"]:
-            device_id = action.get("device_id")
-            command = action.get("command")
-            params = action.get("params", {})
-            
-            result = await self.control_device(device_id, command, params)
-            results.append(result)
-        
-        return {"success": True, "results": results}
-    
-    async def list_scenes(self) -> List[Dict[str, Any]]:
-        """List all scenes"""
-        return [
-            {"name": name, "actions": len(scene["actions"])}
-            for name, scene in self.scenes.items()
-        ]
-    
-    # ========================================================================
-    # Automation
-    # ========================================================================
-    
-    async def create_automation(
-        self,
-        name: str,
-        trigger: Dict[str, Any],
-        conditions: List[Dict[str, Any]],
-        actions: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """Create an automation rule"""
-        self.automations[name] = {
-            "name": name,
-            "trigger": trigger,
-            "conditions": conditions,
-            "actions": actions,
-            "enabled": True,
-            "created_at": datetime.now().isoformat()
-        }
-        return {"success": True, "automation": name}
-    
-    async def list_automations(self) -> List[Dict[str, Any]]:
-        """List all automations"""
-        return [
-            {
-                "name": name,
-                "enabled": auto["enabled"],
-                "trigger": auto["trigger"]["type"]
-            }
-            for name, auto in self.automations.items()
-        ]
-    
-    # ========================================================================
-    # Query Methods
-    # ========================================================================
-    
-    def get_device(self, device_id: str) -> Optional[SmartDevice]:
-        """Get device by ID"""
-        return self.devices.get(device_id)
-    
-    def get_devices_by_room(self, room: str) -> List[SmartDevice]:
-        """Get devices by room"""
-        return [d for d in self.devices.values() if d.room == room]
-    
-    def get_devices_by_type(self, device_type: SmartHomeDeviceType) -> List[SmartDevice]:
-        """Get devices by type"""
-        return [d for d in self.devices.values() if d.device_type == device_type]
-    
-    def list_devices(self) -> List[Dict[str, Any]]:
-        """List all devices"""
-        return [d.to_dict() for d in self.devices.values()]
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get controller stats"""
-        return {
-            "total_devices": len(self.devices),
-            "online_devices": sum(1 for d in self.devices.values() if d.online),
-            "scenes": len(self.scenes),
-            "automations": len(self.automations),
-            "protocols": list(self.adapters.keys())
-        }
-
-
-# ============================================================================
-# AIP Interface
-# ============================================================================
-
-class SmartHomeNode:
-    """Smart Home Node for Galaxy"""
-    
-    def __init__(self):
-        self.controller = SmartHomeController()
-    
-    async def initialize(self, config: Dict[str, Any] = None):
-        """Initialize node"""
-        config = config or {}
-        
-        # Discover devices
-        devices = await self.controller.discover_all()
-        
-        logger.info(f"Smart Home node initialized with {len(devices)} devices")
-        return {"success": True, "devices": len(devices)}
-    
-    async def execute(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute action"""
-        device_id = params.get("device_id")
-        
-        actions = {
-            # Device control
-            "turn_on": lambda: self.controller.turn_on(device_id),
-            "turn_off": lambda: self.controller.turn_off(device_id),
-            "set_brightness": lambda: self.controller.set_brightness(
-                device_id, params.get("brightness", 50)
-            ),
-            "set_color": lambda: self.controller.set_color(
-                device_id,
-                params.get("r", 255),
-                params.get("g", 255),
-                params.get("b", 255)
-            ),
-            "set_temperature": lambda: self.controller.set_temperature(
-                device_id, params.get("temperature", 22.0)
-            ),
-            "lock": lambda: self.controller.lock(device_id),
-            "unlock": lambda: self.controller.unlock(device_id),
-            
-            # Scene management
-            "create_scene": lambda: self.controller.create_scene(
-                params.get("scene_name"),
-                params.get("actions", [])
-            ),
-            "activate_scene": lambda: self.controller.activate_scene(
-                params.get("scene_name")
-            ),
-            "list_scenes": lambda: self.controller.list_scenes(),
-            
-            # Automation
-            "create_automation": lambda: self.controller.create_automation(
-                params.get("name"),
-                params.get("trigger", {}),
-                params.get("conditions", []),
-                params.get("actions", [])
-            ),
-            "list_automations": lambda: self.controller.list_automations(),
-            
-            # Query
-            "list_devices": lambda: {"success": True, "devices": self.controller.list_devices()},
-            "get_device": lambda: {"success": True, "device": self.controller.get_device(device_id).to_dict() if self.controller.get_device(device_id) else None},
-            "get_stats": lambda: {"success": True, "stats": self.controller.get_stats()},
-            
-            # Discovery
-            # Discovery handled separately due to async
-        }
-        
-        if action == "discover":
-            devices = await self.controller.discover_all()
-            return {"success": True, "devices": [d.to_dict() for d in devices]}
-        
-        handler = actions.get(action)
-        if handler:
-            return await handler()
-        else:
-            return {"success": False, "error": f"Unknown action: {action}"}
-    
-    async def health_check(self) -> Dict[str, Any]:
-        """Health check"""
-        stats = self.controller.get_stats()
-        return {
-            "healthy": True,
-            "devices": stats["total_devices"],
-            "online": stats["online_devices"]
-        }
-
-
-# ============================================================================
-# Main Entry
-# ============================================================================
-
-async def main():
-    """Test Smart Home node"""
-    node = SmartHomeNode()
-    
-    # Initialize
-    result = await node.initialize()
-    print(f"Initialize: {result}")
-    
-    # Get stats
-    stats = await node.execute("get_stats", {})
-    print(f"Stats: {stats}")
+@app.get("/ha/states")
+async def ha_states():
+    """获取 Home Assistant 所有实体状态。需要 HA 配置。"""
+    states = await _ha_get("/states")
+    return {"success": True, "states": states, "count": len(states)}
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

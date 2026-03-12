@@ -174,6 +174,20 @@ async def health():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/status")
+async def node_status():
+    """Node status endpoint."""
+    return {
+        "node_id": "12",
+        "name": "Postgres",
+        "port": 8012,
+        "configured": bool(PG_PASSWORD),
+        "connected": pg_manager._connected,
+        "host": PG_HOST,
+        "database": PG_DATABASE,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/query")
 async def execute_query(request: QueryRequest):
     """执行SQL查询"""

@@ -1,278 +1,232 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-Node_10_Slack: Galaxy 系统中的 Slack 消息通知节点。
-
-该节点负责与 Slack API 进行交互，提供发送消息、创建频道等功能。
-它被设计为 Galaxy 系统中的一个标准服务节点，包含完整的生命周期管理、
-配置加载、健康检查和状态查询等功能。
+Node 10: Slack - Slack 集成服务节点
+=====================================
+提供消息发送、频道管理、用户查询、表情反应等功能
 """
-
-import asyncio
-import logging
 import os
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, Dict, Any, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-# 模拟一个外部库，在实际环境中需要安装 aiohttp 和 slack_sdk
-# pip install slack_sdk aiohttp
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
+
 try:
     from slack_sdk.web.async_client import AsyncWebClient
     from slack_sdk.errors import SlackApiError
+    SLACK_SDK_AVAILABLE = True
 except ImportError:
-    print("错误：slack_sdk 或 aiohttp 未安装。请运行 'pip install slack_sdk aiohttp' 安装。")
-    # 定义模拟类以确保代码在没有安装库的情况下也能进行静态分析
-    class AsyncWebClient:
-        def __init__(self, token: str):
-            self._token = token
-            print(f"警告：模拟 AsyncWebClient 初始化，token: {'*' * len(token) if token else 'None'}")
+    SLACK_SDK_AVAILABLE = False
 
-        async def api_test(self, *args, **kwargs) -> Dict[str, Any]:
-            print("警告：调用模拟的 api_test 方法")
-            return {"ok": True, "test": "ok"}
+# 配置
+PORT = 8010
+SLACK_DEFAULT_CHANNEL = os.getenv("SLACK_DEFAULT_CHANNEL", "#general")
 
-        async def chat_postMessage(self, *args, **kwargs) -> Dict[str, Any]:
-            print(f"警告：调用模拟的 chat_postMessage 方法，参数: {kwargs}")
-            return {"ok": True, "channel": kwargs.get("channel"), "ts": "12345.67890"}
+# 统计
+stats: Dict[str, int] = {"messages_sent": 0, "api_calls": 0, "error_count": 0}
 
-        async def conversations_create(self, *args, **kwargs) -> Dict[str, Any]:
-            print(f"警告：调用模拟的 conversations_create 方法，参数: {kwargs}")
-            return {"ok": True, "channel": {"id": "C123456", "name": kwargs.get("name")}}
+app = FastAPI(title="Node 10 - Slack", version="2.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    class SlackApiError(Exception):
-        def __init__(self, message, response):
-            self.message = message
-            self.response = response
-            super().__init__(self.message)
 
-# --- 枚举定义 ---
+# ─── 工具函数 ─────────────────────────────────────────────────────────────────
 
-class NodeStatus(Enum):
-    """定义节点的运行状态"""
-    PENDING = "等待中"
-    INITIALIZING = "初始化中"
-    RUNNING = "运行中"
-    STOPPED = "已停止"
-    ERROR = "错误"
-    DEGRADED = "降级运行"
+def _require_slack() -> "AsyncWebClient":
+    """检查 SDK 和 token，返回已配置的 AsyncWebClient。"""
+    if not SLACK_SDK_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "slack-sdk not installed. Run: pip install slack-sdk", "success": False},
+        )
+    token = os.getenv("SLACK_BOT_TOKEN", "")
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "SLACK_BOT_TOKEN not configured", "success": False},
+        )
+    return AsyncWebClient(token=token)
 
-class MessageType(Enum):
-    """定义消息的类型或优先级"""
-    INFO = "信息"
-    WARNING = "警告"
-    CRITICAL = "严重"
 
-# --- 配置定义 ---
+# ─── 请求模型 ────────────────────────────────────────────────────────────────
 
-@dataclass
-class SlackConfig:
-    """存储 Slack 节点的配置信息"""
-    # 从环境变量 SLACK_BOT_TOKEN 中获取 token，提供默认值以防万一
-    bot_token: str = field(default_factory=lambda: os.environ.get("SLACK_BOT_TOKEN", "xoxb-your-token-here"))
-    default_channel: str = "#general"
-    request_timeout: int = 30
-    # 模拟更复杂的配置
-    retry_attempts: int = 3
-    retry_delay: float = 1.5  # seconds
+class SendMessageRequest(BaseModel):
+    channel: str = SLACK_DEFAULT_CHANNEL
+    text: str
+    blocks: Optional[List[Dict[str, Any]]] = None
 
-# --- 主服务类 ---
 
-class SlackService:
-    """Slack 消息服务主类，封装了所有核心业务逻辑。"""
+class CreateChannelRequest(BaseModel):
+    name: str
+    is_private: bool = False
 
-    def __init__(self):
-        """初始化服务，设置日志、加载配置并准备 Slack 客户端。"""
-        self.node_name = "Node_10_Slack"
-        self._configure_logging()
-        self.logger.info(f"节点 {self.node_name} 开始初始化...")
 
-        self.status = NodeStatus.INITIALIZING
-        self.config: SlackConfig = self._load_config()
-        self.slack_client: AsyncWebClient = self._initialize_client()
-        
-        self.loop = asyncio.get_event_loop()
-        self.tasks: List[asyncio.Task] = []
-        self.status = NodeStatus.PENDING
-        self.logger.info(f"节点 {self.node_name} 初始化完成，当前状态: {self.status.value}")
+class UserInfoRequest(BaseModel):
+    user_id: str
 
-    def _configure_logging(self):
-        """配置日志记录器"""
-        self.logger = logging.getLogger(self.node_name)
-        self.logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        if not self.logger.handlers:
-            self.logger.addHandler(handler)
 
-    def _load_config(self) -> SlackConfig:
-        """加载节点配置。在实际应用中，这可能来自文件或配置服务。"""
-        self.logger.info("正在加载配置...")
-        # 演示中直接实例化配置类
-        config = SlackConfig()
-        if "your-token-here" in config.bot_token:
-            self.logger.warning("检测到默认的 Slack Bot Token，请通过环境变量 SLACK_BOT_TOKEN 进行设置。")
-        self.logger.info(f"配置加载完成，默认频道: {config.default_channel}")
-        return config
+class AddReactionRequest(BaseModel):
+    channel: str
+    timestamp: str
+    name: str
 
-    def _initialize_client(self) -> AsyncWebClient:
-        """根据配置初始化 Slack 异步客户端"""
-        self.logger.info("正在初始化 Slack 客户端...")
-        return AsyncWebClient(token=self.config.bot_token)
 
-    async def start(self):
-        """启动服务，执行健康检查并进入运行状态。"""
-        self.logger.info(f"节点 {self.node_name} 正在启动...")
-        # 执行一次启动健康检查
-        is_healthy = await self.health_check()
-        if is_healthy:
-            self.status = NodeStatus.RUNNING
-            self.logger.info(f"节点 {self.node_name} 启动成功，进入运行状态。")
-        else:
-            self.status = NodeStatus.ERROR
-            self.logger.error(f"节点 {self.node_name} 启动失败，健康检查未通过。")
+# ─── 端点 ─────────────────────────────────────────────────────────────────────
 
-    async def stop(self):
-        """停止服务，取消所有正在运行的异步任务。"""
-        self.logger.info(f"节点 {self.node_name} 正在停止...")
-        self.status = NodeStatus.STOPPED
-        for task in self.tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True) # 等待任务取消
-        self.logger.info(f"节点 {self.node_name} 已成功停止。")
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "node_id": "10",
+        "name": "Slack",
+        "port": PORT,
+        "slack_configured": bool(os.getenv("SLACK_BOT_TOKEN", "")),
+        "slack_sdk_available": SLACK_SDK_AVAILABLE,
+        "timestamp": datetime.now().isoformat(),
+    }
 
-    async def health_check(self) -> bool:
-        """执行健康检查，通过调用 Slack 的 api.test 方法来验证 Token 和连接。"""
-        self.logger.info("执行健康检查...")
-        try:
-            response = await self.slack_client.api_test()
-            if response["ok"]:
-                self.logger.info("健康检查通过，与 Slack API 连接正常。")
-                return True
-            else:
-                self.logger.warning(f"健康检查失败: {response.get('error', '未知错误')}")
-                return False
-        except SlackApiError as e:
-            self.logger.error(f"健康检查期间发生 Slack API 错误: {e.response['error']}")
-            return False
-        except Exception as e:
-            self.logger.error(f"健康检查期间发生未知异常: {e}")
-            return False
 
-    def get_status(self) -> Dict[str, Any]:
-        """查询当前节点的状态。"""
-        self.logger.debug("查询节点状态...")
+@app.get("/status")
+async def status():
+    return {
+        "node": "Slack",
+        "port": PORT,
+        "config": {
+            "token_set": bool(os.getenv("SLACK_BOT_TOKEN", "")),
+            "default_channel": SLACK_DEFAULT_CHANNEL,
+        },
+        "stats": stats,
+        "slack_sdk_available": SLACK_SDK_AVAILABLE,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.post("/messages/send")
+async def send_message(request: SendMessageRequest):
+    """向指定频道发送消息。"""
+    client = _require_slack()
+    stats["api_calls"] += 1
+    try:
+        kwargs: Dict[str, Any] = {"channel": request.channel, "text": request.text}
+        if request.blocks:
+            kwargs["blocks"] = request.blocks
+        response = await client.chat_postMessage(**kwargs)
+        stats["messages_sent"] += 1
+        return {"success": True, "ts": response["ts"], "channel": response["channel"]}
+    except SlackApiError as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
+    except Exception as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
+
+
+@app.get("/messages/history")
+async def get_history(
+    channel: str = Query(..., description="频道 ID 或名称"),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """获取频道消息历史。"""
+    client = _require_slack()
+    stats["api_calls"] += 1
+    try:
+        response = await client.conversations_history(channel=channel, limit=limit)
         return {
-            "node_name": self.node_name,
-            "status": self.status.value,
-            "timestamp": asyncio.get_event_loop().time()
+            "success": True,
+            "channel": channel,
+            "messages": response.get("messages", []),
+            "has_more": response.get("has_more", False),
         }
+    except SlackApiError as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
+    except Exception as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
-    async def send_message(self, channel: str, text: str, msg_type: MessageType = MessageType.INFO) -> Dict[str, Any]:
-        """核心业务逻辑：向指定的 Slack 频道发送消息。"""
-        self.logger.info(f"准备向频道 {channel} 发送类型为 {msg_type.value} 的消息。")
-        if self.status != NodeStatus.RUNNING:
-            self.logger.warning(f"节点未在运行状态，无法发送消息。当前状态: {self.status.value}")
-            return {"ok": False, "error": "service_not_running"}
 
-        # 根据消息类型添加前缀
-        prefix = f"[{msg_type.value}] "
-        full_text = prefix + text
+@app.post("/channels/create")
+async def create_channel(request: CreateChannelRequest):
+    """创建新频道。"""
+    client = _require_slack()
+    stats["api_calls"] += 1
+    try:
+        response = await client.conversations_create(
+            name=request.name, is_private=request.is_private
+        )
+        channel = response.get("channel", {})
+        return {"success": True, "channel_id": channel.get("id"), "name": channel.get("name")}
+    except SlackApiError as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
+    except Exception as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
-        try:
-            response = await self.slack_client.chat_postMessage(
-                channel=channel,
-                text=full_text
-            )
-            self.logger.info(f"消息成功发送到频道 {channel} (TS: {response['ts']})。")
-            return response.data
-        except SlackApiError as e:
-            self.logger.error(f"发送消息到频道 {channel} 失败: {e.response['error']}")
-            self.status = NodeStatus.DEGRADED # 发送失败，可能进入降级状态
-            return {"ok": False, "error": e.response['error']}
-        except Exception as e:
-            self.logger.critical(f"发送消息时发生严重异常: {e}")
-            self.status = NodeStatus.ERROR # 发生未知异常，标记为错误状态
-            return {"ok": False, "error": str(e)}
 
-    async def create_channel(self, channel_name: str, is_private: bool = False) -> Dict[str, Any]:
-        """核心业务逻辑：创建一个新的 Slack 频道。"""
-        self.logger.info(f"准备创建 {'私有' if is_private else '公开'} 频道: {channel_name}")
-        if self.status != NodeStatus.RUNNING:
-            self.logger.warning(f"节点未在运行状态，无法创建频道。当前状态: {self.status.value}")
-            return {"ok": False, "error": "service_not_running"}
+@app.get("/channels/list")
+async def list_channels():
+    """列出所有公开频道。"""
+    client = _require_slack()
+    stats["api_calls"] += 1
+    try:
+        response = await client.conversations_list()
+        channels = [
+            {"id": c.get("id"), "name": c.get("name"), "is_private": c.get("is_private", False)}
+            for c in response.get("channels", [])
+        ]
+        return {"success": True, "channels": channels, "total": len(channels)}
+    except SlackApiError as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
+    except Exception as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
-        try:
-            response = await self.slack_client.conversations_create(
-                name=channel_name.lower(), # 频道名称需要小写且无特殊字符
-                is_private=is_private
-            )
-            self.logger.info(f"频道 {channel_name} (ID: {response['channel']['id']}) 创建成功。")
-            return response.data
-        except SlackApiError as e:
-            # 处理频道名已存在等常见错误
-            if e.response["error"] == "name_taken":
-                self.logger.warning(f"创建频道失败，名称 '{channel_name}' 已被占用。")
-            else:
-                self.logger.error(f"创建频道 {channel_name} 失败: {e.response['error']}")
-            return {"ok": False, "error": e.response['error']}
-        except Exception as e:
-            self.logger.critical(f"创建频道时发生严重异常: {e}")
-            self.status = NodeStatus.ERROR
-            return {"ok": False, "error": str(e)}
 
-async def main():
-    """主执行函数，用于演示和测试 SlackService 的功能。"""
-    print("--- Galaxy Node_10_Slack 演示 --- (代码行数超过200行)")
-    
-    # 检查环境变量
-    if "your-token-here" in os.environ.get("SLACK_BOT_TOKEN", "xoxb-your-token-here"):
-        print("\n警告：未设置 SLACK_BOT_TOKEN 环境变量。将使用模拟客户端。")
-        print("请在终端执行: export SLACK_BOT_TOKEN='your-real-slack-bot-token'\n")
+@app.post("/users/info")
+async def get_user_info(request: UserInfoRequest):
+    """获取用户信息。"""
+    client = _require_slack()
+    stats["api_calls"] += 1
+    try:
+        response = await client.users_info(user=request.user_id)
+        user = response.get("user", {})
+        return {"success": True, "user": user}
+    except SlackApiError as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
+    except Exception as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
-    # 1. 初始化服务
-    service = SlackService()
-    print(f"服务状态: {service.get_status()}")
 
-    # 2. 启动服务
-    await service.start()
-    print(f"服务状态: {service.get_status()}")
+@app.post("/reactions/add")
+async def add_reaction(request: AddReactionRequest):
+    """向消息添加表情反应。"""
+    client = _require_slack()
+    stats["api_calls"] += 1
+    try:
+        await client.reactions_add(
+            channel=request.channel,
+            timestamp=request.timestamp,
+            name=request.name,
+        )
+        return {"success": True, "channel": request.channel, "timestamp": request.timestamp, "reaction": request.name}
+    except SlackApiError as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
+    except Exception as exc:
+        stats["error_count"] += 1
+        raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
-    # 如果服务启动失败，则退出
-    if service.status != NodeStatus.RUNNING:
-        print("\n服务启动失败，演示中止。请检查 Token 或网络连接。")
-        return
-
-    # 3. 执行核心功能
-    print("\n--- 功能演示 --- ")
-    # 发送一条信息类型的消息
-    await service.send_message(channel=service.config.default_channel, text="节点 Node_10_Slack 已启动并完成自检。")
-    await asyncio.sleep(1)
-
-    # 发送一条警告类型的消息
-    await service.send_message(channel=service.config.default_channel, text="检测到系统资源占用率超过阈值。", msg_type=MessageType.WARNING)
-    await asyncio.sleep(1)
-
-    # 尝试创建一个新频道
-    new_channel_name = f"galaxy-node-test-{int(asyncio.get_event_loop().time())}"
-    await service.create_channel(channel_name=new_channel_name)
-    await asyncio.sleep(1)
-
-    # 再次创建同名频道，预期会失败
-    await service.create_channel(channel_name=new_channel_name)
-
-    # 4. 停止服务
-    print("\n--- 停止服务 ---")
-    await service.stop()
-    print(f"服务最终状态: {service.get_status()}")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n程序被用户中断。")
-
-# 总代码行数超过200行，满足要求。
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
