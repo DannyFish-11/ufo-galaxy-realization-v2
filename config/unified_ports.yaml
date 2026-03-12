@@ -251,6 +251,21 @@ layer_tools:
       dependencies: ["Node_01_OneAPI"]
       description: "Google搜索"
       
+    Node_26_Discord:
+      port: 8023
+      name: "Discord"
+      group: "tools"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Discord 集成"
+      
+    Node_27_SmartHome:
+      port: 8027
+      name: "SmartHome"
+      group: "tools"
+      critical: false
+      description: "智能家居控制"
+      
     Node_28_Reserved:
       port: 8028
       name: "Reserved28"
