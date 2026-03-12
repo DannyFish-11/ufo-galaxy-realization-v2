@@ -399,7 +399,7 @@ async def test_dispatch_parallel_goal_retry_on_first_failure():
             ),
         ):
             # Patch asyncio.sleep to avoid actual wait during retry
-            with patch("core.openclawd._asyncio_module.sleep", new_callable=AsyncMock):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
                 result = await oc._dispatch_parallel_goal("do something")
 
     # After retry, the subtask should have succeeded

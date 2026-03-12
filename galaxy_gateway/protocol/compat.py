@@ -172,8 +172,11 @@ def extract_parallel_result_payload(message: AIPMessage):
 
     payload = message.payload or {}
 
-    # Normalise: some legacy senders put subtask_results at top-level payload
-    data: dict = dict(payload)
+    # Normalise: some legacy senders put subtask_results at top-level payload.
+    # Shallow copy is intentional — we only read/rename top-level keys (group_id,
+    # subtask_results/device_results) and never mutate nested structures.
+    import copy as _copy
+    data: dict = _copy.deepcopy(dict(payload))
     if "group_id" not in data and message.task_id:
         data["group_id"] = message.task_id
     data.setdefault("group_id", "unknown")

@@ -917,7 +917,7 @@ class OpenClawd:
                         session_id=session_id,
                     )
                     # Propagate command_id / task_id into result
-                    r.setdefault("command_id", r.get("command_id", ""))
+                    r.setdefault("command_id", "")
                     r.setdefault("task_id", entry.task_id)
                     success = bool(r.get("success"))
                     tracker.mark_done(entry.group_id, entry.task_id, r, success=success)
