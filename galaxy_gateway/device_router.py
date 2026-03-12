@@ -461,6 +461,21 @@ class DeviceRouter:
                 task["result"] = result
                 task["completed_at"] = datetime.now().isoformat()
 
+            # ── 并行闭环：secondary coverage — 若 result 携带并行字段则记录 ──
+            if result.get("group_id"):
+                try:
+                    from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
+                    parallel_payload = {
+                        **result,
+                        # derive status from success field when not explicitly set
+                        "status": result.get("status") or (
+                            "success" if result.get("success") else "failed"
+                        ),
+                    }
+                    await record_parallel_fields(parallel_payload)
+                except Exception as _pt_err:
+                    logger.warning("parallel_tracker[device_router]: record failed: %s", _pt_err)
+
             logger.info(f"✅ 任务结果已记录: {task_id}")
             
         except Exception as e:

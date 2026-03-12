@@ -341,6 +341,19 @@ async def handle_response(connection_id: str, aip_msg):
         task_id = aip_msg.task_id or aip_msg.correlation_id or aip_msg.message_id
         payload = {"results": [r.model_dump() for r in aip_msg.results], **aip_msg.payload}
         await device_router.handle_task_result(task_id, payload)
+
+        # ── 并行闭环：将子任务结果记录到共享 ParallelGroupTracker ──
+        parallel_payload = dict(aip_msg.payload)
+        if not parallel_payload.get("group_id") and aip_msg.results:
+            # 从 results 列表第一个元素补充并行字段（兼容 AIP v3 results 路径）
+            parallel_payload.update(aip_msg.results[0].model_dump())
+
+        try:
+            from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
+            await record_parallel_fields(parallel_payload)
+        except Exception as _pt_err:
+            logger.warning("parallel_tracker[A]: record failed: %s", _pt_err)
+
         logger.info(f"✅ 任务结果已处理: {task_id}")
 
     except Exception as e:
