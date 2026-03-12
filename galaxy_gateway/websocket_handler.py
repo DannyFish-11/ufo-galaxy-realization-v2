@@ -22,6 +22,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
 from galaxy_gateway.protocol.compat import parse_message_compat
 from galaxy_gateway.protocol.aip_v3 import MessageType
+from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +53,13 @@ class GatewayWSManager:
                     break
             
             if device_id:
+                # ── SSOT: write-through to UDM FIRST, then clean up local state ──
+                # Even if UDM write fails the socket IS gone, so we must still
+                # remove the local entry; the warning is logged by the helper.
+                udm_write_unregister(device_id)
+
                 device_router.unregister_device(device_id)
                 del self.device_connections[device_id]
-
-                # Priority B: 同步到 UnifiedDeviceManager (SSOT)
-                try:
-                    from core.unified.device_manager import get_unified_device_manager
-                    from core.unified.models import UnifiedDeviceStatus
-                    get_unified_device_manager().update_device_status(
-                        device_id, UnifiedDeviceStatus.OFFLINE
-                    )
-                except Exception:
-                    pass
 
                 # 兼容层：同步到 core 的 registered_devices
                 try:
@@ -192,36 +188,14 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
         platform = map_device_type_to_platform(device_type_raw)
 
         # ── SSOT: write-through to UnifiedDeviceManager FIRST ──
-        udm_success = False
-        try:
-            from core.unified.device_manager import get_unified_device_manager
-            from core.unified.models import (
-                UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus,
-            )
-            try:
-                utype = UnifiedDeviceType(device_type_raw.split("_")[0] if "_" in device_type_raw else device_type_raw)
-            except ValueError:
-                utype = UnifiedDeviceType.UNKNOWN
-            udm_device = UnifiedDevice(
-                device_id=device_id,
-                device_name=device_name,
-                device_type=utype,
-                status=UnifiedDeviceStatus.ONLINE,
-                capabilities=capabilities if isinstance(capabilities, list) else list(capabilities),
-                metadata=metadata,
-                source="gateway_ws",
-            )
-            get_unified_device_manager().register_device(udm_device)
-            udm_success = True
-        except Exception as udm_err:
-            # SSOT guardrail: if UDM write fails, emit structured warning and
-            # do NOT treat local state as truth.
-            logger.warning(
-                "SSOT guardrail: UDM write failed for device %s — "
-                "local gateway state will NOT be used as truth. error=%s",
-                device_id, udm_err,
-                extra={"event": "ssot_udm_write_failed", "device_id": device_id},
-            )
+        udm_success = udm_write_register(
+            device_id=device_id,
+            device_name=device_name,
+            device_type_raw=device_type_raw,
+            capabilities=capabilities,
+            metadata=metadata,
+            source="gateway_ws",
+        )
 
         # 注册设备（local gateway router — secondary, only when UDM succeeded）
         success = False
@@ -299,20 +273,7 @@ async def handle_heartbeat(connection_id: str, aip_msg):
         device_id = aip_msg.device_id
 
         # ── SSOT: write-through to UnifiedDeviceManager FIRST ──
-        try:
-            from core.unified.device_manager import get_unified_device_manager
-            from core.unified.models import UnifiedDeviceStatus
-            udm = get_unified_device_manager()
-            udm.update_device_status(device_id, UnifiedDeviceStatus.ONLINE)
-        except Exception as udm_err:
-            logger.warning(
-                "SSOT guardrail: UDM heartbeat write failed for device %s — "
-                "local gateway status NOT updated as truth. error=%s",
-                device_id, udm_err,
-                extra={"event": "ssot_udm_heartbeat_failed", "device_id": device_id},
-            )
-            # Do not update local device state when UDM write fails
-        else:
+        if udm_write_heartbeat(device_id):
             # Update local device state only when UDM write succeeded
             device = device_router.get_device(device_id)
             if device:
