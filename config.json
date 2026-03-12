@@ -5,5 +5,7 @@
   "llm_models": {},
   "mcp_servers": {},
   "skills": {},
-  "nodes": {}
+  "nodes": {},
+  "prefer_autonomous": true,
+  "parallel_execution_enabled": true
 }

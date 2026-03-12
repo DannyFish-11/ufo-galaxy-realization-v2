@@ -230,7 +230,8 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
                 device_id=device_id,
                 device_type=platform,
                 capabilities=capabilities,
-                websocket=websocket
+                websocket=websocket,
+                metadata=metadata,
             )
 
             if success:
