@@ -108,6 +108,8 @@
                     <div class="island-tab" :class="{ active: tab === 'devices' }" @click="tab = 'devices'; loadDevices()">📱 设备</div>
                     <div class="island-tab" :class="{ active: tab === 'agents' }" @click="tab = 'agents'; loadAgents()">🤖 Agent</div>
                     <div class="island-tab" :class="{ active: tab === 'tools' }" @click="tab = 'tools'">🔧 工具</div>
+                    <div class="island-tab" :class="{ active: tab === 'permissions' }" @click="tab = 'permissions'; loadPermissions()">🔐 权限</div>
+                    <div class="island-tab" :class="{ active: tab === 'integrations' }" @click="tab = 'integrations'; loadIntegrations()">🔗 集成</div>
                     <div class="island-tab" :class="{ active: tab === 'test' }" @click="tab = 'test'">🧪 测试</div>
                 </div>
 
@@ -444,6 +446,105 @@
                         </div>
                     </div>
 
+                    <!-- ═══ 权限管理中心 (P1) ═══ -->
+                    <div v-show="tab === 'permissions'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span style="font-size: 14px; font-weight: 600;">🔐 全局权限策略</span>
+                                <button @click="savePermissions" class="btn-sm btn-purple">保存策略</button>
+                            </div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.25); margin-bottom: 12px;">全局默认权限，新建 Agent 继承此策略；可在 Agent 创建时单独覆盖。</div>
+                            <div v-if="permPolicy.global" class="grid grid-cols-4 gap-2 mb-3">
+                                <label v-for="pd in permissionDefs" :key="pd.key"
+                                    class="provider-chip flex flex-col items-center cursor-pointer"
+                                    style="padding: 10px 6px; gap: 6px;"
+                                    :style="{ background: permPolicy.global[pd.key] ? 'rgba(124,92,252,0.18)' : 'rgba(255,255,255,0.04)', borderColor: permPolicy.global[pd.key] ? 'rgba(124,92,252,0.5)' : 'rgba(255,255,255,0.08)' }">
+                                    <span style="font-size: 20px;">{{ pd.icon }}</span>
+                                    <span style="font-size: 10px; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.03em;">{{ pd.key }}</span>
+                                    <input type="checkbox" v-model="permPolicy.global[pd.key]" style="width: 14px; height: 14px; accent-color: #7c5cfc; cursor: pointer;">
+                                </label>
+                            </div>
+                            <div v-if="permSaveStatus" class="mt-1" style="font-size: 11px;" :class="permSaveStatus.success ? 'valid' : 'invalid'">{{ permSaveStatus.message }}</div>
+                        </div>
+                        <div class="glass-card p-4">
+                            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">🤖 Agent 覆盖策略</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.25); margin-bottom: 10px;">为特定 Agent 单独设置权限（覆盖全局策略）。填入 Agent ID 后点击"添加覆盖"。</div>
+                            <div class="flex space-x-2 mb-3">
+                                <input v-model="permOverrideAgentId" type="text" placeholder="Agent ID" class="island-input flex-1 px-3 py-2" style="font-size: 12px; border-radius: 12px;">
+                                <button @click="addAgentOverride" class="btn-sm btn-blue">添加覆盖</button>
+                            </div>
+                            <div v-if="permPolicy.agent_overrides && Object.keys(permPolicy.agent_overrides).length" class="space-y-2">
+                                <div v-for="(overridePerms, agentId) in permPolicy.agent_overrides" :key="agentId" class="provider-chip">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span style="font-size: 12px; font-weight: 500; color: #7c5cfc;">{{ agentId }}</span>
+                                        <button @click="removeAgentOverride(agentId)" class="btn-sm" style="background: rgba(255,69,58,0.15); color: #ff453a; padding: 2px 8px; font-size: 10px;">移除</button>
+                                    </div>
+                                    <div class="flex space-x-2">
+                                        <label v-for="pd in permissionDefs" :key="pd.key" class="flex items-center space-x-1 cursor-pointer">
+                                            <input type="checkbox" v-model="permPolicy.agent_overrides[agentId][pd.key]" style="width: 12px; height: 12px; accent-color: #7c5cfc; cursor: pointer;">
+                                            <span style="font-size: 10px; color: rgba(255,255,255,0.5);">{{ pd.icon }} {{ pd.key }}</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else style="font-size: 11px; color: rgba(255,255,255,0.2); text-align: center; padding: 10px 0;">暂无 Agent 覆盖策略</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ 集成管理 (P1) ═══ -->
+                    <div v-show="tab === 'integrations'" style="flex: 1; overflow-y: auto;" class="space-y-3">
+                        <div class="glass-card p-4">
+                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">🔗 集成管理</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.25); margin-bottom: 10px;">管理 Telegram / Discord / Slack / WhatsApp 等平台集成。P1 阶段仅存储配置，无实际 API 调用。</div>
+                            <div class="grid grid-cols-4 gap-2 text-center">
+                                <div><div style="font-size: 22px; font-weight: 700; color: #30d158;">{{ integrations.filter(i => i.enabled).length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">已启用</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #0a84ff;">{{ integrations.length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">总集成</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #7c5cfc;">{{ integrations.filter(i => i.bot_token_configured || i.api_token_configured).length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">已配置 Token</div></div>
+                                <div><div style="font-size: 22px; font-weight: 700; color: #ffd60a;">{{ integrations.filter(i => i.enabled && !(i.bot_token_configured || i.api_token_configured)).length }}</div><div style="font-size: 11px; color: rgba(255,255,255,0.3);">待配置</div></div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4 space-y-3">
+                            <div v-for="intg in integrations" :key="intg.key" class="provider-chip">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center space-x-2">
+                                        <span style="font-size: 16px;">{{ intg.icon }}</span>
+                                        <span style="font-size: 13px; font-weight: 600;">{{ intg.name }}</span>
+                                        <span class="status-dot" :class="intg.enabled ? 'online' : 'offline'"></span>
+                                        <span v-if="intg.bot_token_configured || intg.api_token_configured" style="font-size: 10px; color: #30d158;">Token ✓</span>
+                                    </div>
+                                    <label class="flex items-center space-x-1 cursor-pointer">
+                                        <input type="checkbox" v-model="intg.enabled" @change="saveIntegration(intg)" style="accent-color: #30d158; cursor: pointer;">
+                                        <span style="font-size: 11px; color: rgba(255,255,255,0.5);">启用</span>
+                                    </label>
+                                </div>
+                                <div style="font-size: 10px; color: rgba(255,255,255,0.25); margin-bottom: 8px;">{{ intg.description }}</div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div v-if="intg.key !== 'whatsapp'">
+                                        <div style="font-size: 10px; color: rgba(255,255,255,0.3); margin-bottom: 2px;">Bot Token</div>
+                                        <div class="flex space-x-1">
+                                            <input v-model="intg.bot_token_input" type="password" :placeholder="intg.bot_token_configured ? '已配置 (修改请重新输入)' : '未配置'" class="island-input flex-1 px-2.5 py-1.5" style="font-size: 11px; border-radius: 10px;">
+                                            <button @click="saveIntegrationToken(intg)" class="btn-sm btn-purple" style="font-size: 10px;">保存</button>
+                                        </div>
+                                    </div>
+                                    <div v-if="intg.key === 'whatsapp'">
+                                        <div style="font-size: 10px; color: rgba(255,255,255,0.3); margin-bottom: 2px;">API Token</div>
+                                        <div class="flex space-x-1">
+                                            <input v-model="intg.api_token_input" type="password" :placeholder="intg.api_token_configured ? '已配置' : '未配置'" class="island-input flex-1 px-2.5 py-1.5" style="font-size: 11px; border-radius: 10px;">
+                                            <button @click="saveIntegrationToken(intg)" class="btn-sm btn-purple" style="font-size: 10px;">保存</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 10px; color: rgba(255,255,255,0.3); margin-bottom: 2px;">{{ intg.key === 'whatsapp' ? 'Phone Number ID' : 'Webhook URL' }}</div>
+                                        <div class="flex space-x-1">
+                                            <input v-model="intg.webhook_input" type="text" :placeholder="intg.key === 'whatsapp' ? '电话号码 ID' : 'https://...'" class="island-input flex-1 px-2.5 py-1.5" style="font-size: 11px; border-radius: 10px;">
+                                            <button @click="saveIntegration(intg)" class="btn-sm btn-blue" style="font-size: 10px;">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- ═══ 系统测试（简化对话）═══ -->
                     <div v-show="tab === 'test'" style="flex: 1; overflow-y: auto;" class="space-y-3">
                         <div class="glass-card p-4">
@@ -479,6 +580,35 @@
                             </div>
                             <div v-if="chatReply" class="mt-2 p-3" style="background: rgba(0,0,0,0.3); border-radius: 12px; font-size: 12px;">
                                 <div style="white-space: pre-wrap; color: rgba(255,255,255,0.7);">{{ chatReply }}</div>
+                            </div>
+                            <!-- 执行链路可视化 (P1) -->
+                            <div v-if="chatExecData.error" class="mt-2 p-3" style="background: rgba(255,69,58,0.08); border: 1px solid rgba(255,69,58,0.2); border-radius: 12px; font-size: 11px; color: #ff453a;">
+                                <span style="font-weight: 600;">⚠️ 错误：</span>{{ chatExecData.error }}
+                            </div>
+                            <div v-if="chatExecData.agent_steps && chatExecData.agent_steps.length" class="mt-2">
+                                <div style="font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.4); margin-bottom: 6px; letter-spacing: 0.04em;">🔗 执行链路</div>
+                                <div class="space-y-1">
+                                    <div v-for="(step, idx) in chatExecData.agent_steps" :key="idx"
+                                         style="background: rgba(0,0,0,0.25); border-left: 2px solid rgba(124,92,252,0.5); border-radius: 0 8px 8px 0; padding: 5px 10px; font-size: 11px;">
+                                        <div class="flex items-center space-x-2">
+                                            <span style="color: rgba(124,92,252,0.8); font-weight: 600;">{{ idx + 1 }}</span>
+                                            <span style="color: rgba(255,255,255,0.7);">{{ step.action || step.name || step.type || ('步骤 ' + (idx + 1)) }}</span>
+                                            <span v-if="step.status" style="font-size: 10px; padding: 1px 5px; border-radius: 4px;"
+                                                  :style="{ background: step.status === 'done' || step.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)', color: step.status === 'done' || step.status === 'success' ? '#30d158' : 'rgba(255,255,255,0.4)' }">{{ step.status }}</span>
+                                        </div>
+                                        <div v-if="step.result || step.output" style="margin-top: 2px; color: rgba(255,255,255,0.4); font-size: 10px;">{{ step.result || step.output }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="chatExecData.tool_calls && chatExecData.tool_calls.length" class="mt-2">
+                                <div style="font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.4); margin-bottom: 6px; letter-spacing: 0.04em;">🛠️ 工具调用</div>
+                                <div class="space-y-1">
+                                    <div v-for="(call, idx) in chatExecData.tool_calls" :key="idx"
+                                         style="background: rgba(10,132,255,0.06); border-left: 2px solid rgba(10,132,255,0.4); border-radius: 0 8px 8px 0; padding: 5px 10px; font-size: 11px;">
+                                        <span style="color: #0a84ff; font-weight: 600;">{{ call.function?.name || call.name || call.tool || 'tool' }}</span>
+                                        <span v-if="call.function?.arguments || call.arguments" style="margin-left: 6px; color: rgba(255,255,255,0.3); font-size: 10px; font-family: monospace;">{{ call.function?.arguments || call.arguments }}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -581,6 +711,15 @@
                 const testResult = ref('');
                 const inputMessage = ref('');
                 const chatReply = ref('');
+                const chatExecData = ref({ agent_steps: [], tool_calls: [], error: null });
+
+                // Permissions (P1)
+                const permPolicy = ref({ global: { filesystem: false, terminal: false, network: true, browser: false }, agent_overrides: {} });
+                const permSaveStatus = ref(null);
+                const permOverrideAgentId = ref('');
+
+                // Integrations (P1)
+                const integrations = ref([]);
 
                 const configuredCount = computed(() => {
                     let count = 0;
@@ -731,11 +870,86 @@
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim()) return;
                     chatReply.value = '处理中...';
+                    chatExecData.value = { agent_steps: [], tool_calls: [], error: null };
                     try {
                         const r = await axios.post('/api/v1/chat', { message: inputMessage.value.trim() });
                         chatReply.value = r.data.response || r.data.reply || '处理完成';
+                        chatExecData.value = {
+                            agent_steps: r.data.agent_steps || [],
+                            tool_calls: r.data.tool_calls || [],
+                            error: r.data.error || null,
+                        };
                         inputMessage.value = '';
                     } catch (e) { chatReply.value = '连接失败: ' + e.message; }
+                };
+
+                // Permissions methods (P1)
+                const loadPermissions = async () => {
+                    try {
+                        const r = (await axios.get('/api/v1/permissions/policy')).data;
+                        permPolicy.value = r;
+                    } catch (e) { console.error('加载权限策略失败:', e); }
+                };
+                const savePermissions = async () => {
+                    permSaveStatus.value = null;
+                    try {
+                        const r = await axios.post('/api/v1/permissions/policy', { global: permPolicy.value.global, agent_overrides: permPolicy.value.agent_overrides });
+                        permSaveStatus.value = { success: r.data.success, message: r.data.success ? '策略已保存' : '保存失败' };
+                    } catch (e) { permSaveStatus.value = { success: false, message: '保存失败: ' + e.message }; }
+                };
+                const addAgentOverride = () => {
+                    const id = permOverrideAgentId.value.trim();
+                    if (!id) return;
+                    if (!permPolicy.value.agent_overrides) permPolicy.value.agent_overrides = {};
+                    if (!permPolicy.value.agent_overrides[id]) {
+                        permPolicy.value.agent_overrides[id] = { filesystem: false, terminal: false, network: true, browser: false };
+                    }
+                    permOverrideAgentId.value = '';
+                };
+                const removeAgentOverride = (agentId) => {
+                    if (permPolicy.value.agent_overrides) delete permPolicy.value.agent_overrides[agentId];
+                };
+
+                // Integrations methods (P1)
+                const _INTG_META = {
+                    telegram:  { icon: '✈️', name: 'Telegram' },
+                    discord:   { icon: '🎮', name: 'Discord' },
+                    slack:     { icon: '💬', name: 'Slack' },
+                    whatsapp:  { icon: '📱', name: 'WhatsApp' },
+                };
+                const loadIntegrations = async () => {
+                    try {
+                        const data = (await axios.get('/api/v1/integrations/config')).data;
+                        integrations.value = ['telegram', 'discord', 'slack', 'whatsapp'].map(key => ({
+                            key,
+                            icon: _INTG_META[key].icon,
+                            name: _INTG_META[key].name,
+                            ...(data[key] || {}),
+                            bot_token_input: '',
+                            api_token_input: '',
+                            webhook_input: data[key]?.webhook_url || data[key]?.phone_number_id || '',
+                        }));
+                    } catch (e) { console.error('加载集成配置失败:', e); }
+                };
+                const saveIntegration = async (intg) => {
+                    const payload = { [intg.key]: { enabled: intg.enabled } };
+                    if (intg.key === 'whatsapp') {
+                        if (intg.webhook_input) payload[intg.key].phone_number_id = intg.webhook_input;
+                    } else {
+                        if (intg.webhook_input) payload[intg.key].webhook_url = intg.webhook_input;
+                    }
+                    try { await axios.post('/api/v1/integrations/config', payload); } catch (e) {}
+                };
+                const saveIntegrationToken = async (intg) => {
+                    const isWhatsApp = intg.key === 'whatsapp';
+                    const token = isWhatsApp ? intg.api_token_input : intg.bot_token_input;
+                    if (!token) return;
+                    const field = isWhatsApp ? 'api_token' : 'bot_token';
+                    try {
+                        await axios.post('/api/v1/integrations/config', { [intg.key]: { [field]: token } });
+                        intg[field + '_configured'] = true;
+                        if (isWhatsApp) { intg.api_token_input = ''; } else { intg.bot_token_input = ''; }
+                    } catch (e) { alert('保存失败: ' + e.message); }
                 };
 
                 onMounted(() => {
@@ -749,13 +963,17 @@
                     selectedTemplate, agentTaskDesc, agentCreateStatus, agentPermissions, permissionDefs,
                     twinTask, twinStrategy, twinCount, twinResult, swarmTask, swarmCount, swarmResult,
                     mcpServers, skills, deviceList, crossDeviceSource, transferSource, transferTarget,
-                    tools, nodes, testMessage, testResult, inputMessage, chatReply, configuredCount,
+                    tools, nodes, testMessage, testResult, inputMessage, chatReply, chatExecData, configuredCount,
+                    permPolicy, permSaveStatus, permOverrideAgentId,
+                    integrations,
                     loadNodeApis, saveNodeApiKey, loadAgents, createAgentFromTemplate, createAgentDynamic, deleteAgent,
                     createTwin, createSwarm,
                     loadProtocols, toggleMcpTools, unloadMcp, loadSkill, unloadSkill,
                     loadDevices, discoverDevices, showDeviceTelemetry, sendDeviceCmd, syncClipboard, transferFile,
                     saveOneAPI, validateOneAPI, saveProvider, validateProvider,
-                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage
+                    saveTool, validateTool, validateAllTools, testLLM, checkNodes, sendMessage,
+                    loadPermissions, savePermissions, addAgentOverride, removeAgentOverride,
+                    loadIntegrations, saveIntegration, saveIntegrationToken,
                 };
             }
         }).mount('#app');
