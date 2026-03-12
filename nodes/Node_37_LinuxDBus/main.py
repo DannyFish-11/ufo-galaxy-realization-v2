@@ -1,292 +1,132 @@
-# -*- coding: utf-8 -*-
 """
-Node_37_LinuxDBus: Linux D-Bus 通信节点
-
-负责与 Linux D-Bus 系统服务进行交互，提供方法调用、信号监听和属性访问等功能。
-需要安装 `dbus-next` 库: sudo pip3 install dbus-next
+Node 37: LinuxDBus - D-Bus IPC Service
 """
-
 import os
-import sys
-import json
-import asyncio
-import logging
-from enum import Enum
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
-# 导入 D-Bus 库
-# 确保已安装: pip install dbus-next
 try:
-    from dbus_next.aio import MessageBus
-    from dbus_next.constants import BusType
-    from dbus_next.errors import DBusError
-    HAS_DBUS = True
+    from core.port_config import get_node_port
+    PORT = get_node_port("Node_37_LinuxDBus")
+except Exception:
+    PORT = int(os.getenv("PORT", "8037"))
+
+try:
+    import dbus
+    DBUS_AVAILABLE = True
 except ImportError:
-    HAS_DBUS = False
-    # 提供占位类型，避免引用错误
-    class BusType(Enum):
-        SYSTEM = "system"
-        SESSION = "session"
-    class DBusError(Exception):
-        pass
-    MessageBus = None
-    logging.getLogger("Node_37_LinuxDBus").warning(
-        "dbus-next 未安装，D-Bus 功能不可用。请运行 'pip install dbus-next' 安装。"
-    )
+    dbus = None
+    DBUS_AVAILABLE = False
 
-# 配置日志记录器
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
-)
-logger = logging.getLogger("Node_37_LinuxDBus")
+app = FastAPI(title="Node 37 - LinuxDBus", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-class NodeStatus(Enum):
-    """节点运行状态枚举"""
-    INITIALIZING = "初始化中"
-    CONNECTING = "连接中"
-    CONNECTED = "已连接"
-    RUNNING = "运行中"
-    DISCONNECTED = "已断开"
-    ERROR = "错误"
-    STOPPED = "已停止"
+class DBusCallRequest(BaseModel):
+    bus_type: str = "session"  # "session" or "system"
+    service: str
+    object_path: str
+    interface: str
+    method: str
+    args: Optional[List[Any]] = None
 
-@dataclass
-class DBusConfig:
-    """D-Bus 连接配置"""
-    bus_type: BusType = BusType.SYSTEM
-    node_name: str = "io.github.galaxy.Node37"
+class DBusIntrospectRequest(BaseModel):
+    bus_type: str = "session"
+    service: str
+    object_path: str
 
-@dataclass
-class ServiceConfig:
-    """服务配置类"""
-    node_id: str = "Node_37_LinuxDBus"
-    log_level: str = "INFO"
-    dbus_config: DBusConfig = field(default_factory=DBusConfig)
+class DBusSignalRequest(BaseModel):
+    bus_type: str = "session"
+    object_path: str
+    interface: str
+    signal_name: str
+    args: Optional[List[Any]] = None
 
-class LinuxDBusService:
-    """
-    主服务类，用于管理 D-Bus 通信。
-    """
+def get_bus(bus_type: str):
+    if not DBUS_AVAILABLE:
+        raise RuntimeError("dbus-python not installed. Run: pip install dbus-python")
+    if bus_type == "system":
+        return dbus.SystemBus()
+    return dbus.SessionBus()
 
-    def __init__(self, config_path: Optional[str] = None) -> None:
-        """初始化服务"""
-        self.config: ServiceConfig = self._load_config(config_path)
-        self._setup_logging()
-        self.status: NodeStatus = NodeStatus.INITIALIZING
-        self.bus: Optional[MessageBus] = None
-        self.introspection_cache: Dict[str, Any] = {}
-        logger.info(f"节点 {self.config.node_id} 初始化完成。")
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy" if DBUS_AVAILABLE else "degraded",
+        "node_id": "37",
+        "name": "LinuxDBus",
+        "dbus_available": DBUS_AVAILABLE,
+        "degraded": not DBUS_AVAILABLE,
+        "degraded_reason": None if DBUS_AVAILABLE else "dbus-python not installed",
+        "timestamp": datetime.now().isoformat()
+    }
 
-    def _load_config(self, config_path: Optional[str]) -> ServiceConfig:
-        """加载配置文件，如果路径不存在则使用默认配置"""
-        if config_path and os.path.exists(config_path):
-            logger.info(f"从 {config_path} 加载配置。")
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config_data = json.load(f)
-                    # 此处可以添加更复杂的配置解析逻辑
-                    return ServiceConfig(**config_data)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.error(f"配置文件解析失败: {e}，将使用默认配置。")
-                return ServiceConfig()
-        logger.warning("未提供配置文件或文件不存在，将使用默认配置。")
-        return ServiceConfig()
+@app.get("/status")
+async def status():
+    return {
+        "status": "running",
+        "node_id": "37",
+        "name": "LinuxDBus",
+        "dbus_available": DBUS_AVAILABLE,
+        "timestamp": datetime.now().isoformat()
+    }
 
-    def _setup_logging(self) -> None:
-        """根据配置设置日志级别"""
-        level = logging.getLevelName(self.config.log_level.upper())
-        logger.setLevel(level)
-
-    async def start(self) -> None:
-        """启动服务并连接到 D-Bus"""
-        if self.status in [NodeStatus.CONNECTING, NodeStatus.CONNECTED, NodeStatus.RUNNING]:
-            logger.warning(f"服务已在运行中，当前状态: {self.status.value}")
-            return
-
-        self.status = NodeStatus.CONNECTING
-        logger.info("正在连接到 D-Bus...")
-        try:
-            self.bus = await MessageBus(bus_type=self.config.dbus_config.bus_type).connect()
-            self.status = NodeStatus.CONNECTED
-            logger.info(f"成功连接到 {self.config.dbus_config.bus_type.name} D-Bus。")
-            # 可以在此处添加 D-Bus 名称请求等逻辑
-            # await self.bus.request_name(self.config.dbus_config.node_name)
-            self.status = NodeStatus.RUNNING
-            logger.info(f"节点 {self.config.node_id} 开始运行。")
-        except (DBusError, asyncio.TimeoutError) as e:
-            self.status = NodeStatus.ERROR
-            logger.error(f"连接 D-Bus 失败: {e}")
-            self.bus = None
-        except Exception as e:
-            self.status = NodeStatus.ERROR
-            logger.critical(f"启动过程中发生未知严重错误: {e}", exc_info=True)
-            self.bus = None
-
-    async def stop(self) -> None:
-        """停止服务并断开 D-Bus 连接"""
-        logger.info("正在停止服务...")
-        if self.bus and self.bus.connected:
-            self.bus.disconnect()
-        self.status = NodeStatus.STOPPED
-        logger.info(f"节点 {self.config.node_id} 已停止。")
-
-    async def health_check(self) -> Dict[str, Any]:
-        """提供健康检查接口"""
-        is_connected = self.bus is not None and self.bus.connected
-        return {
-            "node_id": self.config.node_id,
-            "status": self.status.value,
-            "dbus_connected": is_connected,
-            "timestamp": asyncio.get_event_loop().time()
-        }
-
-    async def get_status(self) -> Dict[str, Any]:
-        """提供详细状态查询接口"""
-        health = await self.health_check()
-        health["config"] = self.config.__dict__
-        return health
-
-    async def introspect_service(self, service_name: str, object_path: str) -> Any:
-        """内省一个 D-Bus 服务以获取其接口信息"""
-        if not self.bus or not self.bus.connected:
-            raise ConnectionError("D-Bus 未连接。")
-        
-        cache_key = f"{service_name}:{object_path}"
-        if cache_key in self.introspection_cache:
-            return self.introspection_cache[cache_key]
-
-        logger.info(f"正在内省服务: {service_name}, 对象路径: {object_path}")
-        try:
-            introspection = await self.bus.introspect(service_name, object_path)
-            self.introspection_cache[cache_key] = introspection
-            return introspection
-        except DBusError as e:
-            logger.error(f"内省失败: {e}")
-            raise
-
-    async def call_method(
-        self, 
-        service_name: str, 
-        object_path: str, 
-        interface_name: str, 
-        method_name: str, 
-        signature: str = '', 
-        args: List[Any] = []
-    ) -> Any:
-        """调用一个 D-Bus 方法"""
-        if not self.bus or not self.bus.connected:
-            raise ConnectionError("D-Bus 未连接。")
-
-        logger.info(f"调用方法: {interface_name}.{method_name} on {service_name}")
-        try:
-            proxy_object = self.bus.get_proxy_object(service_name, object_path, await self.introspect_service(service_name, object_path))
-            interface = proxy_object.get_interface(interface_name)
-            
-            # 动态获取方法
-            method_to_call = getattr(interface, f"call_{method_name}")
-            result = await method_to_call(*args)
-            logger.info(f"方法调用成功，返回: {result}")
-            return result
-        except DBusError as e:
-            logger.error(f"调用 D-Bus 方法失败: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"调用期间发生未知错误: {e}", exc_info=True)
-            raise
-
-async def main():
-    """主执行函数"""
-    logger.info("--- D-Bus 节点演示 --- ")
-    service = LinuxDBusService()
-    
+@app.post("/call")
+async def call_method(request: DBusCallRequest):
+    if not DBUS_AVAILABLE:
+        return {"success": False, "error": "dbus-python not installed. Run: pip install dbus-python"}
     try:
-        # 启动服务
-        await service.start()
-
-        if service.status != NodeStatus.RUNNING:
-            logger.error("服务未能成功启动，演示中止。")
-            return
-
-        # --- 演示 1: 获取 systemd 的版本 ---
-        logger.info("\n--- 演示 1: 获取 systemd 版本 ---")
-        try:
-            systemd_version = await service.call_method(
-                'org.freedesktop.systemd1',
-                '/org/freedesktop/systemd1',
-                'org.freedesktop.systemd1.Manager',
-                'GetProperties', # 通常属性通过属性接口获取，但这里用方法调用演示
-                's',
-                ['Version']
-            )
-            # 返回值可能需要解析，这里仅作演示
-            logger.info(f"获取到 systemd 原始返回: {systemd_version}")
-        except Exception as e:
-            logger.error(f"获取 systemd 版本失败: {e}")
-
-        # --- 演示 2: 列出 systemd 管理的所有单元 ---
-        logger.info("\n--- 演示 2: 列出 systemd 单元 ---")
-        try:
-            units = await service.call_method(
-                'org.freedesktop.systemd1',
-                '/org/freedesktop/systemd1',
-                'org.freedesktop.systemd1.Manager',
-                'ListUnits'
-            )
-            logger.info(f"成功列出 {len(units)} 个 systemd 单元。部分单元:")
-            for unit in units[:5]: # 只显示前5个
-                logger.info(f"  - {unit[0]}")
-        except Exception as e:
-            logger.error(f"列出 systemd 单元失败: {e}")
-
-        # --- 演示 3: 健康检查和状态查询 ---
-        logger.info("\n--- 演示 3: 健康与状态检查 ---")
-        health = await service.health_check()
-        logger.info(f"健康检查结果: {health}")
-        status = await service.get_status()
-        logger.info(f"详细状态: {status}")
-
+        bus = get_bus(request.bus_type)
+        obj = bus.get_object(request.service, request.object_path)
+        iface = dbus.Interface(obj, request.interface)
+        method = getattr(iface, request.method)
+        args = request.args or []
+        result = method(*args)
+        return {"success": True, "result": str(result)}
     except Exception as e:
-        logger.critical(f"主程序发生严重错误: {e}", exc_info=True)
-    finally:
-        # 停止服务
-        await service.stop()
-# ---------------------------------------------------------------------------
-# HTTP 健康检查服务器
-# ---------------------------------------------------------------------------
-import threading as _threading
-try:
-    from fastapi import FastAPI as _FastAPI
-    import uvicorn as _uvicorn
-    _health_app = _FastAPI(title="Node_37_LinuxDBus")
+        return {"success": False, "error": str(e)}
 
-    @_health_app.get("/health")
-    def _health_endpoint():
-        return {"status": "ok", "node": "Node_37_LinuxDBus"}
-
-    @_health_app.get("/status")
-    def _status_endpoint():
-        return {"status": "ok", "node": "Node_37_LinuxDBus"}
-
-    def _start_health_server():
-        _uvicorn.run(_health_app, host="0.0.0.0", port=8037, log_level="error")
-except ImportError:
-    _health_app = None
-    def _start_health_server():
-        pass
-if __name__ == "__main__":
-    if _health_app is not None:
-        _threading.Thread(target=_start_health_server, daemon=True).start()
-    # 在某些环境中，直接运行asyncio.run()可能会因嵌套事件循环而出错
-    # 例如在Jupyter或某些框架中。标准Python脚本中是安全的。
+@app.get("/introspect")
+async def introspect(service: str, object_path: str, bus_type: str = "session"):
+    if not DBUS_AVAILABLE:
+        return {"success": False, "error": "dbus-python not installed. Run: pip install dbus-python"}
     try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if "cannot run loop while another loop is running" in str(e):
-            logger.warning("检测到已在运行的事件循环。将使用 get_event_loop().run_until_complete()。")
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(main())
-        else:
-            raise
+        bus = get_bus(bus_type)
+        obj = bus.get_object(service, object_path)
+        iface = dbus.Interface(obj, "org.freedesktop.DBus.Introspectable")
+        xml = iface.Introspect()
+        return {"success": True, "xml": str(xml)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/signal")
+async def emit_signal(request: DBusSignalRequest):
+    if not DBUS_AVAILABLE:
+        return {"success": False, "error": "dbus-python not installed. Run: pip install dbus-python"}
+    try:
+        import dbus.service
+        import dbus.mainloop.glib
+        # Signals require a running main loop and registered service; return guidance
+        return {"success": False, "error": "Signal emission requires a registered D-Bus service with a running main loop. Use /call for method invocation."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/list_names")
+async def list_names(bus_type: str = "session"):
+    if not DBUS_AVAILABLE:
+        return {"success": False, "error": "dbus-python not installed. Run: pip install dbus-python"}
+    try:
+        bus = get_bus(bus_type)
+        obj = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
+        iface = dbus.Interface(obj, "org.freedesktop.DBus")
+        names = list(iface.ListNames())
+        return {"success": True, "names": names, "count": len(names)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

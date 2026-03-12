@@ -23,6 +23,16 @@ from pydantic import BaseModel, Field
 import uvicorn
 from nodes.common.cors_config import get_cors_origins
 
+# Try to import sympy for real symbolic computation
+try:
+    import sympy
+    from sympy import symbols, simplify, expand, factor, solve, diff, integrate, latex, sympify, series
+    from sympy.parsing.sympy_parser import parse_expr
+    SYMPY_AVAILABLE = True
+except ImportError:
+    sympy = None
+    SYMPY_AVAILABLE = False
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -541,6 +551,7 @@ async def health_check():
         "status": "healthy",
         "node_id": NODE_ID,
         "node_name": NODE_NAME,
+        "sympy_available": SYMPY_AVAILABLE,
         "audit_trail_size": len(pipeline.audit_trail) if pipeline else 0
     }
 
@@ -649,6 +660,63 @@ def _get_domain_description(domain: MathDomain) -> str:
         MathDomain.GENERAL: "General mathematical expressions",
     }
     return descriptions.get(domain, "Mathematical domain")
+
+# =============================================================================
+# SymPy-powered endpoints (when sympy is available)
+# =============================================================================
+
+@app.post("/sympy/compute")
+async def sympy_compute(expression: str, operation: str = "simplify", variable: str = "x"):
+    """Use sympy for real symbolic computation."""
+    if not SYMPY_AVAILABLE:
+        return {"success": False, "error": "sympy not installed. Run: pip install sympy"}
+    try:
+        x = symbols(variable)
+        expr = parse_expr(expression, local_dict={variable: x})
+        if operation == "simplify":
+            result = simplify(expr)
+        elif operation == "expand":
+            result = expand(expr)
+        elif operation == "factor":
+            result = factor(expr)
+        elif operation == "diff":
+            result = diff(expr, x)
+        elif operation == "integrate":
+            result = integrate(expr, x)
+        elif operation == "series":
+            result = series(expr, x, 0, 6)
+        elif operation == "solve":
+            result = solve(expr, x)
+        else:
+            return {"success": False, "error": f"Unknown operation: {operation}. Choose: simplify, expand, factor, diff, integrate, series, solve"}
+        return {
+            "success": True,
+            "input": expression,
+            "operation": operation,
+            "result": str(result),
+            "latex": latex(result)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/sympy/solve")
+async def sympy_solve(equation: str, variable: str = "x"):
+    """Solve an equation symbolically using sympy."""
+    if not SYMPY_AVAILABLE:
+        return {"success": False, "error": "sympy not installed. Run: pip install sympy"}
+    try:
+        x = symbols(variable)
+        expr = parse_expr(equation, local_dict={variable: x})
+        solutions = solve(expr, x)
+        return {
+            "success": True,
+            "equation": equation,
+            "variable": variable,
+            "solutions": [str(s) for s in solutions],
+            "solutions_latex": [latex(s) for s in solutions]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # =============================================================================
 # Main Entry Point

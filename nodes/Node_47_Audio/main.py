@@ -1,426 +1,224 @@
-# -*- coding: utf-8 -*-
-
 """
-Node_47_Audio: 音频处理节点
-
-该节点负责处理各种音频任务，包括录音、播放、格式转换和简单的音频效果处理。
-它通过一个主服务类来管理音频设备、处理音频流以及响应外部命令。
+Node 47: Audio - Audio Recording and Playback
 """
-
-import asyncio
-import logging
 import os
-import wave
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, Dict, Any
+import base64
+import io
+import threading
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
 
-# --- 配置和状态定义 ---
-
-# 配置日志记录器
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("node_47_audio.log", mode="a", encoding="utf-8")
-    ]
-)
-
-logger = logging.getLogger(__name__)
-
-class NodeStatus(Enum):
-    """
-    节点运行状态枚举
-    """
-    INITIALIZING = "初始化中"
-    RUNNING = "运行中"
-    STOPPED = "已停止"
-    ERROR = "错误"
-    MAINTENANCE = "维护中"
-
-class AudioFormat(Enum):
-    """
-    支持的音频格式
-    """
-    WAV = "wav"
-    MP3 = "mp3"  # 实际转换需要外部库如 pydub
-    RAW = "raw"
-
-@dataclass
-class AudioConfig:
-    """
-    音频节点配置
-    """
-    node_name: str = "Node_47_Audio"
-    node_version: str = "1.0.0"
-    log_level: str = "INFO"
-    default_device_id: int = 0
-    default_sample_rate: int = 44100
-    default_channels: int = 2
-    default_chunk_size: int = 1024
-    supported_formats: list[str] = field(default_factory=lambda: [f.value for f in AudioFormat])
-
-# --- 主服务类 ---
-
-class AudioService:
-    """
-    音频处理主服务类
-    """
-    def __init__(self, config: AudioConfig):
-        """
-        初始化音频服务
-
-        :param config: 音频节点配置
-        """
-        self.config = config
-        self.status = NodeStatus.INITIALIZING
-        self.current_task = None
-        self._is_recording = False
-        self._is_playing = False
-        self._audio_stream = None
-
-        self._setup_logging()
-        logger.info(f"节点 {self.config.node_name} (版本 {self.config.node_version}) 正在初始化...")
-
-    def _setup_logging(self):
-        """
-        根据配置设置日志级别
-        """
-        level = logging.getLevelName(self.config.log_level.upper())
-        logger.setLevel(level)
-
-    async def start(self):
-        """
-        启动音频服务，进入运行状态
-        """
-        if self.status == NodeStatus.RUNNING:
-            logger.warning("服务已在运行中。")
-            return
-
-        logger.info("音频服务正在启动...")
-        # 在实际应用中，这里会初始化音频设备接口，例如 PyAudio
-        # 此处为模拟实现
-        await asyncio.sleep(1)
-        self.status = NodeStatus.RUNNING
-        logger.info("音频服务已成功启动，处于运行状态。")
-
-    async def stop(self):
-        """
-        停止音频服务
-        """
-        if self.status != NodeStatus.RUNNING:
-            logger.warning("服务未在运行中。")
-            return
-
-        logger.info("音频服务正在停止...")
-        if self._is_recording:
-            await self.stop_recording()
-        if self._is_playing:
-            await self.stop_playback()
-        
-        await asyncio.sleep(1)
-        self.status = NodeStatus.STOPPED
-        logger.info("音频服务已停止。")
-
-    async def record_audio(self, output_path: str, duration: int, sample_rate: int = 44100, channels: int = 2) -> bool:
-        """
-        录制音频到文件
-
-        :param output_path: 输出文件路径 (.wav)
-        :param duration: 录制时长（秒）
-        :param sample_rate: 采样率
-        :param channels: 声道数
-        :return: 录制是否成功
-        """
-        if self._is_recording:
-            logger.error("已有一个录制任务在进行中。")
-            return False
-
-        logger.info(f"开始录制音频，时长 {duration} 秒，保存至 {output_path}")
-        self._is_recording = True
-        self.current_task = "recording"
-
-        try:
-            # 模拟录制过程
-            frames = []
-            total_frames = int(sample_rate / self.config.default_chunk_size * duration)
-            for i in range(total_frames):
-                if not self._is_recording:
-                    logger.info("录制被中断。")
-                    return False
-                # 模拟从音频缓冲区读取数据
-                await asyncio.sleep(self.config.default_chunk_size / sample_rate)
-                frames.append(os.urandom(self.config.default_chunk_size * channels * 2)) # 16-bit audio
-
-            logger.info("录制完成，正在保存文件...")
-
-            with wave.open(output_path, 'wb') as wf:
-                wf.setnchannels(channels)
-                wf.setsampwidth(2)  # 16-bit
-                wf.setframerate(sample_rate)
-                wf.writeframes(b''.join(frames))
-            
-            logger.info(f"音频文件已成功保存到 {output_path}")
-            return True
-        except Exception as e:
-            logger.error(f"录制过程中发生错误: {e}", exc_info=True)
-            self.status = NodeStatus.ERROR
-            return False
-        finally:
-            self._is_recording = False
-            self.current_task = None
-
-    async def stop_recording(self):
-        """
-        手动停止当前录制任务
-        """
-        if not self._is_recording:
-            logger.warning("当前没有录制任务。")
-            return
-        logger.info("正在停止录制...")
-        self._is_recording = False
-
-    async def play_audio(self, file_path: str) -> bool:
-        """
-        播放音频文件
-
-        :param file_path: 音频文件路径
-        :return: 播放是否成功
-        """
-        if self._is_playing:
-            logger.error("已有一个播放任务在进行中。")
-            return False
-        if not os.path.exists(file_path):
-            logger.error(f"音频文件不存在: {file_path}")
-            return False
-
-        logger.info(f"开始播放音频文件: {file_path}")
-        self._is_playing = True
-        self.current_task = "playing"
-
-        try:
-            with wave.open(file_path, 'rb') as wf:
-                # 模拟播放过程
-                while self._is_playing and (data := wf.readframes(self.config.default_chunk_size)):
-                    await asyncio.sleep(self.config.default_chunk_size / wf.getframerate())
-            logger.info("音频播放结束。")
-            return True
-        except Exception as e:
-            logger.error(f"播放过程中发生错误: {e}", exc_info=True)
-            self.status = NodeStatus.ERROR
-            return False
-        finally:
-            self._is_playing = False
-            self.current_task = None
-
-    async def stop_playback(self):
-        """
-        手动停止当前播放任务
-        """
-        if not self._is_playing:
-            logger.warning("当前没有播放任务。")
-            return
-        logger.info("正在停止播放...")
-        self._is_playing = False
-
-    async def convert_format(self, input_path: str, output_path: str, target_format: AudioFormat) -> bool:
-        """
-        转换音频格式
-
-        优先使用 pydub (需要 ffmpeg)，回退到 wave 库处理 WAV。
-
-        :param input_path: 输入文件路径
-        :param output_path: 输出文件路径
-        :param target_format: 目标格式
-        :return: 转换是否成功
-        """
-        if not os.path.exists(input_path):
-            logger.error(f"输入文件不存在: {input_path}")
-            return False
-
-        logger.info(f"请求转换 {input_path} 到 {target_format.value} 格式，输出至 {output_path}")
-
-        try:
-            # 方式1: 尝试使用 pydub (支持所有格式, 需要 ffmpeg)
-            try:
-                from pydub import AudioSegment
-                audio = await asyncio.get_event_loop().run_in_executor(
-                    None, AudioSegment.from_file, input_path
-                )
-                fmt = target_format.value.lower()
-                if fmt == "wav":
-                    export_fmt = "wav"
-                elif fmt == "mp3":
-                    export_fmt = "mp3"
-                elif fmt == "raw":
-                    export_fmt = "raw"
-                else:
-                    export_fmt = fmt
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: audio.export(output_path, format=export_fmt)
-                )
-                logger.info(f"使用 pydub 转换完成: {output_path}")
-                return True
-            except ImportError:
-                logger.info("pydub 不可用，尝试 ffmpeg 直接调用")
-
-            # 方式2: 尝试直接调用 ffmpeg
-            import subprocess
-            proc = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-y", "-i", input_path, output_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
-            if proc.returncode == 0:
-                logger.info(f"使用 ffmpeg 转换完成: {output_path}")
-                return True
-            else:
-                logger.warning(f"ffmpeg 返回非零: {stderr.decode()[:200]}")
-
-            # 方式3: 如果目标是 WAV 且源也是 WAV，直接复制
-            if target_format == AudioFormat.WAV and input_path.lower().endswith(".wav"):
-                import shutil
-                await asyncio.get_event_loop().run_in_executor(
-                    None, shutil.copy2, input_path, output_path
-                )
-                logger.info(f"WAV→WAV 直接复制: {output_path}")
-                return True
-
-            logger.error("无可用的音频转换后端 (需要 pydub 或 ffmpeg)")
-            return False
-
-        except Exception as e:
-            logger.error(f"格式转换过程中发生错误: {e}", exc_info=True)
-            self.status = NodeStatus.ERROR
-            return False
-
-    def get_health_status(self) -> Dict[str, Any]:
-        """
-        获取节点健康状态
-
-        :return: 包含状态信息的字典
-        """
-        return {
-            "node_name": self.config.node_name,
-            "status": self.status.value,
-            "version": self.config.node_version,
-            "is_busy": self._is_recording or self._is_playing,
-            "current_task": self.current_task
-        }
-
-    def get_node_info(self) -> Dict[str, Any]:
-        """
-        获取节点详细信息和配置
-
-        :return: 包含节点信息的字典
-        """
-        return {
-            "config": self.config.__dict__,
-            "status": self.get_health_status()
-        }
-
-# --- 示例和主程序入口 ---
-
-async def main():
-    """
-    主函数，用于演示和测试 AudioService 的功能
-    """
-    logger.info("--- Audio 节点功能演示 ---")
-
-    # 1. 加载配置并初始化服务
-    config = AudioConfig()
-    audio_service = AudioService(config)
-
-    # 2. 启动服务
-    await audio_service.start()
-    logger.info(f"健康检查: {audio_service.get_health_status()}")
-
-    # 3. 演示录制功能
-    output_wav_path = "test_recording.wav"
-    logger.info("\n--- 演示: 录制 5 秒音频 ---")
-    record_task = asyncio.create_task(audio_service.record_audio(output_wav_path, duration=5))
-    
-    # 模拟在录制过程中检查状态
-    await asyncio.sleep(2)
-    logger.info(f"录制中... 健康检查: {audio_service.get_health_status()}")
-    
-    # 等待录制完成
-    success = await record_task
-    if success:
-        logger.info("录制成功。")
-    else:
-        logger.error("录制失败。")
-
-    logger.info(f"健康检查: {audio_service.get_health_status()}")
-
-    # 4. 演示播放功能
-    if os.path.exists(output_wav_path):
-        logger.info("\n--- 演示: 播放录制的音频 ---")
-        play_task = asyncio.create_task(audio_service.play_audio(output_wav_path))
-
-        # 模拟在播放2秒后停止
-        await asyncio.sleep(2)
-        logger.info("将在1秒后中断播放...")
-        await asyncio.sleep(1)
-        await audio_service.stop_playback()
-        await play_task # 等待任务结束
-        logger.info("播放已手动停止。")
-    
-    logger.info(f"健康检查: {audio_service.get_health_status()}")
-
-    # 5. 演示格式转换功能
-    if os.path.exists(output_wav_path):
-        logger.info("\n--- 演示: 转换音频格式 (模拟) ---")
-        converted_path = "test_converted.mp3"
-        await audio_service.convert_format(output_wav_path, converted_path, AudioFormat.MP3)
-
-    # 6. 查询节点信息
-    logger.info(f"\n--- 节点详细信息 ---\n{audio_service.get_node_info()}")
-
-    # 7. 停止服务
-    await audio_service.stop()
-    logger.info(f"健康检查: {audio_service.get_health_status()}")
-
-    logger.info("--- 演示结束 ---")
-# ---------------------------------------------------------------------------
-# HTTP 健康检查服务器
-# ---------------------------------------------------------------------------
-import threading as _threading
 try:
-    from fastapi import FastAPI as _FastAPI
-    import uvicorn as _uvicorn
-    _health_app = _FastAPI(title="Node_47_Audio")
+    from core.port_config import get_node_port
+    PORT = get_node_port("Node_47_Audio")
+except Exception:
+    PORT = int(os.getenv("PORT", "8047"))
 
-    @_health_app.get("/health")
-    def _health_endpoint():
-        return {"status": "ok", "node": "Node_47_Audio"}
-
-    @_health_app.get("/status")
-    def _status_endpoint():
-        return {"status": "ok", "node": "Node_47_Audio"}
-
-    def _start_health_server():
-        _uvicorn.run(_health_app, host="0.0.0.0", port=8047, log_level="error")
+try:
+    import sounddevice as sd
+    import numpy as np
+    SD_AVAILABLE = True
 except ImportError:
-    _health_app = None
-    def _start_health_server():
-        pass
-if __name__ == "__main__":
-    if _health_app is not None:
-        _threading.Thread(target=_start_health_server, daemon=True).start()
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("程序被用户中断。")
-    finally:
-        # 清理生成的测试文件
-        if os.path.exists("test_recording.wav"):
-            os.remove("test_recording.wav")
-        if os.path.exists("test_converted.mp3"):
-            os.remove("test_converted.mp3")
-        if os.path.exists("node_47_audio.log"):
-            os.remove("node_47_audio.log")
-        logger.info("清理完成。")
+    sd = None
+    np = None
+    SD_AVAILABLE = False
 
+try:
+    from scipy.io import wavfile
+    SCIPY_AVAILABLE = True
+except ImportError:
+    wavfile = None
+    SCIPY_AVAILABLE = False
+
+app = FastAPI(title="Node 47 - Audio", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Recording state
+recording_state: Dict[str, Any] = {"active": False, "data": [], "samplerate": 44100, "channels": 1}
+playback_state: Dict[str, Any] = {"active": False}
+
+class RecordStartRequest(BaseModel):
+    device_id: Optional[int] = None
+    samplerate: int = 44100
+    channels: int = 1
+
+class PlayRequest(BaseModel):
+    audio_b64: Optional[str] = None  # base64 WAV data
+    file_path: Optional[str] = None
+    device_id: Optional[int] = None
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy" if SD_AVAILABLE else "degraded",
+        "node_id": "47",
+        "name": "Audio",
+        "sounddevice_available": SD_AVAILABLE,
+        "scipy_available": SCIPY_AVAILABLE,
+        "degraded": not SD_AVAILABLE,
+        "degraded_reason": None if SD_AVAILABLE else "sounddevice not installed",
+        "recording": recording_state["active"],
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/status")
+async def status():
+    return {
+        "status": "running",
+        "node_id": "47",
+        "name": "Audio",
+        "sounddevice_available": SD_AVAILABLE,
+        "recording": recording_state["active"],
+        "playing": playback_state["active"],
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/devices")
+async def list_devices():
+    if not SD_AVAILABLE:
+        return {"success": False, "error": "sounddevice not installed. Run: pip install sounddevice"}
+    try:
+        devices = sd.query_devices()
+        result = []
+        for i, d in enumerate(devices):
+            result.append({
+                "id": i,
+                "name": d["name"],
+                "max_input_channels": d["max_input_channels"],
+                "max_output_channels": d["max_output_channels"],
+                "default_samplerate": d["default_samplerate"],
+                "is_input": d["max_input_channels"] > 0,
+                "is_output": d["max_output_channels"] > 0
+            })
+        return {"success": True, "devices": result, "count": len(result)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/record/start")
+async def record_start(request: RecordStartRequest):
+    if not SD_AVAILABLE:
+        return {"success": False, "error": "sounddevice not installed. Run: pip install sounddevice"}
+    if recording_state["active"]:
+        return {"success": False, "error": "Recording already in progress"}
+    try:
+        recording_state["active"] = True
+        recording_state["data"] = []
+        recording_state["samplerate"] = request.samplerate
+        recording_state["channels"] = request.channels
+
+        def callback(indata, frames, time, status):
+            if recording_state["active"]:
+                recording_state["data"].append(indata.copy())
+
+        kwargs = {"samplerate": request.samplerate, "channels": request.channels, "callback": callback}
+        if request.device_id is not None:
+            kwargs["device"] = request.device_id
+
+        stream = sd.InputStream(**kwargs)
+        stream.start()
+        recording_state["stream"] = stream
+        return {"success": True, "samplerate": request.samplerate, "channels": request.channels}
+    except Exception as e:
+        recording_state["active"] = False
+        return {"success": False, "error": str(e)}
+
+@app.post("/record/stop")
+async def record_stop():
+    if not SD_AVAILABLE:
+        return {"success": False, "error": "sounddevice not installed. Run: pip install sounddevice"}
+    if not recording_state["active"]:
+        return {"success": False, "error": "No active recording"}
+    try:
+        recording_state["active"] = False
+        stream = recording_state.get("stream")
+        if stream:
+            stream.stop()
+            stream.close()
+            recording_state["stream"] = None
+
+        if not recording_state["data"]:
+            return {"success": False, "error": "No audio data recorded"}
+
+        audio = np.concatenate(recording_state["data"], axis=0)
+        samplerate = recording_state["samplerate"]
+
+        buf = io.BytesIO()
+        if SCIPY_AVAILABLE:
+            audio_int16 = (audio * 32767).astype(np.int16)
+            wavfile.write(buf, samplerate, audio_int16)
+        else:
+            # Simple WAV header
+            import struct
+            channels = audio.shape[1] if audio.ndim > 1 else 1
+            audio_int16 = (audio * 32767).astype(np.int16).tobytes()
+            buf.write(b"RIFF")
+            buf.write(struct.pack("<I", 36 + len(audio_int16)))
+            buf.write(b"WAVE")
+            buf.write(b"fmt ")
+            buf.write(struct.pack("<IHHIIHH", 16, 1, channels, samplerate, samplerate * channels * 2, channels * 2, 16))
+            buf.write(b"data")
+            buf.write(struct.pack("<I", len(audio_int16)))
+            buf.write(audio_int16)
+
+        audio_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        recording_state["data"] = []
+        return {"success": True, "audio_b64": audio_b64, "samplerate": samplerate, "duration": len(audio) / samplerate}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/play")
+async def play_audio(request: PlayRequest):
+    if not SD_AVAILABLE:
+        return {"success": False, "error": "sounddevice not installed. Run: pip install sounddevice"}
+    try:
+        if request.audio_b64:
+            data = base64.b64decode(request.audio_b64)
+            buf = io.BytesIO(data)
+            if SCIPY_AVAILABLE:
+                samplerate, audio = wavfile.read(buf)
+            else:
+                return {"success": False, "error": "scipy required for WAV playback. Run: pip install scipy"}
+        elif request.file_path:
+            if not os.path.exists(request.file_path):
+                return {"success": False, "error": f"File not found: {request.file_path}"}
+            if SCIPY_AVAILABLE:
+                samplerate, audio = wavfile.read(request.file_path)
+            else:
+                return {"success": False, "error": "scipy required for WAV playback. Run: pip install scipy"}
+        else:
+            return {"success": False, "error": "Either audio_b64 or file_path required"}
+
+        kwargs = {"samplerate": samplerate}
+        if request.device_id is not None:
+            kwargs["device"] = request.device_id
+
+        def play():
+            playback_state["active"] = True
+            sd.play(audio, **kwargs)
+            sd.wait()
+            playback_state["active"] = False
+
+        t = threading.Thread(target=play, daemon=True)
+        t.start()
+        return {"success": True, "samplerate": samplerate, "message": "Playback started"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/play/stop")
+async def stop_playback():
+    if not SD_AVAILABLE:
+        return {"success": False, "error": "sounddevice not installed. Run: pip install sounddevice"}
+    try:
+        sd.stop()
+        playback_state["active"] = False
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

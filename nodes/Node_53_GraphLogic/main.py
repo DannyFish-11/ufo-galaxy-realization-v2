@@ -12,6 +12,13 @@ import heapq
 from nodes.common.cors_config import get_cors_origins
 from core.port_config import get_node_port
 
+try:
+    import networkx as nx
+    NETWORKX_AVAILABLE = True
+except ImportError:
+    nx = None
+    NETWORKX_AVAILABLE = False
+
 app = FastAPI(title="Node 53 - GraphLogic", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -32,7 +39,11 @@ class LogicRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "node_id": "53", "name": "GraphLogic", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy", "node_id": "53", "name": "GraphLogic", "networkx_available": NETWORKX_AVAILABLE, "timestamp": datetime.now().isoformat()}
+
+@app.get("/status")
+async def status():
+    return {"status": "running", "node_id": "53", "name": "GraphLogic", "networkx_available": NETWORKX_AVAILABLE, "timestamp": datetime.now().isoformat()}
 
 def build_adjacency(graph: Graph) -> Dict[str, Dict[str, float]]:
     adj = {node: {} for node in graph.nodes}
@@ -249,6 +260,74 @@ async def evaluate_logic(request: LogicRequest):
     result = request.query in facts
     return {"success": True, "query": request.query, "result": result, "derived_facts": list(facts)}
 
+def _graph_to_nx(graph: Graph):
+    """Convert Graph model to networkx graph."""
+    if graph.directed:
+        G = nx.DiGraph()
+    else:
+        G = nx.Graph()
+    G.add_nodes_from(graph.nodes)
+    for edge in graph.edges:
+        G.add_edge(edge["source"], edge["target"], weight=edge.get("weight", 1))
+    return G
+
+@app.post("/centrality")
+async def compute_centrality(graph: Graph, measure: str = "degree"):
+    """Use networkx for advanced centrality computation."""
+    if not NETWORKX_AVAILABLE:
+        return {"success": False, "error": "networkx not installed. Run: pip install networkx"}
+    try:
+        G = _graph_to_nx(graph)
+        if measure == "degree":
+            centrality = nx.degree_centrality(G)
+        elif measure == "betweenness":
+            centrality = nx.betweenness_centrality(G)
+        elif measure == "closeness":
+            centrality = nx.closeness_centrality(G)
+        elif measure == "pagerank":
+            centrality = nx.pagerank(G)
+        elif measure == "eigenvector":
+            centrality = nx.eigenvector_centrality(G, max_iter=1000)
+        else:
+            return {"success": False, "error": f"Unknown measure: {measure}. Choose: degree, betweenness, closeness, pagerank, eigenvector"}
+        return {"success": True, "measure": measure, "centrality": centrality}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/community")
+async def detect_communities(graph: Graph):
+    """Detect communities using networkx."""
+    if not NETWORKX_AVAILABLE:
+        return {"success": False, "error": "networkx not installed. Run: pip install networkx"}
+    try:
+        G = _graph_to_nx(graph)
+        if graph.directed:
+            G = G.to_undirected()
+        communities = list(nx.community.greedy_modularity_communities(G))
+        return {
+            "success": True,
+            "communities": [sorted(list(c)) for c in communities],
+            "count": len(communities),
+            "modularity": nx.community.modularity(G, communities)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/clustering")
+async def clustering_coefficient(graph: Graph):
+    """Compute clustering coefficients using networkx."""
+    if not NETWORKX_AVAILABLE:
+        return {"success": False, "error": "networkx not installed. Run: pip install networkx"}
+    try:
+        G = _graph_to_nx(graph)
+        if graph.directed:
+            G = G.to_undirected()
+        clustering = nx.clustering(G)
+        avg = nx.average_clustering(G)
+        return {"success": True, "clustering": clustering, "average_clustering": avg}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 @app.post("/mcp/call")
 async def mcp_call(request: dict):
     tool = request.get("tool", "")
@@ -259,6 +338,9 @@ async def mcp_call(request: dict):
     elif tool == "cycle_detection": return await detect_cycle(Graph(**params.get("graph", {})))
     elif tool == "mst": return await minimum_spanning_tree(Graph(**params.get("graph", {})))
     elif tool == "logic_evaluate": return await evaluate_logic(LogicRequest(**params))
+    elif tool == "centrality": return await compute_centrality(Graph(**params.get("graph", {})), params.get("measure", "degree"))
+    elif tool == "community": return await detect_communities(Graph(**params.get("graph", {})))
+    elif tool == "clustering": return await clustering_coefficient(Graph(**params.get("graph", {})))
     raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
 
 if __name__ == "__main__":
