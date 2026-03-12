@@ -1079,8 +1079,8 @@
     "os_version": "",
     "registered_at": "2026-03-12T04:48:42.499161",
     "last_seen": "2026-03-12T04:48:42.499184",
-    "status": "online",
-    "online": true,
+    "status": "offline",
+    "online": false,
     "source": "gateway_ws"
   },
   "e2e-2e4d19a8": {
@@ -1096,7 +1096,8 @@
     "app_version": "2.3.0",
     "registered_at": "2026-03-12T04:48:43.394156",
     "last_seen": "2026-03-12T04:48:43.394162",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "e2e-list-73ca4018": {
     "device_id": "e2e-list-73ca4018",
@@ -1107,7 +1108,8 @@
     "app_version": "",
     "registered_at": "2026-03-12T04:48:43.397008",
     "last_seen": "2026-03-12T04:48:43.397012",
-    "status": "registered"
+    "status": "offline",
+    "online": false
   },
   "cmd-dev-a23c049c": {
     "device_id": "cmd-dev-a23c049c",
@@ -1118,6 +1120,21 @@
     "app_version": "",
     "registered_at": "2026-03-12T04:48:43.401696",
     "last_seen": "2026-03-12T04:48:43.401700",
+    "status": "offline",
+    "online": false
+  },
+  "rest_ssot_01": {
+    "device_id": "rest_ssot_01",
+    "device_type": "android",
+    "device_name": "SSoT Phone",
+    "capabilities": [
+      "touch",
+      "camera"
+    ],
+    "os_version": "Android 14",
+    "app_version": "2.1.0",
+    "registered_at": "2026-03-12T05:49:21.943754",
+    "last_seen": "2026-03-12T05:49:21.943762",
     "status": "registered"
   }
 }

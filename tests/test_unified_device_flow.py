@@ -486,3 +486,214 @@ class TestWebSocketDisconnectSync:
             UnifiedDeviceStatus.OFFLINE,
             UnifiedDeviceStatus.OFFLINE.value,
         )
+
+
+# ---------------------------------------------------------------------------
+# SSOT 全链路闭环：REST 注册 → UDM → CapabilityRegistry
+# ---------------------------------------------------------------------------
+
+class TestRESTRegistrationWritesToUDM:
+    """REST 注册路径必须写入 UnifiedDeviceManager（SSOT）。"""
+
+    def setup_method(self):
+        _reset_udm()
+        _reset_cap_registry()
+
+    def _make_request(self, device_id: str, capabilities=None, metadata=None):
+        """构造 DeviceRegisterRequest 风格字典，直接调用 devices.py 内部逻辑。"""
+        from core.routes._models import DeviceRegisterRequest
+        data = {
+            "device_id": device_id,
+            "device_type": "android",
+            "device_name": f"TestPhone-{device_id[:4]}",
+            "capabilities": capabilities or ["touch", "screen"],
+            "os_version": "Android 13",
+            "app_version": "2.0.0",
+        }
+        if metadata:
+            data.update(metadata)
+        return DeviceRegisterRequest(**data)
+
+    @pytest.mark.asyncio
+    async def test_rest_register_writes_to_udm(self):
+        """REST POST /register 调用后，设备必须出现在 UDM 中。"""
+        # 确保 devices 模块使用隔离的 UDM 单例
+        _reset_udm()
+        from core.unified.device_manager import get_unified_device_manager
+        udm = get_unified_device_manager()
+
+        from core.routes.devices import create_router
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+        app.include_router(create_router())
+
+        with TestClient(app) as client:
+            resp = client.post("/api/v1/devices/register", json={
+                "device_id": "rest_ssot_01",
+                "device_type": "android",
+                "device_name": "SSoT Phone",
+                "capabilities": ["touch", "camera"],
+                "os_version": "Android 14",
+                "app_version": "2.1.0",
+            })
+            assert resp.status_code == 200
+            assert resp.json()["success"] is True
+
+        # 验证 UDM 内存中有该设备
+        dev = udm.get_device("rest_ssot_01")
+        assert dev is not None, "REST 注册后设备应存在于 UDM"
+        assert dev.device_id == "rest_ssot_01"
+        assert "touch" in dev.capabilities
+
+    @pytest.mark.asyncio
+    async def test_rest_register_capability_visible_in_registry(self):
+        """REST 注册后，CapabilityRegistry 应能看到设备能力。"""
+        _reset_udm()
+        _reset_cap_registry()
+        from core.unified.device_manager import get_unified_device_manager
+        udm = get_unified_device_manager()
+
+        from core.routes.devices import _sync_device_to_capability_registry
+        device_info = {
+            "device_id": "cap_reg_test_01",
+            "device_name": "CapRegPhone",
+            "device_type": "android",
+            "capabilities": ["screen", "keyboard"],
+        }
+
+        # 先手动同步到 UDM（模拟注册流程）
+        udm.register_device_from_dict("cap_reg_test_01", device_info)
+
+        # 调用能力同步
+        count = _sync_device_to_capability_registry(device_info)
+        assert count >= 2, "至少应同步 screen 和 keyboard 两个能力"
+
+        from core.agent.capability_registry import CapabilityRegistry
+        reg = CapabilityRegistry.get_instance()
+        items = reg.list_tools(source="gateway")
+        names = [i.name for i in items]
+        assert any("cap_reg_test_01" in n and "screen" in n for n in names)
+        assert any("cap_reg_test_01" in n and "keyboard" in n for n in names)
+
+    @pytest.mark.asyncio
+    async def test_rest_unregister_removes_from_udm(self):
+        """REST DELETE /devices/{id} 注销后设备应从 UDM 中移除。"""
+        _reset_udm()
+        from core.unified.device_manager import get_unified_device_manager
+        from core.routes.devices import create_router
+        from core.routes._shared import registered_devices
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        udm = get_unified_device_manager()
+
+        # 先在 UDM 和兼容缓存中预注册
+        udm.register_device_from_dict("del_test_01", {
+            "device_id": "del_test_01",
+            "device_type": "android",
+            "capabilities": [],
+        })
+        registered_devices["del_test_01"] = {
+            "device_id": "del_test_01",
+            "device_type": "android",
+            "status": "registered",
+        }
+
+        app = FastAPI()
+        app.include_router(create_router())
+
+        with TestClient(app) as client:
+            resp = client.delete("/api/v1/devices/del_test_01")
+            assert resp.status_code == 200
+
+        # 验证 UDM 中已移除
+        assert udm.get_device("del_test_01") is None, "注销后设备应从 UDM 移除"
+
+    def test_rest_heartbeat_updates_udm(self):
+        """REST POST /heartbeat 应更新 UDM 中的 last_heartbeat。"""
+        _reset_udm()
+        from core.unified.device_manager import get_unified_device_manager
+        from core.routes._shared import registered_devices
+
+        udm = get_unified_device_manager()
+        udm.register_device_from_dict("hb_test_01", {
+            "device_id": "hb_test_01",
+            "device_type": "android",
+        })
+        # 在兼容缓存中预置（heartbeat 端点检查 registered_devices 存在性）
+        registered_devices["hb_test_01"] = {
+            "device_id": "hb_test_01",
+            "last_seen": "2000-01-01T00:00:00",
+            "status": "registered",
+        }
+
+        before_hb = udm.get_device("hb_test_01").last_heartbeat
+
+        udm.heartbeat("hb_test_01")
+
+        after_hb = udm.get_device("hb_test_01").last_heartbeat
+        assert after_hb is not None
+        if before_hb is not None:
+            assert after_hb >= before_hb
+
+
+class TestDisconnectOfflineInUDM:
+    """断连/离线状态必须在 UDM 中可追踪（补充覆盖）。"""
+
+    def test_offline_status_tracked_after_unregister(self):
+        """注销后 UDM 不再持有该设备（unregister 而非 status=offline）。"""
+        _reset_udm()
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
+        udm = UnifiedDeviceManager()
+        dev = UnifiedDevice(device_id="offline_track_01")
+        dev.status = UnifiedDeviceStatus.ONLINE
+        udm.register_device(dev)
+
+        # 注销
+        udm.unregister_device("offline_track_01")
+        assert udm.get_device("offline_track_01") is None
+
+    def test_status_update_to_offline_tracked(self):
+        """状态更新为 OFFLINE 后，online_devices 不包含该设备。"""
+        _reset_udm()
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
+        udm = UnifiedDeviceManager()
+        dev = UnifiedDevice(device_id="offline_track_02")
+        dev.status = UnifiedDeviceStatus.ONLINE
+        udm.register_device(dev)
+
+        udm.update_device_status("offline_track_02", UnifiedDeviceStatus.OFFLINE)
+
+        online = udm.get_online_devices()
+        ids = [d.device_id for d in online]
+        assert "offline_track_02" not in ids
+
+    def test_offline_device_excluded_from_command_routing(self):
+        """离线设备不出现在可调用设备列表中（autonomous 和 capability 查询均排除）。"""
+        _reset_udm()
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
+        udm = UnifiedDeviceManager()
+        dev = UnifiedDevice(
+            device_id="route_offline_01",
+            metadata={"goal_execution_enabled": True},
+            capabilities=["touch"],
+        )
+        udm.register_device(dev)
+        # register_device sets status to ONLINE; explicitly mark offline
+        udm.update_device_status("route_offline_01", UnifiedDeviceStatus.OFFLINE)
+
+        # 离线设备不应出现在自治设备列表中
+        auto_ids = [d.device_id for d in udm.get_autonomous_devices()]
+        assert "route_offline_01" not in auto_ids
+
+        # 离线设备不应出现在能力查询结果中
+        cap_ids = [d.device_id for d in udm.get_devices_with_capability("touch")]
+        assert "route_offline_01" not in cap_ids

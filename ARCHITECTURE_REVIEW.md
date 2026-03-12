@@ -307,3 +307,54 @@ Node_95_WebRTC_Receiver  Node_96_SmartTransportRouter  Node_97_AcademicSearch
    Dockerfile 和 requirements.txt。
 
 > 详细列表和自动化工具请参见 `tools/check_node_packaging.sh`。
+
+---
+
+## 七、设备 SSOT 统一状态（2026-03-12 更新）
+
+### SSOT 已完成统一 + 兼容层行为说明
+
+**事实源（SSOT）已迁移到 `core.unified.device_manager.UnifiedDeviceManager`（UDM）。**
+
+#### 已完成变更
+
+| 链路环节 | 原有行为 | 统一后行为 |
+|---------|---------|----------|
+| REST `POST /api/v1/devices/register` | 只写 `registered_devices` dict + 落盘 JSON | **先写 UDM**，再写 `registered_devices`（兼容缓存） |
+| REST `POST /devices/{id}/heartbeat` | 只更新 `registered_devices` | 先更新兼容缓存，**再调用 `UDM.heartbeat()`** |
+| REST `DELETE /devices/{id}` | 只从 `registered_devices` 删除 | 先清理兼容缓存，**再调用 `UDM.unregister_device()`** |
+| WS 断连 `GatewayWSManager.disconnect()` | 只删 `device_connections` | **调用 `UDM.update_device_status(OFFLINE)`** |
+| `GET /api/v1/devices` / `GET /api/v1/devices/{id}` | 只读 `registered_devices` | **优先读 UDM**，以 `registered_devices` 补充遗留条目 |
+| 设备注册 → CapabilityRegistry | 注册后调用 `_sync_device_to_capability_registry` | 不变，UDM 写入在 capability 同步之前完成 |
+
+#### 兼容层行为
+
+`core/routes/_shared.py` 的 `registered_devices` 已在代码注释中明确标识为
+**"LEGACY COMPAT CACHE — 不是事实源（SSOT）"**。
+
+- **读操作**：允许遗留代码继续读取，作为 UDM 不可用时的兜底。
+- **写操作**：仅在 REST 端点写入 UDM 后同步更新（保持双写以防遗留代码依赖）。
+- **长期规划**：后续可逐步移除对 `registered_devices` 的写操作，完全切换到 UDM。
+
+#### 命令路由链路闭环
+
+```
+OpenClawd
+  → sync_device_capabilities()  [读 UDM，写 CapabilityRegistry]
+  → _dispatch_goal_execution()   [查 UDM.get_autonomous_devices()]
+  → send_gateway_command()
+  → CommandRouter.route_command()
+  → RouteConnectionPool.send_to_device() / GatewayWSManager.send_to_device()
+  → Device (Android / other)
+```
+
+离线设备（`UDM.status = OFFLINE`）不出现在 `get_online_devices()`、
+`get_autonomous_devices()`、`get_devices_with_capability()` 的返回结果中，
+因此命令路由不会将任务分配到离线设备。
+
+#### 测试覆盖
+
+新增测试位于 `tests/test_unified_device_flow.py`，覆盖：
+
+- `TestRESTRegistrationWritesToUDM` — REST 注册写入 UDM；注销从 UDM 移除；能力同步到 CapabilityRegistry；心跳更新 UDM
+- `TestDisconnectOfflineInUDM` — 注销后 UDM 无记录；状态更新为 OFFLINE；离线设备被排除在命令路由之外

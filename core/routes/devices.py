@@ -33,8 +33,10 @@ from core.routes._shared import (
     registered_devices,
     node_status_cache,
     _save_registered_devices,
+
 )
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
+from core.unified.device_manager import get_unified_device_manager
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -89,7 +91,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/devices/register")
     async def register_device(req: DeviceRegisterRequest):
-        """注册设备"""
+        """注册设备
+
+        事实源（SSOT）: UnifiedDeviceManager (UDM)。
+        registered_devices 作为只读兼容缓存保留，不再是主数据源。
+        """
         device_info = {
             "device_id": req.device_id,
             "device_type": req.device_type,
@@ -99,23 +105,41 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "app_version": req.app_version,
             "registered_at": datetime.now().isoformat(),
             "last_seen": datetime.now().isoformat(),
-            "status": "registered"
+            "status": "registered",
         }
+
+        # ── SSOT: 写入 UnifiedDeviceManager ──────────────────────────────
+        try:
+            get_unified_device_manager().register_device_from_dict(req.device_id, device_info)
+            logger.info(
+                "设备已写入 UDM (SSOT): %s (%s)", req.device_id, req.device_type,
+                extra={"event": "rest_register_udm", "device_id": req.device_id},
+            )
+        except Exception as exc:
+            logger.error(
+                "UDM 写入失败（设备注册继续）: %s — %s", req.device_id, exc,
+                extra={"event": "rest_register_udm_error", "device_id": req.device_id},
+            )
+
+        # ── 兼容缓存：保留 registered_devices 供遗留代码只读使用 ──────────
         registered_devices[req.device_id] = device_info
         _save_registered_devices(registered_devices)
-        logger.info(f"设备注册: {req.device_id} ({req.device_type})")
 
-        # PR88: 设备注册后立即同步能力到 CapabilityRegistry，使新设备成为可调用工具
+        logger.info("设备注册: %s (%s)", req.device_id, req.device_type)
+
+        # 设备注册后立即同步能力到 CapabilityRegistry，使新设备成为可调用工具
         synced_caps = _sync_device_to_capability_registry(device_info)
         if synced_caps:
-            logger.info("设备 %s 已同步 %d 个能力到 CapabilityRegistry", req.device_id, synced_caps)
+            logger.info(
+                "设备 %s 已同步 %d 个能力到 CapabilityRegistry", req.device_id, synced_caps,
+            )
 
         return JSONResponse({
             "success": True,
             "device_id": req.device_id,
             "message": "设备注册成功",
             "server_version": "3.0.0",
-            "available_nodes": list(node_status_cache.keys())[:20]
+            "available_nodes": list(node_status_cache.keys())[:20],
         })
 
     @router.post("/api/v1/devices/status")
@@ -138,13 +162,35 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.get("/api/v1/devices")
     async def list_devices():
-        """列出所有设备"""
-        devices = []
+        """列出所有设备（SSOT: UDM，兼容缓存补充遗留条目）"""
+        try:
+            udm = get_unified_device_manager()
+            udm_devices = {d.device_id: d for d in udm.list_devices()}
+        except Exception:
+            udm_devices = {}
+
+        # 以 UDM 为主，registered_devices 补充 UDM 中不存在的遗留条目
+        merged: Dict = {}
         for did, info in registered_devices.items():
-            devices.append({
+            merged[did] = {
                 **info,
-                "online": did in connection_manager.active_devices
-            })
+                "online": did in connection_manager.active_devices,
+            }
+        for did, dev in udm_devices.items():
+            dev_dict = {
+                "device_id": did,
+                "device_name": dev.device_name,
+                "device_type": dev.device_type,
+                "status": dev.status,
+                "capabilities": dev.capabilities,
+                "metadata": dev.metadata,
+                "registered_at": dev.registered_at.isoformat() if dev.registered_at else None,
+                "last_seen": dev.last_heartbeat.isoformat() if dev.last_heartbeat else None,
+                "online": did in connection_manager.active_devices or dev.is_online(),
+            }
+            merged[did] = dev_dict
+
+        devices = list(merged.values())
         return JSONResponse({"devices": devices, "total": len(devices)})
 
     @router.get("/api/v1/devices/discover")
@@ -174,11 +220,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.get("/api/v1/devices/{device_id}")
     async def get_device(device_id: str):
-        """获取设备详情"""
+        """获取设备详情（优先从 UDM 读取）"""
+        # 优先从 UDM (SSOT) 读取
+        try:
+            udm_dev = get_unified_device_manager().get_device(device_id)
+            if udm_dev is not None:
+                info = {
+                    "device_id": udm_dev.device_id,
+                    "device_name": udm_dev.device_name,
+                    "device_type": udm_dev.device_type,
+                    "status": udm_dev.status,
+                    "capabilities": udm_dev.capabilities,
+                    "metadata": udm_dev.metadata,
+                    "registered_at": udm_dev.registered_at.isoformat() if udm_dev.registered_at else None,
+                    "last_seen": udm_dev.last_heartbeat.isoformat() if udm_dev.last_heartbeat else None,
+                    "online": device_id in connection_manager.active_devices or udm_dev.is_online(),
+                }
+                return JSONResponse(info)
+        except Exception:
+            pass
+
+        # 遗留缓存兜底
         if device_id in registered_devices:
             info = registered_devices[device_id]
             info["online"] = device_id in connection_manager.active_devices
             return JSONResponse(info)
+
         raise HTTPException(status_code=404, detail="设备未找到")
 
     @router.post("/api/v1/devices/{device_id}/heartbeat")
@@ -191,8 +258,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
+        # 兼容缓存更新
         registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
         registered_devices[device_id]["status"] = "registered"
+
+        # SSOT: 同步心跳到 UDM
+        try:
+            get_unified_device_manager().heartbeat(device_id)
+        except Exception as exc:
+            logger.warning("UDM heartbeat 同步失败: %s — %s", device_id, exc)
 
         await connection_manager.broadcast_status({
             "type": "device_heartbeat",
@@ -212,8 +286,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
+        # 兼容缓存清理
         del registered_devices[device_id]
         _save_registered_devices(registered_devices)
+
+        # SSOT: 从 UDM 注销
+        try:
+            get_unified_device_manager().unregister_device(device_id)
+        except Exception as exc:
+            logger.warning("UDM unregister 同步失败: %s — %s", device_id, exc)
 
         await connection_manager.broadcast_status({
             "type": "device_unregistered",
@@ -221,7 +302,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "timestamp": datetime.now().isoformat(),
         })
 
-        logger.info(f"设备注销: {device_id}")
+        logger.info("设备注销: %s", device_id)
         return JSONResponse({"success": True, "device_id": device_id})
 
     # ─────── 跨设备协同 ─────────
