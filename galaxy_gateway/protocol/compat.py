@@ -65,6 +65,10 @@ _LEGACY_TYPE_MAP: dict = {
     # status aliases
     "status_update": MessageType.DEVICE_STATUS,
     "update_status": MessageType.DEVICE_STATUS,
+    # high-level autonomous task aliases
+    "goal_execute": MessageType.GOAL_EXECUTION,
+    "goal": MessageType.GOAL_EXECUTION,
+    "parallel_task": MessageType.PARALLEL_SUBTASK,
 }
 
 

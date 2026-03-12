@@ -51,6 +51,10 @@ class OpenClawd:
         "system_status": "_dispatch_status",
         "network": "_dispatch_agent",
         "code": "_dispatch_agent",
+        # Priority D: 高层自治目标执行
+        "goal_execution": "_dispatch_goal_execution",
+        # Priority E: 多设备并行任务
+        "parallel_goal": "_dispatch_parallel_goal",
     }
 
     # 核心节点静态 action 目录 — 精确的节点能力描述供 LLM 工具选择
@@ -509,9 +513,180 @@ class OpenClawd:
             "metadata": {"status_detail": status},
         }
 
-    # ========================================================================
-    # 工具总线 — 三层统一收集与分发
-    # ========================================================================
+    async def _dispatch_goal_execution(
+        self,
+        message: str,
+        intent=None,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> dict:
+        """Priority D: 高层自治目标执行分派。
+
+        流程：
+          1. 若指定了 device_id 且该设备声明 goal_execution_enabled，
+             通过 send_gateway_command 以 task_type=goal_execution 下发整体目标。
+          2. 否则查询 UnifiedDeviceManager 的自治设备列表，选择第一个可用设备。
+          3. 若无自治设备，降级到普通 _dispatch_agent。
+        """
+        goal = message
+        params = {}
+        if intent:
+            goal = getattr(intent, "goal", None) or getattr(intent, "command", None) or message
+            params = getattr(intent, "params", {}) or {}
+
+        # 确定目标设备
+        target_device_id = device_id
+        if not target_device_id:
+            try:
+                from core.unified.device_manager import get_unified_device_manager
+                auto_devices = get_unified_device_manager().get_autonomous_devices()
+                if auto_devices:
+                    target_device_id = auto_devices[0].device_id
+                    logger.info(
+                        "goal_execution: 自动选择自治设备 device_id=%s",
+                        target_device_id,
+                    )
+            except Exception as exc:
+                logger.debug("goal_execution: 自治设备查询失败: %s", exc)
+
+        if not target_device_id:
+            logger.info("goal_execution: 无可用自治设备，降级为 agent 执行")
+            return await self._dispatch_agent(message, intent, device_id, session_id)
+
+        result = await self.send_gateway_command(
+            device_id=target_device_id,
+            command="goal_execution",
+            payload={
+                "task_type": "goal_execution",
+                "goal": goal,
+                **params,
+            },
+            session_id=session_id,
+        )
+        if "response" not in result:
+            result["response"] = (
+                result.get("result")
+                or f"目标任务 '{goal}' 已提交至设备 {target_device_id}"
+            )
+        result["intent"] = "goal_execution"
+        logger.info(
+            "goal_execution dispatched | device=%s success=%s",
+            target_device_id,
+            result.get("success"),
+        )
+        return result
+
+    async def _dispatch_parallel_goal(
+        self,
+        message: str,
+        intent=None,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> dict:
+        """Priority E: 多设备并行任务拆分与下发。
+
+        流程：
+          1. 从 UnifiedDeviceManager 查询所有支持 parallel_execution_enabled 的在线设备。
+          2. 将自然语言目标按设备数量拆分为若干并行子任务（当前实现：每台设备执行相同目标，
+             后续可集成 LLM 进行语义拆分）。
+          3. 使用 asyncio.gather 并行向所有设备下发子任务。
+          4. 收集各设备结果，汇总后返回。
+        """
+        import asyncio as _asyncio
+
+        goal = message
+        params = {}
+        if intent:
+            goal = getattr(intent, "goal", None) or getattr(intent, "command", None) or message
+            params = getattr(intent, "params", {}) or {}
+
+        # 查找支持并行执行的设备
+        parallel_devices = []
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+            udm = get_unified_device_manager()
+            parallel_devices = udm.get_devices_with_capability("parallel_execution_enabled")
+            if not parallel_devices:
+                # 回退到所有自治设备
+                parallel_devices = udm.get_autonomous_devices()
+        except Exception as exc:
+            logger.debug("parallel_goal: 设备查询失败: %s", exc)
+
+        if not parallel_devices:
+            logger.info("parallel_goal: 无支持并行的设备，降级为单设备 goal_execution")
+            return await self._dispatch_goal_execution(message, intent, device_id, session_id)
+
+        subtasks = params.get("subtasks") or [goal] * len(parallel_devices)
+        task_id_base = uuid.uuid4().hex[:8]
+
+        async def _dispatch_subtask(idx: int, dev, subtask: str) -> dict:
+            sub_task_id = f"{task_id_base}_sub{idx}"
+            try:
+                r = await self.send_gateway_command(
+                    device_id=dev.device_id,
+                    command="goal_execution",
+                    payload={
+                        "task_type": "parallel_subtask",
+                        "goal": subtask,
+                        "parallel_group": task_id_base,
+                        "subtask_index": idx,
+                    },
+                    task_id=sub_task_id,
+                    session_id=session_id,
+                )
+                return {"device_id": dev.device_id, "subtask": subtask, **r}
+            except Exception as exc:
+                logger.warning(
+                    "parallel_goal: subtask %d on device %s failed: %s",
+                    idx, dev.device_id, exc,
+                )
+                return {
+                    "device_id": dev.device_id,
+                    "subtask": subtask,
+                    "success": False,
+                    "response": str(exc),
+                }
+
+        coros = [
+            _dispatch_subtask(i, dev, subtasks[i % len(subtasks)])
+            for i, dev in enumerate(parallel_devices)
+        ]
+        # return_exceptions=True: allow all subtasks to complete even if some fail;
+        # _dispatch_subtask already converts exceptions to failure dicts, but this
+        # provides an additional safety net for unexpected raises.
+        raw_results = await _asyncio.gather(*coros, return_exceptions=True)
+        sub_results = [
+            r if isinstance(r, dict) else {
+                "success": False,
+                "response": str(r),
+                "device_id": parallel_devices[i].device_id if i < len(parallel_devices) else "",
+            }
+            for i, r in enumerate(raw_results)
+        ]
+
+        succeeded = sum(1 for r in sub_results if r.get("success"))
+        failed = len(sub_results) - succeeded
+        summary = (
+            f"并行任务 '{goal}' 已分发至 {len(parallel_devices)} 台设备："
+            f"{succeeded} 成功，{failed} 失败。"
+        )
+        logger.info(
+            "parallel_goal done | group=%s devices=%d succeeded=%d failed=%d",
+            task_id_base,
+            len(parallel_devices),
+            succeeded,
+            failed,
+        )
+        return {
+            "success": succeeded > 0,
+            "response": summary,
+            "intent": "parallel_goal",
+            "metadata": {
+                "parallel_group": task_id_base,
+                "subtask_results": list(sub_results),
+                "device_count": len(parallel_devices),
+            },
+        }
 
     def _collect_tools(self) -> List[Dict]:
         """统一收集三层工具（MCP / Skill / Node），转为 OpenAI function calling 格式
@@ -1648,63 +1823,76 @@ class OpenClawd:
     # ========================================================================
 
     def sync_device_capabilities(self) -> int:
-        """将 DeviceRegistry 中的设备同步为 CapabilityRegistry 条目。
+        """将 UnifiedDeviceManager 中的设备同步为 CapabilityRegistry 条目。
 
-        新设备注册后调用此方法，可立即让 OpenClawd 感知并将其纳入 capability bus。
+        Priority A: 使用 UnifiedDeviceManager 作为 SSOT，取代旧 DeviceRegistry。
+        包括低层设备能力和高层自治能力（metadata 声明）。
         返回同步的能力条目数量。
         """
+        _AUTONOMOUS_CAPABILITY_KEYS = (
+            "goal_execution_enabled",
+            "local_task_planning",
+            "local_ui_reasoning",
+            "cross_device_coordination",
+            "parallel_execution_enabled",
+            "local_model_enabled",
+        )
         count = 0
         try:
-            from core.device_registry import DeviceRegistry
+            from core.unified.device_manager import get_unified_device_manager
             from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
 
             reg = CapabilityRegistry.get_instance()
+            udm = get_unified_device_manager()
+            devices = udm.list_devices()
 
-            registry_instance = None
-            try:
-                registry_instance = DeviceRegistry.get_instance()
-            except Exception:
-                try:
-                    registry_instance = DeviceRegistry()
-                except Exception:
-                    pass
-
-            if registry_instance is None:
-                return 0
-
-            devices = (
-                registry_instance.list_devices()
-                if hasattr(registry_instance, "list_devices") else {}
-            )
             if not devices:
                 return 0
 
-            items = devices.items() if isinstance(devices, dict) else enumerate(devices)
-            for device_id, device in items:
-                if isinstance(device, dict):
-                    caps = device.get("capabilities", [])
-                    d_name = device.get("device_name", str(device_id))
-                    d_type = device.get("device_type", "unknown")
-                else:
-                    caps = getattr(device, "capabilities", [])
-                    d_name = getattr(device, "device_name", str(device_id))
-                    d_type = getattr(device, "device_type", "unknown")
+            for device in devices:
+                device_id = device.device_id
+                d_name = device.device_name or device_id
+                d_type = str(device.device_type)
 
-                for cap in caps:
-                    cap_name = cap if isinstance(cap, str) else getattr(cap, "name", str(cap))
+                # 低层设备能力
+                for cap in (device.capabilities or []):
+                    cap_name = cap if isinstance(cap, str) else str(cap)
                     key = f"gateway__{device_id}__{cap_name}"
                     reg.register(CapabilityItem(
                         name=key,
                         description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
                         source="gateway",
-                        source_id=str(device_id),
+                        source_id=device_id,
                         available=True,
                         metadata={"device_name": d_name, "device_type": d_type},
                     ))
                     count += 1
 
+                # Priority C: 高层自治能力（从 metadata 声明）
+                meta = device.metadata or {}
+                for cap_key in _AUTONOMOUS_CAPABILITY_KEYS:
+                    if meta.get(cap_key):
+                        key = f"autonomous__{device_id}__{cap_key}"
+                        reg.register(CapabilityItem(
+                            name=key,
+                            description=f"[Autonomous:{d_name}] {cap_key}",
+                            source="autonomous",
+                            source_id=device_id,
+                            available=True,
+                            metadata={
+                                "device_id": device_id,
+                                "device_name": d_name,
+                                "device_type": d_type,
+                                "capability_key": cap_key,
+                            },
+                        ))
+                        count += 1
+
             if count:
-                logger.info("OpenClawd: 已同步 %d 个设备能力到 CapabilityRegistry", count)
+                logger.info(
+                    "OpenClawd: 已从 UnifiedDeviceManager 同步 %d 个设备能力到 CapabilityRegistry",
+                    count,
+                )
         except Exception as e:
             logger.debug("sync_device_capabilities 失败: %s", e)
         return count

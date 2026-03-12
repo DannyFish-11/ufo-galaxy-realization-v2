@@ -177,17 +177,19 @@ class CapabilityRegistry:
                 self._load_mcp(new_items),
                 self._load_skills(new_items),
                 self._load_gateway(new_items),
+                self._load_autonomous(new_items),
                 return_exceptions=True,
             )
 
             self._items = new_items
             self._last_refresh = time.monotonic()
             logger.info(
-                "CapabilityRegistry: 刷新完成，共 %d 项能力 (mcp=%d skill=%d gateway=%d)",
+                "CapabilityRegistry: 刷新完成，共 %d 项能力 (mcp=%d skill=%d gateway=%d autonomous=%d)",
                 len(new_items),
                 sum(1 for i in new_items.values() if i.source == "mcp"),
                 sum(1 for i in new_items.values() if i.source == "skill"),
                 sum(1 for i in new_items.values() if i.source == "gateway"),
+                sum(1 for i in new_items.values() if i.source == "autonomous"),
             )
 
     # ──────────────────────────────────────────────────────────────────
@@ -251,40 +253,95 @@ class CapabilityRegistry:
             logger.warning("Skill 能力加载失败: %s", exc)
 
     async def _load_gateway(self, target: Dict[str, CapabilityItem]) -> None:
-        """从设备注册表加载 Gateway 能力。"""
+        """从 UnifiedDeviceManager 加载 Gateway 设备能力（Priority A: SSOT）。"""
         try:
-            from core.device_registry import DeviceRegistry
-            registry = DeviceRegistry.get_instance() if hasattr(DeviceRegistry, "get_instance") else None
-            if registry is None:
-                try:
-                    registry = DeviceRegistry()
-                except Exception:
-                    return
-
-            devices = registry.list_devices() if hasattr(registry, "list_devices") else {}
+            from core.unified.device_manager import get_unified_device_manager
+            udm = get_unified_device_manager()
+            devices = udm.list_devices()
             if not devices:
                 return
 
-            for device_id, device in (devices.items() if isinstance(devices, dict) else enumerate(devices)):
-                if isinstance(device, dict):
-                    caps = device.get("capabilities", [])
-                    d_name = device.get("device_name", str(device_id))
-                else:
-                    caps = getattr(device, "capabilities", [])
-                    d_name = getattr(device, "device_name", str(device_id))
-
-                for cap in caps:
+            for device in devices:
+                device_id = device.device_id
+                d_name = device.device_name or device_id
+                for cap in (device.capabilities or []):
                     key = f"gateway__{device_id}__{cap}"
                     target[key] = CapabilityItem(
                         name=key,
                         description=f"[Gateway:{d_name}] 设备能力: {cap}",
                         source="gateway",
-                        source_id=str(device_id),
+                        source_id=device_id,
                         available=True,
+                        metadata={
+                            "device_name": d_name,
+                            "device_type": str(device.device_type),
+                        },
                     )
-            logger.debug("Gateway 能力加载: %d 项", sum(1 for i in target.values() if i.source == "gateway"))
+            logger.debug(
+                "Gateway 能力加载: %d 项",
+                sum(1 for i in target.values() if i.source == "gateway"),
+            )
         except Exception as exc:
             logger.warning("Gateway 能力加载失败: %s", exc)
+
+    async def _load_autonomous(self, target: Dict[str, CapabilityItem]) -> None:
+        """从 UnifiedDeviceManager 加载高层自治能力（Priority C）。
+
+        自治能力由设备在注册时通过 metadata 声明，例如：
+          metadata.goal_execution_enabled = true
+          metadata.local_task_planning = true
+          metadata.local_ui_reasoning = true
+          metadata.cross_device_coordination = true
+          metadata.parallel_execution_enabled = true
+        """
+        _AUTONOMOUS_CAPABILITY_KEYS = (
+            "goal_execution_enabled",
+            "local_task_planning",
+            "local_ui_reasoning",
+            "cross_device_coordination",
+            "parallel_execution_enabled",
+            "local_model_enabled",
+        )
+        _AUTONOMOUS_DESCRIPTIONS = {
+            "goal_execution_enabled": "设备支持高层目标执行（自然语言→端侧自主规划执行）",
+            "local_task_planning": "设备支持本地任务规划（无需服务端逐步指令）",
+            "local_ui_reasoning": "设备支持本地 UI 语义理解与推理",
+            "cross_device_coordination": "设备支持跨设备协同执行",
+            "parallel_execution_enabled": "设备支持并行任务执行",
+            "local_model_enabled": "设备搭载本地推理模型",
+        }
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+            udm = get_unified_device_manager()
+            devices = udm.list_devices()
+
+            for device in devices:
+                meta = device.metadata or {}
+                for cap_key in _AUTONOMOUS_CAPABILITY_KEYS:
+                    if meta.get(cap_key):
+                        key = f"autonomous__{device.device_id}__{cap_key}"
+                        target[key] = CapabilityItem(
+                            name=key,
+                            description=(
+                                f"[Autonomous:{device.device_name}] "
+                                f"{_AUTONOMOUS_DESCRIPTIONS.get(cap_key, cap_key)}"
+                            ),
+                            source="autonomous",
+                            source_id=device.device_id,
+                            available=True,
+                            metadata={
+                                "device_id": device.device_id,
+                                "device_name": device.device_name,
+                                "device_type": str(device.device_type),
+                                "capability_key": cap_key,
+                            },
+                        )
+            logger.debug(
+                "Autonomous 能力加载: %d 项",
+                sum(1 for i in target.values() if i.source == "autonomous"),
+            )
+        except Exception as exc:
+            logger.warning("Autonomous 能力加载失败: %s", exc)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

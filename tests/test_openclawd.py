@@ -36,6 +36,8 @@ class TestOpenClawdHandlerFallback:
         expected_intents = {
             "chat", "device_control", "task_manage", "file_operation",
             "search", "ocr", "system_status", "network", "code",
+            # Priority D+E: high-level autonomous execution
+            "goal_execution", "parallel_goal",
         }
         assert set(oc._INTENT_HANDLER_MAP.keys()) == expected_intents
 

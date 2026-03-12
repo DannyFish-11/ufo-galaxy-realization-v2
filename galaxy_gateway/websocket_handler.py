@@ -55,7 +55,17 @@ class GatewayWSManager:
                 device_router.unregister_device(device_id)
                 del self.device_connections[device_id]
 
-                # 同步到 core 的 registered_devices
+                # Priority B: 同步到 UnifiedDeviceManager (SSOT)
+                try:
+                    from core.unified.device_manager import get_unified_device_manager
+                    from core.unified.models import UnifiedDeviceStatus
+                    get_unified_device_manager().update_device_status(
+                        device_id, UnifiedDeviceStatus.OFFLINE
+                    )
+                except Exception:
+                    pass
+
+                # 兼容层：同步到 core 的 registered_devices
                 try:
                     from core.routes._shared import registered_devices as core_registered_devices
                     if device_id in core_registered_devices:
