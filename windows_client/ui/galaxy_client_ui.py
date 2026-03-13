@@ -24,21 +24,28 @@ import html as html_module
 from datetime import datetime
 from typing import Optional, Callable, List, Dict
 
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QTextEdit, QLineEdit, QPushButton, QLabel, QScrollArea,
-    QStackedWidget, QFrame, QSizePolicy, QGraphicsDropShadowEffect,
-    QGraphicsOpacityEffect, QComboBox
-)
-from PyQt5.QtCore import (
-    Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer,
-    QRect, QSize, QPoint, QThread, pyqtSlot, QParallelAnimationGroup,
-    pyqtProperty, QSequentialAnimationGroup
-)
-from PyQt5.QtGui import (
-    QFont, QPalette, QColor, QLinearGradient, QRadialGradient,
-    QPainter, QBrush, QPen, QIcon, QFontDatabase, QPainterPath
-)
+try:
+    from PyQt5.QtWidgets import (
+        QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+        QTextEdit, QLineEdit, QPushButton, QLabel, QScrollArea,
+        QStackedWidget, QFrame, QSizePolicy, QGraphicsDropShadowEffect,
+        QGraphicsOpacityEffect, QComboBox
+    )
+    from PyQt5.QtCore import (
+        Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer,
+        QRect, QSize, QPoint, QThread, pyqtSlot, QParallelAnimationGroup,
+        pyqtProperty, QSequentialAnimationGroup
+    )
+    from PyQt5.QtGui import (
+        QFont, QPalette, QColor, QLinearGradient, QRadialGradient,
+        QPainter, QBrush, QPen, QIcon, QFontDatabase, QPainterPath
+    )
+except ImportError:
+    print("错误: PyQt5 未安装，无法启动 Galaxy 客户端 UI。")
+    print("Error: PyQt5 is not installed. Cannot start Galaxy client UI.")
+    print("请安装依赖 / Install dependency: pip install PyQt5")
+    print("如使用 conda / With conda: conda install pyqt")
+    sys.exit(1)
 
 logger = logging.getLogger(__name__)
 
@@ -1725,6 +1732,13 @@ class GalaxyClientUI(QWidget):
 
     def __init__(self, api_base: str = f"http://localhost:{get_service_port('dashboard')}", on_command: Callable = None):
         super().__init__()
+        # Pre-declare stack attributes so the attribute always exists on the object.
+        # If _create_ui() raises before setting these, callers will get a clear
+        # "NoneType has no attribute …" error rather than an AttributeError for a
+        # missing name, making the root cause easier to trace.
+        self.stack: Optional[QStackedWidget] = None
+        self.stacked_widget: Optional[QStackedWidget] = None  # alias kept for backward compat
+
         self.api = APIClient(api_base)
         self.on_command = on_command
         self.is_sidebar_mode = True
@@ -1812,6 +1826,7 @@ class GalaxyClientUI(QWidget):
 
         # 内容堆栈 — 5 个 Tab
         self.stack = QStackedWidget()
+        self.stacked_widget = self.stack  # alias for backward compatibility
         self.chat_panel = ChatPanel(self.api)
         self.agent_panel = AgentFactoryPanel(self.api)
         self.device_panel = DevicePanel(self.api)
@@ -1824,6 +1839,7 @@ class GalaxyClientUI(QWidget):
         self.stack.addWidget(self.status_panel)      # index 3
         self.stack.addWidget(self.settings_panel)    # index 4
         container_layout.addWidget(self.stack, 1)
+        logger.debug("QStackedWidget created with %d tabs (stack=%r)", self.stack.count(), self.stack)
 
     def _create_title_bar(self) -> QWidget:
         bar = QWidget()
