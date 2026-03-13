@@ -936,4 +936,9 @@ async def mcp_call(request: MCPCallRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8112)
+    try:
+        from core.port_config import get_node_port
+        _port = get_node_port("Node_112_SelfHealing")
+    except (ImportError, KeyError):
+        _port = 7999
+    uvicorn.run(app, host="0.0.0.0", port=_port)

@@ -39,7 +39,7 @@ layer_kernel:
       description: "状态机核心 - 系统状态管理"
       
     Node_01_OneAPI:
-      port: 8001
+      port: 7995
       name: "OneAPI"
       group: "core"
       critical: true
@@ -102,7 +102,7 @@ layer_kernel:
       description: "网络请求服务"
       
     Node_09_Sandbox:
-      port: 8009
+      port: 7996
       name: "Sandbox"
       group: "core"
       critical: false
@@ -975,7 +975,7 @@ layer_academic:
       description: "主动感知"
       
     Node_110_SmartOrchestrator:
-      port: 8110
+      port: 7997
       name: "SmartOrchestrator"
       group: "academic"
       critical: false
@@ -983,7 +983,7 @@ layer_academic:
       description: "智能编排器"
       
     Node_111_ContextManager:
-      port: 8111
+      port: 7998
       name: "ContextManager"
       group: "academic"
       critical: false
@@ -991,7 +991,7 @@ layer_academic:
       description: "上下文管理器"
       
     Node_112_SelfHealing:
-      port: 8112
+      port: 7999
       name: "SelfHealing"
       group: "academic"
       critical: false
