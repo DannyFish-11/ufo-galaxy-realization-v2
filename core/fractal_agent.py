@@ -434,9 +434,12 @@ class FractalExecutor:
     接收用户任务，创建根 FractalAgent，启动分形执行流程。
     """
 
-    def __init__(self, llm_router=None, agent_factory=None):
+    def __init__(self, llm_router=None, agent_factory=None,
+                 max_depth: int = 3, max_subtasks: int = 20):
         self.llm_router = llm_router
         self.agent_factory = agent_factory
+        self.max_depth = max_depth
+        self.max_subtasks = max_subtasks
         self.executions: Dict[str, Dict] = {}
 
     async def run(self, task_description: str,
@@ -460,8 +463,11 @@ class FractalExecutor:
             depth=0,
             role="coordinator",
         )
+        # 覆盖实例级别的限制（不修改类常量，保持线程安全）
+        root_agent.MAX_DEPTH = self.max_depth
+        root_agent.MAX_SUBTASKS = self.max_subtasks
 
-        logger.info(f"开始分形执行: {task_description[:60]}...")
+        logger.info(f"开始分形执行: {task_description[:60]}... (max_depth={self.max_depth}, max_subtasks={self.max_subtasks})")
 
         result = await root_agent.execute(task)
 

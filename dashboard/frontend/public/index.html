@@ -483,6 +483,15 @@
                                     <span v-if="chatMeta.auto_agent_template" style="font-size: 10px; background: rgba(124,92,252,0.2); color: #a888ff; padding: 1px 6px; border-radius: 4px;">{{ chatMeta.auto_agent_template }}</span>
                                     <span v-if="chatMeta.auto_agent_id" style="font-size: 9px; color: rgba(255,255,255,0.3); font-family: monospace;">{{ chatMeta.auto_agent_id }}</span>
                                 </div>
+                                <!-- Dynamic execution metadata: strategy / providers / twin -->
+                                <div v-if="chatMeta && (chatMeta.chosen_strategy || chatMeta.chosen_providers || chatMeta.twin_id)" class="mb-2 px-2 py-1.5 flex flex-wrap items-center gap-1" style="background: rgba(32,196,168,0.07); border: 1px solid rgba(32,196,168,0.18); border-radius: 8px;">
+                                    <span style="font-size: 10px; color: #20c4a8; font-weight: 600;">⚡ 执行策略</span>
+                                    <span v-if="chatMeta.chosen_strategy" style="font-size: 10px; background: rgba(32,196,168,0.15); color: #7effd6; padding: 1px 6px; border-radius: 4px;">{{ chatMeta.chosen_strategy }}</span>
+                                    <template v-if="chatMeta.chosen_providers && chatMeta.chosen_providers.length">
+                                        <span v-for="p in chatMeta.chosen_providers" :key="p" style="font-size: 9px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45); padding: 1px 5px; border-radius: 4px; font-family: monospace;">{{ p }}</span>
+                                    </template>
+                                    <span v-if="chatMeta.twin_id" style="font-size: 9px; color: rgba(255,255,255,0.3); font-family: monospace;" :title="'Twin ID: ' + chatMeta.twin_id">🔗 twin:{{ chatMeta.twin_coupling || 'loose' }}</span>
+                                </div>
                                 <div style="white-space: pre-wrap; color: rgba(255,255,255,0.7);">{{ chatReply }}</div>
                             </div>
                         </div>
@@ -743,10 +752,14 @@
                         chatReply.value = r.data.response || r.data.reply || '处理完成';
                         // Surface auto-created agent info if present
                         const data = r.data.data || {};
-                        if (data.auto_agent_id || data.auto_agent_template) {
+                        if (data.auto_agent_id || data.auto_agent_template || data.chosen_strategy || data.twin_id) {
                             chatMeta.value = {
                                 auto_agent_id: data.auto_agent_id || null,
                                 auto_agent_template: data.auto_agent_template || null,
+                                chosen_strategy: data.chosen_strategy || null,
+                                chosen_providers: data.chosen_providers || null,
+                                twin_id: data.twin_id || null,
+                                twin_coupling: data.twin_coupling || null,
                             };
                         }
                         inputMessage.value = '';

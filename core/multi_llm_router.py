@@ -872,6 +872,188 @@ class MultiLLMRouter:
             reason="无可用提供商，请在 Dashboard 配置 API Key",
         )
 
+    def route(self, task_type: TaskType,
+              preferred_provider: Optional[str] = None,
+              complexity_score: float = 0.5) -> RoutingDecision:
+        """
+        根据任务类型 + 复杂度评分做出路由决策
+
+        优先级：
+        1. 用户指定的提供商
+        2. 任务类型推荐的提供商（跳过不可用的）
+        3. 任意可用提供商
+
+        complexity_score: 0.0-1.0，影响模型等级选择
+        """
+        if preferred_provider and preferred_provider in self.providers:
+            prov = self.providers[preferred_provider]
+            if prov.status != ProviderStatus.DOWN:
+                model = self.select_model_by_complexity(
+                    preferred_provider, task_type, complexity_score
+                )
+                return RoutingDecision(
+                    provider=preferred_provider, model=model,
+                    reason=f"用户指定提供商: {preferred_provider} (复杂度: {complexity_score:.2f})",
+                )
+
+        # 按任务偏好排序
+        preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
+        alternatives = []
+
+        for provider_name in preferred_order:
+            if provider_name not in self.providers:
+                continue
+            prov = self.providers[provider_name]
+            if prov.status == ProviderStatus.DOWN:
+                continue
+
+            model = self.select_model_by_complexity(
+                provider_name, task_type, complexity_score
+            )
+            if not alternatives:
+                selected = RoutingDecision(
+                    provider=provider_name, model=model,
+                    reason=f"任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
+                )
+            alternatives.append(f"{provider_name}:{model}")
+
+        if alternatives:
+            selected.alternatives = alternatives[1:]  # 排除已选的第一个
+            return selected
+
+        # fallback: 选择任意可用提供商
+        for name, prov in self.providers.items():
+            if prov.status != ProviderStatus.DOWN:
+                return RoutingDecision(
+                    provider=name, model=prov.default_model,
+                    reason=f"Fallback: 唯一可用提供商 {name}",
+                )
+
+        # 无可用提供商 — 返回指向 none 的降级路由决策
+        logger.error("没有可用的 LLM 提供商")
+        return RoutingDecision(
+            provider="none", model="none",
+            reason="无可用提供商，请在 Dashboard 配置 API Key",
+        )
+
+    def route_with_cost_policy(
+        self,
+        task_type: TaskType,
+        complexity_score: float = 0.5,
+        cost_weight: float = 0.3,
+        llm_hint: Optional[Dict[str, Any]] = None,
+    ) -> RoutingDecision:
+        """
+        组合策略路由：任务类型 + 成本效益加权评分。
+
+        规则选择具有最高权威性；LLM 微调仅允许在规则选定的候选集内
+        调整/追加约束（不可替换规则选定的 provider/model）。
+
+        Args:
+            task_type:        任务类型（来自规则引擎，权威）
+            complexity_score: 复杂度评分
+            cost_weight:      成本权重 0.0-1.0（默认 0.3，越高越偏向低成本提供商）
+            llm_hint:         LLM 微调建议（可选）。格式：
+                              {"preferred_provider": "...", "model_override": "...", "temperature": ...}
+                              注意：preferred_provider 仅在规则候选列表内有效（否则忽略）；
+                              model_override 仅在规则已选提供商内有效。
+
+        Returns:
+            RoutingDecision（规则主导，LLM 建议在守护轨道内应用）
+        """
+        # ── 1. 规则主路由 ─────────────────────────────────────────────────────
+        preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
+
+        # 计算每个候选提供商的综合得分（任务适配度 + 成本效益）
+        candidates: List[Dict[str, Any]] = []
+        for rank, provider_name in enumerate(preferred_order):
+            if provider_name not in self.providers:
+                continue
+            prov = self.providers[provider_name]
+            if prov.status == ProviderStatus.DOWN:
+                continue
+
+            model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
+
+            # 任务适配得分（按 TASK_ROUTING_PREFERENCES 排名越前分越高）
+            task_score = max(0.0, 1.0 - rank * 0.2)
+
+            # 成本效益得分（成本越低分越高）
+            avg_cost = (prov.cost_per_1k_input + prov.cost_per_1k_output) / 2
+            # 归一化成本得分：假设 0.01 $/1k 作为参考上限
+            cost_score = max(0.0, 1.0 - min(avg_cost / 0.01, 1.0))
+
+            # 综合得分 = 任务适配 * (1-cost_weight) + 成本效益 * cost_weight
+            composite = task_score * (1.0 - cost_weight) + cost_score * cost_weight
+
+            candidates.append({
+                "provider": provider_name,
+                "model": model,
+                "composite": composite,
+                "task_score": task_score,
+                "cost_score": cost_score,
+            })
+
+        if not candidates:
+            # 无候选 → 回退到原始 route()
+            return self.route(task_type, complexity_score=complexity_score)
+
+        # 按综合得分排序，取最优
+        candidates.sort(key=lambda x: x["composite"], reverse=True)
+        best = candidates[0]
+        selected_provider = best["provider"]
+        selected_model = best["model"]
+
+        # ── 2. LLM 微调（仅允许在规则守护轨道内调整）────────────────────────
+        if llm_hint:
+            hint_provider = llm_hint.get("preferred_provider", "")
+            hint_model = llm_hint.get("model_override", "")
+
+            # 微调规则 A: 仅允许从规则候选列表中的提供商中替换（不允许引入规则列表外的提供商）
+            rule_providers = {c["provider"] for c in candidates}
+            if hint_provider and hint_provider in rule_providers:
+                # 在规则列表内找到对应候选，更新选择
+                for c in candidates:
+                    if c["provider"] == hint_provider:
+                        selected_provider = c["provider"]
+                        selected_model = c["model"]
+                        logger.info(
+                            "LLM 微调建议已采纳（规则守护）: provider=%s", hint_provider
+                        )
+                        break
+            elif hint_provider:
+                logger.debug(
+                    "LLM 微调建议已拒绝（提供商不在规则列表内）: %s not in %s",
+                    hint_provider, rule_providers,
+                )
+
+            # 微调规则 B: 模型覆盖仅允许在规则选定的提供商内切换
+            if hint_model and selected_provider in self.providers:
+                allowed_models = self.providers[selected_provider].models
+                if hint_model in allowed_models:
+                    selected_model = hint_model
+                    logger.info("LLM 微调建议已采纳（模型守护）: model=%s", hint_model)
+                else:
+                    logger.debug(
+                        "LLM 微调建议已拒绝（模型不在该提供商允许列表内）: %s", hint_model
+                    )
+
+        reason = (
+            f"策略路由: 任务类型 [{task_type.value}] "
+            f"复杂度 {complexity_score:.2f} 成本权重 {cost_weight:.2f}"
+        )
+        alternatives = [
+            f"{c['provider']}:{c['model']}"
+            for c in candidates
+            if c["provider"] != selected_provider
+        ]
+        return RoutingDecision(
+            provider=selected_provider,
+            model=selected_model,
+            reason=reason,
+            alternatives=alternatives,
+        )
+
     # ───────── 统一调用入口 ─────────
 
     async def chat(

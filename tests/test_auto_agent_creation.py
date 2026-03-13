@@ -437,3 +437,110 @@ async def test_e2e_multiple_task_types():
         assert selected == expected_template, (
             f"Message '{message}': expected template '{expected_template}', got '{selected}'"
         )
+
+
+# ──────────────────────── New Flow: Strategy Selection ───────────────────────
+
+
+class TestStrategySelection:
+    """Tests for the updated _pick_strategy method (fractal / swarm / specialized / single)."""
+
+    def test_swarm_keywords(self, planner):
+        """Swarm-specific keywords → swarm strategy."""
+        for msg in ["批量处理文件", "大量并发请求 swarm", "高并发任务"]:
+            strategy = planner._pick_strategy(msg, complexity=0.3)
+            assert strategy == "swarm", f"Expected swarm for '{msg}', got {strategy}"
+
+    def test_fractal_by_complexity(self, planner):
+        """Very high complexity (>= 0.75) → fractal strategy."""
+        strategy = planner._pick_strategy("完成一个复杂的任务", complexity=0.8)
+        assert strategy == "fractal"
+
+    def test_fractal_by_keyword(self, planner):
+        """Fractal keywords → fractal strategy."""
+        for msg in ["递归分解这个任务", "分型处理", "多层深度拆解"]:
+            strategy = planner._pick_strategy(msg, complexity=0.3)
+            assert strategy == "fractal", f"Expected fractal for '{msg}', got {strategy}"
+
+    def test_specialized_by_complexity(self, planner):
+        """Medium-high complexity (>= 0.65 < 0.75) → specialized strategy."""
+        strategy = planner._pick_strategy("分析这个项目", complexity=0.68)
+        assert strategy == "specialized"
+
+    def test_specialized_by_keyword(self, planner):
+        """Team/parallel keywords → specialized strategy."""
+        for msg in ["用 team 分工完成", "并行执行多个任务", "异构团队分析"]:
+            strategy = planner._pick_strategy(msg, complexity=0.3)
+            assert strategy == "specialized", f"Expected specialized for '{msg}', got {strategy}"
+
+    def test_single_agent_default(self, planner):
+        """Low complexity + no special keywords → single agent."""
+        strategy = planner._pick_strategy("帮我整理一下笔记", complexity=0.2)
+        assert strategy == "single"
+
+
+class TestExecutionResultNewFields:
+    """Tests for new optional fields in ExecutionResult."""
+
+    def test_new_fields_default_none(self):
+        """All new fields default to None."""
+        result = ExecutionResult(success=True, reply="ok")
+        assert result.chosen_strategy is None
+        assert result.chosen_providers is None
+        assert result.twin_id is None
+        assert result.twin_coupling is None
+
+    def test_new_fields_can_be_set(self):
+        """New fields can be set explicitly."""
+        result = ExecutionResult(
+            success=True,
+            reply="ok",
+            chosen_strategy="fractal",
+            chosen_providers=["deepseek:deepseek-chat", "openai:gpt-4o"],
+            twin_id="twin_abc123",
+            twin_coupling="loose",
+        )
+        assert result.chosen_strategy == "fractal"
+        assert result.chosen_providers == ["deepseek:deepseek-chat", "openai:gpt-4o"]
+        assert result.twin_id == "twin_abc123"
+        assert result.twin_coupling == "loose"
+
+    def test_backward_compat_serialization(self):
+        """Old fields still serialize correctly with new additions."""
+        result = ExecutionResult(
+            success=True,
+            mode="single_agent",
+            reply="done",
+            auto_agent_id="agent_abc123",
+            auto_agent_template="planner",
+        )
+        d = result.model_dump()
+        assert d["auto_agent_id"] == "agent_abc123"
+        assert d["auto_agent_template"] == "planner"
+        # New fields present but None
+        assert "chosen_strategy" in d
+        assert d["chosen_strategy"] is None
+
+
+# ─────────────────── Intent Router: Default Execute for Ambiguous ────────────
+
+
+class TestIntentRouterDefaultExecute:
+    """Test that ambiguous messages default to task_execute."""
+
+    def test_medium_length_ambiguous_message_defaults_to_task(self):
+        """Ambiguous messages of length >= 10 should default to task_execute."""
+        result = _classify_by_rules("这是一个测试消息，没有明确的任务关键词")
+        assert result.mode == IntentMode.TASK_EXECUTE, (
+            f"Expected task_execute for ambiguous long message, got {result.mode}"
+        )
+
+    def test_short_ambiguous_message_stays_chat(self):
+        """Short ambiguous messages (< 10 chars without clear signals) → chat_only."""
+        result = _classify_by_rules("好的")  # 2 chars, no keywords
+        assert result.mode == IntentMode.CHAT_ONLY
+
+    def test_pure_chat_still_chat(self):
+        """Explicit chat keywords still produce chat_only."""
+        result = _classify_by_rules("你好，今天天气怎么样？")
+        assert result.mode == IntentMode.CHAT_ONLY
