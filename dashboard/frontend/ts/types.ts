@@ -87,9 +87,12 @@ export interface Agent {
 export interface LLMProvider {
   provider: string;
   model: string;
+  models?: string[];
   speed_score: number;
   quality_score: number;
   available: boolean;
+  multimodal?: boolean;
+  missing_env_key?: string;
 }
 
 // ============================================================================

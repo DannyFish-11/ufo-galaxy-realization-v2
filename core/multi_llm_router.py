@@ -55,6 +55,8 @@ class ProviderConfig:
     supports_tools: bool = True
     supports_json_mode: bool = True
     timeout: float = 60.0
+    multimodal: bool = False          # 是否原生支持多模态（图像/音频/视频输入）
+    env_key: str = ""                 # 对应的环境变量名（用于可用性提示）
     # 运行时状态
     status: ProviderStatus = ProviderStatus.HEALTHY
     latency_avg_ms: float = 0.0
@@ -91,47 +93,99 @@ class LLMResponse:
 
 # 任务类型 → 提供商优先级
 TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
-    TaskType.REASONING:      ["anthropic", "openai", "deepseek"],
-    TaskType.FAST_RESPONSE:  ["deepseek", "groq", "openai"],
-    TaskType.CODING:         ["deepseek", "anthropic", "openai"],
-    TaskType.CREATIVE:       ["openai", "anthropic", "deepseek"],
-    TaskType.ANALYSIS:       ["anthropic", "openai", "deepseek"],
-    TaskType.PLANNING:       ["anthropic", "openai", "deepseek"],
+    TaskType.REASONING:      ["anthropic", "openai", "google", "deepseek", "xai"],
+    TaskType.FAST_RESPONSE:  ["deepseek", "groq", "google", "openai", "moonshot"],
+    TaskType.CODING:         ["deepseek", "qwen", "anthropic", "openai"],
+    TaskType.CREATIVE:       ["openai", "anthropic", "mistral", "deepseek"],
+    TaskType.ANALYSIS:       ["anthropic", "openai", "google", "perplexity", "deepseek"],
+    TaskType.PLANNING:       ["anthropic", "openai", "xai", "deepseek"],
     TaskType.AGENT_CONTROL:  ["anthropic", "openai", "deepseek"],
-    TaskType.GENERAL:        ["openai", "anthropic", "deepseek"],
+    TaskType.GENERAL:        ["openai", "anthropic", "deepseek", "google"],
 }
 
 # 提供商 → 推荐模型
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
-        TaskType.REASONING:     "gpt-4o",
+        TaskType.REASONING:     "gpt-5.4-thinking",
         TaskType.FAST_RESPONSE: "gpt-4o-mini",
-        TaskType.CODING:        "gpt-4o",
-        TaskType.CREATIVE:      "gpt-4o",
-        TaskType.ANALYSIS:      "gpt-4o",
-        TaskType.PLANNING:      "gpt-4o",
-        TaskType.AGENT_CONTROL: "gpt-4o",
-        TaskType.GENERAL:       "gpt-4o-mini",
+        TaskType.CODING:        "gpt-5.4",
+        TaskType.CREATIVE:      "gpt-5.4",
+        TaskType.ANALYSIS:      "gpt-5.4",
+        TaskType.PLANNING:      "gpt-5.4-thinking",
+        TaskType.AGENT_CONTROL: "gpt-5.4",
+        TaskType.GENERAL:       "gpt-5.4",
     },
     "anthropic": {
-        TaskType.REASONING:     "claude-sonnet-4-5-20250929",
-        TaskType.FAST_RESPONSE: "claude-haiku-4-5-20251001",
-        TaskType.CODING:        "claude-sonnet-4-5-20250929",
-        TaskType.CREATIVE:      "claude-sonnet-4-5-20250929",
-        TaskType.ANALYSIS:      "claude-sonnet-4-5-20250929",
-        TaskType.PLANNING:      "claude-sonnet-4-5-20250929",
-        TaskType.AGENT_CONTROL: "claude-sonnet-4-5-20250929",
-        TaskType.GENERAL:       "claude-haiku-4-5-20251001",
+        TaskType.REASONING:     "claude-opus-4.6",
+        TaskType.FAST_RESPONSE: "claude-sonnet-4.6",
+        TaskType.CODING:        "claude-sonnet-4.6",
+        TaskType.CREATIVE:      "claude-opus-4.6",
+        TaskType.ANALYSIS:      "claude-opus-4.6",
+        TaskType.PLANNING:      "claude-opus-4.6",
+        TaskType.AGENT_CONTROL: "claude-sonnet-4.6",
+        TaskType.GENERAL:       "claude-sonnet-4.6",
+    },
+    "google": {
+        TaskType.REASONING:     "gemini-3.1-deep-think",
+        TaskType.FAST_RESPONSE: "gemini-3.1-flash",
+        TaskType.CODING:        "gemini-3.1-pro",
+        TaskType.CREATIVE:      "gemini-3.1-pro",
+        TaskType.ANALYSIS:      "gemini-3.1-deep-think",
+        TaskType.PLANNING:      "gemini-3.1-deep-think",
+        TaskType.AGENT_CONTROL: "gemini-3.1-pro",
+        TaskType.GENERAL:       "gemini-3.1-flash",
+    },
+    "xai": {
+        TaskType.REASONING:     "grok-4.20",
+        TaskType.FAST_RESPONSE: "grok-4.20",
+        TaskType.CODING:        "grok-4.20",
+        TaskType.CREATIVE:      "grok-4.20",
+        TaskType.ANALYSIS:      "grok-4.20",
+        TaskType.PLANNING:      "grok-4.20",
+        TaskType.AGENT_CONTROL: "grok-4.20",
+        TaskType.GENERAL:       "grok-4.20",
+    },
+    "mistral": {
+        TaskType.REASONING:     "mistral-large-3",
+        TaskType.FAST_RESPONSE: "mistral-large-3",
+        TaskType.CODING:        "mistral-large-3",
+        TaskType.CREATIVE:      "mistral-large-3",
+        TaskType.ANALYSIS:      "mistral-large-3",
+        TaskType.PLANNING:      "mistral-large-3",
+        TaskType.AGENT_CONTROL: "mistral-large-3",
+        TaskType.GENERAL:       "mistral-large-3",
     },
     "deepseek": {
-        TaskType.REASONING:     "deepseek-reasoner",
-        TaskType.FAST_RESPONSE: "deepseek-chat",
-        TaskType.CODING:        "deepseek-chat",
-        TaskType.CREATIVE:      "deepseek-chat",
-        TaskType.ANALYSIS:      "deepseek-reasoner",
-        TaskType.PLANNING:      "deepseek-reasoner",
-        TaskType.AGENT_CONTROL: "deepseek-chat",
-        TaskType.GENERAL:       "deepseek-chat",
+        TaskType.REASONING:     "deepseek-ai/DeepSeek-V3.2",
+        TaskType.FAST_RESPONSE: "deepseek-ai/DeepSeek-V3.2",
+        TaskType.CODING:        "deepseek-ai/DeepSeek-V3.2",
+        TaskType.CREATIVE:      "deepseek-ai/DeepSeek-V3.2",
+        TaskType.ANALYSIS:      "deepseek-ai/DeepSeek-V3.2",
+        TaskType.PLANNING:      "deepseek-ai/DeepSeek-V3.2",
+        TaskType.AGENT_CONTROL: "deepseek-ai/DeepSeek-V3.2",
+        TaskType.GENERAL:       "deepseek-ai/DeepSeek-V3.2",
+    },
+    "qwen": {
+        TaskType.CODING:        "Qwen/Qwen3.5-397B-A17B-Coder",
+        TaskType.FAST_RESPONSE: "Qwen/Qwen3.5-397B-A17B",
+        TaskType.GENERAL:       "Qwen/Qwen3.5-397B-A17B",
+        TaskType.ANALYSIS:      "Qwen/Qwen3.5-397B-A17B",
+    },
+    "zhipu": {
+        TaskType.GENERAL:       "glm-4.6",
+        TaskType.ANALYSIS:      "glm-4.6",
+        TaskType.CODING:        "glm-4.6",
+        TaskType.FAST_RESPONSE: "glm-4-flash",
+    },
+    "moonshot": {
+        TaskType.GENERAL:       "moonshot-v1-128k",
+        TaskType.ANALYSIS:      "moonshot-v1-256k",
+        TaskType.FAST_RESPONSE: "moonshot-v1-32k",
+    },
+    "perplexity": {
+        TaskType.REASONING:     "sonar-deep-research",
+        TaskType.ANALYSIS:      "sonar-pro",
+        TaskType.GENERAL:       "sonar-pro",
     },
     "groq": {
         TaskType.FAST_RESPONSE: "llama-3.3-70b-versatile",
@@ -431,14 +485,57 @@ class OllamaAdapter(BaseProviderAdapter):
         )
 
 
+# OpenAI-compatible adapters — no additional code needed, all reuse OpenAIAdapter
+class GoogleAdapter(OpenAIAdapter):
+    """Google Gemini via OpenAI-compatible endpoint (generativelanguage.googleapis.com)"""
+    pass
+
+
+class GrokAdapter(OpenAIAdapter):
+    """xAI Grok via OpenAI-compatible API (api.x.ai)"""
+    pass
+
+
+class MistralAdapter(OpenAIAdapter):
+    """Mistral AI via OpenAI-compatible API (api.mistral.ai)"""
+    pass
+
+
+class QwenAdapter(OpenAIAdapter):
+    """Alibaba Qwen via Together AI OpenAI-compatible endpoint"""
+    pass
+
+
+class ZhipuAdapter(OpenAIAdapter):
+    """Zhipu GLM via OpenAI-compatible API (open.bigmodel.cn)"""
+    pass
+
+
+class MoonshotAdapter(OpenAIAdapter):
+    """Moonshot Kimi via OpenAI-compatible API (api.moonshot.cn)"""
+    pass
+
+
+class PerplexityAdapter(OpenAIAdapter):
+    """Perplexity Sonar via OpenAI-compatible API (api.perplexity.ai)"""
+    pass
+
+
 # ───────────────────── 主路由器 ─────────────────────
 
 ADAPTER_MAP = {
-    "openai": OpenAIAdapter,
-    "anthropic": AnthropicAdapter,
-    "deepseek": DeepSeekAdapter,
-    "groq": GroqAdapter,
-    "ollama": OllamaAdapter,
+    "openai":     OpenAIAdapter,
+    "anthropic":  AnthropicAdapter,
+    "google":     GoogleAdapter,
+    "xai":        GrokAdapter,
+    "mistral":    MistralAdapter,
+    "deepseek":   DeepSeekAdapter,
+    "qwen":       QwenAdapter,
+    "zhipu":      ZhipuAdapter,
+    "moonshot":   MoonshotAdapter,
+    "perplexity": PerplexityAdapter,
+    "groq":       GroqAdapter,
+    "ollama":     OllamaAdapter,
 }
 
 
@@ -503,9 +600,10 @@ class MultiLLMRouter:
             base = self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
             cfg = ProviderConfig(
                 name="openai", api_key=key, base_url=base,
-                models=["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-                default_model="gpt-4o",
+                models=["gpt-5.4", "gpt-5.4-thinking", "gpt-5.4-pro", "gpt-4.1", "gpt-4o", "gpt-4o-mini"],
+                default_model="gpt-5.4",
                 cost_per_1k_input=0.005, cost_per_1k_output=0.015,
+                multimodal=True, env_key="OPENAI_API_KEY",
             )
             self.providers["openai"] = cfg
             self.adapters["openai"] = OpenAIAdapter(cfg)
@@ -518,12 +616,61 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="anthropic", api_key=key,
                 base_url="https://api.anthropic.com/v1",
-                models=["claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001"],
-                default_model="claude-sonnet-4-5-20250929",
+                models=["claude-opus-4.6", "claude-sonnet-4.6", "claude-haiku-4-5-20251001"],
+                default_model="claude-sonnet-4.6",
                 cost_per_1k_input=0.003, cost_per_1k_output=0.015,
+                multimodal=True, env_key="ANTHROPIC_API_KEY",
             )
             self.providers["anthropic"] = cfg
             self.adapters["anthropic"] = AnthropicAdapter(cfg)
+
+        # Google Gemini (OpenAI-compatible endpoint)
+        key = self._get_key("google")
+        if not key:
+            key = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="google", api_key=key,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+                models=["gemini-3.1-pro", "gemini-3.1-flash", "gemini-3.1-deep-think", "gemini-2.5-pro"],
+                default_model="gemini-3.1-pro",
+                cost_per_1k_input=0.00125, cost_per_1k_output=0.005,
+                multimodal=True, env_key="GOOGLE_API_KEY",
+            )
+            self.providers["google"] = cfg
+            self.adapters["google"] = GoogleAdapter(cfg)
+
+        # xAI Grok
+        key = self._get_key("xai")
+        if not key:
+            key = os.environ.get("XAI_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="xai", api_key=key,
+                base_url="https://api.x.ai/v1",
+                models=["grok-4.20", "grok-4.20-beta"],
+                default_model="grok-4.20",
+                cost_per_1k_input=0.005, cost_per_1k_output=0.015,
+                multimodal=True, env_key="XAI_API_KEY",
+            )
+            self.providers["xai"] = cfg
+            self.adapters["xai"] = GrokAdapter(cfg)
+
+        # Mistral
+        key = self._get_key("mistral")
+        if not key:
+            key = os.environ.get("MISTRAL_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="mistral", api_key=key,
+                base_url="https://api.mistral.ai/v1",
+                models=["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
+                default_model="mistral-large-3",
+                cost_per_1k_input=0.002, cost_per_1k_output=0.006,
+                multimodal=True, env_key="MISTRAL_API_KEY",
+            )
+            self.providers["mistral"] = cfg
+            self.adapters["mistral"] = MistralAdapter(cfg)
 
         # DeepSeek
         key = self._get_key("deepseek")
@@ -533,12 +680,77 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="deepseek", api_key=key,
                 base_url="https://api.deepseek.com/v1",
-                models=["deepseek-chat", "deepseek-reasoner"],
-                default_model="deepseek-chat",
+                models=["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3", "deepseek-chat", "deepseek-reasoner"],
+                default_model="deepseek-ai/DeepSeek-V3.2",
                 cost_per_1k_input=0.00014, cost_per_1k_output=0.00028,
+                multimodal=False, env_key="DEEPSEEK_API_KEY",
             )
             self.providers["deepseek"] = cfg
             self.adapters["deepseek"] = DeepSeekAdapter(cfg)
+
+        # Qwen (via Together AI)
+        key = self._get_key("qwen")
+        if not key:
+            key = os.environ.get("QWEN_API_KEY", "") or os.environ.get("TOGETHER_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="qwen", api_key=key,
+                base_url="https://api.together.xyz/v1",
+                models=["Qwen/Qwen3.5-397B-A17B", "Qwen/Qwen3.5-397B-A17B-Coder", "Qwen/Qwen3-235B-A22B"],
+                default_model="Qwen/Qwen3.5-397B-A17B",
+                cost_per_1k_input=0.0018, cost_per_1k_output=0.0018,
+                multimodal=False, env_key="QWEN_API_KEY",
+            )
+            self.providers["qwen"] = cfg
+            self.adapters["qwen"] = QwenAdapter(cfg)
+
+        # Zhipu GLM
+        key = self._get_key("zhipu")
+        if not key:
+            key = os.environ.get("ZHIPU_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="zhipu", api_key=key,
+                base_url="https://open.bigmodel.cn/api/paas/v4",
+                models=["glm-4.6", "glm-4-flash"],
+                default_model="glm-4.6",
+                cost_per_1k_input=0.001, cost_per_1k_output=0.001,
+                multimodal=True, env_key="ZHIPU_API_KEY",
+            )
+            self.providers["zhipu"] = cfg
+            self.adapters["zhipu"] = ZhipuAdapter(cfg)
+
+        # Moonshot Kimi
+        key = self._get_key("moonshot")
+        if not key:
+            key = os.environ.get("MOONSHOT_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="moonshot", api_key=key,
+                base_url="https://api.moonshot.cn/v1",
+                models=["moonshot-v1-128k", "moonshot-v1-32k", "moonshot-v1-256k"],
+                default_model="moonshot-v1-128k",
+                cost_per_1k_input=0.002, cost_per_1k_output=0.002,
+                multimodal=False, env_key="MOONSHOT_API_KEY",
+            )
+            self.providers["moonshot"] = cfg
+            self.adapters["moonshot"] = MoonshotAdapter(cfg)
+
+        # Perplexity Sonar
+        key = self._get_key("perplexity")
+        if not key:
+            key = os.environ.get("PERPLEXITY_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="perplexity", api_key=key,
+                base_url="https://api.perplexity.ai",
+                models=["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
+                default_model="sonar-pro",
+                cost_per_1k_input=0.001, cost_per_1k_output=0.001,
+                supports_tools=False, multimodal=False, env_key="PERPLEXITY_API_KEY",
+            )
+            self.providers["perplexity"] = cfg
+            self.adapters["perplexity"] = PerplexityAdapter(cfg)
 
         # Groq
         key = self._get_key("groq")
@@ -551,7 +763,7 @@ class MultiLLMRouter:
                 models=["llama-3.3-70b-versatile"],
                 default_model="llama-3.3-70b-versatile",
                 cost_per_1k_input=0.00059, cost_per_1k_output=0.00079,
-                supports_tools=True,
+                supports_tools=True, multimodal=False, env_key="GROQ_API_KEY",
             )
             self.providers["groq"] = cfg
             self.adapters["groq"] = GroqAdapter(cfg)
@@ -566,6 +778,7 @@ class MultiLLMRouter:
                 models=["llama3", "mistral", "codellama"],
                 default_model="llama3",
                 supports_tools=False, supports_json_mode=False,
+                multimodal=False, env_key="OLLAMA_URL",
             )
             self.providers["ollama"] = cfg
             self.adapters["ollama"] = OllamaAdapter(cfg)
@@ -584,6 +797,7 @@ class MultiLLMRouter:
                 base_url=f"{oneapi_url}/v1",
                 models=models,
                 default_model=models[0] if models else "gpt-4o",
+                env_key="ONEAPI_API_KEY",
             )
             self.providers["oneapi"] = cfg
             self.adapters["oneapi"] = OpenAIAdapter(cfg)
@@ -1320,9 +1534,13 @@ class MultiLLMRouter:
             result.append({
                 "provider": name,
                 "model": prov.default_model,
+                "models": prov.models,
                 "source": "env/vault",
                 "active": prov.status != ProviderStatus.DOWN,
+                "available": prov.status != ProviderStatus.DOWN,
                 "supports_tools": prov.supports_tools,
+                "multimodal": prov.multimodal,
+                "env_key": prov.env_key,
             })
         return result
 

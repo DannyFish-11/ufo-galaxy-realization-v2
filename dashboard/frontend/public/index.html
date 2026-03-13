@@ -146,7 +146,10 @@
                             <div class="grid grid-cols-4 gap-2">
                                 <div v-for="(provider, name) in directProviders" :key="name" class="provider-chip">
                                     <div class="flex items-center justify-between mb-2">
-                                        <span style="font-size: 12px; font-weight: 500;">{{ provider.name }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <span style="font-size: 12px; font-weight: 500;">{{ provider.name }}</span>
+                                            <span v-if="provider.multimodal" title="原生多模态（图像/音频/视频）" style="font-size: 9px; background: rgba(124,92,252,0.2); color: #7c5cfc; padding: 1px 5px; border-radius: 6px;">👁 MM</span>
+                                        </div>
                                         <span :class="provider.valid ? 'valid' : (provider.apiKey ? 'pending' : '')" style="font-size: 11px; opacity: 0.6;">{{ provider.valid ? '✓' : (provider.apiKey ? '?' : '✗') }}</span>
                                     </div>
                                     <input v-model="provider.apiKey" type="password" placeholder="API Key" class="island-input w-full px-2.5 py-1.5 mb-1.5" style="font-size: 11px; border-radius: 10px;">
@@ -782,17 +785,18 @@
                 const oneapiStatus = ref(null);
 
                 const directProviders = ref({
-                    openai: { name: 'OpenAI', apiKey: '', valid: false },
-                    anthropic: { name: 'Anthropic', apiKey: '', valid: false },
-                    deepseek: { name: 'DeepSeek', apiKey: '', valid: false },
-                    zhipu: { name: '智谱 AI', apiKey: '', valid: false },
-                    groq: { name: 'Groq', apiKey: '', valid: false },
-                    openrouter: { name: 'OpenRouter', apiKey: '', valid: false },
-                    gemini: { name: 'Gemini', apiKey: '', valid: false },
-                    qwen: { name: '通义千问', apiKey: '', valid: false },
-                    xai: { name: 'xAI', apiKey: '', valid: false },
-                    together: { name: 'Together', apiKey: '', valid: false },
-                    perplexity: { name: 'Perplexity', apiKey: '', valid: false }
+                    openai:     { name: 'OpenAI',    apiKey: '', valid: false, multimodal: true  },
+                    anthropic:  { name: 'Anthropic', apiKey: '', valid: false, multimodal: true  },
+                    google:     { name: 'Google',    apiKey: '', valid: false, multimodal: true  },
+                    xai:        { name: 'xAI / Grok',apiKey: '', valid: false, multimodal: true  },
+                    mistral:    { name: 'Mistral',   apiKey: '', valid: false, multimodal: true  },
+                    deepseek:   { name: 'DeepSeek',  apiKey: '', valid: false, multimodal: false },
+                    qwen:       { name: '通义千问',   apiKey: '', valid: false, multimodal: false },
+                    zhipu:      { name: '智谱 AI',   apiKey: '', valid: false, multimodal: true  },
+                    moonshot:   { name: 'Moonshot',  apiKey: '', valid: false, multimodal: false },
+                    perplexity: { name: 'Perplexity',apiKey: '', valid: false, multimodal: false },
+                    groq:       { name: 'Groq',      apiKey: '', valid: false, multimodal: false },
+                    openrouter: { name: 'OpenRouter', apiKey: '', valid: false, multimodal: false }
                 });
 
                 const nodeApis = ref([]);
