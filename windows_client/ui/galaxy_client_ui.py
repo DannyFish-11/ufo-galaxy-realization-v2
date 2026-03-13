@@ -34,7 +34,7 @@ try:
     from PyQt5.QtCore import (
         Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer,
         QRect, QSize, QPoint, QThread, pyqtSlot, QParallelAnimationGroup,
-        pyqtProperty, QSequentialAnimationGroup
+        pyqtProperty, QSequentialAnimationGroup, QAbstractAnimation
     )
     from PyQt5.QtGui import (
         QFont, QPalette, QColor, QLinearGradient, QRadialGradient,
@@ -1978,8 +1978,18 @@ class GalaxyClientUI(QWidget):
         self._content_fade_anim.setDuration(400)
         self._content_fade_anim.setEasingCurve(QEasingCurve.OutCubic)
 
+    def _animating(self) -> bool:
+        """Animation guard: return True if any geometry/opacity animation is still running."""
+        return any(
+            a.state() == QAbstractAnimation.Running
+            for a in (self.slide_anim, self._sidebar_width_anim, self._content_fade_anim)
+        )
+
     def toggle_sidebar(self):
         """Calligraphy scroll: expand/collapse sidebar with scroll-like animation"""
+        # Animation guard: stop any in-progress animations; ignore new toggle while animating.
+        if self._animating():
+            return
         if self._sidebar_expanded:
             # Collapse: 420px → 40px, fade out content
             self._sidebar_expanded = False
@@ -2019,6 +2029,9 @@ class GalaxyClientUI(QWidget):
 
     def toggle_mode(self):
         """侧边栏 ↔ 全功能窗口"""
+        # Animation guard: ignore toggle while an animation is in progress.
+        if self._animating():
+            return
         if self.is_sidebar_mode:
             # 展开为全窗口
             self.is_sidebar_mode = False
@@ -2048,6 +2061,9 @@ class GalaxyClientUI(QWidget):
             self.slide_anim.start()
 
     def toggle_visibility(self):
+        # Animation guard: ignore rapid F12/button presses while animation is running.
+        if self._animating():
+            return
         if self.is_visible:
             self.hide_sidebar()
         else:
