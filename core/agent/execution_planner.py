@@ -111,6 +111,8 @@ class ExecutionResult(BaseModel):
     """ID of the digital twin created for the primary agent (if any)"""
     twin_coupling: Optional[str] = None
     """Twin coupling mode: tight / loose / decoupled / shadow (default: loose)"""
+    soul_enforced: Optional[bool] = None
+    """True when SOUL policy was actively injected into this execution path (single/team/swarm/fractal)"""
 
 
 def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
@@ -390,6 +392,7 @@ class ExecutionPlanner:
                             "session_id": plan.session_id,
                             "template_hint": selected_template,  # 蓝图约束
                         },
+                        soul_policy=plan.soul_policy,  # SOUL 全局约束注入（B阶段）
                     )
                     logger.info(
                         "ExecutionPlanner: LLM 动态生成 Agent %s (蓝图参考: %s)",
@@ -488,6 +491,7 @@ class ExecutionPlanner:
                 chosen_providers=chosen_providers,
                 twin_id=twin_id,
                 twin_coupling=twin_coupling,
+                soul_enforced=bool(plan.soul_policy),
             )
 
         except Exception as exc:
@@ -564,6 +568,7 @@ class ExecutionPlanner:
                 task_result=team_result.to_dict(),
                 chosen_strategy=f"team_{team_strategy}",
                 chosen_providers=_collect_team_providers(team_result),
+                soul_enforced=bool(plan.soul_policy),
             )
 
         except Exception as exc:
@@ -635,6 +640,7 @@ class ExecutionPlanner:
                     "decomposition_used": getattr(fractal_result, "decomposition_used", False),
                 },
                 chosen_strategy="fractal",
+                soul_enforced=bool(plan.soul_policy),
             )
 
         except Exception as exc:

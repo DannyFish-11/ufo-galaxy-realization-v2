@@ -23,6 +23,11 @@ from enum import Enum
 logger = logging.getLogger("Galaxy.FractalAgent")
 
 
+def _soul_prefix(soul: str) -> str:
+    """格式化 SOUL 约束为 system prompt 前缀（单/Team/Fractal 统一格式）。"""
+    return f"【SOUL约束 - 必须严格遵守】\n{soul}\n\n" if soul else ""
+
+
 # ───────────────────── 数据模型 ─────────────────────
 
 class Complexity(Enum):
@@ -191,11 +196,13 @@ class FractalAgent:
 
     async def _execute_atomic(self, task: FractalTask) -> FractalResult:
         """直接执行原子任务"""
+        soul_section = _soul_prefix(task.context.get("soul", ""))
         try:
             if self.llm_router:
                 resp = await self.llm_router.chat(
                     messages=[
                         {"role": "system", "content": (
+                            soul_section +
                             f"你是一个任务执行 Agent（角色: {self.role}）。\n"
                             "直接执行给定的任务并返回结果。"
                         )},
@@ -295,10 +302,12 @@ class FractalAgent:
 
     async def _decompose_with_llm(self, task: FractalTask) -> List[FractalTask]:
         """用 LLM 分解任务"""
+        soul_section = _soul_prefix(task.context.get("soul", ""))
         try:
             result = await self.llm_router.chat_json(
                 messages=[
                     {"role": "system", "content": (
+                        soul_section +
                         "你是一个任务分解专家。将复杂任务分解为可独立执行的子任务。\n"
                         f"最多分解为 {self.MAX_SUBTASKS} 个子任务。\n"
                         "每个子任务应该足够具体，可以独立执行。\n\n"

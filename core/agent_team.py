@@ -29,6 +29,12 @@ from enum import Enum
 
 logger = logging.getLogger("Galaxy.AgentTeam")
 
+
+def _soul_prefix(soul: str) -> str:
+    """格式化 SOUL 约束为 system prompt 前缀（单/Team/Fractal 统一格式）。"""
+    return f"【SOUL约束 - 必须严格遵守】\n{soul}\n\n" if soul else ""
+
+
 # 孪生模型管理器（可选依赖）
 try:
     from enhancements.agent_factory.twin_model import (
@@ -407,10 +413,11 @@ class AgentTeam:
 
     async def _execute_parallel(self, task: str, context: Optional[Dict]) -> TeamResult:
         """每个成员用不同 LLM 独立回答同一任务，最后综合"""
+        soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
         async def _call_member(member: TeamMember) -> MemberResult:
             messages = [
-                {"role": "system", "content": f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。"},
+                {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。"},
                 {"role": "user", "content": task},
             ]
             if context:
@@ -458,6 +465,7 @@ class AgentTeam:
 
     async def _execute_specialized(self, task: str, context: Optional[Dict]) -> TeamResult:
         """LLM 分解子任务 → 每个子任务匹配最优 Agent+LLM → 并行执行 → 综合"""
+        soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
         # Step 1: 用 LLM 分解任务
         subtasks = await self._decompose_task(task, context)
@@ -497,7 +505,7 @@ class AgentTeam:
         # Step 3: 并行执行 (带工具)
         async def _exec_subtask(subtask: Dict, member: TeamMember) -> MemberResult:
             messages = [
-                {"role": "system", "content": f"你是 {member.agent_name}。你的任务是: {subtask['title']}"},
+                {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}。你的任务是: {subtask['title']}"},
                 {"role": "user", "content": subtask["description"]},
             ]
             result = await self._call_member_with_tools(member, messages)
@@ -530,10 +538,11 @@ class AgentTeam:
 
     async def _execute_swarm(self, task: str, context: Optional[Dict]) -> TeamResult:
         """批量 Agent 并行执行同一任务，多数投票或综合合并"""
+        soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
         async def _call_member(member: TeamMember) -> MemberResult:
             messages = [
-                {"role": "system", "content": f"你是 {member.agent_name}。请独立思考并给出你的回答。"},
+                {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}。请独立思考并给出你的回答。"},
                 {"role": "user", "content": task},
             ]
             return await self._call_member_with_tools(member, messages)
