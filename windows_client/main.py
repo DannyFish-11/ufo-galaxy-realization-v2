@@ -9,6 +9,7 @@ AI 大模型驱动对话
 
 import sys
 import os
+from pathlib import Path
 
 # 确保 Python 使用 UTF-8 编码 (修复中文用户名路径问题)
 if sys.platform == 'win32':
@@ -117,8 +118,38 @@ from core.port_config import get_service_port
 
 logger = logging.getLogger(__name__)
 
-# 后端 API 地址（默认本地）
-GALAXY_API_BASE = os.environ.get("GALAXY_API_BASE", "http://localhost:8099")
+
+def _load_entrypoint_api_base() -> Optional[str]:
+    """从 runtime/entrypoint.json 读取启动器动态写入的 api_base。
+
+    文件格式（由 unified_launcher.py 写入）::
+
+        { "api_base": "http://localhost:8085", "written_at": "..." }
+
+    文件缺失或 JSON 解析失败时静默返回 None，
+    调用方应继续回退到环境变量或硬编码默认值。
+    """
+    try:
+        # runtime/ 目录与仓库根目录同级（此文件位于 windows_client/）
+        ep_file = Path(__file__).parent.parent / "runtime" / "entrypoint.json"
+        if ep_file.is_file():
+            data = json.loads(ep_file.read_text(encoding="utf-8"))
+            val = str(data.get("api_base", "")).strip()
+            if val:
+                return val
+    except Exception:
+        pass
+    return None
+
+
+# 后端 API 地址优先级：
+#   1. runtime/entrypoint.json（启动器动态写入，最优先）
+#   2. GALAXY_API_BASE 环境变量
+#   3. 硬编码默认值 http://localhost:8099
+GALAXY_API_BASE = (
+    _load_entrypoint_api_base()
+    or os.environ.get("GALAXY_API_BASE", "http://localhost:8099")
+)
 # Dashboard API 地址
 DASHBOARD_API_BASE = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
 

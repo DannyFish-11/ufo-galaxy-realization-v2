@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from datetime import datetime
+from datetime import datetime, timezone
 
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
@@ -129,6 +129,37 @@ class ServiceType(Enum):
     L4 = "l4"               # L4 增强
     API = "api"             # API 服务
     UI = "ui"               # UI 服务
+
+
+# ============================================================================
+# 运行时入口点文件
+# ============================================================================
+
+def _write_entrypoint(host: str, port: int) -> None:
+    """向 runtime/entrypoint.json 写入当前 API 入口，供客户端读取。
+
+    文件格式::
+
+        {
+            "api_base": "http://localhost:8085",
+            "written_at": "2026-01-01T00:00:00Z"
+        }
+
+    - ``api_base``：客户端应连接的完整 URL 前缀（不含路径）。
+    - ``written_at``：ISO-8601 UTC 时间戳，仅用于调试，客户端可忽略。
+
+    每次启动均会覆盖写入；目录不存在时自动创建。
+    ``host`` 为 ``0.0.0.0`` / 空字符串时，写入 ``localhost``（客户端可用地址）。
+    """
+    runtime_dir = PROJECT_ROOT / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    effective_host = "localhost" if host in ("0.0.0.0", "") else host
+    payload = {
+        "api_base": f"http://{effective_host}:{port}",
+        "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    entrypoint_file = runtime_dir / "entrypoint.json"
+    entrypoint_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 # ============================================================================
@@ -1147,7 +1178,13 @@ class GalaxyUnified:
         # 系统就绪
         self.service_manager.state = SystemState.RUNNING
         self.running = True
-        
+
+        # 写出运行时入口文件，供 Windows 客户端等自动发现 API 地址
+        try:
+            _write_entrypoint(self.config.host, self.config.web_ui_port)
+        except Exception as _e:
+            logger.warning("写入 runtime/entrypoint.json 失败（不影响启动）: %s", _e)
+
         print_section("系统就绪")
         print_status("Galaxy 统一系统已启动！", "success")
         if self.config.enable_web_ui:
