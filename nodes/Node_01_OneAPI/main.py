@@ -403,7 +403,7 @@ async def node_status():
     return {
         "node_id": "01",
         "name": "OneAPI",
-        "port": 8001,
+        "port": 7995,
         "providers": providers,
         "request_count": 0,
         "timestamp": datetime.now().isoformat()
@@ -609,7 +609,12 @@ async def mcp_call(request: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    try:
+        from core.port_config import get_node_port
+        _port = get_node_port("Node_01_OneAPI")
+    except (ImportError, KeyError):
+        _port = 7995
+    uvicorn.run(app, host="0.0.0.0", port=_port)
 
 @app.post("/generate_video")
 async def generate_video(prompt: str, image_url: Optional[str] = None):

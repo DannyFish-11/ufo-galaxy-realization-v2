@@ -573,7 +573,7 @@
                                 <div v-for="node in nodes" :key="node.node_id" class="provider-chip text-center" style="padding: 6px;">
                                     <div style="font-size: 9px; color: rgba(255,255,255,0.25);">{{ node.node_id }}</div>
                                     <div style="font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ node.name }}</div>
-                                    <div style="font-size: 9px;" :class="node.status === 'healthy' ? 'valid' : ''">{{ node.status || '—' }}</div>
+                                    <div style="font-size: 9px;" :class="node.status === 'healthy' ? 'valid' : node.status === 'inactive' ? '' : (node.status === 'error' ? 'invalid' : '')">{{ node.status || '—' }}</div>
                                 </div>
                             </div>
                         </div>
@@ -1112,7 +1112,7 @@
                     try { testResult.value = JSON.stringify((await axios.post('/api/v1/config/test-llm', { message: testMessage.value })).data, null, 2); } catch (e) { testResult.value = '失败: ' + e.message; }
                 };
                 const checkNodes = async () => {
-                    try { const r = (await axios.post('/api/v1/config/nodes/check')).data.results; nodes.value.forEach(n => { n.status = r[n.node_id]?.success ? 'healthy' : 'error'; }); } catch (e) {}
+                    try { const r = (await axios.post('/api/v1/config/nodes/check')).data.results; nodes.value.forEach(n => { if (n.status === 'inactive') return; n.status = r[n.node_id]?.success ? 'healthy' : 'error'; }); } catch (e) {}
                 };
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim()) return;

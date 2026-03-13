@@ -100,7 +100,7 @@ async def node_status():
     return {
         "node_id": "09",
         "name": "Sandbox",
-        "port": 8009,
+        "port": 7996,
         "active_sandboxes": 0,
         "timestamp": datetime.now().isoformat()
     }
@@ -320,4 +320,9 @@ async def mcp_call(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8009)
+    try:
+        from core.port_config import get_node_port
+        _port = get_node_port("Node_09_Sandbox")
+    except (ImportError, KeyError):
+        _port = 7996
+    uvicorn.run(app, host="0.0.0.0", port=_port)
