@@ -607,6 +607,14 @@ async def mcp_call(request: Dict[str, Any]):
     else:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
 
+@app.post("/generate_video")
+async def generate_video(prompt: str, image_url: Optional[str] = None):
+    """视频生成接口 - 使用 Pixverse"""
+    result = call_pixverse(prompt, image_url)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
 if __name__ == "__main__":
     import uvicorn
     try:
@@ -615,11 +623,3 @@ if __name__ == "__main__":
     except (ImportError, KeyError):
         _port = 7995
     uvicorn.run(app, host="0.0.0.0", port=_port)
-
-@app.post("/generate_video")
-async def generate_video(prompt: str, image_url: Optional[str] = None):
-    """视频生成接口 - 使用 Pixverse"""
-    result = call_pixverse(prompt, image_url)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
