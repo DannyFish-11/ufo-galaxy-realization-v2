@@ -1094,9 +1094,9 @@ infrastructure:
       description: "Docker 容器默认启动端口"
       
     gateway:
-      port: 9000
+      port: 8765
       name: "Gateway"
-      description: "API网关服务 (Galaxy Gateway)"
+      description: "API网关服务 (Galaxy Gateway) — 统一端口，WS + REST + WebRTC proxy 同端口运行"
       
     oneapi_web:
       port: 3001
@@ -1154,7 +1154,7 @@ docker_host_ports:
     galaxy_main: 8086
     dashboard: 8080
     unified_launcher: 8085
-    gateway: 9000
+    gateway: 8765
     memos: 8180
     agentcpm: 8401
     oneapi: 3001
