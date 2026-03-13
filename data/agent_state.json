@@ -1,12 +1,12 @@
 {
   "agents": {
-    "agent_97f885b6548b": {
-      "id": "agent_97f885b6548b",
+    "agent_f01b0cce70cb": {
+      "id": "agent_f01b0cce70cb",
       "config": {
         "role": "analyst",
-        "name": "数据分析 Agent",
-        "description": "专门处理数据分析、统计和可视化任务",
-        "system_prompt": "你是一个数据分析 Agent。分析给定的数据并提供洞察。\n输出格式为 JSON: {\"analysis\": ..., \"insights\": [...], \"recommendations\": [...]}",
+        "name": "调研 Agent",
+        "description": "负责信息收集和研究",
+        "system_prompt": "你是一个调研 Agent。负责收集和整理信息。\n返回 JSON: {\"findings\": [...], \"sources\": [...], \"summary\": ...}",
         "max_subtasks": 5,
         "max_depth": 3,
         "split_threshold": 3,
@@ -17,8 +17,8 @@
       "children_ids": [],
       "creation_mode": "template",
       "depth": 0,
-      "created_at": 1773362962.560576,
-      "last_active": 1773362962.560576,
+      "created_at": 1773367646.0779526,
+      "last_active": 1773367646.0779526,
       "metrics": {
         "tasks_completed": 0,
         "tasks_failed": 0,
@@ -28,5 +28,5 @@
     }
   },
   "agent_tree": {},
-  "timestamp": 1773362962.5606031
+  "timestamp": 1773367646.0779757
 }

@@ -68,6 +68,61 @@ python tests/test_capability_integration.py
 
 ---
 
+## 🧠 B 阶段：SOUL 全局约束 + 模板蓝图双层约束
+
+### SOUL 全局生效（1B）
+
+SOUL（`SOUL.md` 中定义的人格与能力边界策略）现在在**全执行链路中全局生效**：
+
+| 执行路径 | SOUL 注入位置 |
+|---------|-------------|
+| 单 Agent（`_run_single_agent`） | `create_from_llm` prompt 前置注入 + `task_dict.context.soul` |
+| Team / Swarm（`_run_team`） | 每个成员 LLM 调用的 `system` 消息前缀 |
+| Fractal（`_run_fractal`） | 根 Agent 原子执行 system prompt + 子任务 context 继承 |
+
+主控 Agent 的 SOUL 通过 `ExecutionPlan.soul_policy` 传递到 `context["soul"]`，
+子 Agent（Team 成员 / Fractal 子 Agent）从 `context` 中读取并注入自身 system prompt，
+实现 **planner → agent_factory → agent_team → fractal** 全链路 SOUL 约束。
+
+### 模板蓝图双层约束（2C）
+
+Agent 配置生成时采用**前置提示约束 + 后置 schema 校验**双层机制：
+
+**第一层 — 生成前（pre-generation）**  
+在 `AgentFactory._build_agent_generation_prompt` 中，将 SOUL 约束和模板 schema 硬规则
+以结构化文本注入 LLM prompt，要求 LLM 严格遵守输出格式。
+
+**第二层 — 生成后（post-generation）**  
+`AgentFactory._validate_agent_config(result)` 对 LLM 输出做结构校验：
+- `role` 必须是以下之一：`coordinator` / `executor` / `analyst` / `planner` / `monitor` / `communicator` / `specialist`
+- `name` / `system_prompt` 必须是非空字符串
+- `capabilities` 数组中每项必须含 `name`，`strength` 须在 [0.0, 1.0]
+- `max_subtasks` 须在 [1, 50]，`max_depth` 须在 [1, 5]
+
+校验失败时**自动回退到模板兜底**，维持现有 LLM-first 逻辑不变。
+
+### 路由器保持自由（3B）
+
+不新增角色-工具-模型白名单。Multi-LLM Router 继续使用"任务类型 + 成本"规则护栏进行自由路由。
+
+### ExecutionResult 调试字段
+
+`ExecutionResult` 新增可选字段 `soul_enforced: Optional[bool]`：
+- 执行时有 SOUL 策略 → `True`
+- 执行时无 SOUL 策略 → `False`
+- 旧代码不提供该字段 → 默认 `None`（向后兼容）
+
+### 验证测试
+
+```bash
+# 运行 B 阶段所有验证测试
+python -m pytest tests/test_soul_blueprint_b_stage.py -v
+```
+
+涵盖：schema 校验单元测试 · SOUL prompt 注入 · 校验失败回退 · Team/Swarm/Fractal SOUL 传播 · `soul_enforced` 字段向后兼容性
+
+---
+
 ## 🔄 三大自主循环 (Three Autonomous Loops)
 
 Galaxy 内置三条端到端自主循环，实现系统自愈、持续学习和能力扩展：

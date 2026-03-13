@@ -327,6 +327,39 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
 }
 
 
+# ─────── 模板蓝图 Schema（双层约束 2C - 后置校验）─────────────────────────────
+
+AGENT_CONFIG_SCHEMA: Dict[str, Any] = {
+    "required": ["role", "name", "system_prompt"],
+    "properties": {
+        "role": {
+            "type": "string",
+            "enum": [
+                "coordinator", "executor", "analyst",
+                "planner", "monitor", "communicator", "specialist",
+            ],
+        },
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string"},
+        "capabilities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "strength": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                },
+            },
+        },
+        "system_prompt": {"type": "string", "minLength": 1},
+        "max_subtasks": {"type": "integer", "minimum": 1, "maximum": 50},
+        "max_depth": {"type": "integer", "minimum": 1, "maximum": 5},
+    },
+}
+
+
 # ───────────────────── Agent 工厂 ─────────────────────
 
 class AgentFactory:
@@ -403,21 +436,34 @@ class AgentFactory:
         self, task_description: str,
         parent_id: Optional[str] = None,
         context: Optional[Dict] = None,
+        soul_policy: str = "",
     ) -> TaskAgent:
-        """LLM 根据任务描述动态生成 Agent 配置"""
+        """LLM 根据任务描述动态生成 Agent 配置
+
+        双层约束 (2C):
+        - 生成前: 将 SOUL 约束 + 模板 schema 注入 prompt（前置提示约束）
+        - 生成后: 对 LLM 响应做结构校验（后置 schema 校验），失败则回退模板兜底
+        """
         if not self.llm_router:
             raise RuntimeError("LLM Router 未配置，无法使用 LLM 生成模式")
 
-        prompt = self._build_agent_generation_prompt(task_description, context)
+        # 前置约束：将 SOUL + 模板 schema 注入生成 prompt（2C 第一层）
+        prompt = self._build_agent_generation_prompt(task_description, context, soul_policy)
 
         try:
             result = await self.llm_router.chat_json(
                 messages=[
-                    {"role": "system", "content": "你是一个 Agent 配置生成器。根据任务描述生成最优的 Agent 配置。"},
+                    {"role": "system", "content": "你是一个 Agent 配置生成器。根据任务描述生成最优的 Agent 配置。严格遵守 SOUL 约束和 schema 规则。"},
                     {"role": "user", "content": prompt},
                 ],
                 task_type="planning",
             )
+
+            # 后置校验：对 LLM 生成配置做结构校验（2C 第二层）
+            if not self._validate_agent_config(result):
+                logger.warning("LLM 生成的 Agent 配置未通过 schema 校验，回退到模板兜底")
+                template = self._match_template(task_description)
+                return self.create_from_template(template, parent_id)
 
             # 从 LLM 响应构建 AgentConfig
             role_str = result.get("role", "executor")
@@ -465,12 +511,29 @@ class AgentFactory:
             return self.create_from_template(template, parent_id)
 
     def _build_agent_generation_prompt(self, task_description: str,
-                                       context: Optional[Dict] = None) -> str:
+                                       context: Optional[Dict] = None,
+                                       soul_policy: str = "") -> str:
+        """构建注入了 SOUL 约束 + 模板 schema 的 Agent 生成 prompt（双层约束 2C 前置层）。"""
         ctx_str = json.dumps(context, ensure_ascii=False, indent=2) if context else "无"
-        return f"""根据以下任务描述，生成一个最优的 Agent 配置。
+        soul_section = (
+            f"\n\n【SOUL 约束（必须严格遵守，不可违背）】\n{soul_policy}"
+            if soul_policy else ""
+        )
+        schema_hint = (
+            "【模板 Schema 硬规则（生成必须符合）】\n"
+            "- role 必须是以下之一: coordinator, executor, analyst, planner, monitor, communicator, specialist\n"
+            "- name 必须是非空字符串\n"
+            "- system_prompt 必须是非空字符串\n"
+            "- capabilities 必须是对象数组，每项含 name、description、strength(0.0-1.0)\n"
+            "- max_subtasks 必须是 1-50 之间的整数\n"
+            "- max_depth 必须是 1-5 之间的整数"
+        )
+        return f"""根据以下任务描述，生成一个最优的 Agent 配置。{soul_section}
 
 任务描述: {task_description}
 上下文信息: {ctx_str}
+
+{schema_hint}
 
 请返回 JSON 格式:
 {{
@@ -487,6 +550,93 @@ class AgentFactory:
         {{"template": "模板名或描述", "reason": "为什么需要这个子 Agent"}}
     ]
 }}"""
+
+    def _validate_agent_config(self, result: Dict) -> bool:
+        """后置校验：对 LLM 生成的 Agent 配置做结构校验（2C 第二层）。
+
+        Args:
+            result: LLM 返回的 Agent 配置字典，预期包含如下字段：
+                - role (str, required): coordinator/executor/analyst/planner/monitor/communicator/specialist
+                - name (str, required): 非空 Agent 名称
+                - system_prompt (str, required): 非空系统提示词
+                - capabilities (list, optional): 能力数组，每项含 name(str)、strength(float 0-1)
+                - max_subtasks (int, optional): 1-50 之间的整数
+                - max_depth (int, optional): 1-5 之间的整数
+
+        Returns:
+            True 表示配置合法，可用于构建 Agent；
+            False 表示校验失败，调用方应回退到模板兜底，不应抛出异常。
+        """
+        schema = AGENT_CONFIG_SCHEMA
+        props = schema.get("properties", {})
+
+        # 1. 必填字段检查
+        for field_name in schema.get("required", []):
+            val = result.get(field_name)
+            if val is None or val == "":
+                logger.warning("[Schema校验] 缺少必填字段或为空: %s", field_name)
+                return False
+
+        # 2. role 枚举值检查
+        role_val = result.get("role", "")
+        allowed_roles = props.get("role", {}).get("enum", [])
+        if allowed_roles and role_val not in allowed_roles:
+            logger.warning("[Schema校验] 无效 role 值: %r，允许: %s", role_val, allowed_roles)
+            return False
+
+        # 3. name / system_prompt 类型检查
+        for str_field in ("name", "system_prompt"):
+            v = result.get(str_field, "")
+            if not isinstance(v, str) or not v.strip():
+                logger.warning("[Schema校验] 字段 %s 为空或类型错误", str_field)
+                return False
+
+        # 4. capabilities 类型检查（可选字段）
+        caps = result.get("capabilities")
+        if caps is not None:
+            if not isinstance(caps, list):
+                logger.warning("[Schema校验] capabilities 必须是数组")
+                return False
+            for cap in caps:
+                if not isinstance(cap, dict) or not cap.get("name"):
+                    logger.warning("[Schema校验] capabilities 项缺少 name 字段")
+                    return False
+                strength = cap.get("strength")
+                if strength is not None:
+                    try:
+                        s = float(strength)
+                        if s < 0.0 or s > 1.0:
+                            logger.warning("[Schema校验] capability.strength 超出 [0,1]: %s", s)
+                            return False
+                    except (ValueError, TypeError):
+                        logger.warning("[Schema校验] capability.strength 类型错误")
+                        return False
+
+        # 5. max_subtasks 范围检查（可选字段）
+        mst = result.get("max_subtasks")
+        if mst is not None:
+            try:
+                mst_int = int(mst)
+                if mst_int < 1 or mst_int > 50:
+                    logger.warning("[Schema校验] max_subtasks 超出 [1,50]: %d", mst_int)
+                    return False
+            except (ValueError, TypeError):
+                logger.warning("[Schema校验] max_subtasks 类型错误")
+                return False
+
+        # 6. max_depth 范围检查（可选字段）
+        md = result.get("max_depth")
+        if md is not None:
+            try:
+                md_int = int(md)
+                if md_int < 1 or md_int > 5:
+                    logger.warning("[Schema校验] max_depth 超出 [1,5]: %d", md_int)
+                    return False
+            except (ValueError, TypeError):
+                logger.warning("[Schema校验] max_depth 类型错误")
+                return False
+
+        return True
 
     def _match_template(self, task_description: str) -> str:
         """匹配最相关的模板"""
