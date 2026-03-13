@@ -1744,6 +1744,7 @@ class GalaxyClientUI(QWidget):
         self.is_sidebar_mode = True
         self.is_visible = False
         self._sidebar_expanded = False  # calligraphy scroll state
+        self._pending_auto_expand = False
 
         if on_command:
             self.command_submitted.connect(on_command)
@@ -2110,6 +2111,15 @@ class GalaxyClientUI(QWidget):
             )
             self._collapsed_strip.setVisible(True)
             self._content_opacity.setOpacity(0.0)
+            # Auto-expand once the slide-in animation finishes.
+            self._pending_auto_expand = True
+            # Disconnect first to ensure only one connection exists
+            # (Qt raises TypeError when disconnecting a non-connected signal).
+            try:
+                self.slide_anim.finished.disconnect(self._auto_expand_once)
+            except TypeError:
+                pass
+            self.slide_anim.finished.connect(self._auto_expand_once)
         else:
             cx = (self.screen_width - FULL_WIDTH) // 2
             cy = (self.screen_height - FULL_HEIGHT) // 2
@@ -2129,6 +2139,7 @@ class GalaxyClientUI(QWidget):
             return
         self.is_visible = False
         self._sidebar_expanded = False
+        self._pending_auto_expand = False  # prevent stale auto-expand
 
         # Stop any sidebar scroll group that may still be running.
         self._sidebar_scroll_group.stop()
@@ -2150,6 +2161,23 @@ class GalaxyClientUI(QWidget):
 
         QTimer.singleShot(400, self.hide)
         logger.info("Galaxy 客户端隐藏")
+
+    def _auto_expand_once(self):
+        """Called when slide_anim finishes; auto-expands the collapsed strip to full sidebar."""
+        # Disconnect immediately so this only fires once per show.
+        # Qt raises TypeError when disconnecting a non-connected signal; that is expected here.
+        try:
+            self.slide_anim.finished.disconnect(self._auto_expand_once)
+        except TypeError:
+            pass
+        if (
+            self.is_sidebar_mode
+            and self.is_visible
+            and self._pending_auto_expand
+            and not self._sidebar_expanded
+        ):
+            self._pending_auto_expand = False
+            self.toggle_sidebar()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
