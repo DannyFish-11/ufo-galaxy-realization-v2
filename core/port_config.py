@@ -36,9 +36,9 @@ _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "qdrant": 6333,
     "dashboard": 8085,        # Dashboard Backend Web UI (unified port)
     "oneapi_web": 3001,
-    "api_gateway": 9000,      # Galaxy Gateway
-    "state_machine": 8000,
-    "gateway": 9000,           # Galaxy Gateway (alias)
+    "api_gateway": 8765,      # Galaxy Gateway (unified port)
+    "state_machine": 8765,
+    "gateway": 8765,           # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
     "dashboard_backend": 8085, # Same as dashboard (unified port)
     "websocket": 8085,
     "websocket_http": 8081,

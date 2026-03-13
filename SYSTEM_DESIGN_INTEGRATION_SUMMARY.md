@@ -451,8 +451,8 @@ python unified_launcher.py
 | 层次 | 标准 |
 |------|------|
 | 消息格式 | **AIP v3.0**（`galaxy_gateway/protocol/aip_v3.py` — 单一事实来源） |
-| WebSocket 主通道 | `ws://<host>:8765/ws/device/{device_id}` |
-| WebSocket 初始通道 | `ws://<host>:8765/ws/android` |
+| WebSocket 主通道 | `ws://<host>:8765/ws/android/{device_id}` |
+| WebSocket 初始通道 | `ws://<host>:8765/ws/android` (compat) |
 | REST 设备注册 | `POST /api/v1/devices/register` |
 | REST 设备发现 | `GET /api/v1/devices/discover` |
 | REST 设备心跳 | `POST /api/v1/devices/{device_id}/heartbeat` |
@@ -495,8 +495,8 @@ MessageHandler / DeviceManager / DeviceRouter
 
 系统有两个服务入口，各自维护运行时设备状态，均使用 AIP v3 协议：
 
-- **`galaxy_gateway/app.py`（port 8765）**：WebSocket 入口，设备通过 `/ws/device/{id}` 连接。`DeviceRouter` 维护 WebSocket 连接表（仅活跃连接）。
-- **`core/api_routes.py`（port 8000）**：REST 入口，设备通过 `/api/v1/devices/register` 注册。`registered_devices` 字典维护注册设备表（持久化）。
+- **`galaxy_gateway/app.py`（port 8765）**：WebSocket 入口，设备通过 `/ws/android/{id}` 连接（主路径），兼容路径包括 `/ws/device/{id}`、`/ws/android`、`/ws/ufo3/{id}`。`DeviceRouter` 维护 WebSocket 连接表（仅活跃连接）。
+- **`core/api_routes.py`（port 8765）**：REST 入口与 WebSocket 运行在**同一进程同端口**，设备通过 `/api/v1/devices/register` 注册。`registered_devices` 字典维护注册设备表（持久化）。WebRTC proxy（`/ws/webrtc/{id}`、`/api/v1/webrtc/endpoint`）也挂载于此端口。
 
 两个入口使用相同的 `device_id` 键空间，设备应通过 REST 注册后再通过 WebSocket 建立实时通道。
 

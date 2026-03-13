@@ -29,7 +29,7 @@ Galaxy Gateway  ─────────────────────�
 | Variable      | Default                  | Description                                     |
 |---------------|--------------------------|-------------------------------------------------|
 | `NODE_95_URL` | `http://localhost:8095`  | HTTP base URL of `Node_95_WebRTC_Receiver`.     |
-| `GATEWAY_URL` | `http://localhost:8000`  | HTTP base URL of this gateway service.          |
+| `GATEWAY_URL` | `http://localhost:8765`  | HTTP base URL of this gateway service (unified port — WS + REST + WebRTC on same port). |
 
 Both variables are read at call-time, so they can be changed without
 restarting the process (useful for testing).
@@ -47,7 +47,7 @@ WebRTC signaling connection.
 {
   "node95_url": "http://localhost:8095",
   "ws_signaling_path": "/signaling/{device_id}",
-  "gateway_ws_url": "http://localhost:8000",
+  "gateway_ws_url": "http://localhost:8765",
   "gateway_ws_path": "/ws/webrtc/{device_id}"
 }
 ```
@@ -123,7 +123,7 @@ resp = await router.route(TransportRequest(
 ))
 
 print(resp.endpoint)
-# ws://localhost:8000/ws/webrtc/phone_a
+# ws://localhost:8765/ws/webrtc/phone_a
 ```
 
 ---

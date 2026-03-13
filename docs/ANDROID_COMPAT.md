@@ -13,18 +13,24 @@ All paths below are handled by the **same** connection handler
 
 | Path | Introduced | Notes |
 |------|-----------|-------|
-| `/ws/{device_id}` | v3.0 | Primary path |
+| `/ws/android/{device_id}` | v3.0+ | **Primary path** — preferred for all Android clients |
+| `/ws/{device_id}` | v3.0 | Generic device path |
 | `/ws` | v3.0 | Auto-assigns `device_id` if not provided via query param |
-| `/ws/device/{device_id}` | compat | Android device-specific path |
+| `/ws/device/{device_id}` | compat | Compat alias for `/ws/android/{device_id}` |
 | `/ws/ufo3/{device_id}` | compat | Legacy UFO3 client path |
 | `/ws/android` | compat | Broadcast Android path; `device_id` optional (query param) |
+
+> **Note**: WS, REST (`/api/v1/…`), and WebRTC proxy (`/ws/webrtc/{id}`,
+> `/api/v1/webrtc/endpoint`) all run in the **same process on port 8765**.
+> No separate port is required.
 
 ### Connection example
 
 ```
-ws://<host>:<port>/ws/device/<device_id>
-ws://<host>:<port>/ws/ufo3/<device_id>
-ws://<host>:<port>/ws/android?device_id=<device_id>
+ws://<host>:8765/ws/android/<device_id>
+ws://<host>:8765/ws/device/<device_id>
+ws://<host>:8765/ws/ufo3/<device_id>
+ws://<host>:8765/ws/android?device_id=<device_id>
 ```
 
 ---

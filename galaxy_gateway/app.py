@@ -266,6 +266,17 @@ async def websocket_endpoint_auto(websocket: WebSocket, device_id: str = Query(N
 
 
 # ---------------------------------------------------------------------------
+# Primary Android WebSocket path
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/android/{device_id}")
+async def websocket_android_primary(websocket: WebSocket, device_id: str):
+    """Primary Android WebSocket path — all Android clients should connect here."""
+    logger.info("Primary path /ws/android/ used for device %s", device_id)
+    await websocket_manager.handle_connection(websocket, device_id)
+
+
+# ---------------------------------------------------------------------------
 # Legacy / backward-compatible WebSocket paths
 # ---------------------------------------------------------------------------
 
@@ -278,8 +289,8 @@ async def websocket_ufo3(websocket: WebSocket, device_id: str):
 
 @app.websocket("/ws/device/{device_id}")
 async def websocket_device(websocket: WebSocket, device_id: str):
-    """Android device WebSocket path — routed to the same connection handler."""
-    logger.info("Path /ws/device/ used for device %s", device_id)
+    """Android device WebSocket path — compat alias for /ws/android/{device_id}."""
+    logger.info("Compat path /ws/device/ used for device %s", device_id)
     await websocket_manager.handle_connection(websocket, device_id)
 
 
@@ -289,7 +300,7 @@ async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
     if not device_id:
         import uuid
         device_id = str(uuid.uuid4())
-    logger.info("Path /ws/android used, device_id=%s", device_id)
+    logger.info("Compat path /ws/android used, device_id=%s", device_id)
     await websocket_manager.handle_connection(websocket, device_id)
 
 
@@ -850,7 +861,7 @@ def main():
         from core.port_config import get_service_port
         _default_gw_port = str(get_service_port("gateway"))
     except Exception:
-        _default_gw_port = "8000"
+        _default_gw_port = "8765"
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", _default_gw_port))
 

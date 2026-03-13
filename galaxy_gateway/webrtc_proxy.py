@@ -15,7 +15,7 @@ Public helpers
 Environment variables
 ---------------------
 NODE_95_URL              HTTP base URL of Node_95_WebRTC_Receiver (default: http://localhost:8095)
-GATEWAY_URL              HTTP base URL of this gateway service      (default: http://localhost:8000)
+GATEWAY_URL              HTTP base URL of this gateway service      (default: http://localhost:8765)
 GALAXY_STUN_URLS         Comma-separated STUN server URLs (e.g. stun:stun.l.google.com:19302)
 GALAXY_TURN_URLS         Comma-separated TURN server URLs (e.g. turn:turn.example.com:3478)
 GALAXY_TURN_USERNAME     TURN server credential username
