@@ -1819,12 +1819,7 @@ class GalaxyClientUI(QWidget):
         self.title_bar = self._create_title_bar()
         container_layout.addWidget(self.title_bar)
 
-        # Tab 栏 (全窗口模式才显示)
-        self.tab_bar = self._create_tab_bar()
-        self.tab_bar.setVisible(False)
-        container_layout.addWidget(self.tab_bar)
-
-        # 内容堆栈 — 5 个 Tab
+        # 内容堆栈 — 5 个 Tab (must be created before tab bar so _switch_tab is safe)
         self.stack = QStackedWidget()
         self.stacked_widget = self.stack  # alias for backward compatibility
         self.chat_panel = ChatPanel(self.api)
@@ -1838,8 +1833,17 @@ class GalaxyClientUI(QWidget):
         self.stack.addWidget(self.device_panel)      # index 2
         self.stack.addWidget(self.status_panel)      # index 3
         self.stack.addWidget(self.settings_panel)    # index 4
-        container_layout.addWidget(self.stack, 1)
         logger.debug("QStackedWidget created with %d tabs (stack=%r)", self.stack.count(), self.stack)
+
+        # Tab 栏 (全窗口模式才显示) — created after stack so _switch_tab(0) is safe
+        self.tab_bar = self._create_tab_bar()
+        self.tab_bar.setVisible(False)
+        container_layout.addWidget(self.tab_bar)
+
+        container_layout.addWidget(self.stack, 1)
+
+        # Initialise tab selection now that both stack and tab_bar exist
+        self._switch_tab(0)
 
     def _create_title_bar(self) -> QWidget:
         bar = QWidget()
@@ -1924,7 +1928,6 @@ class GalaxyClientUI(QWidget):
             layout.addWidget(btn)
             self._tab_buttons.append(btn)
 
-        self._switch_tab(0)
         return bar
 
     def _tab_style(self, active: bool) -> str:
@@ -1953,6 +1956,9 @@ class GalaxyClientUI(QWidget):
         """
 
     def _switch_tab(self, idx: int):
+        if self.stack is None:
+            logger.warning("_switch_tab(%d) called before stack is initialized; skipping.", idx)
+            return
         self.stack.setCurrentIndex(idx)
         for i, btn in enumerate(self._tab_buttons):
             btn.setStyleSheet(self._tab_style(i == idx))
