@@ -15,6 +15,9 @@ import sys
 import json
 import asyncio
 import logging
+import threading
+import time as _time_module
+import uuid as _uuid_module
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -162,6 +165,208 @@ logger = logging.getLogger("Galaxy")
 
 # 打印 ASCII 艺术字
 print(GALAXY_ASCII_MINIMAL)
+
+# ============================================================================
+# P2: Device Trace Store — lightweight in-process store backed by JSON file
+# ============================================================================
+
+class DeviceTraceStore:
+    """Persist and retrieve per-device execution traces.
+
+    Traces are kept in memory and flushed to ``data/device_traces.json``
+    on every write so they survive server restarts.  The file is created
+    automatically if it does not exist.
+    """
+
+    _DEFAULT_MAX_TRACES = 500  # global cap to prevent unbounded growth
+
+    def __init__(self, path: Optional[str] = None, max_traces: int = 0) -> None:
+        _data_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "data",
+        )
+        os.makedirs(_data_dir, exist_ok=True)
+        self._path: str = path or os.path.join(_data_dir, "device_traces.json")
+        self._max_traces: int = max_traces if max_traces > 0 else self._DEFAULT_MAX_TRACES
+        self._lock = threading.Lock()
+        self._traces: List[dict] = self._load()
+
+    # ── persistence ──────────────────────────────────────────────────────────
+
+    def _load(self) -> List[dict]:
+        try:
+            with open(self._path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+                return data if isinstance(data, list) else []
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+    def _flush(self) -> None:
+        try:
+            with open(self._path, "w", encoding="utf-8") as fh:
+                json.dump(self._traces, fh, ensure_ascii=False, indent=2)
+        except OSError as exc:
+            logger.warning("DeviceTraceStore: failed to flush traces: %s", exc)
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    def add(
+        self,
+        *,
+        device_id: str,
+        command: str,
+        params: dict,
+        result: dict,
+        agent_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        duration_ms: Optional[float] = None,
+    ) -> dict:
+        """Record one execution trace and return it."""
+        trace = {
+            "trace_id": f"tr_{int(_time_module.time() * 1000)}_{device_id}",
+            "device_id": device_id,
+            "command": command,
+            "params": params,
+            "result": result,
+            "success": bool(result.get("success", True)),
+            "error": result.get("error"),
+            "agent_id": agent_id,
+            "task_id": task_id,
+            "duration_ms": duration_ms,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        with self._lock:
+            self._traces.append(trace)
+            # cap
+            if len(self._traces) > self._max_traces:
+                self._traces = self._traces[-self._max_traces :]
+            self._flush()
+        return trace
+
+    def all(self) -> List[dict]:
+        with self._lock:
+            return list(self._traces)
+
+    def for_device(self, device_id: str) -> List[dict]:
+        with self._lock:
+            return [t for t in self._traces if t["device_id"] == device_id]
+
+    def recent(self, n: int = 50) -> List[dict]:
+        with self._lock:
+            return list(self._traces[-n:])
+
+    def clear(self) -> None:
+        with self._lock:
+            self._traces.clear()
+            self._flush()
+
+
+# Global singleton
+_device_trace_store = DeviceTraceStore()
+
+# ============================================================================
+# P2: In-memory agent–device mapping registry
+# ============================================================================
+
+class _AgentDeviceRegistry:
+    """Lightweight in-memory store for agent↔device task assignments."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # {agent_id: {"agent_id", "device_id", "task", "status", "started_at", "updated_at"}}
+        self._assignments: Dict[str, dict] = {}
+
+    def assign(self, agent_id: str, device_id: str, task: str, status: str = "running") -> dict:
+        entry = {
+            "agent_id": agent_id,
+            "device_id": device_id,
+            "task": task,
+            "status": status,
+            "started_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+        with self._lock:
+            self._assignments[agent_id] = entry
+        return entry
+
+    def update_status(self, agent_id: str, status: str) -> None:
+        with self._lock:
+            if agent_id in self._assignments:
+                self._assignments[agent_id]["status"] = status
+                self._assignments[agent_id]["updated_at"] = datetime.utcnow().isoformat() + "Z"
+
+    def release(self, agent_id: str) -> None:
+        with self._lock:
+            self._assignments.pop(agent_id, None)
+
+    def all(self) -> List[dict]:
+        with self._lock:
+            return list(self._assignments.values())
+
+    def for_device(self, device_id: str) -> List[dict]:
+        with self._lock:
+            return [a for a in self._assignments.values() if a["device_id"] == device_id]
+
+
+_agent_device_registry = _AgentDeviceRegistry()
+
+# ============================================================================
+# P2: In-memory orchestration task store
+# ============================================================================
+
+class _OrchestrationStore:
+    """Store multi-device task orchestration records."""
+
+    _MAX = 200
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._tasks: List[dict] = []
+
+    def record(
+        self,
+        *,
+        task_id: str,
+        description: str,
+        device_assignments: List[dict],
+        status: str = "running",
+    ) -> dict:
+        entry = {
+            "task_id": task_id,
+            "description": description,
+            "device_assignments": device_assignments,
+            "status": status,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "results": {},
+        }
+        with self._lock:
+            self._tasks.append(entry)
+            if len(self._tasks) > self._MAX:
+                self._tasks = self._tasks[-self._MAX :]
+        return entry
+
+    def update(self, task_id: str, *, status: Optional[str] = None, results: Optional[dict] = None) -> None:
+        with self._lock:
+            for t in self._tasks:
+                if t["task_id"] == task_id:
+                    if status:
+                        t["status"] = status
+                    if results:
+                        t["results"].update(results)
+                    t["updated_at"] = datetime.utcnow().isoformat() + "Z"
+                    break
+
+    def all(self) -> List[dict]:
+        with self._lock:
+            return list(self._tasks)
+
+    def recent(self, n: int = 50) -> List[dict]:
+        with self._lock:
+            return list(self._tasks[-n:])
+
+
+_orchestration_store = _OrchestrationStore()
 
 # 创建应用 (使用 lifespan 替代 deprecated on_event)
 from contextlib import asynccontextmanager
@@ -402,15 +607,29 @@ async def register_device(request: dict):
 
 @app.post("/api/v1/devices/{device_id}/command")
 async def send_device_command(device_id: str, request: dict):
-    """发送设备命令 - 使用 device_protocol"""
+    """发送设备命令 - 使用 device_protocol，并记录执行 trace"""
+    command = request.get("command", "")
+    params = request.get("params", {})
+    agent_id = request.get("agent_id")
+    task_id = request.get("task_id")
+
+    _t0 = _time_module.monotonic()
     if GALAXY_CORE_AVAILABLE and galaxy_core:
-        command = request.get("command", "")
-        params = request.get("params", {})
-
         result = await galaxy_core.send_device_command(device_id, command, params)
-        return result
+    else:
+        result = {"success": False, "error": "Galaxy core not available"}
 
-    return {"success": False, "error": "Galaxy core not available"}
+    _duration = round((_time_module.monotonic() - _t0) * 1000, 2)
+    _device_trace_store.add(
+        device_id=device_id,
+        command=command,
+        params=params,
+        result=result,
+        agent_id=agent_id,
+        task_id=task_id,
+        duration_ms=_duration,
+    )
+    return result
 
 
 @app.post("/api/v1/devices/discover-active")
@@ -1236,9 +1455,23 @@ async def chat_unified(request: dict):
 
 @app.post("/api/v1/execute/parallel")
 async def execute_parallel(request: dict):
-    """并行执行多设备命令"""
+    """并行执行多设备命令，并记录执行 traces"""
     commands = request.get("commands", [])
+    task_id = request.get("task_id") or f"orch_{int(_time_module.time() * 1000)}"
+    description = request.get("description", "Parallel execution")
     results = {}
+
+    device_assignments = [
+        {"device_id": cmd.get("device_id", ""), "action": cmd.get("action", "")}
+        for cmd in commands
+    ]
+    _orchestration_store.record(
+        task_id=task_id,
+        description=description,
+        device_assignments=device_assignments,
+        status="running",
+    )
+
     if GALAXY_CORE_AVAILABLE and galaxy_core:
         tasks = []
         for cmd in commands:
@@ -1250,12 +1483,188 @@ async def execute_parallel(request: dict):
             task_results = await asyncio.gather(*tasks, return_exceptions=True)
             for cmd, result in zip(commands, task_results):
                 device_id = cmd.get("device_id", "")
-                results[device_id] = result if not isinstance(result, Exception) else {"success": False, "error": str(result)}
-        return {"success": True, "results": results}
+                resolved = result if not isinstance(result, Exception) else {"success": False, "error": str(result)}
+                results[device_id] = resolved
+                _device_trace_store.add(
+                    device_id=device_id,
+                    command=cmd.get("action", ""),
+                    params=cmd.get("params", {}),
+                    result=resolved,
+                    task_id=task_id,
+                )
+        _orchestration_store.update(task_id, status="completed", results=results)
+        return {"success": True, "task_id": task_id, "results": results}
+
     # 无 galaxy_core 时返回空结果
     for cmd in commands:
-        results[cmd.get("device_id", "")] = {"success": False, "error": "Galaxy core not available"}
-    return {"success": False, "results": results}
+        device_id = cmd.get("device_id", "")
+        err_result = {"success": False, "error": "Galaxy core not available"}
+        results[device_id] = err_result
+        _device_trace_store.add(
+            device_id=device_id,
+            command=cmd.get("action", ""),
+            params=cmd.get("params", {}),
+            result=err_result,
+            task_id=task_id,
+        )
+    _orchestration_store.update(task_id, status="failed", results=results)
+    return {"success": False, "task_id": task_id, "results": results}
+
+# ============================================================================
+# P2: Device Execution Trace API
+# ============================================================================
+
+@app.get("/api/v1/devices/traces")
+async def get_all_device_traces(limit: int = 100):
+    """获取所有设备执行 trace 记录（最多 limit 条，默认 100）"""
+    traces = _device_trace_store.all()
+    return {"traces": traces[-limit:], "total": len(traces)}
+
+
+@app.get("/api/v1/devices/{device_id}/traces")
+async def get_device_traces(device_id: str, limit: int = 50):
+    """获取指定设备的执行 trace 记录"""
+    traces = _device_trace_store.for_device(device_id)
+    return {"device_id": device_id, "traces": traces[-limit:], "total": len(traces)}
+
+
+# ============================================================================
+# P2: Agent–Device Collaboration Mapping API
+# ============================================================================
+
+@app.get("/api/v1/agent-device/mapping")
+async def get_agent_device_mapping():
+    """Agent–Device 协同映射：返回所有 Agent 当前控制的设备及任务状态"""
+    # Pull live agent list from factory when available
+    live_agents: List[dict] = []
+    if AGENT_FACTORY_AVAILABLE and agent_factory:
+        try:
+            for aid, agent in agent_factory.agents.items():
+                device_id = getattr(agent, "device_id", None) or getattr(agent, "target_device_id", None) or ""
+                task = getattr(agent, "task", "")
+                status = getattr(agent, "state", "unknown")
+                if hasattr(status, "value"):
+                    status = status.value
+                if device_id:
+                    _agent_device_registry.assign(aid, device_id, task or "", str(status))
+                live_agents.append({
+                    "agent_id": aid,
+                    "name": getattr(agent, "name", aid),
+                    "device_id": device_id,
+                    "task": task,
+                    "status": str(status),
+                })
+        except Exception as exc:
+            logger.debug("agent-device mapping live fetch failed: %s", exc)
+
+    mappings = _agent_device_registry.all()
+    # Merge live_agents into mappings: add any agent not already tracked
+    tracked_ids = {m["agent_id"] for m in mappings}
+    for la in live_agents:
+        if la["agent_id"] not in tracked_ids:
+            mappings.append({
+                "agent_id": la["agent_id"],
+                "device_id": la["device_id"],
+                "task": la["task"],
+                "status": la["status"],
+                "started_at": None,
+                "updated_at": None,
+            })
+
+    # Enrich with recent trace summary per (agent_id, device_id)
+    all_traces = _device_trace_store.all()
+    trace_index: Dict[str, dict] = {}
+    for t in all_traces:
+        if t.get("agent_id"):
+            key = f"{t['agent_id']}_{t['device_id']}"
+            trace_index[key] = {
+                "last_command": t["command"],
+                "last_result_success": t["success"],
+                "last_error": t["error"],
+                "last_trace_ts": t["timestamp"],
+            }
+    for m in mappings:
+        key = f"{m['agent_id']}_{m['device_id']}"
+        m["trace_summary"] = trace_index.get(key)
+
+    return {
+        "mappings": mappings,
+        "total": len(mappings),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.post("/api/v1/agent-device/assign")
+async def assign_agent_to_device(request: dict):
+    """记录 Agent 到设备的分配关系（供其他组件上报）"""
+    agent_id = request.get("agent_id", "")
+    device_id = request.get("device_id", "")
+    task = request.get("task", "")
+    status = request.get("status", "running")
+    if not agent_id or not device_id:
+        raise HTTPException(status_code=400, detail="agent_id and device_id are required")
+    entry = _agent_device_registry.assign(agent_id, device_id, task, status)
+    return {"success": True, "assignment": entry}
+
+
+@app.patch("/api/v1/agent-device/{agent_id}/status")
+async def update_agent_device_status(agent_id: str, request: dict):
+    """更新 Agent 的任务状态"""
+    status = request.get("status", "")
+    if not status:
+        raise HTTPException(status_code=400, detail="status is required")
+    _agent_device_registry.update_status(agent_id, status)
+    return {"success": True}
+
+
+# ============================================================================
+# P2: Multi-Device Orchestration API
+# ============================================================================
+
+@app.get("/api/v1/orchestration/tasks")
+async def get_orchestration_tasks(limit: int = 50):
+    """获取多设备任务编排记录（最近 limit 条）"""
+    tasks = _orchestration_store.recent(limit)
+    # For each task, attach individual device traces
+    trace_by_task: Dict[str, List[dict]] = {}
+    for t in _device_trace_store.all():
+        tid = t.get("task_id")
+        if tid:
+            trace_by_task.setdefault(tid, []).append(t)
+    for task in tasks:
+        task["device_traces"] = trace_by_task.get(task["task_id"], [])
+    return {
+        "tasks": tasks,
+        "total": len(tasks),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.post("/api/v1/orchestration/tasks")
+async def create_orchestration_task(request: dict):
+    """手动记录一个多设备任务编排记录"""
+    task_id = request.get("task_id") or f"orch_{_uuid_module.uuid4().hex[:8]}"
+    description = request.get("description", "")
+    device_assignments = request.get("device_assignments", [])
+    status = request.get("status", "running")
+    if not description:
+        raise HTTPException(status_code=400, detail="description is required")
+    entry = _orchestration_store.record(
+        task_id=task_id,
+        description=description,
+        device_assignments=device_assignments,
+        status=status,
+    )
+    return {"success": True, "task": entry}
+
+
+@app.patch("/api/v1/orchestration/tasks/{task_id}")
+async def update_orchestration_task(task_id: str, request: dict):
+    """更新任务状态或归并结果"""
+    status = request.get("status")
+    results = request.get("results")
+    _orchestration_store.update(task_id, status=status, results=results)
+    return {"success": True}
 
 # ============================================================================
 # 自主能力 API

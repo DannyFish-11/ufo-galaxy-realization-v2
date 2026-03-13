@@ -1,0 +1,18 @@
+[
+  {
+    "trace_id": "tr_1773361366625_d1",
+    "device_id": "d1",
+    "command": "click",
+    "params": {},
+    "result": {
+      "success": false,
+      "error": "Device d1 not found"
+    },
+    "success": false,
+    "error": "Device d1 not found",
+    "agent_id": null,
+    "task_id": "parallel-002",
+    "duration_ms": null,
+    "timestamp": "2026-03-13T00:22:46.625006Z"
+  }
+]
