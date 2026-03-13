@@ -4,10 +4,15 @@ Node 01: OneAPI Gateway - 真实可用的多模型 AI 网关
 支持: OpenRouter, 智谱AI, Groq, Claude, OpenWeather, BraveSearch
 
 所有 API 都经过实际测试验证可用。
+若 .env 缺失或 API Key 未配置，节点以降级（degraded）模式启动，
+健康检查仍返回 HTTP 200，不影响系统启动。
 """
 import os
 import time
+import logging
+import asyncio
 import requests
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, HTTPException, Header
@@ -15,10 +20,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
 
-app = FastAPI(title="Node 01 - OneAPI Gateway", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+logger = logging.getLogger("Node_01_OneAPI")
 
 # ============ API 配置 (从环境变量读取) ============
+# 可选的 OneAPI 聚合端点（优先使用）
+ONEAPI_BASE_URL = os.getenv("ONEAPI_BASE_URL", "")
+ONEAPI_API_KEY  = os.getenv("ONEAPI_API_KEY", "")
+
 # 云端 LLM 提供商
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "")
@@ -36,6 +44,88 @@ LOCAL_LLM_PRIORITY = int(os.getenv("LOCAL_LLM_PRIORITY", "1"))  # 1=最高优先
 # 其他工具 API
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
+
+# ============ 运行时状态缓存（避免健康检查时阻塞事件循环） ============
+_local_llm_available: bool = False
+_startup_mode: str = "starting"  # "healthy" | "degraded" | "skipped"
+
+
+def _collect_cloud_providers() -> List[str]:
+    """返回已配置（有 API Key）的云端提供商列表，不发起任何网络请求。"""
+    providers: List[str] = []
+    if ONEAPI_BASE_URL and ONEAPI_API_KEY:
+        providers.append("oneapi")
+    if OPENROUTER_API_KEY:
+        providers.append("openrouter")
+    if ZHIPU_API_KEY:
+        providers.append("zhipu")
+    if GROQ_API_KEY:
+        providers.append("groq")
+    if TOGETHER_API_KEY:
+        providers.append("together")
+    if PERPLEXITY_API_KEY:
+        providers.append("perplexity")
+    if CLAUDE_API_KEY:
+        providers.append("claude")
+    return providers
+
+
+async def _probe_local_llm_once() -> bool:
+    """在事件循环中以非阻塞方式探测本地 LLM，带退避重试（最多 3 次）。"""
+    for attempt in range(1, 4):
+        try:
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: requests.get(f"{LOCAL_LLM_URL}/health", timeout=1.5),
+            )
+            if resp.status_code == 200:
+                return True
+        except Exception:
+            pass
+        if attempt < 3:
+            await asyncio.sleep(attempt * 0.5)
+    return False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时记录已配置的提供商，探测本地 LLM（非阻塞），设置运行模式。"""
+    global _local_llm_available, _startup_mode
+    cloud = _collect_cloud_providers()
+    tools = [k for k, v in [
+        ("weather", OPENWEATHER_API_KEY),
+        ("search", BRAVE_API_KEY),
+        ("video_generation", PIXVERSE_API_KEY),
+    ] if v]
+
+    if LOCAL_LLM_ENABLED:
+        logger.info("Node_01_OneAPI: 正在探测本地 LLM (%s) …", LOCAL_LLM_URL)
+        _local_llm_available = await _probe_local_llm_once()
+        if _local_llm_available:
+            logger.info("Node_01_OneAPI: 本地 LLM 可用")
+        else:
+            logger.warning(
+                "Node_01_OneAPI: 本地 LLM 不可达 (%s)，已跳过", LOCAL_LLM_URL
+            )
+
+    all_providers = (["local"] if _local_llm_available else []) + cloud
+    if not all_providers:
+        _startup_mode = "degraded"
+        logger.warning(
+            "Node_01_OneAPI: 未检测到任何 API Key，节点以降级模式运行。"
+            "请在 .env 中配置至少一个提供商（OPENROUTER_API_KEY / GROQ_API_KEY / …）。"
+        )
+    else:
+        _startup_mode = "healthy"
+        logger.info(
+            "Node_01_OneAPI: 启动完成。可用提供商: %s  可用工具: %s",
+            all_providers, tools,
+        )
+    yield
+
+app = FastAPI(title="Node 01 - OneAPI Gateway", version="2.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # ============ 请求模型 ============
 class ChatRequest(BaseModel):
@@ -347,33 +437,17 @@ def web_search(query: str, count: int = 10) -> Dict:
 # ============ API 端点 ============
 @app.get("/health")
 async def health():
-    """健康检查 - 显示哪些 API 可用"""
-    providers = []
-    
-    # 检查本地 LLM
-    if LOCAL_LLM_ENABLED:
-        try:
-            resp = requests.get(f"{LOCAL_LLM_URL}/health", timeout=2)
-            if resp.status_code == 200:
-                providers.append("local")
-        except Exception:
-            pass
-    
-    # 检查云端提供商
-    if OPENROUTER_API_KEY: providers.append("openrouter")
-    if ZHIPU_API_KEY: providers.append("zhipu")
-    if GROQ_API_KEY: providers.append("groq")
-    if TOGETHER_API_KEY: providers.append("together")
-    if PERPLEXITY_API_KEY: providers.append("perplexity")
-    if CLAUDE_API_KEY: providers.append("claude")
-    
-    tools = []
-    if OPENWEATHER_API_KEY: tools.append("weather")
-    if BRAVE_API_KEY: tools.append("search")
-    if PIXVERSE_API_KEY: tools.append("video_generation")
-    
+    """健康检查 - 使用启动时缓存的状态，不发起阻塞网络请求。"""
+    cloud = _collect_cloud_providers()
+    providers = (["local"] if _local_llm_available else []) + cloud
+    tools = [k for k, v in [
+        ("weather", OPENWEATHER_API_KEY),
+        ("search", BRAVE_API_KEY),
+        ("video_generation", PIXVERSE_API_KEY),
+    ] if v]
+
     return {
-        "status": "healthy" if providers else "degraded",
+        "status": _startup_mode if _startup_mode != "starting" else ("healthy" if providers else "degraded"),
         "node_id": "01",
         "name": "OneAPI Gateway",
         "available_providers": providers,
@@ -386,20 +460,8 @@ async def health():
 @app.get("/status")
 async def node_status():
     """Node status endpoint."""
-    providers = []
-    if LOCAL_LLM_ENABLED:
-        try:
-            resp = requests.get(f"{LOCAL_LLM_URL}/health", timeout=2)
-            if resp.status_code == 200:
-                providers.append("local")
-        except Exception:
-            pass
-    if OPENROUTER_API_KEY: providers.append("openrouter")
-    if ZHIPU_API_KEY: providers.append("zhipu")
-    if GROQ_API_KEY: providers.append("groq")
-    if TOGETHER_API_KEY: providers.append("together")
-    if PERPLEXITY_API_KEY: providers.append("perplexity")
-    if CLAUDE_API_KEY: providers.append("claude")
+    cloud = _collect_cloud_providers()
+    providers = (["local"] if _local_llm_available else []) + cloud
     return {
         "node_id": "01",
         "name": "OneAPI",

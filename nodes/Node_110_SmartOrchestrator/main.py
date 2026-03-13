@@ -1,11 +1,22 @@
 """
 Node 110 - SmartOrchestrator (智能编排节点)
 提供任务编排、工作流管理和智能调度能力
+
+若 LLM 提供商（Node_01/Node_04 等）未就绪，节点以降级（mock）模式启动：
+任务编排、工作流管理功能仍可用，只是无法向 LLM 路由发送推理请求。
+健康检查始终返回 HTTP 200。
 """
+# 确保项目根目录在 sys.path 最前面，避免本地 core/ 子目录遮蔽项目级 core 包
+import sys as _sys, os as _os
+_project_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if not _sys.path or _sys.path[0] != _project_root:
+    _sys.path.insert(0, _project_root)
+
 import os
 import json
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable, Set
 from dataclasses import dataclass, field, asdict
@@ -55,7 +66,42 @@ def _safe_condition(condition: str, context: dict) -> bool:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Node 110 - SmartOrchestrator", version="2.0.0")
+# ============ 运行时状态 ============
+# LLM 路由/提供商 URL（可选）
+_LLM_ROUTER_URL = os.getenv("LLM_ROUTER_URL", os.getenv("NODE_01_URL", "http://localhost:7995"))
+_node_mode: str = "healthy"  # "healthy" | "degraded"
+
+
+async def _check_llm_provider_available() -> bool:
+    """非阻塞探测 LLM 路由是否可达（1 次，1.5 s 超时）。"""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            r = await client.get(f"{_LLM_ROUTER_URL}/health")
+            return r.status_code < 400
+    except Exception:
+        return False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时检查 LLM 提供商是否可达，不可达则以降级 mock 模式运行。"""
+    global _node_mode
+    available = await _check_llm_provider_available()
+    if available:
+        _node_mode = "healthy"
+        logger.info("Node_110_SmartOrchestrator: LLM 路由可达 (%s)，正常模式启动。", _LLM_ROUTER_URL)
+    else:
+        _node_mode = "degraded"
+        logger.warning(
+            "Node_110_SmartOrchestrator: LLM 路由不可达 (%s)，以降级 mock 模式启动。"
+            " 任务编排仍可用，LLM 推理请求将返回 mock 响应。",
+            _LLM_ROUTER_URL,
+        )
+    yield
+
+
+app = FastAPI(title="Node 110 - SmartOrchestrator", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -478,7 +524,12 @@ class ExecuteWorkflowRequest(BaseModel):
 # API 端点
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "node": "Node_110_SmartOrchestrator"}
+    return {
+        "status": "healthy",
+        "node": "Node_110_SmartOrchestrator",
+        "mode": _node_mode,
+        "llm_router": _LLM_ROUTER_URL,
+    }
 
 @app.get("/status")
 async def get_status():
