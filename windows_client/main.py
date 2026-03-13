@@ -39,14 +39,25 @@ def _preflight_checks() -> bool:
         print("⚠️  警告: 用户目录路径包含非 ASCII 字符（如中文用户名）")
         print(f"   当前路径: {home}")
         print("   这可能导致 comtypes / PyQt5 插件加载失败。")
-        print("   建议操作:")
-        print("     1. 新建一个纯英文用户名账户（如 galaxy）并从该账户运行")
-        print("     2. 或设置环境变量: set USERPROFILE=C:\\Users\\english_name")
-        print("     3. 或将项目复制到纯 ASCII 路径（如 C:\\galaxy\\）")
+        print("   Galaxy 将尝试自动将 comtypes 缓存重定向到 ASCII 安全路径。")
         print()
         ok = False
 
-    # --- 2. 设置 QT_PLUGIN_PATH 避免 PyQt5 插件搜索失败 ---
+    # --- 2. 设置 comtypes 缓存到 ASCII 安全路径（策略 2）---
+    if sys.platform == 'win32':
+        try:
+            from autonomy.comtypes_bootstrap import setup_comtypes_gen_dir
+            cache_dir = setup_comtypes_gen_dir()
+            if cache_dir:
+                logging.getLogger(__name__).info(
+                    "comtypes 缓存目录已设置: %s", cache_dir
+                )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "comtypes 缓存重定向失败（非严重）: %s", exc
+            )
+
+    # --- 3. 设置 QT_PLUGIN_PATH 避免 PyQt5 插件搜索失败 ---
     if sys.platform == 'win32':
         try:
             import PyQt5
@@ -64,7 +75,7 @@ def _preflight_checks() -> bool:
         except Exception:
             pass  # PyQt5 未安装时跳过，后续 PYQT5_AVAILABLE 检查会处理
 
-    # --- 3. 检测 comtypes 缓存目录可写性 ---
+    # --- 4. 检测 comtypes 缓存目录可写性 ---
     if sys.platform == 'win32':
         try:
             import tempfile
@@ -494,17 +505,28 @@ def main():
         err_msg = str(e)
         logger.error(f"Windows Client 启动失败: {err_msg}")
         print(f"\n❌ 启动失败: {err_msg}")
-        if "comtypes" in err_msg.lower() or "typelib" in err_msg.lower():
-            print("  可能原因: comtypes 缓存与当前 Python 版本不兼容。")
-            print("  修复建议: 删除 comtypes 缓存目录后重试")
+        if "comtypes" in err_msg.lower() or "typelib" in err_msg.lower() \
+                or "uiautomationclient" in err_msg.lower():
+            print("  可能原因: comtypes 缓存与当前 Python 版本不兼容，")
+            print("            或缓存路径包含非 ASCII 字符（中文用户名）。")
+            print("  Galaxy 已尝试自动修复；如仍失败，请手动清理缓存后重试：")
             print("    cmd.exe:    del /s /q %LOCALAPPDATA%\\Temp\\comtypes_cache")
             print("    PowerShell: Remove-Item -Recurse -Force $env:LOCALAPPDATA\\Temp\\comtypes_cache")
+            print("  或设置 GALAXY_COMTYPES_CACHE 环境变量到纯 ASCII 路径：")
+            print("    set GALAXY_COMTYPES_CACHE=C:\\galaxy_cache")
+            # 输出详细诊断信息到日志
+            try:
+                from autonomy.comtypes_bootstrap import log_diagnostics
+                log_diagnostics()
+            except Exception:
+                pass
         elif "plugin" in err_msg.lower() or "qt" in err_msg.lower():
             print("  可能原因: PyQt5 插件路径未找到。")
             print("  修复建议: pip install --force-reinstall PyQt5 PyQtWebEngine")
         elif "ascii" in err_msg.lower() or "encode" in err_msg.lower() or "codec" in err_msg.lower():
             print("  可能原因: 路径包含非 ASCII 字符（中文用户名）。")
             print("  修复建议: 使用纯英文用户账户运行，或将项目放在 C:\\galaxy\\ 等 ASCII 路径下。")
+            print("  或设置 GALAXY_COMTYPES_CACHE=C:\\galaxy_cache 环境变量。")
         sys.exit(1)
 
 
