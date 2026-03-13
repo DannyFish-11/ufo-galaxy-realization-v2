@@ -206,7 +206,7 @@ GET /api/v1/ascii
 ```
 GET  /api/v1/devices              # 获取设备列表
 POST /api/v1/devices/register     # 注册设备
-POST /api/v1/devices/{id}/command # 发送设备命令
+POST /api/v1/devices/{id}/command # 发送设备命令（新增 trace 记录）
 ```
 
 ### Agent 管理
@@ -223,8 +223,57 @@ POST /api/v1/dashboard/chat       # 仪表盘聊天（与上同功能）
 
 ### 多设备并行执行
 ```
-POST /api/v1/execute/parallel     # 并行执行多设备命令
+POST /api/v1/execute/parallel     # 并行执行多设备命令（新增 trace + 编排记录）
+                                  # 可选字段: task_id, description
 ```
+
+---
+
+## P2 新增 API（设备执行链路 / 协同视图 / 编排可视化）
+
+### 设备执行 Trace
+```
+GET  /api/v1/devices/traces                # 所有设备执行记录（?limit=100）
+GET  /api/v1/devices/{device_id}/traces    # 指定设备执行记录（?limit=50）
+```
+
+每条 trace 包含：`trace_id`, `device_id`, `command`, `params`, `result`, `success`,
+`error`, `agent_id`, `task_id`, `duration_ms`, `timestamp`。
+
+trace 持久化到 `data/device_traces.json`（最多 500 条滚动保留）。
+
+### Agent–Device 协同映射
+```
+GET   /api/v1/agent-device/mapping            # 查询所有 Agent 控制的设备及任务状态
+POST  /api/v1/agent-device/assign             # 记录 Agent→Device 分配
+      Body: { agent_id, device_id, task, status }
+PATCH /api/v1/agent-device/{agent_id}/status  # 更新 Agent 任务状态
+      Body: { status }
+```
+
+响应中每条映射附带 `trace_summary`（最近一条 trace 摘要）。
+
+### 多设备任务编排
+```
+GET   /api/v1/orchestration/tasks           # 获取编排任务列表（?limit=50）
+POST  /api/v1/orchestration/tasks           # 手动记录编排任务
+      Body: { task_id?, description, device_assignments, status? }
+PATCH /api/v1/orchestration/tasks/{task_id} # 更新任务状态 / 归并结果
+      Body: { status?, results? }
+```
+
+每条任务包含 `device_assignments` 和 `device_traces`（关联的 trace 列表），
+便于前端渲染任务时间线和结果归并状态。
+
+---
+
+### Dashboard UI 新增标签页
+
+| 标签 | 功能 |
+|------|------|
+| 📋 执行链路 | 展示设备执行记录，支持按设备过滤，显示命令/耗时/错误 |
+| 🔗 协同视图 | 展示 Agent–Device 映射，含任务状态和 trace 摘要 |
+| 🗂️ 编排 | 展示多设备任务编排，含分配列表、步骤时间线和结果归并状态 |
 
 ### WebSocket 实时更新
 ```
@@ -411,12 +460,24 @@ CMD ["python", "main.py"]
 | `TestObservabilityEndpoints` | 模型路由 / 近期调用 / 统计 / Trace 查询 |
 | `TestDashboardLiveStatusEndpoint` | 聚合实时状态端点（四区块 JSON 契约验证） |
 
+### P2 新增测试（`tests/test_p2_dashboard_endpoints.py`）
+
+25 个测试，覆盖 P2 三大功能模块：
+
+| 测试类 | 覆盖范围 |
+|--------|---------|
+| `TestDeviceTraceStore` | DeviceTraceStore 单元测试（增、查、持久化、上限） |
+| `TestDeviceTraceEndpoints` | `/api/v1/devices/traces` 及 `/{id}/traces` |
+| `TestAgentDeviceMapping` | `/api/v1/agent-device/mapping`、`/assign`、`/{id}/status` |
+| `TestOrchestrationEndpoints` | `/api/v1/orchestration/tasks` CRUD |
+| `TestParallelExecuteP2Integration` | `execute/parallel` 的 trace + orch 联动写入 |
+
 ### 本地运行
 
 ```bash
 # 从仓库根目录运行（无需外部服务）
 pip install pytest httpx fastapi
-pytest tests/test_e2e_stack.py -v
+pytest tests/test_e2e_stack.py tests/test_p2_dashboard_endpoints.py -v
 ```
 
 ## 许可证
