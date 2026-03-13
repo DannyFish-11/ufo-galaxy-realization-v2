@@ -1556,6 +1556,16 @@ async def list_llm_providers():
     Key lookup priority:
     1. UnifiedConfigManager (merges .env + config.json + unified_ports.yaml)
     2. os.environ (covers keys already exported to the environment)
+
+    Response fields per provider:
+    - provider: str — 提供商 ID
+    - model: str — 默认模型 ID
+    - models: list[str] — 全部支持的模型列表
+    - speed_score: int — 速度评分 (1-10)
+    - quality_score: int — 质量评分 (1-10)
+    - available: bool — 是否已配置 API Key
+    - multimodal: bool — 是否原生支持多模态（图像/音频/视频）
+    - missing_env_key: str — 若不可用，提示需配置的环境变量名
     """
     # Initialise UnifiedConfigManager once for this request
     _unified_mgr = None
@@ -1565,33 +1575,148 @@ async def list_llm_providers():
     except Exception as _exc:
         logger.debug("UnifiedConfigManager 不可用，降级为 os.environ: %s", _exc)
 
-    def _resolve_key(unified_key: str, env_key: str) -> str:
-        if _unified_mgr is not None:
-            val = _unified_mgr.get(unified_key) or _unified_mgr.get(unified_key.upper())
+    def _resolve_key(*env_keys: str) -> str:
+        """Try unified config then os.environ for each key in order, return first non-empty."""
+        for env_key in env_keys:
+            if _unified_mgr is not None:
+                val = _unified_mgr.get(env_key.lower()) or _unified_mgr.get(env_key)
+                if val:
+                    return str(val)
+            val = os.environ.get(env_key, "")
             if val:
-                return str(val)
-        return os.environ.get(env_key, "")
+                return val
+        return ""
+
+    # Each entry: (provider_id, primary_env_key, fallback_env_keys, default_model, models_list,
+    #               speed_score, quality_score, multimodal)
+    llm_provider_defs = [
+        {
+            "provider":     "openai",
+            "env_keys":     ["OPENAI_API_KEY"],
+            "default_model": "gpt-5.4",
+            "models":       ["gpt-5.4", "gpt-5.4-thinking", "gpt-5.4-pro", "gpt-4.1", "gpt-4o", "gpt-4o-mini"],
+            "speed_score":  8,
+            "quality_score": 9,
+            "multimodal":   True,
+        },
+        {
+            "provider":     "anthropic",
+            "env_keys":     ["ANTHROPIC_API_KEY"],
+            "default_model": "claude-sonnet-4.6",
+            "models":       ["claude-opus-4.6", "claude-sonnet-4.6", "claude-haiku-4-5-20251001"],
+            "speed_score":  7,
+            "quality_score": 10,
+            "multimodal":   True,
+        },
+        {
+            "provider":     "google",
+            "env_keys":     ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+            "default_model": "gemini-3.1-pro",
+            "models":       ["gemini-3.1-pro", "gemini-3.1-flash", "gemini-3.1-deep-think", "gemini-2.5-pro"],
+            "speed_score":  8,
+            "quality_score": 9,
+            "multimodal":   True,
+        },
+        {
+            "provider":     "xai",
+            "env_keys":     ["XAI_API_KEY"],
+            "default_model": "grok-4.20",
+            "models":       ["grok-4.20", "grok-4.20-beta"],
+            "speed_score":  8,
+            "quality_score": 8,
+            "multimodal":   True,
+        },
+        {
+            "provider":     "mistral",
+            "env_keys":     ["MISTRAL_API_KEY"],
+            "default_model": "mistral-large-3",
+            "models":       ["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
+            "speed_score":  8,
+            "quality_score": 8,
+            "multimodal":   True,
+        },
+        {
+            "provider":     "deepseek",
+            "env_keys":     ["DEEPSEEK_API_KEY"],
+            "default_model": "deepseek-ai/DeepSeek-V3.2",
+            "models":       ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3", "deepseek-chat", "deepseek-reasoner"],
+            "speed_score":  9,
+            "quality_score": 8,
+            "multimodal":   False,
+        },
+        {
+            "provider":     "qwen",
+            "env_keys":     ["QWEN_API_KEY", "TOGETHER_API_KEY"],
+            "default_model": "Qwen/Qwen3.5-397B-A17B",
+            "models":       ["Qwen/Qwen3.5-397B-A17B", "Qwen/Qwen3.5-397B-A17B-Coder", "Qwen/Qwen3-235B-A22B"],
+            "speed_score":  7,
+            "quality_score": 8,
+            "multimodal":   False,
+        },
+        {
+            "provider":     "zhipu",
+            "env_keys":     ["ZHIPU_API_KEY"],
+            "default_model": "glm-4.6",
+            "models":       ["glm-4.6", "glm-4-flash"],
+            "speed_score":  8,
+            "quality_score": 8,
+            "multimodal":   True,
+        },
+        {
+            "provider":     "moonshot",
+            "env_keys":     ["MOONSHOT_API_KEY"],
+            "default_model": "moonshot-v1-128k",
+            "models":       ["moonshot-v1-32k", "moonshot-v1-128k", "moonshot-v1-256k"],
+            "speed_score":  7,
+            "quality_score": 8,
+            "multimodal":   False,
+        },
+        {
+            "provider":     "perplexity",
+            "env_keys":     ["PERPLEXITY_API_KEY"],
+            "default_model": "sonar-pro",
+            "models":       ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
+            "speed_score":  7,
+            "quality_score": 8,
+            "multimodal":   False,
+        },
+        {
+            "provider":     "groq",
+            "env_keys":     ["GROQ_API_KEY"],
+            "default_model": "llama-3.3-70b-versatile",
+            "models":       ["llama-3.3-70b-versatile"],
+            "speed_score":  10,
+            "quality_score": 7,
+            "multimodal":   False,
+        },
+        {
+            "provider":     "openrouter",
+            "env_keys":     ["OPENROUTER_API_KEY"],
+            "default_model": "openrouter/auto",
+            "models":       ["openrouter/auto"],
+            "speed_score":  7,
+            "quality_score": 8,
+            "multimodal":   False,
+        },
+    ]
 
     providers = []
-    llm_env_map = [
-        ("openai",     "openai_api_key",     "OPENAI_API_KEY",     "gpt-4o",                      8, 9),
-        ("anthropic",  "anthropic_api_key",   "ANTHROPIC_API_KEY",  "claude-3-5-sonnet-20241022",   7, 10),
-        ("deepseek",   "deepseek_api_key",    "DEEPSEEK_API_KEY",   "deepseek-chat",               9, 8),
-        ("zhipu",      "zhipu_api_key",       "ZHIPU_API_KEY",      "glm-4",                       8, 8),
-        ("groq",       "groq_api_key",        "GROQ_API_KEY",       "llama-3.3-70b-versatile",     10, 8),
-        ("gemini",     "gemini_api_key",      "GEMINI_API_KEY",     "gemini-1.5-pro",              8, 9),
-        ("openrouter", "openrouter_api_key",  "OPENROUTER_API_KEY", "openrouter/auto",             7, 8),
-        ("xai",        "xai_api_key",         "XAI_API_KEY",        "grok-beta",                   8, 8),
-    ]
-    for provider, unified_key, env_key, model, speed, quality in llm_env_map:
-        api_key = _resolve_key(unified_key, env_key)
-        providers.append({
-            "provider": provider,
-            "model": model,
-            "speed_score": speed,
-            "quality_score": quality,
-            "available": bool(api_key),
-        })
+    for defn in llm_provider_defs:
+        api_key = _resolve_key(*defn["env_keys"])
+        available = bool(api_key and not api_key.startswith("your-"))
+        entry = {
+            "provider":      defn["provider"],
+            "model":         defn["default_model"],
+            "models":        defn["models"],
+            "speed_score":   defn["speed_score"],
+            "quality_score": defn["quality_score"],
+            "available":     available,
+            "multimodal":    defn["multimodal"],
+        }
+        if not available:
+            entry["missing_env_key"] = defn["env_keys"][0]
+        providers.append(entry)
+
     logger.debug(
         "LLM providers status: %s",
         {p["provider"]: p["available"] for p in providers},

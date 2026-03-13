@@ -263,8 +263,32 @@ POST /api/v1/devices/{id}/command # 发送设备命令（新增 trace 记录）
 ### Agent 管理
 ```
 GET /api/v1/agents                # 获取 Agent 列表
-GET /api/v1/llm/providers         # 获取 LLM 提供商列表
+GET /api/v1/llm/providers         # 获取 LLM 提供商列表（含多模态标记）
 ```
+
+### 支持的模型 / Provider 表格
+
+`GET /api/v1/llm/providers` 返回以下 provider 列表。响应字段：
+`provider`, `model`（默认模型）, `models`（全部可用模型）, `available`（是否配置了 API Key）,
+`multimodal`（是否支持多模态）, `missing_env_key`（不可用时提示需配置的环境变量）。
+
+| Provider ID | 显示名 | 默认模型（API ID） | 全部支持模型 | 多模态 | 所需环境变量 |
+|-------------|--------|-------------------|-------------|-------|-------------|
+| `openai` | OpenAI | `gpt-5.4` | `gpt-5.4`, `gpt-5.4-thinking`, `gpt-5.4-pro`, `gpt-4.1`, `gpt-4o`, `gpt-4o-mini` | ✅ | `OPENAI_API_KEY` |
+| `anthropic` | Anthropic | `claude-sonnet-4.6` | `claude-opus-4.6`, `claude-sonnet-4.6`, `claude-haiku-4-5-20251001` | ✅ | `ANTHROPIC_API_KEY` |
+| `google` | Google | `gemini-3.1-pro` | `gemini-3.1-pro`, `gemini-3.1-flash`, `gemini-3.1-deep-think`, `gemini-2.5-pro` | ✅ | `GOOGLE_API_KEY` 或 `GEMINI_API_KEY` |
+| `xai` | xAI / Grok | `grok-4.20` | `grok-4.20`, `grok-4.20-beta` | ✅ | `XAI_API_KEY` |
+| `mistral` | Mistral | `mistral-large-3` | `mistral-large-3`, `mistral-medium-3`, `mistral-large-2` | ✅ | `MISTRAL_API_KEY` |
+| `deepseek` | DeepSeek | `deepseek-ai/DeepSeek-V3.2` | `deepseek-ai/DeepSeek-V3.2`, `deepseek-ai/DeepSeek-V3`, `deepseek-chat`, `deepseek-reasoner` | ❌ | `DEEPSEEK_API_KEY` |
+| `qwen` | 通义千问 | `Qwen/Qwen3.5-397B-A17B` | `Qwen/Qwen3.5-397B-A17B`, `Qwen/Qwen3.5-397B-A17B-Coder`, `Qwen/Qwen3-235B-A22B` | ❌ | `QWEN_API_KEY` 或 `TOGETHER_API_KEY` |
+| `zhipu` | 智谱 AI | `glm-4.6` | `glm-4.6`, `glm-4-flash` | ✅ | `ZHIPU_API_KEY` |
+| `moonshot` | Moonshot Kimi | `moonshot-v1-128k` | `moonshot-v1-32k`, `moonshot-v1-128k`, `moonshot-v1-256k` | ❌ | `MOONSHOT_API_KEY` |
+| `perplexity` | Perplexity | `sonar-pro` | `sonar-pro`, `sonar-deep-research`, `sonar-reasoning-pro`, `sonar` | ❌ | `PERPLEXITY_API_KEY` |
+| `groq` | Groq | `llama-3.3-70b-versatile` | `llama-3.3-70b-versatile` | ❌ | `GROQ_API_KEY` |
+| `openrouter` | OpenRouter | `openrouter/auto` | `openrouter/auto` | ❌ | `OPENROUTER_API_KEY` |
+
+> **多模态（MM）**：Provider 原生接受图像、音频或视频作为输入（不仅限于文本）。  
+> **通过 Together AI 访问 Qwen**：`QWEN_API_KEY` 和 `TOGETHER_API_KEY` 均可，系统自动检测。
 
 ### 聊天
 ```

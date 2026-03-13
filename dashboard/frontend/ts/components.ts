@@ -271,13 +271,21 @@ export class LLMProviderComponent {
       <div class="llm-providers">
         ${this.providers.map(provider => `
           <div class="provider-card ${provider.available ? 'available' : 'unavailable'}">
-            <span class="provider-status">${provider.available ? '✅' : '❌'}</span>
-            <span class="provider-name">${provider.provider}</span>
+            <div class="provider-header">
+              <span class="provider-status">${provider.available ? '🟢' : '⚫'}</span>
+              <span class="provider-name">${provider.provider}</span>
+              ${provider.multimodal ? '<span class="provider-badge multimodal" title="原生多模态（图像/音频/视频）">👁 多模态</span>' : ''}
+            </div>
             <span class="provider-model">${provider.model}</span>
             <div class="provider-scores">
               <span>速度: ${provider.speed_score}/10</span>
               <span>质量: ${provider.quality_score}/10</span>
             </div>
+            ${!provider.available && provider.missing_env_key
+              ? `<div class="provider-missing-key" title="在 .env 文件中设置此变量以启用">
+                   ⚠️ 需配置: <code>${provider.missing_env_key}</code>
+                 </div>`
+              : ''}
           </div>
         `).join('')}
       </div>
