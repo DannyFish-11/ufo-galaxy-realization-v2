@@ -1964,34 +1964,61 @@ class GalaxyClientUI(QWidget):
             btn.setStyleSheet(self._tab_style(i == idx))
 
     def _setup_animations(self):
+        # Show/hide slide animation (F12 / toggle_visibility)
         self.slide_anim = QPropertyAnimation(self, b"geometry")
         self.slide_anim.setDuration(350)
         self.slide_anim.setEasingCurve(QEasingCurve.OutQuart)
 
-        # Sidebar scroll expand/collapse animation
+        # --- Scroll-like sidebar expand / collapse group ---
+        # Both the geometry change and the opacity fade run in parallel inside
+        # a single QParallelAnimationGroup (_sidebar_scroll_group).  This
+        # guarantees they start and stop together, preventing the "jitter /
+        # bounce-back" that occurred when the two animations were triggered
+        # independently (sometimes with a QTimer delay between them).
+
+        # Geometry: 40px ↔ 420px with OutCubic easing (卷轴式 scroll feel)
         self._sidebar_width_anim = QPropertyAnimation(self, b"geometry")
         self._sidebar_width_anim.setDuration(500)
         self._sidebar_width_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        # Content fade animation (right-to-left appearance via opacity)
+        # Opacity: fade content in/out in sync with the geometry change
         self._content_fade_anim = QPropertyAnimation(self._content_opacity, b"opacity")
-        self._content_fade_anim.setDuration(400)
+        self._content_fade_anim.setDuration(500)
         self._content_fade_anim.setEasingCurve(QEasingCurve.OutCubic)
 
+        # Group that owns both child animations; used as the single unit to
+        # start/stop and to query "is an animation in progress?" (debounce guard).
+        self._sidebar_scroll_group = QParallelAnimationGroup(self)
+        self._sidebar_scroll_group.addAnimation(self._sidebar_width_anim)
+        self._sidebar_scroll_group.addAnimation(self._content_fade_anim)
+
     def _animating(self) -> bool:
-        """Animation guard: return True if any geometry/opacity animation is still running."""
-        return any(
-            a.state() == QAbstractAnimation.Running
-            for a in (self.slide_anim, self._sidebar_width_anim, self._content_fade_anim)
+        """Animation guard: return True if the sidebar scroll group OR the
+        slide animation is still running.  Used to debounce rapid toggles."""
+        return (
+            self._sidebar_scroll_group.state() == QAbstractAnimation.Running
+            or self.slide_anim.state() == QAbstractAnimation.Running
         )
 
     def toggle_sidebar(self):
-        """Calligraphy scroll: expand/collapse sidebar with scroll-like animation"""
-        # Animation guard: stop any in-progress animations; ignore new toggle while animating.
+        """卷轴式展开 / 收起侧边栏 (Calligraphy-scroll expand / collapse).
+
+        A single QParallelAnimationGroup (_sidebar_scroll_group) drives both
+        the geometry change (40 ↔ 420 px) and the opacity fade together, so
+        there is never a race between two independently-started animations.
+        The debounce guard at the top prevents stacking new runs on top of an
+        already-running group, which was the root cause of the previous
+        "横跳 / bounce-back" jitter.
+        """
+        # Debounce guard: ignore new toggles while the scroll group is running.
         if self._animating():
             return
+
+        # Stop any leftover animation before reconfiguring (safety net).
+        self._sidebar_scroll_group.stop()
+
         if self._sidebar_expanded:
-            # Collapse: 420px → 40px, fade out content
+            # Collapse: 420px → 40px, fade out content simultaneously.
             self._sidebar_expanded = False
             target_x = self.screen_width - SIDEBAR_COLLAPSED_WIDTH
 
@@ -1999,17 +2026,13 @@ class GalaxyClientUI(QWidget):
             self._sidebar_width_anim.setEndValue(
                 QRect(target_x, 0, SIDEBAR_COLLAPSED_WIDTH, self.screen_height)
             )
-            self._sidebar_width_anim.start()
-
-            # Fade out content
-            self._content_fade_anim.setStartValue(1.0)
+            self._content_fade_anim.setStartValue(self._content_opacity.opacity())
             self._content_fade_anim.setEndValue(0.0)
-            self._content_fade_anim.start()
 
-            # Show collapsed strip after animation
+            # Show collapsed strip after the group finishes (500 ms).
             QTimer.singleShot(500, lambda: self._collapsed_strip.setVisible(True))
         else:
-            # Expand: 40px → 420px, fade in content from right to left
+            # Expand: 40px → 420px, fade in content — all in one smooth motion.
             self._sidebar_expanded = True
             self._collapsed_strip.setVisible(False)
             target_x = self.screen_width - SIDEBAR_WIDTH
@@ -2018,14 +2041,14 @@ class GalaxyClientUI(QWidget):
             self._sidebar_width_anim.setEndValue(
                 QRect(target_x, 0, SIDEBAR_WIDTH, self.screen_height)
             )
-            self._sidebar_width_anim.start()
-
-            # Fade in content (delayed slightly for scroll unroll effect)
-            self._content_fade_anim.setStartValue(0.0)
+            self._content_fade_anim.setStartValue(self._content_opacity.opacity())
             self._content_fade_anim.setEndValue(1.0)
-            self._content_fade_anim.setDuration(400)
-            QTimer.singleShot(150, self._content_fade_anim.start)
+
+            # Set focus after the scroll completes.
             QTimer.singleShot(500, lambda: self.chat_panel.input_field.setFocus())
+
+        # Start the group: geometry and opacity animate in lock-step.
+        self._sidebar_scroll_group.start()
 
     def toggle_mode(self):
         """侧边栏 ↔ 全功能窗口"""
@@ -2107,6 +2130,9 @@ class GalaxyClientUI(QWidget):
         self.is_visible = False
         self._sidebar_expanded = False
 
+        # Stop any sidebar scroll group that may still be running.
+        self._sidebar_scroll_group.stop()
+
         target_x = self.screen_width
         current_w = self.width()
         self.slide_anim.setStartValue(self.geometry())
@@ -2117,7 +2143,7 @@ class GalaxyClientUI(QWidget):
             self.slide_anim.setEndValue(QRect(target_x, cy, FULL_WIDTH, FULL_HEIGHT))
         self.slide_anim.start()
 
-        # Fade out content
+        # Fade out content in sync with the slide-out animation.
         self._content_fade_anim.setStartValue(self._content_opacity.opacity())
         self._content_fade_anim.setEndValue(0.0)
         self._content_fade_anim.start()
