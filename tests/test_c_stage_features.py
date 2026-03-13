@@ -86,7 +86,6 @@ class TestSOULInheritance:
         f = self._make_factory()
 
         # 手动创建一个带 soul 的父代 Agent
-        from dataclasses import field as dc_field
         cfg = AgentConfig(
             role=AgentRole.COORDINATOR,
             name="parent",

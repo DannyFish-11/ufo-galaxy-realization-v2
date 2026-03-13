@@ -264,8 +264,8 @@ class ExecutionPlanner:
 
         complexity = _estimate_complexity(plan.message)
         # C阶段 3B: 从意图中提取 task_type 传给策略选择器
-        _task_type = getattr(plan.intent, "task_hint", "") or ""
-        strategy = self._pick_strategy(plan.message, complexity, task_type=_task_type)
+        intent_task_type = getattr(plan.intent, "task_hint", "") or ""
+        strategy = self._pick_strategy(plan.message, complexity, task_type=intent_task_type)
 
         logger.info(
             "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s",
@@ -344,7 +344,8 @@ class ExecutionPlanner:
                 from core.cost_tracker import get_cost_tracker
                 _ct = get_cost_tracker()
                 _recent = _ct.get_recent(10)
-                # 取最近 10 条中本次调用相关的（简化：取最后 1 条）
+                # NOTE (C阶段 5C 简化): 取最后 1 条 cost 记录近似本次调用开销。
+                # 在高并发场景可能与其他并发请求混淆；后续可通过 correlation_id 精确关联。
                 if _recent:
                     _last = _recent[-1]
                     result.total_tokens = (

@@ -42,6 +42,8 @@ _DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "da
 _MEMORY_FILE = "task_memory.jsonl"
 _MAX_IN_MEMORY = 200  # 内存中保留的最大条数
 _CONTEXT_MARKER = "[TaskMemory]"  # 注入上下文时的标记，避免重复注入
+_MAX_TASK_LENGTH = 500    # 任务描述最大存储长度（字符）
+_MAX_SUMMARY_LENGTH = 300  # 结果摘要最大存储长度（字符）
 
 
 # ============================================================================
@@ -123,8 +125,8 @@ class TaskMemory:
     ) -> TaskSummary:
         """记录一条任务摘要，持久化到本地文件。"""
         entry = TaskSummary(
-            task=task[:500],  # 截断避免过长
-            result_summary=result_summary[:300],
+            task=task[:_MAX_TASK_LENGTH],  # 截断避免过长
+            result_summary=result_summary[:_MAX_SUMMARY_LENGTH],
             success=success,
             strategy=strategy,
             duration_ms=duration_ms,

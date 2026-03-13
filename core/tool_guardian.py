@@ -82,7 +82,7 @@ class GuardedCallConfig:
         max_retries:      调用失败最多重试次数（0 = 不重试）
         retry_delay_s:    重试间隔（秒）
         block_score:      风险得分 >= 此值时拦截调用（默认 0.95）
-        rollback_fn:      可选异步回滚函数，签名 async (tool_name, args, result) -> None
+        rollback_fn:      可选异步回滚函数，签名 async (tool_name, args, kwargs, exc) -> None
         extra_rules:      追加的风险评分规则（格式同 _DEFAULT_RISK_RULES）
         audit_log:        是否记录调用日志（默认 True）
     """
@@ -285,10 +285,10 @@ async def call_with_guardian(
 class ToolGuardianBlockedError(Exception):
     """工具调用被风险评分拦截时抛出。"""
 
-    def __init__(self, message: str, tool_name: str = "", risk: Dict = None):
+    def __init__(self, message: str, tool_name: str = "", risk: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.tool_name = tool_name
-        self.risk = risk or {}
+        self.risk: Dict[str, Any] = risk or {}
 
 
 # ============================================================================
