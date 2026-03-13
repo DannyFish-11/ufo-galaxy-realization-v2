@@ -630,3 +630,123 @@ POST /api/v1/integrations/config   # 更新集成配置（支持局部更新各�
 
 MIT License
 
+
+---
+
+## C阶段功能扩展（C Stage Features）
+
+### 1A — SOUL 人格继承增强
+
+**原则**: 主控 Agent 的 SOUL 约束向下继承给子 Agent（Team/Swarm/Fractal 分裂路径），子 Agent 可追加自己的 `soul_supplement`，但 `inherited_soul` 不可被覆盖。
+
+**新增字段（AgentConfig）**:
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `inherited_soul` | `str` | 从主控继承的 SOUL 约束（子代只读） |
+| `soul_supplement` | `str` | 子 Agent 可追加的补充人格说明 |
+
+**新增函数**:
+- `core.agent_factory.get_effective_soul(config)` → 返回 `inherited_soul + soul_supplement` 合并字符串
+
+---
+
+### 2C — 工具/MCP 调用守护与回滚
+
+**新增模块**: `core/tool_guardian.py`
+
+**功能**:
+- **风险评分**（B）：对工具名进行 SAFE/MODERATE/DANGEROUS/CRITICAL 评级，分数 0~1
+- **拦截**（B）：`score >= block_score`（默认 0.95）时抛出 `ToolGuardianBlockedError`
+- **重试**（A）：失败时按 `max_retries` 次重试
+- **回滚**（A）：最终失败后调用用户传入的 `rollback_fn(tool_name, args, kwargs, exc)`
+- **审计日志**：内存 ring-buffer，最近 200 条，可通过 API 查询
+
+**向后兼容**: `GuardedCallConfig(enabled=False)`（默认）时完全透传，不影响现有代码路径。
+
+**新增 API**:
+```
+GET /api/v1/guardian/audit?n=50   # 获取最近 N 条工具调用守护审计日志
+```
+
+**使用示例**:
+```python
+from core.tool_guardian import call_with_guardian, GuardedCallConfig
+
+cfg = GuardedCallConfig(enabled=True, max_retries=2, rollback_fn=my_rollback)
+result = await call_with_guardian(fn=my_tool_fn, fn_args=(arg1,), tool_name="file_write", config=cfg)
+```
+
+---
+
+### 3B — 协同策略规则扩展
+
+**新增**: `TASK_TYPE_STRATEGY_MAP`（`core/agent/execution_planner.py`）
+
+任务类型 → 执行策略映射表（优先级最高，融合到原有复杂度/关键词规则中）：
+
+| 任务类型 | 推荐策略 |
+|---------|---------|
+| `fast_response`, `chat`, `question`, `coding`, `device_control` | `single` |
+| `reasoning`, `planning`, `analysis`, `research` | `specialized` |
+| `swarm`, `batch` | `swarm` |
+| `fractal`, `deep_planning` | `fractal` |
+
+原有复杂度/关键词规则保留不变，映射表优先级最高。
+
+**新增 API**:
+```
+GET /api/v1/strategy/mappings   # 获取完整映射表 + 可用策略列表
+```
+
+---
+
+### 4B — 任务记忆/长期记忆
+
+**新增模块**: `core/task_memory.py`
+
+**功能**:
+- 每次任务执行完成后自动将摘要持久化到 `data/task_memory.jsonl`
+- 下次执行时自动将最近 3 条任务摘要注入 `context`（可配置条数）
+- 提供统计接口
+
+**新增 API**:
+```
+GET /api/v1/memory/tasks?n=10   # 获取最近 N 条任务记忆摘要
+GET /api/v1/memory/stats        # 获取统计（总数/成功率/策略分布）
+```
+
+**TaskSummary 字段**:
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `summary_id` | `str` | 唯一 ID |
+| `timestamp` | `float` | Unix 时间戳 |
+| `task` | `str` | 任务描述（最多 500 字符） |
+| `result_summary` | `str` | 执行结果摘要（最多 300 字符） |
+| `success` | `bool` | 是否成功 |
+| `strategy` | `str` | 执行策略 |
+| `duration_ms` | `float` | 执行时长（毫秒） |
+
+---
+
+### 5C — 执行链路可视化细化
+
+**新增字段（ExecutionResult，均为可选，默认 None，向后兼容）**:
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `total_latency_ms` | `float \| None` | 整条链路总延迟（毫秒） |
+| `total_tokens` | `int \| None` | 本次执行消耗 LLM Token 总量 |
+| `total_cost_usd` | `float \| None` | 本次执行估算费用（USD） |
+
+**API 响应变化**（`/api/v1/chat` 等）：
+```json
+{
+  "data": {
+    "chosen_strategy": "single",
+    "total_latency_ms": 1234.5,
+    "total_tokens": 800,
+    "total_cost_usd": 0.000456
+  }
+}
+```
+> 所有字段均为可选，缺失时不影响现有客户端解析。
+

@@ -99,6 +99,11 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         from core.routes import observability
     except ImportError:
         observability = None
+    # C阶段功能路由（可选加载）
+    try:
+        from core.routes import c_stage
+    except ImportError:
+        c_stage = None
 
     router = APIRouter()
 
@@ -125,6 +130,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(protocols.create_router(service_manager=service_manager, config=config))
     if observability:
         router.include_router(observability.create_router(service_manager=service_manager, config=config))
+    if c_stage:
+        router.include_router(c_stage.create_router(service_manager=service_manager, config=config))
     @router.get("/api/config")
     async def get_frontend_config(request: Request = None):
         """

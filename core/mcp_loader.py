@@ -42,6 +42,15 @@ import uuid
 
 logger = logging.getLogger("Galaxy.MCP")
 
+# C阶段 2C: 工具调用守护（可选依赖，默认不启用）
+try:
+    from core.tool_guardian import GuardedCallConfig, call_with_guardian, ToolGuardianBlockedError
+    _GUARDIAN_AVAILABLE = True
+except ImportError:
+    _GUARDIAN_AVAILABLE = False
+    GuardedCallConfig = None  # type: ignore
+    ToolGuardianBlockedError = None  # type: ignore
+
 
 # ============================================================================
 # MCP 标准协议定义
@@ -551,25 +560,62 @@ class MCPLoader:
         server_id: str,
         tool_name: str,
         arguments: Dict[str, Any] = None,
+        guardian_config: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         调用 MCP 工具
-        
+
+        C阶段 2C: 若传入 guardian_config（GuardedCallConfig, enabled=True），
+                  则在调用前进行风险评分/拦截，失败时触发重试/回滚。
+                  guardian_config=None 或 enabled=False 时行为与之前完全相同。
+
         Args:
-            server_id: 服务器 ID
-            tool_name: 工具名称
-            arguments: 参数
-        
+            server_id:       服务器 ID
+            tool_name:       工具名称
+            arguments:       参数
+            guardian_config: 可选 GuardedCallConfig（C阶段 2C 守护配置）
+
         Returns:
             执行结果
         """
         server = self.servers.get(server_id)
         if not server:
             return {"success": False, "error": "服务器不存在"}
-        
+
         if server.status != MCPServerStatus.RUNNING:
             return {"success": False, "error": "服务器未运行"}
-        
+
+        # C阶段 2C: 守护包装（enabled=False 时直通）
+        if (
+            _GUARDIAN_AVAILABLE
+            and guardian_config is not None
+            and getattr(guardian_config, "enabled", False)
+        ):
+            try:
+                return await call_with_guardian(
+                    fn=self._raw_call_tool,
+                    fn_args=(server_id, tool_name, arguments),
+                    tool_name=tool_name,
+                    config=guardian_config,
+                )
+            except ToolGuardianBlockedError as blocked:
+                return {
+                    "success": False,
+                    "error": str(blocked),
+                    "isError": True,
+                    "guardian_blocked": True,
+                    "risk": blocked.risk,
+                }
+
+        return await self._raw_call_tool(server_id, tool_name, arguments)
+
+    async def _raw_call_tool(
+        self,
+        server_id: str,
+        tool_name: str,
+        arguments: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """实际执行 MCP 工具调用（内部方法，供 call_tool 和守护器调用）。"""
         response = await self._send_request(
             server_id,
             "tools/call",
@@ -578,7 +624,7 @@ class MCPLoader:
                 "arguments": arguments or {},
             },
         )
-        
+
         if response:
             if response.error:
                 return {"success": False, "error": response.error, "isError": True}
