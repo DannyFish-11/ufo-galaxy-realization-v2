@@ -859,7 +859,7 @@
                     if (!id) return;
                     if (!permPolicy.value.agent_overrides) permPolicy.value.agent_overrides = {};
                     if (!permPolicy.value.agent_overrides[id]) {
-                        permPolicy.value.agent_overrides[id] = { filesystem: false, terminal: false, network: true, browser: false };
+                        permPolicy.value.agent_overrides[id] = Object.assign({}, permPolicy.value.global || { filesystem: false, terminal: false, network: true, browser: false });
                     }
                     permOverrideAgentId.value = '';
                 };
@@ -895,7 +895,7 @@
                     } else {
                         if (intg.webhook_input) payload[intg.key].webhook_url = intg.webhook_input;
                     }
-                    try { await axios.post('/api/v1/integrations/config', payload); } catch (e) {}
+                    try { await axios.post('/api/v1/integrations/config', payload); } catch (e) { console.error('保存集成配置失败:', e); }
                 };
                 const saveIntegrationToken = async (intg) => {
                     const isWhatsApp = intg.key === 'whatsapp';

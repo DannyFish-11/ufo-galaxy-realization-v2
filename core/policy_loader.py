@@ -64,7 +64,7 @@ def get_agent_permissions(agent_id: str) -> Dict[str, bool]:
     """
     policy = get_policy()
     base = get_global_permissions()
-    overrides: Optional[Dict] = policy.get("agent_overrides", {}).get(agent_id)
+    overrides: Optional[Dict[str, bool]] = policy.get("agent_overrides", {}).get(agent_id)
     if overrides and isinstance(overrides, dict):
         for k, v in overrides.items():
             if k in base and isinstance(v, bool):
