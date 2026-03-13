@@ -633,10 +633,24 @@ class NodeSystemLauncher:
                     ) as session:
                         async with session.get(health_url) as resp:
                             if resp.status < 400:
-                                logger.info(
-                                    "节点 %s 健康检查通过 (尝试 %d/10, 端口 %d)",
-                                    node_name, attempt, port,
-                                )
+                                # 解析响应体以识别 degraded/skipped 模式
+                                try:
+                                    body = await resp.json()
+                                    node_status_val = body.get("status", "healthy")
+                                except Exception:
+                                    node_status_val = "healthy"
+
+                                if node_status_val in ("degraded", "skipped"):
+                                    logger.warning(
+                                        "节点 %s 以 %s 模式启动 (尝试 %d/10, 端口 %d) — "
+                                        "部分功能可能受限，但不影响系统启动",
+                                        node_name, node_status_val, attempt, port,
+                                    )
+                                else:
+                                    logger.info(
+                                        "节点 %s 健康检查通过 (尝试 %d/10, 端口 %d)",
+                                        node_name, attempt, port,
+                                    )
                                 await self._register_node_with_dashboard(node_name, port)
                                 return True
                 except Exception:

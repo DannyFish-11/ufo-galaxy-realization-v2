@@ -1,11 +1,23 @@
 """
 Node 112 - SelfHealing (自愈节点)
 提供系统自动故障检测、诊断和恢复能力
+
+即使 LLM 提供商或监控依赖不可达，节点也会以降级模式启动：
+健康检查、故障记录、恢复计划等核心功能仍可用，
+仅 LLM 驱动的智能诊断会回退到规则模式。
+健康端点始终返回 HTTP 200。
 """
+# 确保项目根目录在 sys.path 最前面，避免本地 core/ 子目录遮蔽项目级 core 包
+import sys as _sys, os as _os
+_project_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if not _sys.path or _sys.path[0] != _project_root:
+    _sys.path.insert(0, _project_root)
+
 import os
 import json
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field, asdict
@@ -19,7 +31,41 @@ from nodes.common.cors_config import get_cors_origins
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Node 112 - SelfHealing", version="2.0.0")
+# ============ 运行时状态 ============
+_LLM_ROUTER_URL = os.getenv("LLM_ROUTER_URL", os.getenv("NODE_01_URL", "http://localhost:7995"))
+_node_mode: str = "healthy"  # "healthy" | "degraded"
+
+
+async def _check_llm_available() -> bool:
+    """非阻塞探测 LLM 路由是否可达。"""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            r = await client.get(f"{_LLM_ROUTER_URL}/health")
+            return r.status_code < 400
+    except Exception:
+        return False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时检查 LLM 可用性，不可达则以降级模式运行。"""
+    global _node_mode
+    available = await _check_llm_available()
+    if available:
+        _node_mode = "healthy"
+        logger.info("Node_112_SelfHealing: LLM 路由可达，正常模式启动。")
+    else:
+        _node_mode = "degraded"
+        logger.warning(
+            "Node_112_SelfHealing: LLM 路由不可达（%s），以降级模式启动。"
+            " 自愈引擎（规则模式）仍可运行，LLM 智能诊断暂不可用。",
+            _LLM_ROUTER_URL,
+        )
+    yield
+
+
+app = FastAPI(title="Node 112 - SelfHealing", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -835,7 +881,11 @@ class ReportFaultRequest(BaseModel):
 # API 端点
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "node": "Node_112_SelfHealing"}
+    return {
+        "status": "healthy",
+        "node": "Node_112_SelfHealing",
+        "mode": _node_mode,
+    }
 
 @app.get("/status")
 async def get_status():

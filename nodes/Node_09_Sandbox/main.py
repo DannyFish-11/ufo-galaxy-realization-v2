@@ -1,8 +1,13 @@
 """
 Node 09: Sandbox - 安全的代码沙箱执行环境
 支持多种编程语言，具备资源限制和安全检查
+
+若宿主机未安装某语言运行时，该语言会被自动排除出可用列表；
+健康检查始终立即返回 HTTP 200，可用语言列表在启动时预计算并缓存。
 """
-import os, subprocess, tempfile, shutil, resource, signal
+import os, subprocess, tempfile, shutil, signal
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -10,8 +15,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
 
-app = FastAPI(title="Node 09 - Sandbox", version="3.0.0", description="Secure code execution sandbox with resource limits")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# resource 模块仅 Unix 下可用
+try:
+    import resource as _resource
+    _RESOURCE_AVAILABLE = True
+except ImportError:
+    _resource = None  # type: ignore[assignment]
+    _RESOURCE_AVAILABLE = False
+
+logger = logging.getLogger("Node_09_Sandbox")
+
+# ============ 运行时状态缓存 ============
+_available_languages: List[str] = []
+_sandbox_mode: str = "healthy"  # 始终 healthy，只是语言列表可能为空
 
 class ExecuteRequest(BaseModel):
     code: str
@@ -63,34 +79,77 @@ def check_code_safety(code: str) -> tuple[bool, Optional[str]]:
 
 def set_resource_limits(memory_limit_mb: int, cpu_limit_seconds: Optional[int]):
     """设置资源限制 (仅 Unix 系统)"""
+    if not _RESOURCE_AVAILABLE:
+        return  # Windows 不支持 resource 模块
     try:
         # 内存限制
         memory_bytes = memory_limit_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        _resource.setrlimit(_resource.RLIMIT_AS, (memory_bytes, memory_bytes))
         
         # CPU 时间限制
         if cpu_limit_seconds:
-            resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit_seconds, cpu_limit_seconds))
+            _resource.setrlimit(_resource.RLIMIT_CPU, (cpu_limit_seconds, cpu_limit_seconds))
     except Exception:
-        pass  # Windows 不支持 resource 模块
+        pass
+
+
+def _check_language_available(lang: str, config: dict) -> bool:
+    """以短超时（1 秒）同步探测某语言是否可用，避免长时间阻塞。"""
+    try:
+        result = subprocess.run(
+            config["version_check"],
+            capture_output=True,
+            timeout=1,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时预计算可用语言列表并缓存，后续健康检查直接返回缓存结果。"""
+    global _available_languages
+    import concurrent.futures, asyncio
+    loop = asyncio.get_event_loop()
+    logger.info("Node_09_Sandbox: 正在探测可用语言运行时 …")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {
+            lang: loop.run_in_executor(pool, _check_language_available, lang, cfg)
+            for lang, cfg in LANGUAGE_CONFIG.items()
+        }
+        for lang, fut in futs.items():
+            try:
+                if await fut:
+                    _available_languages.append(lang)
+            except Exception:
+                pass
+    if _available_languages:
+        logger.info("Node_09_Sandbox: 可用语言: %s", _available_languages)
+    else:
+        logger.warning(
+            "Node_09_Sandbox: 未找到任何可用语言运行时，将以受限模式运行。"
+        )
+    yield
+
+
+app = FastAPI(
+    title="Node 09 - Sandbox",
+    version="3.0.0",
+    description="Secure code execution sandbox with resource limits",
+    lifespan=lifespan,
+)
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.get("/health")
 async def health():
-    """健康检查"""
-    available_languages = []
-    for lang, config in LANGUAGE_CONFIG.items():
-        try:
-            subprocess.run(config["version_check"], capture_output=True, timeout=5)
-            available_languages.append(lang)
-        except Exception:
-            pass
-    
+    """健康检查 - 使用启动时预计算的语言列表，不阻塞事件循环。"""
     return {
         "status": "healthy",
         "node_id": "09",
         "name": "Sandbox",
         "supported_languages": list(LANGUAGE_CONFIG.keys()),
-        "available_languages": available_languages,
+        "available_languages": _available_languages,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -102,6 +161,7 @@ async def node_status():
         "name": "Sandbox",
         "port": 7996,
         "active_sandboxes": 0,
+        "available_languages": _available_languages,
         "timestamp": datetime.now().isoformat()
     }
 
