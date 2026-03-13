@@ -1925,6 +1925,13 @@ async def dashboard_chat(request: dict):
                     extra["twin_id"] = exec_result.twin_id
                 if exec_result.twin_coupling:
                     extra["twin_coupling"] = exec_result.twin_coupling
+                # C阶段 5C: 执行链路可视化 — latency / token / cost
+                if exec_result.total_latency_ms is not None:
+                    extra["total_latency_ms"] = round(exec_result.total_latency_ms, 1)
+                if exec_result.total_tokens is not None:
+                    extra["total_tokens"] = exec_result.total_tokens
+                if exec_result.total_cost_usd is not None:
+                    extra["total_cost_usd"] = round(exec_result.total_cost_usd, 6)
 
                 reply = exec_result.reply or "任务已完成"
                 await _save_assistant_reply(reply)

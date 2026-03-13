@@ -27,6 +27,14 @@ from pydantic import BaseModel, Field
 
 from core.agent.intent_router import IntentResult
 
+# C阶段 4B: 任务记忆（可选依赖）
+try:
+    from core.task_memory import get_task_memory as _get_task_memory
+    _TASK_MEMORY_AVAILABLE = True
+except ImportError:
+    _TASK_MEMORY_AVAILABLE = False
+    _get_task_memory = None  # type: ignore
+
 logger = logging.getLogger("Galaxy.Agent.ExecutionPlanner")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -113,6 +121,13 @@ class ExecutionResult(BaseModel):
     """Twin coupling mode: tight / loose / decoupled / shadow (default: loose)"""
     soul_enforced: Optional[bool] = None
     """True when SOUL policy was actively injected into this execution path (single/team/swarm/fractal)"""
+    # C阶段 5C: 执行链路可视化细化 — latency / token / cost（均为可选，保持向后兼容）
+    total_latency_ms: Optional[float] = None
+    """整条执行链路总延迟（毫秒），等同于 duration_ms，额外暴露便于 UI 消费"""
+    total_tokens: Optional[int] = None
+    """本次执行消耗的 LLM token 总量（input + output，汇总所有 Agent/成员）"""
+    total_cost_usd: Optional[float] = None
+    """本次执行估算总费用（USD），由 CostTracker 汇总"""
 
 
 def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
@@ -150,6 +165,43 @@ def _estimate_complexity(message: str) -> float:
     if any(k in m for k in _COMPLEXITY_KEYWORDS_HIGH):
         score += 0.4
     return min(score, 1.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# C阶段 3B: 任务类型 → 执行策略映射表
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# 格式: task_type_keyword → recommended_strategy
+# 可用策略: "single" | "specialized" | "swarm" | "fractal"
+#
+# 与现有复杂度/关键词规则融合（优先级最高，不移除原逻辑）。
+# _pick_strategy() 优先查此表，查不到则回退至原有复杂度规则。
+
+TASK_TYPE_STRATEGY_MAP: Dict[str, str] = {
+    # 单步快速任务 → 单 Agent
+    "fast_response":  "single",
+    "chat":           "single",
+    "question":       "single",
+    "translation":    "single",
+    "summary":        "single",
+    # 推理/规划 → Team 专项
+    "reasoning":      "specialized",
+    "planning":       "specialized",
+    "analysis":       "specialized",
+    # 编码 → 单 Agent（多数编码任务不需要多 Agent 协作）
+    "coding":         "single",
+    # 研究/信息聚合 → Team 并行
+    "research":       "specialized",
+    # 大量同类任务 → Swarm
+    "swarm":          "swarm",
+    "batch":          "swarm",
+    # 复杂多层分解 → Fractal
+    "fractal":        "fractal",
+    "deep_planning":  "fractal",
+    # 设备控制 → 单 Agent
+    "device_control": "single",
+    "agent_control":  "single",
+}
 
 
 class ExecutionPlanner:
@@ -211,7 +263,9 @@ class ExecutionPlanner:
         tool_calls: List[ToolCallRecord] = []
 
         complexity = _estimate_complexity(plan.message)
-        strategy = self._pick_strategy(plan.message, complexity)
+        # C阶段 3B: 从意图中提取 task_type 传给策略选择器
+        _task_type = getattr(plan.intent, "task_hint", "") or ""
+        strategy = self._pick_strategy(plan.message, complexity, task_type=_task_type)
 
         logger.info(
             "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s",
@@ -263,6 +317,14 @@ class ExecutionPlanner:
         except Exception as e:
             logger.warning("ExecutionPlanner: CapabilityRegistry 刷新失败（继续执行）: %s", e)
 
+        # C阶段 4B: 注入最近任务记忆摘要（可选，默认 3 条）
+        if _TASK_MEMORY_AVAILABLE:
+            try:
+                _mem = _get_task_memory()
+                plan.context = _mem.inject_into_context(plan.context or [], n=3)
+            except Exception as _mem_err:
+                logger.debug("ExecutionPlanner: 任务记忆注入失败（跳过）: %s", _mem_err)
+
         try:
             result = await asyncio.wait_for(
                 self._dispatch(plan, strategy, steps, tool_calls),
@@ -276,11 +338,52 @@ class ExecutionPlanner:
             if result.task_result is None:
                 result.task_result = {}
             result.task_result["capability_stats"] = cap_stats
+            # C阶段 5C: 填充 latency/token/cost 字段
+            result.total_latency_ms = duration_ms
+            try:
+                from core.cost_tracker import get_cost_tracker
+                _ct = get_cost_tracker()
+                _recent = _ct.get_recent(10)
+                # 取最近 10 条中本次调用相关的（简化：取最后 1 条）
+                if _recent:
+                    _last = _recent[-1]
+                    result.total_tokens = (
+                        _last.get("input_tokens", 0) + _last.get("output_tokens", 0)
+                    )
+                    result.total_cost_usd = _last.get("estimated_cost_usd", 0.0)
+            except Exception as _ct_err:
+                logger.debug("ExecutionPlanner: 获取 cost 信息失败（跳过）: %s", _ct_err)
+            # C阶段 4B: 记录任务摘要到长期记忆
+            if _TASK_MEMORY_AVAILABLE:
+                try:
+                    _get_task_memory().record_task(
+                        task=plan.message,
+                        result_summary=(result.reply or "")[:200],
+                        success=result.success,
+                        strategy=result.chosen_strategy or strategy,
+                        duration_ms=duration_ms,
+                        session_id=plan.session_id,
+                    )
+                except Exception as _rec_err:
+                    logger.debug("ExecutionPlanner: 任务记忆记录失败（跳过）: %s", _rec_err)
             return result
 
         except asyncio.TimeoutError:
             duration_ms = (time.monotonic() - t0) * 1000
             logger.error("ExecutionPlanner: 任务执行超时 (%.1fs)", plan.timeout)
+            # C阶段 4B: 超时也记录到任务记忆
+            if _TASK_MEMORY_AVAILABLE:
+                try:
+                    _get_task_memory().record_task(
+                        task=plan.message,
+                        result_summary="任务超时",
+                        success=False,
+                        strategy=strategy,
+                        duration_ms=(time.monotonic() - t0) * 1000,
+                        session_id=plan.session_id,
+                    )
+                except Exception:
+                    pass
             return ExecutionResult(
                 success=False,
                 mode=strategy,
@@ -307,10 +410,11 @@ class ExecutionPlanner:
     # 策略选择
     # ──────────────────────────────────────────────────────────────────
 
-    def _pick_strategy(self, message: str, complexity: float) -> str:
+    def _pick_strategy(self, message: str, complexity: float, task_type: str = "") -> str:
         """选择执行策略：fractal / swarm / specialized / single。
 
-        优先级：
+        优先级（C阶段 3B 后）：
+          0. 任务类型映射表（TASK_TYPE_STRATEGY_MAP）— 最高优先级
           1. Swarm   — 关键词明确请求高并发
           2. Fractal — 复杂度极高 (>= 0.75) 或关键词指示多层递归分解
           3. Specialized (Team) — 复杂度中高 (>= 0.65) 或关键词指示并行/团队
@@ -320,6 +424,12 @@ class ExecutionPlanner:
           - Swarm 并发上限: 20
           - Fractal 最大递归深度: 3
         """
+        # C阶段 3B: 优先查任务类型 → 策略映射表
+        if task_type:
+            mapped = TASK_TYPE_STRATEGY_MAP.get(task_type.lower())
+            if mapped:
+                logger.debug("_pick_strategy: task_type=%s → %s (via mapping table)", task_type, mapped)
+                return mapped
         m = message.lower()
         if any(k in m for k in ["swarm", "群体", "大量", "批量", "高并发"]):
             return "swarm"

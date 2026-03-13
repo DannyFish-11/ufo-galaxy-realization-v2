@@ -190,6 +190,11 @@ class AgentConfig:
         "network": False,
         "browser": False,
     })
+    # C阶段 1A: SOUL 人格继承 — 继承主控 SOUL；子 Agent 可追加自己的 soul_supplement
+    inherited_soul: str = ""
+    """从主控 Agent 继承的 SOUL 约束（只读，不可被子代覆盖）"""
+    soul_supplement: str = ""
+    """子 Agent 追加的补充性人格/能力说明（叠加到 inherited_soul 之后）"""
 
 
 @dataclass
@@ -360,6 +365,19 @@ AGENT_CONFIG_SCHEMA: Dict[str, Any] = {
 }
 
 
+def get_effective_soul(config: "AgentConfig") -> str:
+    """C阶段 1A: 返回 Agent 的有效 SOUL 字符串 = inherited_soul + soul_supplement（若有）。
+
+    子 Agent 继承主控 SOUL（不可覆盖），并可选追加自己的 soul_supplement。
+    """
+    parts: list = []
+    if config.inherited_soul:
+        parts.append(config.inherited_soul)
+    if config.soul_supplement:
+        parts.append(f"【子 Agent 补充人格】\n{config.soul_supplement}")
+    return "\n\n".join(parts) if parts else ""
+
+
 # ───────────────────── Agent 工厂 ─────────────────────
 
 class AgentFactory:
@@ -403,8 +421,12 @@ class AgentFactory:
         self, template_name: str,
         parent_id: Optional[str] = None,
         overrides: Optional[Dict] = None,
+        inherited_soul: str = "",
     ) -> TaskAgent:
-        """从模板创建 Agent"""
+        """从模板创建 Agent。
+
+        C阶段 1A: 若传入 inherited_soul，子 Agent 继承主控 SOUL 约束。
+        """
         if template_name not in AGENT_TEMPLATES:
             available = list(AGENT_TEMPLATES.keys())
             raise ValueError(f"未知模板: {template_name}，可用: {available}")
@@ -417,6 +439,10 @@ class AgentFactory:
                 config = AgentConfig(**{**config.__dict__, "name": overrides["name"]})
             if "system_prompt" in overrides:
                 config = AgentConfig(**{**config.__dict__, "system_prompt": overrides["system_prompt"]})
+
+        # C阶段 1A: 若调用方传入主控 SOUL，设定继承字段
+        if inherited_soul:
+            config = AgentConfig(**{**config.__dict__, "inherited_soul": inherited_soul})
 
         agent = TaskAgent(
             id=f"agent_{uuid.uuid4().hex[:12]}",
@@ -686,6 +712,8 @@ class AgentFactory:
                 parent.config.capabilities, i, num_children
             )
 
+            # C阶段 1A: 继承主控 SOUL（只读），子 Agent 可追加 soul_supplement
+            parent_soul = parent.config.inherited_soul or parent.config.metadata.get("soul_policy", "")
             child_config = AgentConfig(
                 role=AgentRole.EXECUTOR,
                 name=f"{parent.config.name}-子代{i+1}",
@@ -696,6 +724,7 @@ class AgentFactory:
                 max_depth=parent.config.max_depth,
                 split_threshold=parent.config.split_threshold,
                 ttl=parent.config.ttl // 2,  # 子代 TTL 减半
+                inherited_soul=parent_soul,  # 子代继承主控 SOUL（不可覆盖）
             )
 
             child = TaskAgent(
