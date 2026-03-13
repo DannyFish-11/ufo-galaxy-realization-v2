@@ -2894,3 +2894,108 @@ async def get_federation_health():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# 权限策略管理 (P1)
+# ============================================================================
+
+_DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+_PERMISSIONS_POLICY_FILE = os.path.join(_DATA_DIR, "permissions_policy.json")
+_INTEGRATIONS_CONFIG_FILE = os.path.join(_DATA_DIR, "integrations_config.json")
+
+_DEFAULT_PERMISSIONS_POLICY: Dict[str, Any] = {
+    "global": {
+        "filesystem": False,
+        "terminal": False,
+        "network": True,
+        "browser": False,
+        "description": "全局默认权限策略",
+    },
+    "agent_overrides": {},
+    "updated_at": "",
+}
+
+_DEFAULT_INTEGRATIONS_CONFIG: Dict[str, Any] = {
+    "telegram":  {"enabled": False, "bot_token": "", "webhook_url": "", "description": "Telegram Bot 集成"},
+    "discord":   {"enabled": False, "bot_token": "", "webhook_url": "", "description": "Discord Bot 集成"},
+    "slack":     {"enabled": False, "bot_token": "", "webhook_url": "", "description": "Slack App 集成"},
+    "whatsapp":  {"enabled": False, "api_token": "", "phone_number_id": "", "description": "WhatsApp Business API 集成"},
+    "updated_at": "",
+}
+
+
+def _load_json_file(path: str, default: dict) -> dict:
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            pass
+    return default.copy()
+
+
+def _save_json_file(path: str, data: dict) -> bool:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data["updated_at"] = datetime.now().isoformat()
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        return True
+    except Exception as exc:
+        logger.error("保存文件失败 %s: %s", path, exc)
+        return False
+
+
+@app.get("/api/v1/permissions/policy")
+async def get_permissions_policy():
+    """获取全局权限策略（及各 Agent 覆盖项）"""
+    return _load_json_file(_PERMISSIONS_POLICY_FILE, _DEFAULT_PERMISSIONS_POLICY)
+
+
+@app.post("/api/v1/permissions/policy")
+async def update_permissions_policy(request: dict):
+    """更新全局权限策略。支持局部更新 global / agent_overrides。"""
+    policy = _load_json_file(_PERMISSIONS_POLICY_FILE, _DEFAULT_PERMISSIONS_POLICY)
+    if "global" in request and isinstance(request["global"], dict):
+        policy.setdefault("global", {}).update(request["global"])
+    if "agent_overrides" in request and isinstance(request["agent_overrides"], dict):
+        policy.setdefault("agent_overrides", {}).update(request["agent_overrides"])
+    success = _save_json_file(_PERMISSIONS_POLICY_FILE, policy)
+    return {"success": success, "policy": policy}
+
+
+# ============================================================================
+# 集成管理 (P1)
+# ============================================================================
+
+
+@app.get("/api/v1/integrations/config")
+async def get_integrations_config():
+    """获取集成配置（Token 字段脱敏，仅返回是否已配置）"""
+    config = _load_json_file(_INTEGRATIONS_CONFIG_FILE, _DEFAULT_INTEGRATIONS_CONFIG)
+    safe: Dict[str, Any] = {}
+    for key, val in config.items():
+        if not isinstance(val, dict):
+            safe[key] = val
+            continue
+        entry = dict(val)
+        for token_field in ("bot_token", "api_token"):
+            if entry.get(token_field):
+                entry[token_field + "_configured"] = True
+                entry[token_field] = ""
+            else:
+                entry[token_field + "_configured"] = False
+        safe[key] = entry
+    return safe
+
+
+@app.post("/api/v1/integrations/config")
+async def update_integrations_config(request: dict):
+    """更新集成配置。支持局部更新各平台字段。"""
+    config = _load_json_file(_INTEGRATIONS_CONFIG_FILE, _DEFAULT_INTEGRATIONS_CONFIG)
+    for platform in ("telegram", "discord", "slack", "whatsapp"):
+        if platform in request and isinstance(request[platform], dict):
+            config.setdefault(platform, {}).update(request[platform])
+    success = _save_json_file(_INTEGRATIONS_CONFIG_FILE, config)
+    return {"success": success}

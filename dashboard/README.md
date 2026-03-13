@@ -531,6 +531,101 @@ pip install pytest httpx fastapi
 pytest tests/test_e2e_stack.py tests/test_p2_dashboard_endpoints.py -v
 ```
 
+---
+
+## 执行链路可视化（P1 新增）
+
+在 **🧪 测试** 标签页的「简单对话测试」中，每次发送消息后将自动展示响应中的执行链路信息：
+
+| 字段 | 展示方式 |
+|------|----------|
+| `agent_steps` | 紫色左边框时间线，每步显示动作名称、状态和输出 |
+| `tool_calls`  | 蓝色左边框列表，显示工具名称和参数 |
+| `error`       | 红色警告框，展示错误信息 |
+
+当 Agent 返回这些字段时（如 task_execute / hybrid 意图），用户可直观看到整个执行过程。
+
+---
+
+## 权限管理中心（P1 新增）
+
+### UI：🔐 权限 标签页
+
+- **全局权限策略**：统一管理 `filesystem / terminal / network / browser` 四类权限的默认开关
+- **Agent 覆盖策略**：为特定 Agent（按 ID）单独设置权限，覆盖全局默认值
+- **策略持久化**：保存到 `data/permissions_policy.json`
+
+### 后端端点
+
+```
+GET  /api/v1/permissions/policy   # 获取当前策略（global + agent_overrides）
+POST /api/v1/permissions/policy   # 更新策略（局部更新，支持 global 和 agent_overrides 字段）
+```
+
+**请求体示例（POST）：**
+```json
+{
+  "global": { "filesystem": false, "terminal": false, "network": true, "browser": false },
+  "agent_overrides": { "agent_001": { "filesystem": true, "terminal": true } }
+}
+```
+
+### Policy Loader（执行上下文注入）
+
+`core/policy_loader.py` 提供以下接口，供 Agent 执行链路读取权限：
+
+```python
+from core.policy_loader import get_global_permissions, get_agent_permissions, inject_policy_into_context
+
+# 获取全局默认权限
+perms = get_global_permissions()
+
+# 获取指定 Agent 的有效权限（覆盖优先于全局）
+perms = get_agent_permissions("agent_001")
+
+# 注入到执行上下文
+context = inject_policy_into_context({"task": "..."}, agent_id="agent_001")
+# context["permissions"] 即为该 Agent 的有效权限
+```
+
+---
+
+## 集成管理（P1 新增）
+
+### UI：🔗 集成 标签页
+
+支持管理以下 4 个平台的接入配置：
+
+| 平台 | 字段 |
+|------|------|
+| ✈️ Telegram | Bot Token, Webhook URL |
+| 🎮 Discord  | Bot Token, Webhook URL |
+| 💬 Slack    | Bot Token, Webhook URL |
+| 📱 WhatsApp | API Token, Phone Number ID |
+
+- **Token 脱敏**：Token 字段保存后不再明文展示（仅显示"已配置 Token ✓"）
+- **启用/禁用**：每个集成独立开关
+- **配置持久化**：保存到 `data/integrations_config.json`
+
+> P1 阶段仅存储配置，不执行实际 API 调用。
+
+### 后端端点
+
+```
+GET  /api/v1/integrations/config   # 获取集成配置（Token 脱敏）
+POST /api/v1/integrations/config   # 更新集成配置（支持局部更新各平台字段）
+```
+
+**请求体示例（POST）：**
+```json
+{
+  "telegram": { "enabled": true, "bot_token": "xxx", "webhook_url": "https://..." },
+  "slack":    { "enabled": false }
+}
+```
+
+---
+
 ## 许可证
 
 MIT License
