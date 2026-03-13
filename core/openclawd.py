@@ -361,6 +361,10 @@ class OpenClawd:
     GOAL_EXECUTION_TIMEOUT: float = 60.0
     # Timeout for each parallel_subtask dispatch (seconds).
     PARALLEL_SUBTASK_TIMEOUT: float = 60.0
+    # Maximum number of dynamically discovered node tools to expose to LLM.
+    # LLM function calling APIs typically recommend ≤ 128 tools to avoid
+    # context overflow; keep this value in sync with that constraint.
+    NODE_DYNAMIC_TOOL_LIMIT: int = 128
 
     def __init__(self):
         self._initialized = False
@@ -1397,7 +1401,7 @@ class OpenClawd:
         except Exception as e:
             logger.debug(f"收集 MCP Gateway 工具失败: {e}")
 
-        # ── 层 3: Node 节点操作 (静态 action 目录 + 注册表验证) ──
+        # ── 层 3: Node 节点操作 (静态 action 目录 + 动态发现全量节点) ──
         try:
             import json as _json
             import os as _os
@@ -1415,23 +1419,75 @@ class OpenClawd:
                         registry_names[nid] = node_info.get("name", nid)
                         self._node_id_to_key[nid] = node_key
 
-            # 从静态目录生成工具列表
+            # 已注册的工具名集合，避免重复添加
+            _registered_tool_names: set = set()
+
+            # 从静态目录生成工具列表（_CORE_NODE_ACTIONS 作为高优先级回退）
             for node_id, actions_map in self._CORE_NODE_ACTIONS.items():
                 node_name = registry_names.get(node_id, f"Node_{node_id}")
                 for action_name, action_desc in actions_map.items():
-                    tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": f"node__{node_id}__{action_name}",
-                            "description": f"Node {node_name}: {action_desc}",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "params": {"type": "object", "description": "操作参数"}
+                    tool_name_key = f"node__{node_id}__{action_name}"
+                    if tool_name_key not in _registered_tool_names:
+                        _registered_tool_names.add(tool_name_key)
+                        tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": tool_name_key,
+                                "description": f"Node {node_name}: {action_desc}",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "params": {"type": "object", "description": "操作参数"}
+                                    },
                                 },
                             },
-                        },
-                    })
+                        })
+
+            # 动态发现：遍历注册表中所有节点，尝试从 fusion_entry.py 获取 actions
+            # 已在 _CORE_NODE_ACTIONS 中覆盖的节点仍可通过动态发现补充额外 action
+            _DYNAMIC_SCAN_LIMIT = self.NODE_DYNAMIC_TOOL_LIMIT  # LLM function calling 建议上限
+            _dynamic_added = 0
+            for node_id, node_key in list(self._node_id_to_key.items()):
+                if _dynamic_added >= _DYNAMIC_SCAN_LIMIT:
+                    break
+                # 先检查缓存
+                if node_id in self._node_actions_cache:
+                    discovered = self._node_actions_cache[node_id]
+                else:
+                    try:
+                        discovered = self._discover_node_actions(node_id, node_key)
+                        self._node_actions_cache[node_id] = discovered
+                    except Exception as _e:
+                        logger.debug(f"动态发现节点 {node_id} actions 失败: {_e}")
+                        self._node_actions_cache[node_id] = {}
+                        discovered = {}
+
+                node_name = registry_names.get(node_id, f"Node_{node_id}")
+                for action_name, action_desc in discovered.items():
+                    tool_name_key = f"node__{node_id}__{action_name}"
+                    if tool_name_key not in _registered_tool_names:
+                        _registered_tool_names.add(tool_name_key)
+                        _dynamic_added += 1
+                        tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": tool_name_key,
+                                "description": f"Node {node_name}: {action_desc}",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "params": {"type": "object", "description": "操作参数"}
+                                    },
+                                },
+                            },
+                        })
+
+            logger.debug(
+                "Node 工具收集: 静态 %d + 动态发现 %d，注册表节点 %d 个",
+                len(self._CORE_NODE_ACTIONS),
+                _dynamic_added,
+                len(self._node_id_to_key),
+            )
         except Exception as e:
             logger.debug(f"收集 Node 工具失败: {e}")
 

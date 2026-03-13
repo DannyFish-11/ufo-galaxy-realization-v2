@@ -542,6 +542,50 @@ async def list_runtime_nodes():
     return {"nodes": list(_runtime_nodes.values()), "total": len(_runtime_nodes)}
 
 
+@app.get("/api/v1/nodes/all")
+async def list_all_nodes():
+    """统一节点聚合器：合并运行时注册表 + node_registry.json，未启动节点显示 inactive"""
+    registry_path = os.path.join(PROJECT_ROOT, "config", "node_registry.json")
+    registry_nodes: Dict[str, Dict[str, Any]] = {}
+    if os.path.exists(registry_path):
+        try:
+            with open(registry_path, "r", encoding="utf-8") as f:
+                registry = json.load(f)
+            for node_key, node_info in registry.get("nodes", {}).items():
+                nid = node_info.get("id", "")
+                if nid:
+                    registry_nodes[nid] = {
+                        "node_id": nid,
+                        "name": node_info.get("name", node_key),
+                        "node_key": node_key,
+                        "path": node_info.get("path", ""),
+                        "status": "inactive",
+                        "source": "registry",
+                        "has_main": node_info.get("has_main", False),
+                        "registry_status": node_info.get("status", "unknown"),
+                    }
+        except Exception as e:
+            logger.warning("读取 node_registry.json 失败: %s", e)
+
+    # 合并运行时节点（优先覆盖）
+    merged: Dict[str, Dict[str, Any]] = dict(registry_nodes)
+    for nid, rt_info in _runtime_nodes.items():
+        if nid in merged:
+            merged[nid].update({
+                "status": rt_info.get("status", "running"),
+                "port": rt_info.get("port"),
+                "registered_at": rt_info.get("registered_at"),
+                "source": "runtime",
+            })
+        else:
+            merged[nid] = dict(rt_info)
+            merged[nid]["source"] = "runtime"
+
+    result = sorted(merged.values(), key=lambda x: x.get("node_id", ""))
+    logger.debug("节点聚合器: 共 %d 个节点（运行时 %d + 注册表）", len(result), len(_runtime_nodes))
+    return {"nodes": result, "total": len(result)}
+
+
 # ============================================================================
 # 节点 API - 使用已有协议
 # ============================================================================
@@ -1344,6 +1388,120 @@ async def get_node_apis():
             "all_configured": all(k["configured"] for k in keys),
         })
     return {"node_apis": node_apis}
+
+
+@app.get("/api/v1/config/node-apis/auto")
+async def get_node_apis_auto():
+    """自动扫描 nodes/**/README.md 提取环境变量配置需求，与静态表合并返回"""
+    import re as _re
+
+    _MAX_README_SECTION_LENGTH = 2000   # 每段 README 扫描字符数上限
+    _MIN_ENV_VAR_LENGTH = 4             # 有效环境变量名最短字符数
+    # - `ENV_VAR` — 描述
+    # - ENV_VAR=xxx
+    # - | ENV_VAR | 描述 | (Markdown 表格)
+    _ENV_VAR_PATTERN = _re.compile(
+        r'(?:^|\|)\s*`?([A-Z][A-Z0-9_]{2,})`?\s*(?:[=:｜|]|\s).*?(?:$|\|)',
+        _re.MULTILINE,
+    )
+    # 过滤掉非 key 类的常见词
+    _EXCLUDE = {"TRUE", "FALSE", "NULL", "NONE", "HTTP", "HTTPS", "API", "URL", "KEY"}
+
+    nodes_dir = os.path.join(PROJECT_ROOT, "nodes")
+    auto_result: Dict[str, Any] = {}
+
+    # 扫描所有节点目录
+    if os.path.isdir(nodes_dir):
+        for entry in sorted(os.listdir(nodes_dir)):
+            node_dir = os.path.join(nodes_dir, entry)
+            if not os.path.isdir(node_dir) or not entry.startswith("Node_"):
+                continue
+            readme_path = os.path.join(node_dir, "README.md")
+            if not os.path.exists(readme_path):
+                continue
+            try:
+                with open(readme_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            # 仅扫描包含"环境变量"/"API"/"配置"关键词的段落
+            env_section = ""
+            for section_header in ("环境变量", "API", "配置", "Configuration", "Environment"):
+                idx = content.find(section_header)
+                if idx != -1:
+                    env_section += content[idx: idx + _MAX_README_SECTION_LENGTH]
+
+            if not env_section:
+                env_section = content  # 全文扫描作为回退
+
+            found_vars = []
+            for m in _ENV_VAR_PATTERN.finditer(env_section):
+                var = m.group(1).strip()
+                if var and var not in _EXCLUDE and len(var) >= _MIN_ENV_VAR_LENGTH:
+                    found_vars.append({"env_var": var, "label": var})
+
+            # 去重
+            seen = set()
+            unique_vars = []
+            for v in found_vars:
+                if v["env_var"] not in seen:
+                    seen.add(v["env_var"])
+                    unique_vars.append(v)
+
+            if unique_vars:
+                # 从节点目录名解析 node_id
+                parts = entry.split("_")
+                node_id = parts[1] if len(parts) >= 2 else entry
+                node_name = "_".join(parts[2:]) if len(parts) >= 3 else entry
+                auto_result[node_id] = {
+                    "node_id": node_id,
+                    "name": node_name,
+                    "node_key": entry,
+                    "keys": unique_vars,
+                    "source": "auto_scan",
+                }
+
+    # 合并静态表（静态优先）
+    for node_id, info in NODE_API_REQUIREMENTS.items():
+        if node_id not in auto_result:
+            auto_result[node_id] = {
+                "node_id": node_id,
+                "name": info["name"],
+                "node_key": None,
+                "keys": info["keys"],
+                "source": "static",
+            }
+        else:
+            # 追加静态表中存在但 auto_scan 未找到的 key
+            existing_vars = {k["env_var"] for k in auto_result[node_id]["keys"]}
+            for k in info["keys"]:
+                if k["env_var"] not in existing_vars:
+                    auto_result[node_id]["keys"].append(k)
+
+    # 检查当前环境变量配置状态
+    result_list = []
+    for node_id, info in sorted(auto_result.items()):
+        keys_with_status = []
+        for k in info["keys"]:
+            value = os.environ.get(k["env_var"], "")
+            keys_with_status.append({
+                "env_var": k["env_var"],
+                "label": k.get("label", k["env_var"]),
+                "configured": bool(value),
+                "masked": value[:6] + "..." if len(value) > 6 else "",
+            })
+        result_list.append({
+            "node_id": node_id,
+            "name": info["name"],
+            "node_key": info.get("node_key"),
+            "source": info["source"],
+            "keys": keys_with_status,
+            "all_configured": all(k["configured"] for k in keys_with_status),
+        })
+
+    logger.info("节点 API 自动扫描完成: %d 个节点", len(result_list))
+    return {"node_apis": result_list, "total": len(result_list), "source": "auto"}
 
 
 @app.post("/api/v1/config/node-api-key")

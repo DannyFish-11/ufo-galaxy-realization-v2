@@ -166,6 +166,7 @@
                                 <span style="font-size: 14px; font-weight: 600;">🌐 节点 API 配置</span>
                                 <div class="flex space-x-2 items-center">
                                     <span style="font-size: 11px; color: rgba(255,255,255,0.35);">{{ nodeApis.filter(n => n.all_configured).length }}/{{ nodeApis.length }} 已配置</span>
+                                    <button @click="autoScanNodeApis" class="btn-sm btn-purple">🔍 自动扫描</button>
                                     <button @click="loadNodeApis" class="btn-sm btn-blue">刷新</button>
                                 </div>
                             </div>
@@ -951,6 +952,13 @@
                 const loadTools = async () => { try { tools.value = ((await axios.get('/api/v1/config/tools')).data.tools || []).map(t => ({ ...t, status: '' })); } catch (e) {} };
                 const loadNodes = async () => {
                     try {
+                        const all = (await axios.get('/api/v1/nodes/all')).data.nodes || [];
+                        if (all.length > 0) {
+                            nodes.value = all;
+                            return;
+                        }
+                    } catch (e) { /* fall through */ }
+                    try {
                         const rt = (await axios.get('/api/v1/nodes/runtime')).data.nodes || [];
                         if (rt.length > 0) {
                             nodes.value = rt;
@@ -969,6 +977,30 @@
                             keys: n.keys.map(k => ({ ...k, inputValue: '' }))
                         }));
                     } catch (e) { console.error(e); }
+                };
+                const autoScanNodeApis = async () => {
+                    try {
+                        const data = (await axios.get('/api/v1/config/node-apis/auto')).data;
+                        const scanned = (data.node_apis || []).map(n => ({
+                            ...n,
+                            keys: n.keys.map(k => ({ ...k, inputValue: '' }))
+                        }));
+                        // 合并到现有列表（以 node_id 为 key）
+                        const merged = {};
+                        for (const n of nodeApis.value) merged[n.node_id] = n;
+                        for (const n of scanned) {
+                            if (merged[n.node_id]) {
+                                // 追加未知的 key
+                                const existingVars = new Set(merged[n.node_id].keys.map(k => k.env_var));
+                                for (const k of n.keys) {
+                                    if (!existingVars.has(k.env_var)) merged[n.node_id].keys.push(k);
+                                }
+                            } else {
+                                merged[n.node_id] = n;
+                            }
+                        }
+                        nodeApis.value = Object.values(merged);
+                    } catch (e) { alert('自动扫描失败: ' + (e.response?.data?.error || e.message)); }
                 };
                 const saveNodeApiKey = async (envVar, value) => {
                     if (!value) return;
@@ -1159,7 +1191,7 @@
                     deviceTraces, traceFilterDevice, filteredTraces,
                     agentDeviceMappings, orchTasks,
                     loadDeviceTraces, loadAgentDeviceMapping, loadOrchestrationTasks,
-                    loadNodeApis, saveNodeApiKey, loadAgents, createAgentFromTemplate, createAgentDynamic, deleteAgent,
+                    loadNodeApis, saveNodeApiKey, autoScanNodeApis, loadAgents, createAgentFromTemplate, createAgentDynamic, deleteAgent,
                     createTwin, createSwarm,
                     loadProtocols, toggleMcpTools, unloadMcp, loadSkill, unloadSkill,
                     loadDevices, discoverDevices, showDeviceTelemetry, sendDeviceCmd, syncClipboard, transferFile,
