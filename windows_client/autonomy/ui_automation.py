@@ -5,10 +5,21 @@ Windows UI Automation 封装模块
 """
 
 import logging
+import sys
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import comtypes.client
 from comtypes import COMError
+
+# 启动引导：在首次使用 comtypes.gen.UIAutomationClient 之前，
+# 将缓存目录重定向到 ASCII 安全路径，并在缓存缺失/损坏时自动修复。
+try:
+    from . import comtypes_bootstrap as _comtypes_bootstrap
+    _comtypes_bootstrap.ensure_uia_client()
+except Exception as _bootstrap_exc:
+    logging.getLogger(__name__).warning(
+        "comtypes 引导失败（非严重，将在首次使用时重试）: %s", _bootstrap_exc
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +68,26 @@ class UIAutomationWrapper:
             )
             self.root = self.uia.GetRootElement()
             logger.info("UI Automation 初始化成功")
+        except (ImportError, AttributeError, OSError) as e:
+            # UIAutomationClient 缓存缺失或路径含非 ASCII 字符；尝试自动修复后重试。
+            logger.warning("UI Automation 初始化失败（%s），尝试修复 comtypes 缓存...", e)
+            try:
+                from . import comtypes_bootstrap as _bs
+                if _bs.ensure_uia_client():
+                    self.uia = comtypes.client.CreateObject(
+                        "{ff48dba4-60ef-4201-aa87-54103eef594e}",
+                        interface=comtypes.gen.UIAutomationClient.IUIAutomation
+                    )
+                    self.root = self.uia.GetRootElement()
+                    logger.info("UI Automation 初始化成功（修复后重试）")
+                else:
+                    logger.error("comtypes 缓存修复失败，UI Automation 不可用")
+                    raise RuntimeError(
+                        "UIAutomationClient 不可用。请以管理员身份运行，或检查 comtypes 安装。"
+                    ) from e
+            except Exception as retry_exc:
+                logger.error("UI Automation 初始化重试失败: %s", retry_exc)
+                raise
         except Exception as e:
             logger.error(f"UI Automation 初始化失败: {e}")
             raise
