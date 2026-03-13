@@ -102,6 +102,31 @@ class ExecutionResult(BaseModel):
     # Auto-created agent info (optional, for UI surfacing)
     auto_agent_id: Optional[str] = None
     auto_agent_template: Optional[str] = None
+    # Dynamic execution metadata (new fields — all optional for backward compat)
+    chosen_strategy: Optional[str] = None
+    """Execution strategy chosen: single_agent / team_specialized / team_swarm / fractal"""
+    chosen_providers: Optional[List[str]] = None
+    """LLM providers/models used during execution (e.g. ['deepseek:deepseek-chat'])"""
+    twin_id: Optional[str] = None
+    """ID of the digital twin created for the primary agent (if any)"""
+    twin_coupling: Optional[str] = None
+    """Twin coupling mode: tight / loose / decoupled / shadow (default: loose)"""
+
+
+def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
+    """从 TeamResult 中提取使用的 provider:model 列表（可选）。"""
+    try:
+        providers: List[str] = []
+        for member_res in (team_result.member_results or []):
+            prov = getattr(member_res, "provider", None)
+            mdl = getattr(member_res, "model", None)
+            if prov or mdl:
+                entry = f"{prov or ''}:{mdl or ''}".strip(":")
+                if entry and entry not in providers:
+                    providers.append(entry)
+        return providers or None
+    except Exception:
+        return None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -281,10 +306,28 @@ class ExecutionPlanner:
     # ──────────────────────────────────────────────────────────────────
 
     def _pick_strategy(self, message: str, complexity: float) -> str:
+        """选择执行策略：fractal / swarm / specialized / single。
+
+        优先级：
+          1. Swarm   — 关键词明确请求高并发
+          2. Fractal — 复杂度极高 (>= 0.75) 或关键词指示多层递归分解
+          3. Specialized (Team) — 复杂度中高 (>= 0.65) 或关键词指示并行/团队
+          4. Single  — 默认单 Agent
+
+        约束（硬编码）:
+          - Swarm 并发上限: 20
+          - Fractal 最大递归深度: 3
+        """
         m = message.lower()
-        if any(k in m for k in ["swarm", "群体", "大量", "批量"]):
+        if any(k in m for k in ["swarm", "群体", "大量", "批量", "高并发"]):
             return "swarm"
-        if complexity > 0.65 or any(k in m for k in ["team", "团队", "并行", "多个", "分工"]):
+        if complexity >= 0.75 or any(k in m for k in [
+            "fractal", "分型", "递归", "分形", "多层", "深度拆解",
+        ]):
+            return "fractal"
+        if complexity >= 0.65 or any(k in m for k in [
+            "team", "团队", "并行", "多个", "分工", "异构",
+        ]):
             return "specialized"
         return "single"
 
@@ -299,6 +342,8 @@ class ExecutionPlanner:
         steps: List[StepRecord],
         tool_calls: List[ToolCallRecord],
     ) -> ExecutionResult:
+        if strategy == "fractal":
+            return await self._run_fractal(plan, steps, tool_calls)
         if strategy in ("specialized", "parallel", "swarm"):
             return await self._run_team(plan, strategy, steps, tool_calls)
         return await self._run_single_agent(plan, steps, tool_calls)
@@ -313,7 +358,15 @@ class ExecutionPlanner:
         steps: List[StepRecord],
         tool_calls: List[ToolCallRecord],
     ) -> ExecutionResult:
-        """通过 AgentFactory 创建单 Agent 执行任务。"""
+        """通过 AgentFactory 创建单 Agent 执行任务。
+
+        创建策略（LLM 优先）：
+          1. LLM 动态生成 Agent（主路径）—— 模板蓝图作为 schema 约束
+          2. 若 LLM 不可用/失败 → 根据关键词匹配选择模板（兜底）
+          3. 若模板也失败 → coordinator 模板兜底
+
+        同时为主控 Agent 自动创建数字孪生（默认 LOOSE 耦合模式）。
+        """
         step = StepRecord(name="创建 Agent", tool="agent_factory")
         t0 = time.monotonic()
 
@@ -324,28 +377,39 @@ class ExecutionPlanner:
             # 构建带策略注入的任务描述
             task_with_policy = self._build_task_prompt(plan)
 
-            # 自动选择最合适的 Agent 模板
+            # 自动选择最合适的 Agent 模板（作为蓝图约束，不是静态产物）
             selected_template = self._auto_select_template(plan.message, plan.intent)
             agent = None
 
-            # 优先从模板创建（快速、确定）
-            try:
-                agent = factory.create_from_template(selected_template)
-                logger.info(
-                    "ExecutionPlanner: 自动选择模板 '%s' → Agent %s",
-                    selected_template, agent.id,
-                )
-            except Exception as tmpl_err:
-                logger.debug("模板创建失败 (%s)，尝试 LLM 生成: %s", selected_template, tmpl_err)
-                # 回退到 LLM 动态生成
+            # ── LLM 优先：动态生成 Agent（主路径）──────────────────────────
+            if self._llm_router is not None:
                 try:
                     agent = await factory.create_from_llm(
                         task_description=task_with_policy,
-                        context={"session_id": plan.session_id},
+                        context={
+                            "session_id": plan.session_id,
+                            "template_hint": selected_template,  # 蓝图约束
+                        },
                     )
-                    selected_template = ""  # LLM-generated, no fixed template
-                except Exception:
-                    # 最终降级: coordinator 模板
+                    logger.info(
+                        "ExecutionPlanner: LLM 动态生成 Agent %s (蓝图参考: %s)",
+                        agent.id,
+                        selected_template,
+                    )
+                except Exception as llm_err:
+                    logger.debug("LLM 动态生成 Agent 失败，回退到模板: %s", llm_err)
+                    agent = None
+
+            # ── 模板兜底：LLM 不可用或失败时使用 ─────────────────────────
+            if agent is None:
+                try:
+                    agent = factory.create_from_template(selected_template)
+                    logger.info(
+                        "ExecutionPlanner: 模板兜底 '%s' → Agent %s",
+                        selected_template, agent.id,
+                    )
+                except Exception as tmpl_err:
+                    logger.warning("模板创建失败 (%s): %s，使用 coordinator 兜底", selected_template, tmpl_err)
                     selected_template = "coordinator"
                     agent = factory.create_from_template(selected_template)
 
@@ -355,6 +419,28 @@ class ExecutionPlanner:
                 "template": selected_template,
             }
             steps.append(step)
+
+            # ── 创建数字孪生（默认 LOOSE 耦合）────────────────────────────
+            twin_id: Optional[str] = None
+            twin_coupling: Optional[str] = None
+            try:
+                from enhancements.agent_factory.twin_model import (
+                    twin_manager as _tm, CouplingMode as _CM
+                )
+                if _tm is not None:
+                    twin = _tm.create_twin(
+                        source_id=agent.id,
+                        name=f"twin_{agent.config.name}",
+                        coupling_mode=_CM.LOOSE,
+                    )
+                    twin_id = twin.twin_id
+                    twin_coupling = twin.coupling_mode.value
+                    logger.info(
+                        "ExecutionPlanner: 孪生 Agent 已创建 twin_id=%s coupling=%s",
+                        twin_id, twin_coupling,
+                    )
+            except Exception as twin_err:
+                logger.debug("孪生 Agent 创建失败（非致命）: %s", twin_err)
 
             # 执行任务
             exec_step = StepRecord(name="Agent 执行", tool="agent_execute")
@@ -382,6 +468,14 @@ class ExecutionPlanner:
                 ))
 
             step.duration_ms = (time.monotonic() - t0) * 1000
+
+            # 收集使用的 provider 信息
+            chosen_providers: Optional[List[str]] = None
+            _prov = exec_result.get("provider")
+            _mdl = exec_result.get("model")
+            if _prov or _mdl:
+                chosen_providers = [f"{_prov or ''}:{_mdl or ''}".strip(":")]
+
             return ExecutionResult(
                 success=exec_result.get("success", True),
                 mode="single_agent",
@@ -390,6 +484,10 @@ class ExecutionPlanner:
                 model=exec_result.get("model", ""),
                 auto_agent_id=agent.id,
                 auto_agent_template=selected_template or None,
+                chosen_strategy="single_agent",
+                chosen_providers=chosen_providers,
+                twin_id=twin_id,
+                twin_coupling=twin_coupling,
             )
 
         except Exception as exc:
@@ -464,6 +562,79 @@ class ExecutionPlanner:
                 mode=f"team_{team_strategy}",
                 reply=team_result.final_answer or "Team 任务已完成",
                 task_result=team_result.to_dict(),
+                chosen_strategy=f"team_{team_strategy}",
+                chosen_providers=_collect_team_providers(team_result),
+            )
+
+        except Exception as exc:
+            step.success = False
+            step.error = str(exc)
+            step.duration_ms = (time.monotonic() - t0) * 1000
+            steps.append(step)
+            raise
+
+    # ──────────────────────────────────────────────────────────────────
+    # Fractal 执行
+    # ──────────────────────────────────────────────────────────────────
+
+    async def _run_fractal(
+        self,
+        plan: ExecutionPlan,
+        steps: List[StepRecord],
+        tool_calls: List[ToolCallRecord],
+    ) -> ExecutionResult:
+        """通过 FractalExecutor 执行复杂递归任务。
+
+        约束（硬编码）：
+          - max_depth = 3
+          - max_subtasks_total = 20
+        """
+        step = StepRecord(name="创建 Fractal Agent", tool="fractal_executor")
+        t0 = time.monotonic()
+
+        try:
+            from core.fractal_agent import FractalExecutor, FractalTask, Complexity
+            from core.agent_factory import get_agent_factory
+
+            factory = get_agent_factory(self._llm_router)
+            executor = FractalExecutor(
+                llm_router=self._llm_router,
+                agent_factory=factory,
+                max_depth=3,          # 硬编码上限
+                max_subtasks=20,      # 硬编码上限
+            )
+
+            step.output = {"strategy": "fractal", "max_depth": 3, "max_subtasks": 20}
+            steps.append(step)
+
+            exec_step = StepRecord(name="Fractal 执行", tool="fractal_execute")
+            t1 = time.monotonic()
+            context = {
+                "soul": plan.soul_policy,
+                "agents_policy": plan.agents_policy,
+                "session_id": plan.session_id,
+                "tools": plan.tool_schemas,
+            }
+            fractal_result = await executor.run(plan.message, context)
+            exec_step.duration_ms = (time.monotonic() - t1) * 1000
+            exec_step.success = fractal_result.success if hasattr(fractal_result, "success") else True
+            exec_step.output = {
+                "depth": getattr(fractal_result, "depth", 0),
+                "decomposition_used": getattr(fractal_result, "decomposition_used", False),
+            }
+            steps.append(exec_step)
+
+            output = getattr(fractal_result, "output", None) or "Fractal 任务已完成"
+            step.duration_ms = (time.monotonic() - t0) * 1000
+            return ExecutionResult(
+                success=getattr(fractal_result, "success", True),
+                mode="fractal",
+                reply=str(output) if output else "Fractal 任务已完成",
+                task_result={
+                    "fractal_depth": getattr(fractal_result, "depth", 0),
+                    "decomposition_used": getattr(fractal_result, "decomposition_used", False),
+                },
+                chosen_strategy="fractal",
             )
 
         except Exception as exc:

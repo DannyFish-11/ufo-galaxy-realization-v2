@@ -1916,6 +1916,15 @@ async def dashboard_chat(request: dict):
                     extra["auto_agent_id"] = exec_result.auto_agent_id
                 if exec_result.auto_agent_template:
                     extra["auto_agent_template"] = exec_result.auto_agent_template
+                # Expose new dynamic execution metadata (optional fields)
+                if exec_result.chosen_strategy:
+                    extra["chosen_strategy"] = exec_result.chosen_strategy
+                if exec_result.chosen_providers:
+                    extra["chosen_providers"] = exec_result.chosen_providers
+                if exec_result.twin_id:
+                    extra["twin_id"] = exec_result.twin_id
+                if exec_result.twin_coupling:
+                    extra["twin_coupling"] = exec_result.twin_coupling
 
                 reply = exec_result.reply or "任务已完成"
                 await _save_assistant_reply(reply)

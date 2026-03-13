@@ -36,28 +36,65 @@
 
 OpenClawd 现在能够**自动理解任务意图并创建合适的 Agent 执行任务**，无需用户发出任何特殊指令。
 
-#### 工作原理
+#### 默认执行流程（动态自组织）
 
 ```
-用户消息 → IntentRouter (规则分类)
-              │
-              ├─ chat_only  → 直接 LLM 对话
-              │
-              └─ task_execute / hybrid
-                              │
-                              ▼
-                   ExecutionPlanner._auto_select_template()
-                              │ 根据消息关键词自动选择模板
-                              ▼
-                   AgentFactory.create_from_template(template)
-                              │
-                              ▼
-                   Agent 执行任务 → ExecutionResult
-                              │
-                              └─ auto_agent_id + auto_agent_template
+用户消息 → IntentRouter (规则分类，<5ms)
+               │
+               ├─ chat_only  → 直接 LLM 对话
+               │
+               └─ task_execute / hybrid（默认路径）
+                               │
+                               ▼
+                    ExecutionPlanner（策略选择）
+                               │
+                    ┌──────────┴──────────┐
+                    │ 策略选择（自动）      │
+                    ├──────────────────────┤
+                    │ single_agent         │ 低复杂度默认
+                    │ team_specialized     │ 中高复杂度 / 多模型协同
+                    │ team_swarm           │ 高并发（上限 20）
+                    │ fractal              │ 极高复杂度（深度 3）
+                    └──────────────────────┘
+                               │
+                    AgentFactory（LLM 优先）
+                               │
+                    ┌──────────┴──────────┐
+                    │ LLM 动态生成（主路径） │
+                    │ 模板兜底（失败时）     │
+                    └──────────────────────┘
+                               │
+                    TwinModel（孪生指挥层）
+                               │ 自动创建孪生 Agent（默认 LOOSE）
+                               ▼
+                    Multi-LLM Router（任务类型 + 成本策略）
+                               │
+                    Agents 执行 → ExecutionResult
+                               │
+                    返回 auto_agent_id + chosen_strategy
+                         + chosen_providers + twin_id
 ```
 
-#### 自动模板选择逻辑
+#### 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| **默认执行** | 所有任务类请求优先进入执行链，保留 chat_only 仅用于纯问答 |
+| **LLM 优先生成** | AgentFactory 优先调用 LLM 动态生成 Agent；模板作为结构蓝图兜底 |
+| **模板 = 蓝图** | 模板不是静态产物，而是 LLM 生成的结构约束 |
+| **孪生指挥** | 每个主控 Agent 自动创建数字孪生（默认 LOOSE 耦合，可随时解耦/耦合） |
+| **策略护栏** | Multi-LLM Router 规则选择具有最高权威；LLM 只能微调，不可覆盖规则 |
+
+#### 策略选择逻辑
+
+| 条件 | 策略 | 说明 |
+|------|------|------|
+| swarm/批量/高并发 关键词 | `team_swarm` | 并发上限 20 |
+| 复杂度 ≥ 0.75 / 递归/分型 关键词 | `fractal` | 最大深度 3，最大子任务 20 |
+| 复杂度 ≥ 0.65 / team/并行 关键词 | `team_specialized` | 异构 Agent Team |
+| 默认 | `single_agent` | 单 LLM 驱动 Agent |
+
+#### 自动模板选择逻辑（兜底）
 
 | 关键词（中英文） | 选中模板 |
 |-----------------|---------|
@@ -79,36 +116,50 @@ OpenClawd 现在能够**自动理解任务意图并创建合适的 Agent 执行�
   "data": {
     "auto_agent_id": "agent_abc123456",
     "auto_agent_template": "data_analyst",
+    "chosen_strategy": "single_agent",
+    "chosen_providers": ["deepseek:deepseek-chat"],
+    "twin_id": "twin_xyz789",
+    "twin_coupling": "loose",
     "task_result": { ... }
   }
 }
 ```
 
-> ⚠️ 这些字段是**可选的** — 纯聊天消息（不触发 Agent 路径）不包含这些字段，保持向后兼容。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `auto_agent_id` | string? | 自动创建的主控 Agent ID |
+| `auto_agent_template` | string? | 使用的模板蓝图名（LLM 生成时为 null） |
+| `chosen_strategy` | string? | 执行策略：single_agent / team_specialized / team_swarm / fractal |
+| `chosen_providers` | string[]? | 本次执行使用的 LLM provider:model 列表 |
+| `twin_id` | string? | 孪生 Agent ID |
+| `twin_coupling` | string? | 孪生耦合模式：tight / loose / decoupled / shadow |
+
+> ⚠️ 所有字段均为**可选的** — 纯聊天消息不包含这些字段，向后兼容。
 
 #### Dashboard UI 展示
 
-在 **🧪 测试** 标签页的「简单对话测试」中，当系统自动为任务创建了 Agent，对话回复上方会显示一个紫色标签栏，展示：
+在 **🧪 测试** 标签页的「简单对话测试」中，当系统自动为任务创建了 Agent，对话回复上方会显示两个标签栏：
 
-- 🤖 **自动创建 Agent**（标题）
-- Agent 模板名称（如 `data_analyst`）
-- Agent ID（短 ID）
+1. **紫色标签栏**（`auto_agent_template` 存在时）：
+   ```
+   ┌─────────────────────────────────────────┐
+   │ 🤖 自动创建 Agent  [data_analyst]  agent_abc123  │
+   └─────────────────────────────────────────┘
+   ```
 
-示例：
-
-```
-┌─────────────────────────────────────────┐
-│ 🤖 自动创建 Agent  [data_analyst]  agent_abc123  │
-├─────────────────────────────────────────┤
-│ 分析结果：数据显示增长趋势明显...               │
-└─────────────────────────────────────────┘
-```
+2. **绿色标签栏**（`chosen_strategy` 存在时）：
+   ```
+   ┌───────────────────────────────────────────────────┐
+   │ ⚡ 执行策略  [fractal]  deepseek:deepseek-chat  🔗 twin:loose  │
+   └───────────────────────────────────────────────────┘
+   ```
 
 #### 注意事项
 
 - 仅在 `AGENT_FACTORY_AVAILABLE` 为 `True` 时才会触发自动 Agent 路径。
 - 意图路由使用**规则引擎**（`use_llm=False`），延迟极低（<5ms）。
 - 如果 Agent 执行失败，系统会自动降级到直接 LLM 对话。
+- Swarm 并发上限：**20**；Fractal 最大递归深度：**3**（硬编码）。
 
 
 

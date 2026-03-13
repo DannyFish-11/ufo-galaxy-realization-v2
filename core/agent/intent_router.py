@@ -175,7 +175,17 @@ def _classify_by_rules(message: str) -> IntentResult:
             method="rules",
         )
 
-    # 无明确信号 → 聊天
+    # 无明确信号 → 对于较长的消息（>= 10 字符）默认进入任务执行链，
+    # 对于极短的模糊消息保持聊天模式。
+    # 设计原则：默认执行（task_execute），仅纯问答/闲聊保留 chat_only。
+    if len(msg) >= 10:
+        return IntentResult(
+            mode=IntentMode.TASK_EXECUTE,
+            confidence=0.55,
+            task_hint="",
+            raw_intent="task_execute",
+            method="rules",
+        )
     return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.7, method="rules")
 
 
