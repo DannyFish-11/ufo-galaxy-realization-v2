@@ -3,3 +3,4 @@ rag_memory/
 *.jsonl
 *.db
 *.sqlite
+*.json
