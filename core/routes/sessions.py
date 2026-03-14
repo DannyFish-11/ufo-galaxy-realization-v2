@@ -9,11 +9,13 @@ Routes:
   POST   /api/v1/sessions/{id}/join    - 设备加入会话
   GET    /api/v1/sessions/{id}/history - 获取会话历史
   POST   /api/v1/sessions/{id}/sync   - 同步会话到设备
+  POST   /api/v1/sessions/migrate      - 跨设备会话迁移 (Phase 4)
 """
 
 import asyncio
 import logging
-from typing import Optional
+import time
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -147,6 +149,136 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "success": sent,
             "message": f"已同步 {len(history)} 条消息到设备 {req.device_id}" if sent
                        else f"设备 {req.device_id} 不在线",
+        })
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Phase 4: Cross-device session migration
+    # ──────────────────────────────────────────────────────────────────────
+
+    @router.post("/api/v1/sessions/migrate")
+    async def migrate_session(req: dict):
+        """Migrate a session from one device to another.
+
+        Accepts a JSON body matching :class:`SessionMigrateSchema`:
+
+        .. code-block:: json
+
+            {
+                "session_id": "session_abc",
+                "source_device": "phone_01",
+                "target_device": "desktop_02",
+                "context": {}
+            }
+
+        The endpoint:
+          1. Validates the session exists on *source_device*.
+          2. Merges the supplied *context* overrides into the session context.
+          3. Moves the session's *active_device* to *target_device*.
+          4. Notifies both devices via WebSocket.
+          5. Emits a migration audit event.
+        """
+        from core.schemas.session import SessionMigrateSchema
+
+        try:
+            migrate_req = SessionMigrateSchema(**req)
+        except Exception as exc:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": f"Invalid request: {exc}"},
+            )
+
+        session_id = migrate_req.session_id
+        source_device = migrate_req.source_device
+        target_device = migrate_req.target_device
+        context_override = migrate_req.context
+
+        session = sm.get_session(session_id)
+        if session is None:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"Session '{session_id}' not found"},
+            )
+
+        if source_device and source_device not in session.devices:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "success": False,
+                    "error": (
+                        f"Device '{source_device}' is not part of session '{session_id}'. "
+                        f"Known devices: {session.devices}"
+                    ),
+                },
+            )
+
+        # Merge context overrides into session context
+        if context_override:
+            if not hasattr(session, "context") or session.context is None:
+                session.context = {}
+            session.context.update(context_override)
+
+        # Add target device and set as active
+        if target_device not in session.devices:
+            session.devices.append(target_device)
+        session.active_device = target_device
+        session.updated_at = time.time()
+
+        # Persist
+        try:
+            sm._persist_state()
+        except Exception:
+            pass
+
+        # Notify source device
+        history = sm.get_full_history(session_id)
+        await connection_manager.send_to_device(source_device, {
+            "type": "session_migrated",
+            "session_id": session_id,
+            "target_device": target_device,
+        })
+
+        # Push full session context to target device
+        await connection_manager.send_to_device(target_device, {
+            "type": "session_sync",
+            "session_id": session_id,
+            "history": history,
+            "context": getattr(session, "context", {}),
+            "migrated_from": source_device,
+        })
+
+        # Emit audit event (best-effort)
+        try:
+            from core.control_plane._globals import get_audit_ledger
+            from core.control_plane.audit_ledger import EventType, Severity
+            ledger = get_audit_ledger()
+            ledger.append(
+                event_type=EventType.DEVICE_REGISTERED,
+                severity=Severity.INFO,
+                source="sessions_migrate",
+                session_id=session_id,
+                device_id=target_device,
+                message=f"Session migrated: {source_device} → {target_device}",
+                payload={
+                    "session_id": session_id,
+                    "source_device": source_device,
+                    "target_device": target_device,
+                    "context_keys_merged": list(context_override.keys()),
+                },
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            "Session %s migrated from %s to %s",
+            session_id, source_device, target_device,
+        )
+        return JSONResponse({
+            "success": True,
+            "session_id": session_id,
+            "source_device": source_device,
+            "target_device": target_device,
+            "active_device": session.active_device,
+            "message": f"Session successfully migrated to {target_device}",
         })
 
     return router

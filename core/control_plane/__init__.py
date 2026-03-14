@@ -2,7 +2,7 @@
 Galaxy Control Plane package.
 
 Provides the core scheduling, security, and audit infrastructure for the
-Galaxy Control Plane (Supreme Directive V5.2 – Phase 1).
+Galaxy Control Plane (Supreme Directive V5.2 – Phase 1-4).
 
 Public API
 ----------
@@ -12,6 +12,8 @@ smart_scheduler
     Heuristic device scoring and selection engine.
 security_interceptor
     Async HITL approval gate with per-task ACK tokens.
+swarm_scaler
+    Dynamic worker scaler for Swarm-mode Agent teams (Phase 4).
 """
 
 from core.control_plane.audit_ledger import (
@@ -42,6 +44,11 @@ from core.control_plane.security_interceptor import (
     ApprovalTimeoutError,
     RiskLevel,
     SecurityInterceptor,
+)
+from core.control_plane.swarm_scaler import (
+    ScalingAction,
+    ScalingPolicy,
+    SwarmScaler,
 )
 from core.control_plane._globals import (
     get_audit_ledger,
@@ -78,6 +85,10 @@ __all__ = [
     "ApprovalTimeoutError",
     "RiskLevel",
     "SecurityInterceptor",
+    # swarm_scaler (Phase 4)
+    "ScalingAction",
+    "ScalingPolicy",
+    "SwarmScaler",
     # _globals
     "get_audit_ledger",
     "get_approval_registry",
