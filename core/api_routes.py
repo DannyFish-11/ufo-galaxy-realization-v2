@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from core.unified_response import UnifiedChatResponse
 
@@ -61,6 +61,9 @@ from core.routes._shared import (
     task_queue,
     node_status_cache,
     command_results,
+    broadcast_event,
+    _sse_queues,
+    _sse_queues_lock,
 )
 from core.routes._models import (
     DeviceRegisterRequest,
@@ -146,6 +149,76 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(github_routes.create_router(service_manager=service_manager, config=config))
     if opencode_routes:
         router.include_router(opencode_routes.create_router(service_manager=service_manager, config=config))
+
+    # -----------------------------------------------------------------------
+    # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream
+    # -----------------------------------------------------------------------
+    # Clients that cannot use WebSocket (e.g. HTTP-only proxies, simple JS
+    # EventSource) can subscribe here.  The server pushes the same payloads
+    # that broadcast_event() emits to WebSocket /ws/status subscribers.
+    #
+    # Graceful degradation: if the event loop is unavailable or the client
+    # disconnects, the generator exits cleanly without raising.
+    # -----------------------------------------------------------------------
+
+    # Keep-alive interval (seconds) — also used by StatusPoller in windows_client.
+    # Both must stay in sync; see windows_client/main.py StatusPoller.run().
+    _SSE_KEEPALIVE_SECS = 30.0
+
+    @router.get("/api/v1/stream")
+    async def sse_stream(request: Request):
+        """SSE 实时事件流 — 推送 capability_update / device_update / agent_update / mcp_update / skill_update。
+
+        客户端用法 (JavaScript EventSource)::
+
+            const es = new EventSource('/api/v1/stream');
+            es.onmessage = (e) => {
+              const event = JSON.parse(e.data);
+              console.log(event.type, event.data);
+            };
+
+        每 30 秒发送一次 keep-alive 注释，防止连接超时。
+        """
+        queue: asyncio.Queue = asyncio.Queue(maxsize=128)
+
+        async def _register():
+            async with _sse_queues_lock:
+                _sse_queues.add(queue)
+
+        async def _unregister():
+            async with _sse_queues_lock:
+                _sse_queues.discard(queue)
+
+        async def event_generator():
+            await _register()
+            try:
+                # Send a welcome event immediately so the client knows it's connected
+                welcome = json.dumps({"type": "connected", "message": "Galaxy SSE stream connected", "timestamp": datetime.now().isoformat()})
+                yield f"data: {welcome}\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        payload = await asyncio.wait_for(queue.get(), timeout=_SSE_KEEPALIVE_SECS)
+                        yield f"data: {json.dumps(payload)}\n\n"
+                    except asyncio.TimeoutError:
+                        # Send keep-alive comment
+                        yield ": heartbeat\n\n"
+                    except asyncio.CancelledError:
+                        break
+            finally:
+                await _unregister()
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
     @router.get("/api/config")
     async def get_frontend_config(request: Request = None):
         """

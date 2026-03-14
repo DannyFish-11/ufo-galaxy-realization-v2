@@ -259,6 +259,22 @@ class MCPLoader:
             )
         except Exception:
             pass
+
+        # PR4: 推送 mcp_update + capability_update 到 /ws/status 和 /api/v1/stream 订阅者
+        try:
+            from core.routes._shared import broadcast_event
+            import asyncio as _aio
+            loop = None
+            try:
+                loop = _aio.get_running_loop()
+            except RuntimeError:
+                pass
+            _payload = {"server_id": server_id, "event": event}
+            if loop and loop.is_running():
+                loop.create_task(broadcast_event("mcp_update", _payload))
+                loop.create_task(broadcast_event("capability_update", {"source": "mcp_loader", **_payload}))
+        except Exception:
+            pass
     
     # ========================================================================
     # 加载/卸载

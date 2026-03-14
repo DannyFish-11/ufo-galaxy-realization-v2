@@ -228,18 +228,27 @@ export class GalaxyAPI {
   }
 
   // ===========================================================================
-  // WebSocket
+  // WebSocket & SSE 实时状态订阅 (PR4)
   // ===========================================================================
 
   /**
-   * 连接 WebSocket
+   * 连接 WebSocket（实时状态频道 /ws/status）
+   *
+   * 服务端通过此端点推送：
+   *   capability_update, device_update, agent_update, mcp_update, skill_update
+   *   以及原有的 device_connected / device_status_update 等事件。
+   *
+   * 如果 WebSocket 不可用（网络/代理限制），可改用 {@link connectSSE}。
    */
   connectWebSocket(onMessage: (data: WSMessage) => void): void {
     const wsUrl = this.baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-    this.ws = new WebSocket(`${wsUrl}/ws`);
+    // 连接到统一状态频道 /ws/status（推送 capability_update / device_update 等实时事件）
+    this.ws = new WebSocket(`${wsUrl}/ws/status`);
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('[Galaxy] WebSocket connected to /ws/status');
+      // Send ping to confirm channel is alive
+      this.sendWSMessage({ type: 'ping' });
     };
 
     this.ws.onmessage = (event) => {
@@ -247,19 +256,81 @@ export class GalaxyAPI {
         const data = JSON.parse(event.data) as WSMessage;
         onMessage(data);
       } catch (e) {
-        console.error('Failed to parse WebSocket message:', e);
+        console.error('[Galaxy] Failed to parse WebSocket message:', e);
       }
     };
 
     this.ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      // 自动重连
+      console.log('[Galaxy] WebSocket disconnected, retrying in 5s…');
+      // 自动重连（优雅降级）
       setTimeout(() => this.connectWebSocket(onMessage), 5000);
     };
 
     this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error('[Galaxy] WebSocket error:', error);
     };
+  }
+
+  /**
+   * 通过 SSE 订阅实时事件（WebSocket 不可用时的降级方案）
+   *
+   * 服务端端点：GET /api/v1/stream
+   * 推送：capability_update, device_update, agent_update, mcp_update, skill_update
+   *
+   * @param onMessage - 每次收到事件时的回调（与 connectWebSocket 使用相同的 WSMessage 类型）
+   * @returns 关闭函数 —— 调用后断开 SSE 连接
+   */
+  connectSSE(onMessage: (data: WSMessage) => void): () => void {
+    const url = `${this.baseUrl}/api/v1/stream`;
+    let es: EventSource;
+    let closed = false;
+
+    const connect = () => {
+      if (closed) return;
+      es = new EventSource(url);
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as WSMessage;
+          onMessage(data);
+        } catch (e) {
+          console.error('[Galaxy] Failed to parse SSE message:', e);
+        }
+      };
+
+      es.onerror = () => {
+        if (!closed) {
+          es.close();
+          // Retry after 5 seconds on error (consistent with WebSocket reconnect delay)
+          setTimeout(connect, 5_000);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (es) es.close();
+    };
+  }
+
+  /**
+   * 订阅实时状态更新（自动选择 WebSocket 或 SSE）
+   *
+   * 优先尝试 WebSocket（/ws/status）；若浏览器不支持 WebSocket（极少见），
+   * 则降级到 SSE（/api/v1/stream）。
+   *
+   * @param onMessage - 实时事件回调
+   * @returns 取消订阅函数
+   */
+  subscribeUpdates(onMessage: (data: WSMessage) => void): () => void {
+    if (typeof WebSocket !== 'undefined') {
+      this.connectWebSocket(onMessage);
+      return () => this.disconnectWebSocket();
+    }
+    // Fallback: SSE
+    return this.connectSSE(onMessage);
   }
 
   /**
