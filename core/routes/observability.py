@@ -1,12 +1,13 @@
 """
-Galaxy - Observability Routes (PR-C)
-=====================================
+Galaxy - Observability Routes (PR-C / Phase E)
+===============================================
 
 Dashboard 可观测性端点，提供：
   - 活跃模型路由及 Fallback 状态
   - 网关 / 设备在线状态
   - 近期工具 / 设备调用记录
   - 按 task_id 或 command_id 查询 trace
+  - NATS Bus 健康与统计 (Phase E)
 
 Routes:
   GET /api/v1/observability/model-route        - 活跃 LLM 路由 + Fallback 列表
@@ -14,9 +15,13 @@ Routes:
   GET /api/v1/observability/recent-calls       - 近期工具 / 设备调用（最多 50 条）
   GET /api/v1/observability/trace/{id}         - 按 task_id 或 command_id 查 trace
   GET /api/v1/observability/stats              - trace 存储统计
+  GET /health/nats                             - NATS bus 连接状态与统计 (Phase E)
+  GET /api/v1/observability/nats               - NATS bus + MasterBrain 拓扑 (Phase E)
+  GET /api/v1/observability/bus-events         - 最近 NATS 总线事件 (Phase E)
 """
 
 import logging
+import os
 import time as _time
 from typing import Optional
 
@@ -230,5 +235,99 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:
             logger.warning("observability/stats error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    # ── Phase E: NATS Bus health ──────────────────────────────────────────
+
+    @router.get("/health/nats")
+    async def nats_health():
+        """NATS control-plane health — bus stats, connection status, subscriptions.
+
+        Returns::
+
+            {
+              "status": "connected" | "disconnected" | "noop",
+              "noop_mode": bool,
+              "bus": { "connected": bool, "published": int, ... },
+              "master_brain": { "started": bool, "workers": int, ... } | null
+            }
+        """
+        try:
+            from core.nats_bus import nats_bus
+            bus_stats = nats_bus.get_stats()
+        except Exception as exc:
+            bus_stats = {"error": str(exc)}
+
+        brain_status = None
+        try:
+            if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+                from core.master_brain import get_master_brain
+                brain = get_master_brain()
+                if brain is not None:
+                    brain_status = brain.get_status()
+        except Exception:
+            pass
+
+        connected = bus_stats.get("connected", False)
+        noop = bus_stats.get("noop_mode", True)
+        status = "noop" if noop else ("connected" if connected else "disconnected")
+        return JSONResponse({
+            "status": status,
+            "noop_mode": noop,
+            "bus": bus_stats,
+            "master_brain": brain_status,
+        })
+
+    @router.get("/api/v1/observability/nats")
+    async def nats_observability():
+        """NATS Bus + MasterBrain topology and statistics (Phase E).
+
+        Returns bus stats, worker topology, recent events, and NATSExecutor stats.
+        """
+        result: dict = {}
+
+        try:
+            from core.nats_bus import nats_bus
+            result["bus"] = nats_bus.get_stats()
+        except Exception as exc:
+            result["bus"] = {"error": str(exc)}
+
+        try:
+            if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+                from core.master_brain import get_master_brain
+                brain = get_master_brain()
+                if brain is not None:
+                    result["topology"] = brain.get_worker_topology()
+                    result["master_brain"] = brain.get_status()
+        except Exception as exc:
+            result["topology"] = {"error": str(exc)}
+
+        try:
+            from core.command_router import get_nats_executor
+            nats_exec = get_nats_executor()
+            result["nats_executor"] = nats_exec.get_stats()
+        except Exception as exc:
+            result["nats_executor"] = {"error": str(exc)}
+
+        return JSONResponse(result)
+
+    @router.get("/api/v1/observability/bus-events")
+    async def bus_events(limit: int = Query(default=50, le=200)):
+        """Recent NATS bus events from the EventBus (Phase E).
+
+        Returns the last *limit* events related to NATS connectivity and workers.
+        """
+        try:
+            from integration.event_bus import event_bus
+            # event_bus.recent_events() if it exists, otherwise fall back to stats
+            if hasattr(event_bus, "recent_events"):
+                events = event_bus.recent_events(limit=limit)
+            elif hasattr(event_bus, "get_stats"):
+                events = event_bus.get_stats()
+            else:
+                events = {}
+            return JSONResponse({"events": events})
+        except Exception as exc:
+            logger.warning("bus-events error: %s", exc)
+            return JSONResponse({"error": str(exc), "events": []}, status_code=500)
 
     return router

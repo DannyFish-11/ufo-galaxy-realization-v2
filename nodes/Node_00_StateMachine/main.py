@@ -227,10 +227,24 @@ async def lifespan(app: FastAPI):
     ))
     
     logger.info(f"Node {NODE_ID} ({NODE_NAME}) is ready")
+
+    # ── Phase C: NATS heartbeat ──
+    _hb_task = None
+    try:
+        from core.nats_heartbeat import start_node_heartbeat
+        _hb_task = await start_node_heartbeat(
+            worker_id=f"node-{NODE_ID}-statemachine",
+            device_type="statemachine",
+            capabilities=["state_management", "lock_management", "node_registry"],
+        )
+    except Exception as _e:
+        logger.debug(f"NATS heartbeat not started (non-fatal): {_e}")
     
     yield
     
     logger.info(f"Shutting down Node {NODE_ID}")
+    if _hb_task and not _hb_task.done():
+        _hb_task.cancel()
     if redis_client:
         await redis_client.close()
 
