@@ -50,6 +50,7 @@ task_orchestrator: Optional[TaskOrchestrator] = None
 openclawd_instance: Optional[Any] = None  # Phase 3: OpenClawd 统一智能入口
 llm_router_instance: Optional[Any] = None  # Phase 6: LLM 路由器（用于统计）
 nats_adapter: Optional[Any] = None  # Phase B: NATS ↔ WebSocket bridge
+heartbeat_scheduler: Optional[Any] = None  # OpenClawd agent-level heartbeat loop
 
 
 # ============================================================================
@@ -135,7 +136,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    global device_manager, message_handler, websocket_manager, task_orchestrator, nats_adapter
+    global device_manager, message_handler, websocket_manager, task_orchestrator, nats_adapter, heartbeat_scheduler
     
     # 启动时初始化
     logger.info("Initializing Galaxy Gateway...")
@@ -180,6 +181,16 @@ async def lifespan(app: FastAPI):
         logger.info("OpenClawd 已初始化")
     except Exception as e:
         logger.warning(f"OpenClawd 不可用，智能聊天端点将降级: {e}")
+
+    # ── Agent-level Heartbeat Scheduler (OpenClaw 3.x style) ──
+    if openclawd_instance is not None:
+        try:
+            from core.openclawd_heartbeat import get_heartbeat_scheduler
+            heartbeat_scheduler = get_heartbeat_scheduler(openclawd=openclawd_instance)
+            if heartbeat_scheduler is not None:
+                await heartbeat_scheduler.start()
+        except Exception as e:
+            logger.warning(f"OpenClawd heartbeat scheduler not started (non-fatal): {e}")
 
     # ── Phase 6: 获取 LLM 路由器引用（用于统计）──
     try:
@@ -242,6 +253,11 @@ async def lifespan(app: FastAPI):
     
     # 关闭时清理
     logger.info("Shutting down Galaxy Gateway...")
+    if heartbeat_scheduler is not None:
+        try:
+            await heartbeat_scheduler.stop()
+        except Exception:
+            pass
     if nats_adapter:
         try:
             await nats_adapter.stop()

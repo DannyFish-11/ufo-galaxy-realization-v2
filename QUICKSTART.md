@@ -290,4 +290,89 @@ python system_manager.py status
 
 ---
 
+## 🤖 OpenClawd Agent 心跳调度器
+
+OpenClawd 内置 **自主心跳调度器（OpenClaw 3.x 风格）**，让智能体每隔固定时间自动"唤醒"并执行维护任务。
+
+### 配置方式
+
+心跳配置分两部分：
+
+#### 1. `config/agent.yaml` — 系统配置
+
+```yaml
+agent:
+  name: core_agent
+
+heartbeat:
+  enabled: true          # 是否启用（可通过 .env 覆盖）
+  interval: 30m          # 触发间隔（s/m/h，默认 30 分钟）
+  task_file: agent/HEARTBEAT.md   # 任务清单文件
+  ack_token: HEARTBEAT_OK         # 无任务时的 ACK 令牌
+  max_output_chars: 160           # ACK 判定最大长度
+  tier1_model: local_small        # 默认轻量模型（节省 token）
+  tier2_model: gpt-4o             # 复杂任务升级模型
+  tier2_trigger:
+    - "complex_reasoning"
+    - "multi_step_plan"
+    - "code_generation"
+```
+
+#### 2. `.env` — 仅存放密钥，不做系统配置
+
+```dotenv
+# 可选：在运行时覆盖 agent.yaml 中的设置
+# HEARTBEAT_ENABLED=true
+# HEARTBEAT_INTERVAL=30m
+```
+
+### 任务清单 `agent/HEARTBEAT.md`
+
+心跳触发时，智能体读取 `agent/HEARTBEAT.md` 并逐项执行：
+
+```markdown
+# Heartbeat Tasks
+
+## system check
+- check device status
+- check pending tasks
+- update memory if needed
+
+## scheduled jobs
+- every 30m: check notifications
+- every 2h: check device health
+
+## autonomous tasks
+- optimize skills if possible
+- summarize logs
+```
+
+### ACK 抑制机制
+
+当智能体没有任何任务要执行时，它返回 `HEARTBEAT_OK`（短文本）。
+心跳调度器检测到 ACK 后，**只写日志，不向用户输出**，避免垃圾消息。
+
+### 分级模型路由
+
+| 场景 | 模型 |
+|------|------|
+| 普通维护任务 | `tier1_model`（轻量/廉价） |
+| 包含 `complex_reasoning` / `code_generation` 等关键词 | `tier2_model`（强模型） |
+
+### 禁用心跳
+
+```yaml
+# config/agent.yaml
+heartbeat:
+  enabled: false
+```
+
+或在 `.env` 中设置：
+
+```dotenv
+HEARTBEAT_ENABLED=false
+```
+
+---
+
 **现在你可以从手机控制所有设备了！** 🎉

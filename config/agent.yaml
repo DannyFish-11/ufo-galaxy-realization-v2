@@ -1,0 +1,15 @@
+agent:
+  name: core_agent
+
+heartbeat:
+  enabled: true
+  interval: 30m
+  task_file: agent/HEARTBEAT.md
+  ack_token: HEARTBEAT_OK
+  max_output_chars: 160
+  tier1_model: local_small
+  tier2_model: gpt-4o
+  tier2_trigger:
+    - "complex_reasoning"
+    - "multi_step_plan"
+    - "code_generation"
