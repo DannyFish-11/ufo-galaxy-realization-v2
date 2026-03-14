@@ -45,63 +45,25 @@ logger = logging.getLogger("Galaxy")
 
 
 # ============================================================================
-# 终端颜色和打印工具
+# 终端颜色和打印工具 — 从 core/ascii_art 导入规范实现
 # ============================================================================
 
-class Colors:
-    """终端颜色"""
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-
-
-def print_banner():
-    """打印启动横幅"""
-    banner = f"""
-{Colors.CYAN}{Colors.BOLD}
-    ╔══════════════════════════════════════════════════════════╗
-    ║                                                          ║
-    ║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║
-    ║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║
-    ║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║
-    ║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║
-    ║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║
-    ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║
-    ║                                                          ║
-    ║           L4 级自主性智能系统 v2.0                       ║
-    ║                统一融合版                                ║
-    ║                                                          ║
-    ╚══════════════════════════════════════════════════════════╝
-{Colors.ENDC}
-    """
-    print(banner)
+from core.ascii_art import (
+    Colors,
+    print_banner,
+    print_section_header,
+    print_status_row,
+)
 
 
 def print_status(message: str, status: str = "info"):
-    """打印状态信息"""
-    icons = {
-        "info": f"{Colors.BLUE}ℹ️ ",
-        "success": f"{Colors.GREEN}✅",
-        "warning": f"{Colors.YELLOW}⚠️ ",
-        "error": f"{Colors.RED}❌",
-        "loading": f"{Colors.CYAN}⏳",
-        "step": f"{Colors.CYAN}▶ ",
-    }
-    icon = icons.get(status, icons["info"])
-    print(f"{icon} {message}{Colors.ENDC}")
+    """打印状态信息（单行，无值列）。"""
+    print_status_row(message, status=status)
 
 
 def print_section(title: str):
-    """打印章节标题"""
-    print(f"\n{Colors.BOLD}{Colors.CYAN}{'═' * 60}{Colors.ENDC}")
-    print(f"{Colors.BOLD}{Colors.CYAN}  {title}{Colors.ENDC}")
-    print(f"{Colors.BOLD}{Colors.CYAN}{'═' * 60}{Colors.ENDC}\n")
+    """打印章节标题。"""
+    print_section_header(title)
 
 
 # ============================================================================
