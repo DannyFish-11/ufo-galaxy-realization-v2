@@ -59,6 +59,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def legacy_register_device(req: _LegacyRegisterRequest):
         """
         Legacy registration shim — delegates to /api/v1/devices/register logic.
+
+        PR5: Also writes through to UnifiedDeviceManager (UDM) as SSOT so that
+        legacy Android clients that call this endpoint are reflected in the
+        unified device registry.
         """
         logger.info(
             "Legacy /api/devices/register called for device %s", req.device_id
@@ -74,9 +78,33 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "last_seen": datetime.now().isoformat(),
             "status": "registered",
         }
+
+        # PR5: SSOT write-through — legacy endpoint now delegates to UDM
+        try:
+            from galaxy_gateway.ssot import udm_write_register
+            ok = udm_write_register(
+                device_id=req.device_id,
+                device_name=device_info["device_name"],
+                device_type_raw=req.device_type,
+                capabilities=req.capabilities,
+                metadata={"os_version": req.os_version, "app_version": req.app_version},
+                source="compat_legacy",
+            )
+            if ok:
+                logger.info(
+                    "Legacy 设备已写入 UDM (SSOT): %s (%s)", req.device_id, req.device_type,
+                )
+            else:
+                logger.warning(
+                    "Legacy 设备 UDM 写入失败（注册继续）: %s", req.device_id
+                )
+        except Exception as _udm_err:
+            logger.debug("Legacy UDM write-through 异常（不影响注册）: %s", _udm_err)
+
         registered_devices[req.device_id] = device_info
 
         # 同步设备能力到 CapabilityRegistry，与 /api/v1/devices/register 保持一致
+        synced_caps = 0
         try:
             from core.routes.devices import _sync_device_to_capability_registry
             synced_caps = _sync_device_to_capability_registry(device_info)
@@ -87,6 +115,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 )
         except Exception as _sync_err:
             logger.debug("Legacy 设备能力同步失败（不影响注册）: %s", _sync_err)
+
+        # PR4: 广播实时事件（与 /api/v1/devices/register 保持一致）
+        try:
+            from core.routes._shared import broadcast_event
+            await broadcast_event("device_update", {
+                "action": "register",
+                "device_id": req.device_id,
+                "device_name": device_info["device_name"],
+                "device_type": req.device_type,
+                "capabilities": req.capabilities,
+                "source": "legacy",
+            })
+            if synced_caps:
+                await broadcast_event("capability_update", {
+                    "source": "compat_legacy",
+                    "device_id": req.device_id,
+                    "synced_count": synced_caps,
+                })
+        except Exception as _bc_err:
+            logger.debug("Legacy 设备注册广播事件失败: %s", _bc_err)
 
         return JSONResponse({
             "success": True,
@@ -114,6 +162,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def legacy_device_heartbeat(req: _LegacyHeartbeatRequest):
         """
         Legacy heartbeat shim — maps to /api/v1/devices/status update.
+
+        PR5: Also propagates heartbeat to UDM to keep unified registry in sync.
         """
         logger.info(
             "Legacy /api/devices/heartbeat called for device %s", req.device_id
@@ -128,6 +178,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "status": req.status,
                 "timestamp": datetime.now().isoformat(),
             })
+
+        # PR5: UDM heartbeat write-through (best-effort)
+        try:
+            from galaxy_gateway.ssot import udm_write_heartbeat
+            udm_write_heartbeat(req.device_id)
+        except Exception as _udm_err:
+            logger.debug("Legacy UDM heartbeat write-through 失败（不影响响应）: %s", _udm_err)
+
         return JSONResponse({"success": True, "device_id": req.device_id})
 
     @router.post("/api/devices/unregister")

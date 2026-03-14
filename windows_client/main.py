@@ -154,6 +154,125 @@ GALAXY_API_BASE = (
 DASHBOARD_API_BASE = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
 
 
+# =============================================================================
+# PR4: 实时状态轮询线程（StatusPoller）
+# =============================================================================
+# Windows UI 通过 SSE 或定时 HTTP 轮询订阅实时状态更新。
+# 优先尝试 SSE（/api/v1/stream），若不可用则回退到定时 REST 轮询。
+# =============================================================================
+
+class StatusPoller(threading.Thread):
+    """后台线程：订阅 Galaxy 服务端实时状态更新。
+
+    优先使用 SSE（/api/v1/stream）长连接；若 SSE 不可用（网络问题、
+    服务端版本不支持），则每隔 ``poll_interval`` 秒轮询
+    ``/api/v1/system/status`` 和 ``/api/v1/devices``。
+
+    收到事件后通过 ``on_event`` 回调通知 UI 层（在调用线程中执行，
+    UI 层应安排到主线程更新控件）。
+
+    优雅降级策略：
+    - SSE 连接失败 → 自动切换到轮询模式，10 秒后重试 SSE
+    - 轮询端点不可达 → 安静等待，不抛出异常
+    - 停止：调用 ``stop()`` 后线程退出
+    """
+
+    def __init__(
+        self,
+        api_base: str,
+        on_event: "Optional[Any]" = None,
+        poll_interval: float = 30.0,
+    ):
+        super().__init__(name="GalaxyStatusPoller", daemon=True)
+        self._api_base = api_base.rstrip("/")
+        self._on_event = on_event  # callable(event_type: str, data: dict)
+        self._poll_interval = poll_interval
+        self._stop_event = threading.Event()
+
+    def stop(self) -> None:
+        """请求线程停止（最多等待一个轮询周期后退出）。"""
+        self._stop_event.set()
+
+    def _notify(self, event_type: str, data: dict) -> None:
+        if callable(self._on_event):
+            try:
+                self._on_event(event_type, data)
+            except Exception as exc:
+                logger.debug("StatusPoller on_event callback error: %s", exc)
+
+    def _try_sse(self) -> bool:
+        """尝试通过 SSE 消费事件流，返回 True 表示正常退出（stop 被调用），
+        返回 False 表示连接失败/断开（应切换到轮询模式）。"""
+        import urllib.request
+        url = f"{self._api_base}/api/v1/stream"
+        try:
+            req = urllib.request.Request(url, headers={"Accept": "text/event-stream"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                logger.info("StatusPoller: SSE 已连接 (%s)", url)
+                buf = ""
+                while not self._stop_event.is_set():
+                    chunk = resp.read(256)
+                    if not chunk:
+                        break
+                    buf += chunk.decode("utf-8", errors="replace")
+                    while "\n\n" in buf:
+                        block, buf = buf.split("\n\n", 1)
+                        for line in block.splitlines():
+                            if line.startswith("data:"):
+                                raw = line[5:].strip()
+                                if raw:
+                                    try:
+                                        payload = json.loads(raw)
+                                        self._notify(
+                                            payload.get("type", "unknown"),
+                                            payload.get("data", payload),
+                                        )
+                                    except Exception:
+                                        pass
+            return self._stop_event.is_set()
+        except Exception as exc:
+            logger.debug("StatusPoller: SSE 连接失败 (%s) — %s", url, exc)
+            return False
+
+    def _poll_once(self) -> None:
+        """执行一次 REST 轮询：获取系统状态和设备列表，通知 UI。"""
+        for endpoint, event_type in [
+            ("/api/v1/system/status", "agent_update"),
+            ("/api/v1/devices", "device_update"),
+        ]:
+            if self._stop_event.is_set():
+                return
+            try:
+                url = f"{self._api_base}{endpoint}"
+                req = urllib.request.Request(url)
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    self._notify(event_type, data)
+            except Exception as exc:
+                logger.debug("StatusPoller: REST 轮询失败 (%s) — %s", endpoint, exc)
+
+    def run(self) -> None:
+        logger.info("StatusPoller: 启动（api_base=%s）", self._api_base)
+        sse_retry_after = 0.0  # 秒级时间戳：下次尝试 SSE 的时间
+        import time as _time
+        while not self._stop_event.is_set():
+            now = _time.monotonic()
+            if now >= sse_retry_after:
+                # 尝试 SSE 长连接
+                stopped = self._try_sse()
+                if stopped:
+                    break
+                # SSE 失败 → 稍后重试，期间使用轮询
+                sse_retry_after = _time.monotonic() + 60.0
+                logger.debug("StatusPoller: SSE 不可用，切换到轮询模式（60s 后重试 SSE）")
+
+            # REST 轮询（SSE 不可用时的降级）
+            self._poll_once()
+            self._stop_event.wait(self._poll_interval)
+
+        logger.info("StatusPoller: 已停止")
+
+
 class CommandProcessor(QThread):
     """命令处理线程 - 支持 LLM 对话和本地操作
 
@@ -456,6 +575,14 @@ class WindowsClient:
         )
         self.hotkey_thread.start()
 
+        # PR4: 实时状态轮询（SSE 优先，降级到 REST 轮询）
+        self.status_poller = StatusPoller(
+            api_base=GALAXY_API_BASE,
+            on_event=self._on_status_event,
+            poll_interval=30.0,
+        )
+        self.status_poller.start()
+
         # 加载 .env
         self._load_env()
 
@@ -498,6 +625,34 @@ class WindowsClient:
         self.ui.chat_panel.handle_structured_response(response)
         self.ui.update_status("在线")
 
+    def _on_status_event(self, event_type: str, data: dict) -> None:
+        """PR4: 接收来自服务端的实时状态事件，更新 Windows UI。
+
+        在 StatusPoller 后台线程中调用；更新 UI 控件需转到 Qt 主线程。
+        使用 QTimer.singleShot(0, ...) 安全调度到主线程。
+        """
+        try:
+            if event_type in ("device_update", "capability_update", "mcp_update",
+                              "skill_update", "agent_update"):
+                logger.debug("StatusPoller 收到事件: type=%s", event_type)
+                # 通知 UI 刷新相关面板（UI 组件需实现 refresh_status 方法；无则忽略）
+                if QTimer is not None and hasattr(self, "ui") and self.ui is not None:
+                    try:
+                        QTimer.singleShot(0, lambda: self._apply_status_event(event_type, data))
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.debug("_on_status_event 处理失败: %s", exc)
+
+    def _apply_status_event(self, event_type: str, data: dict) -> None:
+        """在 Qt 主线程中应用实时状态事件（由 QTimer.singleShot 调度）。"""
+        try:
+            # 若 UI 组件提供了 refresh_status 方法则调用
+            if hasattr(self.ui, "refresh_status"):
+                self.ui.refresh_status(event_type, data)
+        except Exception as exc:
+            logger.debug("_apply_status_event 失败: %s", exc)
+
     def run(self):
         self.ui.show_sidebar()
         logger.info("Windows Client 启动 - 按 F12 切换侧边栏")
@@ -505,6 +660,9 @@ class WindowsClient:
     def stop(self):
         if hasattr(self, 'hotkey_thread'):
             self.hotkey_thread.stop()
+        # PR4: 停止状态轮询线程
+        if hasattr(self, 'status_poller'):
+            self.status_poller.stop()
 
 
 def main():

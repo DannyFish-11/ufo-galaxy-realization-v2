@@ -8,6 +8,18 @@ Module-level singletons shared across all route modules:
   - task_queue         (in-memory task store)
   - node_status_cache  (node health cache)
   - command_results    (unified-command result store)
+
+Real-time update channel
+------------------------
+``broadcast_event(event_type, data)`` is a fire-and-forget coroutine that
+pushes a structured JSON payload to **all** real-time subscribers:
+
+  * WebSocket clients connected to ``/ws/status``   (push via RouteConnectionPool)
+  * SSE clients connected to ``/api/v1/stream``      (enqueue via _sse_queues)
+
+Supported ``event_type`` values:
+  capability_update, device_update, agent_update, mcp_update, skill_update
+  (any other string is also accepted for forward-compatibility)
 """
 
 import asyncio
@@ -258,3 +270,54 @@ node_status_cache_lock = asyncio.Lock()
 # 统一命令结果存储
 command_results: Dict[str, Dict[str, Any]] = {}
 command_results_lock = asyncio.Lock()
+
+
+# ============================================================================
+# Real-time Event Channel (PR4)
+# ============================================================================
+# SSE subscriber queues — each connected /api/v1/stream client owns one queue.
+# broadcast_event() enqueues the payload for every active subscriber.
+_sse_queues: Set[asyncio.Queue] = set()
+_sse_queues_lock = asyncio.Lock()
+
+
+async def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
+    """Broadcast a structured real-time event to all live subscribers.
+
+    Delivery targets (best-effort, never raises):
+    1. WebSocket ``/ws/status`` subscribers via ``connection_manager.broadcast_status``.
+    2. SSE ``/api/v1/stream`` clients via ``_sse_queues``.
+
+    Args:
+        event_type: One of ``capability_update``, ``device_update``,
+                    ``agent_update``, ``mcp_update``, ``skill_update``,
+                    or any forward-compatible string.
+        data: Arbitrary JSON-serialisable payload.
+    """
+    payload: Dict[str, Any] = {
+        "type": event_type,
+        "data": data,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    # 1. Push to all /ws/status WebSocket subscribers
+    try:
+        await connection_manager.broadcast_status(payload)
+    except Exception as exc:
+        logger.debug("broadcast_event WS push failed (%s): %s", event_type, exc)
+
+    # 2. Enqueue for SSE subscribers (non-blocking)
+    if _sse_queues:
+        stale: list = []
+        async with _sse_queues_lock:
+            for q in list(_sse_queues):
+                try:
+                    q.put_nowait(payload)
+                except asyncio.QueueFull:
+                    # Subscriber is too slow — drop the event rather than block
+                    logger.debug("broadcast_event SSE queue full, dropping event for slow subscriber")
+                except Exception as exc:
+                    logger.debug("broadcast_event SSE enqueue failed: %s", exc)
+                    stale.append(q)
+            for q in stale:
+                _sse_queues.discard(q)

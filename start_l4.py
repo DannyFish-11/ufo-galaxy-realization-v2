@@ -7,6 +7,12 @@ Galaxy L4 级自主性智能系统启动脚本
     The recommended entrypoint is ``main.py`` (or ``unified_launcher.py``),
     which starts the full Galaxy system including L4 modules.
 
+    **PR6 — Frozen entrypoint**: ``start_l4.py`` no longer runs L4 logic
+    directly.  It now delegates all work to ``unified_launcher.py`` to prevent
+    divergent startup paths.  The ``GalaxyMainLoopL4`` class is still available
+    for import (it itself carries a deprecation notice), but it is no longer
+    instantiated here.
+
     Migration::
 
         # Before:
@@ -14,165 +20,69 @@ Galaxy L4 级自主性智能系统启动脚本
 
         # After (full system with L4 enabled):
         python main.py
+        # or equivalently:
+        python unified_launcher.py
 """
 
-import asyncio
 import logging
-import json
 import sys
-import os
 import warnings
 from pathlib import Path
 
 # 添加路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from galaxy_main_loop_l4 import GalaxyMainLoopL4
-try:
-    from core.ascii_art import print_banner
-except ImportError:
-    _FALLBACK_BANNER = (
-        "╔══════════════════════════════════════════════════════════╗\n"
-        "║                                                          ║\n"
-        "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║\n"
-        "║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║\n"
-        "║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║\n"
-        "║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║\n"
-        "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║\n"
-        "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║\n"
-        "║                                                          ║\n"
-        "║     L4 Autonomous Intelligence System   v2.3.21          ║\n"
-        "║                                                          ║\n"
-        "╚══════════════════════════════════════════════════════════╝"
-    )
-    def print_banner():
-        """打印启动横幅（降级为内嵌版本）。"""
-        print(f"\n{_FALLBACK_BANNER}\n")
+_dep_logger = logging.getLogger("L4Startup")
+
+# Issue the deprecation warning as early as possible so shell wrappers see it.
+warnings.warn(
+    "start_l4.py is deprecated and has been frozen (PR6). "
+    "All startup logic now runs through unified_launcher.py. "
+    "Use 'python main.py' or 'python unified_launcher.py' instead. "
+    "start_l4.py will be removed in a future release.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
 
-def load_config(config_path: str = "config/l4_config.json") -> dict:
-    """加载配置文件"""
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        logging.warning(f"配置文件 {config_path} 不存在，使用默认配置")
-        return {}
-    except json.JSONDecodeError as e:
-        logging.error(f"配置文件解析错误: {e}")
-        return {}
+def main():
+    """兼容入口 — 转发到 unified_launcher.main()。
 
-
-def setup_logging(config: dict):
-    """设置日志"""
-    log_config = config.get("logging", {})
-    
-    # 创建日志目录
-    log_file = log_config.get("file", "logs/galaxy_l4.log")
-    log_dir = os.path.dirname(log_file)
-    if log_dir:
-        os.makedirs(log_dir, exist_ok=True)
-    
-    # 配置日志
+    PR6: start_l4.py 不再直接实例化 GalaxyMainLoopL4。
+    所有启动逻辑由 unified_launcher.py 统一管理，确保只有一条启动链路。
+    """
     logging.basicConfig(
-        level=getattr(logging, log_config.get("level", "INFO")),
-        format=log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout)
-        ]
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-
-
-
-async def main():
-    """主函数"""
-    warnings.warn(
-        "start_l4.py is deprecated. Use 'python main.py' (or 'python unified_launcher.py') "
-        "as the standard entrypoint for the full Galaxy system including L4 modules. "
-        "start_l4.py will continue to work but may be removed in a future release.",
-        DeprecationWarning,
-        stacklevel=1,
-    )
-    _dep_logger = logging.getLogger("L4Startup")
     _dep_logger.warning(
-        "⚠  DEPRECATED: start_l4.py — use 'python main.py' instead. "
-        "See unified_launcher.py for the full feature set."
+        "⚠  DEPRECATED / FROZEN: start_l4.py — delegating to unified_launcher.py. "
+        "Use 'python main.py' directly to suppress this warning."
     )
 
-    # 打印横幅
-    print_banner()
-    
-    # 加载配置
-    config = load_config()
-    
-    # 设置日志
-    setup_logging(config)
-    
-    logger = logging.getLogger("L4Startup")
-    logger.info("=" * 60)
-    logger.info("启动 Galaxy L4 系统")
-    logger.info("=" * 60)
-    
-    # 显示配置
-    system_config = config.get("system", {})
-    logger.info(f"系统名称: {system_config.get('name', 'Galaxy L4')}")
-    logger.info(f"系统版本: {system_config.get('version', '4.0.0')}")
-    logger.info(f"运行模式: {system_config.get('mode', 'autonomous')}")
-    
-    # 显示启用的功能
-    logger.info("启用的 L4 功能:")
-    
-    perception_config = config.get("perception", {})
-    if perception_config.get("environment_scan_on_startup", True):
-        logger.info("  ✓ 环境扫描")
-    
-    reasoning_config = config.get("reasoning", {})
-    if reasoning_config.get("enable_goal_decomposition", True):
-        logger.info("  ✓ 目标分解")
-    if reasoning_config.get("enable_autonomous_planning", True):
-        logger.info("  ✓ 自主规划")
-    if reasoning_config.get("enable_world_model", True):
-        logger.info("  ✓ 世界模型")
-    
-    learning_config = config.get("learning", {})
-    if learning_config.get("enable_autonomous_learning", True):
-        logger.info("  ✓ 自主学习")
-    
-    metacog_config = config.get("metacognition", {})
-    if metacog_config.get("enable_self_reflection", True):
-        logger.info("  ✓ 自我反思")
-    
-    coding_config = config.get("coding", {})
-    if coding_config.get("enable_autonomous_coding", True):
-        logger.info("  ✓ 自主编程")
-    
-    # 显示支持的设备
-    devices_config = config.get("devices", {})
-    logger.info("支持的设备:")
-    for device_name, device_config in devices_config.items():
-        if device_config.get("enabled", False):
-            logger.info(f"  ✓ {device_name}")
-    
-    logger.info("=" * 60)
-    
-    # 创建主循环
-    main_loop_config = config.get("main_loop", {})
-    galaxy = GalaxyMainLoopL4(main_loop_config)
-    
-    # 启动系统
     try:
-        logger.info("启动主循环...")
-        await galaxy.start()
-    except KeyboardInterrupt:
-        logger.info("收到中断信号")
-    except Exception as e:
-        logger.error(f"致命错误: {e}", exc_info=True)
-        raise
-    finally:
-        logger.info("系统已停止")
+        from core.ascii_art import print_banner
+        print_banner()
+    except Exception:
+        pass
+
+    print()
+    print("═" * 60)
+    print("  ⚠  start_l4.py is a frozen compatibility wrapper (PR6).")
+    print("     Delegating to unified_launcher.py …")
+    print("═" * 60)
+    print()
+
+    # Delegate to unified_launcher — the single authoritative entrypoint.
+    try:
+        from unified_launcher import main as unified_main
+        unified_main()
+    except Exception as exc:
+        _dep_logger.error("unified_launcher delegation failed: %s", exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
+

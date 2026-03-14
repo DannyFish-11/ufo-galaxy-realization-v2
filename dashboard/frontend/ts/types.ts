@@ -138,9 +138,13 @@ export interface ChatResponse {
 // ============================================================================
 
 export interface WSMessage {
-  type: 'ping' | 'pong' | 'chat' | 'chat_response' | 'status_update';
+  type: 'ping' | 'pong' | 'chat' | 'chat_response' | 'status_update'
+    | 'capability_update' | 'device_update' | 'agent_update' | 'mcp_update' | 'skill_update'
+    | 'connected' | 'device_connected' | 'device_disconnected' | 'device_status_update'
+    | 'initial_status' | string;
   content?: string;
   data?: any;
+  timestamp?: string;
 }
 
 // ============================================================================

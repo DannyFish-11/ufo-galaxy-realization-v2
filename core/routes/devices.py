@@ -33,7 +33,7 @@ from core.routes._shared import (
     registered_devices,
     node_status_cache,
     _save_registered_devices,
-
+    broadcast_event,
 )
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 from core.unified.device_manager import get_unified_device_manager
@@ -133,6 +133,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.info(
                 "设备 %s 已同步 %d 个能力到 CapabilityRegistry", req.device_id, synced_caps,
             )
+
+        # PR4: 广播实时事件 — 通知 Dashboard/Windows UI 有新设备注册
+        try:
+            await broadcast_event("device_update", {
+                "action": "register",
+                "device_id": req.device_id,
+                "device_name": device_info["device_name"],
+                "device_type": req.device_type,
+                "capabilities": req.capabilities,
+            })
+            if synced_caps:
+                await broadcast_event("capability_update", {
+                    "source": "device_register",
+                    "device_id": req.device_id,
+                    "synced_count": synced_caps,
+                })
+        except Exception as _bc_err:
+            logger.debug("设备注册广播事件失败（不影响注册）: %s", _bc_err)
 
         return JSONResponse({
             "success": True,
@@ -301,6 +319,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "device_id": device_id,
             "timestamp": datetime.now().isoformat(),
         })
+
+        # PR4: 广播统一 device_update 事件，UI 可据此移除设备卡片
+        try:
+            await broadcast_event("device_update", {
+                "action": "unregister",
+                "device_id": device_id,
+            })
+        except Exception as _bc_err:
+            logger.debug("设备注销广播事件失败: %s", _bc_err)
 
         logger.info("设备注销: %s", device_id)
         return JSONResponse({"success": True, "device_id": device_id})

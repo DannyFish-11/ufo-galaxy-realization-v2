@@ -182,6 +182,22 @@ class SkillLoader:
             )
         except Exception:
             pass
+
+        # PR4: 推送 skill_update + capability_update 到 /ws/status 和 /api/v1/stream 订阅者
+        try:
+            from core.routes._shared import broadcast_event
+            import asyncio as _aio
+            loop = None
+            try:
+                loop = _aio.get_running_loop()
+            except RuntimeError:
+                pass
+            _payload = {"skill_id": skill_id, "event": event}
+            if loop and loop.is_running():
+                loop.create_task(broadcast_event("skill_update", _payload))
+                loop.create_task(broadcast_event("capability_update", {"source": "skill_loader", **_payload}))
+        except Exception:
+            pass
     
     # ========================================================================
     # 加载/卸载
