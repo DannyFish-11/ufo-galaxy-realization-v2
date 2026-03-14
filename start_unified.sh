@@ -28,6 +28,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 WHITE='\033[1;37m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 # ============================================================================
@@ -35,41 +36,48 @@ NC='\033[0m'
 # ============================================================================
 
 print_banner() {
-    echo -e "${CYAN}"
-    echo "  ╔══════════════════════════════════════════════════════════╗"
-    echo "  ║                                                          ║"
-    echo "  ║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║"
-    echo "  ║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║"
-    echo "  ║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║"
-    echo "  ║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║"
-    echo "  ║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║"
-    echo "  ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║"
-    echo "  ║                                                          ║"
-    echo "  ║           L4 级自主性智能系统 v2.0                       ║"
-    echo "  ║                统一融合版                                ║"
-    echo "  ║                                                          ║"
-    echo "  ╚══════════════════════════════════════════════════════════╝"
+    echo -e "${CYAN}${BOLD}"
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║                                                          ║"
+    echo "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║"
+    echo "║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║"
+    echo "║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║"
+    echo "║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║"
+    echo "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║"
+    echo "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║"
+    echo "║                                                          ║"
+    echo "║     L4 Autonomous Intelligence System   v2.3.21          ║"
+    echo "║                                                          ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
 
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    printf "  ${BLUE}ℹ️   %-28s${NC} %s\n" "$1" "${2:-}"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    printf "  ${GREEN}✅  %-28s${NC} %s\n" "$1" "${2:-}"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    printf "  ${YELLOW}⚠️   %-28s${NC} %s\n" "$1" "${2:-}"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf "  ${RED}❌  %-28s${NC} %s\n" "$1" "${2:-}"
 }
 
 log_step() {
-    echo -e "${CYAN}▶${NC} $1"
+    printf "  ${CYAN}▶   %-28s${NC} %s\n" "$1" "${2:-}"
+}
+
+log_section() {
+    local sep
+    sep=$(printf '═%.0s' {1..60})
+    echo -e "\n${BOLD}${CYAN}${sep}${NC}"
+    echo -e "${BOLD}${CYAN}  ▶  $1${NC}"
+    echo -e "${BOLD}${CYAN}${sep}${NC}\n"
 }
 
 # ============================================================================
@@ -191,45 +199,44 @@ check_nodes() {
 show_status() {
     print_banner
     
-    echo -e "\n${WHITE}=== 系统状态 ===${NC}\n"
+    log_section "系统状态"
     
     # Python 版本
     if command -v python3 &> /dev/null; then
-        echo -e "  Python: ${GREEN}$(python3 --version 2>&1 | cut -d' ' -f2)${NC}"
+        log_success "Python" "$(python3 --version 2>&1 | cut -d' ' -f2)"
     else
-        echo -e "  Python: ${RED}未安装${NC}"
+        log_error "Python" "未安装"
     fi
     
     # 配置状态
     if [ -f ".env" ]; then
-        echo -e "  配置文件: ${GREEN}已存在${NC}"
+        log_success "配置文件" "已存在"
         
         # 检查各个 API
         for api in OPENAI_API_KEY GEMINI_API_KEY OPENROUTER_API_KEY XAI_API_KEY; do
             if grep -qE "^${api}=.+" .env 2>/dev/null; then
-                echo -e "    - $api: ${GREEN}已配置${NC}"
+                log_success "$api" "已配置"
             else
-                echo -e "    - $api: ${YELLOW}未配置${NC}"
+                log_warning "$api" "未配置"
             fi
         done
     else
-        echo -e "  配置文件: ${YELLOW}不存在${NC}"
+        log_warning "配置文件" "不存在"
     fi
     
     # 节点统计
     if [ -d "nodes" ]; then
         NODE_COUNT=$(ls -d nodes/Node_*/ 2>/dev/null | wc -l)
-        echo -e "  节点数量: ${GREEN}$NODE_COUNT${NC}"
+        log_success "节点数量" "$NODE_COUNT"
     fi
     
-    # 核心模块
-    echo -e "\n${WHITE}=== 核心模块 ===${NC}\n"
+    log_section "核心模块"
     
     for module in "core/node_registry.py" "core/node_protocol.py" "core/device_agent_manager.py" "core/microsoft_ufo_integration.py"; do
         if [ -f "$module" ]; then
-            echo -e "  $(basename $module): ${GREEN}✓${NC}"
+            log_success "$(basename $module)" "✓"
         else
-            echo -e "  $(basename $module): ${RED}✗${NC}"
+            log_error "$(basename $module)" "✗"
         fi
     done
     

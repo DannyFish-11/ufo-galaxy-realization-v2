@@ -28,6 +28,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from galaxy_main_loop_l4 import GalaxyMainLoopL4
+try:
+    from core.ascii_art import print_banner
+except ImportError:
+    _FALLBACK_BANNER = (
+        "╔══════════════════════════════════════════════════════════╗\n"
+        "║                                                          ║\n"
+        "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║\n"
+        "║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║\n"
+        "║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║\n"
+        "║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║\n"
+        "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║\n"
+        "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║\n"
+        "║                                                          ║\n"
+        "║     L4 Autonomous Intelligence System   v2.3.21          ║\n"
+        "║                                                          ║\n"
+        "╚══════════════════════════════════════════════════════════╝"
+    )
+    def print_banner():
+        """打印启动横幅（降级为内嵌版本）。"""
+        print(f"\n{_FALLBACK_BANNER}\n")
 
 
 def load_config(config_path: str = "config/l4_config.json") -> dict:
@@ -64,22 +84,6 @@ def setup_logging(config: dict):
     )
 
 
-def print_banner():
-    """打印启动横幅"""
-    banner = """
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║              Galaxy L4 自主性智能系统                      ║
-║                                                              ║
-║  • 自主发现工具和资源                                          ║
-║  • 自主编写代码解决问题                                        ║
-║  • 自主设定和分解目标                                          ║
-║  • 跨设备协同（安卓、无人机、3D打印机、量子计算）                ║
-║  • 自我学习和优化                                             ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-"""
-    print(banner)
 
 
 async def main():

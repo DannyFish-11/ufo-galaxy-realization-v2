@@ -51,11 +51,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# 导入 ASCII 艺术字
+# 导入 ASCII 艺术字 & 打印助手
 try:
-    from core.ascii_art import GALAXY_ASCII_MINIMAL
+    from core.ascii_art import GALAXY_BANNER, GALAXY_ASCII_MINIMAL, print_banner as _print_banner
 except ImportError:
-    GALAXY_ASCII_MINIMAL = "GALAXY - L4 Autonomous Intelligence System"
+    GALAXY_BANNER = "GALAXY - L4 Autonomous Intelligence System"
+    GALAXY_ASCII_MINIMAL = GALAXY_BANNER
+    def _print_banner():
+        print(f"\n{GALAXY_BANNER}\n")
 
 # 导入整合核心
 try:
@@ -163,8 +166,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Galaxy")
 
-# 打印 ASCII 艺术字
-print(GALAXY_ASCII_MINIMAL)
+# 打印规范 Galaxy 横幅
+_print_banner()
 
 # ============================================================================
 # P2: Device Trace Store — lightweight in-process store backed by JSON file
@@ -375,7 +378,7 @@ from contextlib import asynccontextmanager
 async def _lifespan(app):
     # startup
     logger.info("=" * 60)
-    print(GALAXY_ASCII_MINIMAL)
+    _print_banner()
     logger.info("Galaxy Dashboard v2.3.23")
     logger.info("=" * 60)
     if NODE_PROTOCOL_AVAILABLE:
