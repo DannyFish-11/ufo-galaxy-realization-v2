@@ -1,4 +1,5 @@
 {
+  "_DEPRECATION_NOTICE": "DEPRECATED (2026-03-14): Port definitions in this file are STALE and may diverge from the canonical source. Use config/unified_ports.yaml as the single source of truth for port assignments. Node metadata (groups, dependencies, priority) will migrate to config/unified_ports.yaml in a future release. For the 3-layer config model see: System-level -> config/unified_ports.yaml, Node-level -> each node's own config, Environment-level -> .env. Read ports via core.port_config.get_node_port().",
   "metadata": {
     "version": "2.1",
     "total_nodes": 109,

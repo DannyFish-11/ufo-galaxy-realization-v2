@@ -22,7 +22,6 @@ from datetime import datetime
 from typing import Dict, List
 from pathlib import Path
 from fastapi import FastAPI, WebSocket
-from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from nodes.common.cors_config import get_cors_origins
 
@@ -208,153 +207,13 @@ monitor = HealthMonitor(manager)
 
 @app.get("/")
 async def root():
-    """首页"""
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Galaxy Health Monitor</title>
-        <style>
-            body {
-                font-family: 'Courier New', monospace;
-                background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
-                color: #00ff00;
-                padding: 20px;
-            }
-            .container {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-            h1 {
-                color: #00bfff;
-                text-align: center;
-                text-shadow: 0 0 10px #00bfff;
-            }
-            .summary {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 20px;
-                margin: 30px 0;
-            }
-            .card {
-                background: rgba(0, 255, 0, 0.1);
-                border: 1px solid #00ff00;
-                border-radius: 8px;
-                padding: 20px;
-                text-align: center;
-            }
-            .card h2 {
-                margin: 0;
-                font-size: 48px;
-                color: #00ff00;
-            }
-            .card p {
-                margin: 10px 0 0 0;
-                color: #00bfff;
-            }
-            .nodes {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                gap: 15px;
-            }
-            .node {
-                background: rgba(0, 191, 255, 0.1);
-                border: 1px solid #00bfff;
-                border-radius: 8px;
-                padding: 15px;
-            }
-            .node.healthy {
-                border-color: #00ff00;
-            }
-            .node.unhealthy {
-                border-color: #ff4500;
-            }
-            .node h3 {
-                margin: 0 0 10px 0;
-                color: #00bfff;
-            }
-            .status {
-                display: inline-block;
-                padding: 4px 12px;
-                border-radius: 4px;
-                font-size: 12px;
-                font-weight: bold;
-            }
-            .status.healthy {
-                background: #00ff00;
-                color: #000;
-            }
-            .status.unhealthy {
-                background: #ff4500;
-                color: #fff;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🛸 Galaxy Health Monitor</h1>
-            
-            <div class="summary" id="summary">
-                <div class="card">
-                    <h2 id="total">-</h2>
-                    <p>总节点数</p>
-                </div>
-                <div class="card">
-                    <h2 id="healthy">-</h2>
-                    <p>健康节点</p>
-                </div>
-                <div class="card">
-                    <h2 id="unhealthy">-</h2>
-                    <p>不健康节点</p>
-                </div>
-            </div>
-            
-            <div class="nodes" id="nodes"></div>
-        </div>
-        
-        <script>
-            async function updateStatus() {
-                try {
-                    const response = await fetch('/api/status');
-                    const data = await response.json();
-                    
-                    // 更新摘要
-                    document.getElementById('total').textContent = data.summary.total_nodes;
-                    document.getElementById('healthy').textContent = data.summary.healthy_nodes;
-                    document.getElementById('unhealthy').textContent = data.summary.unhealthy_nodes;
-                    
-                    // 更新节点列表
-                    const nodesDiv = document.getElementById('nodes');
-                    nodesDiv.innerHTML = '';
-                    
-                    data.nodes.forEach(node => {
-                        const nodeDiv = document.createElement('div');
-                        nodeDiv.className = `node ${node.healthy ? 'healthy' : 'unhealthy'}`;
-                        nodeDiv.innerHTML = `
-                            <h3>Node_${node.node_id} ${node.name}</h3>
-                            <p>端口: ${node.port}</p>
-                            <p>分组: ${node.group}</p>
-                            <p>状态: <span class="status ${node.healthy ? 'healthy' : 'unhealthy'}">
-                                ${node.healthy ? '✅ 健康' : '❌ 不健康'}
-                            </span></p>
-                        `;
-                        nodesDiv.appendChild(nodeDiv);
-                    });
-                } catch (error) {
-                    console.error('更新状态失败:', error);
-                }
-            }
-            
-            // 初始更新
-            updateStatus();
-            
-            // 每 10 秒更新一次
-            setInterval(updateStatus, 10000);
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
+    """首页 — JSON status endpoint; UI via main SONARA dashboard at :8080"""
+    summary = monitor.get_summary()
+    return {
+        "service": "Galaxy Health Monitor",
+        "dashboard": "http://localhost:8080",
+        "summary": summary,
+    }
 
 @app.get("/api/status")
 async def get_status():

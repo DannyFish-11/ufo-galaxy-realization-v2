@@ -1,4 +1,5 @@
 {
+  "_DEPRECATION_NOTICE": "LEGACY (2026-03-14): api_url fields in this file contain hardcoded ports that may be stale. Canonical port source: config/unified_ports.yaml. Topology/visualization metadata (layers, coordinates, domains) remains valid here but ports should be read at runtime via core.port_config.get_node_port().",
   "version": "1.0",
   "topology_type": "three_layer_sphere",
   "description": "Galaxy - 102 Nodes Three-Layer Sphere Topology",

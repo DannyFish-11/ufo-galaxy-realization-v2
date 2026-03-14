@@ -1,9 +1,19 @@
 """
-Galaxy-Nexus — 统一端口配置读取模块
-====================================
+Galaxy-Nexus — 统一端口配置读取模块  [CANONICAL PORT ACCESS LAYER]
+====================================================================
 
 单一事实来源：从 config/unified_ports.yaml 读取所有端口分配。
 所有模块应通过此模块获取端口号，禁止硬编码。
+
+3-layer config convergence status (2026-03-14):
+  - System-level : config/unified_ports.yaml  <-- THIS MODULE reads it
+  - Node-level   : each node's own config
+  - Environment   : .env / GALAXY_PORT_* env vars (highest priority)
+
+This module is the CANONICAL runtime port accessor. Other files that embed
+port numbers (config/unified_config.json, config/topology.json,
+config/l4_config.json, launcher/config_manager.py) are deprecated for port
+lookups and should eventually delegate here.
 
 使用方法:
     from core.port_config import get_node_port, get_service_port, PortConfig

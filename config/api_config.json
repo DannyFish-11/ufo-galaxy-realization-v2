@@ -1,4 +1,5 @@
 {
+  "_DEPRECATION_NOTICE": "DEPRECATED (2026-03-14): Hardcoded base_url ports in this file may be stale. Canonical port source: config/unified_ports.yaml. Read ports at runtime via core.port_config.get_node_port(). API keys should come from .env or core.unified_config.",
   "oneapi": {
     "enabled": true,
     "api_key": "",

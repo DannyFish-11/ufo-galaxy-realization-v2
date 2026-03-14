@@ -854,14 +854,23 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动统一 Web UI 和完整 API 服务（合并自 dashboard/backend/main.py）
+        """启动统一 Web UI 和完整 API 服务
 
-        架构说明：
-          1. 以 dashboard.backend.main.app 为基础应用（包含所有 Dashboard 路由）
-          2. 在其上叠加 core.api_routes（系统管理、监控、观测性等扩展路由）
-          3. 在其上叠加 core.startup 引导的子系统中间件
-          4. 添加统一启动器专属路由（/api/status、/api/services）
+        架构说明（API 单一入口原则）：
+          core/api_routes.py 是 Galaxy 系统的 **唯一权威 API 定义**。
+          所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
+
+          1. 以 dashboard.backend.main.app 为基础应用（仅用于静态文件服务
+             和 Dashboard 专属 UI 路由）。Dashboard 中与 core 重叠的 API 路由
+             会被步骤 3 中 core.api_routes 的同路径路由覆盖。
+          2. 在其上叠加 core.startup 引导的子系统中间件
+          3. 叠加 core.api_routes 作为 **主 API 层**（系统管理、设备、节点、
+             监控、观测性、AI、chat 等全部路由）
+          4. 添加健康检查路由
           5. 统一在 8299 端口提供服务（避免与 Node_85_PromptLibrary:8085 冲突）
+
+        注意：此启动器 **不应** 定义自己的 inline API 路由。
+        如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
         """
         # 检查前端静态资源是否已构建
         frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
@@ -918,10 +927,13 @@ class UnifiedWebUI:
             except Exception as e:
                 logger.warning("核心子系统引导失败（系统仍可运行）: %s", e)
 
-            # === 步骤 3：叠加 core.api_routes（系统管理 + 扩展路由） ===
-            # 这些路由补充了 dashboard/backend/main.py 中缺少的系统层路由
-            # （monitoring、vision、relay、hybrid、vault、cost、channels、
-            #   federation、sessions、concurrency、errors 等）
+            # === 步骤 3：挂载 core.api_routes 作为主 API 层 ===
+            # core/api_routes.py 是 Galaxy 的 **唯一权威 API 入口**。
+            # 所有 REST 路由（system、devices、nodes、vision、tasks、chat、
+            # ai、monitoring、relay、hybrid、vault、cost、channels、
+            # federation、sessions、concurrency、errors、observability 等）
+            # 均由 core/routes/ 子模块定义，在此统一挂载。
+            # dashboard/backend/main.py 中重叠的路由将被此处覆盖。
             try:
                 from core.api_routes import create_api_routes, create_websocket_routes
                 api_router = create_api_routes(

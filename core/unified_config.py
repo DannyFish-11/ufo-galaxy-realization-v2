@@ -1,8 +1,20 @@
 """
-Galaxy - 统一配置管理器
-==========================
+Galaxy - 统一配置管理器  [LEGACY — delegates to UnifiedConfigManager]
+======================================================================
 
 确保 WebUI 配置和主 UI 配置的一致性
+
+3-layer config convergence status (2026-03-14):
+  This module handles API keys, LLM config, and general app settings.
+  It does NOT manage port assignments (use core.port_config for that).
+
+  - System-level ports : config/unified_ports.yaml -> core.port_config
+  - App/LLM config     : this module (delegates to core.unified.config_manager)
+  - Secrets/API keys   : .env -> this module
+
+  The global ``config`` singleton at module bottom prefers
+  core.unified.config_manager.UnifiedConfigManager when available,
+  falling back to the local UnifiedConfig class.
 
 功能：
 1. 统一的配置存储
@@ -12,13 +24,13 @@ Galaxy - 统一配置管理器
 
 使用方法：
     from core.unified_config import config
-    
+
     # 获取配置
     api_key = config.get("openai_api_key")
-    
+
     # 设置配置
     config.set("openai_api_key", "sk-xxx")
-    
+
     # 保存配置
     config.save()
 """
