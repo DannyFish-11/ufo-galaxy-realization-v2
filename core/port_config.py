@@ -47,6 +47,7 @@ _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "ufo_api": 8767,
     "unified_launcher": 8085,  # Unified Launcher Web UI
     "dockerfile_default": 8086, # Docker container default port
+    "openclawd": 8099,           # OpenClawd main API server (Galaxy core)
 }
 
 

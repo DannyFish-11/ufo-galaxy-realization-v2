@@ -11,6 +11,7 @@ Windows 主 UI — OPPO 光场 + 极客极简 + 书法卷轴式侧边栏
   对话 | Agent | 孪生 | 设备 | MCP/Skill
 """
 
+import os
 import sys
 import json
 from core.port_config import get_service_port
@@ -25,7 +26,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, pyqtProperty,
     QTimer, QRect, QParallelAnimationGroup, QSequentialAnimationGroup,
-    QSize, QPoint
+    QAbstractAnimation, QSize, QPoint
 )
 from PyQt5.QtGui import (
     QFont, QPalette, QColor, QLinearGradient, QPainter,
@@ -33,6 +34,47 @@ from PyQt5.QtGui import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _build_openclawd_api_base() -> str:
+    """Build the OpenClawd API base URL from configuration or environment.
+
+    Priority order (first match wins, keeps backward compatibility):
+      1. GALAXY_API_BASE env var  — full override (e.g. http://10.0.0.5:9000)
+      2. OPENCLAWD_HOST + OPENCLAWD_PORT env vars — per-component override
+      3. API_PORT env var — matches the server's own API_PORT setting
+      4. unified_config.web_ui_port — sourced from config.json / .env
+      5. Hard-coded default 8099 — unchanged from original behavior
+    """
+    # 1. Full override
+    full = os.environ.get("GALAXY_API_BASE", "").strip()
+    if full:
+        return full.rstrip("/")
+
+    # 2. Per-component host + port env vars
+    host = os.environ.get("OPENCLAWD_HOST", "").strip()
+    port_str = os.environ.get("OPENCLAWD_PORT", "").strip()
+    if port_str.isdigit() and 1 <= int(port_str) <= 65535:
+        h = host or "localhost"
+        return f"http://{h}:{port_str}"
+
+    # 3. Server's own API_PORT env var
+    api_port = os.environ.get("API_PORT", "").strip()
+    if api_port.isdigit() and 1 <= int(api_port) <= 65535:
+        return f"http://localhost:{api_port}"
+
+    # 4. unified_config.web_ui_port
+    try:
+        from core.unified_config import UnifiedConfig
+        cfg = UnifiedConfig.instance()
+        cfg_port = cfg.get("web_ui_port", 0)
+        if isinstance(cfg_port, int) and cfg_port > 0:
+            return f"http://localhost:{cfg_port}"
+    except Exception:
+        pass
+
+    # 5. Default (backward compatible)
+    return "http://localhost:8099"
 
 
 # ═══════════════════════════════════════════════
@@ -421,14 +463,19 @@ class SidebarUI(QWidget):
     command_submitted = pyqtSignal(str)
 
     SIDEBAR_W = 420
-    ANIM_DUR = 450  # ms
+    ANIM_DUR = 750  # ms — increased for smoother scroll-unfurl feel
 
     def __init__(self, on_command: Optional[Callable[[str], None]] = None):
         super().__init__()
 
         self.on_command = on_command
         self.is_visible = False
-        self._api_base = "http://localhost:8099"
+        # Port config priority:
+        #   1. OPENCLAWD_HOST / OPENCLAWD_PORT env vars
+        #   2. API_PORT env var (matches the server's API_PORT)
+        #   3. unified_config web_ui_port
+        #   4. hardcoded default 8099 (backward compatible)
+        self._api_base = _build_openclawd_api_base()
 
         if on_command:
             self.command_submitted.connect(on_command)
@@ -650,13 +697,24 @@ class SidebarUI(QWidget):
     # ── 书法卷轴动画 ──
     def _setup_scroll_animation(self):
         """
-        展开动画: 宽度 0→420, 高度 center→full, 透明度 0→1
-        同时光场扫光 0→1
+        展开动画: 宽度 0→SIDEBAR_W, 全高保持不变, 透明度 0→1, 光线扫过
+
+        Animation choices:
+        - OutExpo easing for geometry: fast initial motion that decelerates
+          smoothly, giving a crisp "unfurl" without any bounce.
+        - OutCubic for opacity: gentle fade-in matches the geometry speed.
+        - Duration 750 ms (open) / 600 ms (close): long enough to be
+          perceived as fluid without feeling sluggish.
+        - Start geometry uses FULL screen height from the very first frame
+          so the panel never "jumps" vertically — only the width animates.
+        - Re-entry guard in show_sidebar / hide_sidebar prevents overlapping
+          animations from creating a jittery double-trigger effect.
         """
-        # 几何动画 (卷轴展开/收回)
+        # 几何动画 — 仅宽度变化, 高度全程保持全屏 (消除垂直跳变)
         self.anim_geo = QPropertyAnimation(self, b"geometry")
         self.anim_geo.setDuration(self.ANIM_DUR)
-        self.anim_geo.setEasingCurve(QEasingCurve.OutQuart)
+        # OutExpo: fast initial expansion that decelerates to a crisp stop
+        self.anim_geo.setEasingCurve(QEasingCurve.OutExpo)
 
         # 透明度动画
         self.anim_opacity = QPropertyAnimation(self, b"windowOpacity")
@@ -674,13 +732,14 @@ class SidebarUI(QWidget):
         self.anim_open.addAnimation(self.anim_opacity)
         self.anim_open.addAnimation(self.anim_light)
 
-        # 收回用独立组
+        # 收回用独立组 — InExpo 镜像展开曲线, 快速收缩
+        close_dur = int(self.ANIM_DUR * 0.8)
         self.anim_close_geo = QPropertyAnimation(self, b"geometry")
-        self.anim_close_geo.setDuration(int(self.ANIM_DUR * 0.8))
-        self.anim_close_geo.setEasingCurve(QEasingCurve.InQuart)
+        self.anim_close_geo.setDuration(close_dur)
+        self.anim_close_geo.setEasingCurve(QEasingCurve.InExpo)
 
         self.anim_close_opacity = QPropertyAnimation(self, b"windowOpacity")
-        self.anim_close_opacity.setDuration(int(self.ANIM_DUR * 0.8))
+        self.anim_close_opacity.setDuration(close_dur)
         self.anim_close_opacity.setEasingCurve(QEasingCurve.InCubic)
 
         self.anim_close = QParallelAnimationGroup()
@@ -702,31 +761,36 @@ class SidebarUI(QWidget):
             self.show_sidebar()
 
     def show_sidebar(self):
+        # Re-entry guard: ignore if already visible or open animation is running
         if self.is_visible:
+            return
+        if self.anim_open.state() == QAbstractAnimation.Running:
             return
 
         self.is_visible = True
 
-        # 停止正在运行的动画
-        self.anim_open.stop()
+        # Stop any in-progress close animation cleanly
         self.anim_close.stop()
 
-        # 起始: 屏幕右侧, 零宽, 垂直居中一小条
-        mid_y = self._screen_h // 2 - 50
-        start_rect = QRect(self._screen_w, mid_y, 0, 100)
+        # Start geometry: right edge of screen, zero width, FULL height.
+        # Using full height from frame-0 prevents any vertical jump — only
+        # the horizontal width animates (true calligraphy-scroll unfurl).
+        start_rect = QRect(self._screen_w, 0, 0, self._screen_h)
 
-        # 终止: 全高, 宽420, 紧贴右侧
+        # End geometry: full height, sidebar width, flush to right edge
         end_rect = QRect(
             self._screen_w - self.SIDEBAR_W, 0,
             self.SIDEBAR_W, self._screen_h
         )
 
-        # 几何
+        # Set geometry and opacity BEFORE show() to prevent any visual flash
+        self.setWindowOpacity(0.0)
+        self.setGeometry(start_rect)
+
         self.anim_geo.setStartValue(start_rect)
         self.anim_geo.setEndValue(end_rect)
 
         # 透明度
-        self.setWindowOpacity(0.0)
         self.anim_opacity.setStartValue(0.0)
         self.anim_opacity.setEndValue(1.0)
 
@@ -742,17 +806,20 @@ class SidebarUI(QWidget):
         logger.info("侧边栏展开 (卷轴)")
 
     def hide_sidebar(self):
+        # Re-entry guard: ignore if already hidden or close animation is running
         if not self.is_visible:
+            return
+        if self.anim_close.state() == QAbstractAnimation.Running:
             return
 
         self.is_visible = False
 
+        # Stop any in-progress open animation cleanly
         self.anim_open.stop()
-        self.anim_close.stop()
 
         current = self.geometry()
-        mid_y = self._screen_h // 2 - 50
-        end_rect = QRect(self._screen_w, mid_y, 0, 100)
+        # Collapse back to zero-width strip at right edge (full height maintained)
+        end_rect = QRect(self._screen_w, 0, 0, self._screen_h)
 
         self.anim_close_geo.setStartValue(current)
         self.anim_close_geo.setEndValue(end_rect)

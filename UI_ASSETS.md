@@ -96,3 +96,33 @@ black --check core/ tests/
 # 导入顺序检查
 isort --check-only core/ tests/
 ```
+
+---
+
+## 6. Windows 客户端 — OpenClawd 端口配置
+
+`windows_client/ui/sidebar_ui.py` 中的 `SidebarUI` 通过 `_build_openclawd_api_base()`
+自动确定 OpenClawd API 的地址，无需硬编码端口。优先级如下：
+
+| 优先级 | 方式 | 示例 |
+| ------ | ---- | ---- |
+| 1 | `GALAXY_API_BASE` 环境变量（完整覆盖） | `GALAXY_API_BASE=http://10.0.0.5:9000` |
+| 2 | `OPENCLAWD_HOST` + `OPENCLAWD_PORT` 环境变量 | `OPENCLAWD_PORT=9000` |
+| 3 | `API_PORT` 环境变量（与服务端 `API_PORT` 保持一致） | `API_PORT=8099` |
+| 4 | `unified_config.web_ui_port`（`config.json` / `.env` 中的值） | `web_ui_port: 8099` |
+| 5 | 硬编码默认值（向后兼容） | `http://localhost:8099` |
+
+**常见场景：**
+
+```bash
+# 服务端运行在非默认端口 9000
+export OPENCLAWD_PORT=9000
+python windows_client/main.py
+
+# 或通过完整覆盖
+export GALAXY_API_BASE=http://192.168.1.100:9000
+python windows_client/main.py
+```
+
+> 若所有环境变量均未设置，且 `config.json` 中未指定 `web_ui_port`，
+> 则自动回退到 `http://localhost:8099`，与旧版行为完全兼容。
