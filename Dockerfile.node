@@ -1,0 +1,60 @@
+# ============================================================
+# Galaxy — Generic Node Dockerfile
+# Builds any Galaxy node from the project root context.
+# All nodes share the same base image so that cross-module
+# imports (core.*, nodes.common.*) resolve correctly.
+#
+# Build args:
+#   NODE_NAME   — e.g. Node_00_StateMachine
+#   NODE_PORT   — e.g. 8000
+#
+# Usage (standalone):
+#   docker build --build-arg NODE_NAME=Node_00_StateMachine \
+#                --build-arg NODE_PORT=8000 \
+#                -f Dockerfile.node -t galaxy-node-00 .
+# ============================================================
+
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+# System dependencies needed by various nodes
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    libpq5 \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install root-level Python dependencies first (cached layer)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the full project so that core.* and nodes.* imports work
+COPY . .
+
+# Install node-specific extra dependencies if present
+ARG NODE_NAME
+RUN if [ -f "nodes/${NODE_NAME}/requirements.txt" ]; then \
+        pip install --no-cache-dir -r "nodes/${NODE_NAME}/requirements.txt"; \
+    fi
+
+# Non-root user for security
+RUN addgroup --system --gid 1001 galaxy \
+ && adduser  --system --uid 1001 --ingroup galaxy --no-create-home galaxy \
+ && chown -R galaxy:galaxy /app
+USER galaxy
+
+ARG NODE_PORT=8000
+ENV NODE_NAME=${NODE_NAME} \
+    NODE_PORT=${NODE_PORT} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE ${NODE_PORT}
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -sf "http://localhost:${NODE_PORT}/health" || exit 1
+
+ENTRYPOINT ["tini", "--"]
+CMD ["sh", "-c", "python nodes/${NODE_NAME}/main.py"]

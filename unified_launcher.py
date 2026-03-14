@@ -141,7 +141,7 @@ def _write_entrypoint(host: str, port: int) -> None:
     文件格式::
 
         {
-            "api_base": "http://localhost:8085",
+            "api_base": "http://localhost:8299",
             "written_at": "2026-01-01T00:00:00Z"
         }
 
@@ -184,7 +184,7 @@ class SystemConfig:
     
     # 服务配置（默认值从 PortConfig 读取，回退到硬编码值）
     host: str = "0.0.0.0"
-    web_ui_port: int = 8085
+    web_ui_port: int = 8299
     device_api_port: int = 8766
     ufo_api_port: int = 8767
 
@@ -192,7 +192,7 @@ class SystemConfig:
         """从 PortConfig 加载端口默认值（如果可用）"""
         try:
             from core.port_config import get_service_port
-            if self.web_ui_port == 8085:
+            if self.web_ui_port == 8299:
                 self.web_ui_port = get_service_port("unified_launcher")
             if self.device_api_port == 8766:
                 self.device_api_port = get_service_port("device_api")
@@ -891,7 +891,7 @@ class UnifiedWebUI:
           2. 在其上叠加 core.api_routes（系统管理、监控、观测性等扩展路由）
           3. 在其上叠加 core.startup 引导的子系统中间件
           4. 添加统一启动器专属路由（/api/status、/api/services）
-          5. 统一在 8085 端口提供服务
+          5. 统一在 8299 端口提供服务（避免与 Node_85_PromptLibrary:8085 冲突）
         """
         # 检查前端静态资源是否已构建
         frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
@@ -1414,7 +1414,7 @@ def main():
     parser.add_argument("--status", action="store_true", help="查看系统状态")
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
-    parser.add_argument("--port", "-p", type=int, default=8085, help="Web UI 端口")
+    parser.add_argument("--port", "-p", type=int, default=8299, help="Web UI 端口")
     
     args = parser.parse_args()
     

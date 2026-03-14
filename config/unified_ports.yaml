@@ -2,9 +2,9 @@
 # Galaxy - Unified Port Allocation Configuration
 # 统一端口分配配置文件
 # =============================================================================
-# 版本: 2.0
-# 最后更新: 2026-01-23
-# 总节点数: 103
+# 版本: 2.1
+# 最后更新: 2026-03-14
+# 总节点数: 130
 # =============================================================================
 
 # 端口分配规则:
@@ -19,9 +19,9 @@
 # - 6333: Qdrant Vector DB
 
 metadata:
-  version: "2.0"
-  total_nodes: 103
-  last_updated: "2026-01-23"
+  version: "2.1"
+  total_nodes: 130
+  last_updated: "2026-03-14"
   description: "Galaxy Unified Port Configuration"
 
 # =============================================================================
@@ -434,7 +434,7 @@ layer_physical:
       group: "physical"
       critical: false
       dependencies: ["Node_01_OneAPI"]
-      description: "媒体生成"
+      description: "媒体生成 (物理层 — 图片/音频/视频生成)"
       
     Node_48_Serial:
       port: 8049
@@ -498,6 +498,14 @@ layer_intelligence:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "符号数学计算"
+
+    Node_55_MultiModal:
+      port: 8055
+      name: "MultiModal"
+      group: "intelligence"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "多模态处理"
       
     Node_126_AgentSwarm:
       port: 8126
@@ -626,6 +634,22 @@ layer_monitoring:
       dependencies: []
       description: "备份恢复"
 
+    Node_70_AutonomousLearning:
+      port: 8070
+      name: "AutonomousLearning"
+      group: "monitoring"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "自主学习系统"
+
+    Node_71_MultiDeviceCoordination:
+      port: 8071
+      name: "MultiDeviceCoordination"
+      group: "monitoring"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "多设备协调"
+
 # =============================================================================
 # LAYER 5: ADVANCED - 高级功能 (8070-8099)
 # =============================================================================
@@ -647,7 +671,7 @@ layer_advanced:
       group: "advanced"
       critical: false
       dependencies: ["Node_01_OneAPI"]
-      description: "媒体生成"
+      description: "媒体生成 (高级层 — 任务式异步处理，支持 PixVerse 适配)"
       
     Node_72_KnowledgeBase:
       port: 8072
@@ -1062,6 +1086,38 @@ layer_academic:
       dependencies: []
       description: "文件操作服务"
 
+    Node_121_Web:
+      port: 8121
+      name: "WebOperations"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "Web操作与代理"
+
+    Node_122_Shell:
+      port: 8122
+      name: "ShellExecutor"
+      group: "academic"
+      critical: false
+      dependencies: []
+      description: "Shell命令执行器"
+
+    Node_124_LinuxDesktopAuto:
+      port: 8124
+      name: "LinuxDesktopAuto"
+      group: "academic"
+      critical: false
+      dependencies: []
+      description: "Linux桌面自动化"
+
+    Node_130_AutonomousCoding:
+      port: 8130
+      name: "AutonomousCoding"
+      group: "academic"
+      critical: false
+      dependencies: ["Node_01_OneAPI"]
+      description: "自主编码智能体"
+
 # =============================================================================
 # INFRASTRUCTURE - 基础设施服务
 # =============================================================================
@@ -1084,14 +1140,9 @@ infrastructure:
       description: "可视化监控面板 (Dashboard Backend)"
       
     unified_launcher:
-      port: 8085
+      port: 8299
       name: "UnifiedLauncher"
-      description: "统一启动器 Web UI"
-      
-    dockerfile_default:
-      port: 8086
-      name: "DockerfileDefault"
-      description: "Docker 容器默认启动端口"
+      description: "统一启动器 Web UI (避免与 Node_85_PromptLibrary:8085 冲突)"
       
     gateway:
       port: 8765
@@ -1102,6 +1153,71 @@ infrastructure:
       port: 3001
       name: "OneAPI_Web"
       description: "OneAPI Web界面"
+
+    health_monitor:
+      port: 9100
+      name: "HealthMonitor"
+      description: "系统健康监控端点"
+
+    device_api:
+      port: 8766
+      name: "DeviceAPI"
+      description: "设备控制 API"
+
+    ufo_api:
+      port: 8767
+      name: "UfoAPI"
+      description: "UFO 控制 API"
+
+    neo4j_http:
+      port: 7474
+      name: "Neo4j_HTTP"
+      description: "Neo4j HTTP 接口"
+
+    neo4j_bolt:
+      port: 7687
+      name: "Neo4j_Bolt"
+      description: "Neo4j Bolt 协议端口"
+
+    mongodb:
+      port: 27017
+      name: "MongoDB"
+      description: "MongoDB 文档数据库"
+
+    nats_client:
+      port: 4222
+      name: "NATS_Client"
+      description: "NATS 客户端端口"
+
+    nats_http:
+      port: 8222
+      name: "NATS_HTTP"
+      description: "NATS HTTP 监控端口"
+
+    temporal:
+      port: 7233
+      name: "Temporal"
+      description: "Temporal 工作流引擎 gRPC"
+
+    temporal_ui:
+      port: 8233
+      name: "Temporal_UI"
+      description: "Temporal Web UI"
+
+    ollama:
+      port: 11434
+      name: "Ollama"
+      description: "Ollama 本地大语言模型"
+
+    minio_api:
+      port: 9002
+      name: "MinIO_API"
+      description: "MinIO 对象存储 API"
+
+    minio_console:
+      port: 9001
+      name: "MinIO_Console"
+      description: "MinIO 控制台"
 
 # =============================================================================
 # 端口冲突解决记录
@@ -1138,7 +1254,10 @@ port_conflicts_resolved:
     new: "HealthMonitor: 9100"
 
   - old: "UnifiedLauncher: 8080 (conflict with Dashboard Backend)"
-    new: "UnifiedLauncher: 8085"
+    new: "UnifiedLauncher: 8085 (intermediate)"
+
+  - old: "UnifiedLauncher: 8085 (conflict with Node_85_PromptLibrary)"
+    new: "UnifiedLauncher: 8299"
 
   - old: "Dockerfile CMD: 8080 (conflict with Dashboard Backend)"
     new: "Dockerfile CMD: 8086"
@@ -1153,7 +1272,7 @@ docker_host_ports:
   mappings:
     galaxy_main: 8086
     dashboard: 8080
-    unified_launcher: 8085
+    unified_launcher: 8299
     gateway: 8765
     memos: 8180
     agentcpm: 8401
