@@ -8,9 +8,13 @@ Galaxy ASCII 艺术字 / 统一终端输出格式
 - 对齐的状态行 (print_status_row)
 - 章节标题 (print_section_header)
 - 横幅打印 (print_banner)
+- ANSI 支持检测 (ansi_supported)
 
 所有启动入口均应导入并使用本模块的公共接口，以保证视觉一致性。
 """
+
+import sys
+import os
 
 # ---------------------------------------------------------------------------
 # 版本 & 标语 (single source of truth)
@@ -77,9 +81,66 @@ class Colors:
     GREEN  = '\033[92m'
     YELLOW = '\033[93m'
     RED    = '\033[91m'
+    PURPLE = '\033[35m'
+    PINK   = '\033[95m'
     ENDC   = '\033[0m'
     BOLD   = '\033[1m'
     DIM    = '\033[2m'
+
+
+def ansi_supported() -> bool:
+    """检测当前终端是否支持 ANSI 转义序列。
+
+    - 非 TTY 输出（重定向、CI 无色管道等）→ False
+    - Windows：尝试启用 VT 处理（Win 10 1511+），失败则 False
+    - Unix/Mac：TTY 即认为支持
+
+    Returns:
+        bool: True 表示可安全使用 ANSI 颜色，False 表示应降级为纯文本。
+    """
+    if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+        return False
+    if os.name == 'nt':
+        try:
+            import ctypes
+            if not hasattr(ctypes, 'windll'):
+                return False
+            kernel32 = ctypes.windll.kernel32
+            STD_OUTPUT_HANDLE = -11
+            ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+            mode = ctypes.c_ulong(0)
+            if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                return False
+            if mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING:
+                return True
+            if kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING):
+                return True
+            return False
+        except Exception:
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# 渐变颜色映射 (gradient colors: cyan → green → purple → blue → pink)
+# Each entry maps to one line of GALAXY_BANNER (12 lines total).
+# ---------------------------------------------------------------------------
+
+_BANNER_GRADIENT = [
+    '\033[96m',  # line 0 : ╔═══ top border — cyan
+    '\033[96m',  # line 1 : ║    empty       — cyan
+    '\033[92m',  # line 2 : ║   ██ logo r1   — green
+    '\033[92m',  # line 3 : ║  ██  logo r2   — green
+    '\033[35m',  # line 4 : ║  ██  logo r3   — purple
+    '\033[35m',  # line 5 : ║  ██  logo r4   — purple
+    '\033[94m',  # line 6 : ║  ██  logo r5   — blue
+    '\033[94m',  # line 7 : ║   ╚  logo r6   — blue
+    '\033[95m',  # line 8 : ║    empty       — pink
+    '\033[95m',  # line 9 : ║     version    — pink
+    '\033[95m',  # line 10: ║    empty       — pink
+    '\033[95m',  # line 11: ╚═══ bottom      — pink
+]
 
 
 # ---------------------------------------------------------------------------
@@ -106,14 +167,23 @@ def get_status_icon(status: str) -> str:
 # ---------------------------------------------------------------------------
 
 def print_banner(use_color: bool = True) -> None:
-    """打印规范 Galaxy 横幅。
+    """打印规范 Galaxy 横幅（渐变色：cyan→green→purple→blue→pink）。
+
+    ANSI 支持自动检测：
+    - 若终端支持 ANSI（包括 Windows 10+ VT 模式），输出渐变彩色横幅。
+    - 若终端不支持（如未启用 VT 的 PowerShell、重定向输出），降级为纯文本。
 
     Args:
-        use_color: 若为 True（默认），横幅将以青色加粗显示；
-                   传入 False 可在不支持 ANSI 的环境中使用。
+        use_color: 若为 False，强制使用纯文本（不尝试 ANSI 检测）。
     """
-    if use_color:
-        print(f"\n{Colors.CYAN}{Colors.BOLD}{GALAXY_BANNER}{Colors.ENDC}\n")
+    _use_ansi = use_color and ansi_supported()
+    if _use_ansi:
+        lines = GALAXY_BANNER.split("\n")
+        print()
+        for i, line in enumerate(lines):
+            color = _BANNER_GRADIENT[i] if i < len(_BANNER_GRADIENT) else '\033[96m'
+            print(f"{Colors.BOLD}{color}{line}\033[0m")
+        print()
     else:
         print(f"\n{GALAXY_BANNER}\n")
 

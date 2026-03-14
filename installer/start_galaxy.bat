@@ -3,20 +3,51 @@ chcp 65001 >nul
 title Galaxy - L4 Autonomous Intelligence System
 color 0B
 
-echo.
-echo ╔══════════════════════════════════════════════════════════╗
-echo ║                                                          ║
-echo ║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║
-echo ║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║
-echo ║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║
-echo ║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║
-echo ║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║
-echo ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║
-echo ║                                                          ║
-echo ║     L4 Autonomous Intelligence System   v2.3.21          ║
-echo ║                                                          ║
-echo ╚══════════════════════════════════════════════════════════╝
-echo.
+:: ── ANSI / VT100 support detection ──────────────────────────────────────
+set "ANSI_OK=0"
+for /f "tokens=4-5 delims=. " %%i in ('ver') do (
+    if %%i geq 10 set "ANSI_OK=1"
+)
+if "%ANSI_OK%"=="1" (
+    powershell -NoProfile -Command ^
+        "$k=Add-Type -PassThru -Name 'VT' -Namespace '' -MemberDefinition '[DllImport(\"kernel32.dll\")]public static extern bool SetConsoleMode(IntPtr h,uint m);[DllImport(\"kernel32.dll\")]public static extern bool GetConsoleMode(IntPtr h,out uint m);[DllImport(\"kernel32.dll\")]public static extern IntPtr GetStdHandle(int n);';" ^
+        "$hdl=$k::GetStdHandle(-11);$m=0;$k::GetConsoleMode($hdl,[ref]$m)|Out-Null;$k::SetConsoleMode($hdl,$m-bor4)|Out-Null" ^
+        >nul 2>&1
+    if errorlevel 1 set "ANSI_OK=0"
+)
+
+if "%ANSI_OK%"=="1" (
+    for /f %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
+    echo.
+    echo %ESC%[1;96m╔══════════════════════════════════════════════════════════╗%ESC%[0m
+    echo %ESC%[1;96m║                                                          ║%ESC%[0m
+    echo %ESC%[1;92m║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║%ESC%[0m
+    echo %ESC%[1;92m║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║%ESC%[0m
+    echo %ESC%[1;35m║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║%ESC%[0m
+    echo %ESC%[1;35m║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║%ESC%[0m
+    echo %ESC%[1;94m║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║%ESC%[0m
+    echo %ESC%[1;94m║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║%ESC%[0m
+    echo %ESC%[1;95m║                                                          ║%ESC%[0m
+    echo %ESC%[1;95m║     L4 Autonomous Intelligence System   v2.3.21          ║%ESC%[0m
+    echo %ESC%[1;95m║                                                          ║%ESC%[0m
+    echo %ESC%[1;95m╚══════════════════════════════════════════════════════════╝%ESC%[0m
+    echo.
+) else (
+    echo.
+    echo ╔══════════════════════════════════════════════════════════╗
+    echo ║                                                          ║
+    echo ║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║
+    echo ║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║
+    echo ║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║
+    echo ║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║
+    echo ║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║
+    echo ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║
+    echo ║                                                          ║
+    echo ║     L4 Autonomous Intelligence System   v2.3.21          ║
+    echo ║                                                          ║
+    echo ╚══════════════════════════════════════════════════════════╝
+    echo.
+)
 
 :: 切换到脚本所在目录
 cd /d "%~dp0.."
