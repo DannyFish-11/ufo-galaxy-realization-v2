@@ -296,7 +296,7 @@ def _print_fix_hints(
         return
 
     print("FIX HINTS — suggested port assignments for missing nodes:")
-    next_port = 8200  # start in the 8200-8298 range (8299 is reserved for unified_launcher)
+    next_port = 8200  # start in the 8200-8298 range (8299 is assigned to unified_launcher)
     for node_name in missing:
         while next_port in used_ports:
             next_port += 1
