@@ -33,14 +33,15 @@ class TestModels:
 
     def test_scoring_weights_defaults(self):
         w = ScoringWeights()
-        assert abs(w.capability - 0.40) < 1e-9
-        assert abs(w.latency - 0.25) < 1e-9
-        assert abs(w.load - 0.25) < 1e-9
-        assert abs(w.sandbox - 0.10) < 1e-9
+        assert abs(w.capability - 0.35) < 1e-9
+        assert abs(w.latency - 0.22) < 1e-9
+        assert abs(w.load - 0.22) < 1e-9
+        assert abs(w.sandbox - 0.09) < 1e-9
+        assert abs(w.health - 0.12) < 1e-9
 
     def test_scoring_weights_zero_raises(self):
         with pytest.raises(Exception):
-            ScoringWeights(capability=0.0, latency=0.0, load=0.0, sandbox=0.0)
+            ScoringWeights(capability=0.0, latency=0.0, load=0.0, sandbox=0.0, health=0.0)
 
     def test_scoring_weights_negative_raises(self):
         with pytest.raises(Exception):
