@@ -49,6 +49,11 @@ class C:
     TEXT_DIM  = "#444444"
     ACCENT    = "#ffffff"   # 高亮用纯白
     GLOW      = "rgba(255,255,255,0.06)"
+    # Audiofier A/B 层色彩编码
+    LAYER_A   = "#B22222"   # Layer A — crimson red
+    LAYER_A_DIM = "rgba(178, 34, 34, 0.18)"
+    LAYER_B   = "#00BFFF"   # Layer B — deep sky blue
+    LAYER_B_DIM = "rgba(0, 191, 255, 0.18)"
 
 
 def _compute_sidebar_responsive_sizes(screen_w: int, screen_h: int) -> dict:
@@ -541,12 +546,25 @@ class SidebarUI(QWidget):
         lay.setSpacing(4)
 
         self.mode_btns = []
-        modes = [("对话", 0), ("Agent", 1), ("孪生", 2), ("设备", 3), ("MCP/Skill", 4)]
-        for label, idx in modes:
+        # A/B layer coding rationale:
+        # Layer A (red) = active/intelligence modes (Chat + Agent) — user-facing AI ops
+        # Layer B (blue) = control/infra modes (Twin + Device) — system/device ops
+        # MCP/Skill = neutral (neither purely AI nor device)
+        modes = [("对话", 0, "A"), ("Agent", 1, "A"), ("孪生", 2, "B"), ("设备", 3, "B"), ("MCP/Skill", 4, None)]
+        for label, idx, layer in modes:
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setChecked(idx == 0)
             btn.clicked.connect(lambda checked, i=idx: self._switch_mode(i))
+            if layer == "A":
+                checked_border = C.LAYER_A
+                checked_bg = C.LAYER_A_DIM
+            elif layer == "B":
+                checked_border = C.LAYER_B
+                checked_bg = C.LAYER_B_DIM
+            else:
+                checked_border = C.BORDER_HI
+                checked_bg = "rgba(255,255,255,0.05)"
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent; border: 1px solid transparent;
@@ -556,8 +574,8 @@ class SidebarUI(QWidget):
                 }}
                 QPushButton:hover {{ color: {C.TEXT}; background: {C.GLOW}; }}
                 QPushButton:checked {{
-                    color: {C.TEXT}; border-color: {C.BORDER_HI};
-                    background: rgba(255,255,255,0.05);
+                    color: {C.TEXT}; border-color: {checked_border};
+                    background: {checked_bg};
                 }}
             """)
             lay.addWidget(btn)
@@ -573,17 +591,28 @@ class SidebarUI(QWidget):
         lay.setContentsMargins(self._resp_padding - 2, 4, self._resp_padding - 2, 8)
         lay.setSpacing(6)
 
-        for label, action in [("截图", "截图"), ("剪贴板", "查看剪贴板"), ("任务", "查看任务列表")]:
+        # Shortcut A/B layer coding: screenshot = capture action (Layer A = active/capture),
+        # clipboard = data channel (Layer B = infra/data), tasks = neutral system action.
+        for label, action, layer in [("截图", "截图", "A"), ("剪贴板", "查看剪贴板", "B"), ("任务", "查看任务列表", None)]:
             btn = QPushButton(label)
+            if layer == "A":
+                accent_border = C.LAYER_A
+                accent_bg = C.LAYER_A_DIM
+            elif layer == "B":
+                accent_border = C.LAYER_B
+                accent_bg = C.LAYER_B_DIM
+            else:
+                accent_border = C.BORDER_HI
+                accent_bg = C.BG_CARD
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {C.BG_CARD}; border: 1px solid {C.BORDER};
+                    background: {accent_bg}; border: 1px solid {accent_border};
                     border-radius: 8px; padding: 5px 12px;
                     color: {C.TEXT_SEC}; font-family: 'Consolas', monospace;
                     font-size: {self._resp_font_small}px;
                 }}
-                QPushButton:hover {{ border-color: {C.BORDER_HI}; color: {C.TEXT}; }}
-                QPushButton:pressed {{ background: {C.ACCENT}; color: {C.BG_DEEP}; }}
+                QPushButton:hover {{ border-color: {accent_border}; color: {C.TEXT}; background: {accent_bg}; }}
+                QPushButton:pressed {{ background: {accent_border}; color: {C.BG_DEEP}; }}
             """)
             btn.clicked.connect(lambda _, a=action: self.command_submitted.emit(a))
             lay.addWidget(btn)
