@@ -135,9 +135,9 @@ Adds all **critical** nodes to infrastructure:
 - Node_04_Router (8004)
 - Node_05_Auth (8005)
 - Node_06_Filesystem (8006)
-- Node_64_LoggerCentral (8064) — renamed from Node_65
-- Node_66_HealthMonitor (8066) — renamed from Node_67
-- Node_67_Security (8067) — renamed from Node_68
+- Node_65_LoggerCentral (8064)
+- Node_67_HealthMonitor (8066)
+- Node_68_Security (8067)
 - Node_79_LocalLLM (8079)
 - Node_80_MemorySystem (8180)
 - Galaxy Launcher (8299)

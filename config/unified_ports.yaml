@@ -434,7 +434,7 @@ layer_physical:
       group: "physical"
       critical: false
       dependencies: ["Node_01_OneAPI"]
-      description: "媒体生成"
+      description: "媒体生成 (物理层 — 图片/音频/视频生成)"
       
     Node_48_Serial:
       port: 8049
@@ -671,7 +671,7 @@ layer_advanced:
       group: "advanced"
       critical: false
       dependencies: ["Node_01_OneAPI"]
-      description: "媒体生成"
+      description: "媒体生成 (高级层 — 任务式异步处理，支持 PixVerse 适配)"
       
     Node_72_KnowledgeBase:
       port: 8072
