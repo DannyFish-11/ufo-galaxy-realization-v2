@@ -107,6 +107,9 @@ AUDIOFIER = {
     "led_idle":      "#333333",
     "led_warn":      "#FFA500",
     "led_error":     "#FF3333",
+    # Layer idle tints (semi-transparent, for inactive LED state)
+    "layer_a_idle":  (178, 34, 34, 40),
+    "layer_b_idle":  (0, 100, 140, 40),
 }
 
 SIDEBAR_WIDTH = 1280
@@ -311,6 +314,8 @@ class IndustrialKnob(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
+        # cx/cy = center of the 64×64 drawing area (widget width / 2)
+        # r = knob radius (leaves a 4px margin inside the 64px width)
         cx, cy, r = 32, 32, 28
 
         # 外阴影 (绘在圆形之前)
@@ -357,8 +362,9 @@ class IndustrialKnob(QWidget):
                   (-225 + 90) * 16, -span_angle * 16)
 
         # 指示线
-        angle_deg = -225 + 270 * self._value   # degrees from 3-o'clock position
-        angle_rad = math.radians(angle_deg - 90)   # adjust for Qt coord system
+        # angle_deg: offset from Qt's 0° (3 o'clock), CCW; zero position is ~7:30
+        angle_deg = -225 + 270 * self._value
+        angle_rad = math.radians(angle_deg - 90)   # convert to standard math angle
         lx = int(cx + (r - 8) * math.cos(angle_rad))
         ly = int(cy + (r - 8) * math.sin(angle_rad))
         lx2 = int(cx + (r - 2) * math.cos(angle_rad))
@@ -384,15 +390,19 @@ class IndustrialKnob(QWidget):
             self._drag_start_val = self._value
 
     def mouseMoveEvent(self, event):
+        # DRAG_SENSITIVITY: pixels of vertical drag to traverse the full 0→1 range
+        _DRAG_SENSITIVITY = 120.0
         if self._dragging:
-            delta = (self._drag_start_y - event.globalY()) / 120.0
+            delta = (self._drag_start_y - event.globalY()) / _DRAG_SENSITIVITY
             self.set_value(self._drag_start_val + delta)
 
     def mouseReleaseEvent(self, event):
         self._dragging = False
 
     def wheelEvent(self, event):
-        delta = event.angleDelta().y() / 1200.0
+        # WHEEL_SENSITIVITY: total wheel units (angleDelta) to traverse full 0→1 range
+        _WHEEL_SENSITIVITY = 1200.0
+        delta = event.angleDelta().y() / _WHEEL_SENSITIVITY
         self.set_value(self._value + delta)
 
 
@@ -421,9 +431,9 @@ class LedIndicator(QWidget):
 
     def _led_color(self) -> QColor:
         if self._layer == "A":
-            return QColor(AUDIOFIER["layer_a"]) if self._state != "idle" else QColor(178, 34, 34, 40)
+            return QColor(AUDIOFIER["layer_a"]) if self._state != "idle" else QColor(*AUDIOFIER["layer_a_idle"])
         if self._layer == "B":
-            return QColor(AUDIOFIER["layer_b"]) if self._state != "idle" else QColor(0, 100, 140, 40)
+            return QColor(AUDIOFIER["layer_b"]) if self._state != "idle" else QColor(*AUDIOFIER["layer_b_idle"])
         color_map = {
             "active": QColor(AUDIOFIER["led_active"]),
             "idle":   QColor(AUDIOFIER["led_idle"]),
