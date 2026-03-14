@@ -49,6 +49,7 @@ websocket_manager: Optional[WebSocketManager] = None
 task_orchestrator: Optional[TaskOrchestrator] = None
 openclawd_instance: Optional[Any] = None  # Phase 3: OpenClawd 统一智能入口
 llm_router_instance: Optional[Any] = None  # Phase 6: LLM 路由器（用于统计）
+nats_adapter: Optional[Any] = None  # Phase B: NATS ↔ WebSocket bridge
 
 
 # ============================================================================
@@ -134,7 +135,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    global device_manager, message_handler, websocket_manager, task_orchestrator
+    global device_manager, message_handler, websocket_manager, task_orchestrator, nats_adapter
     
     # 启动时初始化
     logger.info("Initializing Galaxy Gateway...")
@@ -190,6 +191,27 @@ async def lifespan(app: FastAPI):
 
     logger.info("Galaxy Gateway initialized successfully")
 
+    # ── Phase B: NATS ↔ WebSocket Gateway Adapter ──
+    try:
+        from core.nats_bus import nats_bus
+        nats_url = os.getenv("GALAXY_NATS_URL", "")
+        if nats_url:
+            await nats_bus.connect()
+        if nats_bus.is_connected():
+            from galaxy_gateway.gateway_nats_adapter import init_gateway_nats_adapter
+            nats_adapter = init_gateway_nats_adapter(
+                device_manager=device_manager,
+                websocket_manager=websocket_manager,
+            )
+            await nats_adapter.start()
+            logger.info("NATS Gateway Adapter started")
+        else:
+            logger.info(
+                "NATS Gateway Adapter: inactive (GALAXY_NATS_URL not set or NATS unavailable)"
+            )
+    except Exception as e:
+        logger.warning(f"NATS Gateway Adapter init failed (non-fatal): {e}")
+
     # ── Log security posture at startup ──
     from core.auth import is_auth_enabled, get_active_tokens
     if is_auth_enabled():
@@ -220,6 +242,11 @@ async def lifespan(app: FastAPI):
     
     # 关闭时清理
     logger.info("Shutting down Galaxy Gateway...")
+    if nats_adapter:
+        try:
+            await nats_adapter.stop()
+        except Exception:
+            pass
     await task_orchestrator.stop()
     await websocket_manager.stop()
     logger.info("Galaxy Gateway shut down")
@@ -315,6 +342,31 @@ async def health_check():
         "status": "healthy",
         "version": "3.0.0",
         "devices_connected": websocket_manager.get_device_count() if websocket_manager else 0
+    }
+
+
+@app.get("/health/nats")
+async def nats_health():
+    """NATS control-plane health — returns bus stats and adapter state."""
+    try:
+        from core.nats_bus import nats_bus
+        bus_stats = nats_bus.get_stats()
+    except Exception as exc:
+        bus_stats = {"error": str(exc)}
+
+    adapter_stats: Dict[str, Any] = {}
+    if nats_adapter:
+        try:
+            adapter_stats = nats_adapter.get_stats()
+        except Exception as exc:
+            adapter_stats = {"error": str(exc)}
+
+    connected = bus_stats.get("connected", False)
+    return {
+        "status": "connected" if connected else "disconnected",
+        "noop_mode": bus_stats.get("noop_mode", True),
+        "bus": bus_stats,
+        "adapter": adapter_stats,
     }
 
 

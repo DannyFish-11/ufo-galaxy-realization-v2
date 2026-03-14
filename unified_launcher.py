@@ -1168,6 +1168,44 @@ class GalaxyUnified:
 
         # 并行执行所有启动任务
         await asyncio.gather(*tasks)
+
+        # ── Phase A: NATS Bus + MasterBrain startup ──────────────────────────
+        print_section("NATS 控制面")
+        try:
+            from core.nats_bus import nats_bus
+            nats_url = os.environ.get("GALAXY_NATS_URL", "")
+            if nats_url:
+                conn_result = await nats_bus.connect()
+                if conn_result.get("success") and not conn_result.get("noop"):
+                    print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
+                else:
+                    print_status("NATS Bus: 连接失败，降级为本地模式", "warning")
+            else:
+                print_status(
+                    "NATS Bus: 未配置 GALAXY_NATS_URL，运行于 no-op 模式", "warning"
+                )
+
+            stats = nats_bus.get_stats()
+            logger.info("NATS Bus stats: %s", stats)
+        except Exception as _nats_err:
+            print_status(f"NATS Bus 初始化异常 (非致命): {_nats_err}", "warning")
+
+        try:
+            if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+                from core.master_brain import get_master_brain
+                brain = get_master_brain()
+                if brain is not None:
+                    start_result = await brain.start()
+                    if start_result.get("success"):
+                        print_status("MasterBrain: 已启动，订阅已激活", "success")
+                    else:
+                        print_status("MasterBrain: 启动失败，降级为本地模式", "warning")
+            else:
+                print_status(
+                    "MasterBrain: 未启用 (设置 GALAXY_MASTER_BRAIN_ENABLED=true 以启用)", "info"
+                )
+        except Exception as _brain_err:
+            print_status(f"MasterBrain 初始化异常 (非致命): {_brain_err}", "warning")
         
         # 5. 启动 Web UI
         if self.config.enable_web_ui:
@@ -1229,6 +1267,13 @@ class GalaxyUnified:
             await shutdown_subsystems()
         except Exception as e:
             logger.warning(f"子系统关闭异常: {e}")
+
+        # Disconnect NATS bus gracefully
+        try:
+            from core.nats_bus import nats_bus
+            await nats_bus.disconnect()
+        except Exception as e:
+            logger.warning(f"NATS Bus 关闭异常: {e}")
         
     def show_status(self):
         """显示系统状态"""

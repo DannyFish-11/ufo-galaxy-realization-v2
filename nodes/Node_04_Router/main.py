@@ -15,6 +15,7 @@ import os
 import json
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Set
 from dataclasses import dataclass, field
@@ -27,7 +28,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
 
-app = FastAPI(title="Node 04 - Global Router", version="1.0.0")
+# ── Phase C: NATS heartbeat background task ──
+_hb_task: Optional[asyncio.Task] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _hb_task
+    try:
+        from core.nats_heartbeat import start_node_heartbeat
+        _hb_task = await start_node_heartbeat(
+            worker_id="node-04-router",
+            device_type="router",
+            capabilities=["routing", "discovery", "load_balancing", "health_check"],
+        )
+    except Exception as _e:
+        pass  # Heartbeat is optional; node works without NATS
+    yield
+    if _hb_task and not _hb_task.done():
+        _hb_task.cancel()
+
+
+app = FastAPI(title="Node 04 - Global Router", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

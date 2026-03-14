@@ -20,6 +20,7 @@ Galaxy - 命令路由引擎
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -811,6 +812,208 @@ def get_command_router(**kwargs) -> CommandRouter:
         if "cache_backend" in kwargs and kwargs["cache_backend"] is not None:
             _command_router._cache = kwargs["cache_backend"]
     return _command_router
+
+
+# ============================================================================
+# NATS Executor (Phase D)
+# ============================================================================
+
+class NATSExecutor:
+    """Wraps commands as NATS TaskDispatch messages and resolves results.
+
+    - Publishes ``TaskDispatch`` to ``galaxy.tasks.dispatch.{worker_id}`` via
+      :class:`~core.nats_bus.NATSBus`.
+    - Subscribes to ``galaxy.tasks.result.*`` to fulfil pending futures.
+    - Falls back to *fallback_executor* when NATS is not connected and
+      *fallback_enabled* is True (default True).
+
+    Usage::
+
+        nats_exec = NATSExecutor(fallback_executor=existing_local_executor)
+        await nats_exec.start()                 # subscribe to results
+        command_router.set_executor(nats_exec)  # register as executor
+
+    Env vars:
+        GALAXY_NATS_EXECUTOR_FALLBACK  — "true"/"false" (default "true")
+        GALAXY_NATS_EXECUTOR_TIMEOUT   — per-task NATS timeout in seconds (default 30)
+    """
+
+    def __init__(
+        self,
+        fallback_executor: Optional[Callable[..., Coroutine]] = None,
+        fallback_enabled: Optional[bool] = None,
+        timeout_s: float = float(os.environ.get("GALAXY_NATS_EXECUTOR_TIMEOUT", "30")),
+    ) -> None:
+        self._fallback = fallback_executor
+        if fallback_enabled is None:
+            self._fallback_enabled = os.environ.get(
+                "GALAXY_NATS_EXECUTOR_FALLBACK", "true"
+            ).lower() not in ("false", "0")
+        else:
+            self._fallback_enabled = fallback_enabled
+        self._timeout_s = timeout_s
+
+        # task_id → asyncio.Future for pending NATS dispatches
+        self._pending: Dict[str, asyncio.Future] = {}
+        self._started = False
+        self._stats = {
+            "nats_dispatched": 0,
+            "nats_resolved": 0,
+            "nats_timeout": 0,
+            "fallback_used": 0,
+        }
+
+    # ── Lifecycle ────────────────────────────────────────────────────────────
+
+    async def start(self) -> None:
+        """Subscribe to galaxy.tasks.result.* to receive task results."""
+        if self._started:
+            return
+        try:
+            from core.nats_bus import nats_bus
+
+            if not nats_bus.is_connected():
+                logger.debug("NATSExecutor: NATS not connected, skipping result subscription")
+                return
+
+            await nats_bus.subscribe_task_results(self._on_task_result)
+            self._started = True
+            logger.info("NATSExecutor: subscribed to galaxy.tasks.result.*")
+        except Exception as exc:
+            logger.warning("NATSExecutor.start error: %s", exc)
+
+    async def stop(self) -> None:
+        """Cancel all pending result futures."""
+        self._started = False
+        for fut in list(self._pending.values()):
+            if not fut.done():
+                fut.cancel()
+        self._pending.clear()
+
+    # ── Executor interface ───────────────────────────────────────────────────
+
+    async def __call__(
+        self,
+        target: str,
+        command: str,
+        params: dict,
+    ) -> dict:
+        """Execute *command* on *target* via NATS TaskDispatch.
+
+        Signature matches the ``CommandRouter`` executor protocol:
+        ``async (target: str, command: str, params: dict) -> dict``
+        """
+        try:
+            from core.nats_bus import nats_bus
+
+            if not nats_bus.is_connected():
+                return await self._use_fallback(target, command, params, reason="nats_not_connected")
+
+            return await self._dispatch_via_nats(target, command, params)
+        except Exception as exc:
+            logger.error("NATSExecutor: unexpected error — %s", exc)
+            return await self._use_fallback(target, command, params, reason=str(exc))
+
+    # ── Internal ─────────────────────────────────────────────────────────────
+
+    async def _dispatch_via_nats(self, target: str, command: str, params: dict) -> dict:
+        from core.nats_bus import nats_bus
+        from core.schemas.contracts import (
+            TaskDispatchModel,
+            TaskType,
+            DeviceCommandPayloadModel,
+            TimestampModel,
+        )
+        from datetime import datetime, timezone
+
+        task_id = str(uuid.uuid4())
+        ts = TimestampModel(seconds=int(datetime.now(timezone.utc).timestamp()))
+        device_payload = DeviceCommandPayloadModel(
+            command=command,
+            params={k: str(v) for k, v in params.items() if isinstance(v, (str, int, float, bool))},
+            target_device_id=target,
+        )
+        task = TaskDispatchModel(
+            task_id=task_id,
+            task_type=TaskType.DEVICE_CMD,
+            target_worker_id=target,
+            device_payload=device_payload,
+            created_at=ts,
+        )
+
+        # Register future before publish to avoid race condition
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending[task_id] = fut
+
+        try:
+            pub_result = await nats_bus.publish_task_dispatch(target, task)
+            if not pub_result.get("success"):
+                return await self._use_fallback(target, command, params, reason="publish_failed")
+
+            self._stats["nats_dispatched"] += 1
+
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.shield(fut), timeout=self._timeout_s
+                )
+                self._stats["nats_resolved"] += 1
+                return result
+            except asyncio.TimeoutError:
+                self._stats["nats_timeout"] += 1
+                logger.warning(
+                    "NATSExecutor: task %s timed out after %.1fs, falling back",
+                    task_id,
+                    self._timeout_s,
+                )
+                return await self._use_fallback(target, command, params, reason="nats_timeout")
+        finally:
+            self._pending.pop(task_id, None)
+
+    async def _on_task_result(self, data: dict) -> None:
+        """Handle an incoming task result from NATS."""
+        task_id = data.get("task_id", "")
+        fut = self._pending.get(task_id)
+        if fut and not fut.done():
+            status = data.get("status", "")
+            success = status in ("completed", "success")
+            result = {
+                "success": success,
+                "result": data.get("result"),
+                "error": data.get("error"),
+                "task_id": task_id,
+            }
+            fut.set_result(result)
+
+    async def _use_fallback(self, target: str, command: str, params: dict, reason: str) -> dict:
+        if self._fallback and self._fallback_enabled:
+            self._stats["fallback_used"] += 1
+            logger.debug("NATSExecutor: using fallback executor (reason=%s)", reason)
+            return await self._fallback(target, command, params)
+        return {
+            "success": False,
+            "error": f"nats_executor_no_result:{reason}",
+            "target": target,
+            "command": command,
+        }
+
+    def get_stats(self) -> dict:
+        return {**self._stats, "pending": len(self._pending), "started": self._started}
+
+
+_nats_executor: Optional[NATSExecutor] = None
+
+
+def get_nats_executor(
+    fallback_executor: Optional[Callable[..., Coroutine]] = None,
+) -> NATSExecutor:
+    """Return (or create) the module-level :class:`NATSExecutor` singleton."""
+    global _nats_executor
+    if _nats_executor is None:
+        _nats_executor = NATSExecutor(fallback_executor=fallback_executor)
+    elif fallback_executor is not None and _nats_executor._fallback is None:
+        _nats_executor._fallback = fallback_executor
+    return _nats_executor
 
 
 # ============================================================================

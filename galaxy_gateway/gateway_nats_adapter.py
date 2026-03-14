@@ -1,0 +1,373 @@
+"""
+Galaxy Gateway — NATS ↔ WebSocket Adapter (Phase B)
+====================================================
+
+Bridges the NATS JetStream control plane with the WebSocket / HTTP device
+transport layer so that tasks dispatched by MasterBrain (or any NATS
+publisher) are forwarded to the appropriate physical device and the result
+is published back to NATS.
+
+Subject layout (matches NATSBus / contracts):
+  Subscribe : galaxy.tasks.dispatch.gateway   (durable consumer "gateway")
+  Publish   : galaxy.tasks.result.{task_id}
+  Events    : galaxy.events.gateway_success / gateway_failure / gateway_timeout
+
+Usage (called from galaxy_gateway/app.py lifespan)::
+
+    from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+    adapter = GatewayNATSAdapter(device_manager, websocket_manager)
+    await adapter.start()
+    # … on shutdown:
+    await adapter.stop()
+
+Configuration (env vars):
+  GALAXY_NATS_URL               — NATS server URL (e.g. nats://localhost:4222)
+  GALAXY_GW_ADAPTER_TIMEOUT     — per-task WebSocket timeout in seconds (default 30)
+  GALAXY_GW_ADAPTER_RETRIES     — max delivery retries before DLQ (default 2)
+  GALAXY_GW_ADAPTER_DLQ_SUBJECT — dead-letter subject (default galaxy.tasks.deadletter)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import time
+import uuid
+from typing import Any, Callable, Dict, Optional
+
+logger = logging.getLogger("gateway_nats_adapter")
+
+_TASK_TIMEOUT_S = float(os.getenv("GALAXY_GW_ADAPTER_TIMEOUT", "30"))
+_MAX_RETRIES = int(os.getenv("GALAXY_GW_ADAPTER_RETRIES", "2"))
+_DLQ_SUBJECT = os.getenv("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
+_SUBSCRIBE_SUBJECT = "galaxy.tasks.dispatch.gateway"
+_DURABLE_NAME = "gateway"
+
+
+class GatewayNATSAdapter:
+    """Bridges NATS JetStream task dispatches to connected WebSocket devices.
+
+    - Subscribes to ``galaxy.tasks.dispatch.gateway`` (durable "gateway").
+    - For each :class:`~core.schemas.contracts.TaskDispatchModel`, locates the
+      target device in *device_manager* / *websocket_manager* and forwards the
+      task payload via WebSocket.
+    - Awaits the device result (via :attr:`DeviceRouter.task_results` or an
+      injected result-callback) and publishes it back to
+      ``galaxy.tasks.result.{task_id}``.
+    - On timeout or failure emits ``galaxy.events.gateway_failure`` and, after
+      exceeding *max_retries*, publishes to the dead-letter subject.
+    """
+
+    def __init__(
+        self,
+        device_manager: Any = None,
+        websocket_manager: Any = None,
+        task_timeout: float = _TASK_TIMEOUT_S,
+        max_retries: int = _MAX_RETRIES,
+        dlq_subject: str = _DLQ_SUBJECT,
+    ) -> None:
+        self._device_manager = device_manager
+        self._websocket_manager = websocket_manager
+        self._task_timeout = task_timeout
+        self._max_retries = max_retries
+        self._dlq_subject = dlq_subject
+
+        # Pending task futures: task_id -> asyncio.Future
+        self._pending: Dict[str, asyncio.Future] = {}
+
+        self._started = False
+        self._stats = {
+            "dispatched": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "timed_out": 0,
+            "dlq": 0,
+        }
+
+    # ── Lifecycle ────────────────────────────────────────────────────────────
+
+    async def start(self) -> None:
+        """Subscribe to NATS and begin processing gateway task dispatches."""
+        if self._started:
+            return
+        try:
+            from core.nats_bus import nats_bus
+
+            if not nats_bus.is_connected():
+                logger.warning(
+                    "GatewayNATSAdapter: NATS not connected — adapter is inactive"
+                )
+                return
+
+            result = await nats_bus._subscribe(
+                _SUBSCRIBE_SUBJECT,
+                self._handle_task_dispatch,
+                durable=_DURABLE_NAME,
+            )
+            if result.get("success"):
+                self._started = True
+                logger.info(
+                    "GatewayNATSAdapter: subscribed to %s (durable=%s)",
+                    _SUBSCRIBE_SUBJECT,
+                    _DURABLE_NAME,
+                )
+                _try_emit_event("GATEWAY_ADAPTER_STARTED", {"subject": _SUBSCRIBE_SUBJECT})
+            else:
+                logger.error("GatewayNATSAdapter: subscription failed — %s", result)
+        except Exception as exc:
+            logger.error("GatewayNATSAdapter.start error: %s", exc)
+
+    async def stop(self) -> None:
+        """Cancel all pending tasks and unsubscribe."""
+        self._started = False
+        for fut in list(self._pending.values()):
+            if not fut.done():
+                fut.cancel()
+        self._pending.clear()
+        logger.info("GatewayNATSAdapter: stopped")
+
+    # ── Task resolution (called by WebSocket handler when device returns result) ─
+
+    def resolve_task(self, task_id: str, result: dict) -> None:
+        """Resolve a pending task future with the device result.
+
+        Called from the WebSocket message handler when a task_result message
+        arrives from a device.
+        """
+        fut = self._pending.get(task_id)
+        if fut and not fut.done():
+            fut.set_result(result)
+
+    # ── Internal handlers ────────────────────────────────────────────────────
+
+    async def _handle_task_dispatch(self, data: dict) -> None:
+        """Process a TaskDispatch message from NATS."""
+        task_id = data.get("task_id") or str(uuid.uuid4())
+        target_device = data.get("target_worker_id") or data.get("target_device_id", "")
+        task_type = data.get("task_type", "command")
+        payload = data.get("payload") or {}
+
+        logger.info(
+            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s",
+            task_id,
+            target_device,
+            task_type,
+        )
+        self._stats["dispatched"] += 1
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                result = await asyncio.wait_for(
+                    self._forward_to_device(task_id, target_device, task_type, payload),
+                    timeout=self._task_timeout,
+                )
+                # Publish success result back to NATS
+                await self._publish_result(task_id, result, success=True)
+                self._stats["succeeded"] += 1
+                await _publish_event(
+                    "gateway_success",
+                    {"task_id": task_id, "target": target_device, "attempt": attempt},
+                )
+                return
+            except asyncio.TimeoutError:
+                self._stats["timed_out"] += 1
+                logger.warning(
+                    "GatewayNATSAdapter: task %s timed out (attempt %d/%d)",
+                    task_id,
+                    attempt + 1,
+                    self._max_retries + 1,
+                )
+                if attempt < self._max_retries:
+                    await asyncio.sleep(1.0 * (attempt + 1))  # simple back-off
+                    continue
+                # Exhausted retries
+                await self._publish_result(
+                    task_id,
+                    {"success": False, "error": "timeout"},
+                    success=False,
+                )
+                await self._publish_dlq(task_id, data, reason="timeout")
+                await _publish_event(
+                    "gateway_timeout",
+                    {"task_id": task_id, "target": target_device, "retries": attempt},
+                )
+            except Exception as exc:
+                self._stats["failed"] += 1
+                logger.error("GatewayNATSAdapter: task %s error — %s", task_id, exc)
+                await self._publish_result(
+                    task_id,
+                    {"success": False, "error": str(exc)},
+                    success=False,
+                )
+                await self._publish_dlq(task_id, data, reason=str(exc))
+                await _publish_event(
+                    "gateway_failure",
+                    {"task_id": task_id, "target": target_device, "error": str(exc)},
+                )
+                return
+
+    async def _forward_to_device(
+        self,
+        task_id: str,
+        target_device: str,
+        task_type: str,
+        payload: dict,
+    ) -> dict:
+        """Forward a task to the target device via WebSocket or HTTP fallback."""
+        # 1. Try DeviceRouter if available
+        try:
+            from galaxy_gateway.device_router import device_router
+
+            if device_router and target_device:
+                device = device_router.get_device(target_device)
+                if device:
+                    task = {
+                        "task_id": task_id,
+                        "task_type": task_type,
+                        "payload": payload,
+                    }
+                    result = await device_router.dispatch_task(task, device)
+                    return result
+        except Exception as exc:
+            logger.debug("DeviceRouter dispatch failed, falling back: %s", exc)
+
+        # 2. Try WebSocket manager directly
+        if self._websocket_manager and target_device:
+            fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            self._pending[task_id] = fut
+            try:
+                message = json.dumps(
+                    {
+                        "type": "task_assign",
+                        "task_id": task_id,
+                        "task_type": task_type,
+                        "device_id": target_device,
+                        "payload": payload,
+                    }
+                )
+                await self._websocket_manager.send_to_device(target_device, message)
+                result = await asyncio.wait_for(fut, timeout=self._task_timeout)
+                return result
+            finally:
+                self._pending.pop(task_id, None)
+
+        # 3. No device available
+        logger.warning(
+            "GatewayNATSAdapter: no route to device '%s' for task %s",
+            target_device,
+            task_id,
+        )
+        return {"success": False, "error": f"no_route_to_device:{target_device}"}
+
+    async def _publish_result(
+        self, task_id: str, result: dict, success: bool
+    ) -> None:
+        """Publish task result back to NATS."""
+        try:
+            from core.nats_bus import nats_bus
+            from core.schemas.contracts import TaskResultModel, TaskStatus, TimestampModel
+            from datetime import datetime, timezone
+
+            status = TaskStatus.SUCCESS if success else TaskStatus.FAILED
+            model = TaskResultModel(
+                task_id=task_id,
+                worker_id="gateway",
+                status=status,
+                result=result if success else None,
+                error=result.get("error") if not success else None,
+                completed_at=TimestampModel(
+                    seconds=int(datetime.now(timezone.utc).timestamp())
+                ),
+            )
+            await nats_bus.publish_task_result(task_id, model)
+        except Exception as exc:
+            logger.error("GatewayNATSAdapter: failed to publish result for %s: %s", task_id, exc)
+
+    async def _publish_dlq(self, task_id: str, original: dict, reason: str) -> None:
+        """Publish undeliverable task to dead-letter subject."""
+        self._stats["dlq"] += 1
+        try:
+            from core.nats_bus import nats_bus
+
+            dlq_payload = {
+                "task_id": task_id,
+                "original": original,
+                "reason": reason,
+                "gateway_ts": time.time(),
+            }
+            await nats_bus._publish(self._dlq_subject, dlq_payload)
+            logger.warning(
+                "GatewayNATSAdapter: task %s sent to DLQ (%s) — %s",
+                task_id,
+                self._dlq_subject,
+                reason,
+            )
+        except Exception as exc:
+            logger.error("GatewayNATSAdapter: DLQ publish failed: %s", exc)
+
+    # ── Stats ────────────────────────────────────────────────────────────────
+
+    def get_stats(self) -> dict:
+        """Return adapter statistics."""
+        return {
+            "started": self._started,
+            "pending_tasks": len(self._pending),
+            **self._stats,
+        }
+
+
+# ── Module-level singleton ───────────────────────────────────────────────────
+
+_adapter: Optional[GatewayNATSAdapter] = None
+
+
+def get_gateway_nats_adapter() -> Optional[GatewayNATSAdapter]:
+    """Return the module-level adapter instance (None if not yet created)."""
+    return _adapter
+
+
+def init_gateway_nats_adapter(
+    device_manager: Any = None,
+    websocket_manager: Any = None,
+) -> GatewayNATSAdapter:
+    """Create and store the module-level adapter singleton."""
+    global _adapter
+    _adapter = GatewayNATSAdapter(
+        device_manager=device_manager,
+        websocket_manager=websocket_manager,
+    )
+    return _adapter
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _try_emit_event(event_type_name: str, data: dict) -> None:
+    try:
+        from integration.event_bus import event_bus, EventType
+
+        et = getattr(EventType, event_type_name, None)
+        if et is not None:
+            event_bus.publish_sync(et, "gateway_nats_adapter", data)
+    except Exception:
+        pass
+
+
+async def _publish_event(event_type: str, data: dict) -> None:
+    try:
+        from core.nats_bus import nats_bus
+        from core.schemas.contracts import AgentEventModel, EventDomain, EventSeverity
+
+        evt = AgentEventModel(
+            event_id=str(uuid.uuid4()),
+            event_type=event_type,
+            domain=EventDomain.UNSPECIFIED,
+            severity=EventSeverity.INFO,
+            source="gateway_nats_adapter",
+            payload=data,
+        )
+        await nats_bus.publish_event(evt)
+    except Exception:
+        pass
