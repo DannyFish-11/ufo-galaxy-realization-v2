@@ -3289,3 +3289,74 @@ async def update_integrations_config(request: dict):
             config.setdefault(platform, {}).update(request[platform])
     success = _save_json_file(_INTEGRATIONS_CONFIG_FILE, config)
     return {"success": success}
+
+
+# ============================================================================
+# GitHub MCP/Skill Addon Endpoints (Dashboard integration)
+# ============================================================================
+
+class GitHubInstallBody(BaseModel):
+    url: str
+    ref: Optional[str] = None
+    type: Optional[str] = None   # "mcp" | "skill" | None
+    dry_run: bool = False
+
+
+class GitHubUninstallBody(BaseModel):
+    name: str
+
+
+@app.post("/api/v1/github/install")
+async def dashboard_github_install(body: GitHubInstallBody):
+    """Install an MCP tool or Skill from a GitHub repository.
+
+    Requires ``GITHUB_TOKEN`` in env for private repos or to avoid rate limits.
+    Token must NOT be provided in the request body — configure it in .env or
+    the Dashboard Settings page.
+    """
+    try:
+        from core.github_installer import get_github_installer
+        installer = get_github_installer()
+        result = await installer.install(
+            url=body.url,
+            ref=body.ref,
+            addon_type=body.type,
+            dry_run=body.dry_run,
+        )
+        return result
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.post("/api/v1/github/uninstall")
+async def dashboard_github_uninstall(body: GitHubUninstallBody):
+    """Uninstall a previously installed GitHub addon by name."""
+    try:
+        from core.github_installer import get_github_installer
+        installer = get_github_installer()
+        return await installer.uninstall(body.name)
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.get("/api/v1/github/list")
+async def dashboard_github_list():
+    """List all GitHub addons installed in this Galaxy instance."""
+    try:
+        from core.github_installer import get_github_installer
+        installer = get_github_installer()
+        return installer.list_installed()
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.get("/api/v1/github/status")
+async def dashboard_github_status():
+    """Return GitHub installer status (token configured, install dir, counts)."""
+    try:
+        from core.github_installer import get_github_installer
+        installer = get_github_installer()
+        return installer.get_status()
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+

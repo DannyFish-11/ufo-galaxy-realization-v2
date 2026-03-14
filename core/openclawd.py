@@ -235,6 +235,82 @@ _DEFAULT_SKILL_SCHEMA: Dict = {
     },
 }
 
+# GitHub 插件内置工具定义（供 LLM function calling 使用）
+_GITHUB_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "github__install",
+            "description": (
+                "从 GitHub 仓库安装 MCP 工具或 Skill 插件，安装后可立即在当前会话中调用。"
+                "GITHUB_TOKEN 须在环境变量或 Dashboard 中配置，勿在对话中提供 Token。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "GitHub HTTPS 仓库 URL，例如 https://github.com/owner/repo 或 https://github.com/owner/repo/tree/main",
+                    },
+                    "ref": {
+                        "type": "string",
+                        "description": "指定分支、Tag 或 Commit SHA（可选，覆盖 URL 中的分支）",
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": ["mcp", "skill"],
+                        "description": "插件类型：mcp（MCP 工具服务器）或 skill（Skill 技能）；不填则自动检测",
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "设为 true 时只验证 URL 格式，不实际安装",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "github__uninstall",
+            "description": "卸载通过 github__install 安装的 MCP 工具或 Skill 插件。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "插件名称（与安装时 manifest 中的 name 字段一致）",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "github__list",
+            "description": "列出当前已安装的所有 GitHub 来源的 MCP 工具和 Skill 插件及其安装信息。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "github__status",
+            "description": "查看 GitHub 插件安装器状态，包括 GITHUB_TOKEN 是否已配置、安装目录、已安装数量等。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+]
+
 
 class OpenClawd:
     """Galaxy-Nexus 星枢核心智能体 — 统一智能交互入口
@@ -1492,6 +1568,10 @@ class OpenClawd:
             logger.debug(f"收集 Node 工具失败: {e}")
 
         logger.info(f"工具总线收集完成: {len(tools)} 个工具")
+
+        # ── GitHub 插件工具 (始终收集) ─────────────────────────────────────
+        tools.extend(_GITHUB_BUILTIN_TOOLS)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -1581,12 +1661,76 @@ class OpenClawd:
                 )
                 return {"success": True, "result": result}
 
+            elif tool_name.startswith("github__"):
+                # GitHub addon tools: github__install, github__uninstall, github__list
+                action = tool_name[8:]  # strip "github__"
+                return await self._dispatch_github_tool(action, arguments)
+
             else:
                 return {"success": False, "error": f"未知工具前缀: {tool_name}"}
 
         except Exception as e:
             logger.warning(f"工具执行失败 [{tool_name}]: {e}")
             return {"success": False, "error": str(e)}
+
+    # ========================================================================
+    # GitHub Addon Tools — github__install / github__uninstall / github__list
+    # ========================================================================
+
+    async def _dispatch_github_tool(self, action: str, arguments: dict) -> dict:
+        """Dispatch GitHub addon tool calls.
+
+        Supported actions:
+            install   — install MCP tool or Skill from GitHub URL.
+            uninstall — uninstall addon by name.
+            list      — list all installed GitHub addons.
+
+        Args:
+            action:    Action name (strip of ``github__`` prefix).
+            arguments: Tool arguments from LLM tool_calls.
+
+        Returns:
+            ``{"success": bool, "result": Any, "error": Optional[str]}``
+        """
+        try:
+            from core.github_installer import get_github_installer
+            installer = get_github_installer()
+
+            if action == "install":
+                url = arguments.get("url", "")
+                if not url:
+                    return {"success": False, "error": "github__install requires 'url' argument"}
+                result = await installer.install(
+                    url=url,
+                    ref=arguments.get("ref"),
+                    addon_type=arguments.get("type"),
+                    dry_run=bool(arguments.get("dry_run", False)),
+                )
+                return result
+
+            elif action == "uninstall":
+                name = arguments.get("name", "")
+                if not name:
+                    return {"success": False, "error": "github__uninstall requires 'name' argument"}
+                return await installer.uninstall(name)
+
+            elif action == "list":
+                return installer.list_installed()
+
+            elif action == "status":
+                return installer.get_status()
+
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unknown github action: '{action}'. "
+                        "Valid actions: install, uninstall, list, status."
+                    ),
+                }
+        except Exception as exc:
+            logger.warning("_dispatch_github_tool '%s' failed: %s", action, exc)
+            return {"success": False, "error": str(exc)}
 
     # ========================================================================
     # Node 辅助方法
