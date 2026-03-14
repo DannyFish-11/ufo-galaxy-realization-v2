@@ -357,6 +357,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         - sync: 同步等待所有目标返回
         - async: 立即返回 request_id，后台执行
         """
+        # Check for device-level autonomous agent
+        try:
+            from core.device_agent_manager import DeviceAgentManager
+            dam = DeviceAgentManager()
+            device_agents = dam.get_all_agents()
+            # If target device has an active agent, delegate to it
+            for target_id in (req.targets or []):
+                if target_id in device_agents:
+                    agent = device_agents[target_id]
+                    if agent.is_connected:
+                        logger.info(f"Delegating command to DeviceAgent for {target_id}")
+        except Exception:
+            pass  # DeviceAgentManager not available, use standard routing
+
         if req.mode not in ("sync", "async"):
             raise HTTPException(status_code=400, detail="Invalid mode. Must be 'sync' or 'async'")
 
