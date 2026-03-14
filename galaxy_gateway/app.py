@@ -25,12 +25,26 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
+
+try:
+    from core.auth import require_auth as _require_auth
+except ImportError:
+    import warnings
+    warnings.warn(
+        "core.auth not found; using no-op _require_auth fallback. "
+        "Do NOT deploy without the proper auth module.",
+        RuntimeWarning,
+        stacklevel=1,
+    )
+
+    async def _require_auth():  # type: ignore[misc]
+        return {"authenticated": True, "dev_mode": True}
 
 from .protocol import (
     AIPMessage, MessageType, DeviceType, DeviceInfo,
@@ -517,7 +531,7 @@ class TaskRequest(BaseModel):
 
 
 @app.post("/api/tasks")
-async def submit_task(request: TaskRequest):
+async def submit_task(request: TaskRequest, auth: dict = Depends(_require_auth)):
     """提交任务"""
     if not task_orchestrator:
         raise HTTPException(status_code=503, detail="Service not ready")
@@ -545,7 +559,7 @@ async def submit_task(request: TaskRequest):
 
 
 @app.get("/api/tasks/{task_id}")
-async def get_task(task_id: str):
+async def get_task(task_id: str, auth: dict = Depends(_require_auth)):
     """获取任务状态"""
     if not task_orchestrator:
         raise HTTPException(status_code=503, detail="Service not ready")
@@ -567,7 +581,7 @@ async def get_task(task_id: str):
 
 
 @app.get("/api/tasks")
-async def get_all_tasks():
+async def get_all_tasks(auth: dict = Depends(_require_auth)):
     """获取所有任务"""
     if not task_orchestrator:
         raise HTTPException(status_code=503, detail="Service not ready")
@@ -588,7 +602,7 @@ async def get_all_tasks():
 
 
 @app.delete("/api/tasks/{task_id}")
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, auth: dict = Depends(_require_auth)):
     """取消任务"""
     if not task_orchestrator:
         raise HTTPException(status_code=503, detail="Service not ready")
@@ -608,7 +622,7 @@ class CommandRequest(BaseModel):
 
 
 @app.post("/api/commands")
-async def send_command(request: CommandRequest):
+async def send_command(request: CommandRequest, auth: dict = Depends(_require_auth)):
     """直接发送命令到设备"""
     if not websocket_manager:
         raise HTTPException(status_code=503, detail="Service not ready")
@@ -657,7 +671,7 @@ class SessionMigrateRequest(BaseModel):
 
 
 @app.get("/api/v1/sessions")
-async def list_sessions(state: Optional[str] = None):
+async def list_sessions(state: Optional[str] = None, auth: dict = Depends(_require_auth)):
     """列出所有会话（可按状态过滤）"""
     try:
         from galaxy_gateway.session_roaming import session_roaming, SessionState
@@ -678,7 +692,7 @@ async def list_sessions(state: Optional[str] = None):
 
 
 @app.get("/api/v1/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, auth: dict = Depends(_require_auth)):
     """获取单个会话详情"""
     try:
         from galaxy_gateway.session_roaming import session_roaming
@@ -694,7 +708,7 @@ async def get_session(session_id: str):
 
 
 @app.post("/api/v1/sessions/{session_id}/migrate")
-async def migrate_session(session_id: str, request: SessionMigrateRequest):
+async def migrate_session(session_id: str, request: SessionMigrateRequest, auth: dict = Depends(_require_auth)):
     """触发会话迁移到目标设备"""
     try:
         from galaxy_gateway.session_roaming import session_roaming
@@ -719,7 +733,7 @@ async def migrate_session(session_id: str, request: SessionMigrateRequest):
 
 
 @app.get("/api/v1/sessions/stats")
-async def session_stats():
+async def session_stats(auth: dict = Depends(_require_auth)):
     """获取会话统计信息"""
     try:
         from galaxy_gateway.session_roaming import session_roaming
@@ -869,7 +883,7 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/v1/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, auth: dict = Depends(_require_auth)):
     """智能对话端点 — 严格委托给 OpenClawd 统一智能入口
 
     所有对话请求经由 OpenClawd.process() 路由，确保 CapabilityRegistry
@@ -968,7 +982,7 @@ except Exception as _gw5_err:
 # ============================================================================
 
 @app.get("/api/v1/llm/stats")
-async def llm_stats():
+async def llm_stats(auth: dict = Depends(_require_auth)):
     """LLM 路由器统计 — 成本、延迟、提供商状态"""
     if not llm_router_instance:
         raise HTTPException(status_code=503, detail="LLM Router not available")
