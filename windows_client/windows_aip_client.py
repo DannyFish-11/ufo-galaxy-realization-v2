@@ -114,6 +114,72 @@ def _execute_command(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     return manager.execute_action({"type": task_type, "params": payload})
 
 
+def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a remote ``agent_execute`` payload on the local Windows device.
+
+    Tries to run through ``WindowsAutonomyManager`` if available.  Returns a
+    structured result that preserves ``agent_id``, ``task_id``, and
+    ``trace_id`` for end-to-end correlation (PR155).
+
+    Parameters
+    ----------
+    payload:
+        Dict from the ``agent_execute`` message body; expected keys::
+
+            agent_id, agent_template, task, session_id, trace_id, task_id, context
+    """
+    agent_id = payload.get("agent_id", "")
+    task_id = payload.get("task_id", "")
+    trace_id = payload.get("trace_id", "")
+    session_id = payload.get("session_id", "")
+    task_text = payload.get("task", "")
+    agent_template = payload.get("agent_template", "")
+    context = payload.get("context", {})
+
+    logger.info(
+        "[agent_execute] agent_id=%s task_id=%s trace_id=%s template=%s task=%.80s",
+        agent_id, task_id, trace_id, agent_template, task_text,
+    )
+
+    manager = _get_manager()
+
+    try:
+        if manager is not None and hasattr(manager, "execute_agent_task"):
+            # WindowsAutonomyManager supports agent task execution
+            result = manager.execute_agent_task({
+                "task": task_text,
+                "agent_template": agent_template,
+                "context": context,
+            })
+        elif manager is not None:
+            # Fallback: treat task as a generic autonomy action
+            result = manager.execute_action({
+                "type": "agent_task",
+                "params": {"task": task_text, "context": context},
+            })
+        else:
+            # No autonomy manager — return acknowledgement
+            result = {
+                "success": True,
+                "output": f"[agent_execute] task received on Windows device: {task_text[:120]}",
+                "note": "autonomy_manager unavailable; acknowledged only",
+            }
+    except Exception as exc:
+        logger.error("[agent_execute] execution error: %s", exc)
+        result = {"success": False, "error": str(exc)}
+
+    # Ensure result is always a plain dict before setting correlation IDs
+    if not isinstance(result, dict):
+        result = {"success": True, "output": str(result)}
+
+    # Ensure correlation IDs are preserved in the returned result
+    result["agent_id"] = agent_id
+    result["task_id"] = task_id
+    result["trace_id"] = trace_id
+    result["session_id"] = session_id
+    return result
+
+
 # ============================================================================
 # AIP 客户端
 # ============================================================================
@@ -191,6 +257,25 @@ class WindowsAIPClient:
         })
         return msg
 
+    def _agent_execute_result_msg(
+        self,
+        command_id: str,
+        agent_payload: Dict[str, Any],
+        result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build an ``agent_execute_result`` message preserving all correlation IDs (PR155)."""
+        msg = self._base_message("agent_execute_result")
+        msg.update({
+            "command_id": command_id,
+            "agent_id": result.get("agent_id") or agent_payload.get("agent_id", ""),
+            "task_id": result.get("task_id") or agent_payload.get("task_id", ""),
+            "trace_id": result.get("trace_id") or agent_payload.get("trace_id", ""),
+            "session_id": result.get("session_id") or agent_payload.get("session_id", ""),
+            "status": "completed" if result.get("success", True) else "failed",
+            "result": result,
+        })
+        return msg
+
     # ------------------------------------------------------------------
     # 消息处理
     # ------------------------------------------------------------------
@@ -228,6 +313,25 @@ class WindowsAIPClient:
             cmd_id = data.get("command_id", "")
             command = data.get("command", "")
             params = data.get("params", {})
+            # PR155: agent_execute dispatched via route_command arrives as
+            # a "command" envelope with command="agent_execute"
+            if command == "agent_execute":
+                agent_payload = params if isinstance(params, dict) else {}
+                # Merge top-level correlation fields from the envelope
+                for field in ("agent_id", "task_id", "trace_id", "session_id"):
+                    if field not in agent_payload and data.get(field):
+                        agent_payload[field] = data[field]
+                agent_payload.setdefault("task_id", cmd_id)
+                logger.info(
+                    f"收到 agent_execute: agent_id={agent_payload.get('agent_id')} "
+                    f"task_id={agent_payload.get('task_id')} "
+                    f"trace_id={agent_payload.get('trace_id')}"
+                )
+                result = await asyncio.get_event_loop().run_in_executor(
+                    None, _execute_agent_task, agent_payload
+                )
+                await self._send(self._agent_execute_result_msg(cmd_id, agent_payload, result))
+                return
             logger.info(f"收到命令: {cmd_id} cmd={command}")
             result = await asyncio.get_event_loop().run_in_executor(
                 None, _execute_command, command, params

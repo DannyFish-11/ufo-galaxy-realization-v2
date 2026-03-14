@@ -24,11 +24,37 @@ import asyncio as _asyncio_module
 import dataclasses
 import enum
 import logging
+import socket
 import time
 import uuid
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 logger = logging.getLogger("Galaxy.OpenClawd")
+
+# ============================================================================
+# Helper: local-device detection (PR155)
+# ============================================================================
+
+_LOCAL_DEVICE_PREFIXES = ("local", "openclawd", "server")
+_LOCAL_HOSTNAME = socket.gethostname().lower()
+
+
+def _is_local_device(device_id: str) -> bool:
+    """Return True when *device_id* refers to the local host / process.
+
+    A device is considered local when its ID:
+      - starts with a known local prefix (``local``, ``openclawd``, ``server``), or
+      - contains the current hostname, or
+      - is empty / None.
+    """
+    if not device_id:
+        return True
+    dl = device_id.lower()
+    if any(dl.startswith(p) for p in _LOCAL_DEVICE_PREFIXES):
+        return True
+    if _LOCAL_HOSTNAME and _LOCAL_HOSTNAME in dl:
+        return True
+    return False
 
 
 # ============================================================================
@@ -845,13 +871,194 @@ class OpenClawd:
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
     ) -> dict:
-        """Agent 任务分派（PR154: trace_id / task_id / device_id 贯穿整条链路）"""
+        """Agent 任务分派（PR155: 支持远程设备分发；PR154: trace 贯穿）
+
+        当 ``intent.target_device`` 或环境指定的设备 ID 表明任务应在远程设备上
+        执行时，优先走 :meth:`_dispatch_remote_agent`；否则保持本地执行。
+        """
+        # PR155: 检测远程分发条件
+        target_device = None
+        if intent is not None:
+            target_device = getattr(intent, "target_device", None)
+        # 也接受外部通过 device_id 传入的远端设备
+        effective_target = target_device or device_id
+
+        # 仅当明确指定了非本地设备时走远程路径
+        if effective_target and not _is_local_device(effective_target):
+            return await self._dispatch_remote_agent(
+                message=message,
+                intent=intent,
+                device_id=effective_target,
+                session_id=session_id,
+                trace_id=trace_id,
+            )
+
         return await self.handle_agent_task(
             message, intent,
             device_id=device_id,
             session_id=session_id,
             trace_id=trace_id,
         )
+
+    # ========================================================================
+    # _dispatch_remote_agent — PR155: 远程 Agent 分发
+    # ========================================================================
+
+    async def _dispatch_remote_agent(
+        self,
+        message: str,
+        intent=None,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> dict:
+        """将 Agent 任务通过 CommandRouter 分发到远程设备执行（PR155）。
+
+        链路：OpenClawd → CommandRouter.dispatch_agent_remote →
+              gateway/WS → device agent_execute handler → result backflow
+
+        如果设备离线或 CommandRouter 返回错误，自动降级到本地执行并在
+        返回值中标注 ``remote_fallback=True``。
+
+        Parameters
+        ----------
+        message:
+            用户原始指令（透传给远程设备 Agent）。
+        intent:
+            已解析的意图对象（可为 None）。
+        device_id:
+            目标设备 ID。
+        session_id / trace_id:
+            跟踪字段，贯穿整条链路。
+
+        Returns
+        -------
+        dict
+            含 ``success``、``response``、``metadata``（agent_id / task_id /
+            trace_id / device_id / remote_dispatch）的标准响应。
+        """
+        task_id = f"task_{uuid.uuid4().hex[:12]}"
+        trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
+        agent_id = f"remote_agent_{uuid.uuid4().hex[:8]}"
+        agent_template = (
+            getattr(intent, "intent", None) or "coordinator"
+        )
+
+        logger.info(
+            "OpenClawd._dispatch_remote_agent | trace_id=%s task_id=%s "
+            "agent_id=%s device_id=%s template=%s",
+            trace_id, task_id, agent_id, device_id, agent_template,
+        )
+
+        try:
+            from core.command_router import get_command_router
+            cr = get_command_router()
+            cr_result = await cr.dispatch_agent_remote(
+                device_id=device_id,
+                agent_id=agent_id,
+                agent_template=agent_template,
+                task=message,
+                session_id=session_id or "",
+                trace_id=trace_id,
+                task_id=task_id,
+                context={
+                    "intent": getattr(intent, "intent", "") if intent else "",
+                    "params": getattr(intent, "params", {}) if intent else {},
+                },
+            )
+        except Exception as cr_exc:
+            logger.warning(
+                "OpenClawd._dispatch_remote_agent: CommandRouter 不可用，降级本地 | "
+                "trace_id=%s error=%s",
+                trace_id, cr_exc,
+            )
+            # Fallback: local execution
+            local_result = await self.handle_agent_task(
+                message, intent,
+                device_id=device_id,
+                session_id=session_id,
+                trace_id=trace_id,
+            )
+            local_result.setdefault("metadata", {})
+            local_result["metadata"]["remote_fallback"] = True
+            local_result["metadata"]["fallback_reason"] = str(cr_exc)
+            return local_result
+
+        remote_success = cr_result.get("success", False)
+        remote_error_code = cr_result.get("error_code")
+
+        # Fallback when device offline / timeout / disconnect
+        if not remote_success and remote_error_code in (
+            "DEVICE_OFFLINE",
+            "DEVICE_NOT_FOUND",
+            "COMMAND_TIMEOUT",
+            "DISCONNECT",
+        ):
+            logger.warning(
+                "OpenClawd._dispatch_remote_agent: 远程失败(%s)，降级本地执行 | "
+                "trace_id=%s device_id=%s",
+                remote_error_code, trace_id, device_id,
+            )
+            local_result = await self.handle_agent_task(
+                message, intent,
+                device_id=device_id,
+                session_id=session_id,
+                trace_id=trace_id,
+            )
+            local_result.setdefault("metadata", {})
+            local_result["metadata"]["remote_fallback"] = True
+            local_result["metadata"]["fallback_reason"] = remote_error_code
+            local_result["metadata"]["remote_error"] = cr_result.get("error_message", "")
+            return local_result
+
+        # Remote execution returned a structured result
+        raw_result = cr_result.get("result") or {}
+        if isinstance(raw_result, str):
+            response_text = raw_result
+        elif isinstance(raw_result, dict):
+            response_text = raw_result.get("response") or raw_result.get("output") or str(raw_result)
+        else:
+            response_text = str(raw_result) if raw_result else "远程 Agent 任务已完成"
+
+        # PR155: 结果回流到 TaskMemory
+        try:
+            from core.openclawd_memory_backflow import store_task_result
+            await store_task_result(
+                task_id=task_id,
+                device_id=device_id or "remote",
+                route_mode="remote_agent",
+                result={
+                    "status": "completed" if remote_success else "error",
+                    "task_type": "agent_execute",
+                    "task_description": message[:200],
+                    "result_summary": response_text[:200],
+                    "agent_id": agent_id,
+                    "trace_id": trace_id,
+                },
+                session_id=session_id,
+            )
+        except Exception as _bf_err:
+            logger.warning(
+                "_dispatch_remote_agent: memory backflow 失败（非致命）: %s", _bf_err
+            )
+
+        return {
+            "success": remote_success,
+            "response": response_text if remote_success else (
+                cr_result.get("error_message") or "远程 Agent 执行失败"
+            ),
+            "metadata": {
+                "agent_id": agent_id,
+                "agent_template": agent_template,
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "device_id": device_id or "",
+                "session_id": session_id or "",
+                "remote_dispatch": True,
+                "latency_ms": cr_result.get("latency_ms", 0.0),
+                "error_code": remote_error_code,
+            },
+        }
 
     async def _dispatch_tool(
         self,
