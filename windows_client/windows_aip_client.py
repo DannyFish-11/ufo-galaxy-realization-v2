@@ -121,12 +121,21 @@ def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     structured result that preserves ``agent_id``, ``task_id``, and
     ``trace_id`` for end-to-end correlation (PR155).
 
+    Supports the extended **SwarmAgentManifest** context keys introduced in
+    PR158: ``system_prompt``, ``tool_schemas``, ``memory_snapshot``, and
+    ``manifest_id`` are extracted from the ``context`` sub-dict and forwarded
+    to the autonomy manager when present.
+
     Parameters
     ----------
     payload:
         Dict from the ``agent_execute`` message body; expected keys::
 
             agent_id, agent_template, task, session_id, trace_id, task_id, context
+
+        The ``context`` dict may additionally carry::
+
+            system_prompt, tool_schemas, memory_snapshot, manifest_id, member_name
     """
     agent_id = payload.get("agent_id", "")
     task_id = payload.get("task_id", "")
@@ -136,21 +145,39 @@ def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     agent_template = payload.get("agent_template", "")
     context = payload.get("context", {})
 
+    # PR158: extract SwarmAgentManifest fields from context
+    system_prompt = context.get("system_prompt", "")
+    tool_schemas = context.get("tool_schemas", [])
+    memory_snapshot = context.get("memory_snapshot", {})
+    manifest_id = context.get("manifest_id", "")
+
     logger.info(
-        "[agent_execute] agent_id=%s task_id=%s trace_id=%s template=%s task=%.80s",
-        agent_id, task_id, trace_id, agent_template, task_text,
+        "[agent_execute] agent_id=%s task_id=%s trace_id=%s template=%s "
+        "manifest_id=%s task=%.80s",
+        agent_id, task_id, trace_id, agent_template, manifest_id, task_text,
     )
 
     manager = _get_manager()
 
+    # Build enriched execution request that carries manifest fields
+    agent_request = {
+        "task": task_text,
+        "agent_template": agent_template,
+        "context": context,
+    }
+    if system_prompt:
+        agent_request["system_prompt"] = system_prompt
+    if tool_schemas:
+        agent_request["tool_schemas"] = tool_schemas
+    if memory_snapshot:
+        agent_request["memory_snapshot"] = memory_snapshot
+    if manifest_id:
+        agent_request["manifest_id"] = manifest_id
+
     try:
         if manager is not None and hasattr(manager, "execute_agent_task"):
             # WindowsAutonomyManager supports agent task execution
-            result = manager.execute_agent_task({
-                "task": task_text,
-                "agent_template": agent_template,
-                "context": context,
-            })
+            result = manager.execute_agent_task(agent_request)
         elif manager is not None:
             # Fallback: treat task as a generic autonomy action
             result = manager.execute_action({
@@ -177,6 +204,8 @@ def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     result["task_id"] = task_id
     result["trace_id"] = trace_id
     result["session_id"] = session_id
+    if manifest_id:
+        result["manifest_id"] = manifest_id
     return result
 
 
@@ -263,7 +292,7 @@ class WindowsAIPClient:
         agent_payload: Dict[str, Any],
         result: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Build an ``agent_execute_result`` message preserving all correlation IDs (PR155)."""
+        """Build an ``agent_execute_result`` message preserving all correlation IDs (PR155/PR158)."""
         msg = self._base_message("agent_execute_result")
         msg.update({
             "command_id": command_id,
@@ -274,6 +303,10 @@ class WindowsAIPClient:
             "status": "completed" if result.get("success", True) else "failed",
             "result": result,
         })
+        # PR158: propagate manifest_id when present
+        manifest_id = result.get("manifest_id") or agent_payload.get("context", {}).get("manifest_id", "")
+        if manifest_id:
+            msg["manifest_id"] = manifest_id
         return msg
 
     # ------------------------------------------------------------------
