@@ -66,6 +66,7 @@ class EventType(str, Enum):
     # Agent / device events
     AGENT_CREATED = "agent_created"
     AGENT_DISPATCHED = "agent_dispatched"
+    AGENT_EXECUTED = "agent_executed"
     AGENT_RESULT_RECEIVED = "agent_result_received"
     DEVICE_REGISTERED = "device_registered"
     DEVICE_HEARTBEAT = "device_heartbeat"

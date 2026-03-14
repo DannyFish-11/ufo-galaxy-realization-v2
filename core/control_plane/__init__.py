@@ -23,6 +23,7 @@ from core.control_plane.audit_ledger import (
     events_to_dag,
     events_to_json,
 )
+from core.control_plane.swarm_manifest import SwarmAgentManifest
 from core.control_plane.smart_scheduler import (
     CapabilityDescriptor,
     DeviceScore,
@@ -58,6 +59,8 @@ __all__ = [
     "TraceEvent",
     "events_to_dag",
     "events_to_json",
+    # swarm_manifest
+    "SwarmAgentManifest",
     # smart_scheduler
     "CapabilityDescriptor",
     "DeviceScore",
