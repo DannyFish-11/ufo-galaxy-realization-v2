@@ -559,6 +559,12 @@ class GlobalHotkeyThread(threading.Thread):
 class WindowsClient:
     """Windows Client 主类 - F12 热键 + LLM 对话"""
 
+    # Windows 设备支持的能力列表（与 WindowsAIPClient.WINDOWS_SUPPORTED_ACTIONS 对齐）
+    WINDOWS_CAPABILITIES = [
+        "get_screen_state", "click", "type", "press_key", "press_keys",
+        "scroll", "find_and_click", "find_and_type", "screenshot",
+    ]
+
     def __init__(self):
         self.autonomy_manager = WindowsAutonomyManager()
 
@@ -586,7 +592,90 @@ class WindowsClient:
         # 加载 .env
         self._load_env()
 
+        # PR154: 启动时通过 HTTP 注册设备，并启动心跳线程
+        self._windows_device_id = self._resolve_device_id()
+        self._startup_register()
+        self._start_heartbeat()
+
         logger.info("Windows Client 初始化成功（F12 全局热键已启用）")
+
+    def _resolve_device_id(self) -> str:
+        """解析本机设备 ID（稳定且唯一）。
+
+        优先读取 GALAXY_WINDOWS_DEVICE_ID 环境变量；
+        若未配置，则使用 ``windows_{hostname}`` 作为稳定 ID。
+        """
+        import socket
+        return os.environ.get(
+            "GALAXY_WINDOWS_DEVICE_ID",
+            f"windows_{socket.gethostname()}",
+        )
+
+    def _startup_register(self) -> None:
+        """启动时通过 HTTP POST /api/v1/devices/register 注册本机设备。
+
+        注册成功后 CapabilityRegistry 立即获得 Windows 能力条目，
+        OpenClawd 可通过统一 capability/tool 路径调用 Windows 自动化。
+        注册失败（服务未启动）时静默忽略，不阻塞 UI 启动。
+        """
+        import socket
+        import platform as _platform
+
+        try:
+            os_version = _platform.version()
+        except Exception:
+            os_version = sys.platform
+
+        payload = {
+            "device_id": self._windows_device_id,
+            "device_type": "windows_desktop",
+            "device_name": socket.gethostname(),
+            "capabilities": self.WINDOWS_CAPABILITIES,
+            "os_version": os_version,
+            "app_version": "3.0.0",
+        }
+        try:
+            result = self.command_processor._call_api(
+                "/api/v1/devices/register",
+                payload,
+                base_url=GALAXY_API_BASE,
+            )
+            if result and result.get("success"):
+                logger.info(
+                    "Windows 设备已注册: device_id=%s caps=%d",
+                    self._windows_device_id, len(self.WINDOWS_CAPABILITIES),
+                )
+            else:
+                logger.debug("Windows 设备注册响应: %s", result)
+        except Exception as exc:
+            logger.warning("Windows 设备注册失败（服务未启动？）: %s", exc)
+
+    def _start_heartbeat(self, interval: float = 30.0) -> None:
+        """启动后台心跳线程，定期 POST /api/v1/devices/{device_id}/heartbeat。
+
+        心跳保持 UDM 设备在线状态，并持续刷新 CapabilityRegistry。
+        """
+        def _heartbeat_loop() -> None:
+            # Send first heartbeat immediately, then repeat on interval
+            while True:
+                try:
+                    self.command_processor._call_api(
+                        f"/api/v1/devices/{self._windows_device_id}/heartbeat",
+                        {},
+                        base_url=GALAXY_API_BASE,
+                    )
+                    logger.debug("Windows 心跳已发送: device_id=%s", self._windows_device_id)
+                except Exception as exc:
+                    logger.debug("Windows 心跳发送失败: %s", exc)
+                time.sleep(interval)
+
+        heartbeat_thread = threading.Thread(
+            target=_heartbeat_loop,
+            name="GalaxyWindowsHeartbeat",
+            daemon=True,
+        )
+        heartbeat_thread.start()
+        logger.info("Windows 心跳线程已启动（间隔=%.0fs）", interval)
 
     def _load_env(self):
         """加载 .env 到环境变量"""

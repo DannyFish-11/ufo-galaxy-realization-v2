@@ -156,6 +156,20 @@ _COMPLEXITY_KEYWORDS_HIGH = [
     "全部", "所有设备", "批量", "大量", "复杂",
 ]
 
+# PR154: 自动 Agent 创建触发关键词（明确文档化，供测试验证）
+# 当消息包含这些关键词时，ExecutionPlanner 会自动触发 Agent 创建。
+# 这些关键词与 _COMPLEXITY_KEYWORDS_HIGH 配合使用：
+#   - 关键词命中 → complexity >= 0.75 → strategy = "fractal"/"specialized"
+#   - 无论策略如何，AgentFactory 始终被调用（单 Agent / Team / Swarm）
+AUTO_AGENT_TRIGGER_KEYWORDS: tuple = (
+    # 并行 / 多任务信号
+    "team", "swarm", "并行", "多个", "同时", "分别",
+    "全部", "所有设备", "批量", "大量",
+    # 高复杂度信号
+    "复杂",
+    # 分形 / 多层递归信号
+    "fractal", "分型", "递归", "分形", "多层", "深度拆解",
+)
 
 def _estimate_complexity(message: str) -> float:
     """粗略估算任务复杂度 0~1。"""
