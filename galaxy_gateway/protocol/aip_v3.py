@@ -186,6 +186,7 @@ class MessageType(str, Enum):
     COORD_UNLOCK = "coord_unlock"
     
     # === Agent 控制（与 AgentMessageHandler.kt 对齐）===
+    TASK_EXECUTE = "task_execute"
     AGENT_PING = "agent_ping"
     AGENT_CONFIG_UPDATE = "agent_config_update"
     AGENT_RESTART = "agent_restart"
