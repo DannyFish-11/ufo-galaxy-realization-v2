@@ -287,6 +287,10 @@ class IndustrialKnob(QWidget):
     """
     value_changed = pyqtSignal(float)
 
+    # Sensitivity constants: pixels of drag / wheel units to traverse full 0→1 range.
+    _DRAG_SENSITIVITY  = 120.0   # px for full sweep via vertical drag
+    _WHEEL_SENSITIVITY = 1200.0  # angleDelta units for full sweep via mouse wheel
+
     def __init__(self, label: str = "", layer: str = None, value: float = 0.5, parent=None):
         super().__init__(parent)
         self._label = label
@@ -318,13 +322,13 @@ class IndustrialKnob(QWidget):
         # r = knob radius (leaves a 4px margin inside the 64px width)
         cx, cy, r = 32, 32, 28
 
-        # 外阴影 (绘在圆形之前)
+        # 外阴影 (绘在圆形之前) — use symmetric offsets so the shadow is centered
         shadow_grad = QRadialGradient(cx + 3, cy + 3, r + 6)
         shadow_grad.setColorAt(0, QColor(0, 0, 0, 100))
         shadow_grad.setColorAt(1, QColor(0, 0, 0, 0))
         p.setBrush(QBrush(shadow_grad))
         p.setPen(Qt.NoPen)
-        p.drawEllipse(cx - r + 3, cy - r + 3, (r + 3) * 2, (r + 3) * 2)
+        p.drawEllipse(cx - (r + 3), cy - (r + 3), (r + 3) * 2, (r + 3) * 2)
 
         # 底盘: 深炭黑 + 金属反射 (conic-gradient 近似)
         metal_grad = QRadialGradient(cx - 8, cy - 8, r * 2)
@@ -364,7 +368,8 @@ class IndustrialKnob(QWidget):
         # 指示线
         # angle_deg: offset from Qt's 0° (3 o'clock), CCW; zero position is ~7:30
         angle_deg = -225 + 270 * self._value
-        angle_rad = math.radians(angle_deg - 90)   # convert to standard math angle
+        # Convert from Qt coords (0°=3 o'clock, CCW) to math coords (0°=12 o'clock, CW)
+        angle_rad = math.radians(angle_deg - 90)
         lx = int(cx + (r - 8) * math.cos(angle_rad))
         ly = int(cy + (r - 8) * math.sin(angle_rad))
         lx2 = int(cx + (r - 2) * math.cos(angle_rad))
@@ -390,19 +395,15 @@ class IndustrialKnob(QWidget):
             self._drag_start_val = self._value
 
     def mouseMoveEvent(self, event):
-        # DRAG_SENSITIVITY: pixels of vertical drag to traverse the full 0→1 range
-        _DRAG_SENSITIVITY = 120.0
         if self._dragging:
-            delta = (self._drag_start_y - event.globalY()) / _DRAG_SENSITIVITY
+            delta = (self._drag_start_y - event.globalY()) / self._DRAG_SENSITIVITY
             self.set_value(self._drag_start_val + delta)
 
     def mouseReleaseEvent(self, event):
         self._dragging = False
 
     def wheelEvent(self, event):
-        # WHEEL_SENSITIVITY: total wheel units (angleDelta) to traverse full 0→1 range
-        _WHEEL_SENSITIVITY = 1200.0
-        delta = event.angleDelta().y() / _WHEEL_SENSITIVITY
+        delta = event.angleDelta().y() / self._WHEEL_SENSITIVITY
         self.set_value(self._value + delta)
 
 

@@ -546,6 +546,10 @@ class SidebarUI(QWidget):
         lay.setSpacing(4)
 
         self.mode_btns = []
+        # A/B layer coding rationale:
+        # Layer A (red) = active/intelligence modes (Chat + Agent) — user-facing AI ops
+        # Layer B (blue) = control/infra modes (Twin + Device) — system/device ops
+        # MCP/Skill = neutral (neither purely AI nor device)
         modes = [("对话", 0, "A"), ("Agent", 1, "A"), ("孪生", 2, "B"), ("设备", 3, "B"), ("MCP/Skill", 4, None)]
         for label, idx, layer in modes:
             btn = QPushButton(label)
@@ -587,6 +591,8 @@ class SidebarUI(QWidget):
         lay.setContentsMargins(self._resp_padding - 2, 4, self._resp_padding - 2, 8)
         lay.setSpacing(6)
 
+        # Shortcut A/B layer coding: screenshot = capture action (Layer A = active/capture),
+        # clipboard = data channel (Layer B = infra/data), tasks = neutral system action.
         for label, action, layer in [("截图", "截图", "A"), ("剪贴板", "查看剪贴板", "B"), ("任务", "查看任务列表", None)]:
             btn = QPushButton(label)
             if layer == "A":

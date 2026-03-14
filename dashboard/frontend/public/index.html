@@ -218,8 +218,8 @@
                                         <circle cx="40" cy="40" r="30" fill="none"
                                             stroke="url(#grad-models)" stroke-width="4"
                                             stroke-linecap="round"
-                                            :stroke-dasharray="188"
-                                            :stroke-dashoffset="188 * (1 - Math.min(1, (configStatus.configured_models || 0) / Math.max(1, configStatus.total_models || 1)))"
+                                            :stroke-dasharray="MACRO_RING_CIRC"
+                                            :stroke-dashoffset="MACRO_RING_CIRC * (1 - Math.min(1, (configStatus.configured_models || 0) / Math.max(1, configStatus.total_models || 1)))"
                                             transform="rotate(-90 40 40)"
                                             filter="url(#glow-models)"/>
                                         <!-- Center inner glow -->
@@ -252,8 +252,8 @@
                                         <circle cx="40" cy="40" r="30" fill="none"
                                             stroke="url(#grad-tools)" stroke-width="4"
                                             stroke-linecap="round"
-                                            :stroke-dasharray="188"
-                                            :stroke-dashoffset="188 * (1 - Math.min(1, (configStatus.configured_tools || 0) / Math.max(1, configStatus.total_tools || 1)))"
+                                            :stroke-dasharray="MACRO_RING_CIRC"
+                                            :stroke-dashoffset="MACRO_RING_CIRC * (1 - Math.min(1, (configStatus.configured_tools || 0) / Math.max(1, configStatus.total_tools || 1)))"
                                             transform="rotate(-90 40 40)"
                                             filter="url(#glow-tools)"/>
                                         <circle cx="40" cy="40" r="18" fill="rgba(0,206,209,0.05)"/>
@@ -284,8 +284,8 @@
                                         <circle cx="40" cy="40" r="30" fill="none"
                                             stroke="url(#grad-devices)" stroke-width="4"
                                             stroke-linecap="round"
-                                            :stroke-dasharray="188"
-                                            :stroke-dashoffset="188 * (1 - Math.min(1, deviceList.filter(d => d.status === 'online').length / Math.max(1, deviceList.length)))"
+                                            :stroke-dasharray="MACRO_RING_CIRC"
+                                            :stroke-dashoffset="MACRO_RING_CIRC * (1 - Math.min(1, deviceList.filter(d => d.status === 'online').length / Math.max(1, deviceList.length)))"
                                             transform="rotate(-90 40 40)"
                                             filter="url(#glow-dev)"/>
                                         <circle cx="40" cy="40" r="18" fill="rgba(255,140,66,0.05)"/>
@@ -312,7 +312,7 @@
                                         <circle cx="40" cy="40" r="30" fill="none"
                                             :stroke="configStatus.oneapi_configured ? '#30d158' : 'rgba(255,255,255,0.15)'" stroke-width="4"
                                             stroke-linecap="round"
-                                            :stroke-dasharray="188"
+                                            :stroke-dasharray="MACRO_RING_CIRC"
                                             :stroke-dashoffset="configStatus.oneapi_configured ? 0 : 120"
                                             transform="rotate(-90 40 40)"
                                             filter="url(#glow-api)"/>
@@ -1003,6 +1003,9 @@
             setup() {
                 const isExpanded = ref(false);
                 const tab = ref('overview');
+                // MACRO_RING_CIRC: circumference of SVG circle at r=30 (= 2π×30 ≈ 188.5, floored to 188)
+                // Used for stroke-dasharray/stroke-dashoffset Macro Ring animations.
+                const MACRO_RING_CIRC = 188;
                 const currentTime = ref('');
                 const configStatus = ref({});
                 const oneapiUrl = ref('http://localhost:8001/v1');
@@ -1416,6 +1419,7 @@
                     twinTask, twinStrategy, twinCount, twinResult, swarmTask, swarmCount, swarmResult,
                     mcpServers, skills, deviceList, crossDeviceSource, transferSource, transferTarget,
                     tools, nodes, testMessage, testResult, inputMessage, chatReply, chatMeta, chatExecData, configuredCount,
+                    MACRO_RING_CIRC,
                     // P2
                     deviceTraces, traceFilterDevice, filteredTraces,
                     agentDeviceMappings, orchTasks,
