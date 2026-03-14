@@ -104,6 +104,11 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         from core.routes import c_stage
     except ImportError:
         c_stage = None
+    # GitHub 插件路由（可选加载）
+    try:
+        from core.routes import github as github_routes
+    except ImportError:
+        github_routes = None
 
     router = APIRouter()
 
@@ -132,6 +137,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(observability.create_router(service_manager=service_manager, config=config))
     if c_stage:
         router.include_router(c_stage.create_router(service_manager=service_manager, config=config))
+    if github_routes:
+        router.include_router(github_routes.create_router(service_manager=service_manager, config=config))
     @router.get("/api/config")
     async def get_frontend_config(request: Request = None):
         """

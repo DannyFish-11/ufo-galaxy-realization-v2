@@ -355,6 +355,96 @@ class MCPDynamicGateway:
         )
         await self._nats.publish_event(event)
 
+    # ── External Tool Registration (GitHub Addons) ───────────────────────────
+
+    def register_external_tool(
+        self,
+        name: str,
+        command: list,
+        manifest: Optional[dict] = None,
+    ) -> dict:
+        """Register an externally-sourced tool (e.g. from GitHub) into MCPLoader.
+
+        Falls back gracefully if MCPLoader is unavailable.
+
+        Args:
+            name: Unique tool identifier.
+            command: Command list to start the MCP server process.
+            manifest: Optional tool manifest dict (for metadata).
+
+        Returns:
+            ``{"success": bool, "name": str, ...}``
+        """
+        try:
+            from core.mcp_loader import mcp_loader
+            import asyncio
+
+            async def _load():
+                return await mcp_loader.load(server_id=name, command=command)
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    result = pool.submit(asyncio.run, _load()).result(timeout=60)
+            else:
+                result = loop.run_until_complete(_load())
+
+            if result.get("success"):
+                self._generated_tools[name] = {
+                    "name": name,
+                    "command": command,
+                    "source": "github",
+                    "manifest": manifest or {},
+                    "registered_at": datetime.now().isoformat(),
+                }
+                _try_emit_event(
+                    "MCP_TOOL_REGISTERED",
+                    {"tool_name": name, "source": "github", "command": command},
+                )
+                logger.info("External tool '%s' registered via MCPLoader", name)
+                return {"success": True, "name": name, "via": "mcp_loader"}
+
+            return {
+                "success": False,
+                "error": result.get("error", "MCPLoader.load returned failure"),
+            }
+        except Exception as exc:
+            logger.warning("register_external_tool '%s' failed: %s", name, exc)
+            return {"success": False, "error": str(exc)}
+
+    async def execute_tool(self, tool_name: str, arguments: dict) -> dict:
+        """Execute a named tool (generated or registered) by delegating to MCPLoader.
+
+        Args:
+            tool_name: Tool name as registered.
+            arguments: Tool input arguments.
+
+        Returns:
+            Tool result dict.
+        """
+        try:
+            from core.mcp_loader import mcp_loader
+
+            # Find server that has this tool
+            for server in mcp_loader.list_servers():
+                sid = server.get("id", "")
+                tools = await mcp_loader.list_tools(sid)
+                for tool in tools:
+                    if tool.get("name") == tool_name:
+                        return await mcp_loader.call_tool(sid, tool_name, arguments)
+
+            return {"success": False, "error": f"Tool '{tool_name}' not found in any MCP server"}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    def list_github_tools(self) -> list:
+        """Return tools registered via GitHub (source == 'github')."""
+        return [
+            v for v in self._generated_tools.values()
+            if v.get("source") == "github"
+        ]
+
     # ── Status ──────────────────────────────────────────────────────────────
 
     def get_status(self) -> dict:
