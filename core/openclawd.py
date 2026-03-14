@@ -845,8 +845,13 @@ class OpenClawd:
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
     ) -> dict:
-        """Agent 任务分派"""
-        return await self.handle_agent_task(message, intent)
+        """Agent 任务分派（PR154: trace_id / task_id / device_id 贯穿整条链路）"""
+        return await self.handle_agent_task(
+            message, intent,
+            device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+        )
 
     async def _dispatch_tool(
         self,
@@ -2174,15 +2179,25 @@ class OpenClawd:
     # handle_agent_task — 复杂任务 (Agent 协作)
     # ========================================================================
 
-    async def handle_agent_task(self, message: str, intent) -> dict:
+    async def handle_agent_task(
+        self,
+        message: str,
+        intent,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> dict:
         """复杂任务处理 — 使用 AgentFactory 创建 Agent，必要时组建团队
 
         Args:
             message: 用户消息
             intent: 解析后的意图 (ParsedIntent)
+            device_id: 设备 ID（PR154: 贯穿 trace）
+            session_id: 会话 ID（PR154: 贯穿 trace）
+            trace_id: 请求追踪 ID（PR154: 贯穿 trace）
 
         Returns:
-            Agent 执行结果 dict
+            Agent 执行结果 dict（含 task_id / trace_id）
         """
         try:
             from core.agent_factory import get_agent_factory
@@ -2190,6 +2205,9 @@ class OpenClawd:
 
             router = get_llm_router()
             factory = get_agent_factory(router)
+
+            # PR154: 生成稳定的 task_id，贯穿整条执行链路
+            task_id = f"task_{uuid.uuid4().hex[:12]}"
 
             # 判断是否需要团队协作 (复杂度驱动)
             tools = self._collect_tools()
@@ -2206,7 +2224,14 @@ class OpenClawd:
 
             if is_complex:
                 # 复杂任务 -> 团队协作
-                return await self._execute_team_task(message, intent, factory, router)
+                team_result = await self._execute_team_task(message, intent, factory, router)
+                # PR154: 将 task_id / trace_id 注入团队协作结果 metadata
+                meta = team_result.get("metadata", {})
+                meta.setdefault("task_id", task_id)
+                meta.setdefault("trace_id", trace_id or "")
+                meta.setdefault("device_id", device_id or "")
+                team_result["metadata"] = meta
+                return team_result
 
             # 普通 Agent 任务
             # 根据意图匹配模板
@@ -2240,18 +2265,41 @@ class OpenClawd:
                         outputs.append(f"[错误] {r['error']}")
 
             reply = "\n".join(outputs) if outputs else "Agent 任务已完成"
+            success = result.get("status") != "error"
 
             # 清理 Agent
             factory.terminate_agent(agent.id)
 
+            # PR154: 将任务结果写入 TaskMemory（记忆回流）
+            try:
+                from core.openclawd_memory_backflow import store_task_result
+                await store_task_result(
+                    task_id=task_id,
+                    device_id=device_id or "openclawd",
+                    route_mode="agent",
+                    result={
+                        "status": "completed" if success else "error",
+                        "task_type": "agent_task",
+                        "task_description": message[:200],
+                        "result_summary": reply[:200],
+                    },
+                    session_id=session_id,
+                )
+            except Exception as _bf_err:
+                logger.warning("handle_agent_task: memory backflow 失败（非致命）: %s", _bf_err)
+
             return {
-                "success": result.get("status") != "error",
+                "success": success,
                 "response": reply,
                 "metadata": {
                     "agent_id": agent.id,
                     "agent_role": agent.config.role.value,
                     "template": template,
                     "result_count": len(result.get("results", [])),
+                    "task_id": task_id,
+                    "trace_id": trace_id or "",
+                    "device_id": device_id or "",
+                    "session_id": session_id or "",
                 },
             }
 
