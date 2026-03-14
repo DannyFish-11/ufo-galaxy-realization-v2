@@ -34,19 +34,18 @@ _PORTS_YAML_PATH = _PROJECT_ROOT / "config" / "unified_ports.yaml"
 _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "redis": 6379,
     "qdrant": 6333,
-    "dashboard": 8085,        # Dashboard Backend Web UI (unified port)
+    "dashboard": 8080,        # Dashboard Backend Web UI (unified port)
     "oneapi_web": 3001,
     "api_gateway": 8765,      # Galaxy Gateway (unified port)
     "state_machine": 8765,
     "gateway": 8765,           # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
-    "dashboard_backend": 8085, # Same as dashboard (unified port)
-    "websocket": 8085,
+    "dashboard_backend": 8080, # Same as dashboard (unified port)
+    "websocket": 8765,         # WebSocket served through Galaxy Gateway on 8765
     "websocket_http": 8081,
     "health_monitor": 9100,    # Avoid conflict with gateway
     "device_api": 8766,
     "ufo_api": 8767,
-    "unified_launcher": 8085,  # Unified Launcher Web UI
-    "dockerfile_default": 8086, # Docker container default port
+    "unified_launcher": 8299,  # Unified Launcher Web UI (avoids Node_85_PromptLibrary:8085)
     "openclawd": 8099,           # OpenClawd main API server (Galaxy core)
 }
 

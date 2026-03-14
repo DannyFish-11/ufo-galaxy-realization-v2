@@ -1,0 +1,5327 @@
+# ============================================================
+# Galaxy — Full System Docker Compose
+# Single-source-of-truth: config/unified_ports.yaml
+# ============================================================
+#
+# Profiles:
+#   (none / default)  – Infrastructure only
+#   core              – Infrastructure + critical nodes
+#   full              – Everything (all 130 nodes + infra)
+#   worker            – Go edge worker
+#
+# Quick start:
+#   docker compose -f docker-compose.full.yml up -d                   # infra only
+#   docker compose -f docker-compose.full.yml --profile core up -d    # core nodes
+#   docker compose -f docker-compose.full.yml --profile full up -d    # all nodes
+#
+# All ports derive from config/unified_ports.yaml.
+# ============================================================
+
+name: galaxy-full
+
+services:
+  # ================================================================
+  # INFRASTRUCTURE SERVICES (no profile — always start)
+  # ================================================================
+
+  redis:
+    image: redis:7-alpine
+    container_name: galaxy-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: galaxy-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:6333/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: galaxy-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/galaxy_neo4j_password
+      - NEO4J_PLUGINS=["apoc","graph-data-science"]
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: galaxy-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
+      - MONGO_INITDB_ROOT_PASSWORD=mongoadmin123
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: galaxy-nats
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal-db:
+    image: postgres:15-alpine
+    container_name: galaxy-temporal-db
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal_password
+      - POSTGRES_DB=temporal
+    volumes:
+      - temporal-db-data:/var/lib/postgresql/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:1.22
+    container_name: galaxy-temporal
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal_password
+      - POSTGRES_SEEDS=temporal-db
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+
+  temporal-ui:
+    image: temporalio/ui:2.21
+    container_name: galaxy-temporal-ui
+    ports:
+      - "8233:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8233
+    depends_on:
+      - temporal
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: galaxy-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  oneapi:
+    image: justsong/one-api:latest
+    container_name: galaxy-oneapi
+    profiles: [full]
+    ports:
+      - "3001:3000"
+    environment:
+      - SQL_DSN=
+      - SESSION_SECRET=galaxy_oneapi_secret
+      - REDIS_CONN_STRING=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - oneapi-data:/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: galaxy-minio
+    profiles: [full]
+    command: server /data --console-address ":9001"
+    ports:
+      - "9002:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=galaxy_admin
+      - MINIO_ROOT_PASSWORD=galaxy_admin_secret
+    volumes:
+      - minio-data:/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: galaxy-coturn
+    profiles: [full]
+    network_mode: host
+    environment:
+      - DETECT_EXTERNAL_IP=yes
+      - REALM=galaxy.local
+    volumes:
+      - coturn-data:/var/lib/coturn
+    restart: unless-stopped
+
+  # ── Galaxy Core API + Management UI ──────────────────────────
+  galaxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: galaxy-core
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - GALAXY_MODE=production
+      - NEO4J_URI=bolt://neo4j:7687
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://mongoadmin:mongoadmin123@mongodb:27017
+      - OLLAMA_URL=http://ollama:11434
+      - GALAXY_NATS_URL=nats://nats:4222
+      - GALAXY_TEMPORAL_URL=temporal:7233
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./core:/app/core:ro
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - galaxy-data:/app/data
+      - galaxy-logs:/app/logs
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Galaxy API Gateway ────────────────────────────────────────
+  galaxy-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: galaxy-gateway
+    ports:
+      - "8765:8765"
+    env_file:
+      - .env
+    environment:
+      - GALAXY_NATS_URL=nats://nats:4222
+      - QDRANT_URL=http://qdrant:6333
+      - NEO4J_URI=bolt://neo4j:7687
+      - MONGODB_URI=mongodb://mongoadmin:mongoadmin123@mongodb:27017
+      - OLLAMA_URL=http://ollama:11434
+    depends_on:
+      - nats
+      - redis
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+
+  # ── Unified Launcher (management UI on port 8299) ─────────────
+  galaxy-launcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: galaxy-launcher
+    profiles: [core, full]
+    command: ["python", "unified_launcher.py", "--host", "0.0.0.0", "--port", "8299"]
+    ports:
+      - "8299:8299"
+    env_file:
+      - .env
+    environment:
+      - GALAXY_MODE=production
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+      - galaxy-logs:/app/logs
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+
+  # ── Galaxy Edge Worker ────────────────────────────────────────
+  galaxy-worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: galaxy-worker
+    profiles: [worker, full]
+    environment:
+      - GALAXY_NATS_URL=nats://nats:4222
+      - GALAXY_WORKER_ID=worker-docker-01
+      - GALAXY_WORKER_TYPE=linux
+      - GALAXY_WORKER_PORT=8300
+    ports:
+      - "8300:8300"
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8300/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ================================================================
+  # GALAXY NODES (profile: core = critical; full = all)
+  # ================================================================
+
+  # Node_01_OneAPI — 统一API网关
+  node-01-oneapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_01_OneAPI
+        NODE_PORT: "7995"
+    container_name: galaxy-node-01-oneapi
+    profiles: [core]
+    ports:
+      - "7995:7995"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_01_OneAPI
+      - NODE_PORT=7995
+      - NODE_ID=Node_01_OneAPI
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7995/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_09_Sandbox — 沙箱执行环境
+  node-09-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_09_Sandbox
+        NODE_PORT: "7996"
+    container_name: galaxy-node-09-sandbox
+    profiles: [full]
+    ports:
+      - "7996:7996"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_09_Sandbox
+      - NODE_PORT=7996
+      - NODE_ID=Node_09_Sandbox
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7996/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_110_SmartOrchestrator — 智能编排器
+  node-110-smartorchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_110_SmartOrchestrator
+        NODE_PORT: "7997"
+    container_name: galaxy-node-110-smartorchestrator
+    profiles: [full]
+    ports:
+      - "7997:7997"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_110_SmartOrchestrator
+      - NODE_PORT=7997
+      - NODE_ID=Node_110_SmartOrchestrator
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7997/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_111_ContextManager — 上下文管理器
+  node-111-contextmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_111_ContextManager
+        NODE_PORT: "7998"
+    container_name: galaxy-node-111-contextmanager
+    profiles: [full]
+    ports:
+      - "7998:7998"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_111_ContextManager
+      - NODE_PORT=7998
+      - NODE_ID=Node_111_ContextManager
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7998/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_112_SelfHealing — 自愈系统
+  node-112-selfhealing:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_112_SelfHealing
+        NODE_PORT: "7999"
+    container_name: galaxy-node-112-selfhealing
+    profiles: [full]
+    ports:
+      - "7999:7999"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_112_SelfHealing
+      - NODE_PORT=7999
+      - NODE_ID=Node_112_SelfHealing
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7999/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_00_StateMachine — 状态机核心 - 系统状态管理
+  node-00-statemachine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_00_StateMachine
+        NODE_PORT: "8000"
+    container_name: galaxy-node-00-statemachine
+    profiles: [core]
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_00_StateMachine
+      - NODE_PORT=8000
+      - NODE_ID=Node_00_StateMachine
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_02_Tasker — 任务调度引擎
+  node-02-tasker:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_02_Tasker
+        NODE_PORT: "8002"
+    container_name: galaxy-node-02-tasker
+    profiles: [core]
+    ports:
+      - "8002:8002"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_02_Tasker
+      - NODE_PORT=8002
+      - NODE_ID=Node_02_Tasker
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_03_SecretVault — 密钥保险箱
+  node-03-secretvault:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_03_SecretVault
+        NODE_PORT: "8003"
+    container_name: galaxy-node-03-secretvault
+    profiles: [core]
+    ports:
+      - "8003:8003"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_03_SecretVault
+      - NODE_PORT=8003
+      - NODE_ID=Node_03_SecretVault
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8003/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_04_Router — 全局路由器
+  node-04-router:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_04_Router
+        NODE_PORT: "8004"
+    container_name: galaxy-node-04-router
+    profiles: [core]
+    ports:
+      - "8004:8004"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_04_Router
+      - NODE_PORT=8004
+      - NODE_ID=Node_04_Router
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8004/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_05_Auth — 认证授权中心
+  node-05-auth:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_05_Auth
+        NODE_PORT: "8005"
+    container_name: galaxy-node-05-auth
+    profiles: [core]
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_05_Auth
+      - NODE_PORT=8005
+      - NODE_ID=Node_05_Auth
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8005/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_06_Filesystem — 文件系统管理
+  node-06-filesystem:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_06_Filesystem
+        NODE_PORT: "8006"
+    container_name: galaxy-node-06-filesystem
+    profiles: [core]
+    ports:
+      - "8006:8006"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_06_Filesystem
+      - NODE_PORT=8006
+      - NODE_ID=Node_06_Filesystem
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8006/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_07_Git — Git版本控制
+  node-07-git:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_07_Git
+        NODE_PORT: "8007"
+    container_name: galaxy-node-07-git
+    profiles: [full]
+    ports:
+      - "8007:8007"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_07_Git
+      - NODE_PORT=8007
+      - NODE_ID=Node_07_Git
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8007/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_08_Fetch — 网络请求服务
+  node-08-fetch:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_08_Fetch
+        NODE_PORT: "8008"
+    container_name: galaxy-node-08-fetch
+    profiles: [full]
+    ports:
+      - "8008:8008"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_08_Fetch
+      - NODE_PORT=8008
+      - NODE_ID=Node_08_Fetch
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8008/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_10_Slack — Slack集成
+  node-10-slack:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_10_Slack
+        NODE_PORT: "8010"
+    container_name: galaxy-node-10-slack
+    profiles: [full]
+    ports:
+      - "8010:8010"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_10_Slack
+      - NODE_PORT=8010
+      - NODE_ID=Node_10_Slack
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8010/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_11_GitHub — GitHub集成
+  node-11-github:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_11_GitHub
+        NODE_PORT: "8011"
+    container_name: galaxy-node-11-github
+    profiles: [full]
+    ports:
+      - "8011:8011"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_11_GitHub
+      - NODE_PORT=8011
+      - NODE_ID=Node_11_GitHub
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8011/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_12_Postgres — PostgreSQL数据库
+  node-12-postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_12_Postgres
+        NODE_PORT: "8012"
+    container_name: galaxy-node-12-postgres
+    profiles: [full]
+    ports:
+      - "8012:8012"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_12_Postgres
+      - NODE_PORT=8012
+      - NODE_ID=Node_12_Postgres
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8012/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_13_SQLite — SQLite数据库
+  node-13-sqlite:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_13_SQLite
+        NODE_PORT: "8013"
+    container_name: galaxy-node-13-sqlite
+    profiles: [full]
+    ports:
+      - "8013:8013"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_13_SQLite
+      - NODE_PORT=8013
+      - NODE_ID=Node_13_SQLite
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8013/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_14_FFmpeg — 音视频处理
+  node-14-ffmpeg:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_14_FFmpeg
+        NODE_PORT: "8014"
+    container_name: galaxy-node-14-ffmpeg
+    profiles: [full]
+    ports:
+      - "8014:8014"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_14_FFmpeg
+      - NODE_PORT=8014
+      - NODE_ID=Node_14_FFmpeg
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8014/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_15_OCR — 光学字符识别
+  node-15-ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_15_OCR
+        NODE_PORT: "8015"
+    container_name: galaxy-node-15-ocr
+    profiles: [full]
+    ports:
+      - "8015:8015"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_15_OCR
+      - NODE_PORT=8015
+      - NODE_ID=Node_15_OCR
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8015/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_16_Email — 邮件服务
+  node-16-email:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_16_Email
+        NODE_PORT: "8016"
+    container_name: galaxy-node-16-email
+    profiles: [full]
+    ports:
+      - "8016:8016"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_16_Email
+      - NODE_PORT=8016
+      - NODE_ID=Node_16_Email
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8016/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_17_EdgeTTS — 文本转语音
+  node-17-edgetts:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_17_EdgeTTS
+        NODE_PORT: "8017"
+    container_name: galaxy-node-17-edgetts
+    profiles: [full]
+    ports:
+      - "8017:8017"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_17_EdgeTTS
+      - NODE_PORT=8017
+      - NODE_ID=Node_17_EdgeTTS
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8017/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_18_DeepL — 翻译服务
+  node-18-deepl:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_18_DeepL
+        NODE_PORT: "8018"
+    container_name: galaxy-node-18-deepl
+    profiles: [full]
+    ports:
+      - "8018:8018"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_18_DeepL
+      - NODE_PORT=8018
+      - NODE_ID=Node_18_DeepL
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8018/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_19_Crypto — 加密服务
+  node-19-crypto:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_19_Crypto
+        NODE_PORT: "8019"
+    container_name: galaxy-node-19-crypto
+    profiles: [full]
+    ports:
+      - "8019:8019"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_19_Crypto
+      - NODE_PORT=8019
+      - NODE_ID=Node_19_Crypto
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8019/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_20_Qdrant — 向量数据库
+  node-20-qdrant:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_20_Qdrant
+        NODE_PORT: "8020"
+    container_name: galaxy-node-20-qdrant
+    profiles: [full]
+    ports:
+      - "8020:8020"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_20_Qdrant
+      - NODE_PORT=8020
+      - NODE_ID=Node_20_Qdrant
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8020/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_21_Notion — Notion集成
+  node-21-notion:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_21_Notion
+        NODE_PORT: "8021"
+    container_name: galaxy-node-21-notion
+    profiles: [full]
+    ports:
+      - "8021:8021"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_21_Notion
+      - NODE_PORT=8021
+      - NODE_ID=Node_21_Notion
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8021/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_22_BraveSearch — Brave搜索
+  node-22-bravesearch:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_22_BraveSearch
+        NODE_PORT: "8022"
+    container_name: galaxy-node-22-bravesearch
+    profiles: [full]
+    ports:
+      - "8022:8022"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_22_BraveSearch
+      - NODE_PORT=8022
+      - NODE_ID=Node_22_BraveSearch
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8022/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_26_Discord — Discord 集成
+  node-26-discord:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_26_Discord
+        NODE_PORT: "8023"
+    container_name: galaxy-node-26-discord
+    profiles: [full]
+    ports:
+      - "8023:8023"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_26_Discord
+      - NODE_PORT=8023
+      - NODE_ID=Node_26_Discord
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8023/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_23_Time — 时间服务
+  node-23-time:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_23_Time
+        NODE_PORT: "8024"
+    container_name: galaxy-node-23-time
+    profiles: [full]
+    ports:
+      - "8024:8024"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_23_Time
+      - NODE_PORT=8024
+      - NODE_ID=Node_23_Time
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8024/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_24_Weather — 天气服务
+  node-24-weather:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_24_Weather
+        NODE_PORT: "8025"
+    container_name: galaxy-node-24-weather
+    profiles: [full]
+    ports:
+      - "8025:8025"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_24_Weather
+      - NODE_PORT=8025
+      - NODE_ID=Node_24_Weather
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8025/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_25_GoogleSearch — Google搜索
+  node-25-googlesearch:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_25_GoogleSearch
+        NODE_PORT: "8026"
+    container_name: galaxy-node-25-googlesearch
+    profiles: [full]
+    ports:
+      - "8026:8026"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_25_GoogleSearch
+      - NODE_PORT=8026
+      - NODE_ID=Node_25_GoogleSearch
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8026/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_27_SmartHome — 智能家居控制
+  node-27-smarthome:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_27_SmartHome
+        NODE_PORT: "8027"
+    container_name: galaxy-node-27-smarthome
+    profiles: [full]
+    ports:
+      - "8027:8027"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_27_SmartHome
+      - NODE_PORT=8027
+      - NODE_ID=Node_27_SmartHome
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8027/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_28_Reserved — 保留节点28
+  node-28-reserved:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_28_Reserved
+        NODE_PORT: "8028"
+    container_name: galaxy-node-28-reserved
+    profiles: [full]
+    ports:
+      - "8028:8028"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_28_Reserved
+      - NODE_PORT=8028
+      - NODE_ID=Node_28_Reserved
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8028/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_29_Reserved — 保留节点29
+  node-29-reserved:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_29_Reserved
+        NODE_PORT: "8029"
+    container_name: galaxy-node-29-reserved
+    profiles: [full]
+    ports:
+      - "8029:8029"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_29_Reserved
+      - NODE_PORT=8029
+      - NODE_ID=Node_29_Reserved
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8029/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_30_Reserved — 保留节点30
+  node-30-reserved:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_30_Reserved
+        NODE_PORT: "8030"
+    container_name: galaxy-node-30-reserved
+    profiles: [full]
+    ports:
+      - "8030:8030"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_30_Reserved
+      - NODE_PORT=8030
+      - NODE_ID=Node_30_Reserved
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8030/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_31_Reserved — 保留节点31
+  node-31-reserved:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_31_Reserved
+        NODE_PORT: "8031"
+    container_name: galaxy-node-31-reserved
+    profiles: [full]
+    ports:
+      - "8031:8031"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_31_Reserved
+      - NODE_PORT=8031
+      - NODE_ID=Node_31_Reserved
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8031/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_32_Reserved — 保留节点32
+  node-32-reserved:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_32_Reserved
+        NODE_PORT: "8032"
+    container_name: galaxy-node-32-reserved
+    profiles: [full]
+    ports:
+      - "8032:8032"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_32_Reserved
+      - NODE_PORT=8032
+      - NODE_ID=Node_32_Reserved
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8032/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_33_ADB — Android调试桥
+  node-33-adb:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_33_ADB
+        NODE_PORT: "8033"
+    container_name: galaxy-node-33-adb
+    profiles: [full]
+    ports:
+      - "8033:8033"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_33_ADB
+      - NODE_PORT=8033
+      - NODE_ID=Node_33_ADB
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8033/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_34_Scrcpy — 屏幕镜像控制
+  node-34-scrcpy:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_34_Scrcpy
+        NODE_PORT: "8034"
+    container_name: galaxy-node-34-scrcpy
+    profiles: [full]
+    ports:
+      - "8034:8034"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_34_Scrcpy
+      - NODE_PORT=8034
+      - NODE_ID=Node_34_Scrcpy
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8034/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_35_AppleScript — AppleScript自动化
+  node-35-applescript:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_35_AppleScript
+        NODE_PORT: "8035"
+    container_name: galaxy-node-35-applescript
+    profiles: [full]
+    ports:
+      - "8035:8035"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_35_AppleScript
+      - NODE_PORT=8035
+      - NODE_ID=Node_35_AppleScript
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8035/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_36_UIAWindows — Windows UI自动化
+  node-36-uiawindows:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_36_UIAWindows
+        NODE_PORT: "8036"
+    container_name: galaxy-node-36-uiawindows
+    profiles: [full]
+    ports:
+      - "8036:8036"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_36_UIAWindows
+      - NODE_PORT=8036
+      - NODE_ID=Node_36_UIAWindows
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8036/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_37_LinuxDBus — Linux D-Bus控制
+  node-37-linuxdbus:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_37_LinuxDBus
+        NODE_PORT: "8037"
+    container_name: galaxy-node-37-linuxdbus
+    profiles: [full]
+    ports:
+      - "8037:8037"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_37_LinuxDBus
+      - NODE_PORT=8037
+      - NODE_ID=Node_37_LinuxDBus
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8037/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_38_BLE — 蓝牙低功耗
+  node-38-ble:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_38_BLE
+        NODE_PORT: "8038"
+    container_name: galaxy-node-38-ble
+    profiles: [full]
+    ports:
+      - "8038:8038"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_38_BLE
+      - NODE_PORT=8038
+      - NODE_ID=Node_38_BLE
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8038/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_39_SSH — SSH远程控制
+  node-39-ssh:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_39_SSH
+        NODE_PORT: "8039"
+    container_name: galaxy-node-39-ssh
+    profiles: [full]
+    ports:
+      - "8039:8039"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_39_SSH
+      - NODE_PORT=8039
+      - NODE_ID=Node_39_SSH
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8039/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_40_SFTP — SFTP文件传输
+  node-40-sftp:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_40_SFTP
+        NODE_PORT: "8040"
+    container_name: galaxy-node-40-sftp
+    profiles: [full]
+    ports:
+      - "8040:8040"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_40_SFTP
+      - NODE_PORT=8040
+      - NODE_ID=Node_40_SFTP
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8040/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_41_MQTT — MQTT消息队列
+  node-41-mqtt:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_41_MQTT
+        NODE_PORT: "8041"
+    container_name: galaxy-node-41-mqtt
+    profiles: [full]
+    ports:
+      - "8041:8041"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_41_MQTT
+      - NODE_PORT=8041
+      - NODE_ID=Node_41_MQTT
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8041/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_42_CANbus — CAN总线控制
+  node-42-canbus:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_42_CANbus
+        NODE_PORT: "8042"
+    container_name: galaxy-node-42-canbus
+    profiles: [full]
+    ports:
+      - "8042:8042"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_42_CANbus
+      - NODE_PORT=8042
+      - NODE_ID=Node_42_CANbus
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8042/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_43_MAVLink — 无人机通信协议
+  node-43-mavlink:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_43_MAVLink
+        NODE_PORT: "8043"
+    container_name: galaxy-node-43-mavlink
+    profiles: [full]
+    ports:
+      - "8043:8043"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_43_MAVLink
+      - NODE_PORT=8043
+      - NODE_ID=Node_43_MAVLink
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8043/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_44_NFC — NFC近场通信
+  node-44-nfc:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_44_NFC
+        NODE_PORT: "8044"
+    container_name: galaxy-node-44-nfc
+    profiles: [full]
+    ports:
+      - "8044:8044"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_44_NFC
+      - NODE_PORT=8044
+      - NODE_ID=Node_44_NFC
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8044/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_45_DesktopAuto — 桌面自动化
+  node-45-desktopauto:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_45_DesktopAuto
+        NODE_PORT: "8045"
+    container_name: galaxy-node-45-desktopauto
+    profiles: [full]
+    ports:
+      - "8045:8045"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_45_DesktopAuto
+      - NODE_PORT=8045
+      - NODE_ID=Node_45_DesktopAuto
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8045/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_46_Camera — 摄像头控制
+  node-46-camera:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_46_Camera
+        NODE_PORT: "8046"
+    container_name: galaxy-node-46-camera
+    profiles: [full]
+    ports:
+      - "8046:8046"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_46_Camera
+      - NODE_PORT=8046
+      - NODE_ID=Node_46_Camera
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8046/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_47_Audio — 音频控制
+  node-47-audio:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_47_Audio
+        NODE_PORT: "8047"
+    container_name: galaxy-node-47-audio
+    profiles: [full]
+    ports:
+      - "8047:8047"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_47_Audio
+      - NODE_PORT=8047
+      - NODE_ID=Node_47_Audio
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8047/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_49_OctoPrint — 3D打印控制
+  node-49-octoprint:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_49_OctoPrint
+        NODE_PORT: "8048"
+    container_name: galaxy-node-49-octoprint
+    profiles: [full]
+    ports:
+      - "8048:8048"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_49_OctoPrint
+      - NODE_PORT=8048
+      - NODE_ID=Node_49_OctoPrint
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8048/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_48_Serial — 串口通信
+  node-48-serial:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_48_Serial
+        NODE_PORT: "8049"
+    container_name: galaxy-node-48-serial
+    profiles: [full]
+    ports:
+      - "8049:8049"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_48_Serial
+      - NODE_PORT=8049
+      - NODE_ID=Node_48_Serial
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8049/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_50_Transformer — Transformer推理引擎
+  node-50-transformer:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_50_Transformer
+        NODE_PORT: "8050"
+    container_name: galaxy-node-50-transformer
+    profiles: [full]
+    ports:
+      - "8050:8050"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_50_Transformer
+      - NODE_PORT=8050
+      - NODE_ID=Node_50_Transformer
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8050/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_51_QuantumDispatcher — 量子计算调度器
+  node-51-quantumdispatcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_51_QuantumDispatcher
+        NODE_PORT: "8051"
+    container_name: galaxy-node-51-quantumdispatcher
+    profiles: [full]
+    ports:
+      - "8051:8051"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_51_QuantumDispatcher
+      - NODE_PORT=8051
+      - NODE_ID=Node_51_QuantumDispatcher
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8051/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_52_QiskitSimulator — Qiskit量子模拟器
+  node-52-qiskitsimulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_52_QiskitSimulator
+        NODE_PORT: "8052"
+    container_name: galaxy-node-52-qiskitsimulator
+    profiles: [full]
+    ports:
+      - "8052:8052"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_52_QiskitSimulator
+      - NODE_PORT=8052
+      - NODE_ID=Node_52_QiskitSimulator
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8052/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_53_GraphLogic — 图逻辑推理
+  node-53-graphlogic:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_53_GraphLogic
+        NODE_PORT: "8053"
+    container_name: galaxy-node-53-graphlogic
+    profiles: [full]
+    ports:
+      - "8053:8053"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_53_GraphLogic
+      - NODE_PORT=8053
+      - NODE_ID=Node_53_GraphLogic
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8053/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_54_SymbolicMath — 符号数学计算
+  node-54-symbolicmath:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_54_SymbolicMath
+        NODE_PORT: "8054"
+    container_name: galaxy-node-54-symbolicmath
+    profiles: [full]
+    ports:
+      - "8054:8054"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_54_SymbolicMath
+      - NODE_PORT=8054
+      - NODE_ID=Node_54_SymbolicMath
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8054/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_55_MultiModal — 多模态处理
+  node-55-multimodal:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_55_MultiModal
+        NODE_PORT: "8055"
+    container_name: galaxy-node-55-multimodal
+    profiles: [full]
+    ports:
+      - "8055:8055"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_55_MultiModal
+      - NODE_PORT=8055
+      - NODE_ID=Node_55_MultiModal
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8055/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_56_Planning — 规划引擎
+  node-56-planning:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_56_Planning
+        NODE_PORT: "8057"
+    container_name: galaxy-node-56-planning
+    profiles: [full]
+    ports:
+      - "8057:8057"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_56_Planning
+      - NODE_PORT=8057
+      - NODE_ID=Node_56_Planning
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8057/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_57_QuantumCloud — 量子云服务
+  node-57-quantumcloud:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_57_QuantumCloud
+        NODE_PORT: "8058"
+    container_name: galaxy-node-57-quantumcloud
+    profiles: [full]
+    ports:
+      - "8058:8058"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_57_QuantumCloud
+      - NODE_PORT=8058
+      - NODE_ID=Node_57_QuantumCloud
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8058/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_58_ModelRouter — 模型路由器
+  node-58-modelrouter:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_58_ModelRouter
+        NODE_PORT: "8059"
+    container_name: galaxy-node-58-modelrouter
+    profiles: [full]
+    ports:
+      - "8059:8059"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_58_ModelRouter
+      - NODE_PORT=8059
+      - NODE_ID=Node_58_ModelRouter
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8059/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_59_CausalInference — 因果推理
+  node-59-causalinference:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_59_CausalInference
+        NODE_PORT: "8060"
+    container_name: galaxy-node-59-causalinference
+    profiles: [full]
+    ports:
+      - "8060:8060"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_59_CausalInference
+      - NODE_PORT=8060
+      - NODE_ID=Node_59_CausalInference
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8060/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_61_GeometricReasoning — 几何推理
+  node-61-geometricreasoning:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_61_GeometricReasoning
+        NODE_PORT: "8061"
+    container_name: galaxy-node-61-geometricreasoning
+    profiles: [full]
+    ports:
+      - "8061:8061"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_61_GeometricReasoning
+      - NODE_PORT=8061
+      - NODE_ID=Node_61_GeometricReasoning
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8061/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_62_ProbabilisticProgramming — 概率编程
+  node-62-probabilisticprogramming:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_62_ProbabilisticProgramming
+        NODE_PORT: "8062"
+    container_name: galaxy-node-62-probabilisticprogramming
+    profiles: [full]
+    ports:
+      - "8062:8062"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_62_ProbabilisticProgramming
+      - NODE_PORT=8062
+      - NODE_ID=Node_62_ProbabilisticProgramming
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8062/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_64_Telemetry — 遥测数据收集
+  node-64-telemetry:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_64_Telemetry
+        NODE_PORT: "8063"
+    container_name: galaxy-node-64-telemetry
+    profiles: [full]
+    ports:
+      - "8063:8063"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_64_Telemetry
+      - NODE_PORT=8063
+      - NODE_ID=Node_64_Telemetry
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8063/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_65_LoggerCentral — 中央日志系统
+  node-65-loggercentral:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_65_LoggerCentral
+        NODE_PORT: "8064"
+    container_name: galaxy-node-65-loggercentral
+    profiles: [core]
+    ports:
+      - "8064:8064"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_65_LoggerCentral
+      - NODE_PORT=8064
+      - NODE_ID=Node_65_LoggerCentral
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8064/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_66_ConfigManager — 配置管理器
+  node-66-configmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_66_ConfigManager
+        NODE_PORT: "8065"
+    container_name: galaxy-node-66-configmanager
+    profiles: [full]
+    ports:
+      - "8065:8065"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_66_ConfigManager
+      - NODE_PORT=8065
+      - NODE_ID=Node_66_ConfigManager
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8065/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_67_HealthMonitor — 健康监控
+  node-67-healthmonitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_67_HealthMonitor
+        NODE_PORT: "8066"
+    container_name: galaxy-node-67-healthmonitor
+    profiles: [core]
+    ports:
+      - "8066:8066"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_67_HealthMonitor
+      - NODE_PORT=8066
+      - NODE_ID=Node_67_HealthMonitor
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8066/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_68_Security — 安全监控
+  node-68-security:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_68_Security
+        NODE_PORT: "8067"
+    container_name: galaxy-node-68-security
+    profiles: [core]
+    ports:
+      - "8067:8067"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_68_Security
+      - NODE_PORT=8067
+      - NODE_ID=Node_68_Security
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8067/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_69_BackupRestore — 备份恢复
+  node-69-backuprestore:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_69_BackupRestore
+        NODE_PORT: "8068"
+    container_name: galaxy-node-69-backuprestore
+    profiles: [full]
+    ports:
+      - "8068:8068"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_69_BackupRestore
+      - NODE_PORT=8068
+      - NODE_ID=Node_69_BackupRestore
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8068/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_70_AutonomousLearning — 自主学习系统
+  node-70-autonomouslearning:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_70_AutonomousLearning
+        NODE_PORT: "8070"
+    container_name: galaxy-node-70-autonomouslearning
+    profiles: [full]
+    ports:
+      - "8070:8070"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_70_AutonomousLearning
+      - NODE_PORT=8070
+      - NODE_ID=Node_70_AutonomousLearning
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8070/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_71_MultiDeviceCoordination — 多设备协调
+  node-71-multidevicecoordination:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_71_MultiDeviceCoordination
+        NODE_PORT: "8071"
+    container_name: galaxy-node-71-multidevicecoordination
+    profiles: [full]
+    ports:
+      - "8071:8071"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_71_MultiDeviceCoordination
+      - NODE_PORT=8071
+      - NODE_ID=Node_71_MultiDeviceCoordination
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8071/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_72_KnowledgeBase — 知识库系统
+  node-72-knowledgebase:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_72_KnowledgeBase
+        NODE_PORT: "8072"
+    container_name: galaxy-node-72-knowledgebase
+    profiles: [full]
+    ports:
+      - "8072:8072"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_72_KnowledgeBase
+      - NODE_PORT=8072
+      - NODE_ID=Node_72_KnowledgeBase
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8072/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_73_Learning — 自学习系统
+  node-73-learning:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_73_Learning
+        NODE_PORT: "8073"
+    container_name: galaxy-node-73-learning
+    profiles: [full]
+    ports:
+      - "8073:8073"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_73_Learning
+      - NODE_PORT=8073
+      - NODE_ID=Node_73_Learning
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8073/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_74_DigitalTwin — 数字孪生
+  node-74-digitaltwin:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_74_DigitalTwin
+        NODE_PORT: "8074"
+    container_name: galaxy-node-74-digitaltwin
+    profiles: [full]
+    ports:
+      - "8074:8074"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_74_DigitalTwin
+      - NODE_PORT=8074
+      - NODE_ID=Node_74_DigitalTwin
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8074/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_75_DataPipeline — 数据处理管道
+  node-75-datapipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_75_DataPipeline
+        NODE_PORT: "8075"
+    container_name: galaxy-node-75-datapipeline
+    profiles: [full]
+    ports:
+      - "8075:8075"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_75_DataPipeline
+      - NODE_PORT=8075
+      - NODE_ID=Node_75_DataPipeline
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8075/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_76_AlertManager — 告警管理器
+  node-76-alertmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_76_AlertManager
+        NODE_PORT: "8076"
+    container_name: galaxy-node-76-alertmanager
+    profiles: [full]
+    ports:
+      - "8076:8076"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_76_AlertManager
+      - NODE_PORT=8076
+      - NODE_ID=Node_76_AlertManager
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8076/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_77_TaskScheduler — 任务调度器
+  node-77-taskscheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_77_TaskScheduler
+        NODE_PORT: "8077"
+    container_name: galaxy-node-77-taskscheduler
+    profiles: [full]
+    ports:
+      - "8077:8077"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_77_TaskScheduler
+      - NODE_PORT=8077
+      - NODE_ID=Node_77_TaskScheduler
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8077/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_78_DataValidator — 数据校验服务
+  node-78-datavalidator:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_78_DataValidator
+        NODE_PORT: "8078"
+    container_name: galaxy-node-78-datavalidator
+    profiles: [full]
+    ports:
+      - "8078:8078"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_78_DataValidator
+      - NODE_PORT=8078
+      - NODE_ID=Node_78_DataValidator
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8078/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_79_LocalLLM — 本地大语言模型
+  node-79-localllm:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_79_LocalLLM
+        NODE_PORT: "8079"
+    container_name: galaxy-node-79-localllm
+    profiles: [core]
+    ports:
+      - "8079:8079"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_79_LocalLLM
+      - NODE_PORT=8079
+      - NODE_ID=Node_79_LocalLLM
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8079/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_81_Orchestrator — 任务编排器
+  node-81-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_81_Orchestrator
+        NODE_PORT: "8081"
+    container_name: galaxy-node-81-orchestrator
+    profiles: [full]
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_81_Orchestrator
+      - NODE_PORT=8081
+      - NODE_ID=Node_81_Orchestrator
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_82_NetworkGuard — 网络守卫
+  node-82-networkguard:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_82_NetworkGuard
+        NODE_PORT: "8082"
+    container_name: galaxy-node-82-networkguard
+    profiles: [full]
+    ports:
+      - "8082:8082"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_82_NetworkGuard
+      - NODE_PORT=8082
+      - NODE_ID=Node_82_NetworkGuard
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_83_NewsAggregator — 新闻聚合器
+  node-83-newsaggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_83_NewsAggregator
+        NODE_PORT: "8083"
+    container_name: galaxy-node-83-newsaggregator
+    profiles: [full]
+    ports:
+      - "8083:8083"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_83_NewsAggregator
+      - NODE_PORT=8083
+      - NODE_ID=Node_83_NewsAggregator
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8083/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_84_StockTracker — 股票追踪
+  node-84-stocktracker:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_84_StockTracker
+        NODE_PORT: "8084"
+    container_name: galaxy-node-84-stocktracker
+    profiles: [full]
+    ports:
+      - "8084:8084"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_84_StockTracker
+      - NODE_PORT=8084
+      - NODE_ID=Node_84_StockTracker
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8084/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_85_PromptLibrary — 提示词库
+  node-85-promptlibrary:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_85_PromptLibrary
+        NODE_PORT: "8085"
+    container_name: galaxy-node-85-promptlibrary
+    profiles: [full]
+    ports:
+      - "8085:8085"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_85_PromptLibrary
+      - NODE_PORT=8085
+      - NODE_ID=Node_85_PromptLibrary
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8085/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_86_SpeechProcessor — 语音处理服务
+  node-86-speechprocessor:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_86_SpeechProcessor
+        NODE_PORT: "8086"
+    container_name: galaxy-node-86-speechprocessor
+    profiles: [full]
+    ports:
+      - "8086:8086"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_86_SpeechProcessor
+      - NODE_PORT=8086
+      - NODE_ID=Node_86_SpeechProcessor
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8086/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_87_ImageAnalysis — 图像分析服务
+  node-87-imageanalysis:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_87_ImageAnalysis
+        NODE_PORT: "8087"
+    container_name: galaxy-node-87-imageanalysis
+    profiles: [full]
+    ports:
+      - "8087:8087"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_87_ImageAnalysis
+      - NODE_PORT=8087
+      - NODE_ID=Node_87_ImageAnalysis
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8087/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_88_WorkflowEngine — 工作流引擎
+  node-88-workflowengine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_88_WorkflowEngine
+        NODE_PORT: "8088"
+    container_name: galaxy-node-88-workflowengine
+    profiles: [full]
+    ports:
+      - "8088:8088"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_88_WorkflowEngine
+      - NODE_PORT=8088
+      - NODE_ID=Node_88_WorkflowEngine
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8088/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_89_APIGateway — API网关
+  node-89-apigateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_89_APIGateway
+        NODE_PORT: "8089"
+    container_name: galaxy-node-89-apigateway
+    profiles: [full]
+    ports:
+      - "8089:8089"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_89_APIGateway
+      - NODE_PORT=8089
+      - NODE_ID=Node_89_APIGateway
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8089/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_90_MultimodalVision — 多模态视觉
+  node-90-multimodalvision:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_90_MultimodalVision
+        NODE_PORT: "8090"
+    container_name: galaxy-node-90-multimodalvision
+    profiles: [full]
+    ports:
+      - "8090:8090"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_90_MultimodalVision
+      - NODE_PORT=8090
+      - NODE_ID=Node_90_MultimodalVision
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8090/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_91_MultimodalAgent — 多模态智能体
+  node-91-multimodalagent:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_91_MultimodalAgent
+        NODE_PORT: "8091"
+    container_name: galaxy-node-91-multimodalagent
+    profiles: [full]
+    ports:
+      - "8091:8091"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_91_MultimodalAgent
+      - NODE_PORT=8091
+      - NODE_ID=Node_91_MultimodalAgent
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8091/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_92_AutoControl — 自动控制
+  node-92-autocontrol:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_92_AutoControl
+        NODE_PORT: "8092"
+    container_name: galaxy-node-92-autocontrol
+    profiles: [full]
+    ports:
+      - "8092:8092"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_92_AutoControl
+      - NODE_PORT=8092
+      - NODE_ID=Node_92_AutoControl
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8092/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_93_VideoProcessor — 视频处理与分析
+  node-93-videoprocessor:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_93_VideoProcessor
+        NODE_PORT: "8093"
+    container_name: galaxy-node-93-videoprocessor
+    profiles: [full]
+    ports:
+      - "8093:8093"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_93_VideoProcessor
+      - NODE_PORT=8093
+      - NODE_ID=Node_93_VideoProcessor
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8093/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_94_AudioAnalysis — 音频分析与转录
+  node-94-audioanalysis:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_94_AudioAnalysis
+        NODE_PORT: "8094"
+    container_name: galaxy-node-94-audioanalysis
+    profiles: [full]
+    ports:
+      - "8094:8094"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_94_AudioAnalysis
+      - NODE_PORT=8094
+      - NODE_ID=Node_94_AudioAnalysis
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8094/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_95_WebRTC_Receiver — WebRTC接收器
+  node-95-webrtc-receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_95_WebRTC_Receiver
+        NODE_PORT: "8095"
+    container_name: galaxy-node-95-webrtc-receiver
+    profiles: [full]
+    ports:
+      - "8095:8095"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_95_WebRTC_Receiver
+      - NODE_PORT=8095
+      - NODE_ID=Node_95_WebRTC_Receiver
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8095/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_96_SmartTransportRouter — 智能传输路由
+  node-96-smarttransportrouter:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_96_SmartTransportRouter
+        NODE_PORT: "8096"
+    container_name: galaxy-node-96-smarttransportrouter
+    profiles: [full]
+    ports:
+      - "8096:8096"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_96_SmartTransportRouter
+      - NODE_PORT=8096
+      - NODE_ID=Node_96_SmartTransportRouter
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8096/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_97_AcademicSearch — 学术搜索
+  node-97-academicsearch:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_97_AcademicSearch
+        NODE_PORT: "8097"
+    container_name: galaxy-node-97-academicsearch
+    profiles: [full]
+    ports:
+      - "8097:8097"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_97_AcademicSearch
+      - NODE_PORT=8097
+      - NODE_ID=Node_97_AcademicSearch
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8097/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_98_MultimodalFusion — 多模态融合
+  node-98-multimodalfusion:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_98_MultimodalFusion
+        NODE_PORT: "8098"
+    container_name: galaxy-node-98-multimodalfusion
+    profiles: [full]
+    ports:
+      - "8098:8098"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_98_MultimodalFusion
+      - NODE_PORT=8098
+      - NODE_ID=Node_98_MultimodalFusion
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8098/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_99_EmbeddingService — 嵌入向量服务
+  node-99-embeddingservice:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_99_EmbeddingService
+        NODE_PORT: "8099"
+    container_name: galaxy-node-99-embeddingservice
+    profiles: [full]
+    ports:
+      - "8099:8099"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_99_EmbeddingService
+      - NODE_PORT=8099
+      - NODE_ID=Node_99_EmbeddingService
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8099/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_100_MemorySystem — 记忆系统V2
+  node-100-memorysystem:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_100_MemorySystem
+        NODE_PORT: "8100"
+    container_name: galaxy-node-100-memorysystem
+    profiles: [full]
+    ports:
+      - "8100:8100"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_100_MemorySystem
+      - NODE_PORT=8100
+      - NODE_ID=Node_100_MemorySystem
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8100/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_101_CodeEngine — 代码引擎
+  node-101-codeengine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_101_CodeEngine
+        NODE_PORT: "8101"
+    container_name: galaxy-node-101-codeengine
+    profiles: [full]
+    ports:
+      - "8101:8101"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_101_CodeEngine
+      - NODE_PORT=8101
+      - NODE_ID=Node_101_CodeEngine
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8101/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_102_DebugOptimize — 调试优化
+  node-102-debugoptimize:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_102_DebugOptimize
+        NODE_PORT: "8102"
+    container_name: galaxy-node-102-debugoptimize
+    profiles: [full]
+    ports:
+      - "8102:8102"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_102_DebugOptimize
+      - NODE_PORT=8102
+      - NODE_ID=Node_102_DebugOptimize
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8102/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_103_KnowledgeGraph — 知识图谱
+  node-103-knowledgegraph:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_103_KnowledgeGraph
+        NODE_PORT: "8103"
+    container_name: galaxy-node-103-knowledgegraph
+    profiles: [full]
+    ports:
+      - "8103:8103"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_103_KnowledgeGraph
+      - NODE_PORT=8103
+      - NODE_ID=Node_103_KnowledgeGraph
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8103/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_104_AgentCPM — 智能体CPM
+  node-104-agentcpm:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_104_AgentCPM
+        NODE_PORT: "8104"
+    container_name: galaxy-node-104-agentcpm
+    profiles: [full]
+    ports:
+      - "8104:8104"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_104_AgentCPM
+      - NODE_PORT=8104
+      - NODE_ID=Node_104_AgentCPM
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8104/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_105_UnifiedKnowledgeBase — 统一知识库
+  node-105-unifiedknowledgebase:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_105_UnifiedKnowledgeBase
+        NODE_PORT: "8105"
+    container_name: galaxy-node-105-unifiedknowledgebase
+    profiles: [full]
+    ports:
+      - "8105:8105"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_105_UnifiedKnowledgeBase
+      - NODE_PORT=8105
+      - NODE_ID=Node_105_UnifiedKnowledgeBase
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8105/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_106_GitHubFlow — GitHub工作流
+  node-106-githubflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_106_GitHubFlow
+        NODE_PORT: "8106"
+    container_name: galaxy-node-106-githubflow
+    profiles: [full]
+    ports:
+      - "8106:8106"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_106_GitHubFlow
+      - NODE_PORT=8106
+      - NODE_ID=Node_106_GitHubFlow
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8106/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_107_FunctionCalling — 函数调用调度器
+  node-107-functioncalling:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_107_FunctionCalling
+        NODE_PORT: "8107"
+    container_name: galaxy-node-107-functioncalling
+    profiles: [full]
+    ports:
+      - "8107:8107"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_107_FunctionCalling
+      - NODE_PORT=8107
+      - NODE_ID=Node_107_FunctionCalling
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8107/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_108_MetaCognition — 元认知系统
+  node-108-metacognition:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_108_MetaCognition
+        NODE_PORT: "8108"
+    container_name: galaxy-node-108-metacognition
+    profiles: [full]
+    ports:
+      - "8108:8108"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_108_MetaCognition
+      - NODE_PORT=8108
+      - NODE_ID=Node_108_MetaCognition
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8108/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_109_ProactiveSensing — 主动感知
+  node-109-proactivesensing:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_109_ProactiveSensing
+        NODE_PORT: "8109"
+    container_name: galaxy-node-109-proactivesensing
+    profiles: [full]
+    ports:
+      - "8109:8109"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_109_ProactiveSensing
+      - NODE_PORT=8109
+      - NODE_ID=Node_109_ProactiveSensing
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8109/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_113_AndroidVLM — Android视觉语言模型
+  node-113-androidvlm:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_113_AndroidVLM
+        NODE_PORT: "8113"
+    container_name: galaxy-node-113-androidvlm
+    profiles: [full]
+    ports:
+      - "8113:8113"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_113_AndroidVLM
+      - NODE_PORT=8113
+      - NODE_ID=Node_113_AndroidVLM
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8113/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_114_DocumentIntelligence — 文档智能解析与理解
+  node-114-documentintelligence:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_114_DocumentIntelligence
+        NODE_PORT: "8114"
+    container_name: galaxy-node-114-documentintelligence
+    profiles: [full]
+    ports:
+      - "8114:8114"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_114_DocumentIntelligence
+      - NODE_PORT=8114
+      - NODE_ID=Node_114_DocumentIntelligence
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8114/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_115_PluginManager — 插件管理器
+  node-115-pluginmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_115_PluginManager
+        NODE_PORT: "8115"
+    container_name: galaxy-node-115-pluginmanager
+    profiles: [full]
+    ports:
+      - "8115:8115"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_115_PluginManager
+      - NODE_PORT=8115
+      - NODE_ID=Node_115_PluginManager
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8115/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_116_ExternalToolWrapper — 外部工具包装器
+  node-116-externaltoolwrapper:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_116_ExternalToolWrapper
+        NODE_PORT: "8116"
+    container_name: galaxy-node-116-externaltoolwrapper
+    profiles: [full]
+    ports:
+      - "8116:8116"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_116_ExternalToolWrapper
+      - NODE_PORT=8116
+      - NODE_ID=Node_116_ExternalToolWrapper
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8116/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_117_OpenCode — 开放代码
+  node-117-opencode:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_117_OpenCode
+        NODE_PORT: "8117"
+    container_name: galaxy-node-117-opencode
+    profiles: [full]
+    ports:
+      - "8117:8117"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_117_OpenCode
+      - NODE_PORT=8117
+      - NODE_ID=Node_117_OpenCode
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8117/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_118_NodeFactory — 节点工厂
+  node-118-nodefactory:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_118_NodeFactory
+        NODE_PORT: "8118"
+    container_name: galaxy-node-118-nodefactory
+    profiles: [full]
+    ports:
+      - "8118:8118"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_118_NodeFactory
+      - NODE_PORT=8118
+      - NODE_ID=Node_118_NodeFactory
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8118/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_119_BenchmarkEval — 基准评测系统
+  node-119-benchmarkeval:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_119_BenchmarkEval
+        NODE_PORT: "8119"
+    container_name: galaxy-node-119-benchmarkeval
+    profiles: [full]
+    ports:
+      - "8119:8119"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_119_BenchmarkEval
+      - NODE_PORT=8119
+      - NODE_ID=Node_119_BenchmarkEval
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8119/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_120_File — 文件操作服务
+  node-120-file:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_120_File
+        NODE_PORT: "8120"
+    container_name: galaxy-node-120-file
+    profiles: [full]
+    ports:
+      - "8120:8120"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_120_File
+      - NODE_PORT=8120
+      - NODE_ID=Node_120_File
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8120/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_121_Web — Web操作与代理
+  node-121-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_121_Web
+        NODE_PORT: "8121"
+    container_name: galaxy-node-121-web
+    profiles: [full]
+    ports:
+      - "8121:8121"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_121_Web
+      - NODE_PORT=8121
+      - NODE_ID=Node_121_Web
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8121/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_122_Shell — Shell命令执行器
+  node-122-shell:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_122_Shell
+        NODE_PORT: "8122"
+    container_name: galaxy-node-122-shell
+    profiles: [full]
+    ports:
+      - "8122:8122"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_122_Shell
+      - NODE_PORT=8122
+      - NODE_ID=Node_122_Shell
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8122/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_123_Calendar — 日历服务
+  node-123-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_123_Calendar
+        NODE_PORT: "8123"
+    container_name: galaxy-node-123-calendar
+    profiles: [full]
+    ports:
+      - "8123:8123"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_123_Calendar
+      - NODE_PORT=8123
+      - NODE_ID=Node_123_Calendar
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8123/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_124_LinuxDesktopAuto — Linux桌面自动化
+  node-124-linuxdesktopauto:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_124_LinuxDesktopAuto
+        NODE_PORT: "8124"
+    container_name: galaxy-node-124-linuxdesktopauto
+    profiles: [full]
+    ports:
+      - "8124:8124"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_124_LinuxDesktopAuto
+      - NODE_PORT=8124
+      - NODE_ID=Node_124_LinuxDesktopAuto
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8124/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_125_MediaGen — 媒体生成
+  node-125-mediagen:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_125_MediaGen
+        NODE_PORT: "8125"
+    container_name: galaxy-node-125-mediagen
+    profiles: [full]
+    ports:
+      - "8125:8125"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_125_MediaGen
+      - NODE_PORT=8125
+      - NODE_ID=Node_125_MediaGen
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8125/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_126_AgentSwarm — 智能体集群
+  node-126-agentswarm:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_126_AgentSwarm
+        NODE_PORT: "8126"
+    container_name: galaxy-node-126-agentswarm
+    profiles: [full]
+    ports:
+      - "8126:8126"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_126_AgentSwarm
+      - NODE_PORT=8126
+      - NODE_ID=Node_126_AgentSwarm
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8126/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_127_BambuLab — BambuLab 3D打印
+  node-127-bambulab:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_127_BambuLab
+        NODE_PORT: "8127"
+    container_name: galaxy-node-127-bambulab
+    profiles: [full]
+    ports:
+      - "8127:8127"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_127_BambuLab
+      - NODE_PORT=8127
+      - NODE_ID=Node_127_BambuLab
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8127/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_128_MediaGen — 媒体生成
+  node-128-mediagen:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_128_MediaGen
+        NODE_PORT: "8128"
+    container_name: galaxy-node-128-mediagen
+    profiles: [full]
+    ports:
+      - "8128:8128"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_128_MediaGen
+      - NODE_PORT=8128
+      - NODE_ID=Node_128_MediaGen
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8128/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_130_AutonomousCoding — 自主编码智能体
+  node-130-autonomouscoding:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_130_AutonomousCoding
+        NODE_PORT: "8130"
+    container_name: galaxy-node-130-autonomouscoding
+    profiles: [full]
+    ports:
+      - "8130:8130"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_130_AutonomousCoding
+      - NODE_PORT=8130
+      - NODE_ID=Node_130_AutonomousCoding
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8130/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_60_ReinforcementLearning — 强化学习引擎
+  node-60-reinforcementlearning:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_60_ReinforcementLearning
+        NODE_PORT: "8160"
+    container_name: galaxy-node-60-reinforcementlearning
+    profiles: [full]
+    ports:
+      - "8160:8160"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_60_ReinforcementLearning
+      - NODE_PORT=8160
+      - NODE_ID=Node_60_ReinforcementLearning
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8160/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_63_FuzzyLogicEngine — 模糊逻辑推理引擎
+  node-63-fuzzylogicengine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_63_FuzzyLogicEngine
+        NODE_PORT: "8163"
+    container_name: galaxy-node-63-fuzzylogicengine
+    profiles: [full]
+    ports:
+      - "8163:8163"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_63_FuzzyLogicEngine
+      - NODE_PORT=8163
+      - NODE_ID=Node_63_FuzzyLogicEngine
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8163/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Node_80_MemorySystem — 记忆系统
+  node-80-memorysystem:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+      args:
+        NODE_NAME: Node_80_MemorySystem
+        NODE_PORT: "8180"
+    container_name: galaxy-node-80-memorysystem
+    profiles: [core]
+    ports:
+      - "8180:8180"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - GALAXY_NATS_URL=nats://nats:4222
+      - STATE_MACHINE_URL=http://node-00-statemachine:8000
+      - NODE_NAME=Node_80_MemorySystem
+      - NODE_PORT=8180
+      - NODE_ID=Node_80_MemorySystem
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./nodes:/app/nodes:ro
+      - ./core:/app/core:ro
+      - galaxy-data:/app/data
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8180/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+networks:
+  galaxy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+  qdrant-data:
+  neo4j-data:
+  neo4j-logs:
+  mongodb-data:
+  nats-data:
+  temporal-db-data:
+  ollama-data:
+  oneapi-data:
+  minio-data:
+  coturn-data:
+  galaxy-data:
+  galaxy-logs:
