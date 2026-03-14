@@ -81,6 +81,34 @@ COLORS = {
     "glow_dim": "#333333",
 }
 
+# ── Audiofier 工业控制层色彩方案 ──
+AUDIOFIER = {
+    "bg_charcoal":   "#121212",
+    "bg_panel":      "#1a1a1a",
+    "bg_surface":    "#222222",
+    "border":        "#2a2a2a",
+    "border_hi":     "#3a3a3a",
+    # Layer A — crimson/red family
+    "layer_a":       "#B22222",
+    "layer_a_hi":    "#DC143C",
+    "layer_a_glow":  "rgba(178, 34, 34, 0.35)",
+    "layer_a_dim":   "rgba(178, 34, 34, 0.15)",
+    # Layer B — cyan/blue family
+    "layer_b":       "#00BFFF",
+    "layer_b_hi":    "#00CED1",
+    "layer_b_glow":  "rgba(0, 191, 255, 0.35)",
+    "layer_b_dim":   "rgba(0, 191, 255, 0.15)",
+    # Text
+    "text":          "#e0e0e0",
+    "text_sec":      "#888888",
+    "text_dim":      "#444444",
+    # LED states
+    "led_active":    "#00FF88",
+    "led_idle":      "#333333",
+    "led_warn":      "#FFA500",
+    "led_error":     "#FF3333",
+}
+
 SIDEBAR_WIDTH = 1280
 SIDEBAR_COLLAPSED_WIDTH = 40
 FULL_WIDTH = 940
@@ -234,6 +262,213 @@ class FlowBorderFrame(QFrame):
 
         # Let children paint on top
         super().paintEvent(event)
+
+
+# ════════════════════════════════════════════════════════════
+# Audiofier 工业控制层组件
+# ════════════════════════════════════════════════════════════
+
+class IndustrialKnob(QWidget):
+    """Audiofier 风格拟物化旋钮控件.
+
+    使用 QPainter 绘制:
+    - 深炭黑圆形底盘 + 多层阴影体积感
+    - 环形金属反射渐变
+    - 可旋转指示线 (0~270° 范围)
+    - Layer A (红) / Layer B (蓝) 色彩编码高亮环
+
+    参数:
+        label (str): 旋钮标签文字.
+        layer (str): "A" | "B" | None — 决定高亮环颜色.
+        value (float): 0.0 ~ 1.0 初始值.
+    """
+    value_changed = pyqtSignal(float)
+
+    def __init__(self, label: str = "", layer: str = None, value: float = 0.5, parent=None):
+        super().__init__(parent)
+        self._label = label
+        self._layer = layer
+        self._value = max(0.0, min(1.0, value))
+        self._dragging = False
+        self._drag_start_y = 0
+        self._drag_start_val = 0.0
+        self.setFixedSize(64, 76)
+        self.setCursor(Qt.SizeVerCursor)
+        self.setToolTip(f"{label}: {self._value:.2f}")
+
+    @property
+    def value(self) -> float:
+        return self._value
+
+    def set_value(self, v: float):
+        self._value = max(0.0, min(1.0, v))
+        self.setToolTip(f"{self._label}: {self._value:.2f}")
+        self.update()
+        self.value_changed.emit(self._value)
+
+    def paintEvent(self, event):
+        import math
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        cx, cy, r = 32, 32, 28
+
+        # 外阴影 (绘在圆形之前)
+        shadow_grad = QRadialGradient(cx + 3, cy + 3, r + 6)
+        shadow_grad.setColorAt(0, QColor(0, 0, 0, 100))
+        shadow_grad.setColorAt(1, QColor(0, 0, 0, 0))
+        p.setBrush(QBrush(shadow_grad))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(cx - r + 3, cy - r + 3, (r + 3) * 2, (r + 3) * 2)
+
+        # 底盘: 深炭黑 + 金属反射 (conic-gradient 近似)
+        metal_grad = QRadialGradient(cx - 8, cy - 8, r * 2)
+        metal_grad.setColorAt(0.0, QColor(68, 68, 68))
+        metal_grad.setColorAt(0.4, QColor(22, 22, 22))
+        metal_grad.setColorAt(1.0, QColor(12, 12, 12))
+        p.setBrush(QBrush(metal_grad))
+        p.setPen(QPen(QColor(20, 20, 20), 2))
+        p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
+
+        # 内高光 (左上白色弧线感)
+        inner_hi = QRadialGradient(cx - 10, cy - 10, r)
+        inner_hi.setColorAt(0.0, QColor(255, 255, 255, 28))
+        inner_hi.setColorAt(0.6, QColor(255, 255, 255, 0))
+        p.setBrush(QBrush(inner_hi))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
+
+        # Layer 高亮环
+        if self._layer == "A":
+            ring_color = QColor(AUDIOFIER["layer_a"])
+        elif self._layer == "B":
+            ring_color = QColor(AUDIOFIER["layer_b"])
+        else:
+            ring_color = QColor(80, 80, 80)
+
+        # Arc from -225° to value_angle (-225 + 270*value)
+        span_angle = int(270 * self._value)
+        p.setBrush(Qt.NoBrush)
+        arc_pen = QPen(ring_color, 3)
+        arc_pen.setCapStyle(Qt.RoundCap)
+        p.setPen(arc_pen)
+        # Qt uses 16ths of a degree, CCW from 3-o'clock
+        p.drawArc(cx - r - 2, cy - r - 2, (r + 2) * 2, (r + 2) * 2,
+                  (-225 + 90) * 16, -span_angle * 16)
+
+        # 指示线
+        angle_deg = -225 + 270 * self._value   # degrees from 3-o'clock position
+        angle_rad = math.radians(angle_deg - 90)   # adjust for Qt coord system
+        lx = int(cx + (r - 8) * math.cos(angle_rad))
+        ly = int(cy + (r - 8) * math.sin(angle_rad))
+        lx2 = int(cx + (r - 2) * math.cos(angle_rad))
+        ly2 = int(cy + (r - 2) * math.sin(angle_rad))
+        ind_pen = QPen(QColor(230, 230, 230), 2)
+        ind_pen.setCapStyle(Qt.RoundCap)
+        p.setPen(ind_pen)
+        p.drawLine(lx, ly, lx2, ly2)
+
+        # 标签
+        if self._label:
+            p.setPen(QPen(QColor(AUDIOFIER["text_sec"])))
+            font = QFont("Consolas", 8)
+            p.setFont(font)
+            p.drawText(0, 66, 64, 12, Qt.AlignCenter, self._label)
+
+        p.end()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._dragging = True
+            self._drag_start_y = event.globalY()
+            self._drag_start_val = self._value
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            delta = (self._drag_start_y - event.globalY()) / 120.0
+            self.set_value(self._drag_start_val + delta)
+
+    def mouseReleaseEvent(self, event):
+        self._dragging = False
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y() / 1200.0
+        self.set_value(self._value + delta)
+
+
+class LedIndicator(QWidget):
+    """Audiofier 风格 LED 指示灯.
+
+    小圆形 LED, 支持多种状态色 + 发光 glow 效果.
+    状态: "active" | "idle" | "warn" | "error"
+    Layer: "A" | "B" | None — 使用 A/B 色彩编码代替默认状态色.
+    """
+
+    def __init__(self, label: str = "", state: str = "idle",
+                 layer: str = None, size: int = 12, parent=None):
+        super().__init__(parent)
+        self._label = label
+        self._state = state
+        self._layer = layer
+        self._size = size
+        lw = max(size + 4, 60) if label else size + 4
+        self.setFixedSize(lw, size + (14 if label else 4))
+
+    def set_state(self, state: str):
+        """Change LED state: 'active' | 'idle' | 'warn' | 'error'."""
+        self._state = state
+        self.update()
+
+    def _led_color(self) -> QColor:
+        if self._layer == "A":
+            return QColor(AUDIOFIER["layer_a"]) if self._state != "idle" else QColor(178, 34, 34, 40)
+        if self._layer == "B":
+            return QColor(AUDIOFIER["layer_b"]) if self._state != "idle" else QColor(0, 100, 140, 40)
+        color_map = {
+            "active": QColor(AUDIOFIER["led_active"]),
+            "idle":   QColor(AUDIOFIER["led_idle"]),
+            "warn":   QColor(AUDIOFIER["led_warn"]),
+            "error":  QColor(AUDIOFIER["led_error"]),
+        }
+        return color_map.get(self._state, QColor(AUDIOFIER["led_idle"]))
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        s = self._size
+        cx, cy = s // 2 + 2, s // 2 + 2
+        color = self._led_color()
+
+        # Glow halo (when not idle)
+        if self._state != "idle":
+            glow = QRadialGradient(cx, cy, s)
+            glow_color = QColor(color)
+            glow_color.setAlpha(80)
+            glow.setColorAt(0, glow_color)
+            glow.setColorAt(1, QColor(0, 0, 0, 0))
+            p.setBrush(QBrush(glow))
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(cx - s, cy - s, s * 2, s * 2)
+
+        # LED body
+        grad = QRadialGradient(cx - s // 4, cy - s // 4, s // 2)
+        hi_color = QColor(color)
+        hi_color.setAlpha(255)
+        grad.setColorAt(0, hi_color.lighter(160))
+        grad.setColorAt(1, hi_color)
+        p.setBrush(QBrush(grad))
+        p.setPen(QPen(color.darker(150), 1))
+        r = s // 2
+        p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
+
+        # Label
+        if self._label:
+            p.setPen(QPen(QColor(AUDIOFIER["text_sec"])))
+            font = QFont("Consolas", 7)
+            p.setFont(font)
+            p.drawText(0, s + 4, self.width(), 12, Qt.AlignCenter, self._label)
+
+        p.end()
 
 
 class APIClient:
@@ -1791,6 +2026,188 @@ class SettingsPanel(QWidget):
 
 
 # ════════════════════════════════════════════════════════════
+# ABControlSurface — Audiofier 双层控制台面板
+# ════════════════════════════════════════════════════════════
+
+class ABControlSurface(QWidget):
+    """Audiofier 风格 A/B 双层控制台面板.
+
+    左半部: Layer A (红系) — Agent 控制旋钮 + LED
+    右半部: Layer B (蓝系) — 设备通道旋钮 + LED
+    中央:   系统状态 LED 矩阵
+
+    该面板作为独立的可嵌入组件, 放置在 GalaxyClientUI 的 Tab 中.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._knobs: Dict[str, IndustrialKnob] = {}
+        self._leds: Dict[str, LedIndicator] = {}
+        self._status_leds: Dict[str, LedIndicator] = {}
+        self._init_ui()
+
+    def _init_ui(self):
+        self.setStyleSheet(f"""
+            QWidget {{
+                background: {AUDIOFIER['bg_charcoal']};
+                color: {AUDIOFIER['text']};
+                font-family: 'Consolas', 'JetBrains Mono', monospace;
+            }}
+            QLabel {{
+                background: transparent;
+                color: {AUDIOFIER['text_sec']};
+                font-size: 10px;
+            }}
+        """)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 8, 10, 8)
+        root.setSpacing(8)
+
+        # ── 标题栏 ──
+        title_row = QHBoxLayout()
+        title_lbl = QLabel("CONTROL SURFACE")
+        title_lbl.setStyleSheet(f"""
+            color: {AUDIOFIER['text']};
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            background: transparent;
+        """)
+        title_row.addWidget(title_lbl)
+        title_row.addStretch()
+
+        # Master status LED
+        self.master_led = LedIndicator("SYS", state="active", size=10)
+        title_row.addWidget(self.master_led)
+        root.addLayout(title_row)
+
+        # ── 分隔线 ──
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background: {AUDIOFIER['border']};")
+        root.addWidget(sep)
+
+        # ── A/B 双层控制区 ──
+        ab_row = QHBoxLayout()
+        ab_row.setSpacing(8)
+        ab_row.addWidget(self._build_layer("A"), 1)
+
+        # 中央分隔
+        center = QFrame()
+        center.setFixedWidth(1)
+        center.setStyleSheet(f"background: {AUDIOFIER['border']};")
+        ab_row.addWidget(center)
+
+        ab_row.addWidget(self._build_layer("B"), 1)
+        root.addLayout(ab_row)
+
+        # ── 底部 LED 状态矩阵 ──
+        root.addWidget(self._build_led_matrix())
+
+    def _build_layer(self, layer: str) -> QWidget:
+        """Build Layer A or Layer B control section."""
+        if layer == "A":
+            accent      = AUDIOFIER["layer_a"]
+            labels      = ["GAIN", "ROUTE", "PRIORITY", "TEMP"]
+            section_lbl = "LAYER A  ·  AGENT"
+        else:
+            accent      = AUDIOFIER["layer_b"]
+            labels      = ["LATENCY", "CHAN", "SYNC", "VOL"]
+            section_lbl = "LAYER B  ·  DEVICE"
+
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background: {AUDIOFIER['bg_panel']};
+                border: 1px solid {accent};
+                border-radius: 8px;
+            }}
+        """)
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(6)
+
+        # Section header
+        hdr = QLabel(section_lbl)
+        hdr.setStyleSheet(f"""
+            color: {accent};
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            background: transparent;
+        """)
+        lay.addWidget(hdr)
+
+        # Knobs row
+        knob_row = QHBoxLayout()
+        knob_row.setSpacing(4)
+        for i, lbl in enumerate(labels):
+            knob = IndustrialKnob(label=lbl, layer=layer, value=0.4 + i * 0.1)
+            knob_row.addWidget(knob)
+            self._knobs[f"{layer}_{lbl}"] = knob
+        lay.addLayout(knob_row)
+
+        # LED row
+        led_row = QHBoxLayout()
+        led_row.setSpacing(6)
+        led_row.addStretch()
+        for state_label, state in [("ON", "active"), ("HOLD", "warn"), ("ERR", "error")]:
+            led = LedIndicator(state_label, state="idle", layer=layer, size=10)
+            led_row.addWidget(led)
+            self._leds[f"{layer}_{state_label}"] = led
+        # Activate the ON LED for demo
+        self._leds[f"{layer}_ON"].set_state("active")
+        led_row.addStretch()
+        lay.addLayout(led_row)
+
+        return frame
+
+    def _build_led_matrix(self) -> QWidget:
+        """Build a small status LED matrix at the bottom."""
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background: {AUDIOFIER['bg_surface']};
+                border: 1px solid {AUDIOFIER['border']};
+                border-radius: 6px;
+            }}
+        """)
+        frame.setFixedHeight(36)
+        lay = QHBoxLayout(frame)
+        lay.setContentsMargins(8, 4, 8, 4)
+        lay.setSpacing(8)
+
+        status_lbl = QLabel("STATUS")
+        status_lbl.setStyleSheet(
+            f"color: {AUDIOFIER['text_dim']}; font-size: 8px; letter-spacing: 2px; background: transparent;"
+        )
+        lay.addWidget(status_lbl)
+        lay.addStretch()
+
+        for name, state in [("CONN", "active"), ("SYNC", "active"), ("PROC", "idle"), ("ERR", "idle")]:
+            led = LedIndicator(name, state=state, size=8)
+            lay.addWidget(led)
+            self._status_leds[name] = led
+
+        return frame
+
+    def update_status_led(self, name: str, state: str):
+        """Update a named status LED. name: 'CONN'|'SYNC'|'PROC'|'ERR'."""
+        led = self._status_leds.get(name)
+        if led:
+            led.set_state(state)
+            led.update()
+
+    def update_layer_led(self, layer: str, name: str, state: str):
+        """Update a layer-specific LED. layer: 'A'|'B', name: 'ON'|'HOLD'|'ERR'."""
+        led = self._leds.get(f"{layer}_{name}")
+        if led:
+            led.set_state(state)
+            led.update()
+
+
+# ════════════════════════════════════════════════════════════
 # GalaxyClientUI — 混合模式主窗口
 # ════════════════════════════════════════════════════════════
 
@@ -1919,12 +2336,14 @@ class GalaxyClientUI(QWidget):
         self.device_panel = DevicePanel(self.api)
         self.status_panel = StatusPanel(self.api)
         self.settings_panel = SettingsPanel(self.api)
+        self.control_surface = ABControlSurface()
 
         self.stack.addWidget(self.chat_panel)       # index 0
         self.stack.addWidget(self.agent_panel)       # index 1
         self.stack.addWidget(self.device_panel)      # index 2
         self.stack.addWidget(self.status_panel)      # index 3
         self.stack.addWidget(self.settings_panel)    # index 4
+        self.stack.addWidget(self.control_surface)   # index 5
         logger.debug("QStackedWidget created with %d tabs (stack=%r)", self.stack.count(), self.stack)
 
         # Tab 栏 (全窗口模式才显示) — created after stack so _switch_tab(0) is safe
@@ -2011,6 +2430,7 @@ class GalaxyClientUI(QWidget):
             ("设备", 2),
             ("状态", 3),
             ("设置", 4),
+            ("控制", 5),
         ]
         self._tab_buttons = []
         for label, idx in tabs:
