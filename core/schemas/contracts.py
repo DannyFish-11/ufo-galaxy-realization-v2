@@ -550,6 +550,9 @@ class WorkerHeartbeatModel(BaseModel):
     status: WorkerStatus = WorkerStatus.IDLE
     timestamp: Optional[TimestampModel] = None
 
+    # Trace correlation — matches TaskEnvelope.trace_id when a task triggered this heartbeat
+    trace_id: str = ""
+
     # Load metrics
     active_tasks: int = 0
     queued_tasks: int = 0

@@ -33,6 +33,7 @@ import logging
 import os
 import platform
 import socket
+import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("nats_heartbeat")
@@ -57,6 +58,7 @@ class NodeHeartbeatSender:
         worker_version: str = _WORKER_VERSION,
         interval_s: int = _HEARTBEAT_INTERVAL_S,
         stats_fn: Optional[Callable[[], Dict[str, Any]]] = None,
+        trace_id: str = "",
     ) -> None:
         """
         Args:
@@ -68,6 +70,8 @@ class NodeHeartbeatSender:
             interval_s:      Heartbeat emission interval in seconds.
             stats_fn:        Optional callable returning runtime metrics dict
                              (keys: cpu_usage_percent, memory_usage_percent, etc.).
+            trace_id:        Optional TaskEnvelope trace_id for session correlation.
+                             A new UUID is generated when not provided.
         """
         self._worker_id = worker_id
         self._device_type = device_type
@@ -76,6 +80,10 @@ class NodeHeartbeatSender:
         self._worker_version = worker_version
         self._interval_s = interval_s
         self._stats_fn = stats_fn
+        # A consistent trace_id is carried across registration and all heartbeats
+        # so observers can correlate a worker session with the TaskEnvelope that
+        # triggered its registration.
+        self._trace_id: str = trace_id or str(uuid.uuid4())
         self._task: Optional[asyncio.Task] = None
         self._running = False
 
@@ -182,11 +190,12 @@ class NodeHeartbeatSender:
             timestamp=TimestampModel(
                 seconds=int(datetime.now(timezone.utc).timestamp())
             ),
+            trace_id=self._trace_id,
             cpu_usage_percent=float(stats.get("cpu_usage_percent", 0.0)),
             memory_usage_percent=float(stats.get("memory_usage_percent", 0.0)),
         )
         await nats_bus.publish_heartbeat(hb)
-        logger.debug("NodeHeartbeatSender[%s]: heartbeat sent", self._worker_id)
+        logger.debug("NodeHeartbeatSender[%s]: heartbeat sent (trace_id=%s)", self._worker_id, self._trace_id)
 
 
 # ── Convenience function ─────────────────────────────────────────────────────
@@ -200,11 +209,16 @@ async def start_node_heartbeat(
     worker_version: str = _WORKER_VERSION,
     interval_s: int = _HEARTBEAT_INTERVAL_S,
     stats_fn: Optional[Callable[[], Dict[str, Any]]] = None,
+    trace_id: str = "",
 ) -> asyncio.Task:
     """Create a :class:`NodeHeartbeatSender`, register the node, and start the
     heartbeat loop.  Returns the background :class:`asyncio.Task`.
 
     Silently no-ops if NATS is not connected, so nodes remain functional.
+
+    Args:
+        trace_id: Optional TaskEnvelope trace_id for session correlation.
+                  A fresh UUID is generated when not provided.
     """
     # Ensure NATS bus is connected if URL is configured
     try:
@@ -223,5 +237,6 @@ async def start_node_heartbeat(
         worker_version=worker_version,
         interval_s=interval_s,
         stats_fn=stats_fn,
+        trace_id=trace_id,
     )
     return await sender.start()

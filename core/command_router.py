@@ -1028,7 +1028,12 @@ class NATSExecutor:
     async def _use_fallback(self, target: str, command: str, params: dict, reason: str) -> dict:
         if self._fallback and self._fallback_enabled:
             self._stats["fallback_used"] += 1
-            logger.debug("NATSExecutor: using fallback executor (reason=%s)", reason)
+            logger.warning(
+                "NATSExecutor: NATS unavailable for target=%s command=%s, using local fallback (reason=%s)",
+                target,
+                command,
+                reason,
+            )
             return await self._fallback(target, command, params)
         return {
             "success": False,

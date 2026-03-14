@@ -191,6 +191,36 @@ python -m pytest tests/test_nats_control_plane.py -v
 
 These tests mock the NATS client and verify:
 - Gateway adapter dispatch/result roundtrip
-- Node heartbeat registration messages
+- Node heartbeat registration messages (including `trace_id` propagation)
 - NATSExecutor task dispatch and result resolution
 - Health endpoint response structure
+- **PR-4 validation hooks**: NATS URL missing, NATS connection failure, NATS connected
+
+## PR-4: Closed-Loop Hardening Changes
+
+The following changes complete the NATS/MasterBrain closed loop:
+
+### MasterBrain now starts in FastAPI lifespan
+`galaxy_gateway/app.py` explicitly starts MasterBrain in its `lifespan()` when
+`GALAXY_MASTER_BRAIN_ENABLED=true`.  The `MasterBrain._started` guard ensures it
+only initialises once regardless of how many times `start()` is called.
+
+### `GalaxyCore.startup()` async method
+`core/galaxy_core.py` exposes an `async startup()` method for callers that
+manage their own event loop (e.g. standalone launchers).  The sync `__init__`
+no longer attempts fragile event-loop manipulation.
+
+### Explicit fallback warning
+`NATSExecutor._use_fallback()` now emits a `WARNING`-level log so operators
+can see in logs when NATS is unavailable and local fallback is active.
+
+### Worker heartbeat `trace_id` correlation
+`WorkerHeartbeatModel` gains a `trace_id` field.  `NodeHeartbeatSender` accepts
+an optional `trace_id` at construction time (auto-generates a session UUID when
+absent) and includes it in every heartbeat and registration message so observers
+can correlate a worker session with the `TaskEnvelope` that triggered it.
+
+### Clear NATS-absent warning in gateway
+When `GALAXY_NATS_URL` is not configured, the Gateway lifespan now emits a
+`WARNING` (previously `INFO`) so operators cannot miss that cross-device tasks
+will not traverse NATS.

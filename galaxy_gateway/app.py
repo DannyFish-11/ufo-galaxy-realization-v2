@@ -217,11 +217,38 @@ async def lifespan(app: FastAPI):
             await nats_adapter.start()
             logger.info("NATS Gateway Adapter started")
         else:
-            logger.info(
-                "NATS Gateway Adapter: inactive (GALAXY_NATS_URL not set or NATS unavailable)"
+            logger.warning(
+                "NATS Gateway Adapter: inactive — cross-device tasks will NOT traverse NATS "
+                "(set GALAXY_NATS_URL to enable distributed dispatch)"
             )
     except Exception as e:
         logger.warning(f"NATS Gateway Adapter init failed (non-fatal): {e}")
+
+    # ── MasterBrain: cloud-side orchestrator ──
+    if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+        try:
+            from core.master_brain import get_master_brain
+            brain = get_master_brain()
+            if brain is not None:
+                start_result = await brain.start()
+                if start_result.get("already_started"):
+                    logger.info("MasterBrain: already started (no-op)")
+                elif start_result.get("success"):
+                    from core.nats_bus import nats_bus as _nb
+                    logger.info(
+                        "MasterBrain: started — NATS=%s, subscriptions registered",
+                        _nb.is_connected(),
+                    )
+                else:
+                    logger.warning("MasterBrain: start returned failure: %s", start_result)
+            else:
+                logger.warning("MasterBrain: get_master_brain() returned None")
+        except Exception as _mb_err:
+            logger.warning("MasterBrain startup failed (non-fatal): %s", _mb_err)
+    else:
+        logger.info(
+            "MasterBrain: disabled (set GALAXY_MASTER_BRAIN_ENABLED=true to enable)"
+        )
 
     # ── Log security posture at startup ──
     from core.auth import is_auth_enabled, get_active_tokens
