@@ -470,6 +470,9 @@ class CommandRouter:
         timeout: float = 30.0,
         request_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        retry_candidates: Optional[List[Any]] = None,
+        required_capabilities: Optional[List[str]] = None,
+        max_retries: int = 2,
     ) -> Dict[str, Any]:
         """
         统一网关命令路径：OpenClawd → command_router → gateway/device → result
@@ -625,7 +628,189 @@ class CommandRouter:
             )
             return result
 
-        # ── 2. 委托 executor 执行 ────────────────────────────────────────
+        # ── 2. Phase 5: dispatch with optional retry loop ────────────────
+        current_device = device_id
+        tried_devices: set = set()
+        attempt = 0
+
+        while True:
+            # ── Phase 5: circuit-breaker eligibility check (fail-open) ──
+            _cb_eligible = True
+            try:
+                from core.control_plane._globals import get_health_registry as _get_hreg
+                _cb_eligible = _get_hreg().is_eligible(current_device)
+            except Exception:
+                pass
+
+            if not _cb_eligible:
+                # Device circuit is OPEN or quarantined – skip to next candidate
+                tried_devices.add(current_device)
+                next_dev = self._pick_retry_device(
+                    tried_devices, retry_candidates, required_capabilities
+                )
+                if next_dev is not None and attempt < max_retries:
+                    try:
+                        from core.control_plane.audit_ledger import EventType as _EvCB
+                        self._emit_audit(
+                            _EvCB.TASK_RETRY_SCHEDULED,
+                            trace_id=trace_id, task_id=task_id,
+                            device_id=next_dev,
+                            message=(
+                                f"Retry #{attempt + 1}: circuit open on '{current_device}', "
+                                f"rerouting to '{next_dev}'"
+                            ),
+                            payload={
+                                "attempt": attempt + 1,
+                                "skipped_device": current_device,
+                                "reason": "circuit_open_or_quarantined",
+                            },
+                        )
+                    except Exception:
+                        pass
+                    current_device = next_dev
+                    attempt += 1
+                    continue
+                # No eligible candidate – return circuit-open error
+                latency_ms = (time.monotonic() - t0) * 1000
+                cb_result = {
+                    **trace_base,
+                    "device_id": current_device,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.DEVICE_OFFLINE.value,
+                    "error_message": (
+                        f"Device '{current_device}' circuit is open or quarantined "
+                        "and no eligible alternative is available."
+                    ),
+                    "latency_ms": round(latency_ms, 1),
+                }
+                _get_gateway_trace_store().record(cb_result)
+                return cb_result
+
+            # ── Delegate to inner dispatch helper ───────────────────────
+            attempt_trace = {**trace_base, "device_id": current_device}
+            result = await self._dispatch_to_device(
+                current_device, command, payload, command_id, task_id,
+                timeout, attempt_trace, trace_id, t0,
+            )
+
+            # ── Phase 5: record outcome in health registry ───────────────
+            try:
+                from core.control_plane._globals import get_health_registry as _get_hreg2
+                _hreg = _get_hreg2()
+                if result["success"]:
+                    _hreg.record_success(current_device)
+                else:
+                    _hreg.record_failure(
+                        current_device,
+                        error=result.get("error_message") or result.get("error_code", ""),
+                    )
+            except Exception:
+                pass
+
+            if result["success"]:
+                if attempt > 0:
+                    # Emit TASK_RETRY_SUCCEEDED
+                    try:
+                        from core.control_plane.audit_ledger import EventType as _EvR
+                        self._emit_audit(
+                            _EvR.TASK_RETRY_SUCCEEDED,
+                            trace_id=trace_id, task_id=task_id, device_id=current_device,
+                            message=(
+                                f"Retry #{attempt} succeeded on device '{current_device}'"
+                            ),
+                            payload={"attempt": attempt, "original_device": device_id},
+                        )
+                    except Exception:
+                        pass
+                return result
+
+            # ── Failure: decide whether to retry ────────────────────────
+            _retryable_codes = {
+                GatewayErrorCode.COMMAND_TIMEOUT.value,
+                GatewayErrorCode.DISCONNECT.value,
+                GatewayErrorCode.EXECUTOR_ERROR.value,
+            }
+            is_retryable = result.get("error_code") in _retryable_codes
+
+            if not is_retryable or retry_candidates is None or attempt >= max_retries:
+                if attempt > 0:
+                    try:
+                        from core.control_plane.audit_ledger import EventType as _EvRF
+                        self._emit_audit(
+                            _EvRF.TASK_RETRY_FAILED,
+                            trace_id=trace_id, task_id=task_id, device_id=current_device,
+                            message=f"All retries exhausted after {attempt} attempt(s)",
+                            payload={
+                                "attempt": attempt,
+                                "error_code": result.get("error_code"),
+                                "original_device": device_id,
+                            },
+                        )
+                    except Exception:
+                        pass
+                return result
+
+            # ── Pick next candidate and schedule retry ───────────────────
+            tried_devices.add(current_device)
+            next_dev = self._pick_retry_device(
+                tried_devices, retry_candidates, required_capabilities
+            )
+            if next_dev is None:
+                try:
+                    from core.control_plane.audit_ledger import EventType as _EvRE
+                    self._emit_audit(
+                        _EvRE.TASK_RETRY_FAILED,
+                        trace_id=trace_id, task_id=task_id, device_id=current_device,
+                        message="No eligible retry candidate available",
+                        payload={"attempt": attempt, "original_device": device_id},
+                    )
+                except Exception:
+                    pass
+                return result
+
+            try:
+                from core.control_plane.audit_ledger import EventType as _EvRS
+                self._emit_audit(
+                    _EvRS.TASK_RETRY_SCHEDULED,
+                    trace_id=trace_id, task_id=task_id, device_id=next_dev,
+                    message=(
+                        f"Retry #{attempt + 1}: rerouting from '{current_device}' "
+                        f"to '{next_dev}'"
+                    ),
+                    payload={
+                        "attempt": attempt + 1,
+                        "failed_device": current_device,
+                        "error_code": result.get("error_code"),
+                        "original_device": device_id,
+                    },
+                )
+            except Exception:
+                pass
+
+            current_device = next_dev
+            attempt += 1
+
+    # ------------------------------------------------------------------
+    # Phase 5: inner dispatch helper + retry device picker
+    # ------------------------------------------------------------------
+
+    async def _dispatch_to_device(
+        self,
+        device_id: str,
+        command: str,
+        payload: Dict[str, Any],
+        command_id: str,
+        task_id: str,
+        timeout: float,
+        trace_base: Dict[str, Any],
+        trace_id: str,
+        t0: float,
+    ) -> Dict[str, Any]:
+        """Attempt a single dispatch to *device_id*.  Never retries.
+
+        Returns the standard result dict (``success``, ``error_code``, etc.).
+        """
         if self._executor:
             try:
                 raw_result = await asyncio.wait_for(
@@ -643,16 +828,16 @@ class CommandRouter:
                 }
                 _get_gateway_trace_store().record(result)
                 logger.info(
-                    "CommandRouter.route_command done | trace_id=%s command_id=%s latency=%.1fms",
-                    trace_id, command_id, latency_ms,
+                    "CommandRouter._dispatch_to_device done | "
+                    "trace_id=%s command_id=%s device=%s latency=%.1fms",
+                    trace_id, command_id, device_id, latency_ms,
                 )
-                # ── Audit: TASK_COMPLETED ──────────────────────────────────
                 try:
                     from core.control_plane.audit_ledger import EventType as _EvC
                     self._emit_audit(
                         _EvC.TASK_COMPLETED,
                         trace_id=trace_id, task_id=task_id, device_id=device_id,
-                        message=f"Command '{command}' completed successfully",
+                        message=f"Command '{command}' completed on '{device_id}'",
                         payload={"latency_ms": round(latency_ms, 1)},
                     )
                 except Exception:
@@ -672,7 +857,8 @@ class CommandRouter:
                 self._stats["total_timeout"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.warning(
-                    "CommandRouter.route_command timeout | trace_id=%s command_id=%s device=%s",
+                    "CommandRouter._dispatch_to_device timeout | "
+                    "trace_id=%s command_id=%s device=%s",
                     trace_id, command_id, device_id,
                 )
                 return result
@@ -690,7 +876,8 @@ class CommandRouter:
                 self._stats["total_failed"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.warning(
-                    "CommandRouter.route_command disconnect | trace_id=%s command_id=%s device=%s error=%s",
+                    "CommandRouter._dispatch_to_device disconnect | "
+                    "trace_id=%s command_id=%s device=%s error=%s",
                     trace_id, command_id, device_id, exc,
                 )
                 return result
@@ -708,12 +895,13 @@ class CommandRouter:
                 self._stats["total_failed"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.error(
-                    "CommandRouter.route_command executor error | trace_id=%s command_id=%s error=%s",
+                    "CommandRouter._dispatch_to_device executor error | "
+                    "trace_id=%s command_id=%s error=%s",
                     trace_id, command_id, exc,
                 )
                 return result
 
-        # ── 3. 无 executor：尝试 WebSocket 连接管理器 ─────────────────────
+        # ── No executor: use WebSocket connection manager ────────────────
         try:
             from core.routes._shared import connection_manager
             if device_id not in connection_manager.active_devices:
@@ -737,7 +925,7 @@ class CommandRouter:
                     "payload": payload,
                     "command_id": command_id,
                     "task_id": task_id,
-                    "request_id": request_id,
+                    "request_id": trace_base.get("request_id", ""),
                 },
             )
             latency_ms = (time.monotonic() - t0) * 1000
@@ -782,6 +970,37 @@ class CommandRouter:
             }
             _get_gateway_trace_store().record(result)
             return result
+
+    def _pick_retry_device(
+        self,
+        tried: set,
+        candidates: Optional[List[Any]],
+        required_capabilities: Optional[List[str]],
+    ) -> Optional[str]:
+        """Select the best untried, eligible device from *candidates*.
+
+        Returns the ``device_id`` string, or ``None`` if no candidate
+        qualifies.
+        """
+        if not candidates:
+            return None
+        try:
+            from core.control_plane._globals import get_scoring_engine, get_health_registry
+            hreg = get_health_registry()
+            remaining = [
+                c for c in candidates
+                if c.device_id not in tried and hreg.is_eligible(c.device_id)
+            ]
+            if not remaining:
+                return None
+            best = get_scoring_engine().select_best_device(remaining, required_capabilities)
+            return best.device_id if best is not None else None
+        except Exception:
+            # Fallback: just pick first untried candidate
+            for c in candidates:
+                if c.device_id not in tried:
+                    return c.device_id
+            return None
 
     # ------------------------------------------------------------------
     # Remote Agent Dispatch (PR155)

@@ -167,6 +167,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(security_policy_routes.create_router())
     except Exception:
         pass
+    # Control Plane Phase 5: device health & circuit-breaker routes
+    try:
+        from core.routes.device_health import router as device_health_router
+        router.include_router(device_health_router)
+    except Exception:
+        pass
 
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream

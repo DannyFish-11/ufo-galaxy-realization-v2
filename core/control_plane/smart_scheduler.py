@@ -89,6 +89,8 @@ class DeviceStatus(str):
     BUSY = "busy"
     DRAINING = "draining"    # accepting no new work
     MAINTENANCE = "maintenance"
+    QUARANTINED = "quarantined"  # excluded from scheduling until manually reset
+    CIRCUIT_OPEN = "circuit_open"  # circuit breaker tripped
 
 
 # ---------------------------------------------------------------------------
@@ -113,14 +115,15 @@ class ScoringWeights(BaseModel):
     normalised — callers choose magnitudes to express relative priority.
     """
 
-    capability: float = Field(default=0.40, ge=0.0, description="Weight for capability match.")
-    latency: float = Field(default=0.25, ge=0.0, description="Weight for ping latency score.")
-    load: float = Field(default=0.25, ge=0.0, description="Weight for device load score.")
-    sandbox: float = Field(default=0.10, ge=0.0, description="Weight for sandbox level score.")
+    capability: float = Field(default=0.35, ge=0.0, description="Weight for capability match.")
+    latency: float = Field(default=0.22, ge=0.0, description="Weight for ping latency score.")
+    load: float = Field(default=0.22, ge=0.0, description="Weight for device load score.")
+    sandbox: float = Field(default=0.09, ge=0.0, description="Weight for sandbox level score.")
+    health: float = Field(default=0.12, ge=0.0, description="Weight for composite device health score.")
 
     @model_validator(mode="after")
     def _at_least_one_nonzero(self) -> "ScoringWeights":
-        if self.capability + self.latency + self.load + self.sandbox == 0:
+        if self.capability + self.latency + self.load + self.sandbox + self.health == 0:
             raise ValueError("At least one weight must be non-zero.")
         return self
 
@@ -152,6 +155,16 @@ class DeviceScoreInput(BaseModel):
         default_factory=list,
         description="List of capability names currently available on this device.",
     )
+    health_score: float = Field(
+        default=100.0,
+        ge=0.0,
+        le=100.0,
+        description=(
+            "Composite health score [0, 100] from the DeviceHealthRegistry "
+            "(heartbeat latency + error rate + circuit-breaker penalties). "
+            "Defaults to 100 (fully healthy) when health tracking is unavailable."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extra attributes for logging / debugging.",
@@ -166,6 +179,7 @@ class DeviceScore(BaseModel):
     latency_score: float = Field(ge=0.0, le=1.0)
     load_score: float = Field(ge=0.0, le=1.0)
     sandbox_score: float = Field(ge=0.0, le=1.0)
+    health_score: float = Field(default=1.0, ge=0.0, le=1.0, description="Normalised health score [0, 1].")
     total: float = Field(ge=0.0, description="Weighted composite score (not normalised to 1).")
     eligible: bool = Field(
         default=True,
@@ -267,13 +281,19 @@ class DeviceScoringEngine:
         required = required_capabilities or []
 
         # Hard eligibility checks
-        if device.status in (DeviceStatus.OFFLINE, DeviceStatus.MAINTENANCE):
+        if device.status in (
+            DeviceStatus.OFFLINE,
+            DeviceStatus.MAINTENANCE,
+            DeviceStatus.QUARANTINED,
+            DeviceStatus.CIRCUIT_OPEN,
+        ):
             return DeviceScore(
                 device_id=device.device_id,
                 capability_score=0.0,
                 latency_score=0.0,
                 load_score=0.0,
                 sandbox_score=0.0,
+                health_score=0.0,
                 total=0.0,
                 eligible=False,
                 disqualify_reason=f"Device status is '{device.status}'.",
@@ -288,6 +308,7 @@ class DeviceScoringEngine:
                 latency_score=0.0,
                 load_score=0.0,
                 sandbox_score=0.0,
+                health_score=0.0,
                 total=0.0,
                 eligible=False,
                 disqualify_reason=(
@@ -299,6 +320,8 @@ class DeviceScoringEngine:
         lat_score = self._latency_score(device.ping_latency_ms)
         load_score = self._load_score(device.load_pct)
         sb_score = self._sandbox_score(device.sandbox_level)
+        # Normalise health_score from [0, 100] to [0, 1]
+        hlth_score = max(0.0, min(1.0, device.health_score / 100.0))
 
         w = self.weights
         total = (
@@ -306,6 +329,7 @@ class DeviceScoringEngine:
             + w.latency * lat_score
             + w.load * load_score
             + w.sandbox * sb_score
+            + w.health * hlth_score
         )
 
         return DeviceScore(
@@ -314,6 +338,7 @@ class DeviceScoringEngine:
             latency_score=lat_score,
             load_score=load_score,
             sandbox_score=sb_score,
+            health_score=hlth_score,
             total=total,
         )
 

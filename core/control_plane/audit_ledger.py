@@ -78,6 +78,15 @@ class EventType(str, Enum):
     APPROVAL_DENIED = "approval_denied"
     APPROVAL_TIMED_OUT = "approval_timed_out"
 
+    # Phase 5 — device health & self-healing events
+    DEVICE_HEALTH_CHANGED = "device_health_changed"
+    DEVICE_CIRCUIT_OPEN = "device_circuit_open"
+    DEVICE_CIRCUIT_HALF_OPEN = "device_circuit_half_open"
+    DEVICE_CIRCUIT_CLOSED = "device_circuit_closed"
+    TASK_RETRY_SCHEDULED = "task_retry_scheduled"
+    TASK_RETRY_SUCCEEDED = "task_retry_succeeded"
+    TASK_RETRY_FAILED = "task_retry_failed"
+
     # System events
     SYSTEM_ERROR = "system_error"
     CONFIG_CHANGED = "config_changed"

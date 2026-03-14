@@ -13,6 +13,7 @@ Usage
         get_security_interceptor,
         get_approval_registry,
         get_scoring_engine,
+        get_health_registry,
     )
 """
 
@@ -26,6 +27,7 @@ from core.control_plane.security_interceptor import (
     ApprovalRegistry,
     SecurityInterceptor,
 )
+from core.control_plane.device_health_registry import DeviceHealthRegistry
 
 # ---------------------------------------------------------------------------
 # Lazy singletons
@@ -35,6 +37,7 @@ _audit_ledger: Optional[AuditLedger] = None
 _approval_registry: Optional[ApprovalRegistry] = None
 _security_interceptor: Optional[SecurityInterceptor] = None
 _scoring_engine: Optional[DeviceScoringEngine] = None
+_health_registry: Optional[DeviceHealthRegistry] = None
 
 
 def get_audit_ledger() -> AuditLedger:
@@ -70,3 +73,51 @@ def get_scoring_engine() -> DeviceScoringEngine:
     if _scoring_engine is None:
         _scoring_engine = DeviceScoringEngine()
     return _scoring_engine
+
+
+def get_health_registry() -> DeviceHealthRegistry:
+    """Return the process-level :class:`DeviceHealthRegistry` singleton.
+
+    On first call, wires up audit-ledger callbacks so that circuit-state
+    changes are automatically recorded as :class:`TraceEvent` objects.
+    """
+    global _health_registry
+    if _health_registry is None:
+        _health_registry = DeviceHealthRegistry()
+        _wire_health_audit_callback(_health_registry)
+    return _health_registry
+
+
+def _wire_health_audit_callback(registry: DeviceHealthRegistry) -> None:
+    """Connect *registry* events to the shared audit ledger."""
+    from core.control_plane.audit_ledger import EventType, Severity
+
+    _EVENT_MAP = {
+        "DEVICE_HEALTH_CHANGED": EventType.DEVICE_HEALTH_CHANGED,
+        "DEVICE_CIRCUIT_OPEN": EventType.DEVICE_CIRCUIT_OPEN,
+        "DEVICE_CIRCUIT_HALF_OPEN": EventType.DEVICE_CIRCUIT_HALF_OPEN,
+        "DEVICE_CIRCUIT_CLOSED": EventType.DEVICE_CIRCUIT_CLOSED,
+    }
+
+    def _callback(event_name: str, device_id: str, **kwargs) -> None:
+        ev_type = _EVENT_MAP.get(event_name)
+        if ev_type is None:
+            return
+        try:
+            severity = (
+                Severity.WARNING
+                if ev_type == EventType.DEVICE_CIRCUIT_OPEN
+                else Severity.INFO
+            )
+            get_audit_ledger().append(
+                ev_type,
+                severity=severity,
+                source="device_health_registry",
+                device_id=device_id,
+                message=f"{event_name} for device '{device_id}'",
+                payload=kwargs,
+            )
+        except Exception:
+            pass
+
+    registry.set_event_callback(_callback)
