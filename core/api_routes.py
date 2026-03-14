@@ -150,6 +150,18 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     if opencode_routes:
         router.include_router(opencode_routes.create_router(service_manager=service_manager, config=config))
 
+    # Control Plane Phase 2: audit ledger and HITL approval routes
+    try:
+        from core.routes import audit as audit_routes
+        router.include_router(audit_routes.create_router())
+    except Exception:
+        pass
+    try:
+        from core.routes import approvals as approvals_routes
+        router.include_router(approvals_routes.create_router())
+    except Exception:
+        pass
+
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream
     # -----------------------------------------------------------------------
