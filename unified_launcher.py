@@ -151,15 +151,23 @@ class SystemConfig:
     ufo_api_port: int = 8767
 
     def __post_init__(self):
-        """从 PortConfig 加载端口默认值（如果可用）"""
+        """从 PortConfig 加载端口默认值（如果可用）
+
+        端口来源优先级（高→低）：
+          1. 环境变量 GALAXY_UNIFIED_LAUNCHER_PORT / GALAXY_DEVICE_API_PORT / GALAXY_UFO_API_PORT
+             （已由 get_service_port() 内部实现，调用后自动享有此优先级）
+          2. config/unified_ports.yaml（统一端口事实来源）
+          3. 内置硬编码默认值（8299 / 8766 / 8767）
+
+        config.json 中的 web_ui_port 字段仅作 OpenClawd API 端口的 legacy 标记，
+        不参与 unified_launcher 自身端口的解析。
+        """
         try:
             from core.port_config import get_service_port
-            if self.web_ui_port == 8299:
-                self.web_ui_port = get_service_port("unified_launcher")
-            if self.device_api_port == 8766:
-                self.device_api_port = get_service_port("device_api")
-            if self.ufo_api_port == 8767:
-                self.ufo_api_port = get_service_port("ufo_api")
+            # get_service_port 内部已实现 env-first 优先级，直接使用
+            self.web_ui_port = get_service_port("unified_launcher")
+            self.device_api_port = get_service_port("device_api")
+            self.ufo_api_port = get_service_port("ufo_api")
         except Exception:
             pass
     

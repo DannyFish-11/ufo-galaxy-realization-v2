@@ -87,6 +87,9 @@ class EventType(Enum):
     MCP_TOOL_REGISTERED = auto()          # 工具已注册到 MCP Gateway
     MCP_TOOL_RELOADED = auto()            # 工具已热重载
 
+    # 能力总线更新事件（MCP/Skill 加载/卸载后触发）
+    CAPABILITY_UPDATED = auto()           # CapabilityRegistry 已刷新（MCP/Skill 变更后）
+
     # Agentic OS — ACL 审计
     ACL_VALIDATION_FAILED = auto()        # ACL 验证失败
     ACL_NORMALIZATION_APPLIED = auto()    # ACL 应用了归一化

@@ -154,9 +154,9 @@ pip install -q -r requirements.txt || { print_status "error" "依赖安装" "失
 # 启动系统
 echo ""
 print_status "step" "Galaxy" "启动中..."
-print_status "info" "控制面板" "http://localhost:${WEB_UI_PORT:-8085}"
-print_status "info" "API 文档" "http://localhost:${WEB_UI_PORT:-8085}/docs"
-print_status "info" "健康检查" "http://localhost:${WEB_UI_PORT:-8085}/api/health"
+print_status "info" "控制面板" "http://localhost:${WEB_UI_PORT:-8299}"
+print_status "info" "API 文档" "http://localhost:${WEB_UI_PORT:-8299}/docs"
+print_status "info" "健康检查" "http://localhost:${WEB_UI_PORT:-8299}/api/health"
 echo ""
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 python3 unified_launcher.py "$@"
