@@ -8,10 +8,20 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Orbitron:wght@400;500;700;900&display=swap');
+
+        /* ── SONARA 设计系统 CSS 变量 ── */
+        :root {
+            --sonara-purple:  #8A2BE2;
+            --sonara-blue:    #00CED1;
+            --sonara-orange:  #FF8C42;
+            --sonara-radius:  20px;
+            --sonara-spacing: 24px;
+            --sonara-card-bg: rgba(255, 255, 255, 0.04);
+        }
 
         * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-        body { background: #000000; overflow: hidden; user-select: none; }
+        body { background: #000000; overflow: hidden; user-select: none; font-weight: 300; letter-spacing: 0.01em; }
 
         /* ── Galaxy 背景 ── */
         .galaxy-bg {
@@ -24,6 +34,60 @@
         .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
         .star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; }
         @keyframes twinkle { 0%, 100% { opacity: var(--opacity); } 50% { opacity: 0.1; } }
+
+        /* ── SONARA 流体渐变头部 ── */
+        @keyframes sonara-fluid {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .sonara-header {
+            position: fixed; top: 0; left: 0; right: 0; height: 140px;
+            z-index: 0; pointer-events: none;
+            background: linear-gradient(
+                135deg,
+                rgba(138, 43, 226, 0.28) 0%,
+                rgba(0, 206, 209, 0.22) 35%,
+                rgba(255, 140, 66, 0.16) 65%,
+                rgba(138, 43, 226, 0.22) 100%
+            );
+            background-size: 300% 300%;
+            animation: sonara-fluid 9s ease infinite;
+            /* Graceful fallback: if animation is unsupported the static gradient still shows */
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, transparent 100%);
+        }
+
+        /* ── SONARA MacroRing SVG 组件 ── */
+        .macro-ring-wrap   { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .macro-ring-label  { font-size: 9px; font-weight: 300; letter-spacing: 3px;
+                             text-transform: uppercase; color: rgba(255,255,255,0.38); }
+        .macro-ring-value  { font-size: 12px; font-weight: 300; letter-spacing: 1px;
+                             color: rgba(255,255,255,0.75); }
+        .macro-ring-row    { display: flex; align-items: center; justify-content: center;
+                             gap: 28px; flex-wrap: wrap; }
+
+        /* ── SONARA 增强卡片 ── */
+        .glass-card-sonara {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: var(--sonara-radius);
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            padding: 20px 24px;
+            transition: all 0.35s ease;
+        }
+        .glass-card-sonara:hover {
+            background: rgba(255, 255, 255, 0.065);
+            border-color: rgba(138, 43, 226, 0.28);
+            box-shadow: 0 0 0 1px rgba(138, 43, 226, 0.14),
+                        0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        /* ── SONARA 字体排印 ── */
+        .sonara-label { font-size: 10px; font-weight: 300; letter-spacing: 3px;
+                        text-transform: uppercase; color: rgba(255,255,255,0.35); }
+        .sonara-kpi   { font-size: 20px; font-weight: 200; letter-spacing: 0.5px; }
 
         /* ── 灵动岛核心 ── */
         .dynamic-island {
@@ -45,13 +109,13 @@
             padding: 0; cursor: default; align-items: stretch; flex-direction: column;
         }
 
-        .island-tabs { display: flex; gap: 2px; padding: 6px; background: rgba(255, 255, 255, 0.04); border-radius: 18px; margin: 12px 16px 0; }
-        .island-tab { flex: 1; padding: 8px 12px; border-radius: 14px; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.45); text-align: center; transition: all 0.3s; cursor: pointer; }
-        .island-tab:hover { color: rgba(255, 255, 255, 0.7); }
-        .island-tab.active { background: rgba(255, 255, 255, 0.1); color: #ffffff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+        .island-tabs { display: flex; gap: 2px; padding: 6px; background: rgba(255, 255, 255, 0.04); border-radius: 18px; margin: 12px 16px 0; overflow-x: auto; }
+        .island-tab { flex: 1; min-width: max-content; padding: 8px 14px; border-radius: 14px; font-size: 12px; font-weight: 400; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.42); text-align: center; transition: all 0.3s; cursor: pointer; white-space: nowrap; }
+        .island-tab:hover { color: rgba(255, 255, 255, 0.68); }
+        .island-tab.active { background: rgba(138, 43, 226, 0.18); color: #ffffff; box-shadow: 0 2px 12px rgba(138, 43, 226, 0.25), 0 0 0 1px rgba(138, 43, 226, 0.3); }
 
-        .glass-card { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 18px; backdrop-filter: blur(20px); transition: all 0.3s ease; }
-        .glass-card:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
+        .glass-card { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 20px; backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%); transition: all 0.3s ease; }
+        .glass-card:hover { background: rgba(255, 255, 255, 0.065); border-color: rgba(255, 255, 255, 0.12); }
         .island-input { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 22px; color: #fff; transition: all 0.3s ease; }
         .island-input:focus { border-color: rgba(0, 212, 255, 0.4); box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.08); outline: none; }
         .island-input::placeholder { color: rgba(255, 255, 255, 0.25); }
@@ -84,6 +148,8 @@
 <body class="text-white min-h-screen">
     <div class="galaxy-bg"></div>
     <div class="stars" id="starsContainer"></div>
+    <!-- SONARA 流体渐变头部 — CSS 动画, WebGL 可按需替换 -->
+    <div class="sonara-header"></div>
 
     <div id="app">
         <div class="dynamic-island" :class="{ expanded: isExpanded }">
@@ -102,6 +168,7 @@
 
                 <!-- Tab 导航: 配置优先 -->
                 <div class="island-tabs">
+                    <div class="island-tab" :class="{ active: tab === 'overview' }" @click="tab = 'overview'">✦ 概览</div>
                     <div class="island-tab" :class="{ active: tab === 'llm' }" @click="tab = 'llm'">⚙️ LLM</div>
                     <div class="island-tab" :class="{ active: tab === 'nodeapis' }" @click="tab = 'nodeapis'; loadNodeApis()">🌐 节点 API</div>
                     <div class="island-tab" :class="{ active: tab === 'protocols' }" @click="tab = 'protocols'; loadProtocols()">🔌 协议</div>
@@ -117,6 +184,164 @@
                 </div>
 
                 <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 16px;">
+
+                    <!-- ═══ SONARA 概览 — Macro 仪表盘 ═══ -->
+                    <div v-show="tab === 'overview'" style="flex: 1; overflow-y: auto;" class="space-y-5">
+
+                        <!-- SONARA 标题区 -->
+                        <div class="glass-card-sonara" style="text-align:center; padding: 28px 24px 20px;">
+                            <div style="font-size: 11px; font-weight: 300; letter-spacing: 4px; text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 6px;">GALAXY CONTROL CENTER</div>
+                            <div style="font-size: 22px; font-weight: 200; letter-spacing: 2px; background: linear-gradient(135deg, #8A2BE2, #00CED1, #FF8C42); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">System Overview</div>
+                        </div>
+
+                        <!-- Macro 环形仪表盘 -->
+                        <div class="glass-card-sonara">
+                            <div style="font-size: 9px; font-weight: 300; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 20px;">MACRO GAUGES</div>
+                            <div class="macro-ring-row">
+
+                                <!-- 模型配置率 Macro Ring -->
+                                <div class="macro-ring-wrap">
+                                    <svg viewBox="0 0 80 80" width="72" height="72" style="overflow:visible">
+                                        <defs>
+                                            <linearGradient id="grad-models" x1="0" y1="0" x2="1" y2="1">
+                                                <stop offset="0%" stop-color="#8A2BE2"/>
+                                                <stop offset="100%" stop-color="#00CED1"/>
+                                            </linearGradient>
+                                            <filter id="glow-models">
+                                                <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                                            </filter>
+                                        </defs>
+                                        <!-- Track -->
+                                        <circle cx="40" cy="40" r="30" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4"/>
+                                        <!-- Value arc (configured/total models ratio, capped 0-1) -->
+                                        <circle cx="40" cy="40" r="30" fill="none"
+                                            stroke="url(#grad-models)" stroke-width="4"
+                                            stroke-linecap="round"
+                                            :stroke-dasharray="188"
+                                            :stroke-dashoffset="188 * (1 - Math.min(1, (configStatus.configured_models || 0) / Math.max(1, configStatus.total_models || 1)))"
+                                            transform="rotate(-90 40 40)"
+                                            filter="url(#glow-models)"/>
+                                        <!-- Center inner glow -->
+                                        <circle cx="40" cy="40" r="18" fill="rgba(138,43,226,0.06)"/>
+                                        <!-- Value text -->
+                                        <text x="40" y="37" text-anchor="middle" fill="rgba(255,255,255,0.82)" font-size="13" font-weight="200" font-family="Inter,sans-serif">
+                                            {{ configStatus.configured_models || 0 }}
+                                        </text>
+                                        <text x="40" y="49" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8" font-weight="300" font-family="Inter,sans-serif">
+                                            / {{ configStatus.total_models || 0 }}
+                                        </text>
+                                    </svg>
+                                    <div class="macro-ring-label">模型</div>
+                                </div>
+
+                                <!-- 工具配置率 Macro Ring -->
+                                <div class="macro-ring-wrap">
+                                    <svg viewBox="0 0 80 80" width="72" height="72" style="overflow:visible">
+                                        <defs>
+                                            <linearGradient id="grad-tools" x1="0" y1="0" x2="1" y2="1">
+                                                <stop offset="0%" stop-color="#00CED1"/>
+                                                <stop offset="100%" stop-color="#FF8C42"/>
+                                            </linearGradient>
+                                            <filter id="glow-tools">
+                                                <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                                            </filter>
+                                        </defs>
+                                        <circle cx="40" cy="40" r="30" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4"/>
+                                        <circle cx="40" cy="40" r="30" fill="none"
+                                            stroke="url(#grad-tools)" stroke-width="4"
+                                            stroke-linecap="round"
+                                            :stroke-dasharray="188"
+                                            :stroke-dashoffset="188 * (1 - Math.min(1, (configStatus.configured_tools || 0) / Math.max(1, configStatus.total_tools || 1)))"
+                                            transform="rotate(-90 40 40)"
+                                            filter="url(#glow-tools)"/>
+                                        <circle cx="40" cy="40" r="18" fill="rgba(0,206,209,0.05)"/>
+                                        <text x="40" y="37" text-anchor="middle" fill="rgba(255,255,255,0.82)" font-size="13" font-weight="200" font-family="Inter,sans-serif">
+                                            {{ configStatus.configured_tools || 0 }}
+                                        </text>
+                                        <text x="40" y="49" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8" font-weight="300" font-family="Inter,sans-serif">
+                                            / {{ configStatus.total_tools || 0 }}
+                                        </text>
+                                    </svg>
+                                    <div class="macro-ring-label">工具</div>
+                                </div>
+
+                                <!-- 设备在线 Macro Ring -->
+                                <div class="macro-ring-wrap">
+                                    <svg viewBox="0 0 80 80" width="72" height="72" style="overflow:visible">
+                                        <defs>
+                                            <linearGradient id="grad-devices" x1="0" y1="0" x2="1" y2="1">
+                                                <stop offset="0%" stop-color="#FF8C42"/>
+                                                <stop offset="100%" stop-color="#8A2BE2"/>
+                                            </linearGradient>
+                                            <filter id="glow-dev">
+                                                <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                                            </filter>
+                                        </defs>
+                                        <circle cx="40" cy="40" r="30" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4"/>
+                                        <circle cx="40" cy="40" r="30" fill="none"
+                                            stroke="url(#grad-devices)" stroke-width="4"
+                                            stroke-linecap="round"
+                                            :stroke-dasharray="188"
+                                            :stroke-dashoffset="188 * (1 - Math.min(1, deviceList.filter(d => d.status === 'online').length / Math.max(1, deviceList.length)))"
+                                            transform="rotate(-90 40 40)"
+                                            filter="url(#glow-dev)"/>
+                                        <circle cx="40" cy="40" r="18" fill="rgba(255,140,66,0.05)"/>
+                                        <text x="40" y="37" text-anchor="middle" fill="rgba(255,255,255,0.82)" font-size="13" font-weight="200" font-family="Inter,sans-serif">
+                                            {{ deviceList.filter(d => d.status === 'online').length }}
+                                        </text>
+                                        <text x="40" y="49" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8" font-weight="300" font-family="Inter,sans-serif">
+                                            / {{ deviceList.length }}
+                                        </text>
+                                    </svg>
+                                    <div class="macro-ring-label">设备</div>
+                                </div>
+
+                                <!-- OneAPI 状态 Macro Ring -->
+                                <div class="macro-ring-wrap">
+                                    <svg viewBox="0 0 80 80" width="72" height="72" style="overflow:visible">
+                                        <defs>
+                                            <filter id="glow-api">
+                                                <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                                            </filter>
+                                        </defs>
+                                        <circle cx="40" cy="40" r="30" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4"/>
+                                        <circle cx="40" cy="40" r="30" fill="none"
+                                            :stroke="configStatus.oneapi_configured ? '#30d158' : 'rgba(255,255,255,0.15)'" stroke-width="4"
+                                            stroke-linecap="round"
+                                            :stroke-dasharray="188"
+                                            :stroke-dashoffset="configStatus.oneapi_configured ? 0 : 120"
+                                            transform="rotate(-90 40 40)"
+                                            filter="url(#glow-api)"/>
+                                        <circle cx="40" cy="40" r="18" :fill="configStatus.oneapi_configured ? 'rgba(48,209,88,0.07)' : 'rgba(255,255,255,0.02)'"/>
+                                        <text x="40" y="44" text-anchor="middle" :fill="configStatus.oneapi_configured ? 'rgba(48,209,88,0.9)' : 'rgba(255,255,255,0.35)'" font-size="18" font-weight="200" font-family="Inter,sans-serif">
+                                            {{ configStatus.oneapi_configured ? '✓' : '✗' }}
+                                        </text>
+                                    </svg>
+                                    <div class="macro-ring-label">OneAPI</div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- 系统状态快览 -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="glass-card-sonara" style="padding: 16px 18px;">
+                                <div class="sonara-label" style="margin-bottom: 10px;">模型配置</div>
+                                <div style="font-size: 28px; font-weight: 200; letter-spacing: 1px; color: rgba(138,43,226,0.9);">{{ configStatus.configured_models || 0 }}</div>
+                                <div style="font-size: 10px; font-weight: 300; color: rgba(255,255,255,0.3); margin-top: 2px;">共 {{ configStatus.total_models || 0 }} 个模型</div>
+                            </div>
+                            <div class="glass-card-sonara" style="padding: 16px 18px;">
+                                <div class="sonara-label" style="margin-bottom: 10px;">工具集成</div>
+                                <div style="font-size: 28px; font-weight: 200; letter-spacing: 1px; color: rgba(0,206,209,0.9);">{{ configStatus.configured_tools || 0 }}</div>
+                                <div style="font-size: 10px; font-weight: 300; color: rgba(255,255,255,0.3); margin-top: 2px;">共 {{ configStatus.total_tools || 0 }} 个工具</div>
+                            </div>
+                        </div>
+
+                    </div>
 
                     <!-- ═══ LLM 提供商配置 ═══ -->
                     <div v-show="tab === 'llm'" style="flex: 1; overflow-y: auto;" class="space-y-3">
@@ -777,7 +1002,7 @@
         createApp({
             setup() {
                 const isExpanded = ref(false);
-                const tab = ref('llm');
+                const tab = ref('overview');
                 const currentTime = ref('');
                 const configStatus = ref({});
                 const oneapiUrl = ref('http://localhost:8001/v1');
