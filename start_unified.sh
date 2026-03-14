@@ -42,20 +42,67 @@ fi
 # 工具函数
 # ============================================================================
 
+# 24-bit true-color per-character gradient banner helper
+# Anchors: aurora cyan → tech blue → indigo → neon purple → cyber pink
+_print_gradient_line() {
+    local line="$1"
+    local len=${#line}
+    local width=60
+    printf '\033[1m'
+    local i=0
+    while [ $i -lt $len ]; do
+        local char="${line:$i:1}"
+        local t=0
+        [ $width -gt 1 ] && t=$(( i * 1000 / (width - 1) ))
+        # Inline interpolation across 4 segments (5 anchors)
+        local seg=$(( t * 4 / 1000 ))
+        [ $seg -ge 4 ] && seg=3
+        local frac=$(( t * 4 - seg * 1000 ))
+        local r1 g1 b1 r2 g2 b2
+        case $seg in
+            0) r1=0;   g1=225; b1=253; r2=41;  g2=156; b2=255 ;;
+            1) r1=41;  g1=156; b1=255; r2=109; g2=92;  b2=255 ;;
+            2) r1=109; g1=92;  b1=255; r2=184; g2=61;  b2=245 ;;
+            3) r1=184; g1=61;  b1=245; r2=255; g2=46;  b2=147 ;;
+        esac
+        local r=$(( r1 + (r2 - r1) * frac / 1000 ))
+        local g=$(( g1 + (g2 - g1) * frac / 1000 ))
+        local b=$(( b1 + (b2 - b1) * frac / 1000 ))
+        printf "\033[38;2;%d;%d;%dm%s" $r $g $b "$char"
+        i=$(( i + 1 ))
+    done
+    printf '\033[0m\n'
+}
+
 print_banner() {
     echo ""
-    echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}${BOLD}║                                                          ║${NC}"
-    echo -e "${GREEN}${BOLD}║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║${NC}"
-    echo -e "${GREEN}${BOLD}║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║${NC}"
-    echo -e "${PURPLE}${BOLD}║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║${NC}"
-    echo -e "${PURPLE}${BOLD}║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║${NC}"
-    echo -e "${BLUE}${BOLD}║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║${NC}"
-    echo -e "${BLUE}${BOLD}║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║${NC}"
-    echo -e "${PINK}${BOLD}║                                                          ║${NC}"
-    echo -e "${PINK}${BOLD}║     L4 Autonomous Intelligence System   v2.3.21          ║${NC}"
-    echo -e "${PINK}${BOLD}║                                                          ║${NC}"
-    echo -e "${PINK}${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
+    if [ -n "$BOLD" ]; then
+        _print_gradient_line "╔══════════════════════════════════════════════════════════╗"
+        _print_gradient_line "║                                                          ║"
+        _print_gradient_line "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║"
+        _print_gradient_line "║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║"
+        _print_gradient_line "║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║"
+        _print_gradient_line "║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║"
+        _print_gradient_line "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║"
+        _print_gradient_line "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║"
+        _print_gradient_line "║                                                          ║"
+        _print_gradient_line "║     L4 Autonomous Intelligence System   v2.3.21          ║"
+        _print_gradient_line "║                                                          ║"
+        _print_gradient_line "╚══════════════════════════════════════════════════════════╝"
+    else
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║                                                          ║"
+        echo "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║"
+        echo "║  ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝    ║"
+        echo "║  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝      ║"
+        echo "║  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝       ║"
+        echo "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║"
+        echo "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║"
+        echo "║                                                          ║"
+        echo "║     L4 Autonomous Intelligence System   v2.3.21          ║"
+        echo "║                                                          ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
+    fi
     echo ""
 }
 

@@ -123,24 +123,74 @@ def ansi_supported() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# 渐变颜色映射 (gradient colors: cyan → green → purple → blue → pink)
-# Each entry maps to one line of GALAXY_BANNER (12 lines total).
+# 24-bit true-color gradient anchors (left → right)
+# Scheme: aurora cyan → tech blue → indigo → neon purple → cyber pink
 # ---------------------------------------------------------------------------
 
-_BANNER_GRADIENT = [
-    '\033[96m',  # line 0 : ╔═══ top border — cyan
-    '\033[96m',  # line 1 : ║    empty       — cyan
-    '\033[92m',  # line 2 : ║   ██ logo r1   — green
-    '\033[92m',  # line 3 : ║  ██  logo r2   — green
-    '\033[35m',  # line 4 : ║  ██  logo r3   — purple
-    '\033[35m',  # line 5 : ║  ██  logo r4   — purple
-    '\033[94m',  # line 6 : ║  ██  logo r5   — blue
-    '\033[94m',  # line 7 : ║   ╚  logo r6   — blue
-    '\033[95m',  # line 8 : ║    empty       — pink
-    '\033[95m',  # line 9 : ║     version    — pink
-    '\033[95m',  # line 10: ║    empty       — pink
-    '\033[95m',  # line 11: ╚═══ bottom      — pink
+_ANCHOR_COLORS = [
+    (  0, 225, 253),  # aurora cyan
+    ( 41, 156, 255),  # tech blue
+    (109,  92, 255),  # indigo
+    (184,  61, 245),  # neon purple
+    (255,  46, 147),  # cyber pink
 ]
+
+
+def _interp_rgb(t: float) -> tuple:
+    """Interpolate RGB across _ANCHOR_COLORS for t in [0.0, 1.0].
+
+    Args:
+        t: Position along the gradient, 0.0 = leftmost anchor, 1.0 = rightmost.
+
+    Returns:
+        Tuple (r, g, b) with values in 0–255.
+    """
+    anchors = _ANCHOR_COLORS
+    n = len(anchors) - 1  # 4 segments
+    scaled = t * n
+    i = int(scaled)
+    if i >= n:
+        return anchors[-1]
+    frac = scaled - i
+    r1, g1, b1 = anchors[i]
+    r2, g2, b2 = anchors[i + 1]
+    return (
+        int(r1 + (r2 - r1) * frac),
+        int(g1 + (g2 - g1) * frac),
+        int(b1 + (b2 - b1) * frac),
+    )
+
+
+def _colorize_line(line: str, banner_width: int = 60) -> str:
+    """Apply 24-bit true-color smooth gradient across every character of *line*.
+
+    Each column gets its own RGB value computed by interpolating across the
+    five anchor colors, producing a seamless left-to-right gradient with zero
+    banding.
+
+    Args:
+        line:         The text to colorize.
+        banner_width: Total width used for the color calculation (default 60,
+                      matching GALAXY_BANNER). All lines of the banner share
+                      this same scale, so colors align consistently across
+                      lines of varying code-point length.
+
+    Returns:
+        String with per-character ``\\x1b[1;38;2;R;G;Bm`` escape codes,
+        terminated by a reset sequence.
+    """
+    if not line:
+        return line
+    # Use a fixed scale so every banner line maps columns to the same colors,
+    # regardless of per-line code-point count differences.
+    width = banner_width if banner_width > 1 else 2
+    parts = ["\x1b[1m"]  # bold once at start
+    for col, char in enumerate(line):
+        t = col / (width - 1)
+        r, g, b = _interp_rgb(t)
+        parts.append(f"\x1b[38;2;{r};{g};{b}m{char}")
+    parts.append("\x1b[0m")
+    return "".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +217,12 @@ def get_status_icon(status: str) -> str:
 # ---------------------------------------------------------------------------
 
 def print_banner(use_color: bool = True) -> None:
-    """打印规范 Galaxy 横幅（渐变色：cyan→green→purple→blue→pink）。
+    """打印规范 Galaxy 横幅（24-bit true-color 平滑左→右渐变）。
 
     ANSI 支持自动检测：
-    - 若终端支持 ANSI（包括 Windows 10+ VT 模式），输出渐变彩色横幅。
+    - 若终端支持 ANSI（包括 Windows 10+ VT 模式），每个字符使用独立的
+      24-bit RGB 颜色 (``\\x1b[38;2;R;G;Bm``)，从极光青平滑渐变至赛博粉，
+      无色彩断层。
     - 若终端不支持（如未启用 VT 的 PowerShell、重定向输出），降级为纯文本。
 
     Args:
@@ -180,9 +232,8 @@ def print_banner(use_color: bool = True) -> None:
     if _use_ansi:
         lines = GALAXY_BANNER.split("\n")
         print()
-        for i, line in enumerate(lines):
-            color = _BANNER_GRADIENT[i] if i < len(_BANNER_GRADIENT) else '\033[96m'
-            print(f"{Colors.BOLD}{color}{line}\033[0m")
+        for line in lines:
+            print(_colorize_line(line))
         print()
     else:
         print(f"\n{GALAXY_BANNER}\n")
