@@ -383,7 +383,7 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
     if req_file.exists():
         pip_cmd += ["-r", str(req_file)]
 
-    logger.info("Installing dependencies: %s", pip_cmd[3:])
+    logger.info("Installing dependencies: %s", pip_cmd[3:])  # skip ['python', '-m', 'pip']
     try:
         result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
@@ -442,14 +442,15 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
                 env=env_vars if env_vars else None,
             )
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _do_load())
-                result = future.result(timeout=60)
-        else:
-            result = loop.run_until_complete(_do_load())
+        try:
+            loop = asyncio.get_running_loop()
+            # There is a running loop — schedule as a task and block via
+            # run_coroutine_threadsafe from a fresh thread to avoid deadlock.
+            future = asyncio.run_coroutine_threadsafe(_do_load(), loop)
+            result = future.result(timeout=60)
+        except RuntimeError:
+            # No running loop — create a fresh one.
+            result = asyncio.run(_do_load())
 
         if not result.get("success", False):
             # Try MCPDynamicGateway as fallback
@@ -502,14 +503,12 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
         async def _do_load():
             return await skill_loader.load(str(addon_dir))
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _do_load())
-                result = future.result(timeout=60)
-        else:
-            result = loop.run_until_complete(_do_load())
+        try:
+            loop = asyncio.get_running_loop()
+            future = asyncio.run_coroutine_threadsafe(_do_load(), loop)
+            result = future.result(timeout=60)
+        except RuntimeError:
+            result = asyncio.run(_do_load())
 
         if result.get("success", False):
             logger.info("Skill '%s' registered via SkillLoader", name)
@@ -529,14 +528,11 @@ def _unregister_mcp_tool(name: str) -> bool:
         async def _do_unload():
             return await mcp_loader.unload(name)
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _do_unload())
-                future.result(timeout=30)
-        else:
-            loop.run_until_complete(_do_unload())
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(_do_unload(), loop).result(timeout=30)
+        except RuntimeError:
+            asyncio.run(_do_unload())
         return True
     except Exception as exc:
         logger.debug("MCP unregister '%s': %s", name, exc)
@@ -551,14 +547,11 @@ def _unregister_skill(name: str) -> bool:
         async def _do_unload():
             return await skill_loader.unload(name)
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _do_unload())
-                future.result(timeout=30)
-        else:
-            loop.run_until_complete(_do_unload())
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(_do_unload(), loop).result(timeout=30)
+        except RuntimeError:
+            asyncio.run(_do_unload())
         return True
     except Exception as exc:
         logger.debug("Skill unregister '%s': %s", name, exc)
@@ -642,7 +635,7 @@ class GitHubInstaller:
         commit_sha = _fetch_repo(owner, repo, effective_ref, dest)
         if not commit_sha:
             # Non-fatal: download may succeed without a resolvable SHA
-            commit_sha = "<unknown>"
+            commit_sha = "unknown"
             logger.warning(
                 "Could not resolve commit SHA for %s/%s@%s",
                 owner, repo, effective_ref,

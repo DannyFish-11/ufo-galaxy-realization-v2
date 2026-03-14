@@ -382,13 +382,11 @@ class MCPDynamicGateway:
             async def _load():
                 return await mcp_loader.load(server_id=name, command=command)
 
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    result = pool.submit(asyncio.run, _load()).result(timeout=60)
-            else:
-                result = loop.run_until_complete(_load())
+            try:
+                loop = asyncio.get_running_loop()
+                result = asyncio.run_coroutine_threadsafe(_load(), loop).result(timeout=60)
+            except RuntimeError:
+                result = asyncio.run(_load())
 
             if result.get("success"):
                 self._generated_tools[name] = {
