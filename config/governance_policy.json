@@ -1,0 +1,79 @@
+{
+  "_comment": "Galaxy Phase5 Governance Policy — model/tool governance defaults",
+  "version": "1.0.0",
+
+  "model_policy": {
+    "default_safety_tier": "standard",
+    "safety_tiers": {
+      "restricted": {
+        "allowed_models": ["gpt-3.5-turbo", "llama2", "ollama/llama2"],
+        "max_tokens_per_request": 2048
+      },
+      "standard": {
+        "allowed_models": [
+          "gpt-3.5-turbo", "gpt-4", "gpt-4o",
+          "claude-3-haiku", "claude-3-sonnet",
+          "llama2", "mistral", "ollama/mistral"
+        ],
+        "max_tokens_per_request": 8192
+      },
+      "elevated": {
+        "allowed_models": [
+          "gpt-4", "gpt-4o", "gpt-4-turbo",
+          "claude-3-opus", "claude-3-sonnet",
+          "llama2", "mistral"
+        ],
+        "max_tokens_per_request": 32768
+      }
+    },
+    "fallback_model": "llama2",
+    "on_budget_exceed": "downgrade"
+  },
+
+  "budget_policy": {
+    "session_budget_usd": 1.0,
+    "daily_budget_usd": 20.0,
+    "tenant_daily_budget_usd": 100.0,
+    "warning_threshold": 0.8,
+    "on_exceed": "downgrade"
+  },
+
+  "tool_policy": {
+    "default_action": "allow",
+    "allow_list": [],
+    "deny_list": [
+      "shell_exec_unrestricted",
+      "wipe_filesystem",
+      "drop_database"
+    ],
+    "risk_tiers": {
+      "safe": {
+        "action": "allow",
+        "rate_limit_per_minute": 120
+      },
+      "moderate": {
+        "action": "allow",
+        "rate_limit_per_minute": 60
+      },
+      "high": {
+        "action": "allow",
+        "rate_limit_per_minute": 10,
+        "require_audit": true
+      },
+      "critical": {
+        "action": "deny",
+        "rate_limit_per_minute": 0,
+        "require_audit": true
+      }
+    },
+    "per_tool_overrides": {}
+  },
+
+  "queue_policy": {
+    "max_queue_size": 500,
+    "max_concurrent_tasks": 20,
+    "task_timeout_seconds": 60,
+    "backpressure_threshold": 0.8,
+    "shed_strategy": "reject_new"
+  }
+}
