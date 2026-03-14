@@ -276,31 +276,69 @@ app.add_middleware(BearerAuthMiddleware)
 # ============================================================================
 # WebSocket 端点
 # ============================================================================
-
-@app.websocket("/ws/{device_id}")
-async def websocket_endpoint(websocket: WebSocket, device_id: str):
-    """设备 WebSocket 连接端点"""
-    await websocket_manager.handle_connection(websocket, device_id)
-
-
-@app.websocket("/ws")
-async def websocket_endpoint_auto(websocket: WebSocket, device_id: str = Query(None)):
-    """自动分配设备 ID 的 WebSocket 端点"""
-    if not device_id:
-        import uuid
-        device_id = str(uuid.uuid4())
-    await websocket_manager.handle_connection(websocket, device_id)
-
+#
+# IMPORTANT: Route registration order determines matching priority.
+# More-specific routes MUST be registered before generic ones
+# so that /ws/android/* and /ws/device/* are not shadowed by /ws/{device_id}.
+# ============================================================================
 
 # ---------------------------------------------------------------------------
-# Primary Android WebSocket path
+# Primary Android WebSocket path — routed through android_bridge.py (AIP v3)
 # ---------------------------------------------------------------------------
+
+async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
+    """
+    Internal handler used by all Android WS endpoints.
+
+    Routes every message through ``android_bridge.handle_message()`` so that
+    AIP v3 protocol types, device registration, heartbeat, and task lifecycle
+    are all handled by the single gateway bridge rather than the generic
+    WebSocketManager.
+    """
+    from .android_bridge import android_bridge as _android_bridge
+    import json as _json
+
+    await websocket.accept()
+    logger.info("Android device connected via android_bridge: device_id=%s", device_id)
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                message = _json.loads(data)
+            except Exception:
+                logger.warning("Android [%s]: non-JSON message received, skipping", device_id)
+                continue
+
+            response = await _android_bridge.handle_message(websocket, message)
+            if response:
+                await websocket.send_json(response)
+
+    except WebSocketDisconnect:
+        logger.info("Android device disconnected: device_id=%s", device_id)
+        await _android_bridge.disconnect_device(device_id)
+    except Exception as exc:
+        logger.error(
+            "Android WS error: device_id=%s error=%s", device_id, exc, exc_info=True
+        )
+        await _android_bridge.disconnect_device(device_id)
+
 
 @app.websocket("/ws/android/{device_id}")
 async def websocket_android_primary(websocket: WebSocket, device_id: str):
-    """Primary Android WebSocket path — all Android clients should connect here."""
+    """Primary Android WebSocket path — routed through android_bridge (AIP v3)."""
     logger.info("Primary path /ws/android/ used for device %s", device_id)
-    await websocket_manager.handle_connection(websocket, device_id)
+    await _handle_android_ws(websocket, device_id)
+
+
+@app.websocket("/ws/android")
+async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
+    """Android fallback WebSocket path — routed through android_bridge (AIP v3)."""
+    if not device_id:
+        import uuid
+        device_id = str(uuid.uuid4())
+    logger.info("Fallback path /ws/android used, device_id=%s", device_id)
+    await _handle_android_ws(websocket, device_id)
 
 
 # ---------------------------------------------------------------------------
@@ -321,13 +359,22 @@ async def websocket_device(websocket: WebSocket, device_id: str):
     await websocket_manager.handle_connection(websocket, device_id)
 
 
-@app.websocket("/ws/android")
-async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
-    """Android broadcast WebSocket path — auto-assigns device_id when absent."""
+# ---------------------------------------------------------------------------
+# Generic catch-all WebSocket paths (registered AFTER specific paths)
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/{device_id}")
+async def websocket_endpoint(websocket: WebSocket, device_id: str):
+    """设备 WebSocket 连接端点"""
+    await websocket_manager.handle_connection(websocket, device_id)
+
+
+@app.websocket("/ws")
+async def websocket_endpoint_auto(websocket: WebSocket, device_id: str = Query(None)):
+    """自动分配设备 ID 的 WebSocket 端点"""
     if not device_id:
         import uuid
         device_id = str(uuid.uuid4())
-    logger.info("Compat path /ws/android used, device_id=%s", device_id)
     await websocket_manager.handle_connection(websocket, device_id)
 
 

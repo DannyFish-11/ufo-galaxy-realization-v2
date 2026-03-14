@@ -40,114 +40,23 @@ from core.device_types import (  # noqa: E402
 
 
 # =============================================================================
-# 消息类型定义 (与 AIPMessageV3.kt 完全对齐)
+# 消息类型 / 任务状态 / 结果状态 — 从协议 SSOT 导入
+# galaxy_gateway/protocol/aip_v3.py 是单一事实来源；此处仅做再导出。
 # =============================================================================
-
-class MessageType(str, Enum):
-    # === 设备管理 ===
-    DEVICE_REGISTER = "device_register"
-    DEVICE_REGISTER_ACK = "device_register_ack"
-    DEVICE_UNREGISTER = "device_unregister"
-    DEVICE_HEARTBEAT = "heartbeat"
-    DEVICE_HEARTBEAT_ACK = "heartbeat_ack"
-    DEVICE_STATUS = "device_status"
-    DEVICE_CAPABILITIES = "device_capabilities"
-    
-    # === 任务调度 ===
-    TASK_SUBMIT = "task_submit"
-    TASK_ASSIGN = "task_assign"
-    TASK_STATUS = "task_status"
-    TASK_RESULT = "task_result"
-    TASK_CANCEL = "task_cancel"
-    TASK_PROGRESS = "task_progress"
-    TASK_END = "task_end"
-    
-    # === 命令执行 ===
-    COMMAND = "command"
-    COMMAND_RESULT = "command_result"
-    COMMAND_BATCH = "command_batch"
-    
-    # === GUI 操作 ===
-    GUI_CLICK = "gui_click"
-    GUI_SWIPE = "gui_swipe"
-    GUI_INPUT = "gui_input"
-    GUI_SCROLL = "gui_scroll"
-    GUI_SCREENSHOT = "gui_screenshot"
-    GUI_ELEMENT_QUERY = "gui_element_query"
-    GUI_ELEMENT_WAIT = "gui_element_wait"
-    GUI_SCREEN_CONTENT = "gui_screen_content"
-    
-    # === 屏幕/媒体 ===
-    SCREEN_CAPTURE = "screen_capture"
-    SCREEN_STREAM_START = "screen_stream_start"
-    SCREEN_STREAM_STOP = "screen_stream_stop"
-    SCREEN_STREAM_DATA = "screen_stream_data"
-    
-    # === 文件操作 ===
-    FILE_READ = "file_read"
-    FILE_WRITE = "file_write"
-    FILE_DELETE = "file_delete"
-    FILE_LIST = "file_list"
-    FILE_TRANSFER = "file_transfer"
-    
-    # === 进程管理 ===
-    PROCESS_START = "process_start"
-    PROCESS_STOP = "process_stop"
-    PROCESS_LIST = "process_list"
-    PROCESS_STATUS = "process_status"
-    
-    # === 协调同步 ===
-    COORD_SYNC = "coord_sync"
-    COORD_BROADCAST = "coord_broadcast"
-    COORD_LOCK = "coord_lock"
-    COORD_UNLOCK = "coord_unlock"
-    
-    # === Agent 控制 (与 AgentMessageHandler.kt 对齐) ===
-    TASK_EXECUTE = "task_execute"
-    AGENT_PING = "agent_ping"
-    AGENT_CONFIG_UPDATE = "agent_config_update"
-    AGENT_RESTART = "agent_restart"
-
-    # === UI 树操作 (与 AgentMessageHandler.kt 对齐) ===
-    UI_TREE_REQUEST = "ui_tree_request"
-    ACTION_EXECUTE = "action_execute"
-    ACTION_SEQUENCE_EXECUTE = "action_sequence_execute"
-
-    # === 应用/系统控制 (与 AgentMessageHandler.kt 对齐) ===
-    APP_START = "app_start"
-    APP_STOP = "app_stop"
-    SYSTEM_COMMAND = "system_command"
-
-    # === 错误处理 ===
-    ERROR = "error"
-    ERROR_RECOVERY = "error_recovery"
-
-    # === 能力/诊断上报 ===
-    CAPABILITY_REPORT = "capability_report"
-    CAPABILITY_REPORT_ACK = "capability_report_ack"
-    DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
-    DIAGNOSTICS_PAYLOAD_ACK = "diagnostics_payload_ack"
-
-    # === 视觉请求 ===
-    VISION_REQUEST = "vision_request"
-    VISION_RESULT = "vision_result"
+from galaxy_gateway.protocol.aip_v3 import (  # noqa: E402
+    MessageType,
+    TaskStatus,
+    ResultStatus,
+)
 
 
-class TaskStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    CONTINUE = "continue"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-class ResultStatus(str, Enum):
-    SUCCESS = "success"
-    FAILURE = "failure"
-    SKIPPED = "skipped"
-    TIMEOUT = "timeout"
-    NONE = "none"
+# =============================================================================
+# OpenClawd 记忆回流 — 顶层导入使测试可以通过 patch() 注入 mock
+# =============================================================================
+try:
+    from core.openclawd_memory_backflow import store_task_result
+except ImportError:
+    store_task_result = None  # type: ignore[assignment]
 
 
 # =============================================================================
@@ -579,6 +488,12 @@ class AndroidBridge:
         self._message_handlers[MessageType.APP_STOP] = self._handle_generic_forward
         self._message_handlers[MessageType.SYSTEM_COMMAND] = self._handle_generic_forward
 
+        # 设备状态上报
+        self._message_handlers[MessageType.DEVICE_STATUS] = self._handle_device_status
+
+        # 任务生命周期：task_end 结束确认
+        self._message_handlers[MessageType.TASK_END] = self._handle_task_end
+
         # 能力/诊断上报
         self._message_handlers[MessageType.CAPABILITY_REPORT] = self._handle_capability_report
         self._message_handlers[MessageType.DIAGNOSTICS_PAYLOAD] = self._handle_diagnostics_payload
@@ -690,51 +605,155 @@ class AndroidBridge:
             return None
     
     async def _handle_device_register(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理设备注册"""
+        """处理设备注册，失败时向网关日志输出结构化错误"""
         device_id = message.get("device_id")
-        
-        async with self._lock:
-            device = AndroidDevice.from_registration(message)
-            device.websocket = websocket
-            self._devices[device_id] = device
-        
-        logger.info(f"Android device registered: {device_id} ({device.model})")
-        
-        return MessageBuilder.device_register_ack(
-            device_id=device_id,
-            success=True,
-            session_id=str(uuid.uuid4()),
-            message="Registration successful"
-        )
-    
+
+        try:
+            async with self._lock:
+                device = AndroidDevice.from_registration(message)
+                device.websocket = websocket
+                self._devices[device_id] = device
+
+            logger.info(
+                "Android device registered: device_id=%s model=%s platform=%s",
+                device_id, device.model, device.platform,
+            )
+
+            return MessageBuilder.device_register_ack(
+                device_id=device_id,
+                success=True,
+                session_id=str(uuid.uuid4()),
+                message="Registration successful"
+            )
+
+        except Exception as exc:
+            _SENSITIVE_FIELDS = frozenset({
+                "websocket", "image_base64", "token", "password",
+                "credential", "secret", "auth", "api_key",
+            })
+            safe_payload = {k: v for k, v in message.items() if k not in _SENSITIVE_FIELDS}
+            logger.error(
+                "Device registration failed: device_id=%s error=%s payload=%s",
+                device_id, exc, safe_payload,
+            )
+            return MessageBuilder.device_register_ack(
+                device_id=device_id or "unknown",
+                success=False,
+                message=f"Registration failed: {exc}",
+            )
+
     async def _handle_heartbeat(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理心跳"""
+        """处理心跳，未注册设备仍回 ACK 并输出警告"""
         device_id = message.get("device_id")
-        
+
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].last_heartbeat = time.time()
                 self._devices[device_id].connected = True
-        
+            else:
+                logger.warning(
+                    "Heartbeat from unregistered device: device_id=%s; ACK sent",
+                    device_id,
+                )
+
         return MessageBuilder.heartbeat_ack(device_id)
-    
+
+    async def _handle_device_status(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理设备状态上报（battery, cpu, memory 等）"""
+        device_id = message.get("device_id")
+        status_payload = message.get("status") or message.get("payload") or {}
+
+        async with self._lock:
+            if device_id in self._devices:
+                self._devices[device_id].last_heartbeat = time.time()
+                self._devices[device_id].connected = True
+
+        logger.info(
+            "Device status update: device_id=%s status=%s",
+            device_id, status_payload,
+        )
+
+        return {
+            "version": "3.0",
+            "type": "device_status_ack",
+            "message_id": str(uuid.uuid4()),
+            "device_id": device_id,
+            "timestamp": int(time.time() * 1000),
+            "status": "received",
+        }
+
     async def _handle_task_result(self, websocket: Any, message: Dict[str, Any]) -> None:
-        """处理任务结果"""
+        """处理任务结果，完成 Future 并触发 OpenClawd 记忆回流"""
         task_id = message.get("task_id")
         device_id = message.get("device_id")
-        
-        logger.info(f"Task result received: {task_id} from {device_id}")
-        
+        result_status = message.get("status", "unknown")
+        route_mode = message.get("route_mode", "cross_device")
+
+        logger.info(
+            "Task result received: task_id=%s device_id=%s status=%s",
+            task_id, device_id, result_status,
+        )
+
         # 完成等待的 Future
         if task_id in self._pending_responses:
             future = self._pending_responses.pop(task_id)
             if not future.done():
                 future.set_result(message)
-        
+
         # 更新设备状态
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].current_task_id = None
+
+        # OpenClawd 记忆回流 — 将完成任务存入记忆 DB（使用模块级导入使之可测）
+        if task_id and device_id and store_task_result is not None:
+            try:
+                await store_task_result(
+                    task_id=task_id,
+                    device_id=device_id,
+                    route_mode=route_mode,
+                    result=message,
+                )
+                logger.debug(
+                    "Memory backflow stored: task_id=%s device_id=%s route_mode=%s",
+                    task_id, device_id, route_mode,
+                )
+            except Exception as bf_err:
+                logger.warning(
+                    "Memory backflow failed (non-fatal): task_id=%s error=%s",
+                    task_id, bf_err,
+                )
+
+    async def _handle_task_end(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        """处理任务结束通知（task_submit → task_assign → task_progress → task_result → task_end）"""
+        task_id = message.get("task_id")
+        device_id = message.get("device_id")
+        final_status = message.get("status", TaskStatus.COMPLETED.value)
+
+        logger.info(
+            "Task lifecycle ended: task_id=%s device_id=%s final_status=%s",
+            task_id, device_id, final_status,
+        )
+
+        # 清理残余 pending future（若设备未回 task_result 而直接送 task_end）
+        if task_id and task_id in self._pending_responses:
+            future = self._pending_responses.pop(task_id)
+            if not future.done():
+                future.set_result(message)
+
+        async with self._lock:
+            if device_id and device_id in self._devices:
+                self._devices[device_id].current_task_id = None
+
+        return {
+            "version": "3.0",
+            "type": "task_end_ack",
+            "message_id": str(uuid.uuid4()),
+            "device_id": device_id,
+            "task_id": task_id,
+            "timestamp": int(time.time() * 1000),
+            "status": "acknowledged",
+        }
     
     async def _handle_task_progress(self, websocket: Any, message: Dict[str, Any]) -> None:
         """处理任务进度"""
@@ -752,12 +771,17 @@ class AndroidBridge:
                 future.set_result(message)
     
     async def _handle_error(self, websocket: Any, message: Dict[str, Any]) -> None:
-        """处理错误"""
+        """处理错误消息，使用结构化日志输出"""
         device_id = message.get("device_id")
         error_code = message.get("error_code")
         error_message = message.get("error_message")
-        
-        logger.error(f"Error from {device_id}: [{error_code}] {error_message}")
+        details = message.get("details")
+        task_id = message.get("task_id")
+
+        logger.error(
+            "Error from device: device_id=%s error_code=%s error_message=%s task_id=%s details=%s",
+            device_id, error_code, error_message, task_id, details,
+        )
 
     async def _handle_generic_forward(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         """通用占位处理器：记录日志并返回 ACK（后续可扩展为实际转发逻辑）"""
