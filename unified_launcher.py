@@ -1011,32 +1011,30 @@ class UnifiedWebUI:
         except ImportError as e:
             logger.error("Web UI 依赖未安装: %s", e)
             
+    # Minimal fallback HTML — the real dashboard is served from
+    # dashboard/frontend/public/index.html (SONARA galaxy style) at :8080.
+    FALLBACK_HTML = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Galaxy</title></head>
+<body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+<h1>Galaxy Dashboard</h1>
+<p>Dashboard is served at <a href="http://localhost:8080" style="color:#00CED1">http://localhost:8080</a></p>
+</div></body></html>"""
+
     def _get_dashboard_html(self) -> str:
         """获取仪表板 HTML — 从 dashboard/frontend/public/ 读取
 
-        优先加载独立 Dashboard 的 index.html（Dynamic Island 设计），
-        如果不存在则返回最小化的系统状态页面。
+        优先加载独立 Dashboard 的 index.html（SONARA galaxy style），
+        如果不存在则返回指向 :8080 的最小化引导页面。
         """
-        # 优先使用独立 Dashboard
-        dashboard_paths = [
-            PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html",
-            PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index_v2.html",
-        ]
-        for path in dashboard_paths:
-            if path.exists():
-                try:
-                    return path.read_text(encoding="utf-8")
-                except Exception as exc:
-                    logger.warning("读取 Dashboard HTML 失败: %s", exc)
-
-        # 回退：从 fallback.html 读取最小化系统状态页面
-        fallback_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "fallback.html"
-        if fallback_path.exists():
+        dashboard_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
+        if dashboard_path.exists():
             try:
-                return fallback_path.read_text(encoding="utf-8")
+                return dashboard_path.read_text(encoding="utf-8")
             except Exception as exc:
-                logger.warning("读取 fallback.html 失败: %s", exc)
-        return "<html><body><h1>Galaxy System</h1><p>Dashboard unavailable.</p></body></html>"
+                logger.warning("读取 Dashboard HTML 失败: %s", exc)
+
+        return self.FALLBACK_HTML
 
 
 # ============================================================================

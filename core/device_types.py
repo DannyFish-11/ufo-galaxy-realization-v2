@@ -1,8 +1,8 @@
-"""
-UFO Galaxy - 统一设备类型定义（单一事实来源）
-=============================================
+"""Galaxy Device Type definitions — Single Source of Truth.
 
-所有模块必须从此文件导入设备类型，不得自行定义。
+All modules should import DeviceType from this file rather than
+defining their own. The canonical definition lives in
+galaxy_gateway.protocol.aip_v3 (30+ device subtypes).
 
 层次结构：
   DeviceType (简化大类) ← core 层 + gateway 路由使用
@@ -200,3 +200,19 @@ def device_type_to_platform(device_type: DeviceType) -> DevicePlatform:
         DeviceType.CLOUD: DevicePlatform.CLOUD,
     }
     return _map.get(device_type, DevicePlatform.UNKNOWN)
+
+
+# ============================================================================
+# Coarse-grained aliases for modules that only need broad categories
+# ============================================================================
+
+DEVICE_CATEGORY_MAP = {
+    "android": "android_phone",
+    "ios": "ios_phone",
+    "windows": "windows_desktop",
+    "macos": "macos_desktop",
+    "linux": "linux_desktop",
+    "iot": "iot_generic",
+    "browser": "web_browser",
+    "tablet": "android_tablet",
+}
