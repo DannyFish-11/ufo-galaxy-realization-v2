@@ -633,6 +633,108 @@ class CommandRouter:
             return result
 
     # ------------------------------------------------------------------
+    # Remote Agent Dispatch (PR155)
+    # ------------------------------------------------------------------
+
+    async def dispatch_agent_remote(
+        self,
+        device_id: str,
+        agent_id: str,
+        agent_template: str,
+        task: str,
+        session_id: str,
+        trace_id: str,
+        task_id: str,
+        context: Optional[Dict[str, Any]] = None,
+        timeout: float = 60.0,
+    ) -> Dict[str, Any]:
+        """Dispatch an ``agent_execute`` command to a remote device.
+
+        This implements the **Remote Agent Dispatch** contract (PR155).
+        The ``agent_execute`` payload is forwarded via :meth:`route_command`
+        so that all existing trace/error/backflow machinery is reused.
+
+        Parameters
+        ----------
+        device_id:
+            Target device identifier (must be registered/online).
+        agent_id:
+            Unique ID of the agent being dispatched (preserved in result).
+        agent_template:
+            Agent role or template name (e.g. ``"analyst"``, ``"executor"``).
+        task:
+            Natural-language instruction for the remote agent to execute.
+        session_id:
+            Session identifier — threaded through result for backflow.
+        trace_id:
+            Request trace ID — preserved end-to-end for observability.
+        task_id:
+            Task identifier — preserved in result and backflow.
+        context:
+            Optional extra context dict passed to the remote agent.
+        timeout:
+            Maximum seconds to wait for a remote result (default 60 s).
+
+        Returns
+        -------
+        dict
+            Standard route_command envelope plus ``agent_id``, ``task_id``,
+            ``trace_id``, ``session_id`` so callers can correlate easily::
+
+                {
+                    "success": bool,
+                    "agent_id": str,
+                    "task_id": str,
+                    "trace_id": str,
+                    "session_id": str,
+                    "device_id": str,
+                    "result": any,
+                    "error_code": str | None,
+                    "latency_ms": float,
+                    "via": "command_router",
+                }
+        """
+        logger.info(
+            "CommandRouter.dispatch_agent_remote | trace_id=%s task_id=%s "
+            "agent_id=%s device_id=%s template=%s",
+            trace_id, task_id, agent_id, device_id, agent_template,
+        )
+
+        payload: Dict[str, Any] = {
+            "agent_id": agent_id,
+            "agent_template": agent_template,
+            "task": task,
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "task_id": task_id,
+            "context": context or {},
+        }
+
+        cr_result = await self.route_command(
+            device_id=device_id,
+            command="agent_execute",
+            payload=payload,
+            command_id=task_id,
+            task_id=task_id,
+            timeout=timeout,
+            trace_id=trace_id,
+        )
+
+        # Augment the standard route_command response with agent correlation fields
+        cr_result.setdefault("agent_id", agent_id)
+        cr_result.setdefault("session_id", session_id)
+        cr_result.setdefault("trace_id", trace_id)
+        cr_result.setdefault("task_id", task_id)
+
+        logger.info(
+            "CommandRouter.dispatch_agent_remote done | trace_id=%s task_id=%s "
+            "agent_id=%s success=%s latency=%.1fms",
+            trace_id, task_id, agent_id,
+            cr_result.get("success"), cr_result.get("latency_ms", 0.0),
+        )
+        return cr_result
+
+    # ------------------------------------------------------------------
     # 内部调度
     # ------------------------------------------------------------------
 
