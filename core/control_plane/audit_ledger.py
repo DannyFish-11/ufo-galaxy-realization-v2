@@ -87,6 +87,19 @@ class EventType(str, Enum):
     TASK_RETRY_SUCCEEDED = "task_retry_succeeded"
     TASK_RETRY_FAILED = "task_retry_failed"
 
+    # Phase 5.2 — governance events
+    BUDGET_WARNING = "budget_warning"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    BUDGET_DOWNGRADE = "budget_downgrade"
+    TOOL_GOVERNANCE_DECISION = "tool_governance_decision"
+    TOOL_RATE_LIMITED = "tool_rate_limited"
+    TOOL_DENIED = "tool_denied"
+
+    # Phase 5.3 — queue / scalability events
+    QUEUE_METRIC = "queue_metric"
+    QUEUE_BACKPRESSURE = "queue_backpressure"
+    QUEUE_TASK_SHED = "queue_task_shed"
+
     # System events
     SYSTEM_ERROR = "system_error"
     CONFIG_CHANGED = "config_changed"
