@@ -26,7 +26,10 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.CommandRouter")
 
@@ -374,6 +377,40 @@ class CommandRouter:
     # 统一网关命令路径（PR-C）
     # ------------------------------------------------------------------
 
+    async def route_envelope(self, envelope: "TaskEnvelope") -> Dict[str, Any]:
+        """Execute a :class:`~core.schemas.task_envelope.TaskEnvelope`.
+
+        This is the preferred entry-point for all new code.  Legacy callers
+        can continue to use :meth:`route_command`; internally it now creates
+        an envelope and delegates here so that every path shares the same
+        trace_id/task_id logging.
+        """
+        if not envelope.targets:
+            return {
+                "request_id": envelope.task_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": envelope.task_id,
+                "device_id": "",
+                "command": envelope.tool_name,
+                "via": "command_router",
+                "success": False,
+                "result": None,
+                "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                "error_message": "TaskEnvelope.targets 为空，无法路由",
+                "latency_ms": 0.0,
+            }
+        return await self.route_command(
+            device_id=envelope.target,
+            command=envelope.tool_name,
+            payload=envelope.args,
+            command_id=envelope.task_id,
+            task_id=envelope.task_id,
+            timeout=envelope.timeout,
+            request_id=envelope.task_id,
+            trace_id=envelope.trace_id,
+        )
+
     async def route_command(
         self,
         device_id: str,
@@ -383,6 +420,7 @@ class CommandRouter:
         task_id: str,
         timeout: float = 30.0,
         request_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         统一网关命令路径：OpenClawd → command_router → gateway/device → result
@@ -408,11 +446,13 @@ class CommandRouter:
             }
         """
         request_id = request_id or f"req_{uuid.uuid4().hex[:12]}"
+        trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
         t0 = time.monotonic()
 
         trace_base = {
             "request_id": request_id,
             "task_id": task_id,
+            "trace_id": trace_id,
             "command_id": command_id,
             "device_id": device_id,
             "command": command,
@@ -420,9 +460,9 @@ class CommandRouter:
         }
 
         logger.info(
-            "CommandRouter.route_command | request_id=%s command_id=%s task_id=%s "
+            "CommandRouter.route_command | trace_id=%s task_id=%s command_id=%s "
             "device_id=%s command=%s",
-            request_id, command_id, task_id, device_id, command,
+            trace_id, task_id, command_id, device_id, command,
         )
 
         # ── 1. 协议信封校验 ──────────────────────────────────────────────
@@ -440,8 +480,8 @@ class CommandRouter:
             }
             _get_gateway_trace_store().record(result)
             logger.warning(
-                "CommandRouter.route_command envelope invalid | command_id=%s error=%s",
-                command_id, exc.message,
+                "CommandRouter.route_command envelope invalid | trace_id=%s command_id=%s error=%s",
+                trace_id, command_id, exc.message,
             )
             return result
 
@@ -463,8 +503,8 @@ class CommandRouter:
                 }
                 _get_gateway_trace_store().record(result)
                 logger.info(
-                    "CommandRouter.route_command done | command_id=%s latency=%.1fms",
-                    command_id, latency_ms,
+                    "CommandRouter.route_command done | trace_id=%s command_id=%s latency=%.1fms",
+                    trace_id, command_id, latency_ms,
                 )
                 return result
 
@@ -481,8 +521,8 @@ class CommandRouter:
                 self._stats["total_timeout"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.warning(
-                    "CommandRouter.route_command timeout | command_id=%s device=%s",
-                    command_id, device_id,
+                    "CommandRouter.route_command timeout | trace_id=%s command_id=%s device=%s",
+                    trace_id, command_id, device_id,
                 )
                 return result
 
@@ -499,8 +539,8 @@ class CommandRouter:
                 self._stats["total_failed"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.warning(
-                    "CommandRouter.route_command disconnect | command_id=%s device=%s error=%s",
-                    command_id, device_id, exc,
+                    "CommandRouter.route_command disconnect | trace_id=%s command_id=%s device=%s error=%s",
+                    trace_id, command_id, device_id, exc,
                 )
                 return result
 
@@ -517,8 +557,8 @@ class CommandRouter:
                 self._stats["total_failed"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.error(
-                    "CommandRouter.route_command executor error | command_id=%s error=%s",
-                    command_id, exc,
+                    "CommandRouter.route_command executor error | trace_id=%s command_id=%s error=%s",
+                    trace_id, command_id, exc,
                 )
                 return result
 

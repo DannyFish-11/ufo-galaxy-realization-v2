@@ -4,10 +4,72 @@
 
 Galaxy 统一命令协议提供了一个标准化的接口，用于向多个设备/节点并行下发命令，支持同步和异步执行模式，并提供统一的结果聚合和追踪机制。
 
+## TaskEnvelope — 规范内部消息格式（PR-3）
+
+所有内部路由路径现在统一使用 **TaskEnvelope** 作为主要消息格式。外部 API 格式不变；传统端点（legacy endpoints）通过适配器函数自动转换为 TaskEnvelope，向后完全兼容。
+
+### Schema 定义
+
+```python
+# core/schemas/task_envelope.py
+class TaskEnvelope(BaseModel):
+    task_id:    str           # 全局唯一任务标识符（自动生成）
+    trace_id:   str           # 分布式追踪标识符（跨全链路传播）
+    source:     str           # 发起方：'api' / 'ws' / 'scheduler' / device_id …
+    targets:    List[str]     # 目标设备 / worker / node ID 列表
+    tool_name:  str           # 工具/命令/技能/MCP-tool 名称
+    args:       Dict[str, Any]# 传递给工具的命名参数
+    priority:   int           # 优先级 1（最高）– 10（最低），默认 5
+    timeout:    float         # 超时秒数（> 0），默认 30.0
+    created_at: datetime      # UTC 创建时间（自动设置）
+    metadata:   Dict[str, Any]# 扩展元数据（mode, notify_ws, relay_chain …）
+```
+
+### 适配器函数
+
+| 函数 | 适用场景 |
+|------|----------|
+| `envelope_from_command_request(...)` | UnifiedCommandRequest / CommandDispatchRequest → TaskEnvelope |
+| `envelope_from_relay_request(...)` | ProxyRelay RelayRequest → TaskEnvelope |
+| `envelope_from_mcp_call(...)` | MCP 工具调用 → TaskEnvelope |
+
+### 可观测性
+
+所有内部日志统一包含 `trace_id` 和 `task_id` 字段：
+
+```
+INFO  Galaxy.CommandRouter - route_command | trace_id=trace_abc123 task_id=task_xyz ...
+INFO  Galaxy.API           - 收到统一命令: trace_id=trace_abc123 task_id=task_xyz ...
+INFO  Galaxy.API           - MCP 工具调用: trace_id=trace_abc123 task_id=task_xyz ...
+```
+
+GatewayTraceStore 的每条记录也携带 `trace_id`，可通过可观测 API 查询。
+
+### 新代码集成示例
+
+```python
+from core.schemas.task_envelope import TaskEnvelope
+from core.command_router import get_command_router
+
+router = get_command_router()
+
+envelope = TaskEnvelope(
+    source="my_service",
+    targets=["Node_42"],
+    tool_name="screenshot",
+    args={"format": "png"},
+    priority=3,
+)
+result = await router.route_envelope(envelope)
+# result["trace_id"] 可用于跨服务日志关联
+```
+
+---
+
 ## 核心特性
 
 - ✅ **多目标支持**: 同时向多个设备发送命令
-- ✅ **请求追踪**: 每个请求有唯一的 request_id
+- ✅ **请求追踪**: 每个请求有唯一的 request_id，全链路携带 trace_id
 - ✅ **执行模式**: 支持 sync（同步）和 async（异步）模式
 - ✅ **超时控制**: 可配置命令执行超时时间
 - ✅ **结果聚合**: 自动聚合多个目标的执行结果

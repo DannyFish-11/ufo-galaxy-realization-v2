@@ -30,6 +30,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from core.schemas.task_envelope import envelope_from_mcp_call
+
 logger = logging.getLogger("Galaxy.API")
 
 
@@ -223,6 +225,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/protocols/mcp/{name}/call")
     async def call_mcp_tool(name: str, req: MCPToolCallRequest):
         """调用指定 MCP 服务器上的工具"""
+        # Build TaskEnvelope for unified trace_id/task_id logging
+        envelope = envelope_from_mcp_call(
+            server_name=name,
+            tool_name=req.tool_name,
+            arguments=req.arguments,
+        )
+        logger.info(
+            "MCP 工具调用: trace_id=%s task_id=%s server=%s tool=%s",
+            envelope.trace_id, envelope.task_id, name, req.tool_name,
+        )
         try:
             from core.mcp_loader import mcp_loader
 
@@ -240,8 +252,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
 
             logger.info(
-                f"MCP 工具调用: {name}/{req.tool_name} -> "
-                f"success={result.get('success', False)}"
+                "MCP 工具调用完成: trace_id=%s server=%s tool=%s success=%s",
+                envelope.trace_id, name, req.tool_name, result.get("success", False),
             )
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
@@ -252,7 +264,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=501,
             )
         except Exception as e:
-            logger.error(f"MCP 工具调用失败: {e}")
+            logger.error(
+                "MCP 工具调用失败: trace_id=%s error=%s", envelope.trace_id, e,
+            )
             return JSONResponse(
                 {"success": False, "error": str(e)},
                 status_code=500,
