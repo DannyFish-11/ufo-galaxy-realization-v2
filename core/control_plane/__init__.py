@@ -42,6 +42,12 @@ from core.control_plane.security_interceptor import (
     RiskLevel,
     SecurityInterceptor,
 )
+from core.control_plane._globals import (
+    get_audit_ledger,
+    get_approval_registry,
+    get_scoring_engine,
+    get_security_interceptor,
+)
 
 __all__ = [
     # audit_ledger
@@ -69,4 +75,9 @@ __all__ = [
     "ApprovalTimeoutError",
     "RiskLevel",
     "SecurityInterceptor",
+    # _globals
+    "get_audit_ledger",
+    "get_approval_registry",
+    "get_scoring_engine",
+    "get_security_interceptor",
 ]

@@ -91,6 +91,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 device_id=req.device_id,
                 session_id=req.session_id,
                 context=req.context,
+                required_capabilities=req.required_capabilities,
             )
             metadata = result.get("metadata", {})
             trace_id = result.get("trace_id") or metadata.get("trace_id") or metadata.get("request_id", "")

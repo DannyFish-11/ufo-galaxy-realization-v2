@@ -47,6 +47,8 @@ class GatewayErrorCode(str, Enum):
     DISCONNECT = "DISCONNECT"                  # 连接断开
     EXECUTOR_ERROR = "EXECUTOR_ERROR"          # 执行器内部错误
     INTERNAL_ERROR = "INTERNAL_ERROR"          # 未分类内部错误
+    HITL_TIMEOUT = "HITL_TIMEOUT"              # HITL approval window elapsed
+    HITL_DENIED = "HITL_DENIED"               # HITL approval denied by operator
 
 
 @dataclass
@@ -226,6 +228,16 @@ class CommandRouter:
       5. 通过回调推送实时状态变更
     """
 
+    # Phase 2: commands that require HITL approval before execution
+    _HIGH_RISK_COMMANDS: frozenset = frozenset({
+        "delete", "format", "shutdown", "reboot", "wipe",
+        "rm", "remove", "purge", "factory_reset",
+        "execute_shell", "run_script", "sudo",
+        "transfer_funds", "payment", "checkout",
+        "drone_takeoff", "arm_system",
+        "system_change", "registry_write",
+    })
+
     def __init__(
         self,
         executor: Optional[Callable[..., Coroutine]] = None,
@@ -259,6 +271,43 @@ class CommandRouter:
             "avg_latency_ms": 0.0,
         }
         self._latencies: List[float] = []
+
+    # ------------------------------------------------------------------
+    # Control Plane Phase 2 helpers
+    # ------------------------------------------------------------------
+
+    def _is_high_risk_command(self, command: str) -> bool:
+        """Return True when *command* matches a known high-risk pattern."""
+        cmd_lower = command.lower()
+        return any(kw in cmd_lower for kw in self._HIGH_RISK_COMMANDS)
+
+    def _emit_audit(
+        self,
+        event_type,
+        *,
+        source: str = "command_router",
+        message: str = "",
+        trace_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Append a :class:`TraceEvent` to the shared ledger; never raises."""
+        try:
+            from core.control_plane._globals import get_audit_ledger
+            from core.control_plane.audit_ledger import Severity
+            return get_audit_ledger().append(
+                event_type,
+                severity=Severity.INFO,
+                source=source,
+                message=message,
+                trace_id=trace_id,
+                task_id=task_id,
+                device_id=device_id,
+                payload=payload or {},
+            )
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # 公共接口
@@ -465,6 +514,97 @@ class CommandRouter:
             trace_id, task_id, command_id, device_id, command,
         )
 
+        # ── Phase 2: emit TASK_DISPATCHED audit event ────────────────────────
+        try:
+            from core.control_plane.audit_ledger import EventType as _EvType
+            self._emit_audit(
+                _EvType.TASK_DISPATCHED,
+                trace_id=trace_id,
+                task_id=task_id,
+                device_id=device_id,
+                message=f"Dispatching command '{command}' to device '{device_id}'",
+                payload={"command": command, "command_id": command_id},
+            )
+        except Exception:
+            pass
+
+        # ── Phase 2: HITL gate for high-risk commands ────────────────────────
+        if self._is_high_risk_command(command):
+            try:
+                from core.control_plane._globals import get_security_interceptor
+                from core.control_plane.security_interceptor import (
+                    RiskLevel,
+                    ApprovalTimeoutError,
+                    ApprovalDeniedError,
+                )
+                from core.control_plane.audit_ledger import EventType as _EvHITL
+                interceptor = get_security_interceptor()
+                try:
+                    ack_token = await interceptor.require_approval(
+                        action=command,
+                        task_id=task_id,
+                        risk_level=RiskLevel.HIGH,
+                        requestor="command_router",
+                        context={"device_id": device_id, "command": command, "payload": payload},
+                    )
+                    self._emit_audit(
+                        _EvHITL.APPROVAL_GRANTED,
+                        trace_id=trace_id,
+                        task_id=task_id,
+                        device_id=device_id,
+                        message=f"HITL approval granted for '{command}'",
+                        payload={"ack_token": ack_token},
+                    )
+                except ApprovalTimeoutError as exc:
+                    latency_ms = (time.monotonic() - t0) * 1000
+                    self._emit_audit(
+                        _EvHITL.APPROVAL_TIMED_OUT,
+                        source="command_router.hitl",
+                        trace_id=trace_id,
+                        task_id=task_id,
+                        device_id=device_id,
+                        message=f"HITL approval timed out for '{command}'",
+                    )
+                    result = {
+                        **trace_base,
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.HITL_TIMEOUT.value,
+                        "error_message": f"High-risk command '{command}' requires approval (timed out after {exc.timeout_seconds}s). "
+                                         f"Use POST /api/v1/approvals/{exc.request_id} to approve.",
+                        "approval_request_id": exc.request_id,
+                        "latency_ms": round(latency_ms, 1),
+                    }
+                    _get_gateway_trace_store().record(result)
+                    return result
+                except ApprovalDeniedError as exc:
+                    latency_ms = (time.monotonic() - t0) * 1000
+                    self._emit_audit(
+                        _EvHITL.APPROVAL_DENIED,
+                        source="command_router.hitl",
+                        trace_id=trace_id,
+                        task_id=task_id,
+                        device_id=device_id,
+                        message=f"HITL approval denied for '{command}': {exc.reason}",
+                    )
+                    result = {
+                        **trace_base,
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.HITL_DENIED.value,
+                        "error_message": f"High-risk command '{command}' was denied: {exc.reason}",
+                        "approval_request_id": exc.request_id,
+                        "latency_ms": round(latency_ms, 1),
+                    }
+                    _get_gateway_trace_store().record(result)
+                    return result
+            except Exception as hitl_exc:
+                # If the HITL subsystem itself fails, log and proceed (fail-open)
+                logger.warning(
+                    "CommandRouter HITL gate failed (fail-open) | command=%s error=%s",
+                    command, hitl_exc,
+                )
+
         # ── 1. 协议信封校验 ──────────────────────────────────────────────
         try:
             validate_command_envelope(device_id, command, payload, command_id, task_id)
@@ -506,6 +646,17 @@ class CommandRouter:
                     "CommandRouter.route_command done | trace_id=%s command_id=%s latency=%.1fms",
                     trace_id, command_id, latency_ms,
                 )
+                # ── Audit: TASK_COMPLETED ──────────────────────────────────
+                try:
+                    from core.control_plane.audit_ledger import EventType as _EvC
+                    self._emit_audit(
+                        _EvC.TASK_COMPLETED,
+                        trace_id=trace_id, task_id=task_id, device_id=device_id,
+                        message=f"Command '{command}' completed successfully",
+                        payload={"latency_ms": round(latency_ms, 1)},
+                    )
+                except Exception:
+                    pass
                 return result
 
             except asyncio.TimeoutError:

@@ -499,6 +499,121 @@ class OpenClawd:
 
         logger.info("OpenClawd 星枢核心智能体初始化")
 
+    # ========================================================================
+    # Control Plane Phase 2 helpers
+    # ========================================================================
+
+    def _emit_audit(
+        self,
+        event_type,
+        *,
+        trace_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        message: str = "",
+        payload: Optional[Dict] = None,
+    ) -> Optional[str]:
+        """Emit a :class:`~core.control_plane.TraceEvent` to the shared ledger.
+
+        Silently swallows all exceptions so a ledger failure never breaks
+        the main execution path.  Returns the new ``event_id`` or ``None``.
+        """
+        try:
+            from core.control_plane._globals import get_audit_ledger
+            from core.control_plane.audit_ledger import Severity
+            return get_audit_ledger().append(
+                event_type,
+                severity=Severity.INFO,
+                source="openclawd",
+                message=message,
+                trace_id=trace_id,
+                task_id=task_id,
+                session_id=session_id,
+                device_id=device_id,
+                agent_id=agent_id,
+                payload=payload or {},
+            )
+        except Exception:
+            return None
+
+    def _select_device_via_scheduler(
+        self,
+        required_capabilities: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """Use the smart scheduler to pick the best available device.
+
+        Reads the device list from the shared ``connection_manager`` and
+        applies :class:`~core.control_plane.DeviceScoringEngine` to return
+        the highest-scoring eligible device ID, or ``None`` if no suitable
+        device is found.
+
+        Parameters
+        ----------
+        required_capabilities:
+            List of capability strings the selected device must support.
+        """
+        try:
+            from core.control_plane._globals import get_scoring_engine, get_audit_ledger
+            from core.control_plane.smart_scheduler import DeviceScoreInput, DeviceStatus as SchedDeviceStatus
+            from core.control_plane.audit_ledger import EventType, Severity
+            from core.routes._shared import connection_manager
+
+            all_devices = connection_manager.get_all_devices()
+            if not all_devices:
+                return None
+
+            candidates = []
+            for did, info in all_devices.items():
+                raw_status = info.get("status", "offline")
+                if raw_status not in (SchedDeviceStatus.ONLINE, "online", "connected"):
+                    continue
+                caps = info.get("capabilities", [])
+                if isinstance(caps, list):
+                    cap_names = [
+                        c if isinstance(c, str) else (c.get("name", "") if isinstance(c, dict) else str(c))
+                        for c in caps
+                    ]
+                else:
+                    cap_names = []
+                candidates.append(
+                    DeviceScoreInput(
+                        device_id=did,
+                        status=SchedDeviceStatus.ONLINE,
+                        ping_latency_ms=float(info.get("ping_ms", 0.0)),
+                        load_pct=float(info.get("load_pct", 0.0)),
+                        capabilities=cap_names,
+                    )
+                )
+
+            if not candidates:
+                return None
+
+            engine = get_scoring_engine()
+            best = engine.select_best_device(candidates, required_capabilities or [])
+            if best is not None:
+                # Record scheduler decision in audit ledger
+                try:
+                    get_audit_ledger().append(
+                        EventType.SCHEDULER_DECISION,
+                        severity=Severity.INFO,
+                        source="openclawd.scheduler",
+                        message=f"Auto-selected device {best.device_id} (score={best.total:.3f})",
+                        payload={
+                            "selected_device_id": best.device_id,
+                            "score": best.total,
+                            "required_capabilities": required_capabilities or [],
+                            "candidates_count": len(candidates),
+                        },
+                    )
+                except Exception:
+                    pass
+                return best.device_id
+        except Exception as e:
+            logger.debug("_select_device_via_scheduler failed (non-fatal): %s", e)
+        return None
+
     def _ensure_initialized(self):
         """标记为已初始化 (懒加载模式，模块在各方法内按需导入)"""
         if not self._initialized:
@@ -586,6 +701,7 @@ class OpenClawd:
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
         context: Optional[List[Dict]] = None,
+        required_capabilities: Optional[List[str]] = None,
     ) -> dict:
         """主入口 — PR86 架构：OpenClawd 是唯一入口，内嵌 AgentKernel
 
@@ -601,6 +717,7 @@ class OpenClawd:
             device_id: 设备 ID (可选，用于设备操控场景)
             session_id: 会话 ID (可选，用于上下文管理)
             context: 对话历史上下文（可选）
+            required_capabilities: Phase 2 scheduler hint — list of device capabilities required
 
         Returns:
             统一响应 dict: {success, response, intent, metadata}
@@ -631,6 +748,22 @@ class OpenClawd:
         except Exception:
             pass
 
+        # ── Audit ledger: TASK_CREATED ────────────────────────────────────────
+        task_id_for_trace = f"task_{uuid.uuid4().hex[:12]}"
+        try:
+            from core.control_plane.audit_ledger import EventType as _EvType
+            self._emit_audit(
+                _EvType.TASK_CREATED,
+                trace_id=trace_id,
+                task_id=task_id_for_trace,
+                session_id=session_id,
+                device_id=device_id,
+                message="Intent received",
+                payload={"message_preview": message[:120]},
+            )
+        except Exception:
+            pass
+
         # 同步新设备能力（确保 OpenClawd 始终感知最新设备）
         try:
             self.sync_device_capabilities()
@@ -638,6 +771,20 @@ class OpenClawd:
             pass
 
         try:
+            # ── Audit ledger: TASK_STARTED ────────────────────────────────────
+            try:
+                from core.control_plane.audit_ledger import EventType as _EvType2
+                self._emit_audit(
+                    _EvType2.TASK_STARTED,
+                    trace_id=trace_id,
+                    task_id=task_id_for_trace,
+                    session_id=session_id,
+                    device_id=device_id,
+                    message="Processing started",
+                )
+            except Exception:
+                pass
+
             # Step 1: 尝试通过内嵌 AgentKernel 处理（chat_only / task_execute / hybrid）
             kernel = self._get_kernel()
             if kernel is not None:
@@ -676,6 +823,21 @@ class OpenClawd:
                     latency_ms = (time.monotonic() - t0) * 1000
                     await self._record_turn(session_id, "user", message)
                     await self._record_turn(session_id, "assistant", kernel_result.reply)
+                    # ── Audit ledger: TASK_COMPLETED ──────────────────────────
+                    try:
+                        from core.control_plane.audit_ledger import EventType as _EvType3
+                        _ev = _EvType3.TASK_COMPLETED if kernel_result.success else _EvType3.TASK_FAILED
+                        self._emit_audit(
+                            _ev,
+                            trace_id=trace_id,
+                            task_id=task_id_for_trace,
+                            session_id=session_id,
+                            device_id=device_id,
+                            message="AgentKernel completed",
+                            payload={"latency_ms": round(latency_ms, 1), "handler": "agent_kernel"},
+                        )
+                    except Exception:
+                        pass
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -716,10 +878,21 @@ class OpenClawd:
                 handler_name = "_dispatch_chat"
             handler = getattr(self, handler_name)
 
+            # Phase 2: if no device_id provided but required_capabilities given, auto-select
+            effective_device_id = device_id
+            if not effective_device_id and required_capabilities and intent_type in ("device_control", "task_manage"):
+                selected = self._select_device_via_scheduler(required_capabilities)
+                if selected:
+                    logger.info(
+                        "process: scheduler auto-selected device=%s for caps=%s",
+                        selected, required_capabilities,
+                    )
+                    effective_device_id = selected
+
             result = await handler(
                 message=message,
                 intent=parsed_intent,
-                device_id=device_id,
+                device_id=effective_device_id,
                 session_id=session_id,
                 trace_id=trace_id,
             )
@@ -751,6 +924,22 @@ class OpenClawd:
 
             latency_ms = (time.monotonic() - t0) * 1000
 
+            # ── Audit ledger: TASK_COMPLETED ──────────────────────────────────
+            try:
+                from core.control_plane.audit_ledger import EventType as _EvType4
+                _success_flag = result.get("success", True)
+                self._emit_audit(
+                    _EvType4.TASK_COMPLETED if _success_flag else _EvType4.TASK_FAILED,
+                    trace_id=trace_id,
+                    task_id=task_id_for_trace,
+                    session_id=session_id,
+                    device_id=device_id,
+                    message="Handler completed",
+                    payload={"latency_ms": round(latency_ms, 1), "handler": handler_name, "intent": intent_type},
+                )
+            except Exception:
+                pass
+
             return {
                 "success": result.get("success", True),
                 "response": response_text,
@@ -774,6 +963,23 @@ class OpenClawd:
             self._error_count += 1
             latency_ms = (time.monotonic() - t0) * 1000
             logger.error(f"OpenClawd.process 失败: {e}", exc_info=True)
+            # ── Audit ledger: TASK_FAILED ─────────────────────────────────────
+            try:
+                from core.control_plane.audit_ledger import EventType as _EvType5, Severity as _Sev5
+                from core.control_plane._globals import get_audit_ledger
+                get_audit_ledger().append(
+                    _EvType5.TASK_FAILED,
+                    severity=_Sev5.ERROR,
+                    source="openclawd",
+                    message=f"process() raised: {e}",
+                    trace_id=trace_id,
+                    task_id=task_id_for_trace,
+                    session_id=session_id,
+                    device_id=device_id,
+                    payload={"error": str(e)},
+                )
+            except Exception:
+                pass
             return {
                 "success": False,
                 "response": f"处理请求时发生错误: {str(e)}",
@@ -843,10 +1049,19 @@ class OpenClawd:
     ) -> dict:
         """设备操控分派 — 经由 send_gateway_command → CommandRouter → trace"""
         if not device_id:
-            return {
-                "success": False,
-                "response": "设备操控需要指定 device_id，请连接设备后重试。",
-            }
+            # Phase 2: try to auto-select a device via the smart scheduler
+            required_caps = getattr(intent, "required_capabilities", None) if intent else None
+            selected = self._select_device_via_scheduler(required_caps)
+            if selected:
+                logger.info(
+                    "_dispatch_device: no device_id provided; scheduler selected %s", selected
+                )
+                device_id = selected
+            else:
+                return {
+                    "success": False,
+                    "response": "设备操控需要指定 device_id，请连接设备后重试。",
+                }
         command = intent.command if intent else "device_control"
         params = intent.params if intent else {}
         result = await self.send_gateway_command(
