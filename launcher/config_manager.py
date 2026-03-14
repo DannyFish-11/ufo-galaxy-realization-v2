@@ -1,3 +1,20 @@
+# =============================================================================
+# DEPRECATED (2026-03-14)
+# =============================================================================
+# This module is DEPRECATED in favor of core.unified.config_manager
+# (UnifiedConfigManager). The hardcoded port defaults below are STALE and
+# conflict with config/unified_ports.yaml (the canonical port source).
+#
+# 3-layer config model (target):
+#   System-level : config/unified_ports.yaml  (ports, node metadata)
+#   Node-level   : each node's own config
+#   Environment   : .env
+#
+# For port lookups, use: core.port_config.get_node_port()
+# For general config, use: core.unified.config_manager.get_unified_config_manager()
+#
+# This file is kept for backward compatibility until all callers migrate.
+# =============================================================================
 """
 Configuration Manager for Galaxy Launcher
 

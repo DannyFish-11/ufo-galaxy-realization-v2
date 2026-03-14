@@ -1,10 +1,24 @@
 # =============================================================================
-# Galaxy - Unified Port Allocation Configuration
+# Galaxy - Unified Port Allocation Configuration  [CANONICAL SOURCE OF TRUTH]
 # 统一端口分配配置文件
 # =============================================================================
 # 版本: 2.1
 # 最后更新: 2026-03-14
 # 总节点数: 130
+#
+# 3-LAYER CONFIG MODEL:
+#   System-level : THIS FILE (config/unified_ports.yaml)
+#   Node-level   : each node's own config (nodes/Node_XX_*/config.*)
+#   Environment   : .env + GALAXY_PORT_* env vars (override at runtime)
+#
+# RUNTIME ACCESS: core.port_config.get_node_port() / get_service_port()
+#
+# DEPRECATED DUPLICATES (port data in these files is stale):
+#   - config/unified_config.json  (node port fields)
+#   - config/topology.json        (api_url fields)
+#   - config/l4_config.json       (gateway.port field)
+#   - config/api_config.json      (base_url fields)
+#   - launcher/config_manager.py  (hardcoded port defaults)
 # =============================================================================
 
 # 端口分配规则:

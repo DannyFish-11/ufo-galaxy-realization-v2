@@ -1,4 +1,5 @@
 {
+  "_DEPRECATION_NOTICE": "DEPRECATED (2026-03-14): The gateway.port value in this file may diverge from config/unified_ports.yaml. Canonical port source: config/unified_ports.yaml (infrastructure.gateway). Read at runtime via core.port_config.get_service_port('gateway'). L4 behavioral config (main_loop, perception, reasoning, etc.) remains valid here until migrated to the 3-layer config model.",
   "system": {
     "name": "Galaxy L4",
     "version": "4.0.0",

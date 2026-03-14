@@ -282,6 +282,9 @@ class BaseProviderAdapter:
     MAX_RETRIES = 2           # 最大重试次数
     RETRY_BASE_DELAY = 1.0    # 重试基础延迟
 
+    # HTTP status codes that are safe to retry (transient errors)
+    _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
     def __init__(self, config: ProviderConfig):
         self.config = config
         self._client: Optional[httpx.AsyncClient] = None
@@ -290,6 +293,51 @@ class BaseProviderAdapter:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=self.config.timeout)
         return self._client
+
+    async def _post_with_retry(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        body: Dict[str, Any],
+    ) -> httpx.Response:
+        """POST request with automatic retry on transient failures (timeout, 5xx, 429).
+
+        Uses exponential backoff: RETRY_BASE_DELAY * 2^attempt seconds between retries.
+        Falls through to raise on non-retryable errors immediately.
+        """
+        client = await self._get_client()
+        last_exc: Optional[Exception] = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                resp = await client.post(url, headers=headers, json=body)
+                if resp.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.MAX_RETRIES:
+                    delay = self.RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "Retryable HTTP %d from %s (attempt %d/%d), retrying in %.1fs",
+                        resp.status_code, self.config.name, attempt + 1, self.MAX_RETRIES + 1, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                resp.raise_for_status()
+                return resp
+            except httpx.TimeoutException as e:
+                last_exc = e
+                if attempt < self.MAX_RETRIES:
+                    delay = self.RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "Timeout from %s (attempt %d/%d), retrying in %.1fs",
+                        self.config.name, attempt + 1, self.MAX_RETRIES + 1, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise
+            except httpx.HTTPStatusError:
+                # Non-retryable HTTP error, raise immediately
+                raise
+        # Should not reach here, but just in case
+        if last_exc:
+            raise last_exc
+        raise RuntimeError(f"Exhausted retries for {self.config.name}")
 
     async def chat(self, messages: List[Dict], model: str,
                    tools: Optional[List[Dict]] = None,
@@ -313,7 +361,6 @@ class OpenAIAdapter(BaseProviderAdapter):
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
-        client = await self._get_client()
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
@@ -330,12 +377,11 @@ class OpenAIAdapter(BaseProviderAdapter):
             body["response_format"] = response_format
 
         t0 = time.monotonic()
-        resp = await client.post(
+        resp = await self._post_with_retry(
             f"{self.config.base_url}/chat/completions",
-            headers=headers, json=body,
+            headers=headers, body=body,
         )
         latency = (time.monotonic() - t0) * 1000
-        resp.raise_for_status()
         data = resp.json()
 
         choice = data["choices"][0]
@@ -362,7 +408,6 @@ class AnthropicAdapter(BaseProviderAdapter):
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
-        client = await self._get_client()
         headers = {
             "x-api-key": self.config.api_key,
             "anthropic-version": "2023-06-01",
@@ -391,12 +436,11 @@ class AnthropicAdapter(BaseProviderAdapter):
             body["tools"] = self._convert_tools(tools)
 
         t0 = time.monotonic()
-        resp = await client.post(
+        resp = await self._post_with_retry(
             f"{self.config.base_url}/messages",
-            headers=headers, json=body,
+            headers=headers, body=body,
         )
         latency = (time.monotonic() - t0) * 1000
-        resp.raise_for_status()
         data = resp.json()
 
         content = ""
@@ -457,7 +501,6 @@ class OllamaAdapter(BaseProviderAdapter):
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
-        client = await self._get_client()
         body = {
             "model": model,
             "messages": messages,
@@ -466,12 +509,12 @@ class OllamaAdapter(BaseProviderAdapter):
         }
 
         t0 = time.monotonic()
-        resp = await client.post(
+        resp = await self._post_with_retry(
             f"{self.config.base_url}/api/chat",
-            json=body,
+            headers={"Content-Type": "application/json"},
+            body=body,
         )
         latency = (time.monotonic() - t0) * 1000
-        resp.raise_for_status()
         data = resp.json()
 
         return LLMResponse(

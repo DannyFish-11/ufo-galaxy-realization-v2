@@ -854,14 +854,23 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动统一 Web UI 和完整 API 服务（合并自 dashboard/backend/main.py）
+        """启动统一 Web UI 和完整 API 服务
 
-        架构说明：
-          1. 以 dashboard.backend.main.app 为基础应用（包含所有 Dashboard 路由）
-          2. 在其上叠加 core.api_routes（系统管理、监控、观测性等扩展路由）
-          3. 在其上叠加 core.startup 引导的子系统中间件
-          4. 添加统一启动器专属路由（/api/status、/api/services）
+        架构说明（API 单一入口原则）：
+          core/api_routes.py 是 Galaxy 系统的 **唯一权威 API 定义**。
+          所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
+
+          1. 以 dashboard.backend.main.app 为基础应用（仅用于静态文件服务
+             和 Dashboard 专属 UI 路由）。Dashboard 中与 core 重叠的 API 路由
+             会被步骤 3 中 core.api_routes 的同路径路由覆盖。
+          2. 在其上叠加 core.startup 引导的子系统中间件
+          3. 叠加 core.api_routes 作为 **主 API 层**（系统管理、设备、节点、
+             监控、观测性、AI、chat 等全部路由）
+          4. 添加健康检查路由
           5. 统一在 8299 端口提供服务（避免与 Node_85_PromptLibrary:8085 冲突）
+
+        注意：此启动器 **不应** 定义自己的 inline API 路由。
+        如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
         """
         # 检查前端静态资源是否已构建
         frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
@@ -918,10 +927,13 @@ class UnifiedWebUI:
             except Exception as e:
                 logger.warning("核心子系统引导失败（系统仍可运行）: %s", e)
 
-            # === 步骤 3：叠加 core.api_routes（系统管理 + 扩展路由） ===
-            # 这些路由补充了 dashboard/backend/main.py 中缺少的系统层路由
-            # （monitoring、vision、relay、hybrid、vault、cost、channels、
-            #   federation、sessions、concurrency、errors 等）
+            # === 步骤 3：挂载 core.api_routes 作为主 API 层 ===
+            # core/api_routes.py 是 Galaxy 的 **唯一权威 API 入口**。
+            # 所有 REST 路由（system、devices、nodes、vision、tasks、chat、
+            # ai、monitoring、relay、hybrid、vault、cost、channels、
+            # federation、sessions、concurrency、errors、observability 等）
+            # 均由 core/routes/ 子模块定义，在此统一挂载。
+            # dashboard/backend/main.py 中重叠的路由将被此处覆盖。
             try:
                 from core.api_routes import create_api_routes, create_websocket_routes
                 api_router = create_api_routes(
@@ -1011,32 +1023,30 @@ class UnifiedWebUI:
         except ImportError as e:
             logger.error("Web UI 依赖未安装: %s", e)
             
+    # Minimal fallback HTML — the real dashboard is served from
+    # dashboard/frontend/public/index.html (SONARA galaxy style) at :8080.
+    FALLBACK_HTML = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Galaxy</title></head>
+<body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+<h1>Galaxy Dashboard</h1>
+<p>Dashboard is served at <a href="http://localhost:8080" style="color:#00CED1">http://localhost:8080</a></p>
+</div></body></html>"""
+
     def _get_dashboard_html(self) -> str:
         """获取仪表板 HTML — 从 dashboard/frontend/public/ 读取
 
-        优先加载独立 Dashboard 的 index.html（Dynamic Island 设计），
-        如果不存在则返回最小化的系统状态页面。
+        优先加载独立 Dashboard 的 index.html（SONARA galaxy style），
+        如果不存在则返回指向 :8080 的最小化引导页面。
         """
-        # 优先使用独立 Dashboard
-        dashboard_paths = [
-            PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html",
-            PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index_v2.html",
-        ]
-        for path in dashboard_paths:
-            if path.exists():
-                try:
-                    return path.read_text(encoding="utf-8")
-                except Exception as exc:
-                    logger.warning("读取 Dashboard HTML 失败: %s", exc)
-
-        # 回退：从 fallback.html 读取最小化系统状态页面
-        fallback_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "fallback.html"
-        if fallback_path.exists():
+        dashboard_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
+        if dashboard_path.exists():
             try:
-                return fallback_path.read_text(encoding="utf-8")
+                return dashboard_path.read_text(encoding="utf-8")
             except Exception as exc:
-                logger.warning("读取 fallback.html 失败: %s", exc)
-        return "<html><body><h1>Galaxy System</h1><p>Dashboard unavailable.</p></body></html>"
+                logger.warning("读取 Dashboard HTML 失败: %s", exc)
+
+        return self.FALLBACK_HTML
 
 
 # ============================================================================

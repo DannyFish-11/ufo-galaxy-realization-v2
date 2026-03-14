@@ -5,6 +5,7 @@ Galaxy - Test Configuration
 Shared fixtures and configuration for all tests.
 """
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -20,6 +21,14 @@ if str(PROJECT_ROOT) not in sys.path:
 os.environ.setdefault("GALAXY_MODE", "test")
 os.environ.setdefault("GALAXY_DEV_MODE", "1")
 os.environ.setdefault("PYTHONPATH", str(PROJECT_ROOT))
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an event loop for the test session."""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest.fixture

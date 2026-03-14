@@ -1,4 +1,5 @@
 {
+  "_DEPRECATION_NOTICE": "AUTO-GENERATED / LEGACY (2026-03-14): This file is a point-in-time snapshot of node discovery. It does NOT contain port assignments. Canonical node+port config: config/unified_ports.yaml. Canonical node metadata (groups, dependencies): config/unified_config.json (migrating to unified_ports.yaml).",
   "version": "5.0.0",
   "last_updated": "2026-02-02",
   "nodes": {

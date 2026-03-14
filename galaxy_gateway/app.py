@@ -1,10 +1,22 @@
 """
-Galaxy Gateway - 主应用入口
+Galaxy Gateway - 协议适配层（WS → HTTP）
+============================================
 
-FastAPI 应用，提供:
-1. WebSocket 端点供设备连接
-2. REST API 供管理和任务提交
-3. 健康检查端点
+本模块是 Galaxy 系统的 **WebSocket 协议适配器**，不是主 API 源。
+
+职责：
+  1. WebSocket 端点：设备连接、Android bridge、WebRTC signaling
+  2. 设备生命周期管理（注册/心跳/断线）通过 WebSocket 协议
+  3. 会话漫游 REST 端点（gateway 特有的 session roaming 逻辑）
+  4. 健康检查端点（gateway 自身状态）
+
+**REST API 权威定义** 位于 core/api_routes.py。
+本模块中的 REST 端点（/api/devices、/api/tasks、/api/commands 等）
+仅为 gateway 独立运行时的便利接口。在统一部署模式下，
+unified_launcher.py 挂载 core/api_routes.py 作为唯一 API 入口。
+
+如需新增通用 API 端点，请在 core/routes/ 子模块中添加，
+而不是在此文件中添加。
 """
 
 import asyncio

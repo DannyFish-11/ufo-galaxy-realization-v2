@@ -12,6 +12,9 @@ import pytest
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+pytest.importorskip("sklearn")
+
+
 def test_core_modules():
     """测试核心模块导入和实例化"""
     print("=" * 60)

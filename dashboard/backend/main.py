@@ -8,6 +8,18 @@ Galaxy Dashboard 后端
 - nodes/common/mcp_adapter.py
 
 版本: v2.3.23
+
+重要架构说明：
+  core/api_routes.py 是 Galaxy 的 **唯一权威 REST API 定义**。
+  本文件中的 /api/v1/* 路由是历史遗留实现，在统一部署模式下
+  会被 unified_launcher.py 挂载的 core/api_routes.py 覆盖。
+
+  新增 API 端点请在 core/routes/ 子模块中添加，不要在此文件中添加。
+
+  本模块的长期角色：
+  - 静态文件服务（Dashboard 前端）
+  - Dashboard 专属 UI 路由（如 /api/v1/dashboard/chat）
+  - 作为 unified_launcher 的 base app 提供 CORS + 中间件配置
 """
 
 import os

@@ -352,9 +352,10 @@ class OpenCodeEngine:
         # 添加温度参数
         command_parts.append(f"-t {self.config.temperature}")
         
-        # 添加提示
-        command_parts.append(f"-p '{prompt}'")
-        
+        # 添加提示 — use shlex.quote to prevent shell injection
+        import shlex
+        command_parts.append(f"-p {shlex.quote(prompt)}")
+
         return " ".join(command_parts)
     
     def _validate_code(
