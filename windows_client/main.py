@@ -18,10 +18,11 @@ if sys.platform == 'win32':
 
 import logging
 import json
+import time
 import urllib.request
 import urllib.error
 import threading
-from typing import Dict, Any, Optional
+from typing import Callable, Dict, Any, Optional
 
 
 def _preflight_checks() -> bool:
@@ -180,7 +181,7 @@ class StatusPoller(threading.Thread):
     def __init__(
         self,
         api_base: str,
-        on_event: "Optional[Any]" = None,
+        on_event: Optional[Callable[[str, dict], None]] = None,
         poll_interval: float = 30.0,
     ):
         super().__init__(name="GalaxyStatusPoller", daemon=True)
@@ -254,16 +255,15 @@ class StatusPoller(threading.Thread):
     def run(self) -> None:
         logger.info("StatusPoller: 启动（api_base=%s）", self._api_base)
         sse_retry_after = 0.0  # 秒级时间戳：下次尝试 SSE 的时间
-        import time as _time
         while not self._stop_event.is_set():
-            now = _time.monotonic()
+            now = time.monotonic()
             if now >= sse_retry_after:
                 # 尝试 SSE 长连接
                 stopped = self._try_sse()
                 if stopped:
                     break
                 # SSE 失败 → 稍后重试，期间使用轮询
-                sse_retry_after = _time.monotonic() + 60.0
+                sse_retry_after = time.monotonic() + 60.0
                 logger.debug("StatusPoller: SSE 不可用，切换到轮询模式（60s 后重试 SSE）")
 
             # REST 轮询（SSE 不可用时的降级）

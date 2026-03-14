@@ -161,6 +161,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # disconnects, the generator exits cleanly without raising.
     # -----------------------------------------------------------------------
 
+    # Keep-alive interval (seconds) — also used by StatusPoller in windows_client.
+    # Both must stay in sync; see windows_client/main.py StatusPoller.run().
+    _SSE_KEEPALIVE_SECS = 30.0
+
     @router.get("/api/v1/stream")
     async def sse_stream(request: Request):
         """SSE 实时事件流 — 推送 capability_update / device_update / agent_update / mcp_update / skill_update。
@@ -173,7 +177,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
               console.log(event.type, event.data);
             };
 
-        每 30 秒发送一次 ``{"type":"heartbeat"}`` keep-alive 注释，防止连接超时。
+        每 30 秒发送一次 keep-alive 注释，防止连接超时。
         """
         queue: asyncio.Queue = asyncio.Queue(maxsize=128)
 
@@ -195,7 +199,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                     if await request.is_disconnected():
                         break
                     try:
-                        payload = await asyncio.wait_for(queue.get(), timeout=30.0)
+                        payload = await asyncio.wait_for(queue.get(), timeout=_SSE_KEEPALIVE_SECS)
                         yield f"data: {json.dumps(payload)}\n\n"
                     except asyncio.TimeoutError:
                         # Send keep-alive comment

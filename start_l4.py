@@ -64,8 +64,8 @@ def main():
     try:
         from core.ascii_art import print_banner
         print_banner()
-    except Exception:
-        pass
+    except Exception as _banner_err:
+        _dep_logger.debug("print_banner 不可用，跳过横幅显示: %s", _banner_err)
 
     print()
     print("═" * 60)

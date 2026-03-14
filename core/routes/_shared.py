@@ -277,6 +277,12 @@ command_results_lock = asyncio.Lock()
 # ============================================================================
 # SSE subscriber queues — each connected /api/v1/stream client owns one queue.
 # broadcast_event() enqueues the payload for every active subscriber.
+#
+# Note: asyncio.Lock() is created at module import time. In Python ≥ 3.10 this
+# is safe even before an event loop is running; the lock binds to the running
+# loop lazily on first await. In Python 3.9 the lock binds at construction, so
+# this file should be imported after the event loop has started (which is the
+# normal case for FastAPI apps).
 _sse_queues: Set[asyncio.Queue] = set()
 _sse_queues_lock = asyncio.Lock()
 
@@ -314,8 +320,10 @@ async def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
                 try:
                     q.put_nowait(payload)
                 except asyncio.QueueFull:
-                    # Subscriber is too slow — drop the event rather than block
-                    logger.debug("broadcast_event SSE queue full, dropping event for slow subscriber")
+                    # Subscriber is too slow — mark stale so it is removed to
+                    # prevent unbounded QueueFull exceptions on every broadcast.
+                    logger.debug("broadcast_event SSE queue full, removing slow subscriber")
+                    stale.append(q)
                 except Exception as exc:
                     logger.debug("broadcast_event SSE enqueue failed: %s", exc)
                     stale.append(q)

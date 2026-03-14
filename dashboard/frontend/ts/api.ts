@@ -301,8 +301,8 @@ export class GalaxyAPI {
       es.onerror = () => {
         if (!closed) {
           es.close();
-          // Retry after 10 seconds on error
-          setTimeout(connect, 10_000);
+          // Retry after 5 seconds on error (consistent with WebSocket reconnect delay)
+          setTimeout(connect, 5_000);
         }
       };
     };
