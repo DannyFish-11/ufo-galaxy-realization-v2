@@ -688,6 +688,22 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"健康检查整合层启动失败: {e}")
 
     # ====================================================================
+    # 15b. MCP Bridge（外部语言 MCP 服务器桥接）
+    # ====================================================================
+    try:
+        from mcp_bridge.bridge import MCPBridgeLoader
+        mcp_bridge = MCPBridgeLoader.get_instance()
+        # Bridge loader is ready; actual servers are loaded on-demand or via config.
+        # Log availability so operators know the bridge subsystem is active.
+        results["mcp_bridge"] = {"status": "ok", "servers": len(mcp_bridge.list_servers())}
+        logger.info("MCP Bridge started successfully")
+    except ImportError:
+        logger.debug("mcp_bridge package not available — skipping")
+    except Exception as e:
+        results["mcp_bridge"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"MCP Bridge startup failed (non-fatal): {e}")
+
+    # ====================================================================
     # 16. Galaxy Gateway 挂载（作为子应用）
     # ====================================================================
     try:

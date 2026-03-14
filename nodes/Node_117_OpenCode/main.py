@@ -284,9 +284,19 @@ class OpenCodeEngine:
         
         return execution
     
+    _SHELL_INJECTION_CHARS = ["&&", "||", ";", "|", "`", "$(", "${", "\n", "\r"]
+
     async def _run_process(self, command: str, working_dir: str,
                            timeout: int = 30, stdin: str = None) -> Dict[str, Any]:
-        """运行进程"""
+        """运行进程 — 拒绝包含 shell 注入元字符的命令"""
+        for pattern in self._SHELL_INJECTION_CHARS:
+            if pattern in command:
+                return {
+                    "stdout": "",
+                    "stderr": f"Command blocked: contains disallowed shell metacharacter '{pattern}'",
+                    "exit_code": -1,
+                    "timeout": False,
+                }
         try:
             process = await asyncio.create_subprocess_shell(
                 command,

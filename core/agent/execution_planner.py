@@ -37,6 +37,35 @@ except ImportError:
 
 logger = logging.getLogger("Galaxy.Agent.ExecutionPlanner")
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TaskDecomposer helper for multi-device task paths
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _try_decompose_task(message: str, targets: list, context: dict) -> list:
+    """Attempt to decompose a multi-target task into subtasks via TaskDecomposer.
+    Falls back to broadcasting the original message to all targets."""
+    if len(targets) <= 1:
+        return [{"target": targets[0] if targets else None, "message": message}]
+    try:
+        from galaxy_gateway.task_decomposer import TaskDecomposer
+        decomposer = TaskDecomposer(device_registry=None)
+        # Use decompose_multi_device_command for multi-target tasks
+        commands = [
+            {"device_id": t, "action": "execute", "target": message}
+            for t in targets
+        ]
+        tasks, _data_flows = decomposer.decompose_multi_device_command(commands)
+        if tasks:
+            return [
+                {"target": task.device_id, "message": getattr(task, "target", message) or message}
+                for task in tasks
+            ]
+    except Exception as e:
+        logging.getLogger("Galaxy.ExecutionPlanner").debug(f"TaskDecomposer unavailable: {e}")
+    return [{"target": t, "message": message} for t in targets]
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 数据模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -650,6 +679,20 @@ class ExecutionPlanner:
                 agent_factory=factory,
                 llm_router=self._llm_router,
             )
+
+            # If the plan targets multiple devices, attempt task decomposition
+            _plan_targets = getattr(plan, "device_id", None)
+            if isinstance(_plan_targets, list) and len(_plan_targets) > 1:
+                try:
+                    decomposed = await _try_decompose_task(
+                        plan.message, _plan_targets, {"session_id": plan.session_id}
+                    )
+                    logger.info(
+                        "TaskDecomposer: decomposed into %d subtasks for %d targets",
+                        len(decomposed), len(_plan_targets),
+                    )
+                except Exception as _dec_err:
+                    logger.debug("TaskDecomposer decomposition skipped: %s", _dec_err)
 
             team_strategy = "swarm" if strategy == "swarm" else "specialized"
             complexity = _estimate_complexity(plan.message)

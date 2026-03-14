@@ -54,12 +54,23 @@ async def handle_aip_message(ws, message: str, server_http_url: str = None):
             print(f"   Executing command: {command} with params: {params} (id={command_id})")
 
             if command == "execute_script":
-                script_path = params.get("script_path")
+                script_path = params.get("script_path", "")
+                # Security: validate script_path — block shell metacharacters
+                _DANGEROUS = ["&&", "||", ";", "|", "`", "$(", "${", "\n", "\r"]
+                if not script_path or any(p in script_path for p in _DANGEROUS):
+                    details = f"Script path blocked for security: {script_path!r}"
+                    status = "failure"
+                    result_payload = {"command": command, "status": status, "details": details}
+                    if command_id:
+                        result_payload["command_id"] = command_id
+                    await send_aip_message(ws, "command_result", result_payload)
+                    continue
                 print(f"   [Windows Action] Running script: {script_path}")
                 import subprocess
+                import shlex
                 try:
                     proc = subprocess.run(
-                        script_path, shell=True, capture_output=True, text=True, timeout=30
+                        shlex.split(script_path), shell=False, capture_output=True, text=True, timeout=30
                     )
                     details = proc.stdout[:500] if proc.returncode == 0 else proc.stderr[:500]
                     status = "success" if proc.returncode == 0 else "failure"

@@ -263,6 +263,19 @@ class NATSBus:
     async def _publish(self, subject: str, data: dict) -> dict:
         """Serialize and publish a message to NATS JetStream."""
         if self._noop:
+            # Bridge to in-process EventBus so subscribers still receive messages
+            try:
+                from integration.event_bus import EventBus, EventType
+                bus = EventBus()
+                # Use a generic event type; include NATS subject for routing
+                et = getattr(EventType, "NATS_FALLBACK", None) or EventType.COMMAND_DISPATCHED
+                bus.publish_sync(
+                    et,
+                    source="nats_bus",
+                    data={"subject": subject, "payload": data},
+                )
+            except Exception:
+                pass
             return {"success": True, "noop": True}
         if not self._connected or self._js is None:
             return {"success": False, "error": "Not connected to NATS"}

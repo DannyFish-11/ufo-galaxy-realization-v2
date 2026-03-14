@@ -202,11 +202,38 @@ class SymbolicEngine:
             # Replace ^ with **
             expr = expr.replace('^', '**')
             
-            # Safe evaluation (very limited) — pre-validate expression chars
-            if not re.match(r'^[\d\s\+\-\*/\.\(\)\,\*abs\minmax]+$', expr):
-                return None
-            allowed_names = {"abs": abs, "min": min, "max": max}
-            result = eval(expr, {"__builtins__": {}}, allowed_names)  # noqa: S307
+            # Safe evaluation via AST — only allow numbers, unary ops,
+            # binary arithmetic, and whitelisted callables.
+            import ast as _ast
+
+            _SAFE_FUNCS = {"abs": abs, "min": min, "max": max}
+
+            def _safe_eval_node(node):
+                if isinstance(node, _ast.Expression):
+                    return _safe_eval_node(node.body)
+                if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+                    return node.value
+                if isinstance(node, _ast.UnaryOp) and isinstance(node.op, (_ast.UAdd, _ast.USub)):
+                    return (+1 if isinstance(node.op, _ast.UAdd) else -1) * _safe_eval_node(node.operand)
+                if isinstance(node, _ast.BinOp):
+                    l, r = _safe_eval_node(node.left), _safe_eval_node(node.right)
+                    ops = {_ast.Add: lambda a, b: a + b, _ast.Sub: lambda a, b: a - b,
+                           _ast.Mult: lambda a, b: a * b, _ast.Div: lambda a, b: a / b,
+                           _ast.Pow: lambda a, b: a ** b, _ast.Mod: lambda a, b: a % b}
+                    op_fn = ops.get(type(node.op))
+                    if op_fn is None:
+                        raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+                    return op_fn(l, r)
+                if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
+                    fn = _SAFE_FUNCS.get(node.func.id)
+                    if fn is None:
+                        raise ValueError(f"Disallowed function: {node.func.id}")
+                    args = [_safe_eval_node(a) for a in node.args]
+                    return fn(*args)
+                raise ValueError(f"Disallowed AST node: {type(node).__name__}")
+
+            tree = _ast.parse(expr, mode="eval")
+            result = _safe_eval_node(tree)
             return float(result)
         except Exception:
             return None

@@ -37,7 +37,7 @@ Usage::
 
 import json
 import logging
-from typing import Union
+from typing import Optional, Union
 
 from .aip_v3 import AIPMessage, MessageType, parse_message
 
@@ -117,6 +117,48 @@ def _normalise_v2(data: dict) -> dict:
     normalised["version"] = "3.0"
     normalised.setdefault("device_id", "unknown")
     return normalised
+
+
+def aip_v2_binary_to_v3(raw_bytes: bytes) -> Optional[dict]:
+    """Convert AIP v2.0 binary-encoded message to v3 JSON dict.
+
+    Uses :class:`enhancements.multidevice.device_protocol.AIPMessage` which
+    extends the v3 Pydantic ``AIPMessage`` with legacy ``from_bytes()`` binary
+    deserialization.  The v2 wire format is:
+
+        Header(16 bytes): magic(4) + version(2) + msg_type(2) + payload_len(4) + seq(4)
+        Payload:          JSON-encoded body
+        Footer(8 bytes):  crc32(4) + reserved(4)
+
+    Returns ``None`` if the bytes don't match AIP v2.0 format.
+    """
+    try:
+        from enhancements.multidevice.device_protocol import (
+            AIPMessage as V2BinaryMessage,
+            _V2_TO_V3_MSG_TYPE,
+        )
+
+        v2_msg = V2BinaryMessage.from_bytes(raw_bytes)
+
+        # v2_msg is already a Pydantic AIPMessage; extract v3 JSON dict
+        v3_type_str = v2_msg.type.value if hasattr(v2_msg.type, "value") else str(v2_msg.type)
+        timestamp = v2_msg.timestamp
+        if hasattr(timestamp, "isoformat"):
+            timestamp = timestamp.isoformat()
+        else:
+            timestamp = str(timestamp)
+
+        return {
+            "version": "3.0",
+            "type": v3_type_str,
+            "device_id": v2_msg.device_id,
+            "payload": v2_msg.payload,
+            "timestamp": timestamp,
+            "message_id": v2_msg.message_id,
+            "correlation_id": v2_msg.correlation_id,
+        }
+    except Exception:
+        return None
 
 
 def parse_message_compat(data: Union[str, dict]) -> AIPMessage:

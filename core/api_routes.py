@@ -120,22 +120,29 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
     router = APIRouter()
 
+    # Auth dependency for sensitive route groups.
+    # require_auth internally checks is_auth_enabled(), so non-auth deployments are unaffected.
+    _auth_deps = [Depends(require_auth)]
+
     # 按原始顺序 include 各子路由，确保行为与重构前完全一致
-    router.include_router(system.create_router(service_manager=service_manager, config=config))
+    # Sensitive routes: auth required
+    router.include_router(system.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(nodes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(tasks.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(cmd_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(relay.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(vault.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(federation.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+
+    # Exempt routes: no auth required (health, docs, observability, device registration)
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
-    router.include_router(nodes.create_router(service_manager=service_manager, config=config))
     router.include_router(vision.create_router(service_manager=service_manager, config=config))
-    router.include_router(tasks.create_router(service_manager=service_manager, config=config))
-    router.include_router(cmd_routes.create_router(service_manager=service_manager, config=config))
     router.include_router(chat.create_router(service_manager=service_manager, config=config))
     router.include_router(ai.create_router(service_manager=service_manager, config=config))
     router.include_router(monitoring.create_router(service_manager=service_manager, config=config))
-    router.include_router(relay.create_router(service_manager=service_manager, config=config))
     router.include_router(hybrid.create_router(service_manager=service_manager, config=config))
-    router.include_router(vault.create_router(service_manager=service_manager, config=config))
     router.include_router(cost.create_router(service_manager=service_manager, config=config))
     router.include_router(channels.create_router(service_manager=service_manager, config=config))
-    router.include_router(federation.create_router(service_manager=service_manager, config=config))
     router.include_router(compat.create_router(service_manager=service_manager, config=config))
     router.include_router(twin.create_router(service_manager=service_manager, config=config))
     router.include_router(sessions.create_router(service_manager=service_manager, config=config))
