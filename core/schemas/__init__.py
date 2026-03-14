@@ -10,6 +10,14 @@ platform.  Import from this package for convenience::
     from core.schemas import DeviceRegisterSchema, AgentCreateSchema
 """
 
+# -- TaskEnvelope (canonical Agent-Bus schema) --------------------------------
+from core.schemas.task_envelope import (
+    TaskEnvelope,
+    envelope_from_command_request,
+    envelope_from_relay_request,
+    envelope_from_mcp_call,
+)
+
 # -- Device schemas ----------------------------------------------------------
 from core.schemas.device import (
     DeviceModel,
@@ -133,6 +141,11 @@ from core.schemas.contracts import (
 )
 
 __all__ = [
+    # task envelope (canonical Agent-Bus schema)
+    "TaskEnvelope",
+    "envelope_from_command_request",
+    "envelope_from_relay_request",
+    "envelope_from_mcp_call",
     # device (unified models)
     "DeviceModel",
     "DeviceCapabilityModel",

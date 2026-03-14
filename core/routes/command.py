@@ -32,6 +32,7 @@ from core.routes._models import (
     TargetResult,
     UnifiedCommandRequest,
 )
+from core.schemas.task_envelope import envelope_from_command_request
 
 try:
     from core.auth import require_auth
@@ -109,7 +110,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         request_id = req.request_id or str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
 
-        logger.info(f"收到统一命令: request_id={request_id}, command={req.command}, targets={req.targets}, mode={req.mode}")
+        # Build a TaskEnvelope for consistent trace_id propagation
+        envelope = envelope_from_command_request(
+            command=req.command,
+            targets=req.targets,
+            params=req.params,
+            source="api",
+            mode=req.mode,
+            timeout=float(req.timeout),
+            request_id=request_id,
+        )
+
+        logger.info(
+            "收到统一命令: trace_id=%s task_id=%s command=%s targets=%s mode=%s",
+            envelope.trace_id, envelope.task_id, req.command, req.targets, req.mode,
+        )
 
         if req.mode not in ["sync", "async"]:
             raise HTTPException(status_code=400, detail="Invalid mode. Must be 'sync' or 'async'")
@@ -351,9 +366,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         request_id = req.request_id or str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
 
+        # Build a TaskEnvelope for consistent trace_id propagation
+        envelope = envelope_from_command_request(
+            command=req.command,
+            targets=req.targets,
+            params=req.params,
+            source="api",
+            mode=req.mode,
+            timeout=float(req.timeout),
+            request_id=request_id,
+        )
+
         logger.info(
-            "收到命令: request_id=%s command=%s targets=%s mode=%s",
-            request_id, req.command, req.targets, req.mode,
+            "收到命令: trace_id=%s task_id=%s command=%s targets=%s mode=%s",
+            envelope.trace_id, envelope.task_id, req.command, req.targets, req.mode,
         )
 
         command_results[request_id] = {

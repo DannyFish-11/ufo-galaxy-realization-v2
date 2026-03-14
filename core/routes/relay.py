@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core.routes._shared import connection_manager
+from core.schemas.task_envelope import envelope_from_relay_request
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -50,6 +51,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         流程: source_device → Server(中继) → target_device
         如果 expect_reply=true, 服务端等待 target 回复后返回。
         """
+        # Build TaskEnvelope for unified trace_id logging
+        envelope = envelope_from_relay_request(
+            source_device=req.source_device,
+            target_device=req.target_device,
+            payload_type=req.payload_type,
+            payload=req.payload,
+            timeout_seconds=req.timeout_seconds,
+            chain=req.chain,
+            metadata={"expect_reply": req.expect_reply},
+        )
+        logger.info(
+            "relay_send: trace_id=%s task_id=%s %s → %s [%s]",
+            envelope.trace_id, envelope.task_id,
+            req.source_device, req.target_device, req.payload_type,
+        )
+
         relay_req = ProxyRelayRequest(
             source_device=req.source_device,
             target_device=req.target_device,
