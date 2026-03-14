@@ -161,6 +161,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(approvals_routes.create_router())
     except Exception:
         pass
+    # Control Plane Phase 4: security policy routes
+    try:
+        from core.routes import security_policy as security_policy_routes
+        router.include_router(security_policy_routes.create_router())
+    except Exception:
+        pass
 
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream

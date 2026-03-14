@@ -456,3 +456,74 @@ class SecurityInterceptor:
             resolved_by="system:bypass",
         )
         return request.ack_token
+
+    async def check_and_intercept(
+        self,
+        action: str,
+        *,
+        tool: str = "",
+        task_id: Optional[str] = None,
+        requestor: str = "",
+        context: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Evaluate *action* / *tool* against the security policy and gate if needed.
+
+        This is the **preferred Phase 4 entry point**.  It:
+          1. Calls :func:`core.routes.security_policy.evaluate_policy` to
+             determine the ``RiskLevel`` and whether HITL is required.
+          2. If ``require_hitl`` is ``True``, calls :meth:`require_approval`
+             and waits for operator ACK.
+          3. If ``require_hitl`` is ``False``, calls :meth:`bypass` to
+             auto-approve.
+
+        Returns
+        -------
+        dict
+            ``{"risk_level": str, "require_hitl": bool, "ack_token": str,
+               "approved": bool}``
+
+        Raises
+        ------
+        ApprovalDeniedError, ApprovalTimeoutError
+            Propagated from :meth:`require_approval` when HITL is needed and
+            the operator denies or the timeout elapses.
+        """
+        try:
+            from core.routes.security_policy import evaluate_policy
+            evaluation = evaluate_policy(action=action, tool=tool)
+        except Exception:
+            evaluation = {"risk_level": "high", "require_hitl": True, "matched_rule": None}
+
+        risk_str: str = evaluation.get("risk_level", "medium")
+        require_hitl: bool = evaluation.get("require_hitl", False)
+
+        try:
+            risk_level = RiskLevel(risk_str)
+        except ValueError:
+            risk_level = RiskLevel.MEDIUM
+
+        if require_hitl:
+            ack_token = await self.require_approval(
+                action=action,
+                task_id=task_id,
+                risk_level=risk_level,
+                requestor=requestor,
+                context={**(context or {}), "tool": tool, "matched_rule": evaluation.get("matched_rule")},
+                timeout=timeout,
+            )
+        else:
+            ack_token = await self.bypass(
+                action=action,
+                task_id=task_id,
+                risk_level=risk_level,
+                requestor=requestor or "policy:auto-approve",
+                context=context,
+            )
+
+        return {
+            "risk_level": risk_str,
+            "require_hitl": require_hitl,
+            "ack_token": ack_token,
+            "approved": True,
+        }
