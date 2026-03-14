@@ -51,6 +51,56 @@ class C:
     GLOW      = "rgba(255,255,255,0.06)"
 
 
+def _compute_sidebar_responsive_sizes(screen_w: int, screen_h: int) -> dict:
+    """Compute adaptive sizes for the calligraphy-scroll sidebar.
+
+    Breakpoints (width):
+      < 1280 px  → compact desktop
+      1280–1920  → standard baseline
+      > 1920 px  → large / high-DPI desktop
+
+    Width ratios chosen so the sidebar feels proportional to the screen:
+      compact  – 0.38 of screen width (≈ one-third, fitting a laptop display)
+      standard – fixed 420 px (original calligraphy-scroll design baseline)
+      large    – 0.26 of screen width keeps a comfortable ~74 % visible behind
+    """
+    if screen_w < 1280:
+        # ~38 % of screen width – fits comfortably on compact / laptop displays
+        sidebar_w   = max(300, int(screen_w * 0.38))
+        font_title  = 11
+        font_base   = 11
+        font_small  = 10
+        title_h, mode_h, shortcut_h = 40, 32, 42
+        padding     = 10
+    elif screen_w <= 1920:
+        sidebar_w   = 420
+        font_title  = 13
+        font_base   = 12
+        font_small  = 11
+        title_h, mode_h, shortcut_h = 44, 36, 46
+        padding     = 12
+    else:
+        # ~26 % of screen width – scales up slightly while leaving most of the
+        # desktop visible on ultra-wide / 4 K displays
+        sidebar_w   = min(500, int(screen_w * 0.26))
+        font_title  = 14
+        font_base   = 13
+        font_small  = 11
+        title_h, mode_h, shortcut_h = 48, 40, 50
+        padding     = 16
+
+    return {
+        "sidebar_w":   sidebar_w,
+        "font_title":  font_title,
+        "font_base":   font_base,
+        "font_small":  font_small,
+        "title_h":     title_h,
+        "mode_h":      mode_h,
+        "shortcut_h":  shortcut_h,
+        "padding":     padding,
+    }
+
+
 # ═══════════════════════════════════════════════
 #  光场绘制组件 — OPPO Light Field
 # ═══════════════════════════════════════════════
@@ -398,6 +448,21 @@ class SidebarUI(QWidget):
         self._screen_w = screen.width()
         self._screen_h = screen.height()
 
+        # ── Compute responsive layout sizes for this screen ────────────────
+        _rs = _compute_sidebar_responsive_sizes(self._screen_w, self._screen_h)
+        self.SIDEBAR_W        = _rs["sidebar_w"]   # override class default
+        self._resp_font_title = _rs["font_title"]
+        self._resp_font_base  = _rs["font_base"]
+        self._resp_font_small = _rs["font_small"]
+        self._resp_title_h    = _rs["title_h"]
+        self._resp_mode_h     = _rs["mode_h"]
+        self._resp_shortcut_h = _rs["shortcut_h"]
+        self._resp_padding    = _rs["padding"]
+        logger.debug(
+            "SidebarUI responsive: sidebar_w=%d font_base=%d",
+            self.SIDEBAR_W, self._resp_font_base,
+        )
+
         # 初始: 屏幕右侧外, 宽度 0, 居中一小条
         mid_y = self._screen_h // 2 - 50
         self.setGeometry(self._screen_w, mid_y, 0, 100)
@@ -442,17 +507,19 @@ class SidebarUI(QWidget):
 
     def _build_title_bar(self):
         bar = QWidget()
-        bar.setFixedHeight(44)
+        bar.setFixedHeight(self._resp_title_h)
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(14, 0, 10, 0)
+        lay.setContentsMargins(self._resp_padding, 0, 10, 0)
 
         title = QLabel("UFO³ Galaxy")
-        title.setFont(QFont("Consolas", 13, QFont.Bold))
+        title.setFont(QFont("Consolas", self._resp_font_title, QFont.Bold))
         lay.addWidget(title)
         lay.addStretch()
 
         self.status_label = QLabel("● 在线")
-        self.status_label.setStyleSheet(f"color: #4ade80; font-size: 11px; background: transparent;")
+        self.status_label.setStyleSheet(
+            f"color: #4ade80; font-size: {self._resp_font_small}px; background: transparent;"
+        )
         lay.addWidget(self.status_label)
 
         close_btn = QPushButton("×")
@@ -468,9 +535,9 @@ class SidebarUI(QWidget):
 
     def _build_mode_bar(self):
         bar = QWidget()
-        bar.setFixedHeight(36)
+        bar.setFixedHeight(self._resp_mode_h)
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(10, 0, 10, 4)
+        lay.setContentsMargins(self._resp_padding - 2, 0, self._resp_padding - 2, 4)
         lay.setSpacing(4)
 
         self.mode_btns = []
@@ -484,7 +551,8 @@ class SidebarUI(QWidget):
                 QPushButton {{
                     background: transparent; border: 1px solid transparent;
                     border-radius: 12px; padding: 3px 10px;
-                    color: {C.TEXT_SEC}; font-family: 'Consolas', monospace; font-size: 11px;
+                    color: {C.TEXT_SEC}; font-family: 'Consolas', monospace;
+                    font-size: {self._resp_font_small}px;
                 }}
                 QPushButton:hover {{ color: {C.TEXT}; background: {C.GLOW}; }}
                 QPushButton:checked {{
@@ -500,9 +568,9 @@ class SidebarUI(QWidget):
 
     def _build_shortcuts(self):
         bar = QWidget()
-        bar.setFixedHeight(46)
+        bar.setFixedHeight(self._resp_shortcut_h)
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(10, 4, 10, 8)
+        lay.setContentsMargins(self._resp_padding - 2, 4, self._resp_padding - 2, 8)
         lay.setSpacing(6)
 
         for label, action in [("截图", "截图"), ("剪贴板", "查看剪贴板"), ("任务", "查看任务列表")]:
@@ -511,7 +579,8 @@ class SidebarUI(QWidget):
                 QPushButton {{
                     background: {C.BG_CARD}; border: 1px solid {C.BORDER};
                     border-radius: 8px; padding: 5px 12px;
-                    color: {C.TEXT_SEC}; font-family: 'Consolas', monospace; font-size: 10px;
+                    color: {C.TEXT_SEC}; font-family: 'Consolas', monospace;
+                    font-size: {self._resp_font_small}px;
                 }}
                 QPushButton:hover {{ border-color: {C.BORDER_HI}; color: {C.TEXT}; }}
                 QPushButton:pressed {{ background: {C.ACCENT}; color: {C.BG_DEEP}; }}
