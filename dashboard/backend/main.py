@@ -166,8 +166,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Galaxy")
 
-# 打印规范 Galaxy 横幅
-_print_banner()
+# 打印规范 Galaxy 横幅（若已由 unified_launcher 打印，则跳过）
+if not os.environ.get("GALAXY_BANNER_PRINTED"):
+    _print_banner()
 
 # ============================================================================
 # P2: Device Trace Store — lightweight in-process store backed by JSON file
@@ -378,7 +379,8 @@ from contextlib import asynccontextmanager
 async def _lifespan(app):
     # startup
     logger.info("=" * 60)
-    _print_banner()
+    if not os.environ.get("GALAXY_BANNER_PRINTED"):
+        _print_banner()
     logger.info("Galaxy Dashboard v2.3.23")
     logger.info("=" * 60)
     if NODE_PROTOCOL_AVAILABLE:

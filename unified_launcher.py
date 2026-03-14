@@ -1063,6 +1063,8 @@ class GalaxyUnified:
     async def start(self):
         """启动系统"""
         print_banner()
+        # 标记横幅已打印，防止子进程/模块重复打印
+        os.environ["GALAXY_BANNER_PRINTED"] = "1"
         
         # 1. 加载配置
         print_section("配置检查")
@@ -1367,6 +1369,7 @@ def main():
     python unified_launcher.py --minimal    # 最小启动
     python unified_launcher.py --no-l4      # 不启动 L4 模块
     python unified_launcher.py --status     # 查看状态
+    python unified_launcher.py --docker-full # 通过 Docker Compose 启动全量节点（130 个）
         """
     )
     parser.add_argument("--minimal", "-m", action="store_true", help="最小启动模式")
@@ -1377,9 +1380,72 @@ def main():
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
     parser.add_argument("--port", "-p", type=int, default=8299, help="Web UI 端口")
+    parser.add_argument(
+        "--docker-full",
+        action="store_true",
+        help="通过 Docker Compose 启动完整节点集（130 个节点 + 基础设施），等效于: "
+             "docker compose -f docker-compose.full.yml --profile full up -d",
+    )
     
     args = parser.parse_args()
-    
+
+    # ── --docker-full: 通过 Docker Compose 启动全量节点 ──────────────────
+    if args.docker_full:
+        print_banner()
+        os.environ["GALAXY_BANNER_PRINTED"] = "1"
+        print_section("Docker 全量节点启动 (--docker-full)")
+        compose_file = PROJECT_ROOT / "docker-compose.full.yml"
+        if not compose_file.exists():
+            print_status_row(
+                "docker-compose.full.yml",
+                "文件不存在，请确认仓库完整",
+                "error",
+            )
+            sys.exit(1)
+        # 检测 docker/docker compose 是否可用
+        _docker_available = False
+        try:
+            _result = subprocess.run(
+                ["docker", "compose", "version"],
+                capture_output=True, text=True
+            )
+            _docker_available = _result.returncode == 0
+        except FileNotFoundError:
+            pass
+        if not _docker_available:
+            print_status_row(
+                "Docker",
+                "未安装或未运行，请先安装 Docker Desktop / Docker Engine",
+                "error",
+            )
+            print_status_row(
+                "安装文档",
+                "https://docs.docker.com/get-docker/",
+                "info",
+            )
+            sys.exit(1)
+
+        cmd = [
+            "docker", "compose",
+            "-f", str(compose_file),
+            "--profile", "full",
+            "up", "-d",
+        ]
+        print_status_row("命令", " ".join(cmd), "step")
+        print_status_row("状态", "启动中，请稍候...", "loading")
+        try:
+            ret = subprocess.call(cmd)
+        except KeyboardInterrupt:
+            ret = 130
+        if ret == 0:
+            print_status_row("Docker 全量节点", "已在后台启动", "success")
+            print_status_row("查看状态", "docker compose -f docker-compose.full.yml --profile full ps", "info")
+            print_status_row("停止服务", "docker compose -f docker-compose.full.yml --profile full down", "info")
+        else:
+            print_status_row("Docker Compose", f"退出码 {ret}，请检查上方输出", "error")
+            sys.exit(ret)
+        return
+
     # 创建系统实例
     galaxy = GalaxyUnified()
     
