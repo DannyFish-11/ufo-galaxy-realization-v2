@@ -150,6 +150,11 @@ class PortConfig:
     def get_node_port(self, node_name: str) -> int:
         """获取节点端口号
 
+        端口来源优先级（高→低）：
+          1. 环境变量 ``GALAXY_PORT_<NODE_NAME>``（最高，运行时覆盖）
+          2. ``config/unified_ports.yaml``（统一事实来源）
+          3. 内置默认值
+
         Args:
             node_name: 节点名称，如 "Node_50_Transformer" 或 "Node_50"
 
@@ -159,7 +164,16 @@ class PortConfig:
         Raises:
             KeyError: 节点未找到
         """
-        # 精确匹配
+        # 1. 环境变量最高优先级
+        env_key = f"GALAXY_PORT_{node_name.upper()}"
+        env_val = os.environ.get(env_key)
+        if env_val is not None:
+            try:
+                return int(env_val)
+            except ValueError:
+                logger.warning("环境变量 %s 的值不是合法端口号: %s", env_key, env_val)
+
+        # 2. YAML 配置文件 / 默认值（精确匹配）
         if node_name in self._node_ports:
             return self._node_ports[node_name]
 
@@ -168,15 +182,6 @@ class PortConfig:
             if key.startswith(node_name + "_") or key == node_name:
                 return port
 
-        # 也检查环境变量覆盖
-        env_key = f"GALAXY_PORT_{node_name.upper()}"
-        env_val = os.environ.get(env_key)
-        if env_val is not None:
-            try:
-                return int(env_val)
-            except ValueError:
-                pass
-
         raise KeyError(
             f"节点 '{node_name}' 端口未配置。"
             f"请检查 config/unified_ports.yaml 或设置环境变量 {env_key}"
@@ -184,6 +189,11 @@ class PortConfig:
 
     def get_service_port(self, service_name: str) -> int:
         """获取基础设施服务端口号
+
+        端口来源优先级（高→低）：
+          1. 环境变量 ``GALAXY_<SERVICE>_PORT``（最高，运行时覆盖）
+          2. ``config/unified_ports.yaml``（统一事实来源）
+          3. 内置默认值 ``_DEFAULT_INFRASTRUCTURE_PORTS``
 
         Args:
             service_name: 服务名称，如 "redis", "qdrant", "dashboard"
@@ -195,17 +205,19 @@ class PortConfig:
             KeyError: 服务未找到
         """
         key = service_name.lower()
-        if key in self._service_ports:
-            return self._service_ports[key]
 
-        # 环境变量覆盖
+        # 1. 环境变量最高优先级
         env_key = f"GALAXY_{key.upper()}_PORT"
         env_val = os.environ.get(env_key)
         if env_val is not None:
             try:
                 return int(env_val)
             except ValueError:
-                pass
+                logger.warning("环境变量 %s 的值不是合法端口号: %s", env_key, env_val)
+
+        # 2. YAML 配置文件 / 内置默认值
+        if key in self._service_ports:
+            return self._service_ports[key]
 
         raise KeyError(
             f"服务 '{service_name}' 端口未配置。"

@@ -40,11 +40,12 @@ def _build_openclawd_api_base() -> str:
     """Build the OpenClawd API base URL from configuration or environment.
 
     Priority order (first match wins, keeps backward compatibility):
-      1. GALAXY_API_BASE env var  — full override (e.g. http://10.0.0.5:9000)
+      1. GALAXY_API_BASE env var      — full override (e.g. http://10.0.0.5:9000)
       2. OPENCLAWD_HOST + OPENCLAWD_PORT env vars — per-component override
-      3. API_PORT env var — matches the server's own API_PORT setting
-      4. unified_config.web_ui_port — sourced from config.json / .env
-      5. Hard-coded default 8099 — unchanged from original behavior
+      3. API_PORT env var             — matches the server's own API_PORT setting
+      4. unified_config.web_ui_port   — sourced from config.json / .env
+      5. runtime/entrypoint.json      — written by unified_launcher on startup
+      6. Hard-coded default 8099      — unchanged from original behavior
     """
     # 1. Full override
     full = os.environ.get("GALAXY_API_BASE", "").strip()
@@ -73,7 +74,21 @@ def _build_openclawd_api_base() -> str:
     except Exception:
         pass
 
-    # 5. Default (backward compatible)
+    # 5. runtime/entrypoint.json — written by unified_launcher on startup
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        _root = _Path(__file__).resolve().parent.parent.parent
+        _ep = _root / "runtime" / "entrypoint.json"
+        if _ep.exists():
+            _data = _json.loads(_ep.read_text(encoding="utf-8"))
+            _base = _data.get("api_base", "").strip()
+            if _base:
+                return _base.rstrip("/")
+    except Exception:
+        pass
+
+    # 6. Default (backward compatible)
     return "http://localhost:8099"
 
 

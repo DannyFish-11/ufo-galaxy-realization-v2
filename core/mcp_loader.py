@@ -228,6 +228,37 @@ class MCPLoader:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+
+    # ========================================================================
+    # 能力总线刷新（最佳努力）
+    # ========================================================================
+
+    async def _refresh_capability_registry(self, server_id: str, event: str) -> None:
+        """MCP 加载/卸载事件后，最佳努力刷新 CapabilityRegistry 并广播事件。
+
+        Args:
+            server_id: MCP 服务器 ID（仅用于日志）。
+            event: 触发场景描述，如 "load" 或 "unload"。
+        """
+        # 刷新能力总线
+        try:
+            from core.agent.capability_registry import get_capability_registry
+            reg = get_capability_registry()
+            await reg.refresh(force=True)
+            logger.info("CapabilityRegistry 已刷新（MCP %s: %s）", server_id, event)
+        except Exception as exc:
+            logger.debug("CapabilityRegistry 刷新失败（不影响运行）: %s", exc)
+
+        # 广播能力更新事件（最佳努力，事件总线不可用时静默降级）
+        try:
+            from integration.event_bus import event_bus, EventType
+            event_bus.publish_sync(
+                EventType.CAPABILITY_UPDATED,
+                "mcp_loader",
+                {"server_id": server_id, "event": event},
+            )
+        except Exception:
+            pass
     
     # ========================================================================
     # 加载/卸载
@@ -317,6 +348,14 @@ class MCPLoader:
 
         # 移除
         server = self.servers.pop(server_id)
+
+        # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
+        try:
+            asyncio.ensure_future(
+                self._refresh_capability_registry(server_id, "unload")
+            )
+        except Exception:
+            pass
         
         return {
             "success": True,
@@ -501,6 +540,14 @@ class MCPLoader:
 
             # 加载完成后自动注入能力总线
             self._inject_server_to_registry(server_id)
+
+            # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
+            try:
+                asyncio.ensure_future(
+                    self._refresh_capability_registry(server_id, "load")
+                )
+            except Exception:
+                pass
 
             return True
         

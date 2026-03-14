@@ -1,4 +1,5 @@
 {
+  "_comment_web_ui_port": "Legacy fallback: OpenClawd API server port. Authoritative port settings live in config/unified_ports.yaml (key: openclawd). Override at runtime via GALAXY_OPENCLAWD_PORT env var.",
   "web_ui_port": 8099,
   "log_level": "INFO",
   "default_llm_model": "gpt-4o",

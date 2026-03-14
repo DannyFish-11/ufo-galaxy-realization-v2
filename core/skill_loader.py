@@ -151,6 +151,37 @@ class SkillLoader:
         if cls._instance is None:
             cls._instance = SkillLoader()
         return cls._instance
+
+    # ========================================================================
+    # 能力总线刷新（最佳努力）
+    # ========================================================================
+
+    async def _refresh_capability_registry(self, skill_id: str, event: str) -> None:
+        """Skill 加载/卸载事件后，最佳努力刷新 CapabilityRegistry 并广播事件。
+
+        Args:
+            skill_id: Skill ID（仅用于日志）。
+            event: 触发场景描述，如 "load" 或 "unload"。
+        """
+        # 刷新能力总线
+        try:
+            from core.agent.capability_registry import get_capability_registry
+            reg = get_capability_registry()
+            await reg.refresh(force=True)
+            logger.info("CapabilityRegistry 已刷新（Skill %s: %s）", skill_id, event)
+        except Exception as exc:
+            logger.debug("CapabilityRegistry 刷新失败（不影响运行）: %s", exc)
+
+        # 广播能力更新事件（最佳努力，事件总线不可用时静默降级）
+        try:
+            from integration.event_bus import event_bus, EventType
+            event_bus.publish_sync(
+                EventType.CAPABILITY_UPDATED,
+                "skill_loader",
+                {"skill_id": skill_id, "event": event},
+            )
+        except Exception:
+            pass
     
     # ========================================================================
     # 加载/卸载
@@ -242,6 +273,13 @@ class SkillLoader:
             # 加载成功后自动注入能力总线（仅 LOADED 状态注入）
             if skill.status == SkillStatus.LOADED:
                 self._inject_skill_to_registry(skill_id)
+                # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
+                try:
+                    asyncio.ensure_future(
+                        self._refresh_capability_registry(skill_id, "load")
+                    )
+                except Exception:
+                    pass
             else:
                 logger.warning(
                     "技能 %s (%s) 状态为 ERROR（%s），跳过注入能力总线",
@@ -317,6 +355,14 @@ class SkillLoader:
             logger.debug("Skill 从能力总线移除失败: %s", exc)
         
         logger.info(f"卸载技能: {skill.name} ({skill_id})")
+
+        # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
+        try:
+            asyncio.ensure_future(
+                self._refresh_capability_registry(skill_id, "unload")
+            )
+        except Exception:
+            pass
         
         return {
             "success": True,

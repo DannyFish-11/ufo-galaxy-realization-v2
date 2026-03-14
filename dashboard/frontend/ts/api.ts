@@ -3,6 +3,12 @@
  * ============================
  * 
  * 类型安全的 API 调用
+ *
+ * API 基址解析优先级（高→低）：
+ *   1. window.__GALAXY_API_BASE__       — 由后端模板注入（最高优先级）
+ *   2. window.__GALAXY_CONFIG__.api_base — 由后端配置块注入
+ *   3. runtime/entrypoint.json 动态拉取  — 由 unified_launcher 写入
+ *   4. 硬编码默认值 http://localhost:8299 — fallback（与 unified_launcher 默认端口一致）
  */
 
 import type {
@@ -20,6 +26,41 @@ import type {
   LiveStatus,
 } from './types';
 
+// 扩展 Window 接口，支持后端注入的全局配置
+declare global {
+  interface Window {
+    /** 后端模板直接注入的 API 基址（最高优先级） */
+    __GALAXY_API_BASE__?: string;
+    /** 后端注入的完整配置块 */
+    __GALAXY_CONFIG__?: { api_base?: string; [key: string]: unknown };
+  }
+}
+
+/** 默认 Galaxy API 基址，与 unified_launcher / port_config.py 保持一致（端口 8299） */
+const _DEFAULT_API_BASE = 'http://localhost:8299';
+
+/**
+ * 解析 Galaxy API 基址。
+ *
+ * 优先级（高→低）：
+ *   1. window.__GALAXY_API_BASE__       — 后端模板注入
+ *   2. window.__GALAXY_CONFIG__.api_base — 后端配置块
+ *   3. 硬编码默认值（同步 fallback）
+ *
+ * 若需要同时读取 runtime/entrypoint.json，请使用异步工厂
+ * {@link GalaxyAPI.create}。
+ */
+function resolveApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const injected = window.__GALAXY_API_BASE__?.trim();
+    if (injected) return injected.replace(/\/$/, '');
+
+    const cfgBase = window.__GALAXY_CONFIG__?.api_base?.trim();
+    if (cfgBase) return cfgBase.replace(/\/$/, '');
+  }
+  return _DEFAULT_API_BASE;
+}
+
 /**
  * Galaxy API 客户端
  */
@@ -27,8 +68,43 @@ export class GalaxyAPI {
   private baseUrl: string;
   private ws: WebSocket | null = null;
 
-  constructor(baseUrl: string = 'http://localhost:8085') {
-    this.baseUrl = baseUrl;
+  /**
+   * @param baseUrl - API 基址。若不传，使用 {@link resolveApiBase} 自动解析。
+   */
+  constructor(baseUrl?: string) {
+    this.baseUrl = (baseUrl ?? resolveApiBase()).replace(/\/$/, '');
+  }
+
+  /**
+   * 异步工厂方法：创建 GalaxyAPI 实例，自动解析 API 基址。
+   *
+   * 解析顺序（高→低）：
+   *   1. window.__GALAXY_API_BASE__
+   *   2. window.__GALAXY_CONFIG__.api_base
+   *   3. runtime/entrypoint.json（由 unified_launcher 写入）
+   *   4. 默认值 http://localhost:8299
+   */
+  static async create(): Promise<GalaxyAPI> {
+    // 优先使用同步来源
+    const syncBase = resolveApiBase();
+    if (syncBase !== _DEFAULT_API_BASE) {
+      return new GalaxyAPI(syncBase);
+    }
+
+    // 尝试从 runtime/entrypoint.json 获取（由 unified_launcher 启动时写入）
+    try {
+      const resp = await fetch('/runtime/entrypoint.json', { cache: 'no-store' });
+      if (resp.ok) {
+        const data = await resp.json() as { api_base?: string };
+        if (data?.api_base) {
+          return new GalaxyAPI(data.api_base.replace(/\/$/, ''));
+        }
+      }
+    } catch {
+      // entrypoint.json 不可用时静默降级
+    }
+
+    return new GalaxyAPI(syncBase);
   }
 
   // ===========================================================================
@@ -252,5 +328,5 @@ export class GalaxyAPI {
   }
 }
 
-// 默认实例
+// 默认实例（同步解析，优先使用注入的全局配置；需要异步解析请用 GalaxyAPI.create()）
 export const galaxyAPI = new GalaxyAPI();
