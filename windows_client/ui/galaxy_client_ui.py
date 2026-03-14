@@ -87,6 +87,79 @@ FULL_WIDTH = 940
 FULL_HEIGHT = 720
 
 
+def _compute_responsive_sizes(screen_w: int, screen_h: int) -> dict:
+    """Compute adaptive UI dimensions based on the primary screen resolution.
+
+    Breakpoints (width):
+      < 1280 px  → compact desktop
+      1280–1920  → standard / 1080p desktop  (baseline)
+      > 1920 px  → large / high-DPI / ultra-wide desktop
+
+    Returns a dict with all size/font/spacing values that the main window
+    should use instead of the hard-coded module-level constants.
+
+    Width ratios chosen so the panel leaves a comfortable visible margin:
+      compact  – 0.50 of screen width (half-screen overlay on small displays)
+      standard – capped at SIDEBAR_WIDTH (1280 px) so it never overflows
+      large    – 0.65 of screen width keeps 35 % visible behind the panel
+    Full-window ratios follow a similar "leave a margin" principle:
+      compact  – 0.80 × 0.82 fills most of a small screen without clipping
+      large    – 0.55 × 0.75 avoids an overly stretched window on wide displays
+    """
+    # ── Sidebar expanded width ─────────────────────────────────────────────
+    # Never allow the panel to exceed the physical screen width.
+    if screen_w < 1280:
+        # ~50 % of screen – leaves half the screen visible on compact desktops
+        sidebar_w = max(320, int(screen_w * 0.50))
+    elif screen_w <= 1920:
+        sidebar_w = min(screen_w - 40, SIDEBAR_WIDTH)   # 1280 or narrower
+    else:  # ultra-wide / 4 K
+        # ~65 % keeps a comfortable portion of the desktop visible behind it
+        sidebar_w = min(1440, int(screen_w * 0.65))
+
+    # ── Full-window dimensions ─────────────────────────────────────────────
+    if screen_w < 1280:
+        # ~80 % width / ~82 % height – fills most of a small screen comfortably
+        full_w = max(700, int(screen_w * 0.80))
+        full_h = max(520, int(screen_h * 0.82))
+    elif screen_w <= 1920:
+        full_w = min(FULL_WIDTH, screen_w - 100)         # 940 or narrower
+        full_h = min(FULL_HEIGHT, screen_h - 80)         # 720 or shorter
+    else:
+        # ~55 % width / ~75 % height – avoids an overly stretched window
+        full_w = min(1100, int(screen_w * 0.55))
+        full_h = min(800, int(screen_h * 0.75))
+
+    # ── Font sizes ─────────────────────────────────────────────────────────
+    if screen_w < 1280:
+        font_base, font_title, font_small = 11, 12, 10
+    elif screen_w <= 1920:
+        font_base, font_title, font_small = 12, 14, 11
+    else:
+        font_base, font_title, font_small = 13, 15, 12
+
+    # ── Spacing / padding / bar heights ───────────────────────────────────
+    if screen_w < 1280:
+        padding, spacing, title_h, tab_h = 10, 6, 44, 40
+    elif screen_w <= 1920:
+        padding, spacing, title_h, tab_h = 12, 8, 48, 44
+    else:
+        padding, spacing, title_h, tab_h = 16, 10, 52, 48
+
+    return {
+        "sidebar_w": sidebar_w,
+        "full_w":    full_w,
+        "full_h":    full_h,
+        "font_base":  font_base,
+        "font_title": font_title,
+        "font_small": font_small,
+        "padding":   padding,
+        "spacing":   spacing,
+        "title_h":   title_h,
+        "tab_h":     tab_h,
+    }
+
+
 class GlowPanel(QFrame):
     """磨砂半透明面板 + 径向光晕效果"""
 
@@ -1767,6 +1840,24 @@ class GalaxyClientUI(QWidget):
         self.screen_width = screen.width()
         self.screen_height = screen.height()
 
+        # ── Compute responsive layout sizes for this screen ────────────────
+        _rs = _compute_responsive_sizes(self.screen_width, self.screen_height)
+        self._resp_sidebar_w  = _rs["sidebar_w"]
+        self._resp_full_w     = _rs["full_w"]
+        self._resp_full_h     = _rs["full_h"]
+        self._resp_font_base  = _rs["font_base"]
+        self._resp_font_title = _rs["font_title"]
+        self._resp_font_small = _rs["font_small"]
+        self._resp_padding    = _rs["padding"]
+        self._resp_spacing    = _rs["spacing"]
+        self._resp_title_h    = _rs["title_h"]
+        self._resp_tab_h      = _rs["tab_h"]
+        logger.debug(
+            "Responsive sizes: sidebar_w=%d full=%dx%d font_base=%d",
+            self._resp_sidebar_w, self._resp_full_w, self._resp_full_h,
+            self._resp_font_base,
+        )
+
         # 初始位置：屏幕右侧外（collapsed width）
         self.setGeometry(
             self.screen_width, 0,
@@ -1848,7 +1939,7 @@ class GalaxyClientUI(QWidget):
 
     def _create_title_bar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(48)
+        bar.setFixedHeight(self._resp_title_h)
         bar.setStyleSheet(f"""
             QWidget {{
                 background: rgba(0, 0, 0, 0.3);
@@ -1856,18 +1947,18 @@ class GalaxyClientUI(QWidget):
             }}
         """)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(16, 0, 12, 0)
+        layout.setContentsMargins(self._resp_padding, 0, 12, 0)
 
         # 状态灯
         self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet(f"color: {COLORS['success']}; font-size: 10px;")
+        self.status_dot.setStyleSheet(f"color: {COLORS['success']}; font-size: {self._resp_font_small}px;")
         layout.addWidget(self.status_dot)
 
         # 标题
         title = QLabel("Galaxy")
         title.setStyleSheet(f"""
             color: {COLORS['text']};
-            font-size: 14px;
+            font-size: {self._resp_font_title}px;
             font-weight: 700;
             font-family: 'Segoe UI', sans-serif;
         """)
@@ -1882,7 +1973,7 @@ class GalaxyClientUI(QWidget):
                 background: transparent;
                 border: none;
                 color: {COLORS['text_dim']};
-                font-size: 14px;
+                font-size: {self._resp_font_base}px;
             }}
             QPushButton:hover {{ color: {COLORS['text']}; }}
         """)
@@ -1908,10 +1999,10 @@ class GalaxyClientUI(QWidget):
 
     def _create_tab_bar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(44)
+        bar.setFixedHeight(self._resp_tab_h)
         bar.setStyleSheet(f"background: rgba(0, 0, 0, 0.15); border-bottom: 1px solid {COLORS['border']};")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 4, 12, 4)
+        layout.setContentsMargins(self._resp_padding, 4, self._resp_padding, 4)
         layout.setSpacing(4)
 
         tabs = [
@@ -1932,6 +2023,8 @@ class GalaxyClientUI(QWidget):
         return bar
 
     def _tab_style(self, active: bool) -> str:
+        # _resp_font_base is always set in _init_window() before _create_tab_bar() is called.
+        font_size = self._resp_font_base
         if active:
             return f"""
                 QPushButton {{
@@ -1940,7 +2033,7 @@ class GalaxyClientUI(QWidget):
                     border-radius: 10px;
                     padding: 6px 14px;
                     color: {COLORS['text']};
-                    font-size: 12px;
+                    font-size: {font_size}px;
                     font-weight: 600;
                 }}
             """
@@ -1951,7 +2044,7 @@ class GalaxyClientUI(QWidget):
                 border-radius: 10px;
                 padding: 6px 14px;
                 color: {COLORS['text_dim']};
-                font-size: 12px;
+                font-size: {font_size}px;
             }}
             QPushButton:hover {{ color: {COLORS['text']}; }}
         """
@@ -2005,8 +2098,8 @@ class GalaxyClientUI(QWidget):
         """卷轴式展开 / 收起侧边栏 (Calligraphy-scroll expand / collapse).
 
         A single QParallelAnimationGroup (_sidebar_scroll_group) drives both
-        the geometry change (40 ↔ 420 px) and the opacity fade together, so
-        there is never a race between two independently-started animations.
+        the geometry change (40 ↔ sidebar_w px) and the opacity fade together,
+        so there is never a race between two independently-started animations.
         The debounce guard at the top prevents stacking new runs on top of an
         already-running group, which was the root cause of the previous
         "横跳 / bounce-back" jitter.
@@ -2019,7 +2112,7 @@ class GalaxyClientUI(QWidget):
         self._sidebar_scroll_group.stop()
 
         if self._sidebar_expanded:
-            # Collapse: 420px → 40px, fade out content simultaneously.
+            # Collapse: sidebar_w → 40px, fade out content simultaneously.
             self._sidebar_expanded = False
             target_x = self.screen_width - SIDEBAR_COLLAPSED_WIDTH
 
@@ -2033,14 +2126,14 @@ class GalaxyClientUI(QWidget):
             # Show collapsed strip after the group finishes (500 ms).
             QTimer.singleShot(500, lambda: self._collapsed_strip.setVisible(True))
         else:
-            # Expand: 40px → 420px, fade in content — all in one smooth motion.
+            # Expand: 40px → sidebar_w, fade in content — all in one smooth motion.
             self._sidebar_expanded = True
             self._collapsed_strip.setVisible(False)
-            target_x = self.screen_width - SIDEBAR_WIDTH
+            target_x = self.screen_width - self._resp_sidebar_w
 
             self._sidebar_width_anim.setStartValue(self.geometry())
             self._sidebar_width_anim.setEndValue(
-                QRect(target_x, 0, SIDEBAR_WIDTH, self.screen_height)
+                QRect(target_x, 0, self._resp_sidebar_w, self.screen_height)
             )
             self._content_fade_anim.setStartValue(self._content_opacity.opacity())
             self._content_fade_anim.setEndValue(1.0)
@@ -2065,10 +2158,10 @@ class GalaxyClientUI(QWidget):
             self.tab_bar.setVisible(True)
             self.toggle_btn.setText("▬")
 
-            cx = (self.screen_width - FULL_WIDTH) // 2
-            cy = (self.screen_height - FULL_HEIGHT) // 2
+            cx = (self.screen_width - self._resp_full_w) // 2
+            cy = (self.screen_height - self._resp_full_h) // 2
             self.slide_anim.setStartValue(self.geometry())
-            self.slide_anim.setEndValue(QRect(cx, cy, FULL_WIDTH, FULL_HEIGHT))
+            self.slide_anim.setEndValue(QRect(cx, cy, self._resp_full_w, self._resp_full_h))
             self.slide_anim.start()
         else:
             # 收缩为侧边栏 (expanded state)
@@ -2079,9 +2172,9 @@ class GalaxyClientUI(QWidget):
             self.toggle_btn.setText("⬜")
             self._switch_tab(0)
 
-            target_x = self.screen_width - SIDEBAR_WIDTH
+            target_x = self.screen_width - self._resp_sidebar_w
             self.slide_anim.setStartValue(self.geometry())
-            self.slide_anim.setEndValue(QRect(target_x, 0, SIDEBAR_WIDTH, self.screen_height))
+            self.slide_anim.setEndValue(QRect(target_x, 0, self._resp_sidebar_w, self.screen_height))
             self.slide_anim.start()
 
     def toggle_visibility(self):
@@ -2121,10 +2214,10 @@ class GalaxyClientUI(QWidget):
                 pass
             self.slide_anim.finished.connect(self._auto_expand_once)
         else:
-            cx = (self.screen_width - FULL_WIDTH) // 2
-            cy = (self.screen_height - FULL_HEIGHT) // 2
-            self.slide_anim.setStartValue(QRect(self.screen_width, cy, FULL_WIDTH, FULL_HEIGHT))
-            self.slide_anim.setEndValue(QRect(cx, cy, FULL_WIDTH, FULL_HEIGHT))
+            cx = (self.screen_width - self._resp_full_w) // 2
+            cy = (self.screen_height - self._resp_full_h) // 2
+            self.slide_anim.setStartValue(QRect(self.screen_width, cy, self._resp_full_w, self._resp_full_h))
+            self.slide_anim.setEndValue(QRect(cx, cy, self._resp_full_w, self._resp_full_h))
             self._content_opacity.setOpacity(1.0)
             self._collapsed_strip.setVisible(False)
             self._sidebar_expanded = True
@@ -2150,8 +2243,8 @@ class GalaxyClientUI(QWidget):
         if self.is_sidebar_mode:
             self.slide_anim.setEndValue(QRect(target_x, 0, current_w, self.screen_height))
         else:
-            cy = (self.screen_height - FULL_HEIGHT) // 2
-            self.slide_anim.setEndValue(QRect(target_x, cy, FULL_WIDTH, FULL_HEIGHT))
+            cy = (self.screen_height - self._resp_full_h) // 2
+            self.slide_anim.setEndValue(QRect(target_x, cy, self._resp_full_w, self._resp_full_h))
         self.slide_anim.start()
 
         # Fade out content in sync with the slide-out animation.
