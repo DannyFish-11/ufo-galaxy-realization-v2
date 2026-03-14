@@ -77,24 +77,40 @@ class GalaxyCore:
         # 加载节点注册表
         self._load_node_registry()
 
-        # Agentic OS: optional MasterBrain init (constraint C5 — opt-in)
+        # Agentic OS: obtain the MasterBrain reference (opt-in via GALAXY_MASTER_BRAIN_ENABLED).
+        # Actual async startup (NATS connect + subscription) is deferred to startup() so
+        # it can be properly awaited from a FastAPI lifespan or explicit caller.
         if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() == "true":
             try:
                 from core.master_brain import get_master_brain
                 self._master_brain = get_master_brain()
-                # Schedule async start — activates NATS connection and subscriptions
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(self._master_brain.start())
-                    else:
-                        loop.run_until_complete(self._master_brain.start())
-                except RuntimeError:
-                    pass  # No event loop yet; FastAPI lifespan will handle startup
-                logger.info("GalaxyCore: MasterBrain enabled")
+                logger.info("GalaxyCore: MasterBrain enabled (call startup() to initialize)")
             except Exception as e:
                 logger.warning(f"GalaxyCore: MasterBrain init failed: {e}")
                 self._master_brain = None
+
+    async def startup(self) -> None:
+        """Perform async initialisation for GalaxyCore.
+
+        Must be called from a running event loop (e.g. FastAPI lifespan).
+        Safe to call multiple times — :class:`MasterBrain` guards against
+        duplicate starts internally.
+        """
+        if self._master_brain is not None:
+            try:
+                result = await self._master_brain.start()
+                if result.get("already_started"):
+                    logger.info("GalaxyCore.startup: MasterBrain already started")
+                elif result.get("success"):
+                    from core.nats_bus import nats_bus
+                    logger.info(
+                        "GalaxyCore.startup: MasterBrain started (NATS=%s)",
+                        nats_bus.is_connected(),
+                    )
+                else:
+                    logger.warning("GalaxyCore.startup: MasterBrain.start() returned %s", result)
+            except Exception as exc:
+                logger.warning("GalaxyCore.startup: MasterBrain start error: %s", exc)
     
     def _load_node_registry(self):
         """加载节点注册表"""

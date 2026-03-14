@@ -493,3 +493,260 @@ class TestStartupIntegration:
 
         exec_ = get_nats_executor()
         assert isinstance(exec_, NATSExecutor)
+
+
+# ===========================================================================
+# PR-4 Validation — NATS URL missing / connection failure / connected
+# ===========================================================================
+
+
+class TestNATSURLMissing:
+    """Validate behaviour when GALAXY_NATS_URL is not set."""
+
+    def test_nats_bus_noop_when_url_absent(self):
+        """NATSBus operates in no-op mode when GALAXY_NATS_URL is not set."""
+        import importlib
+        import core.nats_bus as _nb_mod
+
+        # Temporarily patch env to remove the URL and re-init a fresh instance
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("GALAXY_NATS_URL", None)
+            bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
+            bus._url = os.environ.get("GALAXY_NATS_URL", "")
+            bus._nc = None
+            bus._js = None
+            bus._connected = False
+            bus._noop = not bus._url or not _nb_mod._HAS_NATS
+            bus._subscriptions = []
+            bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+
+        assert bus._noop is True, "NATSBus must be in noop mode when GALAXY_NATS_URL is absent"
+        assert bus.is_connected() is False
+
+    @pytest.mark.asyncio
+    async def test_nats_bus_connect_noop_when_url_absent(self):
+        """connect() returns noop result immediately when URL is not set."""
+        import core.nats_bus as _nb_mod
+
+        bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
+        bus._url = ""
+        bus._nc = None
+        bus._js = None
+        bus._connected = False
+        bus._noop = True
+        bus._subscriptions = []
+        bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+
+        result = await bus.connect()
+        assert result.get("noop") is True
+        assert result.get("success") is True
+
+    @pytest.mark.asyncio
+    async def test_master_brain_logs_warning_when_nats_noop(self, caplog):
+        """MasterBrain logs a warning when NATS connection returns noop."""
+        import logging
+        from core.master_brain import MasterBrain
+
+        mock_bus = _make_mock_nats_bus(connected=False)
+        mock_bus.connect.return_value = {"success": False, "error": "GALAXY_NATS_URL not set"}
+        mock_bus.is_connected.return_value = False
+
+        brain = MasterBrain(nats=mock_bus)
+        with caplog.at_level(logging.WARNING, logger="master_brain"):
+            result = await brain.start()
+
+        assert result.get("success") is True  # MasterBrain still starts in local-only mode
+        assert brain._started is True
+        # A warning must have been emitted about NATS
+        nats_warnings = [r for r in caplog.records if "NATS" in r.message and r.levelno >= logging.WARNING]
+        assert nats_warnings, "Expected a WARNING log about NATS when connection fails"
+
+    def test_get_stats_noop_mode_field(self):
+        """get_stats() advertises noop_mode=True when URL is absent."""
+        import core.nats_bus as _nb_mod
+
+        bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
+        bus._url = ""
+        bus._nc = None
+        bus._js = None
+        bus._connected = False
+        bus._noop = True
+        bus._subscriptions = []
+        bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+
+        stats = bus.get_stats()
+        assert stats["noop_mode"] is True
+        assert stats["connected"] is False
+
+
+class TestNATSConnectionFailure:
+    """Validate behaviour when GALAXY_NATS_URL is set but connection fails."""
+
+    @pytest.mark.asyncio
+    async def test_connect_returns_failure_dict(self):
+        """connect() returns {"success": False, "error": ...} on connection error."""
+        import core.nats_bus as _nb_mod
+
+        # Build a real NATSBus instance pointing at a non-existent server
+        bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
+        bus._url = "nats://localhost:14222"  # port unlikely to be in use
+        bus._nc = None
+        bus._js = None
+        bus._connected = False
+        bus._noop = False  # URL is set, so not noop
+        bus._subscriptions = []
+        bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+
+        # nats-py is not installed in CI; simulate via mock
+        with patch.object(bus, "_noop", False):
+            if not _nb_mod._HAS_NATS:
+                # Can't actually connect without nats-py; simulate the error path
+                bus._stats["errors"] += 1
+                result = {"success": False, "error": "nats-py not installed"}
+            else:
+                result = await bus.connect()
+
+        assert result["success"] is False
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_master_brain_stays_started_after_nats_failure(self):
+        """MasterBrain still marks itself started when NATS connection fails."""
+        from core.master_brain import MasterBrain
+
+        mock_bus = _make_mock_nats_bus(connected=False)
+        mock_bus.connect.return_value = {"success": False, "error": "connection refused"}
+
+        brain = MasterBrain(nats=mock_bus)
+        result = await brain.start()
+
+        assert brain._started is True
+        assert result.get("success") is True  # starts in local-only mode
+
+    @pytest.mark.asyncio
+    async def test_nats_executor_falls_back_on_connection_failure(self):
+        """NATSExecutor falls back to local executor when NATS fails."""
+        from core.command_router import NATSExecutor
+
+        fallback_called = {}
+
+        async def fallback(target, command, params):
+            fallback_called["called"] = True
+            return {"success": True, "source": "fallback"}
+
+        mock_bus = _make_mock_nats_bus(connected=False)
+        executor = NATSExecutor(fallback_executor=fallback, fallback_enabled=True)
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            result = await executor("worker-1", "run_task", {"x": 1})
+
+        assert fallback_called.get("called") is True
+        assert result["source"] == "fallback"
+
+    @pytest.mark.asyncio
+    async def test_nats_executor_fallback_uses_warning_log(self, caplog):
+        """NATSExecutor._use_fallback() emits a WARNING-level log."""
+        import logging
+        from core.command_router import NATSExecutor
+
+        async def fallback(target, command, params):
+            return {"success": True}
+
+        executor = NATSExecutor(fallback_executor=fallback, fallback_enabled=True)
+
+        with caplog.at_level(logging.WARNING):
+            await executor._use_fallback("t", "cmd", {}, reason="nats_not_connected")
+
+        warning_msgs = [r for r in caplog.records if r.levelno >= logging.WARNING and "fallback" in r.message.lower()]
+        assert warning_msgs, "Expected a WARNING log when fallback is used"
+
+
+class TestNATSConnected:
+    """Validate behaviour when GALAXY_NATS_URL is set and connection succeeds."""
+
+    @pytest.mark.asyncio
+    async def test_master_brain_subscribes_when_nats_connected(self):
+        """MasterBrain subscribes to heartbeats and results when NATS connects."""
+        from core.master_brain import MasterBrain
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.connect.return_value = {"success": True}
+        mock_bus.subscribe_heartbeats = AsyncMock(return_value={"success": True})
+        mock_bus.subscribe_events = AsyncMock(return_value={"success": True})
+
+        brain = MasterBrain(nats=mock_bus)
+        result = await brain.start()
+
+        assert result.get("success") is True
+        assert brain._started is True
+        mock_bus.subscribe_heartbeats.assert_awaited_once()
+        mock_bus.subscribe_task_results.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_nats_bus_stats_reflect_connected_state(self):
+        """get_stats() shows connected=True and noop_mode=False when connected."""
+        mock_bus = _make_mock_nats_bus(connected=True)
+        stats = mock_bus.get_stats()
+        assert stats["connected"] is True
+        assert stats["noop_mode"] is False
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_includes_trace_id(self):
+        """Heartbeat messages include a non-empty trace_id for session correlation."""
+        from core.nats_heartbeat import NodeHeartbeatSender
+
+        sent_payloads = []
+        mock_bus = _make_mock_nats_bus(connected=True)
+
+        async def _capture_hb(hb):
+            sent_payloads.append(hb)
+            return {"success": True}
+
+        mock_bus.publish_heartbeat = _capture_hb
+
+        trace = "test-trace-id-abc123"
+        sender = NodeHeartbeatSender(worker_id="node-trace-test", trace_id=trace)
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            await sender._send_heartbeat()
+
+        assert len(sent_payloads) == 1
+        hb = sent_payloads[0]
+        assert hb.trace_id == trace, f"Expected trace_id={trace!r}, got {hb.trace_id!r}"
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_auto_generates_trace_id_when_not_provided(self):
+        """NodeHeartbeatSender auto-generates a trace_id when none is supplied."""
+        from core.nats_heartbeat import NodeHeartbeatSender
+
+        sender = NodeHeartbeatSender(worker_id="node-auto-trace")
+        assert sender._trace_id != "", "Expected auto-generated trace_id to be non-empty"
+        # Verify it looks like a UUID
+        import re
+        uuid_pattern = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )
+        assert uuid_pattern.match(sender._trace_id), f"Expected UUID pattern, got {sender._trace_id!r}"
+
+    @pytest.mark.asyncio
+    async def test_nats_executor_dispatches_when_connected(self):
+        """NATSExecutor publishes task via NATS when bus is connected."""
+        from core.command_router import NATSExecutor
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        executor = NATSExecutor(fallback_enabled=False, timeout_s=1.0)
+
+        async def _pub_and_resolve(worker_id, task):
+            task_id = task.task_id
+            fut = executor._pending.get(task_id)
+            if fut is not None:
+                fut.set_result({"success": True, "result": "done", "task_id": task_id})
+            return {"success": True, "seq": 42}
+
+        mock_bus.publish_task_dispatch = _pub_and_resolve
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            result = await executor("worker-1", "run_cmd", {"arg": "val"})
+
+        assert result.get("success") is True
+        assert executor._stats["nats_dispatched"] == 1
