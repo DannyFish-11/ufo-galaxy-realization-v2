@@ -32,6 +32,12 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+# Cross-device feature-flag (Round 4) — checked before any cross-device path.
+from galaxy_gateway.cross_device_switch import (  # noqa: E402
+    is_cross_device_enabled,
+    make_disabled_response,
+)
+
 # 延迟导入以避免循环依赖
 cross_device_coordinator = None
 
@@ -238,6 +244,10 @@ class DeviceRouter:
             
             # 2. 判断是否需要跨设备协同
             if analysis.get("requires_cross_device", False):
+                # --- Round 4: hard constraint — check cross-device switch ---
+                if not is_cross_device_enabled():
+                    trace_id = (context or {}).get("trace_id")
+                    return make_disabled_response(trace_id=trace_id)
                 # 使用跨设备协调器
                 coordinator = get_cross_device_coordinator()
                 return await coordinator.execute_cross_device_task(command, context)
@@ -524,7 +534,11 @@ class DeviceRouter:
             return {"success": False, "error": f"任务分发失败: {str(e)}"}
     
     async def _dispatch_cross_device_task(self, task: Dict, devices: List[Device]) -> Dict:
-        """分发跨设备协同任务"""
+        """分发跨设备协同任务 (gated by cross-device switch — Round 4)."""
+        # --- Round 4: hard constraint — single dispatcher guard ---
+        if not is_cross_device_enabled():
+            trace_id = task.get("trace_id")
+            return make_disabled_response(trace_id=trace_id)
         try:
             logger.info(f"🔄 分发跨设备任务到 {len(devices)} 个设备")
             

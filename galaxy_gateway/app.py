@@ -22,6 +22,7 @@ unified_launcher.py 挂载 core/api_routes.py 作为唯一 API 入口。
 import asyncio
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -57,6 +58,12 @@ from .webrtc_proxy import (
     check_node95_reachable,
     get_webrtc_endpoint_info,
     proxy_webrtc_signaling,
+)
+from galaxy_gateway.cross_device_switch import (
+    is_cross_device_enabled,
+    HTTP_STATUS_CROSS_DEVICE_DISABLED,
+    ERROR_CODE_CROSS_DEVICE_DISABLED,
+    ERROR_MSG_CROSS_DEVICE_DISABLED,
 )
 from nodes.common.cors_config import get_cors_origins
 from typing import Dict, Any
@@ -900,9 +907,26 @@ async def webrtc_endpoint_info():
     * The gateway WebSocket path they can use instead of connecting to
       Node_95 directly (``/ws/webrtc/{device_id}``).
 
+    Returns HTTP 403 when cross-device routing is disabled (Round 4 switch).
     Returns HTTP 503 when Node_95 is not reachable so that callers can
     detect degraded state early.
     """
+    # Round 4: hard constraint — reject when cross-device switch is OFF.
+    if not is_cross_device_enabled():
+        trace_id = str(uuid.uuid4())
+        logger.warning(
+            "cross_device_blocked event=webrtc_endpoint trace_id=%s reason=%s",
+            trace_id,
+            ERROR_CODE_CROSS_DEVICE_DISABLED,
+        )
+        raise HTTPException(
+            status_code=HTTP_STATUS_CROSS_DEVICE_DISABLED,
+            detail={
+                "error": ERROR_CODE_CROSS_DEVICE_DISABLED,
+                "message": ERROR_MSG_CROSS_DEVICE_DISABLED,
+                "trace_id": trace_id,
+            },
+        )
     if not await check_node95_reachable():
         raise HTTPException(
             status_code=503,
