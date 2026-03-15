@@ -850,21 +850,74 @@ class AndroidBridge:
 
         能力命名规则（稳定且可被 LLM tool schema 使用）：
             ``gateway__<device_id>__<action_name>``
+
+        新字段（Round 3）
+        -----------------
+        ``capability_schemas`` : list[dict]
+            每个元素描述一条能力的完整 schema::
+
+                {
+                  "action"    : "tap",
+                  "params"    : { ... },      # 可选 JSON Schema
+                  "returns"   : { ... },      # 可选
+                  "version"   : "1.0",        # 可选
+                  "exec_mode" : "local",      # "local"|"remote"|"both"，缺省 "both"
+                  "tags"      : ["ui", ...]   # 可选标签
+                }
+
+        若客户端仅上报 ``supported_actions``（旧格式），则以 exec_mode="both"
+        补全，保持向后兼容。
         """
         device_id = message.get("device_id")
         platform = message.get("platform")
         supported_actions = message.get("supported_actions", [])
         version = message.get("version")
-        logger.info(f"Capability report from {device_id}: platform={platform}, "
-                    f"actions={supported_actions}, version={version}")
+        # Round 3: structured per-action schemas (optional, new clients send this)
+        capability_schemas: list = message.get("capability_schemas") or []
+
+        logger.info(
+            "Capability report from %s: platform=%s, actions=%s, version=%s, schemas=%d",
+            device_id, platform, supported_actions, version, len(capability_schemas),
+        )
 
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].supported_actions = list(supported_actions)
                 self._devices[device_id].last_heartbeat = time.time()
 
-        # Sync reported capabilities into the global CapabilityRegistry so the
-        # LLM can discover and dispatch to this device via natural language.
+        # ── 1. Sync to GatewayCapabilityRegistry (exec_mode-aware) ────────────
+        if device_id:
+            try:
+                from galaxy_gateway.capability_registry import get_gateway_capability_registry
+                gw_reg = get_gateway_capability_registry()
+
+                # Build a lookup from action → schema_dict for new-format clients
+                schema_by_action: dict = {}
+                for schema_entry in capability_schemas:
+                    if isinstance(schema_entry, dict) and schema_entry.get("action"):
+                        schema_by_action[schema_entry["action"]] = schema_entry
+
+                upserted = 0
+                for action in supported_actions:
+                    action_str = action if isinstance(action, str) else str(action)
+                    schema_dict = schema_by_action.get(action_str, {})
+                    # Carry top-level version if not per-action (avoid dict copy when unnecessary)
+                    if version and not schema_dict.get("version"):
+                        schema_dict = {**schema_dict, "version": str(version)}
+                    gw_reg.upsert(device_id, action_str, schema_dict)
+                    upserted += 1
+
+                logger.info(
+                    "capability_report: upserted %d capabilities for device %s to GatewayCapabilityRegistry",
+                    upserted,
+                    device_id,
+                )
+            except Exception as gw_sync_err:
+                logger.warning(
+                    "capability_report: GatewayCapabilityRegistry sync failed: %s", gw_sync_err
+                )
+
+        # ── 2. Sync to LLM CapabilityRegistry (unchanged — backward compat) ───
         if device_id and supported_actions:
             try:
                 from core.agent.capability_registry import CapabilityRegistry, CapabilityItem

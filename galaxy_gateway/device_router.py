@@ -45,6 +45,9 @@ def get_cross_device_coordinator():
 
 from core.device_types import DeviceType, resolve_device_type  # noqa: E402
 
+# Module-level import so the function can be patched in tests
+from galaxy_gateway.capability_registry import get_gateway_capability_registry  # noqa: E402
+
 
 def map_device_type_to_platform(aip_device_type: str) -> str:
     """将 AIP v3 DeviceType 字符串映射为路由层平台大类（公共接口）。
@@ -178,10 +181,24 @@ class DeviceRouter:
             return False
     
     def unregister_device(self, device_id: str) -> bool:
-        """注销设备"""
+        """注销设备，同时清理 GatewayCapabilityRegistry 中的能力记录。"""
         try:
             if device_id in self.devices:
                 del self.devices[device_id]
+
+                # Purge capabilities from GatewayCapabilityRegistry
+                try:
+                    purged = get_gateway_capability_registry().purge(device_id)
+                    logger.debug(
+                        "unregister_device: purged %d capabilities for device %s",
+                        purged,
+                        device_id,
+                    )
+                except Exception as _purge_err:
+                    logger.warning(
+                        "unregister_device: capability registry purge failed: %s", _purge_err
+                    )
+
                 logger.info(f"✅ 设备注销成功: {device_id}")
                 return True
             return False
@@ -302,7 +319,20 @@ class DeviceRouter:
         return analysis
     
     def _select_devices(self, analysis: Dict) -> List[Device]:
-        """选择合适的设备（优先选择自主执行能力的设备）"""
+        """选择合适的设备（优先选择自主执行能力的设备），并尊重 exec_mode。
+
+        exec_mode 路由语义（Round 3）
+        ------------------------------
+        ``analysis["exec_mode"]`` 可由调用方（如编排器、NLU）设置：
+
+        - ``"local"``  — 只选择注册了对应动作且 exec_mode=local/both 的设备。
+        - ``"remote"`` — 只选择注册了对应动作且 exec_mode=remote/both 的设备。
+        - ``"both"``   — 不按 exec_mode 额外过滤（默认行为）。
+        - 缺失         — 等同于 "both"（向后兼容）。
+
+        若 GatewayCapabilityRegistry 不可用或设备尚未上报 capability_report，
+        则退回到原有逻辑，保证向后兼容。
+        """
         target_device_type = analysis["target_device_type"]
 
         if target_device_type == DeviceType.UNKNOWN:
@@ -311,6 +341,64 @@ class DeviceRouter:
 
         # 获取该类型的所有设备
         devices = self.get_devices_by_type(target_device_type)
+
+        # ── exec_mode-aware filtering via GatewayCapabilityRegistry ─────────
+        desired_exec_mode_str: Optional[str] = analysis.get("exec_mode")
+        _actions = analysis.get("actions") or []
+        desired_action: Optional[str] = _actions[0] if _actions else None
+
+        if desired_exec_mode_str or desired_action:
+            try:
+                from galaxy_gateway.capability_registry import ExecMode
+                gw_reg = get_gateway_capability_registry()
+                desired_exec_mode = ExecMode.from_str(desired_exec_mode_str)
+
+                filtered: List[Device] = []
+                unregistered: List[Device] = []
+                for device in devices:
+                    schemas = gw_reg.query(
+                        action=desired_action,
+                        exec_mode=desired_exec_mode if desired_exec_mode != ExecMode.BOTH else None,
+                        device_id=device.device_id,
+                    )
+                    if schemas:
+                        filtered.append(device)
+                    else:
+                        # Device has no schema record — could be legacy client
+                        all_caps = gw_reg.get_by_device(device.device_id)
+                        if not all_caps:
+                            # Legacy device: no capability_report yet → keep it
+                            unregistered.append(device)
+                        # else: device has caps but none match → exclude
+
+                if filtered:
+                    devices = filtered
+                    logger.debug(
+                        "_select_devices: exec_mode=%s action=%s → %d matching device(s)",
+                        desired_exec_mode_str,
+                        desired_action,
+                        len(filtered),
+                    )
+                elif unregistered:
+                    # Fall back to legacy devices that haven't reported capabilities yet
+                    devices = unregistered
+                    logger.debug(
+                        "_select_devices: no schema matches; falling back to %d legacy device(s)",
+                        len(unregistered),
+                    )
+                else:
+                    logger.debug(
+                        "_select_devices: no devices match exec_mode=%s action=%s; using all",
+                        desired_exec_mode_str,
+                        desired_action,
+                    )
+                    # devices already holds the full list — no further filtering
+
+            except Exception as _reg_err:
+                logger.warning(
+                    "_select_devices: capability registry unavailable, skipping exec_mode filter: %s",
+                    _reg_err,
+                )
 
         # 使用自主优先过滤器（有 fallback 保证）
         try:
