@@ -111,18 +111,19 @@ class RepoCoordinator:
         
         logger.info(f"已注册 Android 设备: {device_id}")
         
-        # 创建 AIP 注册消息
-        message = AIPMessage(
-            message_type=AIPMessageType.DEVICE_REGISTER,
-            source_id=device_id,
-            target_id="galaxy_core",
-            payload={
-                "device_id": device_id,
-                "device_type": "android",
-                "name": device_info.get("name", "Android Device"),
-                "capabilities": device_info.get("capabilities", [])
-            }
-        )
+        # Construct AIPMessage for protocol validation only (not dispatched here).
+        # AIPMessage / AIPMessageType may be None when the optional package
+        # is not installed.
+        if AIPMessage is not None and AIPMessageType is not None:
+            AIPMessage(  # protocol validation — raises ValidationError on bad input
+                type=AIPMessageType.DEVICE_REGISTER,
+                device_id=device_id,
+                payload={
+                    "device_type": "android",
+                    "name": device_info.get("name", "Android Device"),
+                    "capabilities": device_info.get("capabilities", [])
+                }
+            )
         
         return {
             "success": True,
@@ -166,17 +167,18 @@ class RepoCoordinator:
         
         device = self.android_devices[device_id]
         
-        # 创建 AIP 任务消息
-        message = AIPMessage(
-            message_type=AIPMessageType.TASK_ASSIGN,
-            source_id="galaxy_core",
-            target_id=device_id,
-            payload={
-                "task_type": task_type,
-                "params": params,
-                "timestamp": datetime.now().isoformat()
-            }
-        )
+        # 创建 AIP 任务消息（使用 v3 字段名 type / device_id）
+        message = None
+        if AIPMessage is not None and AIPMessageType is not None:
+            message = AIPMessage(
+                type=AIPMessageType.TASK_ASSIGN,
+                device_id=device_id,
+                payload={
+                    "task_type": task_type,
+                    "params": params,
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
         
         try:
             # 优先使用 WebSocket

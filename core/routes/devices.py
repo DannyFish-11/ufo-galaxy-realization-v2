@@ -96,6 +96,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         事实源（SSOT）: UnifiedDeviceManager (UDM)。
         registered_devices 作为只读兼容缓存保留，不再是主数据源。
         """
+        # Explicit pre-validation: device_id must be a non-empty string.
+        # Although Pydantic enforces `device_id: str`, an empty string is still
+        # technically valid at the model level, so we add a guard here to return
+        # a clear 400 before any deeper processing (including AIPMessage build).
+        if not req.device_id or not req.device_id.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="device_id is required and must not be empty",
+            )
         device_info = {
             "device_id": req.device_id,
             "device_type": req.device_type,
