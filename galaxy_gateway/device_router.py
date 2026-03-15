@@ -248,7 +248,55 @@ class DeviceRouter:
                 if not is_cross_device_enabled():
                     trace_id = (context or {}).get("trace_id")
                     return make_disabled_response(trace_id=trace_id)
-                # 使用跨设备协调器
+
+                # --- Round 5: Agent Bridge handoff ---
+                # Try delegating to the agent runtime before falling back to the
+                # local cross-device coordinator.
+                try:
+                    from galaxy_gateway.agent_bridge import (
+                        AgentBridge,
+                        HandoffContract,
+                        get_agent_bridge,
+                    )
+
+                    ctx = context or {}
+                    bridge = get_agent_bridge()
+                    # Only attempt handoff when the bridge is configured and enabled.
+                    if bridge._config.enabled:
+                        trace_id = ctx.get("trace_id") or str(uuid.uuid4())
+                        contract = HandoffContract(
+                            trace_id=trace_id,
+                            task={
+                                "command": command,
+                                "analysis": analysis,
+                                "context": ctx,
+                            },
+                            capability=analysis.get("task_type", ""),
+                            exec_mode=analysis.get("exec_mode", "both"),
+                            route_mode=ctx.get("route_mode", "direct"),
+                            session=ctx.get("session", {}),
+                            callback_channel=ctx.get("callback_channel", "ws"),
+                        )
+
+                        async def _local_coordinator_fallback(task: dict) -> dict:
+                            coordinator = get_cross_device_coordinator()
+                            return await coordinator.execute_cross_device_task(
+                                task.get("command", command),
+                                task.get("context", ctx),
+                            )
+
+                        return await bridge.handoff(
+                            contract=contract,
+                            local_fallback=_local_coordinator_fallback,
+                        )
+                except Exception as _bridge_err:
+                    logger.warning(
+                        "agent_bridge_import_error trace_id=%s error=%s; using coordinator",
+                        (context or {}).get("trace_id", ""),
+                        _bridge_err,
+                    )
+
+                # Use cross-device coordinator (fallback when bridge import failed)
                 coordinator = get_cross_device_coordinator()
                 return await coordinator.execute_cross_device_task(command, context)
             
