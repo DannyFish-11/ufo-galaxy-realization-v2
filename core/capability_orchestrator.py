@@ -166,23 +166,57 @@ class CapabilityOrchestrator:
             logger.warning(f"加载技能失败: {e}")
     
     async def _load_nodes(self):
-        """加载节点能力"""
+        """加载节点能力 — 同时写入 NodeDiscoveryService 注册表"""
         try:
+            from core.port_config import get_node_port
             config_path = Path("config/node_registry.json")
             if config_path.exists():
                 with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
-                
+
                 for node_name, node_info in config.get("nodes", {}).items():
+                    # Resolve the canonical port for this node
+                    try:
+                        port = get_node_port(node_name)
+                    except Exception:
+                        port = 0
+
+                    is_ready = node_info.get("production_ready", True)
                     cap = Capability(
                         id=f"node_{node_info['id']}",
                         name=node_info["name"],
                         description=f"节点: {node_info['name']}",
                         type=CapabilityType.NODE,
                         source=node_name,
-                        tags=["node"],
+                        tags=["node"] + ([] if is_ready else ["placeholder"]),
+                        parameters={"port": port},
                     )
                     self.capabilities[cap.id] = cap
+
+                # Pre-populate NodeDiscoveryService with static config entries
+                # so nodes are discoverable without hardcoded URLs or live UDP.
+                try:
+                    from core.node_discovery import get_node_discovery, DiscoveredNode, NodeRole
+                    discovery = get_node_discovery()
+                    for node_name, node_info in config.get("nodes", {}).items():
+                        try:
+                            port = get_node_port(node_name)
+                        except Exception:
+                            port = 0
+                        if port <= 0:
+                            continue
+                        dn = DiscoveredNode(
+                            node_id=node_name,
+                            host="localhost",
+                            port=port,
+                            role=NodeRole.WORKER,
+                            capabilities=[node_info.get("name", node_name)],
+                        )
+                        discovery.register_node(dn)
+                    logger.info(f"NodeDiscovery: pre-populated {len(config.get('nodes', {}))} static nodes")
+                except Exception as disc_err:
+                    logger.debug(f"NodeDiscovery pre-populate skipped: {disc_err}")
+
         except Exception as e:
             logger.warning(f"加载节点失败: {e}")
     
@@ -361,16 +395,68 @@ class CapabilityOrchestrator:
         return await skill_loader.execute(skill_id, **params)
     
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
-        """执行节点"""
+        """执行节点 — 优先走 NodeRegistry in-process 调用，降级到 HTTP"""
         import httpx
-        
-        node_id = cap.source.replace("Node_", "").split("_")[0]
-        port = 8000 + int(node_id)
+        from core.port_config import get_node_port
+
+        node_name = cap.source  # e.g. "Node_50_Transformer"
+
+        # 1. 尝试通过 NodeRegistry in-process 调用
+        try:
+            from core.node_registry import get_registry
+            registry = get_registry()
+            action = params.get("action", "execute")
+            node_params = {k: v for k, v in params.items() if k != "action"}
+            result = await registry.call_node(node_name, action, node_params,
+                                              allow_failover=False)
+            if result.get("success") is not False or "error" not in result:
+                return result
+        except Exception:
+            pass  # fall through to HTTP
+
+        # 2. Resolve port from canonical port config (not 8000+id)
+        try:
+            port = get_node_port(node_name)
+        except Exception:
+            # Last-resort fallback: parse numeric id from node name
+            try:
+                node_num = int(node_name.replace("Node_", "").split("_")[0])
+                port = 8000 + node_num
+            except ValueError:
+                port = 8000
+
         url = f"http://localhost:{port}/execute"
-        
+
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(url, json=params)
             return response.json()
+
+    async def dispatch(self, capability: str, **params: Any) -> Any:
+        """
+        统一调度入口 — 按能力名称/ID 路由到正确节点或工具。
+
+        1. 精确匹配 capability_id
+        2. 语义搜索（能力名称/标签）
+        3. 按 CapabilityType 委托执行
+        4. 保持与直接 HTTP 路径的向后兼容
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # Exact id match first
+        cap = self.capabilities.get(capability)
+
+        # Fuzzy match by name / tag if no exact id
+        if cap is None:
+            cap = await self.find_best(capability)
+
+        if cap is None:
+            # Last resort: treat as chat
+            return await self._execute_builtin(
+                self.capabilities["builtin_chat"], {"message": capability, **params}
+            )
+
+        return await self.execute(cap.id, **params)
     
     async def _execute_builtin(self, cap: Capability, params: Dict) -> Any:
         """执行内置能力"""
@@ -502,3 +588,8 @@ async def execute_capability(capability_id: str, **params) -> Any:
 async def smart_execute(query: str, **params) -> Any:
     """智能执行"""
     return await capability_orchestrator.smart_execute(query, **params)
+
+
+async def dispatch(capability: str, **params: Any) -> Any:
+    """统一调度入口 — 按能力名称/ID 路由到正确节点或工具"""
+    return await capability_orchestrator.dispatch(capability, **params)

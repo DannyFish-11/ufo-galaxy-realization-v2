@@ -304,8 +304,9 @@ class ExternalToolWrapper:
                            input_data: str = None, working_dir: str = None,
                            env: Dict = None) -> ToolExecution:
         """运行命令"""
-        process = await asyncio.create_subprocess_shell(
-            command,
+        import shlex
+        process = await asyncio.create_subprocess_exec(
+            *shlex.split(command),
             stdin=asyncio.subprocess.PIPE if input_data else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

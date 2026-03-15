@@ -55,9 +55,10 @@ logger.info(f"Linux Desktop Tools: xdotool={XDOTOOL_AVAILABLE}, scrot={SCROT_AVA
 
 async def _run_cmd(cmd: str, timeout: float = 10.0) -> str:
     """执行系统命令"""
+    import shlex
     try:
-        process = await asyncio.create_subprocess_shell(
-            cmd,
+        process = await asyncio.create_subprocess_exec(
+            *shlex.split(cmd),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )

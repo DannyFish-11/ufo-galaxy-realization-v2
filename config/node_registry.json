@@ -9,7 +9,8 @@
       "path": "nodes/Node_00_StateMachine",
       "has_main": true,
       "main_size": 11316,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_01_OneAPI": {
       "id": "01",
@@ -17,7 +18,8 @@
       "path": "nodes/Node_01_OneAPI",
       "has_main": true,
       "main_size": 22360,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_02_Tasker": {
       "id": "02",
@@ -25,7 +27,8 @@
       "path": "nodes/Node_02_Tasker",
       "has_main": true,
       "main_size": 16833,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_03_SecretVault": {
       "id": "03",
@@ -33,7 +36,8 @@
       "path": "nodes/Node_03_SecretVault",
       "has_main": true,
       "main_size": 8618,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_04_Router": {
       "id": "04",
@@ -41,7 +45,8 @@
       "path": "nodes/Node_04_Router",
       "has_main": true,
       "main_size": 16681,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_05_Auth": {
       "id": "05",
@@ -49,7 +54,8 @@
       "path": "nodes/Node_05_Auth",
       "has_main": true,
       "main_size": 16534,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_06_Filesystem": {
       "id": "06",
@@ -57,7 +63,8 @@
       "path": "nodes/Node_06_Filesystem",
       "has_main": true,
       "main_size": 10550,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_07_Git": {
       "id": "07",
@@ -65,7 +72,8 @@
       "path": "nodes/Node_07_Git",
       "has_main": true,
       "main_size": 11816,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_08_Fetch": {
       "id": "08",
@@ -73,7 +81,8 @@
       "path": "nodes/Node_08_Fetch",
       "has_main": true,
       "main_size": 2360,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_09_Sandbox": {
       "id": "09",
@@ -81,7 +90,8 @@
       "path": "nodes/Node_09_Sandbox",
       "has_main": true,
       "main_size": 11380,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_100_MemorySystem": {
       "id": "100",
@@ -89,7 +99,8 @@
       "path": "nodes/Node_100_MemorySystem",
       "has_main": true,
       "main_size": 20538,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_101_CodeEngine": {
       "id": "101",
@@ -97,7 +108,8 @@
       "path": "nodes/Node_101_CodeEngine",
       "has_main": true,
       "main_size": 19532,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_102_DebugOptimize": {
       "id": "102",
@@ -105,7 +117,8 @@
       "path": "nodes/Node_102_DebugOptimize",
       "has_main": true,
       "main_size": 19374,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_103_KnowledgeGraph": {
       "id": "103",
@@ -113,7 +126,8 @@
       "path": "nodes/Node_103_KnowledgeGraph",
       "has_main": true,
       "main_size": 19388,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_104_AgentCPM": {
       "id": "104",
@@ -121,7 +135,8 @@
       "path": "nodes/Node_104_AgentCPM",
       "has_main": true,
       "main_size": 14990,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_105_UnifiedKnowledgeBase": {
       "id": "105",
@@ -129,7 +144,8 @@
       "path": "nodes/Node_105_UnifiedKnowledgeBase",
       "has_main": true,
       "main_size": 19028,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_106_GitHubFlow": {
       "id": "106",
@@ -137,7 +153,8 @@
       "path": "nodes/Node_106_GitHubFlow",
       "has_main": true,
       "main_size": 15750,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_108_MetaCognition": {
       "id": "108",
@@ -145,7 +162,8 @@
       "path": "nodes/Node_108_MetaCognition",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_109_ProactiveSensing": {
       "id": "109",
@@ -153,7 +171,8 @@
       "path": "nodes/Node_109_ProactiveSensing",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_10_Slack": {
       "id": "10",
@@ -161,7 +180,8 @@
       "path": "nodes/Node_10_Slack",
       "has_main": true,
       "main_size": 2442,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_110_SmartOrchestrator": {
       "id": "110",
@@ -169,7 +189,8 @@
       "path": "nodes/Node_110_SmartOrchestrator",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_111_ContextManager": {
       "id": "111",
@@ -177,7 +198,8 @@
       "path": "nodes/Node_111_ContextManager",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_112_SelfHealing": {
       "id": "112",
@@ -185,7 +207,8 @@
       "path": "nodes/Node_112_SelfHealing",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_113_AndroidVLM": {
       "id": "113",
@@ -193,7 +216,8 @@
       "path": "nodes/Node_113_AndroidVLM",
       "has_main": true,
       "main_size": 5600,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_116_ExternalToolWrapper": {
       "id": "116",
@@ -201,7 +225,8 @@
       "path": "nodes/Node_116_ExternalToolWrapper",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_117_OpenCode": {
       "id": "117",
@@ -209,7 +234,8 @@
       "path": "nodes/Node_117_OpenCode",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_118_NodeFactory": {
       "id": "118",
@@ -217,7 +243,8 @@
       "path": "nodes/Node_118_NodeFactory",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_11_GitHub": {
       "id": "11",
@@ -225,7 +252,8 @@
       "path": "nodes/Node_11_GitHub",
       "has_main": true,
       "main_size": 5267,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_120_File": {
       "id": "120",
@@ -233,7 +261,8 @@
       "path": "nodes/Node_120_File",
       "has_main": true,
       "main_size": 23456,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_12_Postgres": {
       "id": "12",
@@ -241,7 +270,8 @@
       "path": "nodes/Node_12_Postgres",
       "has_main": true,
       "main_size": 2409,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_13_SQLite": {
       "id": "13",
@@ -249,7 +279,8 @@
       "path": "nodes/Node_13_SQLite",
       "has_main": true,
       "main_size": 11856,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_121_Web": {
       "id": "121",
@@ -257,7 +288,8 @@
       "path": "nodes/Node_121_Web",
       "has_main": true,
       "main_size": 19280,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_14_FFmpeg": {
       "id": "14",
@@ -265,7 +297,8 @@
       "path": "nodes/Node_14_FFmpeg",
       "has_main": true,
       "main_size": 3970,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_122_Shell": {
       "id": "122",
@@ -273,7 +306,8 @@
       "path": "nodes/Node_122_Shell",
       "has_main": true,
       "main_size": 16326,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_15_OCR": {
       "id": "15",
@@ -281,7 +315,8 @@
       "path": "nodes/Node_15_OCR",
       "has_main": true,
       "main_size": 3813,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_16_Email": {
       "id": "16",
@@ -289,7 +324,8 @@
       "path": "nodes/Node_16_Email",
       "has_main": true,
       "main_size": 2838,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_17_EdgeTTS": {
       "id": "17",
@@ -297,7 +333,8 @@
       "path": "nodes/Node_17_EdgeTTS",
       "has_main": true,
       "main_size": 3126,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_18_DeepL": {
       "id": "18",
@@ -305,7 +342,8 @@
       "path": "nodes/Node_18_DeepL",
       "has_main": true,
       "main_size": 3167,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_19_Crypto": {
       "id": "19",
@@ -313,7 +351,8 @@
       "path": "nodes/Node_19_Crypto",
       "has_main": true,
       "main_size": 6022,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_20_Qdrant": {
       "id": "20",
@@ -321,7 +360,8 @@
       "path": "nodes/Node_20_Qdrant",
       "has_main": true,
       "main_size": 5542,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_21_Notion": {
       "id": "21",
@@ -329,7 +369,8 @@
       "path": "nodes/Node_21_Notion",
       "has_main": true,
       "main_size": 10640,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_22_BraveSearch": {
       "id": "22",
@@ -337,7 +378,8 @@
       "path": "nodes/Node_22_BraveSearch",
       "has_main": true,
       "main_size": 6695,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_123_Calendar": {
       "id": "123",
@@ -345,7 +387,8 @@
       "path": "nodes/Node_123_Calendar",
       "has_main": true,
       "main_size": 4035,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_23_Time": {
       "id": "23",
@@ -353,7 +396,8 @@
       "path": "nodes/Node_23_Time",
       "has_main": true,
       "main_size": 4063,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_24_Weather": {
       "id": "24",
@@ -361,7 +405,8 @@
       "path": "nodes/Node_24_Weather",
       "has_main": true,
       "main_size": 8948,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_25_GoogleSearch": {
       "id": "25",
@@ -369,7 +414,8 @@
       "path": "nodes/Node_25_GoogleSearch",
       "has_main": true,
       "main_size": 2769,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_28_Reserved": {
       "id": "28",
@@ -377,7 +423,8 @@
       "path": "nodes/Node_28_Reserved",
       "has_main": true,
       "main_size": 1160,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_29_Reserved": {
       "id": "29",
@@ -385,7 +432,8 @@
       "path": "nodes/Node_29_Reserved",
       "has_main": true,
       "main_size": 1160,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_30_Reserved": {
       "id": "30",
@@ -393,7 +441,8 @@
       "path": "nodes/Node_30_Reserved",
       "has_main": true,
       "main_size": 1160,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_31_Reserved": {
       "id": "31",
@@ -401,7 +450,8 @@
       "path": "nodes/Node_31_Reserved",
       "has_main": true,
       "main_size": 1160,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_32_Reserved": {
       "id": "32",
@@ -409,7 +459,8 @@
       "path": "nodes/Node_32_Reserved",
       "has_main": true,
       "main_size": 1160,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_33_ADB": {
       "id": "33",
@@ -417,7 +468,8 @@
       "path": "nodes/Node_33_ADB",
       "has_main": true,
       "main_size": 16367,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_34_Scrcpy": {
       "id": "34",
@@ -425,7 +477,8 @@
       "path": "nodes/Node_34_Scrcpy",
       "has_main": true,
       "main_size": 10602,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_35_AppleScript": {
       "id": "35",
@@ -433,7 +486,8 @@
       "path": "nodes/Node_35_AppleScript",
       "has_main": true,
       "main_size": 3876,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_36_UIAWindows": {
       "id": "36",
@@ -441,7 +495,8 @@
       "path": "nodes/Node_36_UIAWindows",
       "has_main": true,
       "main_size": 15520,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_37_LinuxDBus": {
       "id": "37",
@@ -449,7 +504,8 @@
       "path": "nodes/Node_37_LinuxDBus",
       "has_main": true,
       "main_size": 2443,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_38_BLE": {
       "id": "38",
@@ -457,7 +513,8 @@
       "path": "nodes/Node_38_BLE",
       "has_main": true,
       "main_size": 4752,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_39_SSH": {
       "id": "39",
@@ -465,7 +522,8 @@
       "path": "nodes/Node_39_SSH",
       "has_main": true,
       "main_size": 2459,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_40_SFTP": {
       "id": "40",
@@ -473,7 +531,8 @@
       "path": "nodes/Node_40_SFTP",
       "has_main": true,
       "main_size": 4444,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_41_MQTT": {
       "id": "41",
@@ -481,7 +540,8 @@
       "path": "nodes/Node_41_MQTT",
       "has_main": true,
       "main_size": 2211,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_42_CANbus": {
       "id": "42",
@@ -489,7 +549,8 @@
       "path": "nodes/Node_42_CANbus",
       "has_main": true,
       "main_size": 1997,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_43_MAVLink": {
       "id": "43",
@@ -497,7 +558,8 @@
       "path": "nodes/Node_43_MAVLink",
       "has_main": true,
       "main_size": 5317,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_44_NFC": {
       "id": "44",
@@ -505,7 +567,8 @@
       "path": "nodes/Node_44_NFC",
       "has_main": true,
       "main_size": 2037,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_45_DesktopAuto": {
       "id": "45",
@@ -513,7 +576,8 @@
       "path": "nodes/Node_45_DesktopAuto",
       "has_main": true,
       "main_size": 6861,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_46_Camera": {
       "id": "46",
@@ -521,7 +585,8 @@
       "path": "nodes/Node_46_Camera",
       "has_main": true,
       "main_size": 2742,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_47_Audio": {
       "id": "47",
@@ -529,7 +594,8 @@
       "path": "nodes/Node_47_Audio",
       "has_main": true,
       "main_size": 3169,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_125_MediaGen": {
       "id": "125",
@@ -537,7 +603,8 @@
       "path": "nodes/Node_125_MediaGen",
       "has_main": true,
       "main_size": 3562,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_48_Serial": {
       "id": "48",
@@ -545,7 +612,8 @@
       "path": "nodes/Node_48_Serial",
       "has_main": true,
       "main_size": 3073,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_49_OctoPrint": {
       "id": "49",
@@ -553,7 +621,8 @@
       "path": "nodes/Node_49_OctoPrint",
       "has_main": true,
       "main_size": 14266,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_50_Transformer": {
       "id": "50",
@@ -561,7 +630,8 @@
       "path": "nodes/Node_50_Transformer",
       "has_main": true,
       "main_size": 11570,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_51_QuantumDispatcher": {
       "id": "51",
@@ -569,7 +639,8 @@
       "path": "nodes/Node_51_QuantumDispatcher",
       "has_main": true,
       "main_size": 23351,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_52_QiskitSimulator": {
       "id": "52",
@@ -577,7 +648,8 @@
       "path": "nodes/Node_52_QiskitSimulator",
       "has_main": true,
       "main_size": 20246,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_53_GraphLogic": {
       "id": "53",
@@ -585,7 +657,8 @@
       "path": "nodes/Node_53_GraphLogic",
       "has_main": true,
       "main_size": 8911,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_54_SymbolicMath": {
       "id": "54",
@@ -593,7 +666,8 @@
       "path": "nodes/Node_54_SymbolicMath",
       "has_main": true,
       "main_size": 21897,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_126_AgentSwarm": {
       "id": "126",
@@ -601,7 +675,8 @@
       "path": "nodes/Node_126_AgentSwarm",
       "has_main": true,
       "main_size": 34735,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_56_Planning": {
       "id": "56",
@@ -609,7 +684,8 @@
       "path": "nodes/Node_56_Planning",
       "has_main": true,
       "main_size": 6078,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_57_QuantumCloud": {
       "id": "57",
@@ -617,7 +693,8 @@
       "path": "nodes/Node_57_QuantumCloud",
       "has_main": true,
       "main_size": 5875,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_58_ModelRouter": {
       "id": "58",
@@ -625,7 +702,8 @@
       "path": "nodes/Node_58_ModelRouter",
       "has_main": true,
       "main_size": 37525,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_59_CausalInference": {
       "id": "59",
@@ -633,7 +711,8 @@
       "path": "nodes/Node_59_CausalInference",
       "has_main": true,
       "main_size": 5690,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_61_GeometricReasoning": {
       "id": "61",
@@ -641,7 +720,8 @@
       "path": "nodes/Node_61_GeometricReasoning",
       "has_main": true,
       "main_size": 5924,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_62_ProbabilisticProgramming": {
       "id": "62",
@@ -649,7 +729,8 @@
       "path": "nodes/Node_62_ProbabilisticProgramming",
       "has_main": true,
       "main_size": 5405,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_64_Telemetry": {
       "id": "64",
@@ -657,7 +738,8 @@
       "path": "nodes/Node_64_Telemetry",
       "has_main": true,
       "main_size": 27745,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_65_LoggerCentral": {
       "id": "65",
@@ -665,7 +747,8 @@
       "path": "nodes/Node_65_LoggerCentral",
       "has_main": true,
       "main_size": 20504,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_66_ConfigManager": {
       "id": "66",
@@ -673,7 +756,8 @@
       "path": "nodes/Node_66_ConfigManager",
       "has_main": true,
       "main_size": 2277,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_67_HealthMonitor": {
       "id": "67",
@@ -681,7 +765,8 @@
       "path": "nodes/Node_67_HealthMonitor",
       "has_main": true,
       "main_size": 22004,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_68_Security": {
       "id": "68",
@@ -689,7 +774,8 @@
       "path": "nodes/Node_68_Security",
       "has_main": true,
       "main_size": 15600,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_69_BackupRestore": {
       "id": "69",
@@ -697,7 +783,8 @@
       "path": "nodes/Node_69_BackupRestore",
       "has_main": true,
       "main_size": 25963,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_70_AutonomousLearning": {
       "id": "70",
@@ -705,7 +792,8 @@
       "path": "nodes/Node_70_AutonomousLearning",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_127_BambuLab": {
       "id": "127",
@@ -713,7 +801,8 @@
       "path": "nodes/Node_127_BambuLab",
       "has_main": true,
       "main_size": 5854,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_128_MediaGen": {
       "id": "128",
@@ -721,7 +810,8 @@
       "path": "nodes/Node_128_MediaGen",
       "has_main": true,
       "main_size": 3562,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_71_MultiDeviceCoordination": {
       "id": "71",
@@ -729,7 +819,8 @@
       "path": "nodes/Node_71_MultiDeviceCoordination",
       "has_main": false,
       "main_size": 0,
-      "status": "stub"
+      "status": "stub",
+      "production_ready": false
     },
     "Node_72_KnowledgeBase": {
       "id": "72",
@@ -737,7 +828,8 @@
       "path": "nodes/Node_72_KnowledgeBase",
       "has_main": true,
       "main_size": 4290,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_73_Learning": {
       "id": "73",
@@ -745,7 +837,8 @@
       "path": "nodes/Node_73_Learning",
       "has_main": true,
       "main_size": 3881,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_74_DigitalTwin": {
       "id": "74",
@@ -753,7 +846,8 @@
       "path": "nodes/Node_74_DigitalTwin",
       "has_main": true,
       "main_size": 4658,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_79_LocalLLM": {
       "id": "79",
@@ -761,7 +855,8 @@
       "path": "nodes/Node_79_LocalLLM",
       "has_main": true,
       "main_size": 27141,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_80_MemorySystem": {
       "id": "80",
@@ -769,7 +864,8 @@
       "path": "nodes/Node_80_MemorySystem",
       "has_main": true,
       "main_size": 29353,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_81_Orchestrator": {
       "id": "81",
@@ -777,7 +873,8 @@
       "path": "nodes/Node_81_Orchestrator",
       "has_main": true,
       "main_size": 19216,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_82_NetworkGuard": {
       "id": "82",
@@ -785,7 +882,8 @@
       "path": "nodes/Node_82_NetworkGuard",
       "has_main": true,
       "main_size": 13547,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_83_NewsAggregator": {
       "id": "83",
@@ -793,7 +891,8 @@
       "path": "nodes/Node_83_NewsAggregator",
       "has_main": true,
       "main_size": 14310,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_84_StockTracker": {
       "id": "84",
@@ -801,7 +900,8 @@
       "path": "nodes/Node_84_StockTracker",
       "has_main": true,
       "main_size": 15593,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_85_PromptLibrary": {
       "id": "85",
@@ -809,7 +909,8 @@
       "path": "nodes/Node_85_PromptLibrary",
       "has_main": true,
       "main_size": 18078,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_90_MultimodalVision": {
       "id": "90",
@@ -817,7 +918,8 @@
       "path": "nodes/Node_90_MultimodalVision",
       "has_main": true,
       "main_size": 20329,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_91_MultimodalAgent": {
       "id": "91",
@@ -825,7 +927,8 @@
       "path": "nodes/Node_91_MultimodalAgent",
       "has_main": true,
       "main_size": 13668,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_92_AutoControl": {
       "id": "92",
@@ -833,7 +936,8 @@
       "path": "nodes/Node_92_AutoControl",
       "has_main": true,
       "main_size": 10255,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_95_WebRTC_Receiver": {
       "id": "95",
@@ -841,7 +945,8 @@
       "path": "nodes/Node_95_WebRTC_Receiver",
       "has_main": true,
       "main_size": 14183,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_96_SmartTransportRouter": {
       "id": "96",
@@ -849,7 +954,8 @@
       "path": "nodes/Node_96_SmartTransportRouter",
       "has_main": true,
       "main_size": 606,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     },
     "Node_97_AcademicSearch": {
       "id": "97",
@@ -857,7 +963,8 @@
       "path": "nodes/Node_97_AcademicSearch",
       "has_main": true,
       "main_size": 10447,
-      "status": "active"
+      "status": "active",
+      "production_ready": true
     }
   }
 }

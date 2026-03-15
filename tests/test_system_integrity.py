@@ -63,16 +63,17 @@ class TestPhase2DeviceSubsystem:
         assert "typewrite" in source
         assert "pyautogui.write(" not in source
 
-    def test_mock_client_session_has_request_method(self):
-        # Force reimport to test the mock path
+    def test_node08_fetch_uses_httpx_client(self):
+        # Node_08_Fetch was refactored from aiohttp mock to httpx.AsyncClient.
+        # Verify the current implementation uses httpx.AsyncClient.request().
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "nodes", "Node_08_Fetch", "main.py",
         )
         with open(source_path) as f:
             content = f.read()
-        assert "def request(self, method, url" in content
-        assert "async def close(self)" in content
+        assert "httpx" in content
+        assert "AsyncClient" in content or "httpx.AsyncClient" in content
 
     def test_device_router_uses_asyncio_event(self):
         import inspect

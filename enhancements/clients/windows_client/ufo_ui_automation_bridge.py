@@ -9,6 +9,7 @@ Windows UI 自动化桥接器
 
 import sys
 import os
+import shlex
 from typing import Dict, Any, List
 import subprocess
 import json
@@ -145,8 +146,8 @@ class UFOUIAutomationBridge:
         path = software_paths.get(software, software)
         
         try:
-            # 使用 subprocess 启动程序
-            subprocess.Popen(path, shell=True)
+            # 使用 subprocess 启动程序（不使用 shell=True 以防命令注入）
+            subprocess.Popen(shlex.split(path))
             return {
                 "status": "success",
                 "method": "subprocess",
