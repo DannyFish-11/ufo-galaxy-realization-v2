@@ -147,7 +147,8 @@ class UFOUIAutomationBridge:
         
         try:
             # 使用 subprocess 启动程序（不使用 shell=True 以防命令注入）
-            subprocess.Popen(shlex.split(path))
+            # 直接用列表形式，避免 shlex.split 在 Windows 路径上的兼容问题
+            subprocess.Popen([path])
             return {
                 "status": "success",
                 "method": "subprocess",

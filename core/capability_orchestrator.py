@@ -451,7 +451,11 @@ class CapabilityOrchestrator:
             cap = await self.find_best(capability)
 
         if cap is None:
-            # Last resort: treat as chat
+            # Last resort: treat as chat and log a warning so operators know
+            # the requested capability was not found.
+            logger.warning(
+                f"dispatch(): 未找到能力 '{capability}'，降级到 builtin_chat"
+            )
             return await self._execute_builtin(
                 self.capabilities["builtin_chat"], {"message": capability, **params}
             )

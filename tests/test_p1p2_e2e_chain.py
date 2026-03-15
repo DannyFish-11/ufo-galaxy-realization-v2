@@ -79,11 +79,14 @@ class TestNodeDiscoveryIntegration:
 
         svc = NodeDiscoveryService(node_id="test_master", port=9999)
         count = NodeDiscoveryService.seed_from_registry(svc)
-        # At least some nodes should be seeded (those with known ports)
-        assert count >= 0  # may be 0 if port config not loaded, that's ok
-        # all seeded nodes should be accessible
+        # Nodes with resolvable ports should be seeded; verify the function works
+        # (count may be 0 in minimal env where port config is not loaded)
+        assert count >= 0, "seed_from_registry should return a non-negative count"
+        # All seeded nodes must be valid DiscoveredNode instances
         for node in svc.nodes.values():
             assert isinstance(node, DiscoveredNode)
+            assert node.host
+            assert node.port > 0
 
     def test_discover_by_node_id(self):
         from core.node_discovery import NodeDiscoveryService, NodeRole, DiscoveredNode, DiscoveryState

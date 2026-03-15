@@ -275,7 +275,7 @@ class NodeDiscoveryService:
             from core.port_config import get_node_port
         except Exception:
             def get_node_port(name: str) -> int:
-                raise ValueError(name)
+                raise ValueError(f"Port configuration not available for node: {name}")
 
         config_path = Path(registry_path)
         if not config_path.exists():
