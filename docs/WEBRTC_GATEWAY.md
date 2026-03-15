@@ -646,3 +646,126 @@ Tests use a local mock WebSocket server and do **not** require a real
 | `tests/test_webrtc_signaling_turn.py`  | **Round 6** — TURN injection, trickle ICE, candidate ordering, timeout, backward-compat tests |
 | `tests/test_config_endpoint.py`        | Unit tests for `GET /api/v1/config`                      |
 | `tests/test_cross_device_switch.py`    | **Round 4** — cross-device switch OFF/ON behavior tests  |
+| `tools/camera_webrtc_sender.py`        | **Desktop sender** — captures webcam via OpenCV + aiortc and streams to Gateway |
+
+---
+
+## Desktop Webcam Sender (PR 3)
+
+`tools/camera_webrtc_sender.py` is a standalone Python script that captures
+video from a local webcam and publishes it to the Galaxy Gateway through the
+standard WebRTC signaling endpoint.
+
+### Prerequisites
+
+```bash
+pip install -r tools/requirements.txt
+```
+
+This installs:
+
+| Package                    | Purpose                              |
+|----------------------------|--------------------------------------|
+| `aiortc`                   | Python WebRTC stack (offer/answer/ICE) |
+| `opencv-python-headless`   | Webcam capture via `cv2.VideoCapture` |
+| `av`                       | Video frame encoding (PyAV)          |
+| `websockets`               | Async WebSocket client for signaling |
+
+### Quick Start
+
+```bash
+python tools/camera_webrtc_sender.py \
+    --device-id desktop_cam_1 \
+    --gateway-ws-url ws://localhost:8765/ws/webrtc \
+    --camera-index 0 \
+    --frame-rate 15 \
+    --resolution 1280x720
+```
+
+The script will:
+
+1. Open webcam index `0` at 1280×720 / 15 fps.
+2. Connect to `ws://localhost:8765/ws/webrtc/desktop_cam_1`.
+3. Send an SDP **offer**, wait for the **answer** from Node_95 (via the Gateway proxy).
+4. Exchange ICE candidates in trickle mode.
+5. Stream video until interrupted (`Ctrl+C`).
+
+### Environment Variables
+
+All CLI arguments can also be set via environment variables:
+
+| Variable          | CLI flag              | Default                             | Description                              |
+|-------------------|-----------------------|-------------------------------------|------------------------------------------|
+| `DEVICE_ID`       | `--device-id`         | `desktop_cam_1`                     | Unique identifier for this device        |
+| `GATEWAY_WS_URL`  | `--gateway-ws-url`    | `ws://localhost:8765/ws/webrtc`     | Gateway base WebSocket URL (no device_id suffix) |
+| `CAMERA_INDEX`    | `--camera-index`      | `0`                                 | OpenCV camera device index               |
+| `FRAME_RATE`      | `--frame-rate`        | `15`                                | Target frames per second                 |
+| `RESOLUTION`      | `--resolution`        | `1280x720`                          | Video resolution as `WxH`                |
+
+Example using environment variables:
+
+```bash
+DEVICE_ID=office_cam \
+GATEWAY_WS_URL=ws://192.168.1.10:8765/ws/webrtc \
+FRAME_RATE=10 \
+python tools/camera_webrtc_sender.py
+```
+
+### Verifying the Stream
+
+Once the sender is connected and streaming you can verify it through the
+Node_95 endpoints:
+
+| Endpoint                          | Expected response                              |
+|-----------------------------------|------------------------------------------------|
+| `GET /devices`                    | JSON list containing `desktop_cam_1`           |
+| `GET /frame/{device_id}`          | Returns the latest JPEG frame (200 OK)         |
+| `GET /stream/{device_id}`         | MJPEG stream suitable for browser preview      |
+
+Example:
+
+```bash
+# List registered devices
+curl http://localhost:8095/devices
+
+# Fetch a single JPEG frame
+curl -o frame.jpg http://localhost:8095/frame/desktop_cam_1
+
+# Open MJPEG stream in browser
+open "http://localhost:8095/stream/desktop_cam_1"
+```
+
+### Signaling Message Format
+
+The sender implements the same offer/answer/ICE protocol used by the Android
+client:
+
+```json
+// Sender → Gateway (offer)
+{ "type": "offer", "sdp": "v=0\r\n..." }
+
+// Gateway → Sender (answer, relayed from Node_95)
+{ "type": "answer", "sdp": "v=0\r\n..." }
+
+// Either direction (trickle ICE)
+{
+  "type": "ice_candidate",
+  "candidate": "candidate:1 1 UDP 2 1.2.3.4 54321 typ host",
+  "sdpMid": "0",
+  "sdpMLineIndex": 0
+}
+
+// Gateway → Sender (ICE server hint, Round 6)
+{
+  "type": "ice_servers",
+  "ice_servers": [{ "urls": ["stun:stun.l.google.com:19302"] }]
+}
+```
+
+### Enable Verbose Logging
+
+```bash
+python tools/camera_webrtc_sender.py --verbose
+```
+
+This sets the log level to `DEBUG` and prints every ICE candidate exchange.
