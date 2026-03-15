@@ -2,10 +2,10 @@
 WebSocket Handler - WebSocket 连接处理器
 
 处理与 Android Agent 和其他设备的 WebSocket 连接。
-所有 incoming 消息通过 :func:`parse_message_compat` 规范化为 AIP v3
-格式后再分发给各处理器。响应消息也使用 AIP v3 字段。
+所有 incoming 消息通过 :func:`parse_message_strict` 强制要求 AIP v3+
+格式后再分发给各处理器。低版本消息会被拒绝并关闭连接。
 
-支持的 incoming 协议版本：AIP/1.0、AIP/2.0、AIP/3.0（向后兼容）。
+强制要求：AIP v3.0+（version >= 3.0）；trace_id 和 route_mode 如缺失会被自动注入。
 
 Author: Manus AI
 Version: 2.0
@@ -20,7 +20,7 @@ from typing import Dict, Set
 import uuid
 from fastapi import WebSocket, WebSocketDisconnect
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
-from galaxy_gateway.protocol.compat import parse_message_compat
+from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
 from galaxy_gateway.protocol.aip_v3 import MessageType
 from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
@@ -121,24 +121,65 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
 async def handle_message(connection_id: str, message: Dict, websocket: WebSocket):
     """处理接收到的消息。
 
-    使用 :func:`parse_message_compat` 将 AIP/1.0、AIP/2.0、AIP/3.0 消息统一
-    规范化为 v3 格式后再路由到具体处理器。
+    使用 :func:`parse_message_strict` 强制要求 AIP v3.0+ 版本。低版本消息
+    会被拒绝并关闭 WebSocket 连接；缺失的 trace_id/route_mode 会被自动注入。
     """
     try:
         if "type" not in message:
             logger.warning("⚠️ 收到缺少 type 字段的消息，已忽略")
             return
 
-        # 规范化为 AIP v3
+        # 强制校验 AIP v3；注入 trace_id/route_mode
         try:
-            aip_msg = parse_message_compat(message)
+            aip_msg = parse_message_strict(message)
+        except AIPVersionError as ver_err:
+            raw_version = message.get("version", "<missing>")
+            logger.warning(
+                "AIP version rejected",
+                extra={
+                    "event": "aip_version_rejected",
+                    "raw_version": raw_version,
+                    "connection_id": connection_id,
+                    "message_type": message.get("type"),
+                    "reason": str(ver_err),
+                },
+            )
+            await websocket.send_json({
+                "version": "3.0",
+                "type": "error",
+                "payload": {
+                    "error": "protocol_version_rejected",
+                    "detail": str(ver_err),
+                    "required": "AIP v3.0+",
+                    "received": raw_version,
+                },
+            })
+            await websocket.close(code=4000)
+            return
         except Exception as parse_err:
             logger.warning(f"⚠️ 消息解析失败（type={message.get('type')}）: {parse_err}")
             return
 
+        # Propagate trace_id and route_mode from message metadata into payload
+        # so downstream handlers always see them in aip_msg.payload.
+        # inject_trace_metadata() has already set both fields on the raw dict;
+        # read them back and write into aip_msg.payload for handler access.
+        trace_id = message.get("trace_id")
+        if trace_id is None:
+            trace_id = aip_msg.payload.get("trace_id", "")
+        route_mode = message.get("route_mode")
+        if route_mode is None:
+            route_mode = aip_msg.payload.get("route_mode", "")
+        if trace_id:
+            aip_msg.payload.setdefault("trace_id", trace_id)
+        if route_mode:
+            aip_msg.payload.setdefault("route_mode", route_mode)
+
         logger.info(
             f"📨 收到消息: type={aip_msg.type.value}, "
-            f"device={aip_msg.device_id}, id={aip_msg.message_id}"
+            f"device={aip_msg.device_id}, id={aip_msg.message_id}, "
+            f"trace_id={aip_msg.payload.get('trace_id')}, "
+            f"route_mode={aip_msg.payload.get('route_mode')}"
         )
 
         # 根据规范化后的 v3 MessageType 路由

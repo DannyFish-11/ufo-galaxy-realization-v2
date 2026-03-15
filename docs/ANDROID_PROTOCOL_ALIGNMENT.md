@@ -8,8 +8,14 @@
 > * **WebSocket 主通道**：`/ws/device/{device_id}`（`galaxy_gateway/app.py`）
 > * **REST 设备 API**：`/api/v1/devices/*`（`core/routes/devices.py`）
 >
-> 所有 incoming 消息无论原始版本（AIP/1.0、AIP/2.0、AIP/3.0）均经由 compat 层
-> 规范化为 v3 标准字段后再交内部处理；服务端下发消息也统一使用 v3 格式。
+> **⚠️ 强制要求（Round 2 / AIP v3 enforcement）：**
+>
+> * 所有连接和消息必须携带 `"version": "3.0"`（或更高版本）。  
+>   缺失或低于 3.0 的消息将被 **直接拒绝**：WebSocket 连接收到 `code=4000` 关闭帧；HTTP 请求收到 400 响应。
+> * 每条消息必须携带 `trace_id`（UUID）和 `route_mode`（`"cross_device"` 或 `"local"`）。  
+>   若缺失，服务端会自动注入默认值并记录结构化日志；客户端应尽量主动携带以保持可追踪性。
+>
+> 服务端下发消息统一使用 v3 格式；响应中会透传请求携带的 trace_id 和 route_mode。
 
 ---
 

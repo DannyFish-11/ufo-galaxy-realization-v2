@@ -531,47 +531,59 @@ class AndroidBridge:
         """处理来自安卓设备的消息。
 
         验证流程：
-        1. 通过 compat 层规范化 legacy AIP/1.0 或 AIP/2.0 消息（type 别名映射、
-           version 字段补全）。
-        2. 自动补全 AIP/3.0 的可选元数据字段（timestamp、message_id）——
-           当这些字段在 legacy 消息中缺失时进行填充，保持向后兼容。
-        3. 检查强制字段（type、device_id）——缺失时返回带明确错误码的 error 消息。
-        4. 派发到对应处理器。
+        1. 强制校验 AIP v3.0+（version >= 3.0），低版本直接返回拒绝响应。
+        2. 注入缺失的 trace_id / route_mode 并记录结构化日志。
+        3. 自动补全 AIP/3.0 的可选元数据字段（timestamp、message_id）——
+           当这些字段缺失时进行填充，保持向后兼容。
+        4. 检查强制字段（type、device_id）——缺失时返回带明确错误码的 error 消息。
+        5. 派发到对应处理器。
         """
-        # Step 1 — Normalise legacy protocol versions to v3 field names in-place.
+        # Step 1 — Enforce AIP v3.0+; reject messages with lower version.
         try:
-            from galaxy_gateway.protocol.compat import _detect_version, _normalise_v1, _normalise_v2
-            detected = _detect_version(message)
-            if detected == "1.0":
-                message = _normalise_v1(message)
-                logger.debug("handle_message: AIP/1.0 message normalised to v3")
-            elif detected == "2.0":
-                message = _normalise_v2(message)
-                logger.debug("handle_message: AIP/2.0 message normalised to v3")
-        except Exception as norm_err:
-            logger.debug("handle_message: normalisation skipped (%s)", norm_err)
+            from galaxy_gateway.protocol.compat import enforce_aip_v3, inject_trace_metadata, AIPVersionError
+            try:
+                enforce_aip_v3(message)
+            except AIPVersionError as ver_err:
+                raw_version = message.get("version", "<missing>")
+                logger.warning(
+                    "AIP version rejected in android_bridge",
+                    extra={
+                        "event": "aip_version_rejected",
+                        "raw_version": raw_version,
+                        "device_id": message.get("device_id", "unknown"),
+                        "message_type": message.get("type"),
+                        "reason": str(ver_err),
+                    },
+                )
+                return MessageBuilder.error(
+                    message.get("device_id") or "unknown",
+                    "PROTOCOL_VERSION_REJECTED",
+                    str(ver_err),
+                    details={"required": "AIP v3.0+", "received": raw_version},
+                )
+            # Step 2 — Inject missing trace_id / route_mode.
+            message = inject_trace_metadata(message)
+        except ImportError:
+            pass  # compat module not yet available during early bootstrap
 
         device_id = message.get("device_id")
         msg_type_str = message.get("type")
 
-        # Step 2 — Auto-fill metadata fields that may be absent in legacy messages.
+        # Step 3 — Auto-fill metadata fields that may be absent in legacy messages.
         # This keeps backward compatibility while ensuring all internal handlers
         # receive a complete v3-shaped dict.  Copy once, then fill in-place.
         needs_fill = (
-            not message.get("version")
-            or not message.get("timestamp")
+            not message.get("timestamp")
             or not message.get("message_id")
         )
         if needs_fill:
             message = dict(message)
-            if not message.get("version"):
-                message["version"] = "3.0"
             if not message.get("timestamp"):
                 message["timestamp"] = int(time.time() * 1000)
             if not message.get("message_id"):
                 message["message_id"] = str(uuid.uuid4())
 
-        # Step 3 — Validate hard-required fields; return an explicit error when absent.
+        # Step 4 — Validate hard-required fields; return an explicit error when absent.
         missing = [f for f in self._V3_MANDATORY_FIELDS if not message.get(f)]
         if missing:
             logger.warning(
@@ -586,7 +598,7 @@ class AndroidBridge:
                 details={"missing_fields": missing, "received_type": msg_type_str},
             )
 
-        # Step 4 — Resolve the MessageType enum value.
+        # Step 5 — Resolve the MessageType enum value.
         try:
             msg_type = MessageType(msg_type_str)
         except ValueError:
@@ -599,7 +611,19 @@ class AndroidBridge:
 
         handler = self._message_handlers.get(msg_type)
         if handler:
-            return await handler(websocket, message)
+            response = await handler(websocket, message)
+            # Propagate trace_id/route_mode into the response so downstream
+            # components always see both fields.
+            if response and isinstance(response, dict):
+                trace_id = message.get("trace_id", "")
+                route_mode = message.get("route_mode", "")
+                resp_payload = response.get("payload")
+                if isinstance(resp_payload, dict):
+                    if trace_id:
+                        resp_payload.setdefault("trace_id", trace_id)
+                    if route_mode:
+                        resp_payload.setdefault("route_mode", route_mode)
+            return response
         else:
             logger.debug(f"No handler for message type: {msg_type}")
             return None
