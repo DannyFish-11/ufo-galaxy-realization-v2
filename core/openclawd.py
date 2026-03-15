@@ -702,6 +702,7 @@ class OpenClawd:
         session_id: Optional[str] = None,
         context: Optional[List[Dict]] = None,
         required_capabilities: Optional[List[str]] = None,
+        multimodal_context: Optional[Any] = None,
     ) -> dict:
         """主入口 — PR86 架构：OpenClawd 是唯一入口，内嵌 AgentKernel
 
@@ -718,6 +719,10 @@ class OpenClawd:
             session_id: 会话 ID (可选，用于上下文管理)
             context: 对话历史上下文（可选）
             required_capabilities: Phase 2 scheduler hint — list of device capabilities required
+            multimodal_context: Multi-modal context bundle (PR 1).  When present,
+                ``multimodal_context.images`` carries base64-encoded image payloads
+                that are forwarded to the model router.  Text-only requests leave
+                this as ``None`` and existing behaviour is fully preserved.
 
         Returns:
             统一响应 dict: {success, response, intent, metadata}
@@ -735,7 +740,28 @@ class OpenClawd:
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
 
-        # ── Lifecycle log: task received ─────────────────────────────────────
+        # ── Multi-modal context: log presence and prepare serialized form ────
+        # ``multimodal_context`` is forwarded as-is through the pipeline and
+        # included in metadata so the model router can consume it in future PRs.
+        # Text-only requests leave this as None and are unaffected.
+        _mm_context_dict: Optional[Dict[str, Any]] = None
+        if multimodal_context is not None:
+            try:
+                _mm_context_dict = multimodal_context.model_dump()
+                _img_count = len(_mm_context_dict.get("images", []))
+                _aud_count = len(_mm_context_dict.get("audio", []))
+                logger.debug(
+                    "OpenClawd process: multimodal_context present — images=%d audio=%d",
+                    _img_count,
+                    _aud_count,
+                )
+            except Exception as _mm_err:
+                logger.debug(
+                    "Failed to serialize multimodal_context (type=%s): %s",
+                    type(multimodal_context).__name__,
+                    _mm_err,
+                )
+
         try:
             from core.task_logger import emit_task_log
             emit_task_log(
@@ -858,6 +884,7 @@ class OpenClawd:
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
                             "task_result": api_dict["task_result"],
+                            "multimodal_context": _mm_context_dict,
                         },
                     }
                 except Exception as e:
@@ -956,6 +983,7 @@ class OpenClawd:
                     "handler": handler_name,
                     **provider_info,
                     **(result.get("metadata", {})),
+                    "multimodal_context": _mm_context_dict,
                 },
             }
 

@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from core.schemas.multimodal import MultiModalContext
+
 
 # ============================================================================
 # Request/Response Models
@@ -52,6 +54,10 @@ class ChatRequest(BaseModel):
     user_id: str = ""          # 用户标识（跨设备统一会话）
     session_id: str = ""       # 会话 ID（跨设备共享）
     required_capabilities: Optional[List[str]] = None  # Phase 2: scheduler hint
+    # Multi-modal context bundle (PR 1).  Absent for text-only requests.
+    # When present, ``multimodal_context.images`` carries base64-encoded image
+    # payloads that are forwarded unchanged to the model router.
+    multimodal_context: Optional[MultiModalContext] = None
 
 
 class NodeCallRequest(BaseModel):

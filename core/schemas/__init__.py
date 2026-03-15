@@ -10,6 +10,14 @@ platform.  Import from this package for convenience::
     from core.schemas import DeviceRegisterSchema, AgentCreateSchema
 """
 
+# -- Multi-modal input schemas (PR 1) ----------------------------------------
+from core.schemas.multimodal import (
+    MultiModalImage,
+    MultiModalAudio,
+    MultiModalContext,
+    MultiModalInput,
+)
+
 # -- TaskEnvelope (canonical Agent-Bus schema) --------------------------------
 from core.schemas.task_envelope import (
     TaskEnvelope,
@@ -141,6 +149,11 @@ from core.schemas.contracts import (
 )
 
 __all__ = [
+    # multi-modal input (PR 1)
+    "MultiModalImage",
+    "MultiModalAudio",
+    "MultiModalContext",
+    "MultiModalInput",
     # task envelope (canonical Agent-Bus schema)
     "TaskEnvelope",
     "envelope_from_command_request",
