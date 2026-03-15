@@ -890,7 +890,7 @@ class UnifiedWebUI:
             import uvicorn
 
             # === 步骤 1：以 dashboard/backend/main.py 的完整 app 为基础 ===
-            # 这一步确保原 8080 Dashboard 的所有路由（agents、devices、LLM providers、
+            # 这一步确保原 Dashboard 的所有路由（agents、devices、LLM providers、
             # MCP、twins、config、observability 等 60+ 端点）全部纳入统一服务。
             try:
                 from dashboard.backend.main import app as _dashboard_app
@@ -1024,7 +1024,7 @@ class UnifiedWebUI:
             logger.error("Web UI 依赖未安装: %s", e)
             
     # Minimal fallback HTML — the real dashboard is served from
-    # dashboard/frontend/public/index.html (SONARA galaxy style) at :8080.
+    # dashboard/frontend/public/index.html (SONARA galaxy style) at :9000.
     FALLBACK_HTML = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Galaxy</title></head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
@@ -1037,7 +1037,7 @@ class UnifiedWebUI:
         """获取仪表板 HTML — 从 dashboard/frontend/public/ 读取
 
         优先加载独立 Dashboard 的 index.html（SONARA galaxy style），
-        如果不存在则返回指向 :8080 的最小化引导页面。
+        如果不存在则返回指向 :9000 的最小化引导页面。
         """
         dashboard_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
         if dashboard_path.exists():

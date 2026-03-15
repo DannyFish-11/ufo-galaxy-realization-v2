@@ -247,7 +247,7 @@ services:
       dockerfile: Dockerfile
     container_name: galaxy-core
     ports:
-      - "8080:8080"
+      - "9000:9000"
     env_file:
       - .env
     environment:
@@ -274,7 +274,7 @@ services:
       - galaxy-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/health/live"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -302,7 +302,9 @@ services:
       - galaxy-network
     restart: unless-stopped
 
-  # ── Unified Launcher (management UI on port 8299) ─────────────
+  # ── Unified Launcher (admin management UI — port 8299 intentional;
+  #    cannot use 9000 here because galaxy-core already binds that port.
+  #    All primary client traffic must go through galaxy-core:9000.) ────
   galaxy-launcher:
     build:
       context: .
@@ -311,7 +313,7 @@ services:
     profiles: [core, full]
     command: ["python", "unified_launcher.py", "--host", "0.0.0.0", "--port", "8299"]
     ports:
-      - "8299:8299"
+      - "8299:8299"  # Admin UI only — use galaxy-core:9000 for all API/client connections
     env_file:
       - .env
     environment:

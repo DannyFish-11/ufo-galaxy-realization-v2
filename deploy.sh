@@ -140,7 +140,7 @@ health_check() {
     # In local (non-Docker) mode, unified_launcher is the single process serving
     # both the Galaxy API and gateway on port 9000. Checking both "galaxy" and
     # "gateway" on the same port is intentional: they are the same endpoint.
-    local services=("galaxy:9000" "gateway:9000" "dashboard:8001")
+    local services=("galaxy:9000" "gateway:9000")
     for svc in "${services[@]}"; do
         local name="${svc%%:*}"
         local port="${svc##*:}"
@@ -254,7 +254,7 @@ access_info() {
     echo ""
     echo -e "  ${GREEN}Galaxy API:${NC}      http://localhost:9000"
     echo -e "  ${GREEN}Gateway:${NC}         http://localhost:9000  (primary client entry)"
-    echo -e "  ${GREEN}Dashboard:${NC}       http://localhost:8001"
+    echo -e "  ${GREEN}Dashboard:${NC}       http://localhost:9000  (served by Galaxy)"
     echo -e "  ${GREEN}Prometheus:${NC}      http://localhost:9090"
     echo -e "  ${GREEN}Grafana:${NC}         http://localhost:3000"
     echo ""

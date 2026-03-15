@@ -90,7 +90,7 @@ python main.py --setup
   ./start.sh
   ```
 
-系统启动后，您可以通过浏览器访问 `http://localhost:8000` 查看状态监控和 Web UI。
+系统启动后，您可以通过浏览器访问 `http://localhost:9000` 查看状态监控和 Web UI。
 
 ## 6. 部署外部服务 (Docker)
 
