@@ -28,7 +28,7 @@ services:
       dockerfile: Dockerfile
     container_name: galaxy
     ports:
-      - "8080:9000"   # container listens on 9000; host:8080 for direct debug access only — use gateway:9000 for all client connections
+      - "9000:9000"   # Main API + Web UI — single client entry port (gateway also forwards here)
     env_file: .env
     environment:
       - GALAXY_MODE=development

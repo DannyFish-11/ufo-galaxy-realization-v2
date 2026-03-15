@@ -31,7 +31,7 @@ services:
         window: 60s
 
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/health/live"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -44,7 +44,7 @@ services:
       - PYTHONUNBUFFERED=1
 
     ports:
-      - "8080:8080"   # Main API + Web UI (灵动岛 Dashboard)
+      - "9000:9000"   # Main API + Web UI (灵动岛 Dashboard) — single client entry port
 
     volumes:
       - galaxy-data:/app/data
@@ -87,7 +87,7 @@ services:
     env_file: .env
     environment:
       - GALAXY_MODE=production
-      - GALAXY_UPSTREAM=http://galaxy:8080
+      - GALAXY_UPSTREAM=http://galaxy:9000
 
     ports:
       - "9000:9000"
@@ -109,7 +109,10 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  # ── Dashboard: Web UI ──
+  # ── Dashboard: Secondary Web UI ──
+  # NOTE: Port 8001 is intentional — this secondary management dashboard cannot
+  # use port 9000 because the primary galaxy service already binds that port.
+  # All primary API/client traffic must go through galaxy:9000 (or gateway:9000).
   dashboard:
     build:
       context: .
@@ -174,7 +177,7 @@ services:
       - WATCHDOG_MODE=production
       - HEALTH_CHECK_INTERVAL=30
       - AUTO_RESTART=true
-      - GALAXY_HEALTH_URL=http://galaxy:8080/health/live
+      - GALAXY_HEALTH_URL=http://galaxy:9000/health/live
 
     volumes:
       - galaxy-logs:/app/logs

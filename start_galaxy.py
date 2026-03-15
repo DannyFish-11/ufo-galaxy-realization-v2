@@ -6,7 +6,7 @@ Galaxy — Quick Start (compatibility wrapper)
 .. deprecated::
     This script is a **compatibility wrapper** that delegates all work to
     ``unified_launcher.py``.  The two dashboard instances (previously on port
-    8080 and 8085) have been merged.  Everything now runs on port **8085**
+    8080 and 8085) have been merged.  Everything now runs on port **9000**
     through the single unified entry point.
 
     Migration::
@@ -14,7 +14,7 @@ Galaxy — Quick Start (compatibility wrapper)
         # Legacy (kept for backward compatibility — redirects to unified_launcher):
         python start_galaxy.py [--port PORT] [--desktop] [--all]
 
-        # Preferred (full system, all subsystems, port 8085):
+        # Preferred (full system, all subsystems, port 9000):
         python unified_launcher.py [--no-l4] [--no-ui] [--port PORT]
         # or the delegating wrapper:
         python main.py [--no-l4] [--no-ui]
@@ -53,13 +53,13 @@ def main():
     warnings.warn(
         "start_galaxy.py is a compatibility wrapper. "
         "Use 'python unified_launcher.py' (or 'python main.py') as the primary entry point. "
-        "Both dashboards have been merged to port 8085.",
+        "Both dashboards have been merged to port 9000.",
         DeprecationWarning,
         stacklevel=1,
     )
     logger.warning(
         "⚠  COMPATIBILITY WRAPPER: start_galaxy.py delegates to unified_launcher.py. "
-        "Use 'python unified_launcher.py' directly. All services run on port 8085."
+        "Use 'python unified_launcher.py' directly. All services run on port 9000."
     )
 
     import argparse
@@ -68,7 +68,7 @@ def main():
     )
     parser.add_argument("--desktop", action="store_true", help="Also launch Windows desktop UI")
     parser.add_argument("--all", action="store_true", help="Dashboard + desktop UI")
-    parser.add_argument("--port", type=int, default=8085, help="Dashboard port (default: 8085)")
+    parser.add_argument("--port", type=int, default=9000, help="Dashboard port (default: 9000)")
     # Accept (and ignore) any extra unified_launcher flags so existing scripts don't break
     parser.add_argument("--no-l4", action="store_true", help="Pass through to unified_launcher")
     parser.add_argument("--no-nodes", action="store_true", help="Pass through to unified_launcher")

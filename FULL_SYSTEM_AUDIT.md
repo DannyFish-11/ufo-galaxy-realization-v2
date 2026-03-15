@@ -146,18 +146,18 @@
 
 | 端口 | 服务1 | 服务2 | 冲突？ |
 |------|-------|-------|--------|
-| **8080** | `unified_launcher.py` Dashboard | `dashboard/backend/main.py` | **致命冲突** |
-| **9000** | `galaxy_gateway/main.py` | `health_monitor.py` | **冲突** |
-| **8000** | `galaxy_gateway/app.py` | `Node_00 State Machine` | **潜在冲突** |
-| 8001 | `Dockerfile.agentcpm` | `Node_01 OneAPI` | **潜在冲突** |
+| **9000** | `unified_launcher.py` Dashboard | `dashboard/backend/main.py` | **已统一 — 单一入口** |
+| **9000** | `galaxy_gateway/main.py` | `health_monitor.py` | **已统一 — 同端口** |
+| **8000** | `galaxy_gateway/app.py` | `Node_00 State Machine` | **内部节点端口** |
+| 8001 | `Dockerfile.agentcpm` | `Node_01 OneAPI` | **内部节点端口** |
 | 8766 | `unified_launcher.py` 设备API | - | 独占 |
 | 8767 | `unified_launcher.py` UFO API | - | 独占 |
 
 ### 2.3 API间耦合
 
-- Gateway (:9000) 的 dashboard.html 调用 `:8080/api/v1/chat`（体系B），不调自己的 `/api/llm/chat`
-- Gateway 节点操作代理到 `127.0.0.1:8000/api/v1/nodes/*`
-- 前端 `dashboard/frontend/ts/api.ts` 硬编码 `localhost:8080`
+- Gateway (:9000) 的 dashboard.html 调用 `:9000/api/v1/chat`（已统一）
+- Gateway 节点操作代理到 `127.0.0.1:9000/api/v1/nodes/*`
+- 前端 `dashboard/frontend/ts/api.ts` 使用 `localhost:9000`（已统一）
 - 三套设备管理各自独立：`/api/devices`(A)、`/api/v1/devices`(B)、`/api/v1/android/*`(B)
 
 ---
@@ -345,8 +345,8 @@ eval(condition, {"__builtins__": {}}, context)
 
 | Dockerfile | CMD | 端口 | 安全 |
 |------------|-----|------|------|
-| `Dockerfile` | `unified_launcher.py --port 8080` | 8080, 8001, 8000 | 非root用户 ✅ |
-| `Dockerfile.gateway` | 硬编码import `core.api_routes` | 8000 | 无非root ⚠️ |
+| `Dockerfile` | `unified_launcher.py --port 9000` | 9000 | 非root用户 ✅ |
+| `Dockerfile.gateway` | 硬编码import `core.api_routes` | 9000 | 无非root ⚠️ |
 | `Dockerfile.agentcpm` | `external.agentcpm.serve --port 8001` | 8001 | 简单 |
 
 ---

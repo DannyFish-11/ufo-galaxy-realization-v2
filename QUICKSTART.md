@@ -66,7 +66,7 @@ python -m launcher status
 
 2. **配置服务器地址**
    - 打开 App → Settings
-   - 输入服务器地址: `ws://your-server-ip:8080`
+   - 输入服务器地址: `ws://your-server-ip:9000`
    - 点击 Connect
 
 3. **授权设备**
@@ -152,8 +152,8 @@ await activate_self("server_01", "restart_service")
 
 启动后访问:
 - **控制台**: http://localhost:3000 (Grafana)
-- **API 文档**: http://localhost:8080/docs
-- **节点状态**: http://localhost:8080/status
+- **API 文档**: http://localhost:9000/docs
+- **节点状态**: http://localhost:9000/status
 
 ## 📊 监控面板
 
@@ -165,7 +165,7 @@ docker-compose logs -f
 curl http://localhost:9090/metrics
 
 # 查看节点健康
-curl http://localhost:8080/health
+curl http://localhost:9000/health
 ```
 
 ## 🔐 安全配置
@@ -202,7 +202,7 @@ export GALAXY_SSL_KEY=/path/to/key.pem
    ping your-server-ip
    
    # 检查防火墙
-   sudo ufw allow 8080
+   sudo ufw allow 9000
    ```
 
 3. **自然语言识别失败**
