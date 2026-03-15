@@ -5,7 +5,7 @@
  * 类型安全的前端组件
  */
 
-import type { Device, Agent, LLMProvider, LiveStatus } from './types';
+import type { Device, Agent, LLMProvider, LiveStatus, ChannelStatus } from './types';
 import { galaxyAPI } from './api';
 
 /**
@@ -446,7 +446,54 @@ export class LiveStatusPanel {
             }
           </div>
 
+          <!-- 通信通道状态 -->
+          ${s.channel_status ? this.renderChannelStatus(s.channel_status) : ''}
+
         </div>
+      </div>`;
+  }
+
+  private renderChannelStatus(ch: ChannelStatus): string {
+    const dot = (isHealthy: boolean) => `<span class="${isHealthy ? 'dot-online' : 'dot-offline'}">●</span>`;
+    const row = (label: string, isHealthy: boolean, detail: string) =>
+      `<li>${dot(isHealthy)} <span>${this.escapeHtml(label)}</span>
+         <span class="card-detail" style="margin-left:4px">${this.escapeHtml(detail)}</span></li>`;
+
+    return `
+      <div class="live-status-card card-ok">
+        <div class="card-title">📡 通信通道状态</div>
+        <ul class="card-list">
+          ${row(
+            'NATS',
+            ch.nats.connected,
+            ch.nats.configured ? (ch.nats.connected ? '已连接' : (ch.nats.error ?? '未连接')) : '未配置 GALAXY_NATS_URL'
+          )}
+          ${row(
+            'Tailscale',
+            ch.tailscale.enabled,
+            ch.tailscale.enabled ? (ch.tailscale.host ? `host: ${ch.tailscale.host}` : '已启用') : '未启用 GALAXY_TAILSCALE_ENABLED'
+          )}
+          ${row(
+            'WebRTC',
+            ch.webrtc.enabled && ch.webrtc.reachable,
+            ch.webrtc.enabled ? (ch.webrtc.reachable ? '节点可达' : (ch.webrtc.error ?? '节点不可达')) : '未启用 GALAXY_ENABLE_WEBRTC'
+          )}
+          ${row(
+            'MQTT',
+            ch.mqtt.enabled && ch.mqtt.reachable,
+            ch.mqtt.enabled ? (ch.mqtt.reachable ? '节点可达' : (ch.mqtt.error ?? '节点不可达')) : '未启用 GALAXY_ENABLE_MQTT'
+          )}
+          ${row(
+            'Scrcpy',
+            ch.scrcpy.enabled && ch.scrcpy.reachable,
+            ch.scrcpy.enabled ? (ch.scrcpy.reachable ? '节点可达' : (ch.scrcpy.error ?? '节点不可达')) : '未启用 GALAXY_ENABLE_SCRCPY'
+          )}
+          ${row(
+            'Legacy 协议 (/ws/ufo3)',
+            false,
+            ch.legacy_protocols.enabled ? '⚠️ 已启用（兼容模式）' : '已禁用（推荐）'
+          )}
+        </ul>
       </div>`;
   }
 

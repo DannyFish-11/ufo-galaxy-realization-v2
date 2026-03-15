@@ -414,9 +414,47 @@ async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
 # Legacy / backward-compatible WebSocket paths
 # ---------------------------------------------------------------------------
 
+# Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable legacy WS paths such as
+# /ws/ufo3.  By default these paths are disabled to enforce the unified Gateway
+# entry point (AIP v3 via /ws/device/{id} or /ws/android/{id}).
+_LEGACY_PROTOCOLS_ENABLED = os.environ.get("GALAXY_ENABLE_LEGACY_PROTOCOLS", "false").lower() == "true"
+
+if _LEGACY_PROTOCOLS_ENABLED:
+    logger.warning(
+        "GALAXY_ENABLE_LEGACY_PROTOCOLS=true — legacy WS paths (/ws/ufo3) are ENABLED. "
+        "This is for backward compatibility only. Disable in production."
+    )
+
+
 @app.websocket("/ws/ufo3/{device_id}")
 async def websocket_ufo3(websocket: WebSocket, device_id: str):
-    """Legacy UFO3 WebSocket path — routed to the same connection handler."""
+    """Legacy UFO3 WebSocket path.
+
+    Disabled by default.  Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to allow
+    connections on this path.  When disabled, the connection is rejected with
+    an explicit error so clients can identify the cause.
+    """
+    if not _LEGACY_PROTOCOLS_ENABLED:
+        logger.warning(
+            "Rejected legacy /ws/ufo3/ connection for device %s. "
+            "Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable, "
+            "or update the client to use /ws/device/%s (AIP v3).",
+            device_id, device_id,
+        )
+        await websocket.accept()
+        import json as _json
+        await websocket.send_text(_json.dumps({
+            "error": "legacy_path_disabled",
+            "message": (
+                "The /ws/ufo3 path is disabled. "
+                "Use /ws/device/<device_id> (AIP v3) or set "
+                "GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable."
+            ),
+            "action": "reconnect",
+            "recommended_path": f"/ws/device/{device_id}",
+        }))
+        await websocket.close(code=1008, reason="Legacy path disabled. Use /ws/device/<id> with AIP v3.")
+        return
     logger.info("Legacy path /ws/ufo3/ used for device %s", device_id)
     await websocket_manager.handle_connection(websocket, device_id)
 

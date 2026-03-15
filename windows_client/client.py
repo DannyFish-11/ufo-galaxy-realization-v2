@@ -12,19 +12,23 @@ import threading # 导入桌面自动化模块
 # 从环境变量或默认值获取配置
 import argparse
 
-from core.port_config import get_node_port
-
-NODE_50_URL = os.environ.get("NODE_50_URL", f"ws://localhost:{get_node_port('Node_50_Transformer')}")
+# ─────────────────────────────────────────────────────────────────────────────
+# 统一入口：Galaxy Gateway + AIP v3
+# Node_50 / UFO3 旧通道已禁用。所有通信通过 Gateway WS /ws/device/{id}。
+# ─────────────────────────────────────────────────────────────────────────────
+GALAXY_GATEWAY_URL = os.environ.get(
+    "GALAXY_GATEWAY_URL",
+    os.environ.get("GALAXY_API_BASE", "ws://localhost:9000").replace("http://", "ws://").replace("https://", "wss://")
+)
 DEVICE_ID = os.environ.get("DEVICE_ID", "Windows_Galaxy_Client_001")
 
 
 async def send_aip_message(websocket, message_type: str, payload: dict):
-    """构造并发送 AIP 消息"""
+    """构造并发送 AIP v3 消息"""
     message = {
-        "protocol": "AIP/1.0",
+        "version": "3.0",
         "type": message_type,
-        "source_node": DEVICE_ID,
-        "target_node": "Node_50_Transformer",
+        "device_id": DEVICE_ID,
         "timestamp": int(time.time()),
         "payload": payload
     }
@@ -150,22 +154,22 @@ async def handle_aip_message(ws, message: str, server_http_url: str = None):
     except Exception as e:
         print(f"Error handling message: {e}")
 
-async def aip_client_logic(node50_url, client_id, ui_app):
-    """Windows Galaxy 客户端主函数"""
-    ws_url = f"{node50_url}/ws/ufo3/{client_id}"
+async def aip_client_logic(gateway_url, client_id, ui_app):
+    """Windows Galaxy 客户端主函数 (统一入口: Gateway + AIP v3)"""
+    ws_url = f"{gateway_url}/ws/device/{client_id}"
     # 从 WebSocket URL 推导 HTTP URL (用于 vision API)
-    server_http_url = node50_url.replace("ws://", "http://").replace("wss://", "https://")
-    print(f"Connecting to Galaxy at {ws_url}...")
+    server_http_url = gateway_url.replace("ws://", "http://").replace("wss://", "https://")
+    print(f"Connecting to Galaxy Gateway at {ws_url}...")
 
     while True:
         try:
             async with websockets.connect(ws_url) as ws:
                 print("Connection established. Sending registration...")
 
-                # 1. 发送注册消息 (AIP/1.0 兼容)
+                # 1. 发送注册消息 (AIP v3)
                 await send_aip_message(
                     ws,
-                    "register",
+                    "device_register",
                     {
                         "device_id": client_id,
                         "device_type": "windows",
@@ -190,12 +194,12 @@ async def aip_client_logic(node50_url, client_id, ui_app):
 
         await asyncio.sleep(5)
 
-def run_aip_client(node50_url, client_id, ui_app):
-    asyncio.run(aip_client_logic(node50_url, client_id, ui_app))
+def run_aip_client(gateway_url, client_id, ui_app):
+    asyncio.run(aip_client_logic(gateway_url, client_id, ui_app))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Galaxy Windows Client")
-    parser.add_argument("--node50_url", default=NODE_50_URL, help="Node 50 WebSocket URL")
+    parser.add_argument("--gateway_url", default=GALAXY_GATEWAY_URL, help="Galaxy Gateway WebSocket URL")
     parser.add_argument("--client_id", default=DEVICE_ID, help="This client's unique ID")
     args = parser.parse_args()
 
@@ -203,7 +207,7 @@ if __name__ == "__main__":
     app = Sidebar()
 
     # 2. 在后台线程中运行 AIP 客户端逻辑
-    aip_thread = threading.Thread(target=run_aip_client, args=(args.node50_url, args.client_id, app), daemon=True)
+    aip_thread = threading.Thread(target=run_aip_client, args=(args.gateway_url, args.client_id, app), daemon=True)
     aip_thread.start()
 
     # 3. 在主线程中运行按键监听器
