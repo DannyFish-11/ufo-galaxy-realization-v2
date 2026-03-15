@@ -84,7 +84,7 @@ heartbeat_scheduler: Optional[Any] = None  # OpenClawd agent-level heartbeat loo
 # ============================================================================
 
 # Paths that are always public regardless of auth setting
-_AUTH_EXEMPT_PATHS = {"/health", "/api/v1/health"}
+_AUTH_EXEMPT_PATHS = {"/health", "/api/v1/health", "/api/v1/config"}
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
@@ -1030,6 +1030,18 @@ try:
     logger.info("Gateway v5.0 路由已挂载")
 except Exception as _gw5_err:
     logger.warning(f"Gateway v5.0 路由挂载跳过: {_gw5_err}")
+
+
+# ============================================================================
+# Client Configuration Discovery — GET /api/v1/config
+# ============================================================================
+
+try:
+    from .api.config import router as _client_config_router
+    app.include_router(_client_config_router)
+    logger.info("Client config discovery route mounted: GET /api/v1/config")
+except Exception as _cfg_err:  # pragma: no cover
+    logger.warning("Client config route mount skipped: %s", _cfg_err)
 
 
 # ============================================================================
