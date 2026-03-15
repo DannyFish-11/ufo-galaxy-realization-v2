@@ -1154,9 +1154,9 @@ infrastructure:
       description: "可视化监控面板 (Dashboard Backend)"
       
     unified_launcher:
-      port: 9000
+      port: 8299
       name: "UnifiedLauncher"
-      description: "统一启动器 Web UI — 单一客户端入口（与 galaxy-gateway 对齐）"
+      description: "统一启动器 Web UI (端口 8299；避免与 galaxy-core:9000 冲突)"
       
     gateway:
       port: 8765
