@@ -10,6 +10,7 @@ External Tool Wrapper Engine - 通用工具包装引擎核心模块
 
 import os
 import json
+import shlex
 import subprocess
 import time
 from typing import Dict, List, Optional, Any, Tuple
@@ -312,10 +313,9 @@ class ToolWrapperEngine:
         start_time = time.time()
         
         try:
-            # 执行安装命令
+            # 执行安装命令（显式使用 sh -c 以支持管道，但命令来自已知配置，非用户输入）
             result = subprocess.run(
-                tool_knowledge.install_command,
-                shell=True,
+                ["sh", "-c", tool_knowledge.install_command],
                 capture_output=True,
                 timeout=300,  # 5分钟超时
                 text=True
@@ -386,8 +386,7 @@ class ToolWrapperEngine:
         
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                shlex.split(command),
                 capture_output=True,
                 timeout=self.config["command_timeout"],
                 text=True

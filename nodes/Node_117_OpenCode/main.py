@@ -6,6 +6,7 @@ import os
 import json
 import asyncio
 import logging
+import shlex
 import tempfile
 import subprocess
 from datetime import datetime
@@ -298,8 +299,8 @@ class OpenCodeEngine:
                     "timeout": False,
                 }
         try:
-            process = await asyncio.create_subprocess_shell(
-                command,
+            process = await asyncio.create_subprocess_exec(
+                *shlex.split(command),
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

@@ -10,6 +10,7 @@ OpenCode Engine - OpenCode 专用引擎核心模块
 
 import os
 import json
+import shlex
 import subprocess
 import time
 from typing import Dict, List, Optional, Any, Tuple
@@ -153,8 +154,7 @@ class OpenCodeEngine:
         # 执行命令
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                shlex.split(command),
                 capture_output=True,
                 timeout=self.config.timeout,
                 text=True

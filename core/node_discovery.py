@@ -237,6 +237,76 @@ class NodeDiscoveryService:
         return [n for n in self.get_healthy_nodes()
                 if n.role == role]
 
+    def get_node(self, node_id: str) -> Optional[DiscoveredNode]:
+        """按节点 ID 获取节点（包含离线节点）"""
+        return self.nodes.get(node_id)
+
+    def get_node_url(self, node_id: str) -> Optional[str]:
+        """返回节点的 HTTP 基础 URL，格式 http://host:port"""
+        node = self.get_node(node_id)
+        if node and node.port > 0:
+            return f"http://{node.host}:{node.port}"
+        return None
+
+    def discover_by_capability(self, capability: str) -> List[Dict]:
+        """按能力发现节点，返回可直接使用的 URL 列表（service discovery 接口）"""
+        return [
+            {
+                "node_id": n.node_id,
+                "url": f"http://{n.host}:{n.port}",
+                "capabilities": n.capabilities,
+                "state": n.state.value,
+            }
+            for n in self.get_nodes_by_capability(capability)
+        ]
+
+    @classmethod
+    def seed_from_registry(cls, service: "NodeDiscoveryService",
+                           registry_path: str = "config/node_registry.json") -> int:
+        """
+        从 node_registry.json 预填充节点，无需等待 UDP 广播。
+
+        Returns:
+            int: 成功注册的节点数量
+        """
+        import json
+        from pathlib import Path
+        try:
+            from core.port_config import get_node_port
+        except Exception:
+            def get_node_port(name: str) -> int:
+                raise ValueError(f"Port configuration not available for node: {name}")
+
+        config_path = Path(registry_path)
+        if not config_path.exists():
+            logger.warning(f"registry_path 不存在: {registry_path}")
+            return 0
+
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+
+        count = 0
+        for node_name, node_info in config.get("nodes", {}).items():
+            try:
+                port = get_node_port(node_name)
+            except Exception:
+                port = 0
+            if port <= 0:
+                continue
+            dn = DiscoveredNode(
+                node_id=node_name,
+                host="localhost",
+                port=port,
+                role=NodeRole.WORKER,
+                capabilities=[node_info.get("name", node_name)],
+                metadata={"production_ready": node_info.get("production_ready", True)},
+            )
+            service.register_node(dn)
+            count += 1
+
+        logger.info(f"NodeDiscovery: seeded {count} nodes from {registry_path}")
+        return count
+
     # ─── 广播和心跳 ───
 
     async def _announce(self):
