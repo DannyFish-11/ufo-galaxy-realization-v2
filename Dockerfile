@@ -53,16 +53,15 @@ COPY --chown=galaxy:galaxy . .
 
 USER galaxy
 
-# Main API + Web UI (灵动岛 Dashboard)
-EXPOSE 8086
+# Main API + Web UI (灵动岛 Dashboard) — single client entry port
+EXPOSE 9000
 
 # Health check (uses core health endpoint)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -sf http://localhost:8086/health/live || exit 1
+    CMD curl -sf http://localhost:9000/health/live || exit 1
 
 # Use tini as init to handle signals properly
 ENTRYPOINT ["tini", "--"]
 
-# Default: launch via unified_launcher
-# Port 8086 is the Docker container default, distinct from the local dev default (8085)
-CMD ["python", "unified_launcher.py", "--host", "0.0.0.0", "--port", "8086"]
+# Default: launch via unified_launcher on port 9000 (single source-of-truth API entry)
+CMD ["python", "unified_launcher.py", "--host", "0.0.0.0", "--port", "9000"]

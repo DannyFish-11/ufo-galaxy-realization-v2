@@ -5,12 +5,12 @@
 
 ---
 
-## 1. Web Dashboard UI（浏览器访问，8085 端口）
+## 1. Web Dashboard UI（浏览器访问，9000 端口）
 
 | 属性 | 详情 |
 | ---- | ---- | | `dashboard/frontend/public/index.html` |
 | **类型** | 纯 HTML/CSS/JS（Vue 3 + TailwindCSS） |
-| **后端** | `dashboard/backend/main.py`（FastAPI，默认端口 **8085**） |
+| **后端** | `dashboard/backend/main.py`（FastAPI，通过 `unified_launcher` 提供服务，访问端口 **9000**） |
 | **启动方式** | `python unified_launcher.py` 或 `python start_galaxy.py` |
 | **UI 风格** | **Galaxy 深空科幻控制台（Sci-fi Console）** — 自主设计 |
 | **主要设计元素** | 纯黑背景 + 径向星空渐变、灵动岛（Dynamic Island）交互组件、霓虹蓝紫描边、磨砂玻璃卡片、流畅过渡动画 |
@@ -21,7 +21,7 @@
 **访问地址：**
 
 ```
-http://localhost:8085
+http://localhost:9000
 ```
 
 ---
@@ -57,7 +57,7 @@ windows_client/START_CLIENT.bat
 
 | 入口 | 状态 | 正确目标 |
 | ---- | ---- | -------- |
-| `python unified_launcher.py` | ✅ **推荐** | Web Dashboard（8085） |
+| `python unified_launcher.py` | ✅ **推荐** | Web Dashboard（9000） |
 | `python start_galaxy.py` | ✅ 兼容 | 委托到 `unified_launcher.py` |
 | `python windows_client/main.py` | ✅ **推荐** | 桌面原生 UI（OPPO 光场） |
 | `python enhancements/clients/windows_client/run_ui.py` | ⚠️ **已废弃** | 自动重定向到 `windows_client/main.py` |
@@ -108,9 +108,9 @@ isort --check-only core/ tests/
 | ------ | ---- | ---- |
 | 1 | `GALAXY_API_BASE` 环境变量（完整覆盖） | `GALAXY_API_BASE=http://10.0.0.5:9000` |
 | 2 | `OPENCLAWD_HOST` + `OPENCLAWD_PORT` 环境变量 | `OPENCLAWD_PORT=9000` |
-| 3 | `API_PORT` 环境变量（与服务端 `API_PORT` 保持一致） | `API_PORT=8099` |
-| 4 | `unified_config.web_ui_port`（`config.json` / `.env` 中的值） | `web_ui_port: 8099` |
-| 5 | 硬编码默认值（向后兼容） | `http://localhost:8099` |
+| 3 | `API_PORT` 环境变量（与服务端 `API_PORT` 保持一致） | `API_PORT=9000` |
+| 4 | `unified_config.web_ui_port`（`config.json` / `.env` 中的值） | `web_ui_port: 9000` |
+| 5 | 硬编码默认值（向后兼容） | `http://localhost:9000` |
 
 **常见场景：**
 
@@ -125,4 +125,4 @@ python windows_client/main.py
 ```
 
 > 若所有环境变量均未设置，且 `config.json` 中未指定 `web_ui_port`，
-> 则自动回退到 `http://localhost:8099`，与旧版行为完全兼容。
+> 则自动回退到 `http://localhost:9000`（单一 API 入口端口）。
