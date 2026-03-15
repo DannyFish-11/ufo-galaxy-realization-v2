@@ -228,12 +228,12 @@ async def lifespan(app: FastAPI):
 
     logger.info("Galaxy Gateway initialized successfully")
 
-    # ── Phase B: NATS ↔ WebSocket Gateway Adapter ──
+    # ── Phase B: NATS ↔ WebSocket Gateway Adapter (REQUIRED) ──
+    # NATS is the internal scheduling mainline — gateway requires it.
     try:
         from core.nats_bus import nats_bus
-        nats_url = os.getenv("GALAXY_NATS_URL", "")
-        if nats_url:
-            await nats_bus.connect()
+        nats_url = os.getenv("GALAXY_NATS_URL", "nats://localhost:4222")
+        await nats_bus.connect()
         if nats_bus.is_connected():
             from galaxy_gateway.gateway_nats_adapter import init_gateway_nats_adapter
             nats_adapter = init_gateway_nats_adapter(
@@ -241,14 +241,22 @@ async def lifespan(app: FastAPI):
                 websocket_manager=websocket_manager,
             )
             await nats_adapter.start()
-            logger.info("NATS Gateway Adapter started")
+            logger.info("NATS Gateway Adapter started (%s)", nats_url)
         else:
-            logger.warning(
-                "NATS Gateway Adapter: inactive — cross-device tasks will NOT traverse NATS "
-                "(set GALAXY_NATS_URL to enable distributed dispatch)"
+            logger.error(
+                "NATS Gateway Adapter: NATS is REQUIRED but could not connect to %s. "
+                "Start NATS with: nats-server -p 4222",
+                nats_url,
             )
+            raise RuntimeError(
+                f"[FATAL] NATS is required but not reachable at {nats_url}. "
+                "Start NATS: nats-server -p 4222"
+            )
+    except RuntimeError:
+        raise
     except Exception as e:
-        logger.warning(f"NATS Gateway Adapter init failed (non-fatal): {e}")
+        logger.error("NATS Gateway Adapter init failed: %s", e)
+        raise RuntimeError(f"[FATAL] NATS init failed: {e}") from e
 
     # ── MasterBrain: cloud-side orchestrator ──
     if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
@@ -516,11 +524,20 @@ async def nats_health():
             adapter_stats = {"error": str(exc)}
 
     connected = bus_stats.get("connected", False)
+    nats_url = os.getenv("GALAXY_NATS_URL", "nats://localhost:4222")
     return {
         "status": "connected" if connected else "disconnected",
+        "required": True,
+        "nats_url": nats_url,
         "noop_mode": bus_stats.get("noop_mode", True),
         "bus": bus_stats,
         "adapter": adapter_stats,
+        "message": (
+            "NATS is connected and operating as the internal scheduling mainline."
+            if connected else
+            f"[ERROR] NATS is REQUIRED but not connected to {nats_url}. "
+            "Start NATS: nats-server -p 4222"
+        ),
     }
 
 
