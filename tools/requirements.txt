@@ -1,0 +1,8 @@
+# tools/requirements.txt
+# Dependencies for tools/camera_webrtc_sender.py
+# Install with: pip install -r tools/requirements.txt
+
+aiortc>=1.9.0
+opencv-python-headless>=4.9.0
+websockets>=11.0
+av>=12.0.0
