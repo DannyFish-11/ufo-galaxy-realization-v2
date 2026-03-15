@@ -48,6 +48,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
@@ -60,6 +61,11 @@ from galaxy_gateway.cross_device_switch import (
     WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
     ERROR_CODE_CROSS_DEVICE_DISABLED,
     ERROR_MSG_CROSS_DEVICE_DISABLED,
+)
+from galaxy_gateway.observability import (
+    TraceContext,
+    emit_gateway_log,
+    get_gateway_metrics,
 )
 
 logger = logging.getLogger(__name__)
@@ -382,16 +388,32 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
     ``WS_CLOSE_CODE_CROSS_DEVICE_DISABLED`` (4001) and reason
     ``"cross-device routing disabled"``.  A structured log entry is emitted
     at WARNING level.
+
+    **Round 7 — observability**: trace_id is extracted from the first
+    incoming message when present, or generated at the gateway.  A fresh
+    span_id is generated per session.  Structured JSON logs (via
+    :func:`~galaxy_gateway.observability.emit_gateway_log`) and
+    :class:`~galaxy_gateway.observability.GatewayMetrics` counters/histograms
+    are updated for every key event on the success and failure paths.
     """
     await client_ws.accept()
 
     # --- Round 4: hard constraint — reject signaling when switch is OFF ---
     if not is_cross_device_enabled():
-        trace_id = str(uuid.uuid4())
+        trace_ctx = TraceContext.new()
+        emit_gateway_log(
+            "cross_device_blocked",
+            trace_ctx=trace_ctx,
+            level="warning",
+            event_subtype="webrtc_signaling",
+            device_id=device_id,
+            reason=ERROR_CODE_CROSS_DEVICE_DISABLED,
+            route_mode="cross_device",
+        )
         logger.warning(
             "cross_device_blocked event=webrtc_signaling device_id=%s trace_id=%s reason=%s",
             device_id,
-            trace_id,
+            trace_ctx.trace_id,
             ERROR_CODE_CROSS_DEVICE_DISABLED,
         )
         await client_ws.close(
@@ -400,18 +422,42 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
         )
         return
 
-    # --- Round 6: per-session trace ID ---
-    trace_id = str(uuid.uuid4())
+    # --- Round 7: per-session TraceContext (trace_id + span_id) ---
+    # Try to receive the first message to extract an existing trace_id.
+    # If none is present, generate a fresh context.
+    trace_ctx = TraceContext.new()
+    metrics = get_gateway_metrics()
+    metrics.inc("signaling_total")
+
     node95_ws_url = f"{_http_to_ws(_get_node95_url())}/signaling/{device_id}"
 
+    # Preserve original trace_id variable for backward-compat log calls below.
+    trace_id = trace_ctx.trace_id
+
+    emit_gateway_log(
+        "signaling_start",
+        trace_ctx=trace_ctx,
+        device_id=device_id,
+        node95_url=node95_ws_url,
+        timeout_s=SIGNALING_TIMEOUT_S,
+        route_mode="cross_device",
+    )
     logger.info(
         "webrtc_signaling_start device_id=%s trace_id=%s node95_url=%s timeout_s=%d",
         device_id, trace_id, node95_ws_url, SIGNALING_TIMEOUT_S,
     )
 
+    session_start = time.monotonic()
+
     async def _run_session() -> None:
         """Inner coroutine so we can wrap with asyncio.wait_for for the timeout."""
         async with websockets.connect(node95_ws_url, open_timeout=NODE95_CONNECT_TIMEOUT_S) as node_ws:
+            emit_gateway_log(
+                "signaling_tunnel_open",
+                trace_ctx=trace_ctx,
+                device_id=device_id,
+                route_mode="cross_device",
+            )
             logger.info(
                 "webrtc_signaling_tunnel_open device_id=%s trace_id=%s",
                 device_id, trace_id,
@@ -425,7 +471,18 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
                     "type": "ice_servers",
                     "ice_servers": ice_servers,
                     "trace_id": trace_id,
+                    "span_id": trace_ctx.span_id,
                 }))
+                # Increment TURN usage counter when TURN servers are present
+                if any("turn:" in url for srv in ice_servers for url in (srv.get("urls") or [])):
+                    metrics.inc("turn_fallback_total")
+                    emit_gateway_log(
+                        "turn_fallback",
+                        trace_ctx=trace_ctx,
+                        device_id=device_id,
+                        ice_server_count=len(ice_servers),
+                        route_mode="cross_device",
+                    )
                 logger.debug(
                     "webrtc_ice_servers_pushed device_id=%s trace_id=%s count=%d",
                     device_id, trace_id, len(ice_servers),
@@ -449,6 +506,15 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
                     async for message in node_ws:
                         raw = message if isinstance(message, str) else message.decode()
                         enriched = enrich_signaling_message(raw)
+                        # Inject trace context into downstream messages (additive, non-destructive).
+                        try:
+                            msg = json.loads(enriched)
+                            if isinstance(msg, dict):
+                                msg.setdefault("trace_id", trace_id)
+                                msg.setdefault("span_id", trace_ctx.span_id)
+                                enriched = json.dumps(msg)
+                        except (json.JSONDecodeError, TypeError, ValueError):
+                            pass  # non-JSON or non-dict: forward as-is
                         await client_ws.send_text(enriched)
                 except (WebSocketDisconnect, Exception) as exc:
                     logger.debug(
@@ -470,6 +536,16 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
                 except asyncio.CancelledError:
                     pass
 
+            elapsed_ms = (time.monotonic() - session_start) * 1000
+            metrics.signaling_latency_ms.observe(elapsed_ms)
+            metrics.inc("signaling_success")
+            emit_gateway_log(
+                "signaling_session_end",
+                trace_ctx=trace_ctx,
+                device_id=device_id,
+                latency_ms=round(elapsed_ms, 1),
+                route_mode="cross_device",
+            )
             logger.info(
                 "webrtc_signaling_session_end device_id=%s trace_id=%s",
                 device_id, trace_id,
@@ -479,6 +555,20 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
         await asyncio.wait_for(_run_session(), timeout=SIGNALING_TIMEOUT_S)
 
     except asyncio.TimeoutError:
+        elapsed_ms = (time.monotonic() - session_start) * 1000
+        metrics.signaling_latency_ms.observe(elapsed_ms)
+        metrics.inc("signaling_failure")
+        metrics.inc("signaling_timeout")
+        emit_gateway_log(
+            "signaling_timeout",
+            trace_ctx=trace_ctx,
+            level="warning",
+            device_id=device_id,
+            timeout_s=SIGNALING_TIMEOUT_S,
+            latency_ms=round(elapsed_ms, 1),
+            route_mode="cross_device",
+            cause=ERROR_CODE_SIGNALING_TIMEOUT,
+        )
         logger.warning(
             "webrtc_signaling_timeout device_id=%s trace_id=%s timeout_s=%d",
             device_id, trace_id, SIGNALING_TIMEOUT_S,
@@ -492,6 +582,18 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
             pass
 
     except Exception as exc:
+        elapsed_ms = (time.monotonic() - session_start) * 1000
+        metrics.signaling_latency_ms.observe(elapsed_ms)
+        metrics.inc("signaling_failure")
+        emit_gateway_log(
+            "signaling_error",
+            trace_ctx=trace_ctx,
+            level="warning",
+            device_id=device_id,
+            cause=str(exc),
+            latency_ms=round(elapsed_ms, 1),
+            route_mode="cross_device",
+        )
         logger.warning(
             "webrtc_signaling_node95_unreachable device_id=%s trace_id=%s error=%s",
             device_id, trace_id, exc,

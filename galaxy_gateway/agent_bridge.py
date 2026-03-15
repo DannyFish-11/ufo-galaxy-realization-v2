@@ -62,6 +62,13 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# Import observability helpers (lazy-safe: importable at module level).
+from galaxy_gateway.observability import (  # noqa: E402
+    TraceContext,
+    emit_gateway_log,
+    get_gateway_metrics,
+)
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -250,6 +257,8 @@ class AgentBridge:
         )
 
         trace_id = contract.trace_id
+        trace_ctx = TraceContext(trace_id=trace_id, span_id=str(uuid.uuid4()))
+        gm = get_gateway_metrics()
 
         # ── 1. Cross-device switch guard ──────────────────────────────────
         if not is_cross_device_enabled():
@@ -276,6 +285,7 @@ class AgentBridge:
 
         # ── 4. Runtime call ────────────────────────────────────────────────
         self.metrics.handoff_attempts += 1
+        gm.inc("bridge_handoff_total")
         t_start = time.monotonic()
 
         try:
@@ -284,24 +294,48 @@ class AgentBridge:
                 timeout=self._config.timeout,
             )
             elapsed = time.monotonic() - t_start
+            elapsed_ms = elapsed * 1000
             self.metrics.record_latency(elapsed)
             self.metrics.handoff_success += 1
+            gm.bridge_latency_ms.observe(elapsed_ms)
+            gm.inc("bridge_handoff_success")
             result.setdefault("trace_id", trace_id)
             result["bridge_source"] = "runtime"
+            emit_gateway_log(
+                "bridge_handoff_ok",
+                trace_ctx=trace_ctx,
+                latency_ms=round(elapsed_ms, 1),
+                capability=contract.capability,
+                exec_mode=contract.exec_mode,
+                route_mode=contract.route_mode,
+            )
             logger.info(
                 "agent_bridge_handoff_ok trace_id=%s latency_ms=%.1f",
                 trace_id,
-                elapsed * 1000,
+                elapsed_ms,
             )
         except (asyncio.TimeoutError, OSError, RuntimeError) as exc:
             elapsed = time.monotonic() - t_start
+            elapsed_ms = elapsed * 1000
             self.metrics.record_latency(elapsed)
             self.metrics.handoff_failure += 1
+            gm.bridge_latency_ms.observe(elapsed_ms)
+            gm.inc("bridge_handoff_failure")
+            emit_gateway_log(
+                "bridge_handoff_failed",
+                trace_ctx=trace_ctx,
+                level="warning",
+                cause=str(exc),
+                latency_ms=round(elapsed_ms, 1),
+                capability=contract.capability,
+                exec_mode=contract.exec_mode,
+                route_mode=contract.route_mode,
+            )
             logger.warning(
                 "agent_bridge_handoff_failed trace_id=%s error=%s latency_ms=%.1f; falling back",
                 trace_id,
                 exc,
-                elapsed * 1000,
+                elapsed_ms,
             )
             result = await self._run_local_fallback(
                 contract.task, local_fallback, trace_id, reason=str(exc)
@@ -382,6 +416,14 @@ class AgentBridge:
     ) -> Dict[str, Any]:
         """Invoke *local_fallback* and tag the result with bridge metadata."""
         self.metrics.fallback_count += 1
+        gm = get_gateway_metrics()
+        gm.inc("bridge_fallback_total")
+        trace_ctx = TraceContext(trace_id=trace_id, span_id=str(uuid.uuid4()))
+        emit_gateway_log(
+            "bridge_fallback",
+            trace_ctx=trace_ctx,
+            reason=reason,
+        )
         logger.info(
             "agent_bridge_fallback trace_id=%s reason=%s",
             trace_id,
