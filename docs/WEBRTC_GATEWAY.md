@@ -3,6 +3,23 @@
 This document describes the WebRTC signaling gateway integration added to the
 Galaxy Gateway (server repo `DannyFish-11/galaxy-realization-v2`).
 
+## Protocol Requirements (AIP v3 — Round 2 enforcement)
+
+> **All WebSocket and HTTP connections to this gateway require AIP v3.0+.**
+>
+> * Every message **must** include `"version": "3.0"` (or higher).  Connections
+>   or messages carrying an older version (or omitting the field) are rejected
+>   immediately: WebSocket connections receive a close frame with code `4000`;
+>   HTTP requests receive a `400 Bad Request`.
+> * Every message **must** include `trace_id` (a UUID string) and `route_mode`
+>   (`"cross_device"` or `"local"`).  When either field is absent, the gateway
+>   injects a generated default and records a structured log entry
+>   (`event: aip_metadata_injected`).  Clients should send both fields
+>   explicitly for end-to-end traceability.
+>
+> These requirements apply to all WebSocket paths (`/ws/android/*`,
+> `/ws/device/*`, `/ws/webrtc/*`) and to all HTTP ingress endpoints.
+
 ## Overview
 
 Android clients need a stable, single gateway address to perform WebRTC

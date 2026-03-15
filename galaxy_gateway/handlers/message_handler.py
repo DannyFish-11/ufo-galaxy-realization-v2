@@ -44,7 +44,22 @@ class MessageHandler:
         try:
             handler = self._get_handler(message.type)
             if handler:
-                return await handler(device_id, message)
+                response = await handler(device_id, message)
+                # Propagate trace_id and route_mode into every response so
+                # downstream components always receive both fields.
+                # Empty strings are intentional here: inject_trace_metadata()
+                # guarantees non-empty values at WS/HTTP ingress, so empty
+                # strings only arise in unit tests or internal direct calls
+                # where injection is skipped — in those cases propagation is
+                # a no-op (the `if trace_id` guard prevents writing empty values).
+                if response is not None:
+                    trace_id = message.payload.get("trace_id", "")
+                    route_mode = message.payload.get("route_mode", "")
+                    if trace_id:
+                        response.payload.setdefault("trace_id", trace_id)
+                    if route_mode:
+                        response.payload.setdefault("route_mode", route_mode)
+                return response
             else:
                 logger.warning(f"No handler for message type: {message.type}")
                 return None

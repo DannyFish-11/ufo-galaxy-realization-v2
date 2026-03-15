@@ -37,11 +37,98 @@ Usage::
 
 import json
 import logging
+import uuid
 from typing import Optional, Union
 
 from .aip_v3 import AIPMessage, MessageType, parse_message
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# AIP v3 enforcement helpers
+# ---------------------------------------------------------------------------
+
+# Minimum required major version for strict enforcement.
+_MIN_REQUIRED_VERSION = (3, 0)
+
+# Default route_mode when the field is absent from an incoming message.
+_DEFAULT_ROUTE_MODE = "cross_device"
+
+
+class AIPVersionError(ValueError):
+    """Raised when an incoming message does not meet the minimum AIP version."""
+
+
+def _parse_version(version_str: str) -> tuple:
+    """Parse a version string like '3.0' or '3.1' into a comparable tuple."""
+    try:
+        parts = str(version_str).split(".")
+        return tuple(int(p) for p in parts[:2])
+    except (ValueError, AttributeError):
+        logger.warning(
+            "Could not parse AIP version string %r; treating as (0, 0)", version_str
+        )
+        return (0, 0)
+
+
+def enforce_aip_v3(data: dict) -> None:
+    """
+    Validate that *data* carries a protocol version >= 3.0.
+
+    :raises AIPVersionError: when the ``version`` field is absent or lower
+        than 3.0.  The caller is responsible for rejecting the connection /
+        request and logging the structured rejection event.
+    """
+    raw_version = data.get("version")
+    if raw_version is None:
+        raise AIPVersionError(
+            "Missing 'version' field; AIP v3.0+ is required"
+        )
+    parsed = _parse_version(str(raw_version))
+    if parsed < _MIN_REQUIRED_VERSION:
+        raise AIPVersionError(
+            f"AIP version {raw_version!r} is below the required minimum 3.0"
+        )
+
+
+def inject_trace_metadata(data: dict) -> dict:
+    """
+    Ensure *data* contains ``trace_id`` and ``route_mode``.
+
+    * ``trace_id``   – generated as a new UUID when absent.
+    * ``route_mode`` – defaults to :data:`_DEFAULT_ROUTE_MODE` when absent.
+
+    A structured log entry is emitted for each injected field so that
+    operators can identify clients that do not send these fields.
+
+    :param data: Raw (already-decoded) message dict.  **Not mutated.**
+    :returns: A new dict with the metadata fields guaranteed to be present.
+    """
+    out = dict(data)
+    injected: list = []
+
+    if not out.get("trace_id"):
+        out["trace_id"] = str(uuid.uuid4())
+        injected.append("trace_id")
+
+    if not out.get("route_mode"):
+        out["route_mode"] = _DEFAULT_ROUTE_MODE
+        injected.append("route_mode")
+
+    if injected:
+        logger.info(
+            "Injected missing AIP metadata fields",
+            extra={
+                "event": "aip_metadata_injected",
+                "injected_fields": injected,
+                "trace_id": out["trace_id"],
+                "route_mode": out["route_mode"],
+                "device_id": out.get("device_id", "unknown"),
+                "message_type": out.get("type", "unknown"),
+            },
+        )
+
+    return out
 
 # ---------------------------------------------------------------------------
 # Legacy type-string → canonical MessageType mapping
@@ -204,6 +291,10 @@ def parse_message_compat(data: Union[str, dict]) -> AIPMessage:
     """
     Parse an incoming message from any supported AIP protocol version.
 
+    trace_id and route_mode are injected when absent so that every
+    :class:`AIPMessage` exiting this layer always carries both fields in
+    its ``payload``.
+
     :param data: Raw JSON string or already-decoded dict.
     :returns: A validated :class:`AIPMessage` instance.
     :raises: ``ValueError`` / ``pydantic.ValidationError`` if the message
@@ -211,6 +302,10 @@ def parse_message_compat(data: Union[str, dict]) -> AIPMessage:
     """
     if isinstance(data, str):
         data = json.loads(data)
+
+    # Ensure trace_id and route_mode are present before normalisation so that
+    # the injected values survive the version-translation step unchanged.
+    data = inject_trace_metadata(data)
 
     version = _detect_version(data)
 
@@ -228,6 +323,36 @@ def parse_message_compat(data: Union[str, dict]) -> AIPMessage:
         data.get("type"),
     )
     return parse_message(_normalise_v1(data))
+
+
+def parse_message_strict(data: Union[str, dict]) -> AIPMessage:
+    """
+    Parse an incoming message and **enforce** AIP v3.0 or higher.
+
+    Unlike :func:`parse_message_compat`, this function raises
+    :class:`AIPVersionError` when the message carries a version below 3.0
+    or omits the ``version`` field entirely.  Use this at WebSocket / HTTP
+    ingress points that must reject legacy clients.
+
+    trace_id and route_mode are still injected when absent so that all
+    downstream handlers always see both fields.
+
+    :param data: Raw JSON string or already-decoded dict.
+    :returns: A validated :class:`AIPMessage` instance.
+    :raises AIPVersionError: when version < 3.0 or version is absent.
+    :raises ValueError / pydantic.ValidationError: for other parse errors.
+    """
+    if isinstance(data, str):
+        data = json.loads(data)
+
+    # Version gate — raises AIPVersionError for < 3.0 or missing version.
+    enforce_aip_v3(data)
+
+    # Inject missing metadata fields before parsing.
+    data = inject_trace_metadata(data)
+
+    logger.debug("Protocol version enforced: AIP/3.0")
+    return parse_message(data)
 
 
 # ---------------------------------------------------------------------------
