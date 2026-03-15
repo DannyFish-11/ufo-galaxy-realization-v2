@@ -477,10 +477,154 @@ pytest tests/test_cross_device_switch.py -v
 
 ---
 
+## WebRTC/TURN Multi-Candidate Robustness (Round 6)
+
+This section documents the Round 6 enhancements that add trickle ICE support,
+TURN fallback, candidate ordering/deduplication, and timeouts to the signaling
+proxy.
+
+### Overview
+
+```
+Android Client
+    │
+    │  ws://GATEWAY_HOST/ws/webrtc/{device_id}
+    ▼
+Galaxy Gateway  ──► enriches offer/answer with TURN ──►  Node_95_WebRTC_Receiver
+    │                                                         ws://NODE_95_HOST/signaling/{device_id}
+    │  pushes ice_servers message on connect
+    ▼
+Android RTCPeerConnection (configured with STUN+TURN)
+```
+
+### ICE Server Push on Connect
+
+When STUN/TURN servers are configured via environment variables, the gateway
+pushes an ``ice_servers`` message to the Android client immediately after the
+signaling tunnel to Node_95 is established:
+
+```json
+{
+  "type": "ice_servers",
+  "ice_servers": [
+    { "urls": ["stun:stun.example.com:3478"] },
+    {
+      "urls": ["turn:turn.example.com:3478"],
+      "username": "testuser",
+      "credential": "testpass"
+    }
+  ],
+  "trace_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+The client should use this list to configure its `RTCPeerConnection.iceServers`
+before processing the first `offer` or `answer`.
+
+### TURN Injection into Offer/Answer
+
+When the gateway relays an `offer` or `answer` message from Node_95 to the
+Android client, it injects the gateway-side `ice_servers` list into the message
+body so that the peer can use TURN as a fallback even if the `ice_servers` push
+was missed or not yet processed:
+
+```json
+{
+  "type": "offer",
+  "sdp": "v=0\r\n...",
+  "ice_servers": [
+    { "urls": ["stun:stun.example.com:3478"] },
+    { "urls": ["turn:turn.example.com:3478"], "username": "u", "credential": "p" }
+  ]
+}
+```
+
+### Trickle ICE
+
+The gateway relays each `ice_candidate` message individually as it arrives
+(trickle mode). Each forwarded candidate is annotated with its type for
+client-side ordering and diagnostics:
+
+```json
+{
+  "type": "ice_candidate",
+  "candidate": "candidate:1 1 UDP 2 1.2.3.4 3478 typ relay raddr ...",
+  "candidate_type": "relay"
+}
+```
+
+### Candidate Ordering
+
+Use `order_ice_candidates(candidates)` from `galaxy_gateway/webrtc_proxy.py`
+to sort and deduplicate a list of ICE candidate dicts.
+
+Priority (most-preferred first):
+
+| Priority | Type    | Description                          |
+|----------|---------|--------------------------------------|
+| 1        | `relay` | TURN relay — works through firewalls |
+| 2        | `srflx` | Server-reflexive (STUN)              |
+| 3        | `prflx` | Peer-reflexive                       |
+| 4        | `host`  | Direct LAN/loopback                  |
+
+Candidates with identical `candidate` SDP values are deduplicated; the first
+occurrence is retained.
+
+### Environment Variables (Round 6)
+
+| Variable                      | Default | Description                                              |
+|-------------------------------|---------|----------------------------------------------------------|
+| `GALAXY_STUN_URLS`            | _(none)_ | Comma-separated STUN URLs (e.g. `stun:stun.l.google.com:19302`) |
+| `GALAXY_TURN_URLS`            | _(none)_ | Comma-separated TURN URLs (e.g. `turn:turn.example.com:3478`) |
+| `GALAXY_TURN_USERNAME`        | _(none)_ | TURN credential username                                |
+| `GALAXY_TURN_CREDENTIAL`      | _(none)_ | TURN credential password                                |
+| `GALAXY_SIGNALING_TIMEOUT_S`  | `30`    | Total session timeout (seconds); closes with code 4010 when exceeded |
+| `GALAXY_HOLE_PUNCH_TIMEOUT_S` | `10`    | Advisory hole-punch budget (seconds) exposed in endpoint metadata |
+
+### Error Codes (Round 6)
+
+| Close Code | Token                | Meaning                                              |
+|-----------|----------------------|------------------------------------------------------|
+| `4010`    | `signaling_timeout`  | Session exceeded `GALAXY_SIGNALING_TIMEOUT_S`        |
+| `4011`    | `hole_punch_failed`  | ICE hole-punch failed or timed out (reserved)        |
+| `4001`    | `cross_device_disabled` | Cross-device switch is OFF (Round 4)             |
+| `1011`    | _(server error)_     | Node_95 is unreachable                               |
+
+Every close event is logged with a `trace_id` for end-to-end observability:
+
+```
+webrtc_signaling_timeout device_id=phone_1 trace_id=<uuid> timeout_s=30
+```
+
+### Endpoint Info Fields (Round 6)
+
+`GET /api/v1/webrtc/endpoint` now includes:
+
+```json
+{
+  "trickle_ice_supported": true,
+  "candidate_ordering": ["relay", "srflx", "prflx", "host"],
+  "signaling_timeout_s": 30,
+  "turn_fallback_enabled": true
+}
+```
+
+### Backward Compatibility
+
+Legacy clients that:
+* Do not handle the `ice_servers` push — the first message is safely ignored
+  if the type is unknown.
+* Send a single `offer` without trickle — still works; the proxy relays the
+  message and the echo/answer comes back normally.
+* Do not include `trace_id` or `version` in messages — fields are not required
+  by the proxy for forwarding.
+
+---
+
 ## Running Tests
 
 ```bash
-pytest tests/test_webrtc_gateway.py tests/test_config_endpoint.py -v
+pytest tests/test_webrtc_gateway.py tests/test_webrtc_signaling_turn.py tests/test_config_endpoint.py -v
 ```
 
 Tests use a local mock WebSocket server and do **not** require a real
@@ -493,11 +637,12 @@ Tests use a local mock WebSocket server and do **not** require a real
 | File                                   | Role                                                     |
 |----------------------------------------|----------------------------------------------------------|
 | `galaxy_gateway/cross_device_switch.py` | **Round 4** — single feature-flag module; all cross-device gates import from here |
-| `galaxy_gateway/webrtc_proxy.py`       | Proxy helpers: health probe, endpoint info, WS relay     |
+| `galaxy_gateway/webrtc_proxy.py`       | **Round 6** — proxy helpers: health probe, endpoint info, WS relay, candidate ordering, TURN enrichment, timeouts |
 | `galaxy_gateway/device_router.py`      | Canonical single dispatcher; cross-device switch checked in `route_task()` and `_dispatch_cross_device_task()` |
 | `galaxy_gateway/api/config.py`         | `GET /api/v1/config` route and config builder helpers    |
 | `galaxy_gateway/app.py`                | REST + WS endpoint registrations; `GET /api/v1/webrtc/endpoint` checks switch |
 | `galaxy_gateway/smart_transport_router.py` | `use_gateway` option in `TransportRequest`           |
 | `tests/test_webrtc_gateway.py`         | Unit + integration tests (mock Node_95)                  |
+| `tests/test_webrtc_signaling_turn.py`  | **Round 6** — TURN injection, trickle ICE, candidate ordering, timeout, backward-compat tests |
 | `tests/test_config_endpoint.py`        | Unit tests for `GET /api/v1/config`                      |
 | `tests/test_cross_device_switch.py`    | **Round 4** — cross-device switch OFF/ON behavior tests  |
