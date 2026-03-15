@@ -3,12 +3,14 @@ setlocal
 
 REM --- Galaxy Windows Client Starter ---
 
-REM 设置 Node 50 的地址
-REM 本地连接 (Podman Desktop 端口映射)
-set NODE50_URL=ws://localhost:8050
+REM 统一入口：Galaxy Gateway (AIP v3)
+REM Node_50 / UFO3 旧通道已禁用；所有通信通过 Gateway /ws/device/{id}
+
+REM Gateway 本地地址
+set GALAXY_GATEWAY_URL=ws://localhost:9000
 
 REM 如果需要从外部设备连接，使用 Tailscale IP:
-REM set NODE50_URL=ws://100.123.215.126:8050
+REM set GALAXY_GATEWAY_URL=ws://100.123.215.126:9000
 
 REM 设置客户端 ID
 set CLIENT_ID=windows-laptop-udvehlu0
@@ -31,9 +33,9 @@ if %errorlevel% neq 0 (
 
 REM 启动客户端
 echo [INFO] Starting Galaxy Windows Client...
-echo [INFO] Connecting to Node 50 at %NODE50_URL%...
+echo [INFO] Connecting to Galaxy Gateway at %GALAXY_GATEWAY_URL%...
 
-python client.py --node50_url %NODE50_URL% --client_id %CLIENT_ID%
+python client.py --gateway_url %GALAXY_GATEWAY_URL% --client_id %CLIENT_ID%
 
 endlocal
 pause

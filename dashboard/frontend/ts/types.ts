@@ -283,6 +283,38 @@ export interface ModelRouteStatus {
   error: string | null;
 }
 
+export interface ChannelEntry {
+  enabled: boolean;
+  reachable: boolean;
+  error: string | null;
+}
+
+export interface NatsStatus {
+  configured: boolean;
+  url: string | null;
+  connected: boolean;
+  error: string | null;
+}
+
+export interface TailscaleStatus {
+  enabled: boolean;
+  host: string | null;
+}
+
+export interface LegacyProtocolStatus {
+  enabled: boolean;
+  note: string;
+}
+
+export interface ChannelStatus {
+  nats: NatsStatus;
+  tailscale: TailscaleStatus;
+  webrtc: ChannelEntry;
+  mqtt: ChannelEntry;
+  scrcpy: ChannelEntry;
+  legacy_protocols: LegacyProtocolStatus;
+}
+
 export interface LiveStatus {
   timestamp: number;
   observability_available: boolean;
@@ -290,6 +322,7 @@ export interface LiveStatus {
   gateway_trace: GatewayTrace;
   device_health: DeviceHealth;
   model_route: ModelRouteStatus;
+  channel_status?: ChannelStatus;
 }
 
 // ============================================================================

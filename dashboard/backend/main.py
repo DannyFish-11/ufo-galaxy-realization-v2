@@ -3176,6 +3176,73 @@ async def get_live_status():
         "gateway_trace": gateway_info,
         "device_health": device_info,
         "model_route": model_info,
+        "channel_status": _get_channel_status(),
+    }
+
+
+def _get_channel_status() -> dict:
+    """
+    返回通信通道状态面板数据：
+      - nats:      是否配置 GALAXY_NATS_URL 且连接成功
+      - tailscale: 是否启用 GALAXY_TAILSCALE_ENABLED
+      - webrtc:    WebRTC 通道是否明确启用（GALAXY_ENABLE_WEBRTC）且节点可达
+      - mqtt:      MQTT 通道是否明确启用（GALAXY_ENABLE_MQTT）且节点可达
+      - scrcpy:    Scrcpy 通道是否明确启用（GALAXY_ENABLE_SCRCPY）且节点可达
+      - legacy_protocols: GALAXY_ENABLE_LEGACY_PROTOCOLS 开关状态
+    """
+    # ── NATS ─────────────────────────────────────────────────────────────────
+    nats_url = os.environ.get("GALAXY_NATS_URL", "")
+    nats_connected = False
+    nats_error: str | None = None
+    if nats_url:
+        try:
+            from core.nats_bus import nats_bus
+            stats = nats_bus.get_stats()
+            nats_connected = stats.get("connected", False)
+        except Exception as exc:
+            nats_error = str(exc)
+    else:
+        nats_error = "GALAXY_NATS_URL not set"
+
+    # ── Tailscale ─────────────────────────────────────────────────────────────
+    tailscale_enabled = os.environ.get("GALAXY_TAILSCALE_ENABLED", "false").lower() == "true"
+    tailscale_host = os.environ.get("GALAXY_TAILSCALE_HOST", "") or None
+
+    # ── Optional transport channels ──────────────────────────────────────────
+    def _channel(env_key: str, node_env: str, default_port: int) -> dict:
+        enabled = os.environ.get(env_key, "false").lower() == "true"
+        reachable = False
+        err: str | None = None
+        if enabled:
+            node_url = os.environ.get(node_env, f"http://localhost:{default_port}")
+            try:
+                import httpx as _httpx
+                r = _httpx.get(f"{node_url}/health", timeout=1.5)
+                reachable = r.status_code == 200
+            except Exception as exc:
+                err = str(exc)
+        else:
+            err = f"{env_key} not enabled"
+        return {"enabled": enabled, "reachable": reachable, "error": err}
+
+    return {
+        "nats": {
+            "configured": bool(nats_url),
+            "url": nats_url or None,
+            "connected": nats_connected,
+            "error": nats_error,
+        },
+        "tailscale": {
+            "enabled": tailscale_enabled,
+            "host": tailscale_host,
+        },
+        "webrtc": _channel("GALAXY_ENABLE_WEBRTC", "NODE_95_URL", 8095),
+        "mqtt": _channel("GALAXY_ENABLE_MQTT", "NODE_41_URL", 8041),
+        "scrcpy": _channel("GALAXY_ENABLE_SCRCPY", "NODE_34_URL", 8034),
+        "legacy_protocols": {
+            "enabled": os.environ.get("GALAXY_ENABLE_LEGACY_PROTOCOLS", "false").lower() == "true",
+            "note": "Controls /ws/ufo3 and other legacy WS paths. Disabled by default.",
+        },
     }
 
 
