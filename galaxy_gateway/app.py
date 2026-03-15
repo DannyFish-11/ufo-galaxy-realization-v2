@@ -504,6 +504,26 @@ async def websocket_endpoint_auto(websocket: WebSocket, device_id: str = Query(N
 # REST API 端点
 # ============================================================================
 
+@app.get("/api/v1/gateway/metrics/json")
+async def gateway_metrics_json():
+    """Return gateway pipeline metrics as a JSON snapshot (Round 7)."""
+    from galaxy_gateway.observability import get_gateway_metrics
+    from starlette.responses import JSONResponse
+    return JSONResponse(get_gateway_metrics().snapshot())
+
+
+@app.get("/api/v1/gateway/metrics")
+@app.get("/gateway/metrics")
+async def gateway_metrics_prometheus():
+    """Prometheus text-format exposition for gateway pipeline metrics (Round 7)."""
+    from galaxy_gateway.observability import get_gateway_metrics
+    from starlette.responses import Response
+    return Response(
+        content=get_gateway_metrics().prometheus_text(),
+        media_type="text/plain; charset=utf-8",
+    )
+
+
 @app.get("/health")
 async def health_check():
     """健康检查"""

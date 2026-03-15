@@ -26,6 +26,7 @@ Date: 2026-03-07
 import asyncio
 import json
 import logging
+import time as _time
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import uuid
@@ -36,6 +37,11 @@ logger = logging.getLogger(__name__)
 from galaxy_gateway.cross_device_switch import (  # noqa: E402
     is_cross_device_enabled,
     make_disabled_response,
+)
+from galaxy_gateway.observability import (  # noqa: E402
+    TraceContext,
+    emit_gateway_log,
+    get_gateway_metrics,
 )
 
 # 延迟导入以避免循环依赖
@@ -236,18 +242,62 @@ class DeviceRouter:
         Returns:
             任务执行结果
         """
+        metrics = get_gateway_metrics()
+        metrics.inc("routing_total")
+        _route_start = _time.monotonic()
+
+        # Extract / generate trace context from incoming context dict.
+        ctx = context or {}
+        trace_ctx = TraceContext.from_message(ctx)
+        # Propagate trace_id back into context so downstream callers can read it.
+        if not ctx.get("trace_id"):
+            ctx = dict(ctx)
+            ctx["trace_id"] = trace_ctx.trace_id
+            emit_gateway_log(
+                "trace_id_injected",
+                trace_ctx=trace_ctx,
+                reason="missing_in_context",
+                route_mode=ctx.get("route_mode", ""),
+            )
+
         try:
             logger.info(f"🎯 开始路由任务: {command}")
             
             # 1. 分析命令，确定目标设备和任务类型
-            analysis = await self._analyze_command(command, context)
+            analysis = await self._analyze_command(command, ctx)
+
+            route_mode = ctx.get("route_mode", "")
+            exec_mode = analysis.get("exec_mode", "both")
+            capability = analysis.get("task_type", "")
+            device_id = ctx.get("device_id", "")
+
+            emit_gateway_log(
+                "dispatcher_selection",
+                trace_ctx=trace_ctx,
+                command=command[:120],
+                route_mode=route_mode,
+                exec_mode=exec_mode,
+                capability=capability,
+                device_id=device_id,
+                requires_cross_device=analysis.get("requires_cross_device", False),
+            )
             
             # 2. 判断是否需要跨设备协同
             if analysis.get("requires_cross_device", False):
                 # --- Round 4: hard constraint — check cross-device switch ---
                 if not is_cross_device_enabled():
-                    trace_id = (context or {}).get("trace_id")
-                    return make_disabled_response(trace_id=trace_id)
+                    emit_gateway_log(
+                        "cross_device_blocked",
+                        trace_ctx=trace_ctx,
+                        level="warning",
+                        reason="switch_disabled",
+                        route_mode=route_mode,
+                        exec_mode=exec_mode,
+                        capability=capability,
+                        device_id=device_id,
+                    )
+                    metrics.inc("routing_failure")
+                    return make_disabled_response(trace_id=trace_ctx.trace_id)
 
                 # --- Round 5: Agent Bridge handoff ---
                 # Try delegating to the agent runtime before falling back to the
@@ -259,23 +309,30 @@ class DeviceRouter:
                         get_agent_bridge,
                     )
 
-                    ctx = context or {}
                     bridge = get_agent_bridge()
                     # Only attempt handoff when the bridge is configured and enabled.
                     if bridge._config.enabled:
-                        trace_id = ctx.get("trace_id") or str(uuid.uuid4())
                         contract = HandoffContract(
-                            trace_id=trace_id,
+                            trace_id=trace_ctx.trace_id,
                             task={
                                 "command": command,
                                 "analysis": analysis,
                                 "context": ctx,
                             },
-                            capability=analysis.get("task_type", ""),
-                            exec_mode=analysis.get("exec_mode", "both"),
-                            route_mode=ctx.get("route_mode", "direct"),
+                            capability=capability,
+                            exec_mode=exec_mode,
+                            route_mode=route_mode or "direct",
                             session=ctx.get("session", {}),
                             callback_channel=ctx.get("callback_channel", "ws"),
+                        )
+
+                        emit_gateway_log(
+                            "bridge_handoff_start",
+                            trace_ctx=trace_ctx,
+                            device_id=device_id,
+                            route_mode=route_mode,
+                            exec_mode=exec_mode,
+                            capability=capability,
                         )
 
                         async def _local_coordinator_fallback(task: dict) -> dict:
@@ -285,25 +342,43 @@ class DeviceRouter:
                                 task.get("context", ctx),
                             )
 
-                        return await bridge.handoff(
+                        result = await bridge.handoff(
                             contract=contract,
                             local_fallback=_local_coordinator_fallback,
                         )
+                        _elapsed_ms = (_time.monotonic() - _route_start) * 1000
+                        metrics.routing_latency_ms.observe(_elapsed_ms)
+                        metrics.inc("routing_success")
+                        return result
                 except Exception as _bridge_err:
                     logger.warning(
                         "agent_bridge_import_error trace_id=%s error=%s; using coordinator",
-                        (context or {}).get("trace_id", ""),
+                        trace_ctx.trace_id,
                         _bridge_err,
                     )
 
                 # Use cross-device coordinator (fallback when bridge import failed)
                 coordinator = get_cross_device_coordinator()
-                return await coordinator.execute_cross_device_task(command, context)
+                result = await coordinator.execute_cross_device_task(command, ctx)
+                _elapsed_ms = (_time.monotonic() - _route_start) * 1000
+                metrics.routing_latency_ms.observe(_elapsed_ms)
+                metrics.inc("routing_success")
+                return result
             
             # 3. 选择合适的设备
             target_devices = self._select_devices(analysis)
             
             if not target_devices:
+                emit_gateway_log(
+                    "routing_failed",
+                    trace_ctx=trace_ctx,
+                    level="warning",
+                    reason="no_available_device",
+                    route_mode=route_mode,
+                    exec_mode=exec_mode,
+                    capability=capability,
+                )
+                metrics.inc("routing_failure")
                 return {
                     "success": False,
                     "error": "没有可用的设备执行此任务"
@@ -311,6 +386,8 @@ class DeviceRouter:
             
             # 3. 创建任务
             task = self._create_task(command, analysis, target_devices)
+            # Propagate trace context into the task payload
+            task.update(trace_ctx.to_dict())
             
             # 4. 分发任务
             if len(target_devices) == 1:
@@ -319,10 +396,26 @@ class DeviceRouter:
             else:
                 # 多设备协同任务
                 result = await self._dispatch_cross_device_task(task, target_devices)
-            
+
+            _elapsed_ms = (_time.monotonic() - _route_start) * 1000
+            metrics.routing_latency_ms.observe(_elapsed_ms)
+            if result.get("success", False):
+                metrics.inc("routing_success")
+            else:
+                metrics.inc("routing_failure")
             return result
             
         except Exception as e:
+            _elapsed_ms = (_time.monotonic() - _route_start) * 1000
+            metrics.routing_latency_ms.observe(_elapsed_ms)
+            metrics.inc("routing_failure")
+            emit_gateway_log(
+                "routing_failed",
+                trace_ctx=trace_ctx,
+                level="error",
+                cause=str(e),
+                route_mode=(context or {}).get("route_mode", ""),
+            )
             logger.error(f"❌ 任务路由失败: {e}")
             return {
                 "success": False,
