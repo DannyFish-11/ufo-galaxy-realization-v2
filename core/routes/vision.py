@@ -5,18 +5,35 @@ Galaxy - Vision Routes
 Routes:
   POST /api/v1/vision/understand  - 融合视觉理解 (OCR + GUI)
   POST /api/v1/vision/ocr         - 独立 OCR 接口
+  POST /api/v1/vision/observe     - 视觉采样会话 (Node_95 → OpenClawd → command_router)
 """
 
 import asyncio
 import base64
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from core.routes._models import VisionRequest, OCRRequest
 
 logger = logging.getLogger("Galaxy.API")
+
+
+# ---------------------------------------------------------------------------
+# Request model for the observe endpoint
+# ---------------------------------------------------------------------------
+
+class ObserveRequest(BaseModel):
+    """Request body for POST /api/v1/vision/observe."""
+
+    device_id: str = Field(description="Target device ID used to pull frames from Node_95.")
+    fps: float = Field(default=1.0, ge=0.01, le=30.0, description="Frames per second to sample.")
+    duration: float = Field(default=10.0, ge=1.0, le=300.0, description="Sampling window in seconds.")
+    prompt: Optional[str] = Field(default=None, description="Instruction forwarded to OpenClawd.")
+    mode: Optional[str] = Field(default=None, description="Optional mode hint for OpenClawd.")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -115,6 +132,42 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 })
 
         except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/api/v1/vision/observe")
+    async def vision_observe(req: ObserveRequest):
+        """Trigger a vision sampling session.
+
+        Pulls frames from Node_95 WebRTC Receiver at *fps* frames/s for
+        *duration* seconds, packages them into a MultiModalContext, calls
+        OpenClawd, and — when the response contains an action — routes it via
+        command_router.
+
+        Returns a JSON object with keys:
+          - success (bool)
+          - frames_sampled (int)
+          - openclawd_response (dict | null)
+          - command_result (dict | null)
+        """
+        try:
+            from core.services.vision_sampler import run_sampling_session
+
+            result = await run_sampling_session(
+                device_id=req.device_id,
+                fps=req.fps,
+                duration=req.duration,
+                prompt=req.prompt,
+                mode=req.mode,
+            )
+            if result.get("success"):
+                status_code = 200
+            elif "unreachable" in (result.get("error") or "").lower() or result.get("frames_sampled", 0) == 0:
+                status_code = 503  # Node_95 unreachable / no frames captured
+            else:
+                status_code = 500
+            return JSONResponse(result, status_code=status_code)
+        except Exception as e:
+            logger.error("vision_observe error: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
 
     return router
