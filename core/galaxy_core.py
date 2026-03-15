@@ -265,19 +265,21 @@ class GalaxyCore:
         """
         注册设备 - 使用 device_protocol
         """
-        # 创建 AIP 消息
-        message = AIPMessage(
-            message_type=AIPMessageType.DEVICE_REGISTER,
-            source_id="galaxy_core",
-            target_id=device_id,
-            payload={
-                "device_id": device_id,
-                "device_type": device_type,
-                "name": name,
-                "endpoint": endpoint,
-                "registered_at": datetime.now().isoformat()
-            }
-        )
+        # Construct AIPMessage for protocol validation only; the message object
+        # is not dispatched here because register_device stores device info
+        # locally in self.devices.  AIPMessage / AIPMessageType may be None
+        # when the optional enhancements.multidevice package is not installed.
+        if AIPMessage is not None and AIPMessageType is not None:
+            AIPMessage(  # protocol validation — raises ValidationError on bad input
+                type=AIPMessageType.DEVICE_REGISTER,
+                device_id=device_id,
+                payload={
+                    "device_type": device_type,
+                    "name": name,
+                    "endpoint": endpoint,
+                    "registered_at": datetime.now().isoformat()
+                }
+            )
         
         self.devices[device_id] = {
             "device_id": device_id,

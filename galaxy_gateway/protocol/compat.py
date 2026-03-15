@@ -84,6 +84,45 @@ def _detect_version(data: dict) -> str:
     return "1.0"
 
 
+def normalise_legacy_payload(data: dict) -> dict:
+    """
+    Map legacy field names in a raw payload dict to the canonical AIP v3
+    :class:`~galaxy_gateway.protocol.aip_v3.AIPMessage` field names.
+
+    This helper is safe to call on any dict before passing it to
+    :class:`AIPMessage` or :func:`parse_message_compat`.  It only
+    promotes / renames fields; it never removes existing ones.
+
+    Mappings applied:
+
+    * ``message_type`` → ``type`` (when ``type`` is absent)
+    * ``payload["device_id"]`` → ``device_id`` (when ``device_id`` is absent
+      at the top level but present inside the ``payload`` sub-dict)
+
+    :param data: Raw input dict (not mutated).
+    :returns: A new dict with legacy fields translated to v3 equivalents.
+    """
+    out = dict(data)
+
+    # Map message_type → type when type is absent
+    if "message_type" in out and "type" not in out:
+        raw = out["message_type"]
+        # Accept both enum instances and plain strings
+        out["type"] = raw.value if hasattr(raw, "value") else str(raw)
+
+    # Promote device_id from payload when absent at top level
+    if "device_id" not in out:
+        payload = out.get("payload")
+        if isinstance(payload, dict) and "device_id" in payload:
+            out["device_id"] = payload["device_id"]
+
+    return out
+
+
+# American-spelling alias for callers who prefer the standard spelling.
+normalize_legacy_payload = normalise_legacy_payload
+
+
 def _normalise_v1(data: dict) -> dict:
     """
     Normalise an AIP/1.0 message dict so it can be parsed by
