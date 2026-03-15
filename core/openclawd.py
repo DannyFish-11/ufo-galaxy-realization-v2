@@ -3117,9 +3117,11 @@ class OpenClawd:
     # ========================================================================
 
     def sync_device_capabilities(self) -> int:
-        """将 UnifiedDeviceManager 中的设备同步为 CapabilityRegistry 条目。
+        """将设备能力同步为 CapabilityRegistry 条目。
 
-        Priority A: 使用 UnifiedDeviceManager 作为 SSOT，取代旧 DeviceRegistry。
+        Priority A: 使用 UnifiedDeviceManager 作为 SSOT。
+        Fallback B: 当 UnifiedDeviceManager 不可用或为空时，回退到 DeviceRegistry
+        （保证向后兼容，同时确保新设备能力能正确注册到能力总线）。
         包括低层设备能力和高层自治能力（metadata 声明）。
         返回同步的能力条目数量。
         """
@@ -3133,23 +3135,53 @@ class OpenClawd:
         )
         count = 0
         try:
-            from core.unified.device_manager import get_unified_device_manager
             from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
 
             reg = CapabilityRegistry.get_instance()
-            udm = get_unified_device_manager()
-            devices = udm.list_devices()
+
+            # ── Priority A: UnifiedDeviceManager ────────────────────────────
+            devices = []
+            try:
+                from core.unified.device_manager import get_unified_device_manager
+                udm = get_unified_device_manager()
+                devices = udm.list_devices() or []
+            except (ImportError, AttributeError, RuntimeError) as _udm_err:
+                logger.debug("UnifiedDeviceManager unavailable: %s", _udm_err)
+
+            # ── Fallback B: DeviceRegistry ───────────────────────────────────
+            if not devices:
+                try:
+                    from core.device_registry import DeviceRegistry
+                    dr = DeviceRegistry.get_instance()
+                    raw = dr.list_devices()
+                    # list_devices may return a dict {id: obj} or a list
+                    if isinstance(raw, dict):
+                        devices = list(raw.values())
+                    else:
+                        devices = list(raw or [])
+                except (ImportError, AttributeError, RuntimeError) as _dr_err:
+                    logger.debug("DeviceRegistry fallback unavailable: %s", _dr_err)
 
             if not devices:
                 return 0
 
             for device in devices:
-                device_id = device.device_id
-                d_name = device.device_name or device_id
-                d_type = str(device.device_type)
+                # Accept both object attributes and dict keys
+                if isinstance(device, dict):
+                    device_id = device.get("device_id", "")
+                    d_name = device.get("device_name", device_id)
+                    d_type = str(device.get("device_type", "unknown"))
+                    caps = device.get("capabilities", [])
+                    meta: Dict[str, Any] = device.get("metadata", {}) or {}
+                else:
+                    device_id = getattr(device, "device_id", "")
+                    d_name = getattr(device, "device_name", None) or device_id
+                    d_type = str(getattr(device, "device_type", "unknown"))
+                    caps = getattr(device, "capabilities", []) or []
+                    meta = getattr(device, "metadata", {}) or {}
 
                 # 低层设备能力
-                for cap in (device.capabilities or []):
+                for cap in caps:
                     cap_name = cap if isinstance(cap, str) else str(cap)
                     key = f"gateway__{device_id}__{cap_name}"
                     reg.register(CapabilityItem(
@@ -3163,7 +3195,6 @@ class OpenClawd:
                     count += 1
 
                 # Priority C: 高层自治能力（从 metadata 声明）
-                meta = device.metadata or {}
                 for cap_key in _AUTONOMOUS_CAPABILITY_KEYS:
                     if meta.get(cap_key):
                         key = f"autonomous__{device_id}__{cap_key}"
@@ -3184,7 +3215,7 @@ class OpenClawd:
 
             if count:
                 logger.info(
-                    "OpenClawd: 已从 UnifiedDeviceManager 同步 %d 个设备能力到 CapabilityRegistry",
+                    "OpenClawd: 已同步 %d 个设备能力到 CapabilityRegistry",
                     count,
                 )
         except Exception as e:

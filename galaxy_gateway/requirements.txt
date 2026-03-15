@@ -3,6 +3,9 @@ fastapi>=0.104.0
 uvicorn>=0.24.0
 pydantic>=2.5.0
 
+# WebSocket support (required for gateway WS endpoints and gateway tests)
+websockets>=11.0
+
 # HTTP Client
 httpx>=0.25.0
 

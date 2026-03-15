@@ -42,6 +42,63 @@ except ImportError:
 
 logger = logging.getLogger("Galaxy.API")
 
+# ── Node_71 MDCE URL helper ─────────────────────────────────────────────────
+
+def _get_node71_url() -> str:
+    """Return the base URL for Node_71 (Multi-Device Coordination Engine)."""
+    try:
+        from core.port_config import get_node_port
+        port = get_node_port("Node_71_MultiDeviceCoordination")
+    except Exception:
+        port = 8071
+    host = os.getenv("NODE_71_HOST", "localhost")
+    return f"http://{host}:{port}"
+
+
+async def _delegate_to_mdce(
+    request_id: str,
+    req: "UnifiedCommandRequest",
+    created_at: str,
+) -> Optional["JSONResponse"]:
+    """Delegate a multi-device command to Node_71 MDCE.
+
+    Posts the command to the MDCE task-creation endpoint and returns the
+    result wrapped in the same envelope structure used by the local path so
+    callers cannot tell the difference.  Returns ``None`` when Node_71 is
+    unreachable so the caller can fall back to local fan-out.
+    """
+    import httpx
+
+    node71_url = _get_node71_url()
+    payload = {
+        "task_type": "parallel",
+        "command": req.command,
+        "params": req.params or {},
+        "targets": req.targets,
+        "timeout": req.timeout,
+        "request_id": request_id,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=float(req.timeout) + 5) as client:
+            resp = await client.post(f"{node71_url}/tasks", json=payload)
+            resp.raise_for_status()
+            mdce_result = resp.json()
+    except (httpx.HTTPError, httpx.TransportError, OSError, ValueError) as exc:
+        logger.warning(
+            "Node_71 MDCE delegation failed (request_id=%s): %s -- falling back to local dispatch",
+            request_id, exc,
+        )
+        return None
+
+    return JSONResponse({
+        "request_id": request_id,
+        "status": CommandStatus.QUEUED,
+        "created_at": created_at,
+        "mdce": True,
+        "mdce_task_id": mdce_result.get("task_id"),
+        "message": "Multi-device command delegated to Node_71 MDCE.",
+    })
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create command routing and unified command routes router."""
@@ -131,6 +188,34 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         if not req.targets:
             raise HTTPException(status_code=400, detail="Targets list cannot be empty")
+
+        # ── Multi-device: delegate to Node_71 MDCE ─────────────────────────
+        # When more than one target is requested, route through the Multi-Device
+        # Coordination Engine (Node_71) instead of running a naive local fan-out.
+        # Single-device commands continue through the local CommandRouter path.
+        if len(req.targets) > 1:
+            command_results[request_id] = {
+                "request_id": request_id,
+                "command": req.command,
+                "targets": req.targets,
+                "params": req.params,
+                "mode": req.mode,
+                "status": CommandStatus.QUEUED,
+                "created_at": created_at,
+                "completed_at": None,
+                "results": {},
+            }
+            mdce_response = await _delegate_to_mdce(request_id, req, created_at)
+            if mdce_response is not None:
+                logger.info(
+                    "Multi-device command %s delegated to Node_71 MDCE (targets=%s)",
+                    request_id, req.targets,
+                )
+                return mdce_response
+            # MDCE unreachable — fall through to local fan-out below
+            logger.warning(
+                "Node_71 MDCE unavailable; using local fan-out for request %s", request_id,
+            )
 
         command_results[request_id] = {
             "request_id": request_id,
