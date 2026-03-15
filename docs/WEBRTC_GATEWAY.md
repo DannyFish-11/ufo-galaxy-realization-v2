@@ -258,6 +258,146 @@ val wsUrl = "${config.wsBase}${config.wsPaths[0].replace("{id}", deviceId)}"
 
 ---
 
+## Capability Schema and exec_mode (Round 3)
+
+### Overview
+
+Since Round 3 every Android (or other) client can advertise a richer, per-action
+capability schema via the **`capability_report`** WebSocket message.  The server
+stores these schemas in the in-memory `GatewayCapabilityRegistry`
+(`galaxy_gateway/capability_registry.py`) and uses the `exec_mode` field to
+select the best target device when dispatching a task.
+
+### `capability_report` message format
+
+```json
+{
+  "type": "capability_report",
+  "version": "3.0",
+  "device_id": "<device_id>",
+  "platform": "android",
+  "supported_actions": ["tap", "swipe", "screenshot"],
+  "capability_schemas": [
+    {
+      "action": "tap",
+      "params": {
+        "x": { "type": "integer" },
+        "y": { "type": "integer" }
+      },
+      "returns": { "success": { "type": "boolean" } },
+      "version": "1.2",
+      "exec_mode": "local",
+      "tags": ["ui", "touch"]
+    },
+    {
+      "action": "screenshot",
+      "params": {},
+      "returns": { "image_base64": { "type": "string" } },
+      "version": "1.0",
+      "exec_mode": "both"
+    }
+  ]
+}
+```
+
+`capability_schemas` is **optional**.  Older clients that only send
+`supported_actions` are handled with backward-compatible defaults
+(`exec_mode = "both"`).
+
+### Schema fields
+
+| Field        | Type                    | Required | Description |
+|--------------|-------------------------|----------|-------------|
+| `action`     | string                  | ✓        | Action identifier (e.g. `"tap"`, `"screenshot"`). |
+| `params`     | object (JSON Schema)    | ✗        | Input parameter schema.  Omit if no parameters. |
+| `returns`    | object (JSON Schema)    | ✗        | Return value schema. |
+| `version`    | string                  | ✗        | Schema version string (e.g. `"1.2"`).  Defaults to `"1.0"`. |
+| `exec_mode`  | `"local"` \| `"remote"` \| `"both"` | ✗ | Execution preference (see below).  Defaults to `"both"` if absent. |
+| `tags`       | array of strings        | ✗        | Free-form labels used for additional filtering (e.g. `["ui", "capture"]`). |
+
+### exec_mode semantics
+
+| Value    | Meaning |
+|----------|---------|
+| `local`  | The action **should** run on the device itself.  The server router will not assign this capability to a remote (server-side) executor.  Typical for low-latency UI automation actions. |
+| `remote` | The action **should** run server-side / remotely.  The router will not assign it to the originating device. |
+| `both`   | Either local or remote execution is acceptable.  The router may use any available executor. |
+| _(absent)_ | Treated as `"both"` for backward compatibility. |
+
+### Routing decision
+
+`DeviceRouter._select_devices()` queries the `GatewayCapabilityRegistry` to
+find devices that match both the requested **action** and the caller's
+**exec_mode** preference:
+
+1. Devices that have the capability registered **and** whose `exec_mode` is
+   compatible with the requested mode are preferred.
+2. If no devices have matching schemas, devices with **no capability_report at
+   all** (legacy clients) are used as a fallback.
+3. If neither group has online devices, the router returns an empty list and
+   the caller receives a "no available device" error.
+
+### Cleanup on disconnect
+
+When a device disconnects, `DeviceRouter.unregister_device()` calls
+`GatewayCapabilityRegistry.purge(device_id)` to remove all stale schemas.
+
+### Registry API (`galaxy_gateway/capability_registry.py`)
+
+```python
+from galaxy_gateway.capability_registry import (
+    GatewayCapabilityRegistry,
+    ExecMode,
+    get_gateway_capability_registry,
+)
+
+reg = get_gateway_capability_registry()   # global singleton
+
+# Upsert a capability (e.g. from capability_report)
+reg.upsert("device-abc", "tap", {
+    "exec_mode": "local",
+    "version": "1.2",
+    "params": {"x": {"type": "integer"}, "y": {"type": "integer"}},
+    "tags": ["ui"],
+})
+
+# Query: find devices that support "tap" in local mode
+schemas = reg.query(action="tap", exec_mode=ExecMode.LOCAL)
+
+# Purge on disconnect
+reg.purge("device-abc")
+
+# Observability
+print(reg.stats())
+# {'registrations': 1, 'hits': 1, 'misses': 0, 'devices': 0, 'total_capabilities': 0}
+```
+
+### Metrics / Logging
+
+The registry emits structured log entries and maintains in-memory counters:
+
+| Metric                | Description |
+|-----------------------|-------------|
+| `registrations`       | Total number of `upsert()` calls (cumulative). |
+| `hits`                | Number of `query()` calls that returned ≥ 1 result. |
+| `misses`              | Number of `query()` calls that returned 0 results. |
+| `devices`             | Current number of devices with registered capabilities. |
+| `total_capabilities`  | Current total number of capability entries across all devices. |
+
+Log events:
+- `capability_registry: upsert device=<id> action=<action> exec_mode=<mode>` (DEBUG)
+- `capability_registry: purged N capabilities for device <id>` (INFO)
+- `capability_report: upserted N capabilities for device <id> to GatewayCapabilityRegistry` (INFO)
+- `unregister_device: purged N capabilities for device <id>` (DEBUG)
+
+### Running the new tests
+
+```bash
+pytest tests/test_capability_registry.py tests/test_routing_with_exec_mode.py -v
+```
+
+---
+
 ## Running Tests
 
 ```bash
