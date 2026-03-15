@@ -28,12 +28,19 @@ GALAXY_TAILSCALE_TAG     Optional Tailscale ACL tag for this node
 import asyncio
 import logging
 import os
+import uuid
 from typing import Any, Dict, List, Optional
 
 import httpx
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from core.port_config import get_service_port, get_node_port
+from galaxy_gateway.cross_device_switch import (
+    is_cross_device_enabled,
+    WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
+    ERROR_CODE_CROSS_DEVICE_DISABLED,
+    ERROR_MSG_CROSS_DEVICE_DISABLED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +153,11 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
     When STUN/TURN servers or Tailscale are configured their metadata is
     included under ``ice_servers`` and ``tailscale`` keys respectively so
     that clients can immediately apply the correct ICE configuration.
+
+    The ``cross_device_enabled`` field reflects the current state of the
+    ``GALAXY_CROSS_DEVICE_ENABLED`` feature flag (Round 4).  When ``False``
+    the signaling WS path will be rejected with close code
+    ``WS_CLOSE_CODE_CROSS_DEVICE_DISABLED`` (4001).
     """
     node95_url = _get_node95_url()
     gateway_url = _get_gateway_url()
@@ -154,6 +166,7 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
         "ws_signaling_path": "/signaling/{device_id}",
         "gateway_ws_url": gateway_url,
         "gateway_ws_path": "/ws/webrtc/{device_id}",
+        "cross_device_enabled": is_cross_device_enabled(),
     }
 
     ice_servers = _get_ice_servers()
@@ -177,8 +190,29 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
 
     If Node_95 is unreachable the connection is closed with code 1011 (an
     application-level error analogous to HTTP 503).
+
+    **Round 4 — cross-device switch**: When ``GALAXY_CROSS_DEVICE_ENABLED`` is
+    OFF the connection is accepted and immediately closed with code
+    ``WS_CLOSE_CODE_CROSS_DEVICE_DISABLED`` (4001) and reason
+    ``"cross-device routing disabled"``.  A structured log entry is emitted
+    at WARNING level.
     """
     await client_ws.accept()
+
+    # --- Round 4: hard constraint — reject signaling when switch is OFF ---
+    if not is_cross_device_enabled():
+        trace_id = str(uuid.uuid4())
+        logger.warning(
+            "cross_device_blocked event=webrtc_signaling device_id=%s trace_id=%s reason=%s",
+            device_id,
+            trace_id,
+            ERROR_CODE_CROSS_DEVICE_DISABLED,
+        )
+        await client_ws.close(
+            code=WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
+            reason="cross-device routing disabled",
+        )
+        return
 
     node95_ws_url = f"{_http_to_ws(_get_node95_url())}/signaling/{device_id}"
     logger.info("WebRTC proxy: connecting to Node_95 at %s", node95_ws_url)

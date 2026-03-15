@@ -398,6 +398,85 @@ pytest tests/test_capability_registry.py tests/test_routing_with_exec_mode.py -v
 
 ---
 
+## Cross-Device Switch (Round 4)
+
+### Overview
+
+All cross-device routing paths (task routing, WS signaling, WebRTC relay) are
+gated by a single, server-side **cross-device switch**.  When the switch is
+**OFF**, the gateway hard-rejects any request that would route work to a
+different device, returns a structured error, and emits a traceable log entry.
+
+This prevents accidental cross-device signaling during maintenance windows,
+single-node deployments, or policy-restricted environments.
+
+### Feature Flag
+
+| Environment Variable          | Default | Meaning                                          |
+|-------------------------------|---------|--------------------------------------------------|
+| `GALAXY_CROSS_DEVICE_ENABLED` | _(not set)_ = `1` | Set to `0`, `false`, or `no` to disable all cross-device routing. Any other value (or absence) means **enabled**. |
+
+The variable is read at **call time**, so it can be toggled without restarting
+the process (useful in tests and live operations).
+
+### Error Codes and Messages (Switch OFF)
+
+| Channel | Code / Status | Body / Close Reason |
+|---------|--------------|---------------------|
+| HTTP REST (`GET /api/v1/webrtc/endpoint`) | `403 Forbidden` | `{"error": "cross_device_disabled", "message": "Cross-device routing is disabled by server policy", "trace_id": "<uuid>"}` |
+| WebSocket (`/ws/webrtc/{device_id}`) | Close code `4001` | `"cross-device routing disabled"` |
+| Task routing (`DeviceRouter.route_task`) | dict with `"success": false` | `{"success": false, "error": "cross_device_disabled", "message": "...", "trace_id": "<uuid>"}` |
+
+All rejection paths emit a structured `WARNING` log entry:
+
+```
+cross_device_blocked event=<event> trace_id=<uuid> reason=cross_device_disabled
+```
+
+The `trace_id` is taken from the incoming request when available; otherwise a
+fresh UUID is generated so every blocked event is individually traceable.
+
+### Single-Dispatcher Rule
+
+`DeviceRouter` (`galaxy_gateway/device_router.py`) is the **canonical,
+single dispatcher**.  All cross-device sub-paths — including
+`CrossDeviceCoordinator` and the `CrossDeviceScheduler` in
+`enhancements/multidevice/` — are reached only through `DeviceRouter`.
+
+The switch check lives in **one module** (`galaxy_gateway/cross_device_switch.py`)
+and is imported by every entry-point that can initiate cross-device work:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  galaxy_gateway/cross_device_switch.py                             │
+│  ─────────────────────────────────────────────────────────────────│
+│  is_cross_device_enabled() ← GALAXY_CROSS_DEVICE_ENABLED           │
+│  make_disabled_response()  ← structured error dict for task paths  │
+│  guard_cross_device()      ← raises CrossDeviceDisabledError       │
+│  WS_CLOSE_CODE_CROSS_DEVICE_DISABLED = 4001                        │
+│  HTTP_STATUS_CROSS_DEVICE_DISABLED   = 403                         │
+└──────────────────────────┬─────────────────────────────────────────┘
+                           │  imported by
+         ┌─────────────────┼──────────────────────┐
+         ▼                 ▼                       ▼
+ device_router.py    webrtc_proxy.py          app.py
+ route_task()        proxy_webrtc_signaling() webrtc_endpoint_info()
+ _dispatch_cross_    (WS 4001 close)          (HTTP 403)
+ device_task()
+```
+
+**When ON**: All paths behave exactly as before (AIP v3, trace/route_mode,
+capability-registry filtering, and exec_mode routing from prior rounds are
+fully preserved).
+
+### Running the Round 4 Tests
+
+```bash
+pytest tests/test_cross_device_switch.py -v
+```
+
+---
+
 ## Running Tests
 
 ```bash
@@ -413,9 +492,12 @@ Tests use a local mock WebSocket server and do **not** require a real
 
 | File                                   | Role                                                     |
 |----------------------------------------|----------------------------------------------------------|
+| `galaxy_gateway/cross_device_switch.py` | **Round 4** — single feature-flag module; all cross-device gates import from here |
 | `galaxy_gateway/webrtc_proxy.py`       | Proxy helpers: health probe, endpoint info, WS relay     |
+| `galaxy_gateway/device_router.py`      | Canonical single dispatcher; cross-device switch checked in `route_task()` and `_dispatch_cross_device_task()` |
 | `galaxy_gateway/api/config.py`         | `GET /api/v1/config` route and config builder helpers    |
-| `galaxy_gateway/app.py`                | REST + WS endpoint registrations                         |
+| `galaxy_gateway/app.py`                | REST + WS endpoint registrations; `GET /api/v1/webrtc/endpoint` checks switch |
 | `galaxy_gateway/smart_transport_router.py` | `use_gateway` option in `TransportRequest`           |
 | `tests/test_webrtc_gateway.py`         | Unit + integration tests (mock Node_95)                  |
 | `tests/test_config_endpoint.py`        | Unit tests for `GET /api/v1/config`                      |
+| `tests/test_cross_device_switch.py`    | **Round 4** — cross-device switch OFF/ON behavior tests  |
