@@ -8,7 +8,7 @@
  *   1. window.__GALAXY_API_BASE__       — 由后端模板注入（最高优先级）
  *   2. window.__GALAXY_CONFIG__.api_base — 由后端配置块注入
  *   3. runtime/entrypoint.json 动态拉取  — 由 unified_launcher 写入
- *   4. 硬编码默认值 http://localhost:8299 — fallback（与 unified_launcher 默认端口一致）
+ *   4. 硬编码默认值 http://localhost:9000 — fallback（与 unified_launcher 默认端口一致）
  */
 
 import type {
@@ -36,8 +36,8 @@ declare global {
   }
 }
 
-/** 默认 Galaxy API 基址，与 unified_launcher / port_config.py 保持一致（端口 8299） */
-const _DEFAULT_API_BASE = 'http://localhost:8299';
+/** 默认 Galaxy API 基址，与 unified_launcher / port_config.py 保持一致（端口 9000） */
+const _DEFAULT_API_BASE = 'http://localhost:9000';
 
 /**
  * 解析 Galaxy API 基址。
@@ -82,7 +82,7 @@ export class GalaxyAPI {
    *   1. window.__GALAXY_API_BASE__
    *   2. window.__GALAXY_CONFIG__.api_base
    *   3. runtime/entrypoint.json（由 unified_launcher 写入）
-   *   4. 默认值 http://localhost:8299
+   *   4. 默认值 http://localhost:9000
    */
   static async create(): Promise<GalaxyAPI> {
     // 优先使用同步来源

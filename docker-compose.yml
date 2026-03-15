@@ -28,7 +28,7 @@ services:
       dockerfile: Dockerfile
     container_name: galaxy
     ports:
-      - "8080:8080"
+      - "8080:9000"   # container listens on 9000; host:8080 for direct debug access only — use gateway:9000 for all client connections
     env_file: .env
     environment:
       - GALAXY_MODE=development
@@ -56,13 +56,15 @@ services:
       - galaxy-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/health/live"]
       interval: 15s
       timeout: 10s
       retries: 3
       start_period: 20s
 
-  # ============ Galaxy Gateway ============
+  # ============ Galaxy Gateway — Primary Client Entry (port 9000) ============
+  # All clients (Windows, Android, Dashboard) should connect to this service.
+  # Single source-of-truth API base: http://<host>:9000
   galaxy-gateway:
     build:
       context: .

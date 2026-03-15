@@ -129,15 +129,18 @@ deploy_local() {
     info "Installing dependencies..."
     pip install -q -r requirements.txt
 
-    info "Starting Galaxy on port ${GALAXY_PORT:-8080}..."
-    $PYTHON_CMD unified_launcher.py --host 0.0.0.0 --port "${GALAXY_PORT:-8080}"
+    info "Starting Galaxy on port ${GALAXY_PORT:-9000}..."
+    $PYTHON_CMD unified_launcher.py --host 0.0.0.0 --port "${GALAXY_PORT:-9000}"
 }
 
 # ── Health check ──
 health_check() {
     info "Health check..."
 
-    local services=("galaxy:8080" "gateway:8000" "dashboard:8001")
+    # In local (non-Docker) mode, unified_launcher is the single process serving
+    # both the Galaxy API and gateway on port 9000. Checking both "galaxy" and
+    # "gateway" on the same port is intentional: they are the same endpoint.
+    local services=("galaxy:9000" "gateway:9000" "dashboard:8001")
     for svc in "${services[@]}"; do
         local name="${svc%%:*}"
         local port="${svc##*:}"
@@ -217,7 +220,7 @@ WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$INSTALL_DIR/.env
 Environment=PYTHONPATH=$INSTALL_DIR
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 $INSTALL_DIR/unified_launcher.py --host 0.0.0.0 --port 8080
+ExecStart=/usr/bin/python3 $INSTALL_DIR/unified_launcher.py --host 0.0.0.0 --port 9000
 ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
 RestartSec=10
@@ -249,13 +252,13 @@ access_info() {
     echo -e "${CYAN}  Galaxy — Service Endpoints${NC}"
     echo -e "${CYAN}============================================================${NC}"
     echo ""
-    echo -e "  ${GREEN}Galaxy API:${NC}      http://localhost:8080"
-    echo -e "  ${GREEN}Gateway:${NC}         http://localhost:8000"
+    echo -e "  ${GREEN}Galaxy API:${NC}      http://localhost:9000"
+    echo -e "  ${GREEN}Gateway:${NC}         http://localhost:9000  (primary client entry)"
     echo -e "  ${GREEN}Dashboard:${NC}       http://localhost:8001"
     echo -e "  ${GREEN}Prometheus:${NC}      http://localhost:9090"
     echo -e "  ${GREEN}Grafana:${NC}         http://localhost:3000"
     echo ""
-    echo -e "  ${BLUE}Health:${NC}          curl http://localhost:8080/health/live"
+    echo -e "  ${BLUE}Health:${NC}          curl http://localhost:9000/health/live"
     echo -e "  ${BLUE}Logs:${NC}            ./deploy.sh logs [service]"
     echo -e "  ${BLUE}Status:${NC}          ./deploy.sh status"
     echo ""

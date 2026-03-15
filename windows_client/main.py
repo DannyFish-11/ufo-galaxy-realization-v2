@@ -125,7 +125,7 @@ def _load_entrypoint_api_base() -> Optional[str]:
 
     文件格式（由 unified_launcher.py 写入）::
 
-        { "api_base": "http://localhost:8085", "written_at": "..." }
+        { "api_base": "http://localhost:9000", "written_at": "..." }
 
     文件缺失或 JSON 解析失败时静默返回 None，
     调用方应继续回退到环境变量或硬编码默认值。
@@ -146,10 +146,10 @@ def _load_entrypoint_api_base() -> Optional[str]:
 # 后端 API 地址优先级：
 #   1. runtime/entrypoint.json（启动器动态写入，最优先）
 #   2. GALAXY_API_BASE 环境变量
-#   3. 硬编码默认值 http://localhost:8099
+#   3. 硬编码默认值 http://localhost:9000
 GALAXY_API_BASE = (
     _load_entrypoint_api_base()
-    or os.environ.get("GALAXY_API_BASE", "http://localhost:8099")
+    or os.environ.get("GALAXY_API_BASE", "http://localhost:9000")
 )
 # Dashboard API 地址
 DASHBOARD_API_BASE = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")

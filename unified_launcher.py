@@ -103,7 +103,7 @@ def _write_entrypoint(host: str, port: int) -> None:
     文件格式::
 
         {
-            "api_base": "http://localhost:8299",
+            "api_base": "http://localhost:9000",
             "written_at": "2026-01-01T00:00:00Z"
         }
 
@@ -146,7 +146,7 @@ class SystemConfig:
     
     # 服务配置（默认值从 PortConfig 读取，回退到硬编码值）
     host: str = "0.0.0.0"
-    web_ui_port: int = 8299
+    web_ui_port: int = 9000
     device_api_port: int = 8766
     ufo_api_port: int = 8767
 
@@ -157,7 +157,7 @@ class SystemConfig:
           1. 环境变量 GALAXY_UNIFIED_LAUNCHER_PORT / GALAXY_DEVICE_API_PORT / GALAXY_UFO_API_PORT
              （已由 get_service_port() 内部实现，调用后自动享有此优先级）
           2. config/unified_ports.yaml（统一端口事实来源）
-          3. 内置硬编码默认值（8299 / 8766 / 8767）
+          3. 内置硬编码默认值（9000 / 8766 / 8767）
 
         config.json 中的 web_ui_port 字段仅作 OpenClawd API 端口的 legacy 标记，
         不参与 unified_launcher 自身端口的解析。
@@ -867,7 +867,7 @@ class UnifiedWebUI:
           3. 叠加 core.api_routes 作为 **主 API 层**（系统管理、设备、节点、
              监控、观测性、AI、chat 等全部路由）
           4. 添加健康检查路由
-          5. 统一在 8299 端口提供服务（避免与 Node_85_PromptLibrary:8085 冲突）
+          5. 统一在 9000 端口提供服务（与 galaxy-gateway 默认端口对齐）
 
         注意：此启动器 **不应** 定义自己的 inline API 路由。
         如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
@@ -1030,7 +1030,7 @@ class UnifiedWebUI:
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
 <h1>Galaxy Dashboard</h1>
-<p>Dashboard is served at <a href="http://localhost:8080" style="color:#00CED1">http://localhost:8080</a></p>
+<p>Dashboard is served at <a href="http://localhost:9000" style="color:#00CED1">http://localhost:9000</a></p>
 </div></body></html>"""
 
     def _get_dashboard_html(self) -> str:
@@ -1397,7 +1397,7 @@ def main():
     parser.add_argument("--status", action="store_true", help="查看系统状态")
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
-    parser.add_argument("--port", "-p", type=int, default=8299, help="Web UI 端口")
+    parser.add_argument("--port", "-p", type=int, default=9000, help="Web UI 端口")
     parser.add_argument(
         "--docker-full",
         action="store_true",
@@ -1498,7 +1498,7 @@ def main():
             except OSError:
                 print_status(
                     f"端口 {_port} 已被占用！请先停止占用该端口的进程，"
-                    f"或使用 --port 指定其他端口（如 --port 8086）。",
+                    f"或使用 --port 指定其他端口（如 --port 9001）。",
                     "error"
                 )
                 sys.exit(1)

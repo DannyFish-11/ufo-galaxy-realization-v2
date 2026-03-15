@@ -34,7 +34,8 @@ All ports are defined in **`config/unified_ports.yaml`** — the single authorit
 | 8070–8099 | Advanced / Multimodal | LocalLLM (8079), EmbeddingService (8099) … |
 | 8100–8130 | Academic | MemorySystem (8100), AutonomousCoding (8130) |
 | 8160, 8163, 8180 | Intelligence overflows | RL (8160), Fuzzy (8163), MemSystem v2 (8180) |
-| 8299 | Infrastructure | UnifiedLauncher Web UI |
+| 8299 | Infrastructure | (legacy) EmbeddingService overflow |
+| 9000 | Infrastructure | UnifiedLauncher Web UI / Galaxy Gateway (single client entry) |
 | 8765 | Gateway | Galaxy API Gateway |
 | 3001 | OneAPI Web | External LLM Gateway UI |
 | 4222 / 8222 | NATS | Client / HTTP monitor |
@@ -58,7 +59,7 @@ port = get_node_port("Node_50")               # prefix match → 8050
 
 # Infrastructure port
 redis_port = get_service_port("redis")         # → 6379
-launcher_port = get_service_port("unified_launcher")  # → 8299
+launcher_port = get_service_port("unified_launcher")  # → 9000
 ```
 
 Environment variable overrides are also supported:
@@ -107,7 +108,7 @@ python unified_launcher.py
 python unified_launcher.py --minimal
 
 # Custom port
-python unified_launcher.py --port 8299
+python unified_launcher.py --port 9000
 
 # Check status
 python unified_launcher.py --status
@@ -140,7 +141,7 @@ Adds all **critical** nodes to infrastructure:
 - Node_68_Security (8067)
 - Node_79_LocalLLM (8079)
 - Node_80_MemorySystem (8180)
-- Galaxy Launcher (8299)
+- Galaxy Launcher (9000)
 
 ```bash
 docker compose -f docker-compose.full.yml --profile core up -d
@@ -236,7 +237,7 @@ The `unified_launcher.py` reads all port assignments from `config/unified_ports.
 ```
 unified_launcher.py
     └── SystemConfig.__post_init__()
-            └── core.port_config.get_service_port("unified_launcher") → 8299
+            └── core.port_config.get_service_port("unified_launcher") → 9000
     └── NodeSystemLauncher.start_all()
             └── For each node in node_dependencies.json:
                     └── core.port_config.get_node_port(node_name) → port from yaml
@@ -307,10 +308,10 @@ The Windows client (`windows_client/ui/sidebar_ui.py`) connects to the Galaxy AP
 
 ```bash
 cat runtime/entrypoint.json
-# → { "api_base": "http://localhost:8299", ... }
+# → { "api_base": "http://localhost:9000", ... }
 ```
 
-If running in Docker, the Galaxy Core service is on port **8080** and the Launcher UI on **8299**.
+If running in Docker, both the Galaxy Core service and the Launcher UI default to port **9000**.
 
 ### Adding a new node
 
