@@ -270,11 +270,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         connected = bus_stats.get("connected", False)
         noop = bus_stats.get("noop_mode", True)
         status = "noop" if noop else ("connected" if connected else "disconnected")
+        nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
         return JSONResponse({
             "status": status,
+            "required": True,
+            "nats_url": nats_url,
             "noop_mode": noop,
             "bus": bus_stats,
             "master_brain": brain_status,
+            "message": (
+                "NATS is connected and operating as the internal scheduling mainline."
+                if connected else
+                f"[ERROR] NATS is REQUIRED but not connected to {nats_url}. "
+                "Start NATS: nats-server -p 4222"
+            ),
         })
 
     @router.get("/api/v1/observability/nats")

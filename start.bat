@@ -99,9 +99,68 @@ call venv\Scripts\activate.bat
 echo   [>>] 依赖检查                       安装中...
 pip install -q -r requirements.txt 2>nul
 
+:: ── 自动启动 NATS（强依赖）────────────────────────────────────────────────
+echo.
+echo   [>>] NATS                          启动中 (必需)...
+
+if not defined GALAXY_NATS_URL set "GALAXY_NATS_URL=nats://localhost:4222"
+
+:: Check if NATS port is already open
+powershell -NoProfile -Command "try { $t=New-Object Net.Sockets.TcpClient; $t.Connect('localhost',4222); $t.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+if %errorlevel%==0 (
+    echo   [OK] NATS                          已在运行 (port=4222)
+    goto nats_ready
+)
+
+:: Try to start nats-server if available
+where nats-server >nul 2>&1
+if %errorlevel%==0 (
+    start /B nats-server -p 4222
+    timeout /t 3 /nobreak >nul
+    powershell -NoProfile -Command "try { $t=New-Object Net.Sockets.TcpClient; $t.Connect('localhost',4222); $t.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+    if %errorlevel%==0 (
+        echo   [OK] NATS                          已启动 (port=4222)
+        goto nats_ready
+    )
+    echo   [X]  NATS                          nats-server 启动失败
+    echo        诊断: 运行 scripts\health_check.ps1
+    deactivate
+    pause
+    exit /b 1
+)
+
+:: Try Docker fallback
+where docker >nul 2>&1
+if %errorlevel%==0 (
+    docker info >nul 2>&1
+    if %errorlevel%==0 (
+        docker run -d --name galaxy-nats --rm -p 4222:4222 nats:latest >nul 2>&1
+        timeout /t 3 /nobreak >nul
+        powershell -NoProfile -Command "try { $t=New-Object Net.Sockets.TcpClient; $t.Connect('localhost',4222); $t.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+        if %errorlevel%==0 (
+            echo   [OK] NATS                          已通过 Docker 启动 (port=4222)
+            goto nats_ready
+        )
+        echo   [X]  NATS                          Docker 启动失败
+        deactivate
+        pause
+        exit /b 1
+    )
+)
+
+echo   [X]  NATS                          未找到 nats-server 或 Docker
+echo        下载 nats-server: https://github.com/nats-io/nats-server/releases
+echo        说明: NATS 是必需的内部调度主线，缺少它系统无法启动
+deactivate
+pause
+exit /b 1
+
+:nats_ready
+
 :: 启动系统
 echo.
 echo   [>>] Galaxy                        启动中...
+echo   [i]  NATS                          %GALAXY_NATS_URL% (必需)
 echo.
 python unified_launcher.py %*
 

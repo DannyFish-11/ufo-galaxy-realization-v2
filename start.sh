@@ -151,12 +151,81 @@ source venv/bin/activate
 print_status "loading" "依赖检查" "安装中..."
 pip install -q -r requirements.txt || { print_status "error" "依赖安装" "失败"; exit 1; }
 
+# ── 自动启动 NATS（强依赖）──────────────────────────────────────────────────
+echo ""
+print_status "step" "NATS" "启动中 (必需)..."
+NATS_PORT="${GALAXY_NATS_PORT:-4222}"
+NATS_URL="${GALAXY_NATS_URL:-nats://localhost:$NATS_PORT}"
+export GALAXY_NATS_URL="$NATS_URL"
+
+# Port probe helper: try nc, then bash /dev/tcp, then python3
+_port_open() {
+    local host="$1" port="$2"
+    if command -v nc &>/dev/null; then
+        nc -z "$host" "$port" 2>/dev/null
+    elif (echo >/dev/tcp/"$host"/"$port") 2>/dev/null; then
+        return 0
+    elif command -v python3 &>/dev/null; then
+        python3 -c "import socket; s=socket.create_connection(('$host',$port),2); s.close()" 2>/dev/null
+    else
+        return 1
+    fi
+}
+
+_nats_running=false
+if command -v nats-server &>/dev/null; then
+    # Check if NATS is already running
+    if ! _port_open localhost "$NATS_PORT"; then
+        nats-server -p "$NATS_PORT" &
+        NATS_PID=$!
+        sleep 2
+        if _port_open localhost "$NATS_PORT"; then
+            print_status "success" "NATS" "已启动 (PID=$NATS_PID, port=$NATS_PORT)"
+            _nats_running=true
+        else
+            print_status "error" "NATS" "启动失败 — 请检查 nats-server 日志"
+            print_status "error" "诊断" "运行: bash scripts/health_check.sh"
+            exit 1
+        fi
+    else
+        print_status "success" "NATS" "已在运行 (port=$NATS_PORT)"
+        _nats_running=true
+    fi
+elif command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
+    # Fallback: start NATS via Docker
+    if ! _port_open localhost "$NATS_PORT"; then
+        docker run -d --name galaxy-nats --rm -p "${NATS_PORT}:4222" nats:latest >/dev/null 2>&1 && {
+            sleep 2
+            if _port_open localhost "$NATS_PORT"; then
+                print_status "success" "NATS" "已通过 Docker 启动 (port=$NATS_PORT)"
+                _nats_running=true
+            else
+                print_status "error" "NATS" "Docker 启动失败"
+                print_status "error" "诊断" "运行: bash scripts/health_check.sh"
+                exit 1
+            fi
+        } || {
+            print_status "error" "NATS" "Docker 启动失败"
+            exit 1
+        }
+    else
+        print_status "success" "NATS" "已在运行 (port=$NATS_PORT)"
+        _nats_running=true
+    fi
+else
+    print_status "error" "NATS" "未找到 nats-server 或 docker，无法启动 NATS"
+    print_status "error" "安装" "Linux: apt install nats-server  或  brew install nats-server (macOS)"
+    print_status "error" "说明" "NATS 是必需的内部调度主线，缺少它系统无法启动"
+    exit 1
+fi
+
 # 启动系统
 echo ""
 print_status "step" "Galaxy" "启动中..."
 print_status "info" "控制面板" "http://localhost:${WEB_UI_PORT:-8299}"
 print_status "info" "API 文档" "http://localhost:${WEB_UI_PORT:-8299}/docs"
 print_status "info" "健康检查" "http://localhost:${WEB_UI_PORT:-8299}/api/health"
+print_status "info" "NATS" "$NATS_URL (必需)"
 echo ""
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 python3 unified_launcher.py "$@"

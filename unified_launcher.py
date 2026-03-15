@@ -1152,25 +1152,42 @@ class GalaxyUnified:
         await asyncio.gather(*tasks)
 
         # ── Phase A: NATS Bus + MasterBrain startup ──────────────────────────
-        print_section("NATS 控制面")
+        # NATS is the internal scheduling mainline (strong dependency).
+        # Startup MUST fail if NATS cannot be reached.
+        print_section("NATS 控制面 (必需)")
+        nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+        _is_win = sys.platform.startswith("win")
+        _hc_script = r"scripts\health_check.ps1" if _is_win else "scripts/health_check.sh"
+        _hc_cmd = f".\\{_hc_script}" if _is_win else f"bash {_hc_script}"
+
+        def _nats_diag(detail: str) -> None:
+            print_status(f"NATS Bus: {detail}", "error")
+            print_status("诊断提示: 请确认 NATS 服务已启动 (nats-server -p 4222)", "error")
+            print_status(f"  当前 NATS URL: {nats_url}", "error")
+            print_status(f"  运行完整诊断: {_hc_cmd}", "error")
+
         try:
             from core.nats_bus import nats_bus
-            nats_url = os.environ.get("GALAXY_NATS_URL", "")
-            if nats_url:
-                conn_result = await nats_bus.connect()
-                if conn_result.get("success") and not conn_result.get("noop"):
-                    print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
-                else:
-                    print_status("NATS Bus: 连接失败，降级为本地模式", "warning")
+            conn_result = await nats_bus.connect()
+            if conn_result.get("success") and not conn_result.get("noop"):
+                print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
             else:
-                print_status(
-                    "NATS Bus: 未配置 GALAXY_NATS_URL，运行于 no-op 模式", "warning"
+                _nats_error_msg = conn_result.get("error", "连接失败，无详细信息")
+                _nats_diag(f"连接失败 — {_nats_error_msg}")
+                raise SystemExit(
+                    f"[FATAL] NATS 不可用 ({nats_url})。"
+                    " 请启动 NATS 服务后重试: nats-server -p 4222"
                 )
-
             stats = nats_bus.get_stats()
             logger.info("NATS Bus stats: %s", stats)
+        except SystemExit:
+            raise
         except Exception as _nats_err:
-            print_status(f"NATS Bus 初始化异常 (非致命): {_nats_err}", "warning")
+            _nats_diag(f"初始化异常: {_nats_err}")
+            raise SystemExit(
+                f"[FATAL] NATS 初始化失败: {_nats_err}。"
+                " 请启动 NATS 服务后重试: nats-server -p 4222"
+            )
 
         try:
             if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
@@ -1211,7 +1228,13 @@ class GalaxyUnified:
             print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
+        _nats_url_display = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+        print_status(f"NATS (必需): {_nats_url_display}", "success")
         print_status("按 Ctrl+C 停止系统", "info")
+
+        # ── 启动后立即执行健康检查 ──────────────────────────────────────────
+        print_section("启动后健康检查")
+        await self._run_startup_health_check()
         
         # 启动 Web UI（阻塞）
         if self.config.enable_web_ui:
@@ -1241,6 +1264,89 @@ class GalaxyUnified:
         self.service_manager.stop_all()
         self.service_manager.state = SystemState.STOPPED
         print_status("系统已停止", "success")
+
+    async def _run_startup_health_check(self):
+        """启动后立即执行健康检查；失败时打印详细诊断。"""
+        import socket
+
+        base_url = f"http://localhost:{self.config.web_ui_port}"
+        node71_url = "http://localhost:8071"
+        nats_host = "localhost"
+        nats_port = 4222
+        all_ok = True
+
+        # 1) Gateway / core health
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"{base_url}/health", timeout=5) as resp:
+                code = resp.getcode()
+            print_status(f"Gateway /health: HTTP {code}", "success")
+        except Exception as exc:
+            print_status(f"Gateway /health: 失败 — {exc}", "error")
+            all_ok = False
+
+        # 2) system info
+        try:
+            with urllib.request.urlopen(f"{base_url}/api/v1/system/info", timeout=5) as resp:
+                code = resp.getcode()
+            print_status(f"system/info: HTTP {code}", "success")
+        except Exception as exc:
+            print_status(f"system/info: 失败 — {exc}", "warning")
+
+        # 3) Node_71 health
+        try:
+            with urllib.request.urlopen(f"{node71_url}/health", timeout=3) as resp:
+                code = resp.getcode()
+            print_status(f"Node_71 /health: HTTP {code}", "success")
+        except Exception as exc:
+            print_status(f"Node_71 /health: 不可达 — {exc}", "warning")
+
+        # 4) NATS port 4222 check
+        try:
+            with socket.create_connection((nats_host, nats_port), timeout=3):
+                pass
+            print_status(f"NATS port {nats_port}: 已监听", "success")
+        except Exception as exc:
+            print_status(f"NATS port {nats_port}: 未监听 — {exc}", "error")
+            all_ok = False
+
+        # 5) Key port availability
+        for port, label in [(self.config.web_ui_port, "Gateway/Core (9000)"),
+                            (8071, "Node_71 (8071)"),
+                            (4222, "NATS (4222)")]:
+            try:
+                with socket.create_connection(("localhost", port), timeout=2):
+                    print_status(f"端口 {port} ({label}): 已监听", "success")
+            except Exception:
+                pass  # already logged individually above
+
+        # 6) Docker container status (best-effort)
+        try:
+            result = subprocess.run(
+                ["docker", "ps", "--filter", "name=nats", "--filter", "name=gateway",
+                 "--filter", "name=node_71", "--format", "{{.Names}}\t{{.Status}}"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                print_status("Docker 容器状态:", "info")
+                for line in result.stdout.strip().splitlines():
+                    print(f"    {line}")
+        except Exception:
+            pass  # Docker not available or not used
+
+        if not all_ok:
+            print_section("健康检查诊断")
+            _is_win = sys.platform.startswith("win")
+            print_status("部分检查项失败，请检查以下内容:", "error")
+            print_status("  1. NATS 服务: nats-server -p 4222", "error")
+            if _is_win:
+                print_status("  2. 端口冲突: netstat -ano | findstr :4222", "error")
+                print_status("  3. 运行完整诊断: .\\scripts\\health_check.ps1", "error")
+            else:
+                print_status("  2. 端口冲突: lsof -i :4222 / lsof -i :9000", "error")
+                print_status("  3. 运行完整诊断: bash scripts/health_check.sh", "error")
+        else:
+            print_status("所有健康检查通过 ✅", "success")
 
     async def _async_shutdown(self):
         """异步关闭核心子系统"""
