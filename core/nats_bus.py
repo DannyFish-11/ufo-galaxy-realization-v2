@@ -214,6 +214,30 @@ class NATSBus:
             request.model_dump(mode="json", exclude_none=True),
         )
 
+    async def publish_task_envelope(self, target: str, envelope: Any) -> dict:
+        """Publish a TaskEnvelope to ``galaxy.tasks.dispatch.{target}``.
+
+        PR-3: TaskEnvelope is the primary NATS transport format.  The
+        ``_nats_schema`` discriminator field allows subscribers to detect and
+        parse the envelope format before falling back to legacy TaskDispatch.
+        """
+        subject = f"galaxy.tasks.dispatch.{target}"
+        data = envelope.model_dump(mode="json", exclude_none=True)
+        data["_nats_schema"] = "TaskEnvelope"
+        return await self._publish(subject, data)
+
+    async def publish_task_result_envelope(self, task_id: str, envelope: Any) -> dict:
+        """Publish a TaskEnvelope-shaped result to ``galaxy.tasks.result.{task_id}``.
+
+        PR-3: Publishes a unified result payload that carries both the legacy
+        ``status`` field (for backward-compatible consumers) and a full
+        TaskEnvelope representation.
+        """
+        subject = f"galaxy.tasks.result.{task_id}"
+        data = envelope.model_dump(mode="json", exclude_none=True)
+        data["_nats_schema"] = "TaskEnvelope"
+        return await self._publish(subject, data)
+
     # ── Subscribe methods ───────────────────────────────────────────────────
 
     async def subscribe_task_dispatches(
