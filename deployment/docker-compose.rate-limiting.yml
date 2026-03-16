@@ -1,0 +1,65 @@
+# =============================================================================
+# Galaxy – Docker Compose: Rate & Queue Limiting (PR-G5)
+# =============================================================================
+#
+# Extends the main docker-compose.yml with Nginx rate-limiting and Galaxy
+# resilience tuning for local or staging deployments.
+#
+# Usage
+# -----
+#   # Start core services with rate-limiting overlay:
+#   docker compose -f docker-compose.yml -f deployment/docker-compose.rate-limiting.yml up -d
+#
+# What this adds
+# --------------
+# 1. nginx-ratelimit – Nginx reverse proxy with:
+#      - 100 req/s burst limit per IP (zone: galaxy_api)
+#      - 10 req/s burst limit on /api/v1/resilience/* (zone: resilience_api)
+#      - Connection limit: 20 simultaneous connections per IP
+# 2. GALAXY_ROUTER_MAX_QUEUE_DEPTH=200  — refuse requests beyond 200 in-flight
+# 3. GALAXY_ROUTER_CB_ENABLED=true      — per-target circuit breaker
+# 4. GALAXY_ROUTER_ADAPTIVE_CONCURRENCY=true — AIMD concurrency control
+# =============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Nginx rate-limiting reverse proxy
+  # --------------------------------------------------------------------------
+  nginx-ratelimit:
+    image: nginx:1.27-alpine
+    container_name: galaxy-nginx-ratelimit
+    depends_on:
+      - galaxy
+    ports:
+      - "9080:9080"    # Public entry point (rate-limited)
+    volumes:
+      - ./deployment/nginx/ratelimit.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - galaxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # --------------------------------------------------------------------------
+  # Override Galaxy to enable resilience features
+  # --------------------------------------------------------------------------
+  galaxy:
+    environment:
+      # PR-G5 resilience env vars
+      - GALAXY_ROUTER_MAX_QUEUE_DEPTH=200
+      - GALAXY_ROUTER_CB_ENABLED=true
+      - GALAXY_ROUTER_ADAPTIVE_CONCURRENCY=true
+      # Circuit breaker tuning
+      - GALAXY_CB_FAILURE_THRESHOLD=5
+      - GALAXY_CB_RECOVERY_TIMEOUT_S=30
+      - GALAXY_CB_WINDOW_SIZE=10
+      # Adaptive semaphore tuning
+      - GALAXY_AS_INIT_LIMIT=10
+      - GALAXY_AS_MIN_LIMIT=2
+      - GALAXY_AS_MAX_LIMIT=50
+      - GALAXY_AS_TARGET_LATENCY_MS=500
+      - GALAXY_AS_ERROR_THRESHOLD=0.2
+      - GALAXY_AS_PROBE_INTERVAL_S=10
