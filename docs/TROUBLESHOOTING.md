@@ -2,6 +2,47 @@
 
 ---
 
+## Single-machine vs Multi-machine NATS
+
+Galaxy uses NATS as its internal scheduling bus.  The right configuration
+depends on how many machines are involved.
+
+### Single-machine (default)
+
+No extra configuration needed.  Galaxy defaults to `nats://localhost:4222`.
+Start a local NATS server and Galaxy will connect automatically:
+
+```bash
+# Docker (easiest)
+docker run -d --rm -p 4222:4222 nats:latest
+
+# Or install nats-server directly
+nats-server -p 4222
+```
+
+Leave `GALAXY_NATS_URL` **unset** — Galaxy will use the local default and
+print a hint showing the current LAN IP so you can switch later.
+
+### Multi-machine (cross-device)
+
+Set `GALAXY_NATS_URL` to the server's LAN or public IP **before** starting
+Galaxy on every machine:
+
+```bash
+# On the machine running the NATS server (start it first)
+nats-server -p 4222
+
+# On every Galaxy instance (replace 192.168.1.10 with actual server IP)
+export GALAXY_NATS_URL=nats://192.168.1.10:4222
+python unified_launcher.py
+```
+
+> **Tip:** Galaxy prints a suggested cross-device URL at startup when
+> `GALAXY_NATS_URL` is unset.  Copy that URL, set it on all machines, and
+> cross-device routing becomes available without any code changes.
+
+---
+
 ## Error: `[FATAL] NATS 不可用` / `[FATAL] NATS is required but not reachable`
 
 **Cause:** NATS server is not running. NATS is the internal scheduling mainline and is required.

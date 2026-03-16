@@ -33,7 +33,33 @@ _BANNER_VERSION_LINE = (
     "║     " + GALAXY_TAGLINE + "   " + GALAXY_VERSION
 ).ljust(59) + "║"
 
-GALAXY_BANNER = "\n".join([
+
+def _normalize_banner(lines: list) -> str:
+    """Pad each banner line to a uniform width so the right border aligns.
+
+    Lines enclosed by ║...║ that are shorter than the widest line have their
+    inner content right-padded with spaces so the closing ║ lands in the same
+    column on every row.  Top/bottom border lines (╔...╗ / ╚...╝) are already
+    at full width and are left unchanged.
+
+    Args:
+        lines: Raw banner lines as a list of strings.
+
+    Returns:
+        A single string with ``\\n``-joined, uniformly-width lines.
+    """
+    width = max(len(line) for line in lines)
+    result = []
+    for line in lines:
+        if len(line) < width and line.startswith("║") and line.endswith("║"):
+            inner = line[1:-1].ljust(width - 2)
+            result.append("║" + inner + "║")
+        else:
+            result.append(line)
+    return "\n".join(result)
+
+
+_RAW_BANNER_LINES = [
     "╔══════════════════════════════════════════════════════════╗",
     "║                                                          ║",
     "║   ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗    ║",
@@ -46,7 +72,9 @@ GALAXY_BANNER = "\n".join([
     _BANNER_VERSION_LINE,
     "║                                                          ║",
     "╚══════════════════════════════════════════════════════════╝",
-])
+]
+
+GALAXY_BANNER = _normalize_banner(_RAW_BANNER_LINES)
 
 # ---------------------------------------------------------------------------
 # 向后兼容别名 (backward-compat aliases)
@@ -215,6 +243,27 @@ def get_status_icon(status: str) -> str:
 # ---------------------------------------------------------------------------
 # 公共打印助手 (public print helpers)
 # ---------------------------------------------------------------------------
+
+def print_powershell_hint() -> None:
+    """Print a one-time startup tip for Windows PowerShell users.
+
+    Recommends Consolas font, ≥120-column window width, and UTF-8 code page so
+    that the Galaxy ASCII banner renders without broken borders or missing glyphs.
+
+    The hint is only printed when the process is running inside a Windows
+    PowerShell session (detected via the ``PSModulePath`` or ``PSVersionTable``
+    environment variables) and is silently skipped on other platforms.
+    """
+    if os.name != 'nt' or not (os.environ.get("PSModulePath") or os.environ.get("PSVersionTable")):
+        return
+    print(
+        "\n[Galaxy Tip] PowerShell 显示建议:\n"
+        "  • 字体:   Consolas (右键标题栏 → 属性 → 字体)\n"
+        "  • 列宽:   窗口宽度 ≥ 120 列 (属性 → 布局 → 宽度 120)\n"
+        "  • UTF-8:  运行 chcp 65001 后再启动 Galaxy\n"
+        "  示例: chcp 65001 && python unified_launcher.py\n"
+    )
+
 
 def print_banner(use_color: bool = True) -> None:
     """打印规范 Galaxy 横幅（24-bit true-color 平滑左→右渐变）。
