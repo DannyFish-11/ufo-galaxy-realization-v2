@@ -325,6 +325,51 @@ def parse_message_compat(data: Union[str, dict]) -> AIPMessage:
     return parse_message(_normalise_v1(data))
 
 
+def normalise_to_v3_dict(data: Union[str, dict]) -> dict:
+    """
+    Normalise an incoming message from any supported AIP protocol version to a
+    v3-shaped **dict**, preserving all extra application-level fields.
+
+    Unlike :func:`parse_message_compat`, this function does **not** create a
+    Pydantic :class:`AIPMessage` object.  Extra fields (e.g. ``platform``,
+    ``model``, ``os_version``) that are not part of the :class:`AIPMessage`
+    schema are therefore retained in the returned dict, making it suitable for
+    downstream handlers that read non-schema fields directly.
+
+    Normalisation applied:
+
+    * JSON string input is decoded first.
+    * ``trace_id`` and ``route_mode`` are injected when absent.
+    * ``version`` is set to ``"3.0"`` for v1 and v2 input.
+    * ``type`` is mapped from legacy aliases to canonical v3 names for v1 input.
+    * ``device_id`` defaults to ``"unknown"`` when absent (v1/v2 only).
+
+    :param data: Raw JSON string or already-decoded dict.
+    :returns: A normalised dict with ``version="3.0"`` and canonical type name.
+    :raises: ``json.JSONDecodeError`` if *data* is a malformed JSON string.
+    """
+    if isinstance(data, str):
+        data = json.loads(data)
+
+    data = inject_trace_metadata(data)
+    version = _detect_version(data)
+
+    if version == "3.0":
+        logger.debug("Protocol version detected: AIP/3.0 (dict pass-through)")
+        return dict(data)
+
+    if version == "2.0":
+        logger.info("Protocol version detected: AIP/2.0 — normalising to v3 dict")
+        return _normalise_v2(data)
+
+    # AIP/1.0
+    logger.info(
+        "Protocol version detected: AIP/1.0 — normalising type=%r to v3 dict",
+        data.get("type"),
+    )
+    return _normalise_v1(data)
+
+
 def parse_message_strict(data: Union[str, dict]) -> AIPMessage:
     """
     Parse an incoming message and **enforce** AIP v3.0 or higher.
