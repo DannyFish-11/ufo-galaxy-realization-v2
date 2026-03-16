@@ -166,6 +166,38 @@ jobs:
         run: |
           python -m pytest tests/test_config_preflight.py -v --tb=short
 
+  g7-quick-smoke:
+    # PR-G7: Developer Experience & Quick Validation.
+    # Fast, non-flaky in-process smoke suite — no live ports, no subprocesses.
+    # Validates: VLM stub, Tasker stub, Gateway /health, WS /ws/status,
+    #             Makefile targets, quick_verify.sh, QUICKSTART docs.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run G7 smoke suite
+        run: |
+          python -m pytest -m g7_smoke tests/test_g7_smoke.py \
+            -v --tb=short
+      - name: Verify Makefile targets exist
+        run: |
+          grep -E "^\.PHONY.*fmt|^fmt" Makefile
+          grep -E "^\.PHONY.*lint|^lint" Makefile
+          grep -E "test" Makefile
+          grep -E "contract" Makefile
+          grep -E "quick-verify" Makefile
+          echo "✅ All required Make targets present."
+      - name: Verify quick_verify.sh is executable
+        run: |
+          test -x scripts/quick_verify.sh
+          echo "✅ scripts/quick_verify.sh is executable."
+
   test:
     runs-on: ubuntu-latest
     permissions:

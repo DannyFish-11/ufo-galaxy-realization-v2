@@ -21,6 +21,97 @@ graph LR
 
 ---
 
+## ⚡ 10分钟本地快速验证 (PR-G7)
+
+> **一条命令** 启动最小节点集（Tasker + Gateway + VLM stub）并跑通  
+> WS → HTTP → result 烟雾路径，全程约 1–2 分钟。
+
+### 前提条件
+
+| 工具 | 版本要求 |
+|------|---------|
+| Python | ≥ 3.9 |
+| pip 依赖 | `fastapi uvicorn[standard] websockets httpx`（脚本自动安装） |
+| bash | Linux / macOS 原生；Windows 请用 WSL2 或 Git Bash |
+
+### 一条命令运行
+
+```bash
+# 克隆仓库后，在项目根目录执行：
+bash scripts/quick_verify.sh
+```
+
+或者使用 Make 目标：
+
+```bash
+make quick-verify
+```
+
+正常输出示例：
+
+```
+  [INFO] Starting VLM stub on :8199 ...
+  [INFO] Starting Galaxy Gateway on :8888 ...
+  [INFO] Starting Tasker stub on :8299 ...
+  [PASS] VLM stub is up
+  [PASS] Gateway is up
+  [PASS] Tasker stub is up
+  [PASS] GET /health → 200
+  [PASS] WS /ws/status → ping echoed
+  [PASS] POST /api/v1/vlm/infer → result:stub_ok
+  [PASS] Tasker /health → gateway_reachable:true
+  [PASS] POST /api/v1/task/submit → task_id present
+  ✅  All smoke checks passed — minimal stack healthy
+```
+
+### 自定义端口
+
+```bash
+VLM_PORT=9199 GATEWAY_PORT=9888 TASKER_PORT=9299 bash scripts/quick_verify.sh
+```
+
+### Make 工具链
+
+项目根目录提供了常用的 Make 目标：
+
+```bash
+make fmt          # black + isort 自动格式化
+make lint         # flake8 静态检查
+make test:fast    # pytest -m "not slow"（快速 CI 门）
+make contract     # 生成 protobuf stubs + proto lint
+make quick-verify # 10分钟本地最小栈烟雾验证
+```
+
+> **Windows 用户**：Make 目标在 WSL2 / Git Bash 下可直接使用。
+> 原生 CMD/PowerShell 可直接运行对应的 `python -m` 命令：
+> ```powershell
+> python -m black core/ tests/
+> python -m isort core/ tests/
+> python -m flake8 core/ tests/ --max-line-length=120
+> python -m pytest tests/ -m "not slow"
+> ```
+
+### 仅跑烟雾测试（无需启动进程）
+
+```bash
+python -m pytest -m g7_smoke tests/test_g7_smoke.py -v --tb=short
+```
+
+---
+
+## 🔧 常见故障排查 / Troubleshooting（快速路径）
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| `[FAIL] Gateway is up` | Gateway 端口被占用 | `GATEWAY_PORT=9888 bash scripts/quick_verify.sh` |
+| `ImportError: fastapi` | 缺少依赖 | `pip install -r requirements.txt` |
+| `[FAIL] WS /ws/status → ping echoed` | Gateway 未完全启动 | 脚本已内置 15 s 重试；若仍失败请检查 Python 路径 |
+| `Permission denied: quick_verify.sh` | 脚本未加执行权限 | `chmod +x scripts/quick_verify.sh` |
+| Windows 下 `bash` 报错 | 缺少 bash 环境 | 安装 [WSL2](https://learn.microsoft.com/zh-cn/windows/wsl/install) 或 [Git Bash](https://git-scm.com/downloads) |
+| `flake8` / `black` 报错 | 缺少开发依赖 | `pip install -r requirements-dev.txt` |
+
+---
+
 ## 🚀 一键启动
 
 ### 方式 1: Docker Compose (推荐)
