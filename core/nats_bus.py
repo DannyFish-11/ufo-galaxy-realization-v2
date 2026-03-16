@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import os
+import socket
 import time
 from typing import Any, Callable, Dict, Optional
 
@@ -45,6 +46,21 @@ except ImportError:
     _HAS_NATS = False
     NATSClient = None  # type: ignore[assignment,misc]
     JetStreamContext = None  # type: ignore[assignment,misc]
+
+
+def _get_lan_ip() -> str:
+    """Return the host's primary LAN IPv4 address, or empty string if unavailable.
+
+    Uses a UDP socket pointed at a public address to discover which local
+    interface the OS would route outbound traffic through.  No data is
+    actually transmitted.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return ""
 
 
 def _try_emit_event(event_type_name: str, data: dict) -> None:
@@ -94,6 +110,10 @@ class NATSBus:
 
     def __init__(self) -> None:
         self._url = os.environ.get("GALAXY_NATS_URL", "")
+        self._auto_local = False  # True when URL was auto-defaulted to localhost
+        if not self._url and _HAS_NATS:
+            self._url = "nats://localhost:4222"
+            self._auto_local = True
         self._nc: Optional[Any] = None  # NATSClient
         self._js: Optional[Any] = None  # JetStreamContext
         self._connected = False
@@ -162,6 +182,21 @@ class NATSBus:
 
         except Exception as exc:
             self._stats["errors"] += 1
+            if self._auto_local:
+                # Auto-local default failed — fall back to no-op gracefully.
+                self._noop = True
+                lan_ip = _get_lan_ip()
+                hint = (
+                    f" For cross-device support set: GALAXY_NATS_URL=nats://{lan_ip}:4222"
+                    if lan_ip
+                    else " Set GALAXY_NATS_URL=nats://<LAN_IP>:4222 for cross-device support."
+                )
+                logger.warning(
+                    "NATSBus: could not reach nats://localhost:4222 — running in no-op mode "
+                    "(single-machine).%s",
+                    hint,
+                )
+                return {"success": True, "noop": True, "auto_local_failed": True}
             logger.error(f"NATSBus: connection failed — {exc}")
             return {"success": False, "error": str(exc)}
 

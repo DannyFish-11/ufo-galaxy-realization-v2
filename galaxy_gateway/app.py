@@ -250,20 +250,13 @@ async def lifespan(app: FastAPI):
             await nats_adapter.start()
             logger.info("NATS Gateway Adapter started (%s)", nats_url)
         else:
-            logger.error(
-                "NATS Gateway Adapter: NATS is REQUIRED but could not connect to %s. "
-                "Start NATS with: nats-server -p 4222",
+            logger.warning(
+                "NATS Gateway Adapter: NATS unavailable (%s) — running in no-op / "
+                "single-machine mode. Start NATS with: nats-server -p 4222",
                 nats_url,
             )
-            raise RuntimeError(
-                f"[FATAL] NATS is required but not reachable at {nats_url}. "
-                "Start NATS: nats-server -p 4222"
-            )
-    except RuntimeError:
-        raise
     except Exception as e:
-        logger.error("NATS Gateway Adapter init failed: %s", e)
-        raise RuntimeError(f"[FATAL] NATS init failed: {e}") from e
+        logger.warning("NATS Gateway Adapter init error (non-fatal): %s", e)
 
     # ── MasterBrain: cloud-side orchestrator ──
     if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
