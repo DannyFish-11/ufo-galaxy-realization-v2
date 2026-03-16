@@ -31,7 +31,7 @@
       "description": "Auto-generated config for Node_00_StateMachine"
     },
     "Node_01_OneAPI": {
-      "port": 8001,
+      "port": 7995,
       "group": "core",
       "priority": 1,
       "dependencies": [],
@@ -116,7 +116,7 @@
       ]
     },
     "Node_09_Sandbox": {
-      "port": 8009,
+      "port": 7996,
       "group": "core",
       "priority": 2,
       "dependencies": [
@@ -1109,7 +1109,7 @@
       "description": "Auto-generated config for Node_106_GitHubFlow"
     },
     "Node_110_SmartOrchestrator": {
-      "port": 8110,
+      "port": 7997,
       "group": "core",
       "priority": 2,
       "dependencies": [
@@ -1122,7 +1122,7 @@
       "description": "智能任务编排引擎 - 动态任务分解、并行执行、自适应优化"
     },
     "Node_111_ContextManager": {
-      "port": 8111,
+      "port": 7998,
       "group": "core",
       "priority": 2,
       "dependencies": [
@@ -1135,7 +1135,7 @@
       "description": "上下文管理引擎 - 跨会话持久化、用户画像、智能检索"
     },
     "Node_112_SelfHealing": {
-      "port": 8112,
+      "port": 7999,
       "group": "core",
       "priority": 2,
       "dependencies": [

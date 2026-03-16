@@ -543,7 +543,7 @@ class MinimalistWindow(QMainWindow):
 
             def _call_llm(self, message: str) -> str:
                 """调用 LLM API"""
-                api_base = os.environ.get("GALAXY_API_BASE", "http://localhost:9000")
+                api_base = os.environ.get("GALAXY_API_BASE", "http://localhost:8299")
                 dashboard_base = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
 
                 # 尝试主系统
