@@ -15,6 +15,9 @@ Galaxy - 事件桥接层
   EventBus <─────> WebSocket            (事件流 → 前端推送)
 
 每个子系统既是事件发布者、也是事件订阅者。
+
+M2 事件层（PR-4）在关键路径额外并行发布 M2 统一事件，
+不破坏任何现有订阅。
 """
 
 import asyncio
@@ -24,6 +27,16 @@ from typing import Optional
 from core.task_utils import create_tracked_task
 
 logger = logging.getLogger("Galaxy.EventBridge")
+
+
+def _publish_m2(event_type: str, device_id: str, payload: dict, **kw) -> None:
+    """发布 M2 统一事件的轻量辅助函数（失败不崩溃）。"""
+    try:
+        from integration.event_bus import build_m2_event, publish_m2_event
+        evt = build_m2_event(event_type, device_id, payload, **kw)
+        publish_m2_event(evt)
+    except Exception as _exc:
+        logger.debug("EventBridge: M2 发布失败（非致命）: %s", _exc)
 
 
 class EventBridge:
@@ -82,6 +95,23 @@ class EventBridge:
                     )
                 except Exception as pub_err:
                     logger.warning(f"EventBridge: 发布命令结果事件失败: {pub_err}")
+
+                # M2 并行发布 — task.lifecycle
+                try:
+                    m2_status = "completed" if str(cmd_result.status.value).lower() in ("success", "completed", "done") else "failed"
+                    _publish_m2(
+                        "task.lifecycle",
+                        "command_router",
+                        {
+                            "task_id": cmd_result.request_id,
+                            "status": m2_status,
+                            "task_type": "command",
+                        },
+                        node="command_router",
+                        task_id=cmd_result.request_id,
+                    )
+                except Exception as _m2_err:
+                    logger.debug("EventBridge: M2 task.lifecycle 发布失败: %s", _m2_err)
 
                 # 链式调用原有回调（WebSocket 推送）
                 if _original_on_status:
@@ -233,6 +263,17 @@ class EventBridge:
                     data={"device_id": device.device_id, "device_type": device.device_type.value,
                           "name": device.name},
                 )
+                # M2 并行发布 — device.presence
+                _publish_m2(
+                    "device.presence",
+                    "gateway",
+                    {
+                        "device_id": device.device_id,
+                        "device_type": device.device_type.value,
+                        "presence": "registered",
+                    },
+                    node="device_registry",
+                )
 
             def _on_device_online(device):
                 event_bus.publish_sync(
@@ -240,12 +281,34 @@ class EventBridge:
                     source="device_registry",
                     data={"device_id": device.device_id, "device_type": device.device_type.value},
                 )
+                # M2 并行发布 — device.presence
+                _publish_m2(
+                    "device.presence",
+                    "gateway",
+                    {
+                        "device_id": device.device_id,
+                        "device_type": device.device_type.value,
+                        "presence": "online",
+                    },
+                    node="device_registry",
+                )
 
             def _on_device_offline(device):
                 event_bus.publish_sync(
                     EventType.DEVICE_DISCONNECTED,
                     source="device_registry",
                     data={"device_id": device.device_id, "device_type": device.device_type.value},
+                )
+                # M2 并行发布 — device.presence
+                _publish_m2(
+                    "device.presence",
+                    "gateway",
+                    {
+                        "device_id": device.device_id,
+                        "device_type": device.device_type.value,
+                        "presence": "offline",
+                    },
+                    node="device_registry",
                 )
 
             device_registry.on_device_registered(_on_device_registered)

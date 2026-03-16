@@ -249,6 +249,19 @@ class GatewayNATSAdapter:
                     "gateway_success",
                     {"task_id": task_id, "target": target_device, "attempt": attempt},
                 )
+                # M2 并行发布 — task.lifecycle (completed)
+                _publish_m2_event_safe(
+                    "task.lifecycle",
+                    "gateway",
+                    {
+                        "task_id": task_id,
+                        "status": "completed",
+                        "task_type": task_type,
+                        "target_device": target_device,
+                    },
+                    node="gateway_nats_adapter",
+                    task_id=task_id,
+                )
                 return
             except asyncio.TimeoutError:
                 self._stats["timed_out"] += 1
@@ -273,6 +286,20 @@ class GatewayNATSAdapter:
                     "gateway_timeout",
                     {"task_id": task_id, "target": target_device, "retries": attempt},
                 )
+                # M2 并行发布 — task.lifecycle (failed/timeout)
+                _publish_m2_event_safe(
+                    "task.lifecycle",
+                    "gateway",
+                    {
+                        "task_id": task_id,
+                        "status": "failed",
+                        "task_type": task_type,
+                        "target_device": target_device,
+                        "error": "timeout",
+                    },
+                    node="gateway_nats_adapter",
+                    task_id=task_id,
+                )
             except Exception as exc:
                 self._stats["failed"] += 1
                 logger.error("GatewayNATSAdapter: task %s error — %s", task_id, exc)
@@ -286,6 +313,20 @@ class GatewayNATSAdapter:
                 await _publish_event(
                     "gateway_failure",
                     {"task_id": task_id, "target": target_device, "error": str(exc)},
+                )
+                # M2 并行发布 — task.lifecycle (failed)
+                _publish_m2_event_safe(
+                    "task.lifecycle",
+                    "gateway",
+                    {
+                        "task_id": task_id,
+                        "status": "failed",
+                        "task_type": task_type,
+                        "target_device": target_device,
+                        "error": str(exc),
+                    },
+                    node="gateway_nats_adapter",
+                    task_id=task_id,
                 )
                 return
 
@@ -467,3 +508,13 @@ async def _publish_event(event_type: str, data: dict) -> None:
         await nats_bus.publish_event(evt)
     except Exception:
         pass
+
+
+def _publish_m2_event_safe(event_type: str, device_id: str, payload: dict, **kw) -> None:
+    """发布 M2 统一事件的轻量辅助函数（失败不崩溃）。"""
+    try:
+        from integration.event_bus import build_m2_event, publish_m2_event
+        evt = build_m2_event(event_type, device_id, payload, **kw)
+        publish_m2_event(evt)
+    except Exception as _exc:
+        logger.debug("GatewayNATSAdapter: M2 发布失败（非致命）: %s", _exc)

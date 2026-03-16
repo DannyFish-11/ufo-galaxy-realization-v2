@@ -4,13 +4,15 @@ Galaxy 事件总线系统
 """
 
 import asyncio
-import logging
-from typing import Dict, Any, List, Callable, Optional, Set
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum, auto
 import json
+import logging
+import os
+import uuid
 import weakref
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum, auto
+from typing import Any, Callable, Dict, List, Optional, Set
 
 
 class EventType(Enum):
@@ -285,6 +287,185 @@ class EventBus:
 
 # 全局事件总线实例
 event_bus = EventBus()
+
+
+# ============================================================================
+# M2 统一事件 Schema 校验与发布
+# ============================================================================
+
+_m2_logger = logging.getLogger("EventBus.M2")
+
+# 缓存加载的 JSON Schema（懒加载）
+_m2_schema: Optional[Dict[str, Any]] = None
+_jsonschema_available: Optional[bool] = None
+
+
+def _load_m2_schema() -> Optional[Dict[str, Any]]:
+    """懒加载 contracts/event_schema.json"""
+    global _m2_schema
+    if _m2_schema is not None:
+        return _m2_schema
+
+    schema_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "contracts",
+        "event_schema.json",
+    )
+    try:
+        with open(schema_path, "r", encoding="utf-8") as fh:
+            _m2_schema = json.load(fh)
+        return _m2_schema
+    except Exception as exc:
+        _m2_logger.warning("M2 schema 文件加载失败: %s", exc)
+        return None
+
+
+def _is_jsonschema_available() -> bool:
+    global _jsonschema_available
+    if _jsonschema_available is None:
+        try:
+            import jsonschema  # noqa: F401
+            _jsonschema_available = True
+        except ImportError:
+            _jsonschema_available = False
+    return _jsonschema_available
+
+
+def validate_m2_event(event_dict: Dict[str, Any]) -> bool:
+    """
+    校验 M2 事件对象是否符合 contracts/event_schema.json。
+
+    - 如果 jsonschema 库不可用，仅做基础必填字段检查。
+    - 校验失败时记录日志但不抛出异常（不崩溃）。
+
+    Returns:
+        True  校验通过
+        False 校验失败（已记录日志）
+    """
+    required = {"event_id", "event_type", "timestamp", "source", "payload"}
+    missing = required - set(event_dict.keys())
+    if missing:
+        _m2_logger.warning("M2 事件缺少必填字段: %s | event=%s", missing, event_dict.get("event_id", "<unknown>"))
+        return False
+
+    if not isinstance(event_dict.get("source"), dict) or not event_dict["source"].get("device_id"):
+        _m2_logger.warning("M2 事件 source.device_id 缺失 | event_id=%s", event_dict.get("event_id"))
+        return False
+
+    if _is_jsonschema_available():
+        schema = _load_m2_schema()
+        if schema is not None:
+            try:
+                import jsonschema
+                jsonschema.validate(instance=event_dict, schema=schema)
+            except jsonschema.ValidationError as exc:
+                _m2_logger.warning(
+                    "M2 事件 schema 校验失败: %s | event_id=%s event_type=%s",
+                    exc.message,
+                    event_dict.get("event_id"),
+                    event_dict.get("event_type"),
+                )
+                return False
+            except Exception as exc:
+                _m2_logger.warning("M2 schema 校验异常: %s", exc)
+                return False
+
+    return True
+
+
+def build_m2_event(
+    event_type: str,
+    device_id: str,
+    payload: Dict[str, Any],
+    *,
+    node: Optional[str] = None,
+    task_id: Optional[str] = None,
+    span_id: Optional[str] = None,
+    event_id: Optional[str] = None,
+    timestamp: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    构建符合 M2 统一事件 Schema 的事件字典。
+
+    Args:
+        event_type: M2 事件类型（如 "task.lifecycle"）
+        device_id: 来源设备 ID
+        payload: 事件 payload
+        node: 可选，组件名称
+        task_id: 可选，关联任务 ID
+        span_id: 可选，Span ID
+        event_id: 可选，覆盖自动生成的 event_id
+        timestamp: 可选，覆盖自动生成的时间戳（ISO 8601 UTC）
+
+    Returns:
+        M2 事件字典
+    """
+    source: Dict[str, Any] = {"device_id": device_id}
+    if node:
+        source["node"] = node
+
+    event: Dict[str, Any] = {
+        "event_id": event_id or str(uuid.uuid4()),
+        "event_type": event_type,
+        "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+        "source": source,
+        "payload": payload,
+    }
+
+    trace: Dict[str, str] = {}
+    if task_id:
+        trace["task_id"] = task_id
+    if span_id:
+        trace["span_id"] = span_id
+    if trace:
+        event["trace"] = trace
+
+    return event
+
+
+def publish_m2_event(
+    event_dict: Dict[str, Any],
+    *,
+    validate: bool = True,
+) -> bool:
+    """
+    发布 M2 统一事件。
+
+    发布前可选地校验 schema（失败不崩溃，仅记录日志）。
+    同时将事件以 UIGalaxyEvent 格式发布到现有 EventBus，
+    保持旧有订阅者的兼容性。
+
+    Args:
+        event_dict: M2 事件字典（建议通过 build_m2_event 构建）
+        validate: 是否在发布前进行 schema 校验（默认 True）
+
+    Returns:
+        True  发布成功（含校验通过）
+        False 校验失败（事件未发布）
+    """
+    if validate and not validate_m2_event(event_dict):
+        return False
+
+    # 将 M2 事件发布到 EventBus（作为通用数据事件，不破坏现有订阅）
+    try:
+        m2_legacy_event = UIGalaxyEvent(
+            event_type=EventType.COMMAND_DISPATCHED,  # 中性事件类型，仅作传输载体
+            source=event_dict.get("source", {}).get("device_id", "m2"),
+            data={
+                "_m2": True,
+                **event_dict,
+            },
+        )
+        event_bus.publish(m2_legacy_event)
+    except Exception as exc:
+        _m2_logger.debug("M2 事件写入 EventBus 失败（非致命）: %s", exc)
+
+    _m2_logger.debug(
+        "M2 事件已发布: event_type=%s event_id=%s",
+        event_dict.get("event_type"),
+        event_dict.get("event_id"),
+    )
+    return True
 
 
 class UIProgressCallback:
