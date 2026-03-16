@@ -33,6 +33,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Galaxy.CommandRouter")
 
+# ── PR-G5: resilience defaults from env vars (safe, backward-compatible) ────
+_DEFAULT_MAX_QUEUE_DEPTH: int = int(os.environ.get("GALAXY_ROUTER_MAX_QUEUE_DEPTH", "200"))
+_DEFAULT_CB_ENABLED: bool = os.environ.get("GALAXY_ROUTER_CB_ENABLED", "true").lower() not in ("false", "0")
+_DEFAULT_ADAPTIVE_CONCURRENCY: bool = os.environ.get(
+    "GALAXY_ROUTER_ADAPTIVE_CONCURRENCY", "true"
+).lower() not in ("false", "0")
+
 
 # ============================================================================
 # 错误代码 — 结构化、可解释的网关错误（PR-C）
@@ -244,18 +251,53 @@ class CommandRouter:
         cache_backend=None,
         on_status_change: Optional[Callable] = None,
         max_concurrent: int = 20,
+        max_queue_depth: int = _DEFAULT_MAX_QUEUE_DEPTH,
+        cb_enabled: bool = _DEFAULT_CB_ENABLED,
+        adaptive_concurrency: bool = _DEFAULT_ADAPTIVE_CONCURRENCY,
     ):
         """
         Args:
             executor: 异步执行函数 (target, command, params) -> result
             cache_backend: 缓存后端（CacheManager 实例）
             on_status_change: 状态变更回调（用于 WebSocket 推送）
-            max_concurrent: 最大并发执行数
+            max_concurrent: 最大并发执行数（静态上限；自适应模式以此为初始值）
+            max_queue_depth: 入队等待上限；超出时直接返回 429 降级响应（PR-G5）
+            cb_enabled: 启用每目标熔断器（PR-G5）
+            adaptive_concurrency: 启用自适应并发控制（PR-G5）
         """
         self._executor = executor
         self._cache = cache_backend
         self._on_status_change = on_status_change
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._max_concurrent = max_concurrent
+
+        # ── PR-G5: resilience controls ───────────────────────────────────
+        self._max_queue_depth = max_queue_depth
+        self._cb_enabled = cb_enabled
+        self._adaptive_concurrency_enabled = adaptive_concurrency
+
+        # Per-target circuit breakers (created lazily)
+        self._circuit_breakers: Dict[str, Any] = {}
+
+        # Adaptive semaphore (replaces static semaphore when enabled)
+        if adaptive_concurrency:
+            try:
+                from core.resilience.adaptive_semaphore import AdaptiveSemaphore
+                self._adaptive_sem: Optional[Any] = AdaptiveSemaphore(
+                    initial_limit=max_concurrent,
+                    max_limit=max(max_concurrent * 3, 50),
+                )
+            except Exception:
+                self._adaptive_sem = None
+        else:
+            self._adaptive_sem = None
+
+        # Resilience metrics singleton
+        try:
+            from core.resilience.metrics import get_resilience_metrics
+            self._resilience_metrics: Optional[Any] = get_resilience_metrics()
+        except Exception:
+            self._resilience_metrics = None
 
         # 请求存储（内存，可扩展到 Redis）
         self._results: Dict[str, CommandResult] = {}
@@ -269,6 +311,9 @@ class CommandRouter:
             "total_timeout": 0,
             "cache_hits": 0,
             "avg_latency_ms": 0.0,
+            # PR-G5 additions
+            "total_rejected": 0,
+            "total_fallbacks": 0,
         }
         self._latencies: List[float] = []
 
@@ -310,6 +355,82 @@ class CommandRouter:
             return None
 
     # ------------------------------------------------------------------
+    # PR-G5: resilience helpers
+    # ------------------------------------------------------------------
+
+    def _get_circuit_breaker(self, target: str) -> Optional[Any]:
+        """Return the per-target :class:`CircuitBreaker`, creating it lazily."""
+        if not self._cb_enabled:
+            return None
+        if target not in self._circuit_breakers:
+            try:
+                from core.resilience.circuit_breaker import CircuitBreaker
+                self._circuit_breakers[target] = CircuitBreaker(target=target)
+            except Exception:
+                return None
+        return self._circuit_breakers.get(target)
+
+    def _count_active_requests(self) -> int:
+        """Number of requests currently in PENDING / DISPATCHING / RUNNING state."""
+        return sum(
+            1 for r in self._results.values()
+            if r.status in (
+                CommandStatus.PENDING,
+                CommandStatus.DISPATCHING,
+                CommandStatus.RUNNING,
+            )
+        )
+
+    def _make_throttled_result(self, request: CommandRequest) -> CommandResult:
+        """Build a FAILED CommandResult representing a queue-full rejection."""
+        cmd_result = CommandResult(
+            request_id=request.request_id,
+            status=CommandStatus.FAILED,
+            metadata={**request.metadata, "throttled": True,
+                      "error": "Queue depth limit exceeded; request rejected"},
+        )
+        for target in request.targets:
+            tr = TargetResult(target=target)
+            tr.status = CommandStatus.FAILED
+            tr.error = "throttled"
+            cmd_result.targets[target] = tr
+        cmd_result.completed_at = time.time()
+        return cmd_result
+
+    def get_resilience_snapshot(self) -> Dict[str, Any]:
+        """Return a combined resilience snapshot: metrics + per-target CB states."""
+        metrics = {}
+        if self._resilience_metrics is not None:
+            try:
+                metrics = self._resilience_metrics.snapshot()
+            except Exception:
+                pass
+
+        cb_states = {}
+        for tgt, cb in self._circuit_breakers.items():
+            try:
+                cb_states[tgt] = cb.snapshot()
+            except Exception:
+                pass
+
+        adaptive = {}
+        if self._adaptive_sem is not None:
+            try:
+                adaptive = self._adaptive_sem.snapshot()
+            except Exception:
+                pass
+
+        return {
+            "metrics": metrics,
+            "circuit_breakers": cb_states,
+            "adaptive_semaphore": adaptive,
+            "queue_depth": self._count_active_requests(),
+            "max_queue_depth": self._max_queue_depth,
+            "cb_enabled": self._cb_enabled,
+            "adaptive_concurrency_enabled": self._adaptive_concurrency_enabled,
+        }
+
+    # ------------------------------------------------------------------
     # 公共接口
     # ------------------------------------------------------------------
 
@@ -319,9 +440,39 @@ class CommandRouter:
 
         根据 mode 决定执行策略，返回聚合结果。
         对于 ASYNC 模式，立即返回 PENDING 状态。
+        PR-G5: 在执行前检查队列深度，超限时返回降级响应。
         """
         self._stats["total_dispatched"] += 1
         start = time.time()
+
+        # ── PR-G5: admission control ──────────────────────────────────────
+        active = self._count_active_requests()
+        if self._resilience_metrics is not None:
+            try:
+                self._resilience_metrics.set_queue_depth(active)
+            except Exception:
+                pass
+
+        if active >= self._max_queue_depth:
+            self._stats["total_rejected"] += 1
+            if self._resilience_metrics is not None:
+                try:
+                    self._resilience_metrics.record_rejected()
+                except Exception:
+                    pass
+            logger.warning(
+                "CommandRouter.dispatch: queue depth %d >= limit %d; rejecting %s",
+                active, self._max_queue_depth, request.request_id,
+            )
+            rejected_result = self._make_throttled_result(request)
+            self._results[request.request_id] = rejected_result
+            return rejected_result
+
+        if self._resilience_metrics is not None:
+            try:
+                self._resilience_metrics.record_accepted()
+            except Exception:
+                pass
 
         # 初始化结果
         cmd_result = CommandResult(
@@ -408,15 +559,23 @@ class CommandRouter:
         return True
 
     def get_stats(self) -> dict:
-        """获取统计信息"""
-        return {
+        """获取统计信息（PR-G5: includes resilience counters）"""
+        base = {
             **self._stats,
-            "active_commands": sum(
-                1 for r in self._results.values()
-                if r.status in (CommandStatus.PENDING, CommandStatus.DISPATCHING, CommandStatus.RUNNING)
-            ),
+            "active_commands": self._count_active_requests(),
             "total_tracked": len(self._results),
+            "max_queue_depth": self._max_queue_depth,
+            "cb_enabled": self._cb_enabled,
+            "adaptive_concurrency_enabled": self._adaptive_concurrency_enabled,
         }
+        # Attach per-target CB summary
+        cb_summary = {
+            tgt: cb.state.value
+            for tgt, cb in self._circuit_breakers.items()
+        }
+        if cb_summary:
+            base["circuit_breaker_states"] = cb_summary
+        return base
 
     def set_executor(self, executor: Callable[..., Coroutine]):
         """设置/更新执行器"""
@@ -1170,7 +1329,7 @@ class CommandRouter:
         max_retries: int,
         target_result: TargetResult,
     ):
-        """执行单个目标，带超时和重试"""
+        """执行单个目标，带超时和重试（PR-G5: 集成熔断器和自适应并发）"""
         if not self._executor:
             target_result.status = CommandStatus.FAILED
             target_result.error = "No executor configured"
@@ -1178,15 +1337,69 @@ class CommandRouter:
 
         target_result.started_at = time.time()
         last_error = None
+        cb = self._get_circuit_breaker(target)
+
+        # ── PR-G5: circuit-breaker fast-path ────────────────────────────
+        if cb is not None and cb.is_open:
+            if cb.has_fallback:
+                try:
+                    fallback_result = await cb._fallback(target, command, params)
+                    target_result.status = CommandStatus.SUCCESS
+                    target_result.result = fallback_result
+                    target_result.completed_at = time.time()
+                    target_result.latency_ms = (
+                        (target_result.completed_at - target_result.started_at) * 1000
+                    )
+                    self._stats["total_fallbacks"] += 1
+                    if self._resilience_metrics is not None:
+                        try:
+                            self._resilience_metrics.record_fallback()
+                        except Exception:
+                            pass
+                    return
+                except Exception as e:
+                    last_error = f"Fallback failed: {e}"
+            else:
+                from core.resilience.circuit_breaker import CircuitOpenError
+                target_result.status = CommandStatus.FAILED
+                target_result.error = str(CircuitOpenError(target, cb.opened_at))
+                target_result.completed_at = time.time()
+                target_result.latency_ms = (
+                    (target_result.completed_at - target_result.started_at) * 1000
+                )
+                self._stats["total_failed"] += 1
+                return
 
         for attempt in range(max_retries + 1):
             target_result.retries = attempt
+            call_start = time.monotonic()
+            call_error = False
             try:
-                async with self._semaphore:
-                    result = await asyncio.wait_for(
-                        self._executor(target, command, params),
-                        timeout=timeout,
-                    )
+                # ── PR-G5: use adaptive semaphore when available ─────────
+                sem_ctx = (
+                    self._adaptive_sem if self._adaptive_sem is not None
+                    else self._semaphore
+                )
+                executor_coro = self._executor(target, command, params)
+                async with sem_ctx:
+                    if cb is not None:
+                        # Wrap execution in the circuit breaker guard;
+                        # asyncio.wait_for enforces per-call timeout inside the guard.
+                        async def _guarded_call(_coro=executor_coro, _t=timeout):
+                            return await asyncio.wait_for(_coro, timeout=_t)
+                        result = await cb.call(_guarded_call)
+                    else:
+                        result = await asyncio.wait_for(
+                            executor_coro,
+                            timeout=timeout,
+                        )
+
+                elapsed_ms = (time.monotonic() - call_start) * 1000
+                if self._adaptive_sem is not None:
+                    try:
+                        await self._adaptive_sem.record(elapsed_ms, error=False)
+                    except Exception:
+                        pass
 
                 target_result.status = CommandStatus.SUCCESS
                 target_result.result = result
@@ -1195,8 +1408,15 @@ class CommandRouter:
                 return
 
             except asyncio.TimeoutError:
+                call_error = True
                 last_error = f"Timeout after {timeout}s"
                 logger.warning(f"Command timeout: {target}/{command} (attempt {attempt + 1})")
+                elapsed_ms = (time.monotonic() - call_start) * 1000
+                if self._adaptive_sem is not None:
+                    try:
+                        await self._adaptive_sem.record(elapsed_ms, error=True)
+                    except Exception:
+                        pass
                 if attempt < max_retries:
                     # 指数退避
                     await asyncio.sleep(min(2 ** attempt * 0.5, 5.0))
@@ -1208,8 +1428,15 @@ class CommandRouter:
                 raise
 
             except Exception as e:
+                call_error = True
                 last_error = str(e)
                 logger.warning(f"Command error: {target}/{command}: {e} (attempt {attempt + 1})")
+                elapsed_ms = (time.monotonic() - call_start) * 1000
+                if self._adaptive_sem is not None:
+                    try:
+                        await self._adaptive_sem.record(elapsed_ms, error=True)
+                    except Exception:
+                        pass
                 if attempt < max_retries:
                     await asyncio.sleep(min(2 ** attempt * 0.5, 5.0))
 

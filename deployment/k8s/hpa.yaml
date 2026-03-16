@@ -1,0 +1,174 @@
+# =============================================================================
+# Galaxy – K8s HPA for Galaxy API Gateway (PR-G5)
+# =============================================================================
+#
+# Horizontal Pod Autoscaler that scales the Galaxy gateway deployment based
+# on CPU utilisation and (optionally) a custom queue-depth metric exported
+# by the /api/v1/resilience/metrics endpoint.
+#
+# Prerequisites
+# -------------
+# 1. Kubernetes >= 1.23 (HPA v2 stable)
+# 2. metrics-server installed for CPU/memory scaling
+# 3. prometheus-adapter (or KEDA) configured to expose
+#    "galaxy_resilience_queue_depth" as a custom metric for queue-depth scaling
+#
+# Usage
+# -----
+#   kubectl apply -f deployment/k8s/hpa.yaml
+#   kubectl get hpa -n galaxy
+# =============================================================================
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: galaxy-gateway
+  namespace: galaxy
+  labels:
+    app: galaxy-gateway
+    component: api-gateway
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: galaxy-gateway
+  template:
+    metadata:
+      labels:
+        app: galaxy-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/v1/resilience/metrics/prom"
+        prometheus.io/port: "9000"
+    spec:
+      containers:
+        - name: galaxy-gateway
+          image: galaxy-gateway:latest
+          ports:
+            - containerPort: 9000
+          env:
+            # Resilience tuning (PR-G5)
+            - name: GALAXY_ROUTER_MAX_QUEUE_DEPTH
+              value: "200"
+            - name: GALAXY_ROUTER_CB_ENABLED
+              value: "true"
+            - name: GALAXY_ROUTER_ADAPTIVE_CONCURRENCY
+              value: "true"
+            - name: GALAXY_AS_INIT_LIMIT
+              value: "10"
+            - name: GALAXY_AS_MIN_LIMIT
+              value: "2"
+            - name: GALAXY_AS_MAX_LIMIT
+              value: "50"
+            - name: GALAXY_AS_TARGET_LATENCY_MS
+              value: "500"
+            - name: GALAXY_CB_FAILURE_THRESHOLD
+              value: "5"
+            - name: GALAXY_CB_RECOVERY_TIMEOUT_S
+              value: "30"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health/live
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+# CPU-based HPA (always available with metrics-server)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: galaxy-gateway-cpu-hpa
+  namespace: galaxy
+  labels:
+    app: galaxy-gateway
+    component: hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: galaxy-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    # Scale out when average CPU utilisation exceeds 70 %
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Scale out when average memory utilisation exceeds 80 %
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+
+---
+# Queue-depth HPA (requires prometheus-adapter or KEDA with Prometheus trigger)
+# Uncomment when prometheus-adapter is configured to expose
+# "galaxy_resilience_queue_depth" as a custom metric.
+#
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: galaxy-gateway-queue-hpa
+#   namespace: galaxy
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: galaxy-gateway
+#   minReplicas: 2
+#   maxReplicas: 10
+#   metrics:
+#     - type: Pods
+#       pods:
+#         metric:
+#           name: galaxy_resilience_queue_depth
+#         target:
+#           type: AverageValue
+#           averageValue: "50"
+
+---
+# PodDisruptionBudget – ensure at least 1 replica stays alive during rollovers
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: galaxy-gateway-pdb
+  namespace: galaxy
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: galaxy-gateway
