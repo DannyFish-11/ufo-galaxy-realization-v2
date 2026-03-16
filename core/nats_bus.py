@@ -152,7 +152,10 @@ class NATSBus:
                 reconnected_cb=self._on_reconnect,
                 disconnected_cb=self._on_disconnect,
                 error_cb=self._on_error,
-                max_reconnect_attempts=-1,
+                # Auto-local default: fail fast on first attempt so we don't
+                # spam errors in a tight reconnect loop before switching to
+                # no-op.  Explicit GALAXY_NATS_URL keeps unlimited retries.
+                max_reconnect_attempts=0 if self._auto_local else -1,
             )
             self._js = self._nc.jetstream()
 
@@ -193,7 +196,7 @@ class NATSBus:
                 )
                 logger.warning(
                     "NATSBus: could not reach nats://localhost:4222 — running in no-op mode "
-                    "(single-machine).%s",
+                    "(single-machine). To enable NATS locally: nats-server -p 4222.%s",
                     hint,
                 )
                 return {"success": True, "noop": True, "auto_local_failed": True}
