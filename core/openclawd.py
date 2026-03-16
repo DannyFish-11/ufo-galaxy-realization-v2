@@ -3251,7 +3251,7 @@ class OpenClawd:
         return count
 
     # ========================================================================
-    # 网关统一命令路径 — PR86: OpenClawd -> command_router -> gateway -> device -> result
+    # 网关统一命令路径 — PR-1: OpenClawd -> TaskEnvelope -> route_envelope -> device -> result
     # ========================================================================
 
     async def send_gateway_command(
@@ -3264,16 +3264,19 @@ class OpenClawd:
     ) -> Dict:
         """统一网关命令路径（带 trace ID）。
 
-        链路：OpenClawd → command_router → gateway/device_router → device → result
-        每次调用生成唯一 command_id，所有日志均含 trace 字段。
+        链路：OpenClawd → TaskEnvelope → route_envelope → gateway/device_router → device → result
+
+        构造 TaskEnvelope 并经由 CommandRouter.route_envelope() 进入内部路由链路。
+        保留所有原入口参数与返回字段，与旧调用者完全兼容。
         """
         command_id = uuid.uuid4().hex
         task_id = task_id or uuid.uuid4().hex
+        trace_id = f"trace_{uuid.uuid4().hex[:12]}"
         t0 = time.monotonic()
         logger.info(
-            "OpenClawd.send_gateway_command | command_id=%s task_id=%s "
+            "OpenClawd.send_gateway_command | command_id=%s task_id=%s trace_id=%s "
             "session_id=%s device_id=%s command=%s",
-            command_id, task_id, session_id, device_id, command,
+            command_id, task_id, trace_id, session_id, device_id, command,
         )
 
         result: Dict = {
@@ -3285,17 +3288,27 @@ class OpenClawd:
             "command": command,
         }
 
-        # 尝试通过 command_router 发送
+        # 尝试通过 command_router.route_envelope 发送（PR-1: 统一入口）
         try:
             from core.command_router import get_command_router
+            from core.schemas.task_envelope import TaskEnvelope
+
             cr = get_command_router()
-            cr_result = await cr.route_command(
-                device_id=device_id,
-                command=command,
-                payload=payload or {},
-                command_id=command_id,
+            # 构造 TaskEnvelope，携带 session_id 和 command_id 进入统一链路
+            envelope = TaskEnvelope(
                 task_id=task_id,
+                trace_id=trace_id,
+                source="openclawd",
+                targets=[device_id],
+                tool_name=command,
+                args=payload or {},
+                metadata={
+                    "command_id": command_id,
+                    "session_id": session_id,
+                    "source": "openclawd",
+                },
             )
+            cr_result = await cr.route_envelope(envelope)
             latency_ms = (time.monotonic() - t0) * 1000
             result.update({
                 "success": cr_result.get("success", False),
