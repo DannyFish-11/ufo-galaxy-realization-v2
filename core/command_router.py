@@ -582,16 +582,25 @@ class CommandRouter:
         self._executor = executor
 
     # ------------------------------------------------------------------
-    # 统一网关命令路径（PR-C）
+    # 统一网关命令路径（PR-1: route_envelope 为主入口）
     # ------------------------------------------------------------------
 
     async def route_envelope(self, envelope: "TaskEnvelope") -> Dict[str, Any]:
-        """Execute a :class:`~core.schemas.task_envelope.TaskEnvelope`.
+        """Primary entry-point for all internal routing (PR-1).
 
-        This is the preferred entry-point for all new code.  Legacy callers
-        can continue to use :meth:`route_command`; internally it now creates
-        an envelope and delegates here so that every path shares the same
-        trace_id/task_id logging.
+        All new code and entry points MUST construct a
+        :class:`~core.schemas.task_envelope.TaskEnvelope` and call this
+        method.  Legacy callers can continue to use :meth:`route_command`
+        which now serves as a compatibility shim that wraps the legacy
+        parameters into a TaskEnvelope and delegates here.
+
+        Optional routing hints stored in ``envelope.metadata``:
+
+        * ``command_id``            — explicit command identifier (defaults to task_id)
+        * ``request_id``            — caller-assigned request id (defaults to task_id)
+        * ``retry_candidates``      — list of alternative device IDs for retry
+        * ``required_capabilities`` — capability filter for candidate selection
+        * ``max_retries``           — override default retry limit (int)
         """
         if not envelope.targets:
             return {
@@ -608,15 +617,30 @@ class CommandRouter:
                 "error_message": "TaskEnvelope.targets 为空，无法路由",
                 "latency_ms": 0.0,
             }
-        return await self.route_command(
+
+        # Extract optional routing params stored in metadata by the compat layer.
+        meta = envelope.metadata or {}
+        command_id: str = str(meta.get("command_id") or envelope.task_id)
+        request_id: str = str(meta.get("request_id") or envelope.task_id)
+        retry_candidates: Optional[List[Any]] = meta.get("retry_candidates")  # type: ignore[assignment]
+        required_capabilities: Optional[List[str]] = meta.get("required_capabilities")  # type: ignore[assignment]
+        try:
+            max_retries: int = int(meta.get("max_retries", 2))
+        except (TypeError, ValueError):
+            max_retries = 2
+
+        return await self._execute_command(
             device_id=envelope.target,
             command=envelope.tool_name,
             payload=envelope.args,
-            command_id=envelope.task_id,
+            command_id=command_id,
             task_id=envelope.task_id,
             timeout=envelope.timeout,
-            request_id=envelope.task_id,
+            request_id=request_id,
             trace_id=envelope.trace_id,
+            retry_candidates=retry_candidates,
+            required_capabilities=required_capabilities,
+            max_retries=max_retries,
         )
 
     async def route_command(
@@ -633,8 +657,54 @@ class CommandRouter:
         required_capabilities: Optional[List[str]] = None,
         max_retries: int = 2,
     ) -> Dict[str, Any]:
+        """Compatibility shim (PR-1): wraps legacy params in a TaskEnvelope
+        and delegates to :meth:`route_envelope`.
+
+        New code should construct a TaskEnvelope directly and call
+        ``route_envelope`` instead.  This method is preserved for callers
+        that have not yet been migrated and for external integrations that
+        depend on the existing signature.
         """
-        统一网关命令路径：OpenClawd → command_router → gateway/device → result
+        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+
+        envelope = _TaskEnvelope(
+            task_id=task_id,
+            trace_id=trace_id or f"trace_{uuid.uuid4().hex[:12]}",
+            source="compat",
+            targets=[device_id] if device_id else [],
+            tool_name=command,
+            args=payload or {},
+            timeout=timeout,
+            metadata={
+                "request_id": request_id or f"req_{uuid.uuid4().hex[:12]}",
+                "command_id": command_id,
+                "retry_candidates": retry_candidates,
+                "required_capabilities": required_capabilities,
+                "max_retries": max_retries,
+            },
+        )
+        return await self.route_envelope(envelope)
+
+    async def _execute_command(
+        self,
+        device_id: str,
+        command: str,
+        payload: Dict[str, Any],
+        command_id: str,
+        task_id: str,
+        timeout: float = 30.0,
+        request_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        retry_candidates: Optional[List[Any]] = None,
+        required_capabilities: Optional[List[str]] = None,
+        max_retries: int = 2,
+    ) -> Dict[str, Any]:
+        """Internal execution engine, called by :meth:`route_envelope`.
+
+        Contains the full routing logic: audit events, HITL gate, envelope
+        validation, circuit-breaker, device dispatch and retry loop.
+
+        統一网关命令路径：OpenClawd → command_router → gateway/device → result
 
         所有命令必须经由此方法执行，确保：
           1. 协议信封验证（invalid_envelope 立即返回错误）
@@ -671,7 +741,7 @@ class CommandRouter:
         }
 
         logger.info(
-            "CommandRouter.route_command | trace_id=%s task_id=%s command_id=%s "
+            "CommandRouter._execute_command | trace_id=%s task_id=%s command_id=%s "
             "device_id=%s command=%s",
             trace_id, task_id, command_id, device_id, command,
         )
@@ -782,7 +852,7 @@ class CommandRouter:
             }
             _get_gateway_trace_store().record(result)
             logger.warning(
-                "CommandRouter.route_command envelope invalid | trace_id=%s command_id=%s error=%s",
+                "CommandRouter._execute_command envelope invalid | trace_id=%s command_id=%s error=%s",
                 trace_id, command_id, exc.message,
             )
             return result

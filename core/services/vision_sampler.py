@@ -123,7 +123,8 @@ async def run_sampling_session(
     *duration* seconds, packages them as base64-encoded images into a
     :class:`~core.schemas.multimodal.MultiModalContext`, calls
     ``OpenClawd.process()``, and — if the response carries an ``action``
-    payload — routes it via ``command_router.route_command``.
+    payload — wraps it in a :class:`~core.schemas.task_envelope.TaskEnvelope`
+    and routes it via ``command_router.route_envelope`` (PR-1 unified entry).
 
     Args:
         device_id: The target device identifier used to fetch frames.
@@ -296,17 +297,23 @@ async def run_sampling_session(
         if action_command:
             try:
                 from core.command_router import get_command_router
+                from core.schemas.task_envelope import TaskEnvelope
 
                 cmd_router = get_command_router()
-                cmd_id = f"vision_cmd_{uuid.uuid4().hex[:12]}"
                 task_id = f"vision_task_{uuid.uuid4().hex[:12]}"
-                command_result = await cmd_router.route_command(
-                    device_id=action_device,
-                    command=action_command,
-                    payload=action_params,
-                    command_id=cmd_id,
+                # PR-1: wrap action command in TaskEnvelope and use route_envelope
+                envelope = TaskEnvelope(
                     task_id=task_id,
+                    source="vision_sampler",
+                    targets=[action_device],
+                    tool_name=action_command,
+                    args=action_params,
+                    metadata={
+                        "command_id": f"vision_cmd_{uuid.uuid4().hex[:12]}",
+                        "device_id": action_device,
+                    },
                 )
+                command_result = await cmd_router.route_envelope(envelope)
                 logger.info(
                     "VisionSampler: routed command=%s to device=%s (success=%s)",
                     action_command,
@@ -315,7 +322,7 @@ async def run_sampling_session(
                 )
             except Exception as exc:
                 logger.error(
-                    "VisionSampler: command_router.route_command failed — %s", exc
+                    "VisionSampler: route_envelope failed — %s", exc
                 )
                 command_result = {"success": False, "error": str(exc)}
 

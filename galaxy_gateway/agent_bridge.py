@@ -118,6 +118,11 @@ class HandoffContract:
     All fields are forwarded as JSON to the runtime's ``POST /handoff``
     endpoint.  Optional fields default to empty / "both" so legacy callers
     that don't populate every field still work.
+
+    PR-1: ``task_id`` is accepted alongside ``trace_id`` so callers that
+    construct a TaskEnvelope first can carry the unified identifier through
+    the bridge.  Legacy payloads that only provide ``trace_id`` remain
+    fully compatible.
     """
 
     trace_id: str
@@ -127,9 +132,11 @@ class HandoffContract:
     route_mode: str = "direct"
     session: Dict[str, Any] = field(default_factory=dict)
     callback_channel: str = "ws"
+    # PR-1: optional task_id from the originating TaskEnvelope
+    task_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "trace_id": self.trace_id,
             "task": self.task,
             "capability": self.capability,
@@ -138,6 +145,9 @@ class HandoffContract:
             "session": self.session,
             "callback_channel": self.callback_channel,
         }
+        if self.task_id:
+            d["task_id"] = self.task_id
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +496,52 @@ def get_agent_bridge() -> AgentBridge:
 # Exports
 # ---------------------------------------------------------------------------
 
+
+def handoff_contract_from_envelope(
+    envelope: Any,
+    *,
+    capability: str = "",
+    exec_mode: str = "both",
+    session: Optional[Dict[str, Any]] = None,
+    callback_channel: str = "ws",
+) -> "HandoffContract":
+    """Build a :class:`HandoffContract` from a TaskEnvelope (PR-1 helper).
+
+    Extracts ``trace_id``, ``task_id``, ``route_mode``, and the task payload
+    from the envelope so that bridge callers that already hold a TaskEnvelope
+    don't need to unpack it manually.  Legacy callers that build
+    HandoffContract directly are unaffected.
+
+    Args:
+        envelope:         A :class:`~core.schemas.task_envelope.TaskEnvelope`.
+        capability:       Primary capability required by the task.
+        exec_mode:        Execution mode: "local" | "remote" | "both".
+        session:          Session context forwarded to the runtime.
+        callback_channel: Preferred response channel: "ws" | "webrtc" | "nats".
+
+    Returns:
+        A fully populated :class:`HandoffContract`.
+    """
+    route_mode = (envelope.metadata or {}).get("route_mode", "direct") if hasattr(envelope, "metadata") else "direct"
+    task_payload: Dict[str, Any] = {
+        "task_id": envelope.task_id,
+        "tool_name": envelope.tool_name,
+        "args": envelope.args,
+        "targets": envelope.targets,
+        "source": envelope.source,
+    }
+    return HandoffContract(
+        trace_id=envelope.trace_id,
+        task_id=envelope.task_id,
+        task=task_payload,
+        capability=capability,
+        exec_mode=exec_mode,
+        route_mode=route_mode,
+        session=session or {},
+        callback_channel=callback_channel,
+    )
+
+
 __all__ = [
     "AgentBridge",
     "AgentBridgeConfig",
@@ -493,4 +549,5 @@ __all__ = [
     "HandoffContract",
     "LocalFallback",
     "get_agent_bridge",
+    "handoff_contract_from_envelope",
 ]

@@ -232,13 +232,16 @@ class DeviceRouter:
         return [d for d in self.devices.values() if capability in d.capabilities]
     
     async def route_task(self, command: str, context: Dict = None) -> Dict:
-        """
-        路由任务到合适的设备
-        
+        """路由任务到合适的设备。
+
+        PR-1: 在进入内部路由逻辑前，将 command/context 转换为 TaskEnvelope，
+        用于统一 trace_id/task_id 传播。原有 context 字段与 AIP compat 规则
+        保持兼容。
+
         Args:
             command: 用户命令
-            context: 上下文信息
-        
+            context: 上下文信息（支持 trace_id, route_mode, device_id 等字段）
+
         Returns:
             任务执行结果
         """
@@ -259,6 +262,42 @@ class DeviceRouter:
                 reason="missing_in_context",
                 route_mode=ctx.get("route_mode", ""),
             )
+
+        # PR-1: build a TaskEnvelope at the entry point for unified trace propagation.
+        # The envelope carries trace_id/task_id/route_mode through the routing chain.
+        try:
+            from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+
+            _task_id = ctx.get("task_id") or f"task_{uuid.uuid4().hex[:16]}"
+            _device_id = ctx.get("device_id", "")
+            _route_mode = ctx.get("route_mode", "")
+            _route_envelope = _TaskEnvelope(
+                task_id=_task_id,
+                trace_id=trace_ctx.trace_id,
+                source=ctx.get("source", "device_router"),
+                targets=[_device_id] if _device_id else [],
+                tool_name=command,
+                args=ctx.get("payload") or {},
+                metadata={
+                    "route_mode": _route_mode,
+                    "task_type": ctx.get("task_type", ""),
+                    "context": ctx,
+                },
+            )
+            # Propagate unified task_id and trace_id back into context so the
+            # internal task dict and AIP messages share the same identifiers.
+            ctx = dict(ctx)
+            ctx["task_id"] = _route_envelope.task_id
+            ctx["trace_id"] = _route_envelope.trace_id
+            logger.debug(
+                "DeviceRouter.route_task envelope | task_id=%s trace_id=%s route_mode=%s",
+                _route_envelope.task_id,
+                _route_envelope.trace_id,
+                _route_mode,
+            )
+        except Exception as _env_err:
+            # Never block routing on envelope construction failure.
+            logger.debug("DeviceRouter.route_task: TaskEnvelope construction skipped — %s", _env_err)
 
         try:
             logger.info(f"🎯 开始路由任务: {command}")

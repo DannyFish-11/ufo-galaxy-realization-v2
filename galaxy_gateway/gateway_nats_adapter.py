@@ -143,17 +143,60 @@ class GatewayNATSAdapter:
     # ── Internal handlers ────────────────────────────────────────────────────
 
     async def _handle_task_dispatch(self, data: dict) -> None:
-        """Process a TaskDispatch message from NATS."""
+        """Process a TaskDispatch message from NATS.
+
+        PR-1: Before entering the internal routing / forwarding path, the
+        incoming NATS payload is converted to a TaskEnvelope so that all
+        routing uses a unified task representation.  Fields that are present
+        in the NATS payload are preserved; missing optional fields (trace_id,
+        route_mode) are injected following the existing compat rules.
+        """
         task_id = data.get("task_id") or str(uuid.uuid4())
         target_device = data.get("target_worker_id") or data.get("target_device_id", "")
         task_type = data.get("task_type", "command")
         payload = data.get("payload") or {}
+        trace_id = data.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+        route_mode = data.get("route_mode", "direct")
+
+        # PR-1: convert the NATS TaskDispatch dict to a TaskEnvelope so the
+        # internal routing chain always operates on a unified envelope object.
+        try:
+            from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+
+            _envelope = _TaskEnvelope(
+                task_id=task_id,
+                trace_id=trace_id,
+                source="nats_gateway",
+                targets=[target_device] if target_device else [],
+                tool_name=task_type,
+                args=payload,
+                metadata={
+                    "route_mode": route_mode,
+                    "task_type": task_type,
+                    "nats_subject": _SUBSCRIBE_SUBJECT,
+                },
+            )
+            # Use canonical identifiers from the envelope for the rest of the handler.
+            task_id = _envelope.task_id
+            trace_id = _envelope.trace_id
+            logger.debug(
+                "GatewayNATSAdapter: envelope task_id=%s trace_id=%s route_mode=%s",
+                task_id,
+                trace_id,
+                route_mode,
+            )
+        except Exception as _env_err:
+            # Never block dispatch on envelope construction failure.
+            logger.debug(
+                "GatewayNATSAdapter: TaskEnvelope construction skipped — %s", _env_err
+            )
 
         logger.info(
-            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s",
+            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s trace_id=%s",
             task_id,
             target_device,
             task_type,
+            trace_id,
         )
         self._stats["dispatched"] += 1
 
