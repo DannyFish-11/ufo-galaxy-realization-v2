@@ -158,6 +158,13 @@ _LEGACY_TYPE_MAP: dict = {
     "parallel_task": MessageType.PARALLEL_SUBTASK,
     # parallel result alias – devices/nodes may send "parallel_result"
     "parallel_result": MessageType.PARALLEL_RESULT,
+    # v2 transport-layer aliases (used by core/device_communication.py local protocol)
+    # These are normalised here so the routing layer only sees v3 type names.
+    "handshake": MessageType.DEVICE_REGISTER,      # legacy registration handshake
+    "text": MessageType.COMMAND,                   # wire-format "TEXT" (lowercased in _normalise_v1)
+    "response": MessageType.COMMAND_RESULT,        # v2 command response → v3 command_result
+    "status": MessageType.DEVICE_STATUS,           # v2 status update → v3 device_status
+    "event": MessageType.WAKE_EVENT,               # v2 generic event → v3 wake_event
 }
 
 
