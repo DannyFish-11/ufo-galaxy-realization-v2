@@ -7,6 +7,9 @@
 3. 分配任务到合适的设备
 4. 协调多设备执行
 5. 汇总执行结果
+
+内部唯一任务格式：TaskEnvelope（PR-2）。
+外部入口（user_request/AIP）进入后立即转换为 TaskEnvelope。
 """
 
 import asyncio
@@ -80,6 +83,9 @@ class TaskOrchestrator:
         self._worker_task: Optional[asyncio.Task] = None
         # Round-robin index for distributing tasks across connected devices.
         self._device_rr_index: int = -1
+        # PR-2: TaskEnvelope registry — each submitted task is wrapped in an
+        # envelope immediately so all internal processing uses the unified format.
+        self._task_envelopes: Dict[str, Any] = {}
         
     async def start(self):
         """启动编排器"""
@@ -105,7 +111,7 @@ class TaskOrchestrator:
         target_device: Optional[str] = None,
         timeout: int = 300
     ) -> Task:
-        """提交新任务"""
+        """提交新任务（PR-2：立即转换为 TaskEnvelope，内部唯一任务格式）。"""
         task_id = str(uuid.uuid4())
         task = Task(
             task_id=task_id,
@@ -118,6 +124,30 @@ class TaskOrchestrator:
             task.assigned_device = target_device
         
         self.tasks[task_id] = task
+
+        # PR-2: wrap the incoming request in a TaskEnvelope immediately so
+        # all downstream internal processing uses the unified format.
+        try:
+            from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+            _envelope = _TaskEnvelope(
+                task_id=task_id,
+                source="task_orchestrator",
+                targets=[target_device] if target_device else [],
+                tool_name="orchestrate",
+                args={"user_request": user_request},
+                priority=priority.value if hasattr(priority, "value") else 5,
+                timeout=float(timeout),
+                metadata={"priority_label": priority.name if hasattr(priority, "name") else ""},
+            )
+            self._task_envelopes[task_id] = _envelope
+            logger.debug(
+                "TaskOrchestrator.submit_task envelope | task_id=%s trace_id=%s",
+                _envelope.task_id,
+                _envelope.trace_id,
+            )
+        except Exception as _env_err:
+            logger.debug("TaskOrchestrator: TaskEnvelope construction skipped — %s", _env_err)
+
         await self.task_queue.put(task)
         
         logger.info(f"Task submitted: {task_id} - {user_request[:50]}...")
@@ -140,10 +170,21 @@ class TaskOrchestrator:
                 logger.error(f"Task worker error: {e}")
     
     async def _process_task(self, task: Task):
-        """处理单个任务"""
+        """处理单个任务（PR-2：通过 TaskEnvelope 追踪生命周期）。"""
         logger.info(f"Processing task: {task.task_id}")
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.utcnow()
+
+        # PR-2: retrieve or construct the envelope for this task.
+        envelope = self._task_envelopes.get(task.task_id)
+        if envelope is not None:
+            logger.debug(
+                "TaskOrchestrator._process_task | task_id=%s trace_id=%s request='%.50s' device=%s",
+                envelope.task_id,
+                envelope.trace_id,
+                task.user_request,
+                task.assigned_device or "unassigned",
+            )
         
         try:
             # 1. 选择目标设备
@@ -292,13 +333,20 @@ class TaskOrchestrator:
         return commands
     
     async def _send_task_to_device(self, task: Task):
-        """发送任务到设备"""
+        """发送任务到设备（PR-2：使用 TaskEnvelope 字段构造消息）。"""
+        # PR-2: retrieve the envelope constructed at submit_task; fall back to
+        # the legacy AIP message path when the envelope is unavailable.
+        envelope = self._task_envelopes.get(task.task_id)
+        trace_id = envelope.trace_id if envelope is not None else task.task_id
+
         message = create_task_message(
             device_id=task.assigned_device,
             task_id=task.task_id,
             commands=task.commands
         )
         message.payload["user_request"] = task.user_request
+        # PR-2: attach envelope trace_id for unified cross-component correlation.
+        message.payload["trace_id"] = trace_id
         
         # 注册任务回调
         self.message_handler.create_task(

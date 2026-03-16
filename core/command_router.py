@@ -435,13 +435,41 @@ class CommandRouter:
     # ------------------------------------------------------------------
 
     async def dispatch(self, request: CommandRequest) -> CommandResult:
-        """
-        分发命令请求
+        """兼容层（PR-2）：接收旧 CommandRequest 后立即转换为 TaskEnvelope 完成统一路由。
 
-        根据 mode 决定执行策略，返回聚合结果。
-        对于 ASYNC 模式，立即返回 PENDING 状态。
-        PR-G5: 在执行前检查队列深度，超限时返回降级响应。
+        新代码应直接构造 :class:`~core.schemas.task_envelope.TaskEnvelope` 并调用
+        :meth:`route_envelope`。此方法保留以兼容尚未迁移的调用方。
+
+        内部唯一任务格式：TaskEnvelope（PR-2）。
         """
+        # Default fallback values for optional CommandRequest fields.
+        _DEFAULT_PRIORITY = 5
+        _DEFAULT_TIMEOUT = 30.0
+
+        # PR-2: 立即将 CommandRequest 转换为 TaskEnvelope，统一内部追踪标识。
+        try:
+            from core.schemas.task_envelope import TaskEnvelope as _TE
+            _dispatch_envelope = _TE(
+                task_id=request.request_id,
+                trace_id=(request.metadata or {}).get("trace_id") or None,
+                source=request.source,
+                targets=list(request.targets),
+                tool_name=request.command,
+                args=dict(request.params or {}),
+                priority=request.priority if hasattr(request, "priority") and request.priority is not None else _DEFAULT_PRIORITY,
+                timeout=request.timeout if hasattr(request, "timeout") and request.timeout else _DEFAULT_TIMEOUT,
+                metadata=dict(request.metadata or {}),
+            )
+            logger.debug(
+                "CommandRouter.dispatch compat | task_id=%s trace_id=%s command=%s targets=%s",
+                _dispatch_envelope.task_id,
+                _dispatch_envelope.trace_id,
+                _dispatch_envelope.tool_name,
+                _dispatch_envelope.targets,
+            )
+        except Exception as _env_err:
+            logger.debug("CommandRouter.dispatch: TaskEnvelope construction skipped — %s", _env_err)
+
         self._stats["total_dispatched"] += 1
         start = time.time()
 
@@ -1042,8 +1070,16 @@ class CommandRouter:
         """
         if self._executor:
             try:
+                # PR-2: inject envelope identifiers into params so executor
+                # (e.g. NATSExecutor) can reuse the TaskEnvelope's task_id
+                # instead of generating a new UUID.  Keys prefixed with
+                # "_galaxy_" are reserved for internal metadata and removed
+                # by the executor before forwarding to the device.
+                _exec_params = dict(payload)
+                _exec_params.setdefault("_galaxy_task_id", task_id)
+                _exec_params.setdefault("_galaxy_trace_id", trace_id)
                 raw_result = await asyncio.wait_for(
-                    self._executor(device_id, command, payload),
+                    self._executor(device_id, command, _exec_params),
                     timeout=timeout,
                 )
                 latency_ms = (time.monotonic() - t0) * 1000
@@ -1735,7 +1771,13 @@ class NATSExecutor:
         )
         from datetime import datetime, timezone
 
-        task_id = str(uuid.uuid4())
+        # PR-2: extract envelope identifiers injected by _dispatch_to_device
+        # (keys prefixed with "_galaxy_" are internal metadata, not device params).
+        params = dict(params)
+        galaxy_task_id: Optional[str] = params.pop("_galaxy_task_id", None)
+        galaxy_trace_id: Optional[str] = params.pop("_galaxy_trace_id", None)
+
+        task_id = galaxy_task_id or str(uuid.uuid4())
         ts = TimestampModel(seconds=int(datetime.now(timezone.utc).timestamp()))
         device_payload = DeviceCommandPayloadModel(
             command=command,
@@ -1748,6 +1790,9 @@ class NATSExecutor:
             target_worker_id=target,
             device_payload=device_payload,
             created_at=ts,
+            # PR-2: propagate TaskEnvelope trace_id into NATS context for
+            # cross-component correlation.
+            context={"trace_id": galaxy_trace_id or ""} if galaxy_trace_id else {},
         )
 
         # Register future before publish to avoid race condition
