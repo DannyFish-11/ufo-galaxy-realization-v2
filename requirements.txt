@@ -71,6 +71,7 @@ matplotlib>=3.8.0
 pyautogui>=0.9.54
 pytesseract>=0.3.10
 pygetwindow>=0.0.9; sys_platform == 'win32'
+pywinauto>=0.6.8; sys_platform == 'win32'
 keyboard>=0.13.5
 
 # ============================================================================

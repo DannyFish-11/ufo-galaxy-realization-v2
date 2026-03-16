@@ -20,6 +20,7 @@ import sys
 import json
 import time
 import signal
+import socket
 import asyncio
 import logging
 import argparse
@@ -51,6 +52,7 @@ logger = logging.getLogger("Galaxy")
 from core.ascii_art import (
     Colors,
     print_banner,
+    print_powershell_hint,
     print_section_header,
     print_status_row,
 )
@@ -64,6 +66,16 @@ def print_status(message: str, status: str = "info"):
 def print_section(title: str):
     """打印章节标题。"""
     print_section_header(title)
+
+
+def _get_lan_ip() -> str:
+    """Return the host's primary LAN IPv4 address, or empty string if unavailable."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return ""
 
 
 # ============================================================================
@@ -1081,6 +1093,7 @@ class GalaxyUnified:
     async def start(self):
         """启动系统"""
         print_banner()
+        print_powershell_hint()
         # 标记横幅已打印，防止子进程/模块重复打印
         os.environ["GALAXY_BANNER_PRINTED"] = "1"
         
@@ -1152,42 +1165,49 @@ class GalaxyUnified:
         await asyncio.gather(*tasks)
 
         # ── Phase A: NATS Bus + MasterBrain startup ──────────────────────────
-        # NATS is the internal scheduling mainline (strong dependency).
-        # Startup MUST fail if NATS cannot be reached.
-        print_section("NATS 控制面 (必需)")
+        # NATS is the internal scheduling mainline but is optional: if
+        # GALAXY_NATS_URL is unset the bus operates in no-op mode and the
+        # system starts in single-machine mode.
+        _nats_env_set = bool(os.environ.get("GALAXY_NATS_URL", "").strip())
         nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
         _is_win = sys.platform.startswith("win")
         _hc_script = r"scripts\health_check.ps1" if _is_win else "scripts/health_check.sh"
         _hc_cmd = f".\\{_hc_script}" if _is_win else f"bash {_hc_script}"
 
+        print_section("NATS 控制面")
+
+        # Friendly hint when GALAXY_NATS_URL is not explicitly configured.
+        if not _nats_env_set:
+            _lan_ip = _get_lan_ip()
+            print_status("GALAXY_NATS_URL 未设置 — 使用本地默认值", "info")
+            print_status(f"  默认地址: nats://localhost:4222 (单机开发)", "info")
+            if _lan_ip:
+                print_status(
+                    f"  跨设备提示: 设置 GALAXY_NATS_URL=nats://{_lan_ip}:4222"
+                    " 可让其他设备接入",
+                    "info",
+                )
+
         def _nats_diag(detail: str) -> None:
-            print_status(f"NATS Bus: {detail}", "error")
-            print_status("诊断提示: 请确认 NATS 服务已启动 (nats-server -p 4222)", "error")
-            print_status(f"  当前 NATS URL: {nats_url}", "error")
-            print_status(f"  运行完整诊断: {_hc_cmd}", "error")
+            print_status(f"NATS Bus: {detail}", "warning")
+            print_status("提示: 启动 NATS 服务 (nats-server -p 4222) 以启用分布式调度", "info")
+            print_status(f"  当前 NATS URL: {nats_url}", "info")
+            print_status(f"  运行完整诊断: {_hc_cmd}", "info")
 
         try:
             from core.nats_bus import nats_bus
             conn_result = await nats_bus.connect()
             if conn_result.get("success") and not conn_result.get("noop"):
                 print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
+            elif conn_result.get("noop"):
+                print_status("NATS Bus: 未启用 (no-op 模式，单机运行)", "info")
             else:
                 _nats_error_msg = conn_result.get("error", "连接失败，无详细信息")
-                _nats_diag(f"连接失败 — {_nats_error_msg}")
-                raise SystemExit(
-                    f"[FATAL] NATS 不可用 ({nats_url})。"
-                    " 请启动 NATS 服务后重试: nats-server -p 4222"
-                )
+                _nats_diag(f"连接失败 — {_nats_error_msg}，以降级模式继续启动")
             stats = nats_bus.get_stats()
             logger.info("NATS Bus stats: %s", stats)
-        except SystemExit:
-            raise
         except Exception as _nats_err:
-            _nats_diag(f"初始化异常: {_nats_err}")
-            raise SystemExit(
-                f"[FATAL] NATS 初始化失败: {_nats_err}。"
-                " 请启动 NATS 服务后重试: nats-server -p 4222"
-            )
+            _nats_diag(f"初始化异常: {_nats_err}，以降级模式继续启动")
 
         try:
             if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
@@ -1228,8 +1248,8 @@ class GalaxyUnified:
             print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
-        _nats_url_display = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
-        print_status(f"NATS (必需): {_nats_url_display}", "success")
+        _nats_url_display = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222 (默认)")
+        print_status(f"NATS: {_nats_url_display}", "info")
         print_status("按 Ctrl+C 停止系统", "info")
 
         # ── 启动后立即执行健康检查 ──────────────────────────────────────────
