@@ -18,15 +18,23 @@ Galaxy 健康监控系统
 import asyncio
 import httpx
 import json
+import time
 from datetime import datetime
 from typing import Dict, List
 from pathlib import Path
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from nodes.common.cors_config import get_cors_origins
 
 # 导入系统管理器
 from system_manager import SystemManager, NODES, NodeConfig
+
+# SLO 指标
+from core.slo_metrics import get_slo_metrics
+
+# 记录 health_monitor 进程启动时间
+_hm_start_time = time.time()
 
 app = FastAPI(title="Galaxy Health Monitor", version="1.0.0")
 app.add_middleware(
@@ -64,14 +72,22 @@ class HealthMonitor:
         
     async def check_node(self, config: NodeConfig) -> Dict:
         """检查单个节点"""
+        t0 = time.monotonic()
         is_healthy = await self.manager.check_node_health(config, timeout=5)
-        
+        latency_ms = (time.monotonic() - t0) * 1000.0
+
+        # --- SLO: record heartbeat result and command latency ---
+        slo = get_slo_metrics()
+        slo.record_heartbeat(is_healthy)
+        slo.record_command_latency(latency_ms)
+
         status = {
             "node_id": config.id,
             "name": config.name,
             "port": config.port,
             "group": config.group,
             "healthy": is_healthy,
+            "latency_ms": round(latency_ms, 2),
             "timestamp": datetime.now().isoformat()
         }
         
@@ -138,6 +154,8 @@ class HealthMonitor:
         # 如果连续 3 次不健康，尝试重启
         if self.alert_count[node_id] >= 3:
             print(f"🔄 尝试重启节点 {status['name']}...")
+            # --- SLO: record reconnect attempt ---
+            get_slo_metrics().record_reconnect(node_id)
             try:
                 restart_result = await self.manager.restart_node(node_id)
                 if restart_result:
@@ -255,13 +273,55 @@ async def get_history(node_id: str):
         "history": monitor.health_history[node_id]
     }
 
+
+# =============================================================================
+# SLO 指标端点  (PR-G2)
+# =============================================================================
+
+@app.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics():
+    """Prometheus text-format SLO metrics scrape endpoint.
+
+    Returns all galaxy_slo_* metrics in Prometheus exposition format.
+    Compatible with Prometheus ``scrape_configs`` and Grafana data sources.
+
+    Example::
+
+        curl http://localhost:9100/metrics
+    """
+    return PlainTextResponse(
+        content=get_slo_metrics().prometheus_text(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+@app.get("/api/v1/slo/metrics")
+async def slo_metrics_json():
+    """JSON snapshot of all SLO metrics.
+
+    Returns the same data as ``/metrics`` but as a structured JSON object,
+    which is easier to consume from dashboards or scripts.
+
+    Schema::
+
+        {
+          "startup":          {"duration_ms": float|null, "recorded_at": float|null},
+          "heartbeat":        {"total": int, "failures": int, "loss_rate": float},
+          "reconnect":        {"attempts_total": int},
+          "command_latency":  {"sample_count": int, "p50_ms": float|null, "p95_ms": float|null}
+        }
+    """
+    return get_slo_metrics().snapshot()
+
 # =============================================================================
 # 启动服务
 # =============================================================================
 
 @app.on_event("startup")
 async def startup_event():
-    """启动时开始监控循环"""
+    """启动时开始监控循环，并记录启动耗时"""
+    startup_ms = (time.time() - _hm_start_time) * 1000.0
+    get_slo_metrics().record_startup(startup_ms)
     asyncio.create_task(monitor.monitor_loop())
 
 if __name__ == "__main__":

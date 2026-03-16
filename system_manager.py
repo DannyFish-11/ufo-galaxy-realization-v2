@@ -329,7 +329,14 @@ class SystemManager:
         
         while time.time() - start_time < max_wait:
             if await self.check_node_health(config, timeout=2):
+                startup_ms = (time.time() - start_time) * 1000.0
                 print(f"{GREEN}✅ 节点 {config.name} 已就绪{RESET}")
+                # --- SLO: record per-node startup duration ---
+                try:
+                    from core.slo_metrics import get_slo_metrics
+                    get_slo_metrics().record_startup(startup_ms)
+                except Exception:
+                    pass
                 return True
             await asyncio.sleep(1)
         
