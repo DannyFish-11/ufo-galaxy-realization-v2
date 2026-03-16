@@ -1300,9 +1300,9 @@ class GalaxyUnified:
             import urllib.request
             with urllib.request.urlopen(f"{base_url}/health", timeout=5) as resp:
                 code = resp.getcode()
-            print_status(f"Gateway /health: HTTP {code}", "success")
+            print_status(f"Launcher /health: HTTP {code}", "success")
         except Exception as exc:
-            print_status(f"Gateway /health: 失败 — {exc}", "error")
+            print_status(f"Launcher /health: 失败 — {exc}", "error")
             all_ok = False
 
         # 2) system info
@@ -1363,7 +1363,7 @@ class GalaxyUnified:
                 print_status("  2. 端口冲突: netstat -ano | findstr :4222", "error")
                 print_status("  3. 运行完整诊断: .\\scripts\\health_check.ps1", "error")
             else:
-                print_status("  2. 端口冲突: lsof -i :4222 / lsof -i :9000", "error")
+                print_status("  2. 端口冲突: lsof -i :4222 / lsof -i :8299", "error")
                 print_status("  3. 运行完整诊断: bash scripts/health_check.sh", "error")
         else:
             print_status("所有健康检查通过 ✅", "success")

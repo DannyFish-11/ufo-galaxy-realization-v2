@@ -3,10 +3,11 @@
 # Usage: bash scripts/health_check.sh
 #
 # Environment variables (all optional, defaults shown):
-#   GALAXY_API_BASE   — Galaxy core/gateway URL  (default: http://localhost:9000)
-#   GALAXY_NODE71_URL — Node_71 URL              (default: http://localhost:8071)
-#   GALAXY_NATS_HOST  — NATS host                (default: localhost)
-#   GALAXY_NATS_PORT  — NATS port                (default: 4222)
+#   GALAXY_API_BASE   — Galaxy unified launcher URL  (default: http://localhost:8299)
+#   GALAXY_NODE71_URL — Node_71 URL                  (default: http://localhost:8071)
+#   GALAXY_NATS_HOST  — NATS host                    (default: localhost)
+#   GALAXY_NATS_PORT  — NATS port                    (default: 4222)
+#   GALAXY_NATS_URL   — Full NATS URL (overrides host/port)
 
 set -euo pipefail
 
@@ -27,19 +28,31 @@ hdr()  { echo ""; printf "${BOLD}${CYAN}── %s ──────────
 FAILED=0
 
 # ── Configuration ────────────────────────────────────────────────────────────
-BASE_URL="${GALAXY_API_BASE:-http://localhost:9000}"
+# unified_launcher 默认端口为 8299（非旧版 9000）
+BASE_URL="${GALAXY_API_BASE:-http://localhost:8299}"
 NODE71_URL="${GALAXY_NODE71_URL:-http://localhost:8071}"
 NATS_HOST="${GALAXY_NATS_HOST:-localhost}"
 NATS_PORT="${GALAXY_NATS_PORT:-4222}"
 NATS_URL="${GALAXY_NATS_URL:-nats://${NATS_HOST}:${NATS_PORT}}"
+NATS_ENV_SET="${GALAXY_NATS_URL:-}"
 
 # ── Banner ───────────────────────────────────────────────────────────────────
 echo ""
 printf "${BOLD}== Galaxy Health Check ==${NC}\n"
-info "Gateway / Core" "$BASE_URL"
-info "Node_71"        "$NODE71_URL"
-info "NATS"           "$NATS_URL"
+info "Launcher URL"    "$BASE_URL"
+info "Node_71"         "$NODE71_URL"
+info "NATS"            "$NATS_URL"
 echo ""
+
+# ── NATS 默认策略提示 ─────────────────────────────────────────────────────────
+if [ -z "$NATS_ENV_SET" ]; then
+    LAN_IP=$(python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || true)
+    warn "GALAXY_NATS_URL" "未设置 — 默认使用 nats://localhost:4222 (单机开发模式)"
+    if [ -n "$LAN_IP" ]; then
+        info "跨设备提示" "设置 GALAXY_NATS_URL=nats://${LAN_IP}:4222 可让局域网设备接入"
+    fi
+    echo ""
+fi
 
 # ── Port probe helper ────────────────────────────────────────────────────────
 _port_open() {
@@ -65,7 +78,7 @@ fi
 
 # ── 2. Key ports ─────────────────────────────────────────────────────────────
 hdr "关键端口"
-for PORT_LABEL in "9000:Gateway/Core" "8071:Node_71" "4222:NATS"; do
+for PORT_LABEL in "8299:UnifiedLauncher" "8071:Node_71" "4222:NATS"; do
     PORT="${PORT_LABEL%%:*}"
     LABEL="${PORT_LABEL##*:}"
     if _port_open localhost "$PORT"; then
@@ -76,7 +89,7 @@ for PORT_LABEL in "9000:Gateway/Core" "8071:Node_71" "4222:NATS"; do
 done
 
 # ── 3. Gateway / Core health ─────────────────────────────────────────────────
-hdr "Gateway / Core"
+hdr "Unified Launcher / Core"
 _http_check() {
     local url="$1" label="$2"
     local code
@@ -167,7 +180,7 @@ else
     echo "  2. 安装 NATS:       Linux: apt install nats-server"
     echo "                      macOS: brew install nats-server"
     echo "  3. Docker 启动 NATS: docker run -d --rm -p 4222:4222 nats:latest"
-    echo "  4. 检查端口占用:    lsof -i :4222 | lsof -i :9000"
+    echo "  4. 检查端口占用:    lsof -i :4222 | lsof -i :8299"
     echo "  5. 完整部署指南:    docs/DEPLOYMENT_COMPLETE.md"
     echo "  6. 故障排查手册:    docs/TROUBLESHOOTING.md"
     echo ""

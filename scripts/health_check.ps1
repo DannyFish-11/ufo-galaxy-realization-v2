@@ -2,21 +2,35 @@
 # Usage: .\scripts\health_check.ps1
 #
 # Environment variables (all optional, defaults shown):
-#   GALAXY_API_BASE   — Galaxy core/gateway URL  (default: http://localhost:9000)
-#   GALAXY_NODE71_URL — Node_71 URL              (default: http://localhost:8071)
-#   GALAXY_NATS_HOST  — NATS host                (default: localhost)
-#   GALAXY_NATS_PORT  — NATS port                (default: 4222)
+#   GALAXY_API_BASE   — Galaxy unified launcher URL  (default: http://localhost:8299)
+#   GALAXY_NODE71_URL — Node_71 URL                  (default: http://localhost:8071)
+#   GALAXY_NATS_HOST  — NATS host                    (default: localhost)
+#   GALAXY_NATS_PORT  — NATS port                    (default: 4222)
+#   GALAXY_NATS_URL   — Full NATS URL (overrides host/port)
 
 $ErrorActionPreference = "Continue"
 
 # ── Configuration ────────────────────────────────────────────────────────────
-$baseUrl    = if ($env:GALAXY_API_BASE)   { $env:GALAXY_API_BASE }   else { "http://localhost:9000" }
+# unified_launcher 默认端口为 8299（非旧版 9000）
+$baseUrl    = if ($env:GALAXY_API_BASE)   { $env:GALAXY_API_BASE }   else { "http://localhost:8299" }
 $node71Url  = if ($env:GALAXY_NODE71_URL) { $env:GALAXY_NODE71_URL } else { "http://localhost:8071" }
 $natsHost   = if ($env:GALAXY_NATS_HOST)  { $env:GALAXY_NATS_HOST }  else { "localhost" }
 $natsPort   = if ($env:GALAXY_NATS_PORT)  { [int]$env:GALAXY_NATS_PORT } else { 4222 }
 $natsUrl    = if ($env:GALAXY_NATS_URL)   { $env:GALAXY_NATS_URL }   else { "nats://${natsHost}:${natsPort}" }
+$natsEnvSet = [bool]$env:GALAXY_NATS_URL
 
 $failed = $false
+
+# ── LAN IP helper ────────────────────────────────────────────────────────────
+function Get-LanIP {
+    try {
+        $udpClient = New-Object System.Net.Sockets.UdpClient
+        $udpClient.Connect("8.8.8.8", 80)
+        $ip = ($udpClient.Client.LocalEndPoint).Address.ToString()
+        $udpClient.Close()
+        return $ip
+    } catch { return "" }
+}
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 function Write-Ok   { param($label, $detail="") Write-Host ("  [OK] {0,-40} {1}" -f $label, $detail) -ForegroundColor Green }
@@ -52,10 +66,20 @@ function Invoke-CheckHttp {
 # ── Banner ───────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "== Galaxy Health Check (Windows) ==" -ForegroundColor Cyan -NoNewline; Write-Host ""
-Write-Info "Gateway / Core" $baseUrl
+Write-Info "Launcher URL"   $baseUrl
 Write-Info "Node_71"        $node71Url
 Write-Info "NATS"           $natsUrl
 Write-Host ""
+
+# ── NATS 默认策略提示 ──────────────────────────────────────────────────────────
+if (-not $natsEnvSet) {
+    $lanIp = Get-LanIP
+    Write-Warn "GALAXY_NATS_URL" "未设置 — 默认使用 nats://localhost:4222 (单机开发模式)"
+    if ($lanIp) {
+        Write-Info "跨设备提示" "设置 `$env:GALAXY_NATS_URL=nats://${lanIp}:4222 可让局域网设备接入"
+    }
+    Write-Host ""
+}
 
 # ── 1. NATS port (required) ──────────────────────────────────────────────────
 Write-Hdr "NATS (必需)"
@@ -68,7 +92,7 @@ if (Test-TcpPort -HostName $natsHost -Port $natsPort) {
 # ── 2. Key ports ─────────────────────────────────────────────────────────────
 Write-Hdr "关键端口"
 @(
-    @{Port=9000; Label="Gateway/Core"},
+    @{Port=8299; Label="UnifiedLauncher"},
     @{Port=8071; Label="Node_71"},
     @{Port=4222; Label="NATS"}
 ) | ForEach-Object {
@@ -81,7 +105,7 @@ Write-Hdr "关键端口"
 }
 
 # ── 3. Gateway / Core health ─────────────────────────────────────────────────
-Write-Hdr "Gateway / Core"
+Write-Hdr "Unified Launcher / Core"
 Invoke-CheckHttp "$baseUrl/health"              "GET /health"             | Out-Null
 Invoke-CheckHttp "$baseUrl/api/v1/system/info"  "GET /api/v1/system/info" | Out-Null
 
