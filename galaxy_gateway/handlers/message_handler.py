@@ -21,6 +21,16 @@ from .device_manager import DeviceManager
 logger = logging.getLogger(__name__)
 
 
+def _publish_m2_safe(event_type: str, device_id: str, payload: dict, **kw) -> None:
+    """发布 M2 事件的轻量辅助函数（失败不崩溃）。"""
+    try:
+        from integration.event_bus import build_m2_event, publish_m2_event
+        evt = build_m2_event(event_type, device_id, payload, **kw)
+        publish_m2_event(evt)
+    except Exception as _exc:
+        logger.debug("MessageHandler: M2 发布失败（非致命）: %s", _exc)
+
+
 class MessageHandler:
     """消息处理器"""
     
@@ -172,6 +182,22 @@ class MessageHandler:
                 except Exception as e:
                     logger.error(f"Task callback error: {e}")
 
+        # M2 并行发布 — task.lifecycle (completed / failed)
+        _ts = message.task_status or TaskStatus.COMPLETED
+        _m2_status = "completed" if str(_ts).upper() in ("COMPLETED", "TASKSTATUS.COMPLETED", "SUCCESS") else "failed"
+        _publish_m2_safe(
+            "task.lifecycle",
+            device_id,
+            {
+                "task_id": task_id,
+                "status": _m2_status,
+                "task_type": (message.payload or {}).get("task_type", "generic"),
+                "target_device": device_id,
+            },
+            node="message_handler",
+            task_id=task_id,
+        )
+
         # ── 并行闭环：将子任务结果记录到共享 ParallelGroupTracker ──
         try:
             from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
@@ -217,6 +243,20 @@ class MessageHandler:
         logger.info(f"Task submit from {device_id}: task_id={task_id}, type={task_type}")
 
         self.create_task(task_id, device_id, task_type)
+
+        # M2 并行发布 — task.lifecycle (created)
+        _publish_m2_safe(
+            "task.lifecycle",
+            "gateway",
+            {
+                "task_id": task_id,
+                "status": "created",
+                "task_type": task_type,
+                "target_device": device_id,
+            },
+            node="message_handler",
+            task_id=task_id,
+        )
 
         return AIPMessage(
             type=MessageType.TASK_ASSIGN,

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.ai/schemas/m2-event/v1",
+  "title": "Galaxy M2 Unified Event",
+  "description": "Galaxy M2 统一事件 Schema — 跨设备/跨组件的标准化语义事件格式",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "source", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "全局唯一事件标识符（UUID 或其他唯一字符串）"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "agent.state",
+        "agent.emotion",
+        "task.lifecycle",
+        "skill.invoke",
+        "perception.update",
+        "action.command",
+        "device.presence"
+      ],
+      "description": "M2 事件类型最小集枚举"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "事件产生时刻（ISO 8601 UTC）"
+    },
+    "source": {
+      "type": "object",
+      "required": ["device_id"],
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "来源设备 ID（可为逻辑节点名，如 'gateway'）"
+        },
+        "node": {
+          "type": "string",
+          "description": "可选，组件/服务名称"
+        },
+        "version": {
+          "type": "string",
+          "description": "可选，组件版本"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "事件具体数据，因 event_type 而异"
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "关联任务 ID"
+        },
+        "span_id": {
+          "type": "string",
+          "description": "Span ID（用于链路追踪）"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "agent_state_payload": {
+      "type": "object",
+      "description": "agent.state 事件 payload",
+      "required": ["agent_id", "state"],
+      "properties": {
+        "agent_id": {"type": "string"},
+        "state": {
+          "type": "string",
+          "enum": ["idle", "running", "error", "shutdown", "paused"]
+        },
+        "previous_state": {"type": "string"},
+        "reason": {"type": "string"}
+      }
+    },
+    "agent_emotion_payload": {
+      "type": "object",
+      "description": "agent.emotion 事件 payload",
+      "required": ["agent_id", "emotion"],
+      "properties": {
+        "agent_id": {"type": "string"},
+        "emotion": {"type": "string"},
+        "valence": {"type": "number", "minimum": -1.0, "maximum": 1.0},
+        "arousal": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+      }
+    },
+    "task_lifecycle_payload": {
+      "type": "object",
+      "description": "task.lifecycle 事件 payload",
+      "required": ["task_id", "status"],
+      "properties": {
+        "task_id": {"type": "string"},
+        "status": {
+          "type": "string",
+          "enum": ["created", "running", "completed", "failed", "cancelled"]
+        },
+        "previous_status": {"type": "string"},
+        "task_type": {"type": "string"},
+        "target_device": {"type": "string"},
+        "progress": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "error": {"type": "string"}
+      }
+    },
+    "skill_invoke_payload": {
+      "type": "object",
+      "description": "skill.invoke 事件 payload",
+      "required": ["skill_name"],
+      "properties": {
+        "skill_name": {"type": "string"},
+        "skill_version": {"type": "string"},
+        "args": {"type": "object"},
+        "invocation_id": {"type": "string"}
+      }
+    },
+    "perception_update_payload": {
+      "type": "object",
+      "description": "perception.update 事件 payload",
+      "required": ["perception_type"],
+      "properties": {
+        "perception_type": {
+          "type": "string",
+          "enum": ["screen", "audio", "sensor", "vision", "none"]
+        },
+        "content_hash": {"type": "string"},
+        "width": {"type": "integer"},
+        "height": {"type": "integer"},
+        "active_app": {"type": "string"},
+        "element_count": {"type": "integer"}
+      }
+    },
+    "action_command_payload": {
+      "type": "object",
+      "description": "action.command 事件 payload",
+      "required": ["command_type", "target_device"],
+      "properties": {
+        "command_id": {"type": "string"},
+        "command_type": {"type": "string"},
+        "target_device": {"type": "string"},
+        "args": {"type": "object"},
+        "priority": {"type": "integer", "minimum": 1, "maximum": 10}
+      }
+    },
+    "device_presence_payload": {
+      "type": "object",
+      "description": "device.presence 事件 payload",
+      "required": ["device_id", "presence"],
+      "properties": {
+        "device_id": {"type": "string"},
+        "device_type": {"type": "string"},
+        "presence": {
+          "type": "string",
+          "enum": ["online", "offline", "registered", "unregistered"]
+        },
+        "previous_presence": {"type": "string"},
+        "capabilities": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}
