@@ -378,9 +378,14 @@ async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
     AIP v3 protocol types, device registration, heartbeat, and task lifecycle
     are all handled by the single gateway bridge rather than the generic
     WebSocketManager.
+
+    All incoming messages are first normalised to AIP v3 via
+    ``parse_message_compat`` before being forwarded to the bridge.  This means
+    legacy clients (AIP/1.0, 2.0) are silently upgraded to v3 at the WS layer;
+    no legacy-specific parsing occurs inside the bridge itself.
     """
     from .android_bridge import android_bridge as _android_bridge
-    import json as _json
+    from galaxy_gateway.protocol.compat import normalise_to_v3_dict as _normalise
 
     await websocket.accept()
     logger.info("Android device connected via android_bridge: device_id=%s", device_id)
@@ -389,9 +394,13 @@ async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
         while True:
             data = await websocket.receive_text()
             try:
-                message = _json.loads(data)
+                # Normalise to AIP v3 via compat (handles v1/v2/v3 input).
+                # Extra application-level fields (platform, model, etc.) are
+                # preserved by normalise_to_v3_dict — no legacy-specific
+                # parsing branches exist in the bridge itself.
+                message = _normalise(data)
             except Exception:
-                logger.warning("Android [%s]: non-JSON message received, skipping", device_id)
+                logger.warning("Android [%s]: failed to parse/normalise message, skipping", device_id)
                 continue
 
             response = await _android_bridge.handle_message(websocket, message)
@@ -448,6 +457,10 @@ async def websocket_ufo3(websocket: WebSocket, device_id: str):
     Disabled by default.  Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to allow
     connections on this path.  When disabled, the connection is rejected with
     an explicit error so clients can identify the cause.
+
+    When enabled, routes through the same android_bridge pipeline as
+    ``/ws/android/{device_id}`` with all incoming messages normalised to
+    AIP v3 via ``parse_message_compat``.
     """
     if not _LEGACY_PROTOCOLS_ENABLED:
         logger.warning(
@@ -471,14 +484,18 @@ async def websocket_ufo3(websocket: WebSocket, device_id: str):
         await websocket.close(code=1008, reason="Legacy path disabled. Use /ws/device/<id> with AIP v3.")
         return
     logger.info("Legacy path /ws/ufo3/ used for device %s", device_id)
-    await websocket_manager.handle_connection(websocket, device_id)
+    await _handle_android_ws(websocket, device_id)
 
 
 @app.websocket("/ws/device/{device_id}")
 async def websocket_device(websocket: WebSocket, device_id: str):
-    """Android device WebSocket path — compat alias for /ws/android/{device_id}."""
+    """Android device WebSocket path — compat alias for /ws/android/{device_id}.
+
+    Routes through the same android_bridge pipeline as ``/ws/android/{device_id}``,
+    with all incoming messages normalised to AIP v3 via ``parse_message_compat``.
+    """
     logger.info("Compat path /ws/device/ used for device %s", device_id)
-    await websocket_manager.handle_connection(websocket, device_id)
+    await _handle_android_ws(websocket, device_id)
 
 
 # ---------------------------------------------------------------------------
