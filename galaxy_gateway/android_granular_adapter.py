@@ -2,6 +2,14 @@
 Galaxy Fusion - Android Granular Adapter
 功能: 将 AIP v3.0 消息转化为 Node 33 (ADB) / Node 34 (Scrcpy) 可执行的颗粒级指令。
 支持完整的设备控制命令集: click, swipe, input, keyevent, screenshot, shell, app_launch等。
+
+**v3-only contract**
+--------------------
+This adapter accepts only AIP v3.0 (or later) :class:`AIPMessage` objects.
+Legacy AIP v1/v2 messages **must** be normalised to v3 by
+:func:`galaxy_gateway.protocol.compat.parse_message_compat` *before* being
+passed to :meth:`AndroidGranularAdapter.dispatch_aip_message`.  Passing a
+pre-v3 message directly raises :class:`AIPAdapterVersionError`.
 """
 import logging
 import base64
@@ -11,8 +19,42 @@ from .protocol.aip_v3 import AIPMessage, MessageType
 logger = logging.getLogger("AndroidGranularAdapter")
 
 
+class AIPAdapterVersionError(ValueError):
+    """Raised when an AIPMessage with version < 3.0 is passed directly to
+    :class:`AndroidGranularAdapter`.
+
+    Legacy messages must be normalised to v3 via
+    :func:`galaxy_gateway.protocol.compat.parse_message_compat` first.
+    """
+
+
+def _require_v3(message: AIPMessage) -> None:
+    """Assert that *message* carries AIP version >= 3.0.
+
+    :raises AIPAdapterVersionError: when ``message.version`` is absent,
+        empty, or below "3.x".
+    """
+    version = getattr(message, "version", None) or ""
+    if not version.startswith("3"):
+        raise AIPAdapterVersionError(
+            f"AndroidGranularAdapter is v3-only: received version={version!r}. "
+            "Normalise legacy messages with parse_message_compat() before "
+            "passing them to the adapter."
+        )
+
+
 class AndroidGranularAdapter:
-    """将AIP协议消息分发为具体的Android ADB/Scrcpy操作"""
+    """AIP v3-only adapter that dispatches :class:`AIPMessage` objects to
+    concrete Android ADB/Scrcpy operations.
+
+    **Contract**: all messages received by this adapter must already be
+    AIP v3.0 or later.  Legacy AIP v1/v2 payloads must pass through
+    :func:`galaxy_gateway.protocol.compat.parse_message_compat` (or
+    :func:`~galaxy_gateway.protocol.compat.parse_message_strict`) before
+    reaching this class.  The adapter itself performs no legacy parsing or
+    fallback; an :class:`AIPAdapterVersionError` is raised for any message
+    whose ``version`` field does not start with ``"3"``.
+    """
 
     def __init__(self, adb_executor: Any):
         self.adb = adb_executor
@@ -47,7 +89,19 @@ class AndroidGranularAdapter:
         logger.info("Android Granular Adapter Initialized with %d commands.", len(self._command_handlers))
 
     async def dispatch_aip_message(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
-        """将 AIP 消息分发为具体的 Android 操作"""
+        """Dispatch an AIP v3 message to the corresponding Android operation.
+
+        :param device_id: Target Android device identifier.
+        :param message: An :class:`AIPMessage` that **must** carry
+            ``version="3.x"``.  Legacy messages must be normalised by
+            :func:`galaxy_gateway.protocol.compat.parse_message_compat`
+            before being passed here.
+        :raises AIPAdapterVersionError: when *message.version* is not a v3
+            version string.
+        """
+        # v3-only enforcement: reject pre-v3 messages at the adapter surface.
+        _require_v3(message)
+
         # v3: message.type holds the unified message type
         msg_type = message.type
 
