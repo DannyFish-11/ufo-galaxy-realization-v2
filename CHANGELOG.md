@@ -15,6 +15,25 @@ Open pull requests pending review / merge:
   (`v3-protocol-guard`) and unit test (`tests/test_v3_protocol_guard.py`) enforce no
   residual v2 references in source code.
 
+- **PR-S5** – Schema / 文档更新 (v3 JSON Schemas + documentation hardening):
+  - Added `galaxy_gateway/protocol/schemas/` with JSON Schema (Draft 2020-12) files for all
+    five primary AIP v3 message types: `device_register`, `heartbeat`, `capability_report`,
+    `task_assign`, and `command_result`, plus a shared `aip_envelope` base schema.
+  - `capability_report` schema enforces the three v3-required fields: `platform`,
+    `supported_actions` (non-empty array), and `version` (pattern `^3\.`).
+  - All schemas reject `version` values below `"3.0"` (pattern `^3\.`) so they describe
+    the **post-compat** canonical v3 objects that handlers receive; legacy clients must pass
+    through `galaxy_gateway/protocol/compat.parse_message_compat()` first.
+  - `docs/ANDROID_PROTOCOL_ALIGNMENT.md` updated: new Section 10 "JSON Schema 参考与 v3
+    Payload 示例" documents schema file index, v3 required fields table, full payload
+    examples for all five types, the legacy→v3 auto-conversion flow diagram, and how to run
+    the schema validation test suite.
+  - Added `tests/test_v3_schemas.py`: 50 test cases covering schema load, embedded-example
+    validation (positive), and rejection of missing required fields (negative).
+  - Compat layer (`compat.py`) is unchanged; docs clarify it is the single entry point for
+    legacy inputs and that business fields (`platform`, `supported_actions`) are **not**
+    back-filled by compat.
+
 - **PR #4** – Wire `/ws/android` to `android_bridge`: integrates the Android stack with the
   V2 backend, enabling end-to-end AIP v3.0 message flow between the Android client and the server.
 - **PR #5** – Remove Android client duplication: canonical Android source moved to

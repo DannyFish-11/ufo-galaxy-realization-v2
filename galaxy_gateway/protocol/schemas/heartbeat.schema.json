@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.example/schemas/aip/v3/heartbeat",
+  "title": "AIP v3.0 – heartbeat",
+  "description": "Periodic keep-alive message sent by a registered client.  The server replies with a 'heartbeat_ack' message.\n\nLegacy type aliases 'agent_heartbeat' and 'device_heartbeat' are mapped to 'heartbeat' by the compat layer.",
+  "type": "object",
+  "required": ["version", "type", "device_id"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^3\\.",
+      "description": "AIP protocol version – must be 3.x.",
+      "examples": ["3.0"]
+    },
+    "type": {
+      "type": "string",
+      "const": "heartbeat",
+      "description": "Fixed message type discriminator."
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier of the sending device.",
+      "examples": ["android-abc123"]
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "timestamp": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "integer", "minimum": 0}
+      ]
+    },
+    "trace_id": {"type": "string"},
+    "route_mode": {"type": "string", "enum": ["cross_device", "local"]},
+    "payload": {
+      "type": "object",
+      "description": "Optional heartbeat metadata (e.g. battery level, current task)."
+    }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "version": "3.0",
+      "type": "heartbeat",
+      "device_id": "android-abc123",
+      "message_id": "550e8400-e29b-41d4-a716-446655440001",
+      "timestamp": "2026-01-01T00:01:00Z",
+      "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c9",
+      "route_mode": "cross_device"
+    }
+  ]
+}

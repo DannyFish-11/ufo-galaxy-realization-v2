@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.example/schemas/aip/v3/envelope",
+  "title": "AIP v3.0 Message Envelope",
+  "description": "Base envelope shared by every AIP v3.0 message.  All message-specific schemas must reference ($ref) this envelope and add their own required/payload fields.\n\nLegacy clients (AIP/1.x, 2.x) are accepted at the ingress boundary and automatically upgraded to v3 by galaxy_gateway/protocol/compat.py before reaching any handler.",
+  "type": "object",
+  "required": ["version", "type", "device_id"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Protocol version.  Must be '3.0' or higher (e.g. '3.1').  Legacy clients that omit this field or send '1.x'/'2.x' are auto-converted by the compat layer.",
+      "pattern": "^3\\.",
+      "examples": ["3.0"]
+    },
+    "type": {
+      "type": "string",
+      "description": "Canonical AIP v3 message type string (see MessageType enum in aip_v3.py).",
+      "examples": [
+        "device_register",
+        "heartbeat",
+        "capability_report",
+        "task_assign",
+        "command_result"
+      ]
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier of the originating device.",
+      "examples": ["android-abc123"]
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique message identifier (UUID v4).  Auto-generated when absent."
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "Links a response message back to its request message_id."
+    },
+    "device_type": {
+      "type": "string",
+      "description": "Fine-grained device type (AIPDeviceType enum value).",
+      "examples": ["android_phone", "windows_desktop", "linux_server"]
+    },
+    "timestamp": {
+      "description": "Message creation time.  Accepted as ISO-8601 string or Unix-millisecond integer.",
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "integer", "minimum": 0}
+      ]
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Optional task identifier used to correlate task lifecycle messages."
+    },
+    "task_status": {
+      "type": "string",
+      "enum": ["pending", "running", "continue", "completed", "failed", "cancelled"],
+      "description": "Current status of the associated task."
+    },
+    "task_type": {
+      "type": "string",
+      "description": "High-level task category, e.g. 'goal_execution', 'parallel_subtask'."
+    },
+    "commands": {
+      "type": "array",
+      "description": "Ordered list of Command objects to execute.",
+      "items": {
+        "type": "object",
+        "required": ["tool_name"],
+        "properties": {
+          "command_id": {"type": "string"},
+          "tool_name": {"type": "string"},
+          "tool_type": {"type": "string", "default": "action"},
+          "parameters": {"type": "object"},
+          "timeout": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "description": "Execution results corresponding to previously received commands.",
+      "items": {
+        "type": "object",
+        "required": ["command_id", "status"],
+        "properties": {
+          "command_id": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["success", "failure", "skipped", "timeout", "none"]
+          },
+          "result": {},
+          "error": {"type": "string"},
+          "execution_time": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Arbitrary message-type-specific key/value data."
+    },
+    "error": {
+      "type": "string",
+      "description": "Human-readable error description (used in ERROR messages)."
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Distributed tracing identifier (UUID).  Auto-injected by compat layer when absent."
+    },
+    "route_mode": {
+      "type": "string",
+      "enum": ["cross_device", "local"],
+      "default": "cross_device",
+      "description": "Routing hint.  Auto-injected by compat layer when absent."
+    }
+  },
+  "additionalProperties": true
+}
