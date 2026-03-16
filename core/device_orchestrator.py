@@ -501,6 +501,68 @@ class DeviceOrchestrator:
             "timestamp": datetime.now().isoformat(),
         }
 
+    # ------------------------------------------------------------------
+    # DevicePoolManager delegation
+    # ------------------------------------------------------------------
+
+    def select_device(
+        self,
+        required_capabilities: Optional[List[str]] = None,
+        device_type: Optional[str] = None,
+        exclude: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """Select an eligible device via the unified DevicePoolManager.
+
+        Delegates to :func:`core.device_pool_manager.get_device_pool_manager`
+        so that all scheduling decisions pass through the single pool entry
+        point (health scoring, circuit-breaker, quarantine, strategy).
+
+        Args:
+            required_capabilities: Capability names the device must have.
+            device_type: Optional device-type filter.
+            exclude: Device IDs to skip.
+
+        Returns:
+            Selected ``device_id``, or ``None`` if no eligible device exists.
+        """
+        try:
+            from core.device_pool_manager import get_device_pool_manager
+            pool = get_device_pool_manager()
+            return pool.select_device(
+                required_capabilities=required_capabilities,
+                device_type=device_type,
+                exclude=exclude,
+            )
+        except Exception as exc:
+            logger.warning("DevicePoolManager.select_device 失败: %s", exc)
+            return None
+
+    def register_device_in_pool(
+        self,
+        device_id: str,
+        capabilities: Optional[List[str]] = None,
+        device_type: str = "",
+        weight: float = 1.0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Register a device in the unified DevicePoolManager.
+
+        This method ensures that devices registered via the orchestrator are
+        also visible to the pool scheduler.
+        """
+        try:
+            from core.device_pool_manager import get_device_pool_manager
+            pool = get_device_pool_manager()
+            pool.register_device(
+                device_id,
+                capabilities=capabilities,
+                device_type=device_type,
+                weight=weight,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            logger.warning("DevicePoolManager.register_device 失败: %s", exc)
+
 
 # ===========================================================================
 # 全局单例
