@@ -1,0 +1,32 @@
+# Galaxy — Core Security-Critical Dependencies
+# =============================================
+# This file is the pip-compile INPUT for the hash-locked requirements.
+# It covers the core framework, network, and security packages that are
+# most sensitive from a supply-chain perspective.
+#
+# To regenerate requirements.hash.txt, run:
+#   scripts/pin_deps.sh
+# or equivalently:
+#   pip-compile --generate-hashes --output-file=requirements.hash.txt requirements.in
+
+# Core Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.9.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+
+# Network and Communication
+httpx>=0.26.0
+aiohttp>=3.9.0
+websockets>=11.0
+requests>=2.31.0
+
+# Security and Encryption
+cryptography>=41.0.0
+bcrypt>=4.0.0
+python-jose[cryptography]>=3.3.0
+
+# Utilities (frequently pulled as transitive deps)
+pyyaml>=6.0
+python-dateutil>=2.8.0

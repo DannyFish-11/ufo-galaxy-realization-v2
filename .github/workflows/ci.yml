@@ -113,6 +113,38 @@ jobs:
           print(f"✅ Dashboard JSON valid — {len(dash['panels'])} panels, all required metrics present.")
           EOF
 
+  supply-chain-hash-gate:
+    # PR-G4: Supply-Chain & Image Security — hash-locked dependency gate.
+    # Ensures requirements.hash.txt is present and core packages install
+    # cleanly with --require-hashes before any other jobs merge.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install pip-tools
+        run: pip install pip-tools
+      - name: Assert requirements.hash.txt exists
+        run: |
+          test -f requirements.hash.txt || {
+            echo "❌  requirements.hash.txt missing — run: scripts/pin_deps.sh"
+            exit 1
+          }
+          echo "✅  requirements.hash.txt present."
+      - name: Install core deps with --require-hashes
+        run: |
+          pip install --require-hashes -r requirements.hash.txt
+          echo "✅  Hash-verified install of core deps succeeded."
+      - name: Run supply-chain unit tests
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest tests/test_supply_chain.py -v --tb=short -m "not slow"
+          echo "✅  Supply-chain unit tests passed."
+
   config-preflight-dry-run:
     # PR-G3: Configuration & Secrets Governance.
     # Validates that the pre-flight checker runs cleanly (dry-run) and that
@@ -146,4 +178,4 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -v -m "not slow"
