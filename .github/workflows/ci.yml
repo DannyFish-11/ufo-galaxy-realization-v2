@@ -25,6 +25,28 @@ jobs:
       - name: Check import ordering
         run: isort --check-only core/ tests/
 
+  v3-protocol-guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure no direct aip_protocol_v2 imports outside the deprecated file itself
+        run: |
+          # Allow the deprecated stub and the guard test; block everything else.
+          FORBIDDEN=$(grep -rn "aip_protocol_v2" \
+            --include="*.py" \
+            --exclude="aip_protocol_v2.py" \
+            --exclude="test_v3_protocol_guard.py" \
+            galaxy_gateway/ core/ enhancements/ tests/ \
+            2>/dev/null || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "❌ Forbidden reference to aip_protocol_v2 detected:"
+            echo "$FORBIDDEN"
+            exit 1
+          fi
+          echo "✅ No forbidden aip_protocol_v2 references found."
+
   test:
     runs-on: ubuntu-latest
     permissions:

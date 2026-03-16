@@ -350,13 +350,13 @@ async def test_8_proxy_relay_mesh_aware():
 # ============================================================================
 
 def test_9_aip_v2_phase5_types():
-    """确认 AIP v2 协议包含 Phase 5 消息类型"""
-    from galaxy_gateway.aip_protocol_v2 import ExtendedMessageType
+    """确认 AIP v3 协议包含 Phase 5 消息类型（已从 v2 迁移到 v3 MessageType）"""
+    from galaxy_gateway.protocol.aip_v3 import MessageType
 
     # Phase 5 新增类型
-    assert ExtendedMessageType.PEER_ANNOUNCE.value == "peer_announce"
-    assert ExtendedMessageType.PEER_EXCHANGE.value == "peer_exchange"
-    assert ExtendedMessageType.MESH_TOPOLOGY.value == "mesh_topology"
+    assert MessageType.PEER_ANNOUNCE.value == "peer_announce"
+    assert MessageType.PEER_EXCHANGE.value == "peer_exchange"
+    assert MessageType.MESH_TOPOLOGY.value == "mesh_topology"
 
 
 # ============================================================================

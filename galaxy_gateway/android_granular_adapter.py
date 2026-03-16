@@ -1,12 +1,12 @@
 """
 Galaxy Fusion - Android Granular Adapter
-功能: 将 AIP v2.0 消息转化为 Node 33 (ADB) / Node 34 (Scrcpy) 可执行的颗粒级指令。
+功能: 将 AIP v3.0 消息转化为 Node 33 (ADB) / Node 34 (Scrcpy) 可执行的颗粒级指令。
 支持完整的设备控制命令集: click, swipe, input, keyevent, screenshot, shell, app_launch等。
 """
 import logging
 import base64
 from typing import Dict, Any, Optional, List
-from .aip_protocol_v2 import AIPMessage, MessageType, ExtendedMessageType
+from .protocol.aip_v3 import AIPMessage, MessageType
 
 logger = logging.getLogger("AndroidGranularAdapter")
 
@@ -48,27 +48,21 @@ class AndroidGranularAdapter:
 
     async def dispatch_aip_message(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """将 AIP 消息分发为具体的 Android 操作"""
-        # 处理基础控制消息
-        if message.message_type == MessageType.CONTROL:
+        # v3: message.type holds the unified message type
+        msg_type = message.type
+
+        # 处理命令消息
+        if msg_type in (MessageType.COMMAND, MessageType.COMMAND_BATCH):
             return await self._dispatch_control(device_id, message)
 
-        # 处理扩展GUI消息
-        ext_type = message.extended_type
-        if ext_type:
-            return await self._dispatch_extended(device_id, message, ext_type)
-
-        logger.warning(f"Unsupported message type: {message.message_type}")
-        return None
+        # 处理 GUI / 扩展消息 (type is the action, not a separate extended_type field)
+        return await self._dispatch_extended(device_id, message, msg_type.value)
 
     async def _dispatch_control(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """分发控制命令"""
-        payload = message.payload
-        if not payload:
-            return self._error_response(message, "Empty payload")
-
-        # 从payload中提取命令和参数
-        data = payload.metadata if hasattr(payload, 'metadata') else {}
-        command = data.get("command", payload.data_type if hasattr(payload, 'data_type') else "")
+        # v3: payload is a plain dict
+        data = message.payload or {}
+        command = data.get("command", message.type.value)
         params = data.get("params", {})
 
         handler = self._command_handlers.get(command)
@@ -85,16 +79,16 @@ class AndroidGranularAdapter:
 
     async def _dispatch_extended(self, device_id: str, message: AIPMessage, ext_type: str) -> Optional[AIPMessage]:
         """分发扩展类型消息"""
-        payload = message.payload
-        data = payload.metadata if hasattr(payload, 'metadata') else {}
+        # v3: payload is a plain dict
+        data = message.payload or {}
 
         ext_handlers = {
-            ExtendedMessageType.GUI_CLICK.value: self._handle_gui_click,
-            ExtendedMessageType.GUI_SWIPE.value: self._handle_gui_swipe,
-            ExtendedMessageType.GUI_INPUT.value: self._handle_gui_input,
-            ExtendedMessageType.GUI_SCREENSHOT.value: self._handle_screenshot,
-            ExtendedMessageType.GUI_ELEMENT_QUERY.value: self._handle_element_query,
-            ExtendedMessageType.COMMAND.value: self._dispatch_control,
+            MessageType.GUI_CLICK.value: self._handle_gui_click,
+            MessageType.GUI_SWIPE.value: self._handle_gui_swipe,
+            MessageType.GUI_INPUT.value: self._handle_gui_input,
+            MessageType.GUI_SCREENSHOT.value: self._handle_screenshot,
+            MessageType.GUI_ELEMENT_QUERY.value: self._handle_element_query,
+            MessageType.COMMAND.value: self._dispatch_control,
         }
 
         handler = ext_handlers.get(ext_type)
@@ -336,39 +330,21 @@ class AndroidGranularAdapter:
     # ========================= 辅助方法 =========================
 
     def _success_response(self, original: AIPMessage, result: Dict) -> AIPMessage:
-        """创建成功响应"""
-        from .aip_protocol_v2 import MessagePayload
-        import json
-        payload = MessagePayload(
-            data_type="command_result",
-            format="json",
-            size=len(json.dumps(result)),
-            checksum="",
-            transfer_method="gateway",
-            metadata={"success": True, **result}
-        )
+        """创建成功响应 (v3 AIPMessage)"""
         return AIPMessage(
-            message_type=MessageType.CONTROL,
-            extended_type="command_result",
-            payload=payload,
-            correlation_id=original.message_id
+            type=MessageType.COMMAND_RESULT,
+            device_id=original.device_id,
+            payload={"success": True, **result},
+            correlation_id=original.message_id,
         )
 
     def _error_response(self, original: AIPMessage, error: str) -> AIPMessage:
-        """创建错误响应"""
-        from .aip_protocol_v2 import MessagePayload
-        payload = MessagePayload(
-            data_type="error",
-            format="json",
-            size=len(error),
-            checksum="",
-            transfer_method="gateway",
-            metadata={"success": False, "error": error}
-        )
+        """创建错误响应 (v3 AIPMessage)"""
         return AIPMessage(
-            message_type=MessageType.ERROR,
-            payload=payload,
-            correlation_id=original.message_id
+            type=MessageType.ERROR,
+            device_id=original.device_id,
+            payload={"success": False, "error": error},
+            correlation_id=original.message_id,
         )
 
     def get_supported_commands(self) -> List[str]:

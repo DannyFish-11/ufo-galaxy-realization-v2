@@ -19,8 +19,8 @@ import time
 from pathlib import Path
 
 # 导入测试模块
-from galaxy_gateway.aip_protocol_v2 import MessageBuilder, DeviceInfo, MessageCodec
-from galaxy_gateway.multimodal_transfer import MultimodalTransferManager
+from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType, parse_message, validate_message
+from galaxy_gateway.multimodal_transfer import MultimodalTransferManager, DeviceInfo
 from galaxy_gateway.p2p_connector import P2PConnector, PeerInfo
 from galaxy_gateway.resumable_transfer import ResumableTransferManager
 
@@ -70,58 +70,44 @@ class TestResults:
 # ============================================================================
 
 async def test_aip_protocol(results: TestResults):
-    """测试 AIP v2.0 协议"""
+    """测试 AIP v3.0 协议"""
     print("\n" + "="*80)
-    print("测试 AIP v2.0 协议")
+    print("测试 AIP v3.0 协议")
     print("="*80)
     
     # 测试 1: 创建控制消息
     try:
-        phone_a = DeviceInfo(
+        msg = AIPMessage(
+            type=MessageType.COMMAND,
             device_id="phone_a",
-            device_name="手机A",
-            device_type="android",
-            ip_address="192.168.1.100"
-        )
-        
-        pc = DeviceInfo(
-            device_id="pc",
-            device_name="电脑",
-            device_type="windows",
-            ip_address="192.168.1.10"
-        )
-        
-        msg = MessageBuilder.create_control_message(
-            from_device=phone_a,
-            to_device=pc,
-            command="open_app",
-            parameters={"app": "chrome"}
+            payload={"command": "open_app", "params": {"app": "chrome"}},
         )
         
         assert msg.message_id is not None
-        assert msg.from_device.device_id == "phone_a"
-        assert msg.to_device.device_id == "pc"
+        assert msg.device_id == "phone_a"
+        assert msg.type == MessageType.COMMAND
         
         results.add_result("AIP: 创建控制消息", True)
     except Exception as e:
         results.add_result("AIP: 创建控制消息", False, str(e))
     
-    # 测试 2: 消息编解码
+    # 测试 2: 消息序列化与反序列化
     try:
-        encoded = MessageCodec.encode(msg)
-        decoded = MessageCodec.decode(encoded)
+        import json
+        serialized = msg.model_dump_json()
+        decoded = parse_message(json.loads(serialized))
         
         assert decoded.message_id == msg.message_id
-        assert decoded.from_device.device_id == msg.from_device.device_id
+        assert decoded.device_id == msg.device_id
         
-        results.add_result("AIP: 消息编解码", True)
+        results.add_result("AIP: 消息序列化与反序列化", True)
     except Exception as e:
-        results.add_result("AIP: 消息编解码", False, str(e))
+        results.add_result("AIP: 消息序列化与反序列化", False, str(e))
     
     # 测试 3: 消息验证
     try:
-        valid, error = MessageCodec.validate(msg)
-        assert valid
+        ok, error = validate_message(msg)
+        assert ok
         
         results.add_result("AIP: 消息验证", True)
     except Exception as e:

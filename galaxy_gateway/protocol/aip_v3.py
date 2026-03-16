@@ -228,6 +228,34 @@ class MessageType(str, Enum):
     ERROR = "error"
     ERROR_RECOVERY = "error_recovery"
 
+    # === Agent 分发 (Phase 1) ===
+    AGENT_DEPLOY = "agent_deploy"
+    AGENT_DEPLOY_ACK = "agent_deploy_ack"
+    AGENT_STATUS = "agent_status"
+    AGENT_RESULT = "agent_result"
+
+    # === 设备间中继 (Phase 2) ===
+    RELAY_REQUEST = "relay_request"
+    RELAY_FORWARD = "relay_forward"
+    RELAY_REPLY = "relay_reply"
+    RELAY_ACK = "relay_ack"
+
+    # === 混合执行 (Phase 3) ===
+    HYBRID_EXECUTE = "hybrid_execute"
+    HYBRID_RESULT = "hybrid_result"
+    HYBRID_DEGRADE = "hybrid_degrade"
+
+    # === RAG & 代码执行 (Phase 4) ===
+    RAG_QUERY = "rag_query"
+    RAG_RESULT = "rag_result"
+    CODE_EXECUTE = "code_execute"
+    CODE_RESULT = "code_result"
+
+    # === P2P Mesh (Phase 5) ===
+    PEER_ANNOUNCE = "peer_announce"
+    PEER_EXCHANGE = "peer_exchange"
+    MESH_TOPOLOGY = "mesh_topology"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""
@@ -538,23 +566,9 @@ def validate_message(message: AIPMessage) -> bool:
 # Unified Protocol Bridge - AIP v2.0 ↔ v3.0
 # ============================================================================
 
-_V2_AVAILABLE = False
-_V2ExtendedMessageType = None
-_V2MessageTypeRegistry = None
-
-try:
-    from galaxy_gateway.aip_protocol_v2 import (
-        ExtendedMessageType as _V2ExtendedMessageType,
-        MessageTypeRegistry as _V2MessageTypeRegistry,
-    )
-    _V2_AVAILABLE = True
-except ImportError:
-    pass
-
-
 class UnifiedMessageTypes:
     """
-    Single access point for all AIP message types across v2.0 and v3.0.
+    Single access point for all AIP v3.0 message types.
 
     Usage:
         from galaxy_gateway.protocol.aip_v3 import UnifiedMessageTypes
@@ -564,29 +578,27 @@ class UnifiedMessageTypes:
 
     @classmethod
     def get_all_types(cls) -> list:
-        """Return all valid message type strings from v2 and v3 (de-duplicated)"""
-        v3_types = [t.value for t in MessageType]
-        if _V2_AVAILABLE and _V2ExtendedMessageType is not None:
-            v2_ext_types = [t.value for t in _V2ExtendedMessageType]
-            return list(dict.fromkeys(v3_types + v2_ext_types))
-        return v3_types
+        """Return all valid message type strings from v3 (canonical)."""
+        return [t.value for t in MessageType]
 
     @classmethod
     def is_valid(cls, msg_type: str) -> bool:
-        """Check if a message type string is valid across any protocol version"""
+        """Check if a message type string is valid in AIP v3."""
         return msg_type in cls.get_all_types()
 
     @classmethod
     def get_v2_extended(cls):
-        """Get v2.0 ExtendedMessageType enum (or None if unavailable)"""
-        return _V2ExtendedMessageType if _V2_AVAILABLE else None
+        """Deprecated: v2 ExtendedMessageType is no longer supported.
+        All types are now part of :class:`MessageType` in v3."""
+        return None
 
     @classmethod
     def get_v3_message_type(cls):
-        """Get v3.0 MessageType enum"""
+        """Get v3.0 MessageType enum."""
         return MessageType
 
     @classmethod
     def get_registry(cls):
-        """Get v2.0 MessageTypeRegistry (or None if unavailable)"""
-        return _V2MessageTypeRegistry if _V2_AVAILABLE else None
+        """Deprecated: v2 MessageTypeRegistry is no longer supported.
+        Use :meth:`get_all_types` instead."""
+        return None
