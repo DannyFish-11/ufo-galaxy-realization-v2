@@ -53,30 +53,35 @@ except ImportError:
 
 
 class MessageType(str, Enum):
-    """消息类型 — 兼容 AIP v3.0 (COMPAT LAYER)
+    """本地传输层消息类型 — 用于 DeviceMessage 内部封装。
 
-    这是简化的本地消息类型。Canonical 定义位于:
-        galaxy_gateway.protocol.aip_v3.MessageType
+    Canonical v3 定义位于: galaxy_gateway.protocol.aip_v3.MessageType
+    路由层 (handle_message) 不直接使用本枚举做分支判断；所有入站消息
+    须先经 compat 层规范化为 v3 字符串后再路由。
 
-    本地简化类型与 AIP v3.0 MessageType 的映射关系：
-      COMMAND     → COMMAND
-      RESPONSE    → TASK_RESULT
-      HEARTBEAT   → DEVICE_HEARTBEAT
-      STATUS      → DEVICE_STATUS
-      ERROR       → ERROR
-    使用 ``to_aip_v3()`` 获取对应的 AIP v3.0 MessageType 枚举值。
+    与 AIP v3.0 的对应关系（供参考）：
+      COMMAND   → command         (v3 COMMAND)
+      ACK       → ack             (本地应答，无直接 v3 对应)
+      HEARTBEAT → heartbeat       (v3 DEVICE_HEARTBEAT.value)
+      ERROR     → error           (v3 ERROR)
+      WAKE_EVENT → wake_event     (v3 WAKE_EVENT)
+
+    以下成员是 v2 兼容遗留类型，**不应出现在路由层判断中**：
+      RESPONSE  → 应经 compat 转换为 command_result 后路由
+      STATUS    → 应经 compat 转换为 device_status 后路由
+      EVENT     → 应经 compat 转换为 wake_event 后路由
     """
     # 控制
     COMMAND = "command"         # 命令
-    RESPONSE = "response"       # 响应
+    RESPONSE = "response"       # [v2 compat] 命令响应 — 勿直接用于路由
     ACK = "ack"                 # 确认
 
     # 状态
-    HEARTBEAT = "heartbeat"     # 心跳
-    STATUS = "status"           # 状态更新
+    HEARTBEAT = "heartbeat"     # 心跳 (v3 DEVICE_HEARTBEAT.value = "heartbeat")
+    STATUS = "status"           # [v2 compat] 状态更新 — 勿直接用于路由
 
     # 事件
-    EVENT = "event"             # 事件
+    EVENT = "event"             # [v2 compat] 通用事件 — 勿直接用于路由
     ERROR = "error"             # 错误
 
     # 流
@@ -456,139 +461,225 @@ class DeviceCommunication:
         device_id: str,
         message_data: str,
     ) -> Optional[DeviceMessage]:
-        """
-        处理收到的消息
-        
+        """处理收到的消息 — AIP v3-only 路由。
+
+        所有入站消息先经 compat 层规范化为 AIP v3 字段（type/version），
+        路由层只分发 v3 MessageType 字符串：
+
+        =========================================================  ===================
+        v3 type string                                             动作
+        =========================================================  ===================
+        ``device_register``                                        注册设备
+        ``heartbeat``                                              更新心跳时间戳
+        ``command_result``                                         解决 pending 命令请求
+        ``task_assign``                                            转发到 action handler
+        ``capability_report``                                      更新设备能力
+        ``device_status``                                          更新设备状态
+        ``wake_event``                                             转发到唤醒事件总线
+        ``error``                                                  记录错误日志
+        =========================================================  ===================
+
+        Legacy 类型（"handshake", "response", "status", "TEXT", "event" 等）
+        由 compat 层预先规范化，**不会直接出现在路由判断中**。
+
         Args:
             device_id: 设备 ID
-            message_data: 消息数据
-        
+            message_data: JSON 编码的消息字符串
+
         Returns:
-            响应消息 (如果需要)
+            响应消息（可选），无需响应时返回 None
         """
         conn = self.connections.get(device_id)
         if not conn:
             return None
-        
+
         try:
-            # 先尝试解析为 JSON
-            import json
             raw_msg = json.loads(message_data)
-            
-            # 兼容安卓端握手消息
-            if raw_msg.get("type") == "handshake":
-                logger.info(f"收到安卓端握手: {device_id}")
-                
-                # 自动注册设备
-                try:
-                    from core.device_registry import device_registry
-                    device = device_registry.get(device_id)
-                    if not device:
-                        await device_registry.register(
-                            device_id=device_id,
-                            device_type=raw_msg.get("platform", "android"),
-                            name=f"Android Device ({device_id[:8]})",
-                            capabilities=["screen", "touch", "keyboard"],
-                            metadata={
-                                "version": raw_msg.get("version", "2.0"),
-                                "auto_registered": True,
-                            },
-                        )
-                except Exception as e:
-                    logger.warning(f"自动注册设备失败: {e}")
-                
-                # 返回握手确认
-                return DeviceMessage(
-                    type=MessageType.ACK,
-                    action="handshake",
-                    payload={"status": "connected", "device_id": device_id},
-                )
-            
-            # 兼容安卓端心跳消息
-            if raw_msg.get("type") == "heartbeat":
-                conn.last_heartbeat = time.time()
-                return DeviceMessage(
-                    type=MessageType.ACK,
-                    action="heartbeat",
-                )
-            
-            # 兼容安卓端 AIP 消息格式
-            if "type" in raw_msg and "payload" in raw_msg:
-                # AIP 格式，转换为 DeviceMessage
-                message = DeviceMessage(
-                    type=MessageType.COMMAND if raw_msg.get("type") in ["TEXT", "COMMAND"] else MessageType.EVENT,
-                    action=raw_msg.get("type", "").lower(),
-                    payload=raw_msg.get("payload", {}),
-                    device_id=device_id,
-                )
-            else:
-                # 标准 DeviceMessage 格式
-                message = DeviceMessage.from_json(message_data)
+
+            # Step 1 — Normalise to AIP v3 via compat layer.
+            # Legacy types ("handshake", "response", "status", "TEXT", "event",
+            # etc.) are mapped to their v3 equivalents here; v3 messages pass
+            # through unchanged.  After this point routing only sees v3 names.
+            try:
+                from galaxy_gateway.protocol.compat import normalise_to_v3_dict
+                v3_msg = normalise_to_v3_dict(raw_msg)
+            except Exception as _norm_err:
+                logger.warning("handle_message: compat normalisation failed: %s", _norm_err)
+                v3_msg = dict(raw_msg)  # fallback on import/parse failure
+
+            msg_type = v3_msg.get("type", "")
             conn.messages_received += 1
             conn.last_message = time.time()
-            
-            # 处理心跳
-            if message.type == MessageType.HEARTBEAT:
+
+            # Step 2 — Route based on v3 MessageType names only.
+
+            # device_register — register / auto-register device
+            if msg_type == "device_register":
+                logger.info("收到设备注册消息: %s", device_id)
+                try:
+                    from core.device_registry import device_registry
+                    if not device_registry.get(device_id):
+                        await device_registry.register(
+                            device_id=device_id,
+                            device_type=(v3_msg.get("device_type") or
+                                         v3_msg.get("platform", "android")),
+                            name=f"Device ({device_id[:8]})",
+                            capabilities=(v3_msg.get("capabilities") or
+                                          ["screen", "touch", "keyboard"]),
+                            metadata={"auto_registered": True},
+                        )
+                except Exception as e:
+                    logger.warning("自动注册设备失败: %s", e)
+                return DeviceMessage(
+                    type=MessageType.ACK,
+                    action="device_register",
+                    device_id=device_id,
+                    payload={"status": "registered", "device_id": device_id},
+                )
+
+            # heartbeat — keep-alive
+            # Use the inbound message_id as correlation_id in the ACK so that
+            # senders using request-response semantics can match the reply.
+            if msg_type == "heartbeat":
                 conn.last_heartbeat = time.time()
                 return DeviceMessage(
                     type=MessageType.ACK,
                     action="heartbeat",
-                    correlation_id=message.message_id,
+                    device_id=device_id,
+                    correlation_id=v3_msg.get("message_id", ""),
                 )
-            
-            # 处理响应
-            elif message.type == MessageType.RESPONSE:
-                if message.correlation_id in conn.pending_requests:
-                    future = conn.pending_requests[message.correlation_id]
+
+            # command_result — resolve pending command request
+            if msg_type == "command_result":
+                correlation_id = v3_msg.get("correlation_id", "")
+                if correlation_id and correlation_id in conn.pending_requests:
+                    future = conn.pending_requests[correlation_id]
                     if not future.done():
-                        future.set_result(message.payload)
+                        future.set_result(v3_msg.get("payload", {}))
+                elif correlation_id:
+                    logger.warning(
+                        "command_result from %s has no matching pending request "
+                        "(correlation_id=%r); possibly late or duplicate",
+                        device_id, correlation_id,
+                    )
                 return None
-            
-            # 处理状态更新
-            elif message.type == MessageType.STATUS:
-                await self._handle_status(device_id, message)
+
+            # task_assign — dispatch to registered action handler
+            if msg_type == "task_assign":
+                action = (v3_msg.get("action") or
+                          v3_msg.get("task_type", "task_assign"))
+                if action and action in self._message_handlers:
+                    handler = self._message_handlers[action]
+                    message = DeviceMessage(
+                        type=MessageType.COMMAND,
+                        action=action,
+                        payload=v3_msg.get("payload", {}),
+                        device_id=device_id,
+                        correlation_id=v3_msg.get("correlation_id", ""),
+                    )
+                    result = await handler(device_id, message)
+                    if result:
+                        return DeviceMessage(
+                            type=MessageType.ACK,
+                            action=action,
+                            payload=result,
+                            device_id=device_id,
+                            correlation_id=message.message_id,
+                        )
+                return None
+
+            # capability_report — update device capabilities
+            if msg_type == "capability_report":
+                await self._handle_capability_report(device_id, v3_msg)
                 return DeviceMessage(
                     type=MessageType.ACK,
-                    action="status",
-                    correlation_id=message.message_id,
+                    action="capability_report",
+                    device_id=device_id,
                 )
-            
-            # 处理事件
-            elif message.type == MessageType.EVENT:
-                await self._handle_event(device_id, message)
+
+            # device_status — update device status in registry
+            if msg_type == "device_status":
+                status_msg = DeviceMessage(
+                    type=MessageType.STATUS,
+                    action="device_status",
+                    payload=v3_msg.get("payload", {}),
+                    device_id=device_id,
+                )
+                await self._handle_status(device_id, status_msg)
+                return DeviceMessage(
+                    type=MessageType.ACK,
+                    action="device_status",
+                    device_id=device_id,
+                    correlation_id=v3_msg.get("message_id", ""),
+                )
+
+            # wake_event — forward to wake event bus
+            if msg_type == "wake_event":
+                event_msg = DeviceMessage(
+                    type=MessageType.WAKE_EVENT,
+                    action="wake_event",
+                    payload=v3_msg.get("payload", {}),
+                    device_id=device_id,
+                )
+                await self._handle_event(device_id, event_msg)
                 return None
-            
-            # 处理错误
-            elif message.type == MessageType.ERROR:
+
+            # error — log and return None
+            if msg_type == "error":
                 conn.errors += 1
-                logger.error(f"设备错误: {device_id} - {message.payload}")
+                logger.error("设备错误: %s - %s", device_id, v3_msg.get("payload"))
                 return None
-            
-            # 触发消息回调
-            await self._emit_event("message", device_id, message)
-            
-            # 调用注册的处理器
-            if message.action in self._message_handlers:
-                handler = self._message_handlers[message.action]
+
+            # Step 3 — Unrecognised v3 type: try action-based dispatch, then
+            # emit an event for any registered "message" callbacks.
+            logger.debug("Unrecognised v3 message type from %s: %r", device_id, msg_type)
+            action = v3_msg.get("action", "")
+            if action and action in self._message_handlers:
+                handler = self._message_handlers[action]
+                message = DeviceMessage(
+                    type=MessageType.COMMAND,
+                    action=action,
+                    payload=v3_msg.get("payload", {}),
+                    device_id=device_id,
+                )
                 result = await handler(device_id, message)
                 if result:
                     return DeviceMessage(
-                        type=MessageType.RESPONSE,
-                        action=message.action,
+                        type=MessageType.ACK,
+                        action=action,
                         payload=result,
+                        device_id=device_id,
                         correlation_id=message.message_id,
                     )
-            
+
+            await self._emit_event("message", device_id, DeviceMessage(
+                type=MessageType.EVENT,
+                action=msg_type,
+                payload=v3_msg.get("payload", {}),
+                device_id=device_id,
+            ))
             return None
-            
+
         except Exception as e:
-            logger.error(f"处理消息失败: {device_id} - {e}")
+            logger.error("处理消息失败: %s - %s", device_id, e)
             return None
     
     def register_handler(self, action: str, handler: Callable):
         """注册消息处理器"""
         self._message_handlers[action] = handler
-    
+
+    async def _handle_capability_report(self, device_id: str, v3_msg: dict):
+        """处理 capability_report: 将设备能力更新到注册表。"""
+        try:
+            from core.device_registry import device_registry
+            payload = v3_msg.get("payload", {})
+            capabilities = (payload.get("capabilities") or
+                            payload.get("supported_actions", []))
+            if capabilities and hasattr(device_registry, "update_capabilities"):
+                await device_registry.update_capabilities(device_id, capabilities)
+        except (ImportError, AttributeError) as e:
+            logger.debug("设备注册表不可用（capability_report）: %s", e)
+
     async def _handle_status(self, device_id: str, message: DeviceMessage):
         """处理状态更新"""
         try:
