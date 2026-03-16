@@ -279,13 +279,10 @@ class TestBuildNodeReport:
         assert report["sbom"]["present"] is False
 
     def test_report_sbom_found_when_file_present(self, tmp_path):
-        node_name, mod = self._first_gen_report_with_sbom(tmp_path)
-
-    def _first_gen_report_with_sbom(self, tmp_path):
         mod = _import_gen_report()
         nodes = mod.discover_nodes()
         node_name = nodes[0]
-        # Create a fake SBOM file
+        # Create a fake CycloneDX SBOM file named after the node
         sbom_data = {"components": [{"name": "pkg-a"}, {"name": "pkg-b"}]}
         sbom_file = tmp_path / f"{node_name.lower()}.sbom.json"
         sbom_file.write_text(json.dumps(sbom_data))
@@ -294,7 +291,7 @@ class TestBuildNodeReport:
         )
         assert report["sbom"]["present"] is True
         assert report["sbom"]["component_count"] == 2
-        return node_name, mod
+        assert report["supply_chain_checks"]["sbom_present"] is True
 
 
 # ===========================================================================
