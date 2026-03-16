@@ -66,6 +66,53 @@ jobs:
             tests/test_s6_regression_compat_guardrails.py \
             -v --tb=short
 
+  slo-metrics-check:
+    # PR-G2: Validate SLO metric endpoint availability and JSON schema.
+    # Lightweight check — no network calls, no heavy perf tests.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run SLO metrics unit tests
+        run: |
+          python -m pytest tests/test_slo_metrics.py -v --tb=short
+      - name: Validate Grafana dashboard JSON schema
+        run: |
+          python - <<'EOF'
+          import json, sys
+
+          with open("docs/grafana/slo_dashboard.json") as f:
+              dash = json.load(f)
+
+          # Required top-level fields
+          for field in ("title", "uid", "panels", "schemaVersion"):
+              if field not in dash:
+                  print(f"❌ Missing required dashboard field: {field}")
+                  sys.exit(1)
+
+          # Verify all expected SLO metric names appear somewhere in panel targets
+          required_metrics = [
+              "galaxy_slo_startup_duration_ms",
+              "galaxy_slo_heartbeat_loss_rate",
+              "galaxy_slo_reconnect_attempts_total",
+              "galaxy_slo_command_latency_p50_ms",
+              "galaxy_slo_command_latency_p95_ms",
+          ]
+          dashboard_text = json.dumps(dash)
+          for metric in required_metrics:
+              if metric not in dashboard_text:
+                  print(f"❌ Metric not found in dashboard: {metric}")
+                  sys.exit(1)
+
+          print(f"✅ Dashboard JSON valid — {len(dash['panels'])} panels, all required metrics present.")
+          EOF
+
   test:
     runs-on: ubuntu-latest
     permissions:
