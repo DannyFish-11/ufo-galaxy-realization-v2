@@ -14,18 +14,30 @@ Every component that originates or forwards a task MUST wrap it in a
 TaskEnvelope.  Legacy endpoints convert their request models using the
 helper adapters below so that all internal code sees a consistent shape.
 
-Schema version: 1
+Schema version: 2
 Pydantic: v2
+
+PR-5 additions (capability closure):
+  - session_id        : explicit session identifier for context continuity
+  - lifecycle_status  : task.lifecycle state machine (created→running→done/failed)
+  - permission_level  : required caller privilege level (0=open … 3=critical)
+  - required_capabilities : list of device/agent capabilities required to run
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+
+# ---------------------------------------------------------------------------
+# Lifecycle state literals (Capability 1)
+# ---------------------------------------------------------------------------
+
+TaskLifecycleStatus = Literal["created", "running", "done", "failed"]
 
 # ---------------------------------------------------------------------------
 # Canonical TaskEnvelope
@@ -50,6 +62,14 @@ class TaskEnvelope(BaseModel):
             "Distributed trace identifier. Set by the originating gateway "
             "and propagated unchanged through the entire call chain so that "
             "all logs for a single user request share the same trace_id."
+        ),
+    )
+    session_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Session identifier for context continuity across multiple tasks "
+            "within the same user/agent interaction. Used by TaskMemory to "
+            "scope memory injection. (Capability 3)"
         ),
     )
 
@@ -86,6 +106,38 @@ class TaskEnvelope(BaseModel):
         description="Maximum execution time in seconds.",
     )
 
+    # ── Lifecycle (Capability 1) ─────────────────────────────────────────────
+    lifecycle_status: TaskLifecycleStatus = Field(
+        default="created",
+        description=(
+            "Task lifecycle state machine: created → running → done | failed. "
+            "Updated in-place by CommandRouter / TaskOrchestrator as the task "
+            "progresses. Drives M2 task.lifecycle events. (Capability 1)"
+        ),
+    )
+
+    # ── Access Control (Capability 5) ────────────────────────────────────────
+    permission_level: int = Field(
+        default=0,
+        ge=0,
+        le=3,
+        description=(
+            "Required privilege level for this task: "
+            "0=open (no restrictions), 1=normal (authenticated), "
+            "2=elevated (admin-equivalent), 3=critical (destructive/system). "
+            "Checked by ACLEnforcer before execution. (Capability 5)"
+        ),
+    )
+    required_capabilities: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Device/agent capabilities required to execute this task "
+            "(e.g. 'screen', 'filesystem', 'http_client'). "
+            "ACLEnforcer validates the executing agent has all listed caps. "
+            "(Capabilities 4 & 5)"
+        ),
+    )
+
     # ── Timestamps ──────────────────────────────────────────────────────────
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -97,7 +149,7 @@ class TaskEnvelope(BaseModel):
         default_factory=dict,
         description=(
             "Arbitrary key-value pairs: mode, notify_ws, relay hints, "
-            "tenant, user_id, session_id, …"
+            "tenant, user_id, …"
         ),
     )
 
@@ -115,9 +167,33 @@ class TaskEnvelope(BaseModel):
         return {
             "task_id": self.task_id,
             "trace_id": self.trace_id,
+            "session_id": self.session_id or "",
             "source": self.source,
             "tool_name": self.tool_name,
+            "lifecycle_status": self.lifecycle_status,
+            "permission_level": str(self.permission_level),
         }
+
+    def transition(self, new_status: TaskLifecycleStatus) -> "TaskEnvelope":
+        """Return a copy of this envelope with the lifecycle_status updated.
+
+        Validates allowed transitions:
+          created  → running
+          running  → done | failed
+          done     → (terminal, no further transitions)
+          failed   → (terminal, no further transitions)
+        """
+        _allowed: Dict[str, set] = {
+            "created": {"running"},
+            "running": {"done", "failed"},
+            "done": set(),
+            "failed": set(),
+        }
+        if new_status not in _allowed.get(self.lifecycle_status, set()):
+            raise ValueError(
+                f"Invalid lifecycle transition: {self.lifecycle_status!r} → {new_status!r}"
+            )
+        return self.model_copy(update={"lifecycle_status": new_status})
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +213,9 @@ def envelope_from_command_request(
     request_id: Optional[str] = None,
     task_id: Optional[str] = None,
     trace_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    permission_level: int = 0,
+    required_capabilities: Optional[List[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> TaskEnvelope:
     """Build a TaskEnvelope from a legacy CommandDispatchRequest / UnifiedCommandRequest.
@@ -153,12 +232,15 @@ def envelope_from_command_request(
     return TaskEnvelope(
         task_id=task_id or request_id or f"task_{uuid.uuid4().hex[:16]}",
         trace_id=trace_id or f"trace_{uuid.uuid4().hex[:12]}",
+        session_id=session_id,
         source=source,
         targets=targets,
         tool_name=command,
         args=params,
         priority=priority,
         timeout=timeout,
+        permission_level=permission_level,
+        required_capabilities=required_capabilities or [],
         metadata=meta,
     )
 

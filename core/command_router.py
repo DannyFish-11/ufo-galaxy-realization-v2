@@ -629,7 +629,60 @@ class CommandRouter:
         * ``retry_candidates``      — list of alternative device IDs for retry
         * ``required_capabilities`` — capability filter for candidate selection
         * ``max_retries``           — override default retry limit (int)
+        * ``caller_level``          — ACL privilege level of the caller (int, default 0)
+        * ``agent_capabilities``    — capabilities of the executing agent (list)
+
+        PR-5: ACL check + lifecycle state transitions applied here.
         """
+        # ── PR-5 Cap 5: ACL check before anything else ──────────────────────
+        try:
+            from core.acl_enforcer import get_acl_enforcer
+            _meta = envelope.metadata or {}
+            acl_result = get_acl_enforcer().check(
+                envelope=envelope,
+                caller_level=int(_meta.get("caller_level", 0)),
+                agent_capabilities=_meta.get("agent_capabilities"),
+            )
+            if not acl_result.allowed:
+                return {
+                    "request_id": envelope.task_id,
+                    "task_id": envelope.task_id,
+                    "trace_id": envelope.trace_id,
+                    "command_id": envelope.task_id,
+                    "device_id": "",
+                    "command": envelope.tool_name,
+                    "via": "command_router",
+                    "success": False,
+                    "result": None,
+                    "error_code": "ACL_DENIED",
+                    "error_message": acl_result.reason,
+                    "latency_ms": 0.0,
+                }
+        except Exception as _acl_exc:
+            logger.debug("ACL check skipped (fail-open): %s", _acl_exc)
+
+        # ── PR-5 Cap 3: inject TaskMemory context before execution ───────────
+        try:
+            from core.task_memory import get_task_memory
+            _mem = get_task_memory()
+            _recent = _mem.get_recent_summaries(n=3)
+            if _recent:
+                logger.debug(
+                    "task.memory_inject | task_id=%s injecting %d recent summaries",
+                    envelope.task_id, len(_recent),
+                )
+                # Store injected context in metadata for planner/executor access
+                envelope = envelope.model_copy(update={
+                    "metadata": {
+                        **envelope.metadata,
+                        "_injected_memory_summaries": [
+                            s.result_summary for s in _recent
+                        ],
+                    }
+                })
+        except Exception:
+            pass
+
         if not envelope.targets:
             return {
                 "request_id": envelope.task_id,
@@ -646,18 +699,31 @@ class CommandRouter:
                 "latency_ms": 0.0,
             }
 
+        # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
+        try:
+            from core.task_lifecycle import get_lifecycle_manager
+            _lcm = get_lifecycle_manager()
+            envelope = _lcm.mark_running(envelope)
+        except Exception as _lc_exc:
+            logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
+
         # Extract optional routing params stored in metadata by the compat layer.
         meta = envelope.metadata or {}
         command_id: str = str(meta.get("command_id") or envelope.task_id)
         request_id: str = str(meta.get("request_id") or envelope.task_id)
         retry_candidates: Optional[List[Any]] = meta.get("retry_candidates")  # type: ignore[assignment]
-        required_capabilities: Optional[List[str]] = meta.get("required_capabilities")  # type: ignore[assignment]
+        # required_capabilities: prefer explicit field, fall back to metadata (with explicit cast)
+        _meta_caps = meta.get("required_capabilities")
+        required_capabilities: Optional[List[str]] = (
+            list(envelope.required_capabilities) if envelope.required_capabilities
+            else ([str(c) for c in _meta_caps] if isinstance(_meta_caps, list) else None)
+        )
         try:
             max_retries: int = int(meta.get("max_retries", 2))
         except (TypeError, ValueError):
             max_retries = 2
 
-        return await self._execute_command(
+        result = await self._execute_command(
             device_id=envelope.target,
             command=envelope.tool_name,
             payload=envelope.args,
@@ -670,6 +736,25 @@ class CommandRouter:
             required_capabilities=required_capabilities,
             max_retries=max_retries,
         )
+
+        # ── PR-5 Cap 1: lifecycle transition running → done/failed ───────────
+        try:
+            from core.task_lifecycle import get_lifecycle_manager
+            _lcm = get_lifecycle_manager()
+            if result.get("success"):
+                _lcm.mark_done(
+                    envelope,
+                    result_summary=str(result.get("result", ""))[:200],
+                )
+            else:
+                _lcm.mark_failed(
+                    envelope,
+                    error=str(result.get("error_message", "unknown"))[:200],
+                )
+        except Exception as _lc_exc:
+            logger.debug("Lifecycle terminal transition skipped: %s", _lc_exc)
+
+        return result
 
     async def route_command(
         self,

@@ -1,0 +1,12 @@
+{
+  "_comment": "Galaxy ACL policy — PR-5 Capability 5",
+  "strict_above_level": 1,
+  "default_agent_capabilities": ["screen", "keyboard", "filesystem", "http_client"],
+  "audit_all": true,
+  "level_descriptions": {
+    "0": "open — no authentication required",
+    "1": "normal — authenticated caller",
+    "2": "elevated — admin equivalent",
+    "3": "critical — destructive / system-level"
+  }
+}
