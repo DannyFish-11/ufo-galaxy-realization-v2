@@ -113,6 +113,27 @@ jobs:
           print(f"✅ Dashboard JSON valid — {len(dash['panels'])} panels, all required metrics present.")
           EOF
 
+  config-preflight-dry-run:
+    # PR-G3: Configuration & Secrets Governance.
+    # Validates that the pre-flight checker runs cleanly (dry-run) and that
+    # all config-governance unit tests pass.  Does NOT require real API keys.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run config preflight (dry-run — no real keys required)
+        run: |
+          python -m core.config_preflight --mode all --dry-run
+      - name: Run config governance unit tests
+        run: |
+          python -m pytest tests/test_config_preflight.py -v --tb=short
+
   test:
     runs-on: ubuntu-latest
     permissions:
