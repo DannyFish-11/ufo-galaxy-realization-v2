@@ -29,6 +29,8 @@
 6. [Node_113_AndroidVLM API 端点及调用链路](#6-node_113_androidvlm-api-端点及调用链路)
 7. [Node_15_OCR UI 分析模式](#7-node_15_ocr-ui-分析模式)
 8. [能力注册系统（OpenClaw 风格）](#8-能力注册系统openclaw-风格)
+9. [Android↔Server 完整集成说明](#9-androidserver-完整集成说明)
+10. [JSON Schema 参考与 v3 Payload 示例](#10-json-schema-参考与-v3-payload-示例)
 
 ---
 
@@ -516,4 +518,203 @@ task_result → AndroidBridge._handle_task_result() → 返回结果
 
 ---
 
-*最后更新：2026-03-11*
+## 10. JSON Schema 参考与 v3 Payload 示例
+
+> **权威性声明（PR-S5）**：AIP v3.0 是 Galaxy 协议的**唯一事实来源**。
+> 本节 JSON Schema 文件是对 `galaxy_gateway/protocol/aip_v3.py` 中 Pydantic
+> 模型的正式机器可读描述。传统（legacy）客户端发送的 AIP/1.x、AIP/2.x 消息，
+> 由 `galaxy_gateway/protocol/compat.py` 自动转换为 v3 后再进入业务逻辑。
+
+### 10.1 Schema 文件索引
+
+所有 JSON Schema 文件位于 `galaxy_gateway/protocol/schemas/`：
+
+| 文件 | 消息类型 | 说明 |
+|------|---------|------|
+| `aip_envelope.schema.json` | (所有) | v3 消息通用信封，包含所有共享字段 |
+| `device_register.schema.json` | `device_register` | 设备注册（Client → Server） |
+| `heartbeat.schema.json` | `heartbeat` | 心跳保活（Client → Server） |
+| `capability_report.schema.json` | `capability_report` | 能力上报（Client → Server） |
+| `task_assign.schema.json` | `task_assign` | 任务分配（Server → Client） |
+| `command_result.schema.json` | `command_result` | 命令结果（Client → Server） |
+
+### 10.2 v3 必填字段（全消息类型通用）
+
+每条 AIP v3 消息**必须**包含以下三个字段：
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `version` | `string` | 模式 `^3\.`，如 `"3.0"` | 协议版本，compat 层将旧版自动升级 |
+| `type` | `string` | `MessageType` 枚举值之一 | 消息类型鉴别符 |
+| `device_id` | `string` | 非空 | 发送方设备唯一标识 |
+
+`capability_report` 还额外要求（v3 新增强制要求）：
+
+| 字段 | 类型 | 约束 |
+|------|------|------|
+| `platform` | `string` | `"android"` / `"ios"` / `"windows"` / … |
+| `supported_actions` | `string[]` | 至少包含 1 个元素 |
+
+### 10.3 v3 Payload 示例
+
+#### device_register
+
+```json
+{
+  "version": "3.0",
+  "type": "device_register",
+  "device_id": "android-abc123",
+  "message_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "route_mode": "cross_device",
+  "device_type": "android_phone",
+  "platform": "android",
+  "name": "My Phone",
+  "model": "Pixel 7",
+  "os_version": "Android 14",
+  "sdk_version": 34,
+  "capabilities": 1023
+}
+```
+
+#### heartbeat
+
+```json
+{
+  "version": "3.0",
+  "type": "heartbeat",
+  "device_id": "android-abc123",
+  "message_id": "550e8400-e29b-41d4-a716-446655440001",
+  "timestamp": "2026-01-01T00:01:00Z",
+  "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c9",
+  "route_mode": "cross_device"
+}
+```
+
+#### capability_report（v3 强制要求 platform + supported_actions）
+
+```json
+{
+  "version": "3.0",
+  "type": "capability_report",
+  "device_id": "android-abc123",
+  "platform": "android",
+  "supported_actions": ["tap", "swipe", "screenshot", "long_press", "input_text"],
+  "capability_version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440002",
+  "timestamp": "2026-01-01T00:02:00Z",
+  "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430ca",
+  "route_mode": "cross_device",
+  "capability_schemas": [
+    {
+      "action": "tap",
+      "params": {
+        "type": "object",
+        "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}},
+        "required": ["x", "y"]
+      },
+      "exec_mode": "remote",
+      "tags": ["ui", "touch"]
+    }
+  ]
+}
+```
+
+#### task_assign（Server → Client）
+
+```json
+{
+  "version": "3.0",
+  "type": "task_assign",
+  "device_id": "android-abc123",
+  "task_id": "task-550e8400",
+  "task_type": "ui_automation",
+  "payload": {"action": "tap", "x": 540, "y": 960},
+  "priority": 5,
+  "timeout": 30,
+  "message_id": "550e8400-e29b-41d4-a716-446655440003",
+  "timestamp": "2026-01-01T00:03:00Z",
+  "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430cb",
+  "route_mode": "cross_device"
+}
+```
+
+#### command_result（Client → Server）
+
+```json
+{
+  "version": "3.0",
+  "type": "command_result",
+  "device_id": "android-abc123",
+  "task_id": "task-550e8400",
+  "task_status": "completed",
+  "results": [
+    {
+      "command_id": "cmd-001",
+      "status": "success",
+      "result": {"screenshot_path": "/sdcard/screenshots/shot001.png"},
+      "execution_time": 0.45
+    }
+  ],
+  "message_id": "550e8400-e29b-41d4-a716-446655440004",
+  "correlation_id": "550e8400-e29b-41d4-a716-446655440003",
+  "timestamp": "2026-01-01T00:03:01Z",
+  "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430cb",
+  "route_mode": "cross_device"
+}
+```
+
+### 10.4 Legacy → v3 自动转换路径
+
+`compat.py` 在消息到达任何业务处理器**之前**完成自动升级，业务代码始终只看到 v3 `AIPMessage`：
+
+```
+Android APK（任意 AIP 版本）
+    │  发送 JSON（AIP/1.0 或 2.0 或 3.0）
+    ▼
+galaxy_gateway/protocol/compat.parse_message_compat()
+    ├─ AIP/1.0（type 别名映射 + version 升级到 "3.0"）
+    │     "register"        → "device_register"
+    │     "agent_heartbeat" → "heartbeat"
+    │     "task_execute"    → "task_submit"
+    │     "command_result"  → "task_result"  ← 旧版 type 字面值，映射到 v3 task_result
+    │     "response"        → "command_result"  ← v2 transport alias，映射到 v3 command_result
+    │     "status_update"   → "device_status"
+    │
+    │  注：上表中的 "command_result" 是 **AIP/1.0 的 type 字段值**，会被规范化为
+    │  v3 的 "task_result"（任务结果汇报）。而 v3 协议本身也有独立的 "command_result"
+    │  类型（命令级执行结果），两者含义不同——这是 AIP/1.x→v3 迁移中的历史遗留命名差异。
+    ├─ AIP/2.0（仅将 version 字段升级到 "3.0"）
+    └─ AIP/3.0（直接传递，不修改）
+    │
+    │  inject_trace_metadata()  ← 自动注入 trace_id / route_mode（如缺失）
+    │
+    ▼
+AIPMessage（v3 Pydantic 对象）
+    │
+    ▼
+业务处理器（android_bridge / device_communication 等）
+```
+
+> **注意**：`platform`、`supported_actions`、`capability_version` 等业务字段
+> **不会** 由 compat 层自动补充，发送 `capability_report` 的客户端必须主动包含这些字段。
+
+### 10.5 Schema 验证测试
+
+运行以下命令验证所有 schema 文件加载正常、示例数据通过验证：
+
+```bash
+python -m pytest tests/test_v3_schemas.py -v
+```
+
+测试覆盖：
+
+* 每个 schema 文件是合法 JSON 且加载无误
+* 每个 schema 内嵌 `examples` 通过验证（正向测试）
+* 缺少 `version`、`device_id`、`platform`、`supported_actions` 等必填字段时验证拒绝（负向测试）
+* `version: "2.0"` 被拒绝（AIP/2.x 须先经 compat 转换再到达 handler）
+
+---
+
+*最后更新：2026-03-16*

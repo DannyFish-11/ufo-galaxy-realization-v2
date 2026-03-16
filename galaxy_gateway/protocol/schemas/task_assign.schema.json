@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.example/schemas/aip/v3/task_assign",
+  "title": "AIP v3.0 – task_assign",
+  "description": "Sent by the Galaxy server to push a task to a registered device.  The device executes the task and replies with one or more 'command_result' messages.",
+  "type": "object",
+  "required": ["version", "type", "device_id", "task_id", "task_type", "payload"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^3\\.",
+      "description": "AIP protocol version – must be 3.x.",
+      "examples": ["3.0"]
+    },
+    "type": {
+      "type": "string",
+      "const": "task_assign",
+      "description": "Fixed message type discriminator."
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Target device identifier.",
+      "examples": ["android-abc123"]
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique task identifier used to correlate result messages.",
+      "examples": ["task-550e8400"]
+    },
+    "task_type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "High-level task category that tells the device which handler to invoke.",
+      "examples": ["ui_automation", "screenshot", "goal_execution", "parallel_subtask"]
+    },
+    "payload": {
+      "type": "object",
+      "description": "Task-specific parameters passed to the device handler."
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5,
+      "description": "Execution priority (1 = lowest, 10 = highest)."
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 300,
+      "description": "Maximum execution time in seconds before the server considers the task failed."
+    },
+    "commands": {
+      "type": "array",
+      "description": "Optional pre-built command sequence to execute.",
+      "items": {
+        "type": "object",
+        "required": ["tool_name"],
+        "properties": {
+          "command_id": {"type": "string"},
+          "tool_name": {"type": "string"},
+          "tool_type": {"type": "string"},
+          "parameters": {"type": "object"},
+          "timeout": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "correlation_id": {"type": "string"},
+    "timestamp": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "integer", "minimum": 0}
+      ]
+    },
+    "trace_id": {"type": "string"},
+    "route_mode": {"type": "string", "enum": ["cross_device", "local"]}
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "version": "3.0",
+      "type": "task_assign",
+      "device_id": "android-abc123",
+      "task_id": "task-550e8400",
+      "task_type": "ui_automation",
+      "payload": {
+        "action": "tap",
+        "x": 540,
+        "y": 960
+      },
+      "priority": 5,
+      "timeout": 30,
+      "message_id": "550e8400-e29b-41d4-a716-446655440003",
+      "timestamp": "2026-01-01T00:03:00Z",
+      "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430cb",
+      "route_mode": "cross_device"
+    }
+  ]
+}

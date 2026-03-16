@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.example/schemas/aip/v3/command_result",
+  "title": "AIP v3.0 – command_result",
+  "description": "Sent by a device to report the outcome of one or more commands assigned via 'task_assign'.\n\nNote: the legacy type alias 'response' is mapped to 'command_result' by the compat layer.",
+  "type": "object",
+  "required": ["version", "type", "device_id"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^3\\.",
+      "description": "AIP protocol version – must be 3.x.",
+      "examples": ["3.0"]
+    },
+    "type": {
+      "type": "string",
+      "const": "command_result",
+      "description": "Fixed message type discriminator."
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the device that executed the commands.",
+      "examples": ["android-abc123"]
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier from the originating 'task_assign' message."
+    },
+    "task_status": {
+      "type": "string",
+      "enum": ["pending", "running", "continue", "completed", "failed", "cancelled"],
+      "description": "Overall task status after executing the reported commands."
+    },
+    "results": {
+      "type": "array",
+      "description": "Per-command execution results.",
+      "items": {
+        "type": "object",
+        "required": ["command_id", "status"],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "description": "Matches the command_id from the originating command."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["success", "failure", "skipped", "timeout", "none"],
+            "description": "Execution outcome."
+          },
+          "result": {
+            "description": "Arbitrary result payload (null when not applicable)."
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message when status is 'failure' or 'timeout'."
+          },
+          "execution_time": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Wall-clock time in seconds for this command."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "error": {
+      "type": "string",
+      "description": "Top-level error description when the entire task failed."
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "correlation_id": {
+      "type": "string",
+      "description": "Should match the message_id of the originating task_assign message."
+    },
+    "timestamp": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "integer", "minimum": 0}
+      ]
+    },
+    "trace_id": {"type": "string"},
+    "route_mode": {"type": "string", "enum": ["cross_device", "local"]}
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "version": "3.0",
+      "type": "command_result",
+      "device_id": "android-abc123",
+      "task_id": "task-550e8400",
+      "task_status": "completed",
+      "results": [
+        {
+          "command_id": "cmd-001",
+          "status": "success",
+          "result": {"screenshot_path": "/sdcard/screenshots/shot001.png"},
+          "execution_time": 0.45
+        }
+      ],
+      "message_id": "550e8400-e29b-41d4-a716-446655440004",
+      "correlation_id": "550e8400-e29b-41d4-a716-446655440003",
+      "timestamp": "2026-01-01T00:03:01Z",
+      "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430cb",
+      "route_mode": "cross_device"
+    }
+  ]
+}

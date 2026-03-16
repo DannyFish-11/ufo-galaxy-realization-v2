@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.example/schemas/aip/v3/device_register",
+  "title": "AIP v3.0 – device_register",
+  "description": "Sent by a client immediately after opening the WebSocket connection to register itself with the Galaxy server.\n\nLegacy type aliases 'register', 'agent_register', and 'registration' are mapped to 'device_register' by the compat layer.",
+  "type": "object",
+  "required": ["version", "type", "device_id"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^3\\.",
+      "description": "AIP protocol version – must be 3.x.",
+      "examples": ["3.0"]
+    },
+    "type": {
+      "type": "string",
+      "const": "device_register",
+      "description": "Fixed message type discriminator."
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Globally unique device identifier.",
+      "examples": ["android-abc123", "win-desktop-001"]
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "timestamp": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "integer", "minimum": 0}
+      ]
+    },
+    "trace_id": {"type": "string"},
+    "route_mode": {"type": "string", "enum": ["cross_device", "local"]},
+    "device_type": {
+      "type": "string",
+      "description": "Fine-grained device type.",
+      "examples": ["android_phone", "android_tablet", "windows_desktop"]
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform family.",
+      "enum": ["android", "ios", "windows", "macos", "linux", "cloud", "embedded", "unknown"],
+      "examples": ["android"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable device name."
+    },
+    "model": {
+      "type": "string",
+      "description": "Device model identifier, e.g. 'Pixel 7'."
+    },
+    "os_version": {
+      "type": "string",
+      "description": "Operating system version string.",
+      "examples": ["Android 14", "Windows 11"]
+    },
+    "sdk_version": {
+      "type": "integer",
+      "description": "Android SDK level or OS-specific SDK integer."
+    },
+    "capabilities": {
+      "type": "integer",
+      "description": "Bitmask of DeviceCapability flags.",
+      "minimum": 0
+    },
+    "payload": {
+      "type": "object",
+      "description": "Optional extra device metadata."
+    }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "version": "3.0",
+      "type": "device_register",
+      "device_id": "android-abc123",
+      "message_id": "550e8400-e29b-41d4-a716-446655440000",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "route_mode": "cross_device",
+      "device_type": "android_phone",
+      "platform": "android",
+      "name": "My Phone",
+      "model": "Pixel 7",
+      "os_version": "Android 14",
+      "sdk_version": 34,
+      "capabilities": 1023
+    }
+  ]
+}

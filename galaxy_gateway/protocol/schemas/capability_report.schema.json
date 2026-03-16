@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galaxy.example/schemas/aip/v3/capability_report",
+  "title": "AIP v3.0 – capability_report",
+  "description": "Sent by a registered client to declare (or update) the actions it can perform.  The three fields 'platform', 'supported_actions', and 'version' are mandatory in AIP v3; the compat layer does NOT back-fill them – senders must supply them explicitly.\n\nThe server replies with 'capability_report_ack'.",
+  "type": "object",
+  "required": ["version", "type", "device_id", "platform", "supported_actions"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^3\\.",
+      "description": "AIP protocol version – must be 3.x.",
+      "examples": ["3.0"]
+    },
+    "type": {
+      "type": "string",
+      "const": "capability_report",
+      "description": "Fixed message type discriminator."
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier of the reporting device.",
+      "examples": ["android-abc123"]
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform family of the reporting device.  This field is REQUIRED in AIP v3.",
+      "enum": ["android", "ios", "windows", "macos", "linux", "cloud", "embedded", "unknown"],
+      "examples": ["android"]
+    },
+    "supported_actions": {
+      "type": "array",
+      "description": "List of action names this device can execute.  This field is REQUIRED in AIP v3 and must contain at least one entry.",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "examples": [["tap", "swipe", "screenshot", "long_press", "input_text"]]
+    },
+    "capability_version": {
+      "type": "string",
+      "description": "Optional semver string identifying the capability set revision.",
+      "examples": ["1.0", "2.1"]
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "timestamp": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "integer", "minimum": 0}
+      ]
+    },
+    "trace_id": {"type": "string"},
+    "route_mode": {"type": "string", "enum": ["cross_device", "local"]},
+    "capability_schemas": {
+      "type": "array",
+      "description": "Optional structured per-action schemas (Round-3 extended format).  Each entry describes one action in detail.",
+      "items": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action name, must match an entry in supported_actions."
+          },
+          "params": {
+            "type": "object",
+            "description": "JSON Schema fragment describing this action's parameters."
+          },
+          "returns": {
+            "type": "object",
+            "description": "JSON Schema fragment describing this action's return value."
+          },
+          "version": {
+            "type": "string",
+            "description": "Per-action capability version."
+          },
+          "exec_mode": {
+            "type": "string",
+            "enum": ["local", "remote", "both"],
+            "default": "both",
+            "description": "Where the action may be executed."
+          },
+          "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Semantic tags for capability discovery."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "version": "3.0",
+      "type": "capability_report",
+      "device_id": "android-abc123",
+      "platform": "android",
+      "supported_actions": ["tap", "swipe", "screenshot", "long_press", "input_text"],
+      "capability_version": "1.0",
+      "message_id": "550e8400-e29b-41d4-a716-446655440002",
+      "timestamp": "2026-01-01T00:02:00Z",
+      "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430ca",
+      "route_mode": "cross_device",
+      "capability_schemas": [
+        {
+          "action": "tap",
+          "params": {
+            "type": "object",
+            "properties": {
+              "x": {"type": "integer"},
+              "y": {"type": "integer"}
+            },
+            "required": ["x", "y"]
+          },
+          "exec_mode": "remote",
+          "tags": ["ui", "touch"]
+        }
+      ]
+    }
+  ]
+}
