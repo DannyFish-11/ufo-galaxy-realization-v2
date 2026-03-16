@@ -105,6 +105,15 @@ class EventType(str, Enum):
     CONFIG_CHANGED = "config_changed"
     SCHEDULER_DECISION = "scheduler_decision"
 
+    # DAG lifecycle events (ConstellationRuntime)
+    DAG_PLANNED = "dag_planned"
+    DAG_EVOLVED = "dag_evolved"
+    DAG_NODE_INSERTED = "dag_node_inserted"
+    TASK_REPLANNED = "task_replanned"
+    TASK_REASSIGNED = "task_reassigned"
+    DAG_DISPATCHED = "dag_dispatched"
+    DAG_COMPLETED = "dag_completed"
+
 
 class Severity(str, Enum):
     """RFC-5424-inspired severity levels."""
@@ -246,8 +255,17 @@ class AuditLedger:
     external ``threading.Lock``.
     """
 
+    _global_instance: "Optional[AuditLedger]" = None
+
     def __init__(self) -> None:
         self._events: List[TraceEvent] = []
+
+    @classmethod
+    def get_instance(cls) -> "AuditLedger":
+        """Return the global singleton :class:`AuditLedger` instance."""
+        if cls._global_instance is None:
+            cls._global_instance = cls()
+        return cls._global_instance
 
     # ------------------------------------------------------------------
     # Write

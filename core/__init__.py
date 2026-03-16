@@ -142,6 +142,27 @@ def get_mcp_gateway():
     return mcp_gateway
 
 
+def get_constellation_runtime(config=None, enable_dag_evolution: bool = True):
+    """获取 ConstellationRuntime 单例（统一规划→DAG→执行入口）"""
+    from .constellation_runtime import get_constellation_runtime as _get
+    return _get(config=config, enable_dag_evolution=enable_dag_evolution)
+
+
+def get_device_pool_manager(strategy=None):
+    """获取 DevicePoolManager 单例（统一设备池调度入口）"""
+    from .device_pool_manager import get_device_pool_manager as _get, SchedulingStrategy
+    kw = {}
+    if strategy is not None:
+        kw["strategy"] = strategy
+    return _get(**kw)
+
+
+def get_dag_evolver(max_replan_attempts: int = 3):
+    """获取 DAGEvolver 实例（动态 DAG 演化）"""
+    from .dag_evolver import DAGEvolver
+    return DAGEvolver(max_replan_attempts=max_replan_attempts)
+
+
 __all__ = [
     # 节点注册表
     'NodeRegistry',
@@ -191,6 +212,11 @@ __all__ = [
     'get_nats_bus',
     'get_master_brain',
     'get_mcp_gateway',
+
+    # Constellation / DAG / Device Pool (unified architecture)
+    'get_constellation_runtime',
+    'get_device_pool_manager',
+    'get_dag_evolver',
 ]
 
 __version__ = '3.0.0'

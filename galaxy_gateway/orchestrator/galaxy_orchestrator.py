@@ -723,6 +723,59 @@ class GalaxyOrchestrator:
         })
 
         try:
+            # ── ConstellationRuntime 路由（跨设备 / DAG 任务）──────────────────
+            ctx = context or {}
+            use_constellation = ctx.get("use_constellation", False)
+            if not use_constellation:
+                # Auto-detect: try a lightweight intent check
+                try:
+                    intent_preview = await self.gateway.understand_intent(request, context)
+                    use_constellation = intent_preview.get("intent_type", "") in (
+                        "cross_device", "constellation", "analysis", "multi_step"
+                    )
+                    # Store intent preview so we don't call understand_intent twice
+                    precomputed_intent = intent_preview
+                except Exception:
+                    precomputed_intent = None
+                    use_constellation = False
+            else:
+                precomputed_intent = None
+
+            if use_constellation:
+                try:
+                    from core.constellation_runtime import get_constellation_runtime
+                    runtime = get_constellation_runtime()
+                    cr_result = await runtime.run(
+                        task_description=request,
+                        device_id=ctx.get("device_id", ""),
+                        session_id=ctx.get("session_id"),
+                        user_id=ctx.get("user_id", "default"),
+                        context={**ctx, "trace_id": trace_id, "task_id": task_id},
+                    )
+                    task.status = TaskStatus.COMPLETED
+                    task.completed_at = time.time()
+                    self.stats["completed_tasks"] += 1
+                    exec_time = task.completed_at - task.created_at
+                    self._publish_event("ORCHESTRATION_COMPLETED", {
+                        "task_id": task_id, "trace_id": trace_id, "success": cr_result.get("success"),
+                        "execution_time": exec_time,
+                    })
+                    await self._log_experience(request, cr_result, cr_result.get("success", False))
+                    return {
+                        "success": cr_result.get("success", False),
+                        "task_id": task_id,
+                        "trace_id": trace_id,
+                        "result": cr_result,
+                        "execution_time": exec_time,
+                        "source": "constellation_runtime",
+                    }
+                except Exception as cr_err:
+                    logger.warning(
+                        "[%s] ConstellationRuntime 失败，降级到常规路径: %s", task_id, cr_err
+                    )
+
+            # ── Legacy path ───────────────────────────────────────────────────
+
             # 0. RAGMemory 增强（注入历史经验和知识上下文）
             rag_context = None
             if self.gateway._rag_memory:
@@ -738,7 +791,7 @@ class GalaxyOrchestrator:
 
             # 1. 意图理解
             logger.info(f"[{task_id}] 步骤1: 意图理解")
-            intent = await self.gateway.understand_intent(request, context)
+            intent = precomputed_intent or await self.gateway.understand_intent(request, context)
             task.intent = intent
 
             # 2. 任务分解（TeamManager 可接管复杂多设备任务）
