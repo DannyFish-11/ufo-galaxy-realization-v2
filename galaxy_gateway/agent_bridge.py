@@ -241,9 +241,14 @@ class AgentBridge:
         ----
         1. Check ``GALAXY_CROSS_DEVICE_ENABLED``; return disabled dict if OFF.
         2. Check bridge enabled flag; stay local if disabled.
-        3. Deduplicate by ``trace_id``; return cached result on hit.
+        3. Deduplicate by ``trace_id`` (or ``task_id`` when provided by a
+           TaskEnvelope-sourced contract); return cached result on hit.
         4. Call runtime; on timeout / error fall back to *local_fallback*.
         5. Cache successful result; update metrics; return result.
+
+        PR-2: When the contract carries a TaskEnvelope-sourced ``task_id``,
+        the dedup cache uses ``task_id`` as the primary key (in addition to
+        ``trace_id``) to avoid duplicate dispatches within the same envelope.
 
         Parameters
         ----------
@@ -267,6 +272,9 @@ class AgentBridge:
         )
 
         trace_id = contract.trace_id
+        # PR-2: use task_id as dedup key when it originates from a TaskEnvelope;
+        # fall back to trace_id for legacy contracts that only carry trace_id.
+        dedup_key = contract.task_id if contract.task_id else trace_id
         trace_ctx = TraceContext(trace_id=trace_id, span_id=str(uuid.uuid4()))
         gm = get_gateway_metrics()
 
@@ -285,13 +293,14 @@ class AgentBridge:
             )
 
         # ── 3. Deduplication ───────────────────────────────────────────────
-        if trace_id in self._dedup_cache:
+        if dedup_key in self._dedup_cache:
             self.metrics.dedup_hit_count += 1
             logger.info(
-                "agent_bridge_dedup_hit trace_id=%s",
+                "agent_bridge_dedup_hit trace_id=%s dedup_key=%s",
                 trace_id,
+                dedup_key,
             )
-            return self._dedup_cache[trace_id]
+            return self._dedup_cache[dedup_key]
 
         # ── 4. Runtime call ────────────────────────────────────────────────
         self.metrics.handoff_attempts += 1
@@ -352,8 +361,52 @@ class AgentBridge:
             )
 
         # ── 5. Cache and return ────────────────────────────────────────────
-        self._cache_result(trace_id, result)
+        # PR-2: cache by dedup_key (task_id when envelope-sourced, trace_id otherwise).
+        self._cache_result(dedup_key, result)
         return result
+
+    async def handoff_from_envelope(
+        self,
+        envelope: Any,
+        *,
+        capability: str = "",
+        exec_mode: str = "both",
+        session: Optional[Dict[str, Any]] = None,
+        callback_channel: str = "ws",
+        local_fallback: Optional[LocalFallback] = None,
+    ) -> Dict[str, Any]:
+        """PR-2 primary entry point: delegate a TaskEnvelope to the agent runtime.
+
+        Constructs a :class:`HandoffContract` from *envelope* and calls
+        :meth:`handoff`.  This is the preferred path for all new code that
+        already holds a :class:`~core.schemas.task_envelope.TaskEnvelope`.
+
+        Legacy callers that build :class:`HandoffContract` manually are
+        unaffected — they can continue to use :meth:`handoff` directly.
+
+        Parameters
+        ----------
+        envelope:
+            A :class:`~core.schemas.task_envelope.TaskEnvelope`.
+        capability:
+            Primary capability required by the task.
+        exec_mode:
+            "local" | "remote" | "both" (default "both").
+        session:
+            Session context forwarded to the runtime.
+        callback_channel:
+            Preferred response channel: "ws" | "webrtc" | "nats".
+        local_fallback:
+            Fallback coroutine; forwarded to :meth:`handoff`.
+        """
+        contract = handoff_contract_from_envelope(
+            envelope,
+            capability=capability,
+            exec_mode=exec_mode,
+            session=session or {},
+            callback_channel=callback_channel,
+        )
+        return await self.handoff(contract=contract, local_fallback=local_fallback)
 
     def get_metrics(self) -> Dict[str, Any]:
         """Return a snapshot of the current bridge metrics."""

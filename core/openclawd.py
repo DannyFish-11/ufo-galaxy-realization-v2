@@ -1157,7 +1157,8 @@ class OpenClawd:
     ) -> dict:
         """将 Agent 任务通过 CommandRouter 分发到远程设备执行（PR155）。
 
-        链路：OpenClawd → CommandRouter.dispatch_agent_remote →
+        PR-2：在入口立即构造 TaskEnvelope，统一内部路由格式。
+        链路：OpenClawd → TaskEnvelope → CommandRouter.dispatch_agent_remote →
               gateway/WS → device agent_execute handler → result backflow
 
         如果设备离线或 CommandRouter 返回错误，自动降级到本地执行并在
@@ -1186,6 +1187,35 @@ class OpenClawd:
         agent_template = (
             getattr(intent, "intent", None) or "coordinator"
         )
+
+        # PR-2: construct TaskEnvelope immediately at entry for unified internal routing.
+        try:
+            from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+            _remote_envelope = _TaskEnvelope(
+                task_id=task_id,
+                trace_id=trace_id,
+                source="openclawd._dispatch_remote_agent",
+                targets=[device_id] if device_id else [],
+                tool_name="agent_remote",
+                args={
+                    "message": message,
+                    "agent_template": agent_template,
+                    "session_id": session_id or "",
+                },
+                metadata={
+                    "agent_id": agent_id,
+                    "device_id": device_id or "",
+                    "session_id": session_id or "",
+                },
+            )
+            logger.debug(
+                "OpenClawd._dispatch_remote_agent envelope | task_id=%s trace_id=%s agent_id=%s",
+                _remote_envelope.task_id,
+                _remote_envelope.trace_id,
+                agent_id,
+            )
+        except Exception as _env_err:
+            logger.debug("_dispatch_remote_agent: TaskEnvelope construction skipped — %s", _env_err)
 
         logger.info(
             "OpenClawd._dispatch_remote_agent | trace_id=%s task_id=%s "
@@ -2639,6 +2669,9 @@ class OpenClawd:
     ) -> dict:
         """复杂任务处理 — 使用 AgentFactory 创建 Agent，必要时组建团队
 
+        PR-2：在入口立即构造 TaskEnvelope，统一 task_id/trace_id 贯穿链路。
+        内部唯一任务格式：TaskEnvelope。
+
         Args:
             message: 用户消息
             intent: 解析后的意图 (ParsedIntent)
@@ -2656,8 +2689,33 @@ class OpenClawd:
             router = get_llm_router()
             factory = get_agent_factory(router)
 
-            # PR154: 生成稳定的 task_id，贯穿整条执行链路
+            # PR-2: 在入口立即构造 TaskEnvelope，task_id/trace_id 贯穿整条执行链路。
             task_id = f"task_{uuid.uuid4().hex[:12]}"
+            _envelope_trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
+            try:
+                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+                _agent_envelope = _TaskEnvelope(
+                    task_id=task_id,
+                    trace_id=_envelope_trace_id,
+                    source="openclawd.handle_agent_task",
+                    targets=[device_id] if device_id else [],
+                    tool_name="agent_task",
+                    args={
+                        "message": message,
+                        "intent": intent.intent if intent else "general",
+                    },
+                    metadata={
+                        "session_id": session_id or "",
+                        "device_id": device_id or "",
+                    },
+                )
+                logger.debug(
+                    "OpenClawd.handle_agent_task envelope | task_id=%s trace_id=%s",
+                    _agent_envelope.task_id,
+                    _agent_envelope.trace_id,
+                )
+            except Exception as _env_err:
+                logger.debug("handle_agent_task: TaskEnvelope construction skipped — %s", _env_err)
 
             # 判断是否需要团队协作 (复杂度驱动)
             tools = self._collect_tools()
@@ -2678,7 +2736,7 @@ class OpenClawd:
                 # PR154: 将 task_id / trace_id 注入团队协作结果 metadata
                 meta = team_result.get("metadata", {})
                 meta.setdefault("task_id", task_id)
-                meta.setdefault("trace_id", trace_id or "")
+                meta.setdefault("trace_id", _envelope_trace_id)
                 meta.setdefault("device_id", device_id or "")
                 team_result["metadata"] = meta
                 return team_result
@@ -2747,7 +2805,8 @@ class OpenClawd:
                     "template": template,
                     "result_count": len(result.get("results", [])),
                     "task_id": task_id,
-                    "trace_id": trace_id or "",
+                    # PR-2: use envelope trace_id (guaranteed non-empty)
+                    "trace_id": _envelope_trace_id,
                     "device_id": device_id or "",
                     "session_id": session_id or "",
                 },

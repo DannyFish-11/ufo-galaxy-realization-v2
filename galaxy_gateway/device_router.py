@@ -644,35 +644,65 @@ class DeviceRouter:
         # 这里是简化版本，实际应该更复杂
         
         return payload
-    
+
+    @staticmethod
+    def _extract_tool_name(task: Dict) -> str:
+        """PR-2: 从任务字典中提取工具名称（按优先级：action > task_type > command > 默认）。"""
+        payload = task.get("payload") or {}
+        return (
+            payload.get("action")
+            or payload.get("task_type")
+            or task.get("command", "execute")
+        )
+
     async def dispatch_task(self, task: Dict, device: Device) -> Dict:
-        """分发单设备任务（公共 API，供跨模块调用）"""
+        """分发单设备任务（公共 API，供跨模块调用）。
+
+        PR-2：内部优先使用 TaskEnvelope + route_envelope 统一链路；
+        仅当 CommandRouter 不可用时才降级到 WebSocket 直发。
+        """
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
 
-            # 优先通过统一命令路由器分发（已绑定 DeviceCommunication executor）
+            # PR-2: convert task dict → TaskEnvelope → route_envelope
+            # (replaces the legacy CommandRequest + dispatch path).
             try:
-                from core.command_router import get_command_router, CommandRequest, CommandMode
+                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+                from core.command_router import get_command_router
                 cmd_router = get_command_router()
                 if cmd_router._executor is not None:
-                    cmd_req = CommandRequest(
+                    _tool = self._extract_tool_name(task)
+                    _args = task.get("payload", {}).get("params") or task.get("payload", {})
+                    _task_envelope = _TaskEnvelope(
+                        task_id=task.get("task_id") or str(uuid.uuid4()),
+                        trace_id=task.get("trace_id"),
                         source="device_router",
                         targets=[device.device_id],
-                        command=task["payload"].get("action", task["payload"].get("task_type", "")),
-                        params=task["payload"].get("params", task["payload"]),
-                        mode=CommandMode.SYNC,
-                        timeout=30.0,
+                        tool_name=_tool,
+                        args=_args if isinstance(_args, dict) else {},
+                        metadata={
+                            "command": task.get("command", ""),
+                            "device_router": "true",
+                        },
                     )
-                    cmd_result = await cmd_router.dispatch(cmd_req)
-                    target_result = cmd_result.targets.get(device.device_id)
-                    if target_result:
-                        return {
-                            "success": target_result.status.value == "success",
-                            "result": target_result.result,
-                            "error": target_result.error,
-                        }
+                    logger.debug(
+                        "DeviceRouter.dispatch_task envelope | task_id=%s trace_id=%s "
+                        "tool=%s device=%s",
+                        _task_envelope.task_id,
+                        _task_envelope.trace_id,
+                        _task_envelope.tool_name,
+                        device.device_id,
+                    )
+                    cr_result = await cmd_router.route_envelope(_task_envelope)
+                    return {
+                        "success": cr_result.get("success", False),
+                        "result": cr_result.get("result"),
+                        "error": cr_result.get("error_message"),
+                        "task_id": cr_result.get("task_id"),
+                        "trace_id": cr_result.get("trace_id"),
+                    }
             except Exception as route_err:
-                logger.debug(f"CommandRouter 分发失败，回退 WebSocket: {route_err}")
+                logger.debug(f"route_envelope 路由失败，回退 WebSocket: {route_err}")
 
             # 回退：直接通过 WebSocket 发送 AIP v3.0 消息
             if device.websocket:
@@ -714,14 +744,46 @@ class DeviceRouter:
             return {"success": False, "error": f"任务分发失败: {str(e)}"}
     
     async def _dispatch_cross_device_task(self, task: Dict, devices: List[Device]) -> Dict:
-        """分发跨设备协同任务 (gated by cross-device switch — Round 4)."""
+        """分发跨设备协同任务 (gated by cross-device switch — Round 4).
+
+        PR-2：将任务字典转换为 TaskEnvelope 进行子任务分解和结果汇总，
+        确保内部唯一任务格式。
+        """
         # --- Round 4: hard constraint — single dispatcher guard ---
         if not is_cross_device_enabled():
             trace_id = task.get("trace_id")
             return make_disabled_response(trace_id=trace_id)
         try:
             logger.info(f"🔄 分发跨设备任务到 {len(devices)} 个设备")
-            
+
+            # PR-2: create a parent TaskEnvelope for cross-device coordination.
+            try:
+                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+                _parent_envelope = _TaskEnvelope(
+                    task_id=task.get("task_id") or str(uuid.uuid4()),
+                    trace_id=task.get("trace_id"),
+                    source="device_router.cross_device",
+                    targets=[d.device_id for d in devices],
+                    tool_name=task.get("command", "cross_device"),
+                    args=task.get("payload", {}),
+                    metadata={"cross_device": "true", "device_count": str(len(devices))},
+                )
+                logger.debug(
+                    "DeviceRouter._dispatch_cross_device_task envelope | "
+                    "task_id=%s trace_id=%s devices=%s",
+                    _parent_envelope.task_id,
+                    _parent_envelope.trace_id,
+                    [d.device_id for d in devices],
+                )
+                # Propagate envelope ids into the task dict for subtask creation.
+                task = dict(task)
+                task["task_id"] = _parent_envelope.task_id
+                task["trace_id"] = _parent_envelope.trace_id
+            except Exception as _env_err:
+                logger.debug(
+                    "DeviceRouter._dispatch_cross_device_task: TaskEnvelope skipped — %s", _env_err
+                )
+
             # 将任务分解为多个子任务
             subtasks = self._decompose_task(task, devices)
             
