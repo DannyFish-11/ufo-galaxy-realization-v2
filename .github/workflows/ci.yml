@@ -47,6 +47,25 @@ jobs:
           fi
           echo "✅ No forbidden aip_protocol_v2 references found."
 
+  s6-compat-smoke:
+    # PR-S6: Regression & Compatibility Guardrails smoke suite.
+    # Runs on every PR to catch legacy→compat→v3 regressions early.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run S6 compat guardrail smoke suite
+        run: |
+          python -m pytest -m s6_smoke \
+            tests/test_s6_regression_compat_guardrails.py \
+            -v --tb=short
+
   test:
     runs-on: ubuntu-latest
     permissions:
