@@ -61,10 +61,9 @@ class GalaxyBridge:
     async def _detect_galaxy(self):
         """检测 galaxy 系统"""
         try:
-            # 尝试导入 galaxy 的模块
-            from aip_protocol_v2 import AIPMessage, MessageType
+            # 尝试连接 Galaxy Gateway (protocol import not required for detection)
+            from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType  # noqa: F401
             
-            # 尝试连接 Galaxy Gateway
             import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"http://localhost:{get_service_port('state_machine')}/health", timeout=2) as resp:

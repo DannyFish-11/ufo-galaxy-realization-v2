@@ -345,19 +345,19 @@ def test_5_full_migration_e2e():
 
 
 def test_6_aip_protocol_types():
-    """验证 AIP v2 协议新增类型"""
-    print("\n[测试 6] AIP v2 协议 Agent 消息类型")
+    """验证 AIP v3 协议 Agent 消息类型（已从 v2 迁移到 v3 MessageType）"""
+    print("\n[测试 6] AIP v3 协议 Agent 消息类型")
 
-    from galaxy_gateway.aip_protocol_v2 import ExtendedMessageType
+    from galaxy_gateway.protocol.aip_v3 import MessageType
 
     required_types = ["agent_deploy", "agent_deploy_ack", "agent_status", "agent_result"]
 
-    all_types = [t.value for t in ExtendedMessageType]
+    all_types = [t.value for t in MessageType]
     for rt in required_types:
         assert rt in all_types, f"缺少消息类型: {rt}"
         print(f"  ✅ {rt}")
 
-    print("  ✅ AIP v2 协议 Agent 消息类型完整")
+    print("  ✅ AIP v3 协议 Agent 消息类型完整")
 
 
 if __name__ == "__main__":

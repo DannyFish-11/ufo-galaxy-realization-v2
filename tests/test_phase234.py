@@ -389,30 +389,30 @@ async def test_9_safe_executor_run():
 # ============================================================================
 
 def test_10_aip_v2_extended_types():
-    """测试 AIP v2 新增消息类型"""
-    from galaxy_gateway.aip_protocol_v2 import ExtendedMessageType
+    """测试 AIP v3 统一消息类型（之前的 v2 ExtendedMessageType 已合并进 v3 MessageType）"""
+    from galaxy_gateway.protocol.aip_v3 import MessageType
 
     # Phase 1 types
-    assert ExtendedMessageType.AGENT_DEPLOY.value == "agent_deploy"
-    assert ExtendedMessageType.AGENT_RESULT.value == "agent_result"
+    assert MessageType.AGENT_DEPLOY.value == "agent_deploy"
+    assert MessageType.AGENT_RESULT.value == "agent_result"
 
     # Phase 2 types
-    assert ExtendedMessageType.RELAY_REQUEST.value == "relay_request"
-    assert ExtendedMessageType.RELAY_FORWARD.value == "relay_forward"
-    assert ExtendedMessageType.RELAY_REPLY.value == "relay_reply"
-    assert ExtendedMessageType.RELAY_ACK.value == "relay_ack"
+    assert MessageType.RELAY_REQUEST.value == "relay_request"
+    assert MessageType.RELAY_FORWARD.value == "relay_forward"
+    assert MessageType.RELAY_REPLY.value == "relay_reply"
+    assert MessageType.RELAY_ACK.value == "relay_ack"
 
     # Phase 3 types
-    assert ExtendedMessageType.HYBRID_EXECUTE.value == "hybrid_execute"
-    assert ExtendedMessageType.HYBRID_RESULT.value == "hybrid_result"
-    assert ExtendedMessageType.HYBRID_DEGRADE.value == "hybrid_degrade"
+    assert MessageType.HYBRID_EXECUTE.value == "hybrid_execute"
+    assert MessageType.HYBRID_RESULT.value == "hybrid_result"
+    assert MessageType.HYBRID_DEGRADE.value == "hybrid_degrade"
 
     # Phase 4 types
-    assert ExtendedMessageType.RAG_QUERY.value == "rag_query"
-    assert ExtendedMessageType.RAG_RESULT.value == "rag_result"
-    assert ExtendedMessageType.CODE_EXECUTE.value == "code_execute"
+    assert MessageType.RAG_QUERY.value == "rag_query"
+    assert MessageType.RAG_RESULT.value == "rag_result"
+    assert MessageType.CODE_EXECUTE.value == "code_execute"
 
-    print("✓ Test 10: AIP v2 extended types passed")
+    print("✓ Test 10: AIP v3 unified message types passed")
 
 
 # ============================================================================
@@ -583,7 +583,7 @@ def test_15_module_imports():
     )
     from core.rag_memory import RAGMemory, ExperienceEntry, KnowledgeChunk, get_rag_memory
     from core.safe_executor import SafeExecutor, ExecutionResult, check_code_safety, get_safe_executor
-    from galaxy_gateway.aip_protocol_v2 import ExtendedMessageType
+    from galaxy_gateway.protocol.aip_v3 import MessageType  # v3-only source of truth
 
     # 单例可实例化
     assert get_proxy_relay() is not None

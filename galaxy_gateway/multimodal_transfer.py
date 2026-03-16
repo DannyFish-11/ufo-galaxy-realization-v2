@@ -11,7 +11,7 @@ Galaxy - 多模态传输模块
 
 作者：Manus AI
 日期：2026-01-22
-版本：1.0
+版本：2.0 (v3-only protocol)
 """
 
 import os
@@ -20,18 +20,148 @@ import base64
 import hashlib
 import mimetypes
 from typing import Dict, List, Any, Optional, Union, BinaryIO
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, field
 from enum import Enum
 from PIL import Image
 import asyncio
 import aiohttp
 from pathlib import Path
 
-from galaxy_gateway.aip_protocol_v2 import (
-    AIPMessage, MessageBuilder, DeviceInfo,
-    MessageType, TransferMethod, ContentType
-)
+# All protocol types come from v3 exclusively.
+from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
 from core.port_config import get_service_port
+
+# ============================================================================
+# Transport-layer data classes (local to this module; previously from v2)
+# ============================================================================
+
+class TransferMethod(Enum):
+    """传输方式"""
+    GATEWAY = "gateway"   # 通过 Gateway 传输（小文件，Base64 编码）
+    P2P = "p2p"           # P2P 直连传输（大文件）
+    WEBRTC = "webrtc"     # WebRTC 传输（实时流）
+
+
+class ContentType(Enum):
+    """内容类型"""
+    JSON = "application/json"
+    TEXT = "text/plain"
+    JPEG = "image/jpeg"
+    PNG = "image/png"
+    WEBP = "image/webp"
+    GIF = "image/gif"
+    MP4 = "video/mp4"
+    WEBM = "video/webm"
+    MP3 = "audio/mpeg"
+    WAV = "audio/wav"
+    OPUS = "audio/opus"
+    BINARY = "application/octet-stream"
+
+
+@dataclass
+class DeviceInfo:
+    """设备信息（传输层）"""
+    device_id: str
+    device_name: str
+    device_type: str  # "android", "windows", "linux", etc.
+    ip_address: Optional[str] = None
+    status: Optional[str] = None
+    capabilities: Optional[List[str]] = None
+
+
+@dataclass
+class MessagePayload:
+    """消息负载（传输层）"""
+    data_type: str         # image, video, audio, file, text
+    format: str            # jpeg, mp4, mp3, etc.
+    size: int              # 字节
+    checksum: str          # sha256
+    transfer_method: str   # gateway, p2p, webrtc
+    chunks: Optional[int] = None
+    chunk_size: Optional[int] = None
+    data: Optional[str] = None   # Base64 编码内容（小文件）
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+class MessageBuilder:
+    """消息构建工具（传输层；仅用于 multimodal_transfer 内部）"""
+
+    @staticmethod
+    def _calculate_checksum(data: Union[str, bytes]) -> str:
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        return f"sha256:{hashlib.sha256(data).hexdigest()}"
+
+    @staticmethod
+    def create_image_message(
+        from_device: DeviceInfo,
+        to_device: DeviceInfo,
+        image_data: bytes,
+        format: str = "jpeg",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> AIPMessage:
+        """构建图片传输 v3 AIPMessage.
+
+        The payload dict uses the following keys:
+          - data_type, format, size, checksum, transfer_method: transfer metadata
+          - data: Base64-encoded image bytes
+          - from_device / to_device: source and destination device IDs for routing
+          - any extra keys passed via *metadata*
+        """
+        encoded = base64.b64encode(image_data).decode("utf-8")
+        payload = {
+            "data_type": "image",
+            "format": format,
+            "size": len(image_data),
+            "checksum": MessageBuilder._calculate_checksum(image_data),
+            "transfer_method": TransferMethod.GATEWAY.value,
+            "data": encoded,
+            "from_device": from_device.device_id,
+            "to_device": to_device.device_id,
+            **(metadata or {}),
+        }
+        return AIPMessage(
+            type=MessageType.FILE_TRANSFER,
+            device_id=from_device.device_id,
+            payload=payload,
+        )
+
+    @staticmethod
+    def create_file_message(
+        from_device: DeviceInfo,
+        to_device: DeviceInfo,
+        file_path: str,
+        file_size: int,
+        file_checksum: str,
+        chunks: int,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> AIPMessage:
+        """构建文件传输 v3 AIPMessage.
+
+        The payload dict uses the following keys:
+          - data_type, format, size, checksum, transfer_method, chunks: transfer metadata
+          - from_device / to_device: source and destination device IDs for routing
+          - any extra keys passed via *metadata*
+        """
+        payload = {
+            "data_type": "file",
+            "format": Path(file_path).suffix[1:] if file_path else "",
+            "size": file_size,
+            "checksum": file_checksum,
+            "transfer_method": (
+                TransferMethod.GATEWAY.value if file_size < 1024 * 1024
+                else TransferMethod.P2P.value
+            ),
+            "chunks": chunks,
+            "from_device": from_device.device_id,
+            "to_device": to_device.device_id,
+            **(metadata or {}),
+        }
+        return AIPMessage(
+            type=MessageType.FILE_TRANSFER,
+            device_id=from_device.device_id,
+            payload=payload,
+        )
 
 # ============================================================================
 # 配置
@@ -157,16 +287,17 @@ class MultimodalTransferManager:
         Returns:
             bytes: 图片数据
         """
-        if not message.payload or not message.payload.data:
+        if not message.payload or not message.payload.get("data"):
             raise ValueError("No image data in message")
         
         # 解码 Base64
-        image_data = base64.b64decode(message.payload.data)
+        image_data = base64.b64decode(message.payload["data"])
         
         # 验证校验和
         calculated_checksum = self._calculate_checksum(image_data)
-        if calculated_checksum != message.payload.checksum:
-            raise ValueError(f"Checksum mismatch: expected {message.payload.checksum}, got {calculated_checksum}")
+        expected = message.payload.get("checksum", "")
+        if expected and calculated_checksum != expected:
+            raise ValueError(f"Checksum mismatch: expected {expected}, got {calculated_checksum}")
         
         # 保存（如果指定了路径）
         if save_path:
@@ -208,28 +339,24 @@ class MultimodalTransferManager:
         chunks = (file_size + self.config.CHUNK_SIZE - 1) // self.config.CHUNK_SIZE
         
         # 创建消息
-        from aip_protocol_v2 import MessagePayload
-        payload = MessagePayload(
-            data_type="video",
-            format=Path(video_path).suffix[1:],  # 去掉点号
-            size=file_size,
-            checksum=file_checksum,
-            transfer_method=TransferMethod.P2P.value,
-            chunks=chunks,
-            chunk_size=self.config.CHUNK_SIZE,
-            metadata={
-                "filename": filename,
-                **(metadata or {})
-            }
-        )
+        payload_dict = {
+            "data_type": "video",
+            "format": Path(video_path).suffix[1:],
+            "size": file_size,
+            "checksum": file_checksum,
+            "transfer_method": TransferMethod.P2P.value,
+            "chunks": chunks,
+            "chunk_size": self.config.CHUNK_SIZE,
+            "from_device": from_device.device_id,
+            "to_device": to_device.device_id,
+            "filename": filename,
+            **(metadata or {}),
+        }
         
         message = AIPMessage(
-            from_device=from_device,
-            to_device=to_device,
-            message_type=MessageType.VIDEO,
-            content_type=ContentType.MP4,
-            payload=payload,
-            requires_ack=True
+            type=MessageType.FILE_TRANSFER,
+            device_id=from_device.device_id,
+            payload=payload_dict,
         )
         
         return message
@@ -269,31 +396,27 @@ class MultimodalTransferManager:
         else:
             filename = f"audio.{format}"
         
+        # 创建消息
         size = len(audio_data)
         transfer_method = TransferMethod.GATEWAY.value if size < self.config.GATEWAY_MAX_SIZE else TransferMethod.P2P.value
-        
-        # 创建消息
-        from aip_protocol_v2 import MessagePayload
-        payload = MessagePayload(
-            data_type="audio",
-            format=format,
-            size=size,
-            checksum=self._calculate_checksum(audio_data),
-            transfer_method=transfer_method,
-            metadata={
-                "filename": filename,
-                **(metadata or {})
-            },
-            data=base64.b64encode(audio_data).decode('utf-8') if size < self.config.GATEWAY_MAX_SIZE else None
-        )
+        payload_dict = {
+            "data_type": "audio",
+            "format": format,
+            "size": size,
+            "checksum": self._calculate_checksum(audio_data),
+            "transfer_method": transfer_method,
+            "from_device": from_device.device_id,
+            "to_device": to_device.device_id,
+            "filename": filename,
+            **(metadata or {}),
+        }
+        if size < self.config.GATEWAY_MAX_SIZE:
+            payload_dict["data"] = base64.b64encode(audio_data).decode("utf-8")
         
         message = AIPMessage(
-            from_device=from_device,
-            to_device=to_device,
-            message_type=MessageType.AUDIO,
-            content_type=ContentType.MP3,
-            payload=payload,
-            requires_ack=True
+            type=MessageType.FILE_TRANSFER,
+            device_id=from_device.device_id,
+            payload=payload_dict,
         )
         
         return message

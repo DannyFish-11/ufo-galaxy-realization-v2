@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 Open pull requests pending review / merge:
 
+- **PR-S1** – Protocol Single Source of Truth (v3-only): `galaxy_gateway/protocol/aip_v3.py`
+  is now the sole canonical protocol definition. Direct imports of `aip_protocol_v2` are
+  blocked at import-time; all message types previously in `ExtendedMessageType` (Phases 1–5)
+  are promoted into `MessageType` in v3. Legacy inputs are still accepted via
+  `galaxy_gateway/protocol/compat.py` (normalised → v3 `AIPMessage`). A new CI job
+  (`v3-protocol-guard`) and unit test (`tests/test_v3_protocol_guard.py`) enforce no
+  residual v2 references in source code.
+
 - **PR #4** – Wire `/ws/android` to `android_bridge`: integrates the Android stack with the
   V2 backend, enabling end-to-end AIP v3.0 message flow between the Android client and the server.
 - **PR #5** – Remove Android client duplication: canonical Android source moved to
