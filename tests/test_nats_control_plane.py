@@ -131,9 +131,13 @@ class TestGatewayNATSAdapter:
                 }
             )
 
-        mock_bus.publish_task_result.assert_awaited_once()
-        call_kwargs = mock_bus.publish_task_result.call_args[0]
-        assert call_kwargs[0] == "t-001"
+        # PR-3: _publish_result now calls nats_bus._publish() directly with a
+        # unified envelope payload instead of publish_task_result().
+        mock_bus._publish.assert_awaited()
+        call_args = mock_bus._publish.call_args[0]
+        assert "galaxy.tasks.result.t-001" in call_args[0]
+        assert call_args[1].get("task_id") == "t-001"
+        assert call_args[1].get("_nats_schema") == "TaskEnvelope"
 
     @pytest.mark.asyncio
     async def test_handle_task_dispatch_dlq_on_timeout(self):
@@ -750,3 +754,303 @@ class TestNATSConnected:
 
         assert result.get("success") is True
         assert executor._stats["nats_dispatched"] == 1
+
+
+# ===========================================================================
+# PR-3 — NATS × TaskEnvelope alignment
+# ===========================================================================
+
+
+class TestPR3NATSEnvelopeAlignment:
+    """Validate PR-3: NATS transport unified to TaskEnvelope."""
+
+    # ── contracts.py bridge functions ───────────────────────────────────────
+
+    def test_envelope_from_task_dispatch_preserves_task_id(self):
+        """envelope_from_task_dispatch() retains the original task_id."""
+        from core.schemas.contracts import (
+            envelope_from_task_dispatch,
+            TaskDispatchModel,
+            TaskType,
+            DeviceCommandPayloadModel,
+        )
+
+        task = TaskDispatchModel(
+            task_id="task-bridge-001",
+            task_type=TaskType.DEVICE_CMD,
+            target_worker_id="device-A",
+            device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="device-A"),
+            context={"trace_id": "trace-abc"},
+        )
+        env = envelope_from_task_dispatch(task)
+
+        assert env.task_id == "task-bridge-001"
+        assert env.trace_id == "trace-abc"
+        assert env.target == "device-A"
+        assert env.tool_name == "tap"
+
+    def test_envelope_from_task_dispatch_generates_trace_id_when_missing(self):
+        """envelope_from_task_dispatch() generates a trace_id if context lacks one."""
+        from core.schemas.contracts import (
+            envelope_from_task_dispatch,
+            TaskDispatchModel,
+            TaskType,
+        )
+
+        task = TaskDispatchModel(
+            task_id="task-no-trace",
+            task_type=TaskType.DEVICE_CMD,
+            target_worker_id="device-B",
+        )
+        env = envelope_from_task_dispatch(task)
+
+        assert env.trace_id.startswith("trace_")
+        assert len(env.trace_id) > 6
+
+    def test_task_dispatch_from_envelope_roundtrip(self):
+        """task_dispatch_from_envelope() produces a usable TaskDispatchModel."""
+        from core.schemas.contracts import task_dispatch_from_envelope
+        from core.schemas.task_envelope import TaskEnvelope
+
+        env = TaskEnvelope(
+            task_id="task-rt-001",
+            trace_id="trace-rt",
+            source="test",
+            targets=["device-C"],
+            tool_name="swipe",
+            args={"direction": "up"},
+            timeout=15.0,
+        )
+        task = task_dispatch_from_envelope(env)
+
+        assert task.task_id == "task-rt-001"
+        assert task.target_worker_id == "device-C"
+        assert task.context.get("trace_id") == "trace-rt"
+        assert task.device_payload is not None
+        assert task.device_payload.command == "swipe"
+
+    # ── NATSBus.publish_task_envelope ────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_publish_task_envelope_uses_correct_subject(self):
+        """publish_task_envelope() publishes to galaxy.tasks.dispatch.{target}."""
+        from core.nats_bus import NATSBus
+        from core.schemas.task_envelope import TaskEnvelope
+
+        bus = NATSBus.__new__(NATSBus)
+        bus._noop = False
+        bus._connected = True
+        bus._js = None
+        bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+        bus._subscriptions = []
+
+        published = {}
+
+        async def _mock_publish(subject, data):
+            published["subject"] = subject
+            published["data"] = data
+            return {"success": True, "seq": 1}
+
+        bus._publish = _mock_publish
+
+        env = TaskEnvelope(
+            task_id="task-pub-001",
+            trace_id="trace-pub",
+            targets=["worker-42"],
+            tool_name="ping",
+        )
+        result = await bus.publish_task_envelope("worker-42", env)
+
+        assert result.get("success") is True
+        assert published["subject"] == "galaxy.tasks.dispatch.worker-42"
+        assert published["data"].get("_nats_schema") == "TaskEnvelope"
+        assert published["data"].get("task_id") == "task-pub-001"
+
+    # ── GatewayNATSAdapter — TaskEnvelope primary path ───────────────────────
+
+    @pytest.mark.asyncio
+    async def test_adapter_handles_task_envelope_directly(self):
+        """Adapter accepts a TaskEnvelope-shaped message without conversion."""
+        from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        adapter = GatewayNATSAdapter(task_timeout=5.0)
+
+        received = {}
+
+        async def _capture_forward(task_id, target, task_type, payload):
+            received["task_id"] = task_id
+            received["target"] = target
+            received["tool_name"] = task_type
+            return {"success": True, "data": "ok"}
+
+        adapter._forward_to_device = _capture_forward
+
+        envelope_payload = {
+            "_nats_schema": "TaskEnvelope",
+            "task_id": "task-env-001",
+            "trace_id": "trace-env",
+            "source": "test",
+            "targets": ["device-env"],
+            "tool_name": "long_press",
+            "args": {"x": 50, "y": 100},
+            "priority": 5,
+            "timeout": 10.0,
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "metadata": {},
+        }
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            await adapter._handle_task_dispatch(envelope_payload)
+
+        assert received.get("task_id") == "task-env-001"
+        assert received.get("target") == "device-env"
+        assert received.get("tool_name") == "long_press"
+        assert adapter._stats["dispatched"] == 1
+        assert adapter._stats["succeeded"] == 1
+
+    @pytest.mark.asyncio
+    async def test_adapter_handles_legacy_task_dispatch(self):
+        """Old TaskDispatch dicts are accepted and executed by the adapter."""
+        from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        adapter = GatewayNATSAdapter(task_timeout=5.0)
+
+        received = {}
+
+        async def _capture_forward(task_id, target, task_type, payload):
+            received["task_id"] = task_id
+            received["target"] = target
+            return {"success": True}
+
+        adapter._forward_to_device = _capture_forward
+
+        # No _nats_schema field — legacy format
+        legacy_payload = {
+            "task_id": "task-legacy-002",
+            "target_worker_id": "device-legacy",
+            "task_type": "command",
+            "payload": {"action": "scroll"},
+        }
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            await adapter._handle_task_dispatch(legacy_payload)
+
+        assert received.get("target") == "device-legacy"
+        assert adapter._stats["dispatched"] == 1
+        assert adapter._stats["succeeded"] == 1
+
+    @pytest.mark.asyncio
+    async def test_adapter_publish_result_includes_nats_schema(self):
+        """_publish_result() emits a unified message with _nats_schema marker."""
+        from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        published = {}
+
+        async def _mock_pub(subject, data):
+            published["subject"] = subject
+            published["data"] = data
+            return {"success": True}
+
+        mock_bus._publish = _mock_pub
+        adapter = GatewayNATSAdapter()
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            await adapter._publish_result("task-res-001", {"value": "done"}, success=True, trace_id="tr-xyz")
+
+        assert published["subject"] == "galaxy.tasks.result.task-res-001"
+        d = published["data"]
+        assert d.get("_nats_schema") == "TaskEnvelope"
+        assert d.get("task_id") == "task-res-001"
+        assert d.get("trace_id") == "tr-xyz"
+        assert d.get("status") == "success"
+        assert d["metadata"]["success"] is True
+
+    # ── NATSExecutor — TaskEnvelope primary publish ───────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_nats_executor_publishes_task_envelope(self):
+        """NATSExecutor calls publish_task_envelope() when building a dispatch."""
+        from core.command_router import NATSExecutor
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        envelope_calls = []
+
+        async def _capture_envelope(target, envelope):
+            task_id = envelope.task_id
+            envelope_calls.append({"target": target, "task_id": task_id})
+            # Immediately resolve so the executor doesn't time out.
+            import asyncio as _a
+
+            def _resolve():
+                fut = executor._pending.get(task_id)
+                if fut is not None and not fut.done():
+                    fut.set_result({"success": True, "result": "ok", "task_id": task_id})
+
+            _a.get_event_loop().call_soon(_resolve)
+            return {"success": True, "seq": 10}
+
+        mock_bus.publish_task_envelope = _capture_envelope
+
+        executor = NATSExecutor(fallback_enabled=False, timeout_s=2.0)
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            result = await executor("device-env", "swipe", {"dir": "down"})
+
+        assert result.get("success") is True
+        assert len(envelope_calls) == 1
+        assert envelope_calls[0]["target"] == "device-env"
+
+    # ── NATSExecutor._on_task_result — envelope result ───────────────────────
+
+    @pytest.mark.asyncio
+    async def test_nats_executor_resolves_task_envelope_result(self):
+        """_on_task_result() correctly resolves a TaskEnvelope-shaped result."""
+        from core.command_router import NATSExecutor
+        import asyncio
+
+        executor = NATSExecutor()
+        loop = asyncio.get_event_loop()
+        fut = loop.create_future()
+        executor._pending["task-env-res-001"] = fut
+
+        await executor._on_task_result({
+            "_nats_schema": "TaskEnvelope",
+            "task_id": "task-env-res-001",
+            "metadata": {
+                "success": True,
+                "status": "success",
+                "result": {"data": "envelope_ok"},
+                "error": None,
+            },
+        })
+
+        assert fut.done()
+        r = fut.result()
+        assert r["success"] is True
+        assert r["result"] == {"data": "envelope_ok"}
+        assert r["task_id"] == "task-env-res-001"
+
+    @pytest.mark.asyncio
+    async def test_nats_executor_resolves_legacy_task_result(self):
+        """_on_task_result() correctly resolves a legacy TaskResult dict."""
+        from core.command_router import NATSExecutor
+        import asyncio
+
+        executor = NATSExecutor()
+        loop = asyncio.get_event_loop()
+        fut = loop.create_future()
+        executor._pending["task-legacy-res-001"] = fut
+
+        await executor._on_task_result({
+            "task_id": "task-legacy-res-001",
+            "status": "success",
+            "result": {"output": "legacy_ok"},
+        })
+
+        assert fut.done()
+        r = fut.result()
+        assert r["success"] is True
+        assert r["result"] == {"output": "legacy_ok"}

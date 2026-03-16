@@ -1778,6 +1778,7 @@ class NATSExecutor:
         galaxy_trace_id: Optional[str] = params.pop("_galaxy_trace_id", None)
 
         task_id = galaxy_task_id or str(uuid.uuid4())
+        trace_id = galaxy_trace_id or f"trace_{uuid.uuid4().hex[:12]}"
         ts = TimestampModel(seconds=int(datetime.now(timezone.utc).timestamp()))
         device_payload = DeviceCommandPayloadModel(
             command=command,
@@ -1792,7 +1793,7 @@ class NATSExecutor:
             created_at=ts,
             # PR-2: propagate TaskEnvelope trace_id into NATS context for
             # cross-component correlation.
-            context={"trace_id": galaxy_trace_id or ""} if galaxy_trace_id else {},
+            context={"trace_id": trace_id} if trace_id else {},
         )
 
         # Register future before publish to avoid race condition
@@ -1801,7 +1802,34 @@ class NATSExecutor:
         self._pending[task_id] = fut
 
         try:
-            pub_result = await nats_bus.publish_task_dispatch(target, task)
+            # PR-3: Publish as TaskEnvelope (primary NATS transport format).
+            # Falls back to legacy TaskDispatch publish on any error so that
+            # backward-compatible consumers still receive the message.
+            pub_result: dict = {"success": False}
+            try:
+                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+
+                _envelope = _TaskEnvelope(
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    source="command_router",
+                    targets=[target],
+                    tool_name=command,
+                    args=params,
+                    timeout=self._timeout_s,
+                )
+                pub_result = await nats_bus.publish_task_envelope(target, _envelope)
+                if not pub_result.get("success"):
+                    raise RuntimeError(
+                        f"envelope publish returned failure: {pub_result.get('error', 'unknown')}"
+                    )
+            except Exception as _env_err:
+                logger.debug(
+                    "NATSExecutor: TaskEnvelope publish failed (%s), falling back to TaskDispatch",
+                    _env_err,
+                )
+                pub_result = await nats_bus.publish_task_dispatch(target, task)
+
             if not pub_result.get("success"):
                 return await self._use_fallback(target, command, params, reason="publish_failed")
 
@@ -1825,16 +1853,36 @@ class NATSExecutor:
             self._pending.pop(task_id, None)
 
     async def _on_task_result(self, data: dict) -> None:
-        """Handle an incoming task result from NATS."""
-        task_id = data.get("task_id", "")
-        fut = self._pending.get(task_id)
-        if fut and not fut.done():
+        """Handle an incoming task result from NATS.
+
+        PR-3: Accepts both TaskEnvelope-shaped results (``_nats_schema ==
+        "TaskEnvelope"``) and legacy TaskResult dicts.  For TaskEnvelope
+        results the execution status and output are read from
+        ``metadata.success`` / ``metadata.result`` / ``metadata.error``; for
+        legacy results the existing ``status`` field is used.
+        """
+        nats_schema = data.get("_nats_schema", "")
+        if nats_schema == "TaskEnvelope":
+            # TaskEnvelope result: status carried in metadata
+            task_id = data.get("task_id", "")
+            meta = data.get("metadata") or {}
+            success = bool(meta.get("success", True))
+            result_data = meta.get("result")
+            error = meta.get("error")
+        else:
+            # Legacy TaskResult format
+            task_id = data.get("task_id", "")
             status = data.get("status", "")
             success = status in ("completed", "success")
+            result_data = data.get("result")
+            error = data.get("error")
+
+        fut = self._pending.get(task_id)
+        if fut and not fut.done():
             result = {
                 "success": success,
-                "result": data.get("result"),
-                "error": data.get("error"),
+                "result": result_data,
+                "error": error,
                 "task_id": task_id,
             }
             fut.set_result(result)

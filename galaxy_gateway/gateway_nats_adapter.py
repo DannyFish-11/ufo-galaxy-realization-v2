@@ -143,53 +143,89 @@ class GatewayNATSAdapter:
     # ── Internal handlers ────────────────────────────────────────────────────
 
     async def _handle_task_dispatch(self, data: dict) -> None:
-        """Process a TaskDispatch message from NATS.
+        """Process a TaskDispatch (or TaskEnvelope) message from NATS.
 
-        PR-1: Before entering the internal routing / forwarding path, the
-        incoming NATS payload is converted to a TaskEnvelope so that all
-        routing uses a unified task representation.  Fields that are present
-        in the NATS payload are preserved; missing optional fields (trace_id,
-        route_mode) are injected following the existing compat rules.
+        PR-3: Incoming NATS messages are normalised to a TaskEnvelope before
+        entering the routing path:
+          - If ``_nats_schema == "TaskEnvelope"``, the payload is validated
+            directly as a TaskEnvelope.
+          - Otherwise (legacy TaskDispatch) the dict is converted via
+            ``envelope_from_task_dispatch()`` so that the rest of the handler
+            always works with a unified envelope object.
+        Old TaskDispatch callers remain fully supported through this bridge.
         """
-        task_id = data.get("task_id") or str(uuid.uuid4())
-        target_device = data.get("target_worker_id") or data.get("target_device_id", "")
-        task_type = data.get("task_type", "command")
-        payload = data.get("payload") or {}
-        trace_id = data.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
-        route_mode = data.get("route_mode", "direct")
+        nats_schema = data.get("_nats_schema", "")
 
-        # PR-1: convert the NATS TaskDispatch dict to a TaskEnvelope so the
-        # internal routing chain always operates on a unified envelope object.
-        try:
-            from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+        if nats_schema == "TaskEnvelope":
+            # ── Parse as TaskEnvelope (primary format) ──────────────────────
+            _envelope_parsed = False
+            try:
+                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
-            _envelope = _TaskEnvelope(
-                task_id=task_id,
-                trace_id=trace_id,
-                source="nats_gateway",
-                targets=[target_device] if target_device else [],
-                tool_name=task_type,
-                args=payload,
-                metadata={
-                    "route_mode": route_mode,
-                    "task_type": task_type,
-                    "nats_subject": _SUBSCRIBE_SUBJECT,
-                },
+                _envelope = _TaskEnvelope.model_validate(data)
+                task_id = _envelope.task_id
+                trace_id = _envelope.trace_id
+                target_device = _envelope.target
+                task_type = _envelope.tool_name
+                payload = _envelope.args
+                route_mode = _envelope.metadata.get("route_mode", "direct")
+                _envelope_parsed = True
+                logger.debug(
+                    "GatewayNATSAdapter: parsed TaskEnvelope task_id=%s trace_id=%s",
+                    task_id,
+                    trace_id,
+                )
+            except Exception as _parse_err:
+                logger.warning(
+                    "GatewayNATSAdapter: TaskEnvelope parse failed, falling back to legacy — %s",
+                    _parse_err,
+                )
+
+            if not _envelope_parsed:
+                # Fall back to legacy field extraction
+                task_id = data.get("task_id") or str(uuid.uuid4())
+                trace_id = data.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+                target_device = data.get("target_worker_id") or data.get("target_device_id", "")
+                task_type = data.get("task_type", "command")
+                payload = data.get("payload") or {}
+                route_mode = data.get("route_mode", "direct")
+        else:
+            # ── Legacy TaskDispatch — extract fields and convert to envelope ─
+            task_id = data.get("task_id") or str(uuid.uuid4())
+            target_device = data.get("target_worker_id") or data.get("target_device_id", "")
+            task_type = data.get("task_type", "command")
+            payload = data.get("payload") or {}
+            trace_id = (
+                data.get("trace_id")
+                or (data.get("context") or {}).get("trace_id", "")
+                or f"trace_{uuid.uuid4().hex[:12]}"
             )
-            # Use canonical identifiers from the envelope for the rest of the handler.
-            task_id = _envelope.task_id
-            trace_id = _envelope.trace_id
-            logger.debug(
-                "GatewayNATSAdapter: envelope task_id=%s trace_id=%s route_mode=%s",
-                task_id,
-                trace_id,
-                route_mode,
-            )
-        except Exception as _env_err:
-            # Never block dispatch on envelope construction failure.
-            logger.debug(
-                "GatewayNATSAdapter: TaskEnvelope construction skipped — %s", _env_err
-            )
+            route_mode = data.get("route_mode", "direct")
+
+            # PR-3: Convert legacy TaskDispatch → TaskEnvelope so that internal
+            # routing always sees a unified envelope; replace task_id/trace_id
+            # with canonical values from the envelope.
+            try:
+                from core.schemas.contracts import (
+                    envelope_from_task_dispatch as _env_from_dispatch,
+                    TaskDispatchModel as _TDM,
+                )
+
+                _legacy = _TDM.model_validate({**data, "task_id": task_id})
+                _envelope = _env_from_dispatch(_legacy)
+                task_id = _envelope.task_id
+                trace_id = _envelope.trace_id
+                logger.debug(
+                    "GatewayNATSAdapter: converted legacy TaskDispatch → TaskEnvelope "
+                    "task_id=%s trace_id=%s",
+                    task_id,
+                    trace_id,
+                )
+            except Exception as _conv_err:
+                logger.debug(
+                    "GatewayNATSAdapter: TaskDispatch→Envelope conversion skipped — %s",
+                    _conv_err,
+                )
 
         logger.info(
             "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s trace_id=%s",
@@ -207,7 +243,7 @@ class GatewayNATSAdapter:
                     timeout=self._task_timeout,
                 )
                 # Publish success result back to NATS
-                await self._publish_result(task_id, result, success=True)
+                await self._publish_result(task_id, result, success=True, trace_id=trace_id)
                 self._stats["succeeded"] += 1
                 await _publish_event(
                     "gateway_success",
@@ -230,6 +266,7 @@ class GatewayNATSAdapter:
                     task_id,
                     {"success": False, "error": "timeout"},
                     success=False,
+                    trace_id=trace_id,
                 )
                 await self._publish_dlq(task_id, data, reason="timeout")
                 await _publish_event(
@@ -243,6 +280,7 @@ class GatewayNATSAdapter:
                     task_id,
                     {"success": False, "error": str(exc)},
                     success=False,
+                    trace_id=trace_id,
                 )
                 await self._publish_dlq(task_id, data, reason=str(exc))
                 await _publish_event(
@@ -305,26 +343,41 @@ class GatewayNATSAdapter:
         return {"success": False, "error": f"no_route_to_device:{target_device}"}
 
     async def _publish_result(
-        self, task_id: str, result: dict, success: bool
+        self, task_id: str, result: dict, success: bool, trace_id: str = ""
     ) -> None:
-        """Publish task result back to NATS."""
+        """Publish task result back to NATS.
+
+        PR-3: Publishes a unified result payload that carries both the legacy
+        ``status`` / ``worker_id`` fields (for backward-compatible consumers)
+        and a ``_nats_schema: "TaskEnvelope"`` discriminator with
+        ``metadata.success``, ``metadata.result``, and ``metadata.error`` so
+        that new consumers can parse it as a TaskEnvelope result.
+        """
         try:
             from core.nats_bus import nats_bus
-            from core.schemas.contracts import TaskResultModel, TaskStatus, TimestampModel
+            from core.schemas.contracts import TaskStatus, TimestampModel
             from datetime import datetime, timezone
 
-            status = TaskStatus.SUCCESS if success else TaskStatus.FAILED
-            model = TaskResultModel(
-                task_id=task_id,
-                worker_id="gateway",
-                status=status,
-                result=result if success else None,
-                error=result.get("error") if not success else None,
-                completed_at=TimestampModel(
-                    seconds=int(datetime.now(timezone.utc).timestamp())
-                ),
-            )
-            await nats_bus.publish_task_result(task_id, model)
+            status_val = TaskStatus.SUCCESS.value if success else TaskStatus.FAILED.value
+            ts = int(datetime.now(timezone.utc).timestamp())
+
+            unified = {
+                # ── Legacy TaskResult fields (backward compat) ──────────────
+                "task_id": task_id,
+                "worker_id": "gateway",
+                "status": status_val,
+                "completed_at": {"seconds": ts, "nanos": 0},
+                # ── TaskEnvelope discriminator (PR-3) ───────────────────────
+                "_nats_schema": "TaskEnvelope",
+                "trace_id": trace_id or "",
+                "metadata": {
+                    "success": success,
+                    "status": status_val,
+                    "result": result if success else None,
+                    "error": result.get("error") if not success else None,
+                },
+            }
+            await nats_bus._publish(f"galaxy.tasks.result.{task_id}", unified)
         except Exception as exc:
             logger.error("GatewayNATSAdapter: failed to publish result for %s: %s", task_id, exc)
 

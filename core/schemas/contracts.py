@@ -683,3 +683,117 @@ class AgentMessageModel(BaseModel):
             correlation_id=header.get("correlation_id", ""),
             **payload,
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TaskEnvelope bridge helpers  (PR-3: NATS alignment — internal use only)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_PRIORITY_TO_INT: Dict[str, int] = {
+    "critical": 1,
+    "high": 2,
+    "normal": 5,
+    "low": 8,
+    "unspecified": 5,
+}
+
+
+def envelope_from_task_dispatch(task: "TaskDispatchModel") -> Any:
+    """Convert a TaskDispatchModel to a TaskEnvelope.
+
+    Internal bridge used by NATS components so that the internal routing chain
+    always operates on a unified envelope object.  Preserves ``task_id`` and
+    recovers ``trace_id`` from the task ``context`` dict.
+    """
+    from core.schemas.task_envelope import TaskEnvelope
+
+    # Determine tool name and args from whichever payload field is set.
+    tool_name: str = task.task_type.value
+    args: Dict[str, Any] = {}
+
+    if task.device_payload:
+        tool_name = task.device_payload.command or tool_name
+        args = {
+            "command": task.device_payload.command,
+            "target_device_id": task.device_payload.target_device_id,
+            **task.device_payload.params,
+        }
+    elif task.shell_payload:
+        tool_name = "shell"
+        args = {
+            "command": task.shell_payload.command,
+            "working_dir": task.shell_payload.working_dir,
+        }
+    elif task.code_payload:
+        tool_name = task.code_payload.language.value
+        args = {
+            "source": task.code_payload.source,
+            "language": task.code_payload.language.value,
+        }
+    elif task.mcp_payload:
+        tool_name = task.mcp_payload.tool_name or "mcp_call"
+        args = {
+            "server_id": task.mcp_payload.server_id,
+            "tool_name": task.mcp_payload.tool_name,
+            "arguments_json": task.mcp_payload.arguments_json,
+        }
+
+    trace_id: str = (
+        task.context.get("trace_id")
+        or f"trace_{uuid.uuid4().hex[:12]}"
+    )
+    priority: int = _PRIORITY_TO_INT.get(
+        task.priority.value if task.priority else "normal", 5
+    )
+    metadata: Dict[str, Any] = {
+        "task_type": task.task_type.value,
+        "parent_task_id": task.parent_task_id,
+        "workflow_run_id": task.workflow_run_id,
+    }
+    for k, v in task.context.items():
+        if k != "trace_id":
+            metadata[k] = v
+
+    return TaskEnvelope(
+        task_id=task.task_id,
+        trace_id=trace_id,
+        source=task.source_agent_id or "nats",
+        targets=[task.target_worker_id] if task.target_worker_id else [],
+        tool_name=tool_name,
+        args=args,
+        priority=priority,
+        timeout=task.timeout_ms / 1000.0 if task.timeout_ms else 30.0,
+        metadata=metadata,
+    )
+
+
+def task_dispatch_from_envelope(envelope: Any) -> "TaskDispatchModel":
+    """Convert a TaskEnvelope back to a TaskDispatchModel.
+
+    Backward-compatibility helper so that legacy NATS consumers that expect
+    a ``TaskDispatchModel`` can still process envelopes published by new code.
+    Internal use only.
+    """
+    target = envelope.target  # first target or ""
+    ts = TimestampModel.now()
+    return TaskDispatchModel(
+        task_id=envelope.task_id,
+        source_agent_id=envelope.source,
+        target_worker_id=target,
+        task_type=TaskType.DEVICE_CMD,
+        device_payload=DeviceCommandPayloadModel(
+            command=envelope.tool_name,
+            params={
+                k: str(v)
+                for k, v in envelope.args.items()
+                if isinstance(v, (str, int, float, bool))
+            },
+            target_device_id=target,
+        ),
+        timeout_ms=int(envelope.timeout * 1000),
+        context={
+            "trace_id": envelope.trace_id,
+            **{k: str(v) for k, v in envelope.metadata.items()},
+        },
+        created_at=ts,
+    )
