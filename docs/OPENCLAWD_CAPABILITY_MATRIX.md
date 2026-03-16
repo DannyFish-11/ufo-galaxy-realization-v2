@@ -1,0 +1,195 @@
+# OpenClawd Capability Matrix — PR-5
+
+> **目的**：对五项能力进行完整的证据链梳理，每项能力均有真实代码落地点、验证路径和可运行样例。
+
+---
+
+## 1. 完全自主执行复杂任务（端到端闭环）
+
+### 能力描述
+系统能够端到端自主执行复杂任务，任务生命周期强制流转：`created → running → done/failed`。
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/task_envelope.py` | 新增 `lifecycle_status: TaskLifecycleStatus` 字段（默认 `"created"`）；新增 `transition()` 方法验证合法状态转换 |
+| `core/task_lifecycle.py` | **新增**：`TaskLifecycleManager` 类，封装 `mark_running()`、`mark_done()`、`mark_failed()`、`run_with_lifecycle()` 四个接口；每次状态变更同时发出 M2 `task.lifecycle` 事件并写 TaskMemory |
+| `core/command_router.py` | `route_envelope()` 入口新增生命周期钩子：进入时 `mark_running`；退出时根据结果 `mark_done` / `mark_failed` |
+| `galaxy_gateway/orchestrator/task_orchestrator.py` | `_process_task()` 中同样挂载生命周期：`mark_running` → 执行 → `mark_done/failed` |
+
+### 验证路径
+```python
+from core.schemas.task_envelope import TaskEnvelope
+from core.task_lifecycle import TaskLifecycleManager
+
+mgr = TaskLifecycleManager()
+env = TaskEnvelope(tool_name="my_tool", targets=["dev1"])
+# created
+env = mgr.mark_running(env)    # → running
+env = mgr.mark_done(env, result_summary="OK")  # → done
+assert env.lifecycle_status == "done"
+```
+
+### 最小测试
+`tests/test_pr5_capability_closure.py::TestTaskLifecycle`（11 个测试用例）
+
+---
+
+## 2. 不依赖视觉/UI 的复杂任务
+
+### 能力描述
+系统可以执行纯非视觉任务（文件系统、HTTP、系统命令），执行链路中不调用截图/屏幕状态采集。
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/task_envelope.py` | `required_capabilities` 字段为显式列表，调用方可明确声明 `["filesystem"]` 而不包含 `"screen"`，由 ACLEnforcer 校验 |
+| `scripts/non_visual_task_demo.py` | **新增**：纯非UI任务端到端演示（filesystem + system_cmd + http_client 三步链路） |
+
+### 验证路径（运行 Demo）
+```bash
+python scripts/non_visual_task_demo.py
+```
+预期输出：所有步骤标记 `done`，无截图/UI 调用。
+
+### 无视觉路径说明
+`required_capabilities` 不包含 `"screen"` 或 `"screenshot"` → ACLEnforcer 不会要求视觉能力 → 执行器走纯系统/网络路径。
+
+### 最小测试
+`tests/test_pr5_capability_closure.py::TestNonVisualTaskPath`（5 个测试用例）
+
+---
+
+## 3. 记住历史操作与上下文
+
+### 能力描述
+每次任务附加 `trace_id / task_id / session_id`；任务完成时将摘要写入 `TaskMemory`（memory backflow）；执行前注入最近任务摘要。
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/task_envelope.py` | 新增 `session_id: Optional[str]` 显式字段；`log_context()` 加入 `session_id` |
+| `core/task_lifecycle.py` | `_write_memory()` 方法：在 `done/failed` 时调用 `TaskMemory.record_task()`；日志打印 `task.memory_backflow` 断言 |
+| `core/command_router.py` | `route_envelope()` 进入时注入最近 3 条摘要到 `envelope.metadata["_injected_memory_summaries"]`；日志打印 `task.memory_inject` 断言 |
+
+### 验证路径
+```python
+from core.schemas.task_envelope import TaskEnvelope
+env = TaskEnvelope(
+    tool_name="search_docs",
+    session_id="session_001",
+    trace_id="trace_abc",
+)
+ctx = env.log_context()
+assert ctx["session_id"] == "session_001"
+assert ctx["task_id"] == env.task_id
+assert ctx["trace_id"] == "trace_abc"
+```
+
+日志中搜索：
+```
+task.memory_backflow | task_id=... session_id=... memory_written=True
+task.memory_inject   | task_id=... injecting N recent summaries
+```
+
+### 最小测试
+`tests/test_pr5_capability_closure.py::TestTaskMemoryContext`（7 个测试用例）
+
+---
+
+## 4. 跨应用 / 跨系统操作
+
+### 能力描述
+单次任务可以跨多个设备/系统分阶段执行，结果通过 TaskEnvelope `targets` 多目标字段传递，生命周期和记忆由 `TaskLifecycleManager` 统一管理。
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/task_envelope.py` | `targets: List[str]` 已支持多目标；`target` 属性返回第一目标（向后兼容） |
+| `scripts/cross_device_task_demo.py` | **新增**：device_a（生成 artifact）→ device_b（处理 artifact）完整两设备管道，使用 `TaskLifecycleManager.run_with_lifecycle()` 追踪每阶段生命周期 |
+
+### 验证路径（运行 Demo）
+```bash
+python scripts/cross_device_task_demo.py
+```
+预期输出：
+- Phase 1（device_a）: lifecycle `done`
+- Phase 2（device_b）: lifecycle `done`
+- 两阶段共享 `session_id` 和 `trace_id`
+
+### 最小测试
+`tests/test_pr5_capability_closure.py::TestCrossDeviceOrch`（3 个测试用例）
+
+---
+
+## 5. 可扩展高权限任务
+
+### 能力描述
+`TaskEnvelope` 携带 `permission_level`（0–3）和 `required_capabilities`；执行前由 `ACLEnforcer` 校验；每次检查（允许/拒绝）均记录审计事件。
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/task_envelope.py` | 新增 `permission_level: int (0–3)` 和 `required_capabilities: List[str]` 两个显式字段 |
+| `core/acl_enforcer.py` | **新增**：`ACLEnforcer` 类：校验 `permission_level` vs `caller_level`；校验 `required_capabilities` vs `agent_capabilities`；发出 M2 `skill.invoke` 审计事件；返回 `ACLCheckResult` |
+| `config/acl_policy.json` | **新增**：策略文件（`strict_above_level`、默认能力集、`audit_all` 开关） |
+| `core/command_router.py` | `route_envelope()` 进入时调用 `ACLEnforcer.check()`；ACL 拒绝时立即返回 `ACL_DENIED` 错误 |
+
+### 权限级别
+| 级别 | 含义 | 示例工具 |
+|------|------|---------|
+| 0 | 开放（无限制） | 截图、查询 |
+| 1 | 普通（已认证） | 点击、输入 |
+| 2 | 提升（管理员） | 写文件、停进程 |
+| 3 | 关键（系统级） | 系统命令、批量删除 |
+
+### 验证路径
+```python
+from core.acl_enforcer import ACLEnforcer
+from core.schemas.task_envelope import TaskEnvelope
+
+enforcer = ACLEnforcer()
+env = TaskEnvelope(tool_name="system_reboot", permission_level=3)
+result = enforcer.check(env, caller_level=0)  # 拒绝
+assert result.allowed is False
+
+result2 = enforcer.check(env, caller_level=3)  # 允许
+assert result2.allowed is True
+```
+
+日志中搜索：
+```
+acl.audit | task_id=... permission_level=3 caller_level=0 outcome=denied
+```
+
+### 最小测试
+`tests/test_pr5_capability_closure.py::TestACLPermissions`（9 个测试用例）
+
+---
+
+## 综合端到端验证
+
+`tests/test_pr5_capability_closure.py::TestFullCapabilityChain::test_e2e_lifecycle_acl_memory_chain`
+
+该测试串联所有五项能力：
+1. 构造带 `session_id / permission_level / required_capabilities` 的 `TaskEnvelope`
+2. ACLEnforcer 校验通过
+3. `run_with_lifecycle()` 执行任务（lifecycle `done`）
+4. TaskMemory 写入断言（`record_task` 被调用）
+5. `trace_id / session_id / targets` 全程携带
+
+### 运行所有测试
+```bash
+python -m pytest tests/test_pr5_capability_closure.py -v --tb=short
+```
+
+### 运行演示脚本
+```bash
+python scripts/non_visual_task_demo.py
+python scripts/cross_device_task_demo.py
+```

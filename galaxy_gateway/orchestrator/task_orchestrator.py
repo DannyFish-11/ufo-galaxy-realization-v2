@@ -185,31 +185,64 @@ class TaskOrchestrator:
                 task.user_request,
                 task.assigned_device or "unassigned",
             )
-        
+            # PR-5 Cap 1: lifecycle created → running
+            try:
+                from core.task_lifecycle import get_lifecycle_manager
+                envelope = get_lifecycle_manager().mark_running(envelope)
+                self._task_envelopes[task.task_id] = envelope
+            except Exception as _e:
+                logger.debug("Orchestrator lifecycle mark_running skipped: %s", _e)
+
         try:
             # 1. 选择目标设备
             device_id = await self._select_device(task)
             if not device_id:
                 task.status = TaskStatus.FAILED
                 task.error = "No suitable device available"
+                # PR-5 Cap 1: lifecycle → failed
+                if envelope is not None:
+                    try:
+                        from core.task_lifecycle import get_lifecycle_manager
+                        get_lifecycle_manager().mark_failed(envelope, error=task.error)
+                    except Exception:
+                        pass
                 return
-            
+
             task.assigned_device = device_id
-            
+
             # 2. 分解任务为命令
             commands = await self._decompose_task(task)
             task.commands = commands
-            
+
             # 3. 发送任务到设备
             await self._send_task_to_device(task)
-            
+
             # 4. 等待结果（带超时）
             await self._wait_for_completion(task)
-            
+
+            # PR-5 Cap 1: lifecycle → done/failed based on final status
+            if envelope is not None:
+                try:
+                    from core.task_lifecycle import get_lifecycle_manager
+                    _lcm = get_lifecycle_manager()
+                    if task.status == TaskStatus.COMPLETED:
+                        _lcm.mark_done(envelope, result_summary=f"task {task.task_id} completed")
+                    elif task.status == TaskStatus.FAILED:
+                        _lcm.mark_failed(envelope, error=task.error or "unknown")
+                except Exception:
+                    pass
+
         except Exception as e:
             logger.error(f"Task processing error: {e}")
             task.status = TaskStatus.FAILED
             task.error = str(e)
+            # PR-5 Cap 1: lifecycle → failed
+            if envelope is not None:
+                try:
+                    from core.task_lifecycle import get_lifecycle_manager
+                    get_lifecycle_manager().mark_failed(envelope, error=str(e))
+                except Exception:
+                    pass
         finally:
             task.completed_at = datetime.utcnow()
     
