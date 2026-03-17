@@ -771,6 +771,7 @@ class OpenClawd:
         # additive: failures are logged and silently suppressed so that existing
         # text-only paths continue to work exactly as before.
         _interaction_dict: Optional[Dict[str, Any]] = None
+        _interaction_mode_str: Optional[str] = None
         try:
             from core.interaction.scene_interpreter import SceneInterpreter as _SceneInterpreter
 
@@ -782,8 +783,23 @@ class OpenClawd:
                 session_id=session_id,
             )
             _interaction_dict = _decision.to_dict()
+            _interaction_mode_str = _decision.mode.value
         except Exception as _interp_err:
             logger.debug("SceneInterpreter.interpret failed: %s", _interp_err)
+
+        # ── Persona / Spirit Engine (PR-3) ────────────────────────────────────
+        # Retrieve current PersonaState for this session *before* processing.
+        # We update it *after* the response is ready (see below).  On any
+        # failure the persona block is silently skipped — text-only callers
+        # see response.response unchanged.
+        _persona_state_dict: Optional[Dict[str, Any]] = None
+        try:
+            from core.persona.state_store import get_state_store as _get_store
+            _persona_store = _get_store()
+            _pre_persona = _persona_store.get_state(session_id)
+            _persona_state_dict = _pre_persona.to_dict()
+        except Exception as _persona_pre_err:
+            logger.debug("PersonaState pre-fetch failed: %s", _persona_pre_err)
 
         try:
             from core.task_logger import emit_task_log
@@ -887,6 +903,18 @@ class OpenClawd:
                         )
                     except Exception:
                         pass
+                    # ── Persona / Spirit Engine update (PR-3) ─────────────────
+                    try:
+                        from core.persona.state_store import get_state_store as _get_store2
+                        _ps, _delta = _get_store2().update_state(
+                            session_id,
+                            message=message,
+                            interaction_mode=_interaction_mode_str,
+                            task_success=kernel_result.success,
+                        )
+                        _persona_state_dict = _ps.to_dict()
+                    except Exception as _pe:
+                        logger.debug("PersonaState update (kernel path) failed: %s", _pe)
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -894,6 +922,7 @@ class OpenClawd:
                         "error": kernel_result.error,
                         "trace_id": trace_id,
                         "interaction": _interaction_dict,
+                        "persona_state": _persona_state_dict,
                         "metadata": {
                             "request_id": request_id,
                             "trace_id": trace_id,
@@ -991,12 +1020,27 @@ class OpenClawd:
             except Exception:
                 pass
 
+            # ── Persona / Spirit Engine update (PR-3) ─────────────────────────
+            try:
+                from core.persona.state_store import get_state_store as _get_store3
+                _success_flag2 = result.get("success", True)
+                _ps2, _delta2 = _get_store3().update_state(
+                    session_id,
+                    message=message,
+                    interaction_mode=_interaction_mode_str,
+                    task_success=_success_flag2,
+                )
+                _persona_state_dict = _ps2.to_dict()
+            except Exception as _pe2:
+                logger.debug("PersonaState update (direct path) failed: %s", _pe2)
+
             return {
                 "success": result.get("success", True),
                 "response": response_text,
                 "intent": intent_type,
                 "trace_id": trace_id,
                 "interaction": _interaction_dict,
+                "persona_state": _persona_state_dict,
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,

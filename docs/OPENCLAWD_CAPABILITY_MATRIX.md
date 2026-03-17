@@ -404,3 +404,53 @@ All 39 tests cover:
 - `INTERACTION_MODE_SELECTED` event emission
 - `OpenClawd.process()` attaches `interaction` key for both text-only and multimodal requests
 - No regression on existing text-only response structure
+
+
+---
+
+## 7. Persona / Spirit Engine (PR-3)
+
+### 能力描述
+轻量级 **PersonaState** 系统，跟踪 mood / energy / focus / curiosity / urgency / trust_level / expression_mode 等情感状态，并基于消息情绪、交互模式和任务结果进行规则化更新。完全无模型调用，完全向后兼容。
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/persona_state.py` | **新增**：`PersonaState` dataclass + `to_dict()` + `_clip()` |
+| `core/persona/persona_rules.py` | **新增**：关键词列表、delta 常量、`derive_mood()`、`derive_expression_mode()` |
+| `core/persona/emotion_engine.py` | **新增**：`EmotionEngine.compute_delta()` + `apply_delta()`（纯规则） |
+| `core/persona/state_store.py` | **新增**：`StateStore`（内存 per-session）+ `get_state_store()` 单例；emit `PERSONA_STATE_UPDATED` |
+| `integration/event_bus.py` | 新增 `EventType.PERSONA_STATE_UPDATED` |
+| `core/openclawd.py` | `process()` 在请求前读取状态、在响应后更新状态，并将 `persona_state` 写入返回字典（additive） |
+| `tests/test_persona.py` | **新增**：34 个单元测试 |
+| `docs/PERSONA_STATE.md` | **新增**：完整文档 |
+
+### 验证路径
+
+```python
+from core.persona.state_store import get_state_store
+
+store = get_state_store()
+state, delta = store.update_state(
+    "sess_demo",
+    message="这个脚本崩溃了",
+    interaction_mode="control_console",
+    task_success=False,
+)
+assert state.urgency > 0.1
+assert state.mood in ("concerned", "focused")
+```
+
+### 运行测试
+
+```bash
+python -m pytest tests/test_persona.py -v --tb=short
+```
+
+34 个测试覆盖：
+- `PersonaState` schema + `to_dict()` 序列化
+- `EmotionEngine` 所有规则分支（感激、挫败、好奇、紧迫、任务成功/失败、交互模式）
+- `StateStore` get / update / reset + EventBus 异常不传播
+- `derive_mood` / `derive_expression_mode` 所有优先级
+- `OpenClawd.process()` 返回 `persona_state` 且文本调用路径的 `response` 字段不变
