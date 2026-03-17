@@ -304,3 +304,103 @@ All 22 tests cover:
 - EventBus failure is non-fatal
 - `OpenClawd.process()` text-only path unchanged
 - `OpenClawd.process()` with context injects summary into handler message
+
+---
+
+## 7. Scene Interpreter / Interaction Mode Engine (PR-2)
+
+### Capability Description
+
+The **Scene Interpreter** analyses the fused multimodal context (from PR-1) together with the
+raw message text and session metadata to select an `InteractionMode` and produce an
+`InteractionDecision` carrying UI / voice / avatar hints.  The decision is attached to
+`OpenClawd.process()` return payloads as `result["interaction"]` and broadcast on the EventBus
+as `INTERACTION_MODE_SELECTED`.
+
+All logic is **rule-based** (no model calls), so latency is near-zero and every rule is
+deterministically testable.
+
+### Interaction Modes
+
+| Mode | Value | When selected |
+|------|-------|---------------|
+| `CHAT` | `"chat"` | Default fallback — no special signal |
+| `DEEP_THINKING` | `"deep_thinking"` | Long message (> 40 chars) with analytical/philosophical keywords |
+| `CONTROL_CONSOLE` | `"control_console"` | Execution / task / script / command keywords detected |
+| `FIELD_ASSISTANT` | `"field_assistant"` | Visual context present **and** pointing/guidance keywords |
+| `AMBIENT_COMPANION` | `"ambient_companion"` | Very short message (≤ 8 chars), no strong signal |
+| `EXECUTION_BRIDGE` | `"execution_bridge"` | Reserved for future high-trust execution paths |
+
+### InteractionDecision Schema
+
+```python
+@dataclass
+class InteractionDecision:
+    mode: InteractionMode          # Selected mode
+    relationship_mode: str         # Human-readable relationship label
+    ui_surface: str                # UI renderer hint (e.g. "chat_panel", "control_console")
+    voice_mode: str                # Voice channel hint ("off", "ambient", "active")
+    avatar_mode: str               # Avatar hint ("idle", "focused", "guiding", …)
+    confidence: float              # [0.0, 1.0] interpreter confidence
+    rationale: str                 # Short explanation of the decision
+```
+
+### Caller Override via `mode_hint`
+
+Pass `mode_hint` (string matching `InteractionMode` value) to bypass all rules:
+
+```python
+from core.interaction.scene_interpreter import SceneInterpreter
+
+interpreter = SceneInterpreter()
+decision = interpreter.interpret(
+    message="任意消息",
+    fused_context=fused,
+    mode_hint="deep_thinking",   # Force DEEP_THINKING regardless of keywords
+)
+```
+
+### OpenClawd Integration
+
+`OpenClawd.process()` automatically calls `SceneInterpreter.interpret()` after the PR-1
+perception fusion step.  The decision is attached as a top-level `"interaction"` key:
+
+```python
+result = await openclawd.process(message="帮我执行部署脚本")
+# result["interaction"]["mode"]         == "control_console"
+# result["interaction"]["ui_surface"]   == "control_console"
+# result["interaction"]["voice_mode"]   == "off"
+# result["interaction"]["confidence"]   == 0.9
+```
+
+Text-only responses are **fully backward-compatible**: existing keys (`success`, `response`,
+`intent`, `trace_id`, `metadata`) are unchanged.  If the interpreter fails for any reason,
+`result["interaction"]` is `None` and the main response is unaffected.
+
+### Code Entry Points
+
+| File | Purpose |
+|------|---------|
+| `core/interaction/interaction_types.py` | `InteractionMode` enum + `InteractionDecision` dataclass |
+| `core/interaction/mode_selector.py`     | `ModeSelector` — per-mode hint tables and decision builder |
+| `core/interaction/scene_interpreter.py` | `SceneInterpreter` — rule engine + EventBus emission |
+| `core/interaction/__init__.py`          | Package re-exports |
+| `integration/event_bus.py`              | `EventType.INTERACTION_MODE_SELECTED` enum member |
+| `core/openclawd.py`                     | `process()` wires SceneInterpreter after MultimodalBus |
+
+### Running the Tests
+
+```bash
+python -m pytest tests/test_pr2_scene_interpreter.py -v --tb=short
+```
+
+All 39 tests cover:
+- `InteractionMode` enum completeness
+- `InteractionDecision` to_dict / from_dict round-trip
+- `ModeSelector.build_decision` for every mode + confidence clamping + overrides
+- `SceneInterpreter` rule engine: CONTROL_CONSOLE, FIELD_ASSISTANT, DEEP_THINKING, AMBIENT_COMPANION, CHAT
+- Caller override via `mode_hint` (valid and invalid values)
+- Error resilience (bad `fused_context` never raises)
+- `INTERACTION_MODE_SELECTED` event emission
+- `OpenClawd.process()` attaches `interaction` key for both text-only and multimodal requests
+- No regression on existing text-only response structure
