@@ -108,6 +108,9 @@ class EventType(Enum):
     # 交互模式事件 (PR 2)
     INTERACTION_MODE_SELECTED = auto()    # SceneInterpreter 已选定交互模式
 
+    # Persona / Spirit Engine 事件 (PR-3)
+    PERSONA_STATE_UPDATED = auto()        # PersonaState 已更新（session_id + delta）
+
 
 @dataclass
 class UIGalaxyEvent:
