@@ -930,6 +930,17 @@ class OpenClawd:
                         _interaction_envelope_dict = _envelope.to_dict()
                     except Exception as _ie:
                         logger.debug("InteractionEnvelope build (kernel path) failed: %s", _ie)
+                    # ── Output Orchestrator (PR-6) ────────────────────────────
+                    _output_plan_dict: Optional[Dict[str, Any]] = None
+                    try:
+                        from core.output.orchestrator import OutputOrchestrator as _OOrch
+                        _output_plan_dict = _OOrch().orchestrate(
+                            interaction_envelope=_interaction_envelope_dict,
+                            persona_state=_persona_state_dict,
+                            response_text=kernel_result.reply,
+                        )
+                    except Exception as _op:
+                        logger.debug("OutputOrchestrator (kernel path) failed: %s", _op)
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -939,6 +950,7 @@ class OpenClawd:
                         "interaction": _interaction_dict,
                         "persona_state": _persona_state_dict,
                         "interaction_envelope": _interaction_envelope_dict,
+                        "output_plan": _output_plan_dict,
                         "metadata": {
                             "request_id": request_id,
                             "trace_id": trace_id,
@@ -1065,6 +1077,18 @@ class OpenClawd:
             except Exception as _ie2:
                 logger.debug("InteractionEnvelope build (direct path) failed: %s", _ie2)
 
+            # ── Output Orchestrator (PR-6) ────────────────────────────────────
+            _output_plan_dict2: Optional[Dict[str, Any]] = None
+            try:
+                from core.output.orchestrator import OutputOrchestrator as _OOrch2
+                _output_plan_dict2 = _OOrch2().orchestrate(
+                    interaction_envelope=_interaction_envelope_dict2,
+                    persona_state=_persona_state_dict,
+                    response_text=response_text,
+                )
+            except Exception as _op2:
+                logger.debug("OutputOrchestrator (direct path) failed: %s", _op2)
+
             return {
                 "success": result.get("success", True),
                 "response": response_text,
@@ -1073,6 +1097,7 @@ class OpenClawd:
                 "interaction": _interaction_dict,
                 "persona_state": _persona_state_dict,
                 "interaction_envelope": _interaction_envelope_dict2,
+                "output_plan": _output_plan_dict2,
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,
