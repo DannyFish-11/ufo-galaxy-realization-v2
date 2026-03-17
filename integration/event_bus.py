@@ -101,6 +101,10 @@ class EventType(Enum):
     NATS_DISCONNECTED = auto()            # NATS 已断开
     NATS_RECONNECTING = auto()            # NATS 正在重连
 
+    # Multimodal Perception Bus (PR 1)
+    PERCEPTION_INGESTED = auto()          # 多模态输入已摄入（原始）
+    PERCEPTION_FUSED = auto()             # 多模态上下文已融合（摘要就绪）
+
 
 @dataclass
 class UIGalaxyEvent:

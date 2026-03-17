@@ -740,27 +740,30 @@ class OpenClawd:
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
 
-        # ── Multi-modal context: log presence and prepare serialized form ────
-        # ``multimodal_context`` is forwarded as-is through the pipeline and
-        # included in metadata so the model router can consume it in future PRs.
-        # Text-only requests leave this as None and are unaffected.
+        # ── Multimodal Perception Bus (PR 1) ─────────────────────────────────
+        # Run MultimodalBus.ingest() for every request (text-only requests
+        # produce an empty fusion_summary and leave the message unchanged).
+        # Base64 payloads are never stored in _mm_context_dict.
         _mm_context_dict: Optional[Dict[str, Any]] = None
-        if multimodal_context is not None:
-            try:
-                _mm_context_dict = multimodal_context.model_dump()
-                _img_count = len(_mm_context_dict.get("images", []))
-                _aud_count = len(_mm_context_dict.get("audio", []))
-                logger.debug(
-                    "OpenClawd process: multimodal_context present — images=%d audio=%d",
-                    _img_count,
-                    _aud_count,
-                )
-            except Exception as _mm_err:
-                logger.debug(
-                    "Failed to serialize multimodal_context (type=%s): %s",
-                    type(multimodal_context).__name__,
-                    _mm_err,
-                )
+        _fusion_suffix: str = ""
+        try:
+            from core.perception.multimodal_bus import MultimodalBus as _MMBus
+
+            _bus = _MMBus()
+            _mm_context_dict = _bus.ingest(
+                message=message,
+                multimodal_context=multimodal_context,
+                device_metadata={"device_id": device_id, "session_id": session_id},
+            )
+            _fusion_suffix = _mm_context_dict.get("fusion_summary") or ""
+        except Exception as _bus_err:  # broad catch: bus must never crash the main request flow
+            logger.debug("MultimodalBus.ingest failed: %s", _bus_err)
+            # Graceful fallback: serialise raw context if available
+            if multimodal_context is not None:
+                try:
+                    _mm_context_dict = multimodal_context.model_dump()
+                except Exception:  # model_dump may raise AttributeError / ValidationError
+                    pass
 
         try:
             from core.task_logger import emit_task_log
@@ -917,7 +920,7 @@ class OpenClawd:
                     effective_device_id = selected
 
             result = await handler(
-                message=message,
+                message=f"{message}\n{_fusion_suffix}" if _fusion_suffix else message,
                 intent=parsed_intent,
                 device_id=effective_device_id,
                 session_id=session_id,
