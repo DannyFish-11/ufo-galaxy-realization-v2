@@ -105,6 +105,9 @@ class EventType(Enum):
     PERCEPTION_INGESTED = auto()          # 多模态输入已摄入（原始）
     PERCEPTION_FUSED = auto()             # 多模态上下文已融合（摘要就绪）
 
+    # 交互模式事件 (PR 2)
+    INTERACTION_MODE_SELECTED = auto()    # SceneInterpreter 已选定交互模式
+
 
 @dataclass
 class UIGalaxyEvent:

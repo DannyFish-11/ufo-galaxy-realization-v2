@@ -765,6 +765,26 @@ class OpenClawd:
                 except Exception:  # model_dump may raise AttributeError / ValidationError
                     pass
 
+        # ── Scene Interpreter (PR 2) ──────────────────────────────────────
+        # Run SceneInterpreter after perception fusion to select an
+        # InteractionMode and produce UI/voice/avatar hints.  This is purely
+        # additive: failures are logged and silently suppressed so that existing
+        # text-only paths continue to work exactly as before.
+        _interaction_dict: Optional[Dict[str, Any]] = None
+        try:
+            from core.interaction.scene_interpreter import SceneInterpreter as _SceneInterpreter
+
+            _interpreter = _SceneInterpreter()
+            _decision = _interpreter.interpret(
+                message=message,
+                fused_context=_mm_context_dict,
+                device_metadata={"device_id": device_id, "session_id": session_id},
+                session_id=session_id,
+            )
+            _interaction_dict = _decision.to_dict()
+        except Exception as _interp_err:
+            logger.debug("SceneInterpreter.interpret failed: %s", _interp_err)
+
         try:
             from core.task_logger import emit_task_log
             emit_task_log(
@@ -873,6 +893,7 @@ class OpenClawd:
                         "intent": kernel_result.intent.raw_intent,
                         "error": kernel_result.error,
                         "trace_id": trace_id,
+                        "interaction": _interaction_dict,
                         "metadata": {
                             "request_id": request_id,
                             "trace_id": trace_id,
@@ -975,6 +996,7 @@ class OpenClawd:
                 "response": response_text,
                 "intent": intent_type,
                 "trace_id": trace_id,
+                "interaction": _interaction_dict,
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,
