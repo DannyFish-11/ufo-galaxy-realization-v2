@@ -651,3 +651,186 @@ python -m pytest tests/test_pr5_generative_ui.py -v --tb=short
 - 未知模式回退到 `chat_panel`
 - `GenerativeUIRuntime.render_surface()` 正常路径与错误容忍
 - `get_generative_ui_runtime()` 单例行为
+
+---
+
+## 8. Output Orchestrator — Multi-Channel Output Plan (PR-6)
+
+### 能力描述
+
+Output Orchestrator 将 `InteractionEnvelope`、`PersonaState` 和 `response_text`
+转换为**多通道输出计划**，统一描述文字/语音/形象/覆盖层等各渠道的渲染意图。
+除文字通道外，其余通道均为存根实现（stub）——返回结构化计划，但不执行真实渲染。
+
+`OpenClawd.process()` 返回结构新增顶层字段 `output_plan`；现有字段（`response`、
+`interaction_envelope` 等）完全不变。
+
+---
+
+### output_plan 结构
+
+```json
+{
+  "text": {
+    "enabled": true,
+    "content": "<response text>",
+    "format": "markdown",
+    "streaming": false,
+    "expression_hint": "quiet_luminous"
+  },
+  "voice": {
+    "enabled": false,
+    "tts_plan": null,
+    "note": "stub: voice not requested for this interaction mode"
+  },
+  "avatar": {
+    "enabled": false,
+    "avatar_plan": null,
+    "note": "stub: avatar not requested for this interaction mode"
+  },
+  "overlay": {
+    "enabled": false,
+    "overlay_plan": null,
+    "note": "stub: overlay not requested for this interaction mode"
+  },
+  "actions": []
+}
+```
+
+当 `InteractionEnvelope.output_plan` 中 `voice / avatar / overlay` 为 `true` 时，
+对应子 dict 中会携带完整的计划数据：
+
+```json
+{
+  "voice": {
+    "enabled": true,
+    "tts_plan": {
+      "engine": "stub",
+      "text": "<response text>",
+      "voice_id": "default",
+      "speed": 1.0,
+      "pitch": 1.0,
+      "mood_hint": "calm"
+    },
+    "note": "stub: TTS plan ready — audio synthesis not yet implemented"
+  },
+  "avatar": {
+    "enabled": true,
+    "avatar_plan": {
+      "expression": "curious",
+      "animation": "thinking",
+      "pose": "default",
+      "energy_level": 0.82,
+      "blink": true
+    },
+    "note": "stub: avatar plan ready — 3D rendering not yet implemented"
+  },
+  "overlay": {
+    "enabled": true,
+    "overlay_plan": {
+      "type": "annotation",
+      "position": "auto",
+      "content_snippet": "<first 120 chars of response>",
+      "highlight_targets": [],
+      "steps": [],
+      "opacity": 0.85
+    },
+    "note": "stub: overlay plan ready — screen rendering not yet implemented"
+  }
+}
+```
+
+---
+
+### 各通道启用规则
+
+| 通道    | 启用条件 |
+|---------|---------|
+| `text`  | **始终启用**（text-only 通用回退） |
+| `voice` | `OutputPlan.voice == true`（`field_assistant` / `ambient_companion` 默认开启） |
+| `avatar`| `OutputPlan.avatar == true`（`deep_thinking` / `field_assistant` / `ambient_companion` 默认开启） |
+| `overlay`| `OutputPlan.overlay == true`（`field_assistant` 默认开启） |
+| `actions`| 来自 `task_state.actions`（可选，列表为空时返回 `[]`） |
+
+---
+
+### text 通道 format 规则
+
+| `ui_surface`              | `format`   |
+|---------------------------|------------|
+| `chat_panel`              | `markdown` |
+| `infinite_canvas`         | `markdown` |
+| `deep_thinking_canvas`    | `markdown` |
+| `control_console`         | `markdown` |
+| 其他（如 `field_overlay`） | `plain`    |
+
+---
+
+### 代码落地点
+
+| 文件 | 内容 |
+|------|------|
+| `core/output/__init__.py` | 包入口，导出 `OutputOrchestrator` |
+| `core/output/orchestrator.py` | `OutputOrchestrator.orchestrate()` 主逻辑；接受 envelope dict/对象/None |
+| `core/output/text_channel.py` | `TextChannel.build()` — 始终启用；format 由 ui_surface 决定 |
+| `core/output/voice_channel.py` | `VoiceChannel.build()` — stub；enabled 时返回 `tts_plan` |
+| `core/output/avatar_channel.py` | `AvatarChannel.build()` — stub；mood→expression / mode→animation 映射 |
+| `core/output/overlay_channel.py` | `OverlayChannel.build()` — stub；从 task_state 提取 steps |
+| `core/openclawd.py` | `process()` 两条路径（kernel / direct）各新增 Output Orchestrator 调用块，写入 `output_plan` 键 |
+| `tests/test_pr6_output_orchestrator.py` | **新增**：单元测试（TextChannel / VoiceChannel / AvatarChannel / OverlayChannel / OutputOrchestrator / OpenClawd 集成） |
+
+---
+
+### 客户端消费示意
+
+```python
+result = await openclawd.process(message="...", session_id="sess_1")
+
+# 文字渲染（始终可用）
+text_plan = result["output_plan"]["text"]
+print(text_plan["content"])          # response text
+print(text_plan["format"])           # "markdown" | "plain"
+
+# 语音合成（仅当 voice enabled）
+voice_plan = result["output_plan"]["voice"]
+if voice_plan["enabled"]:
+    tts = voice_plan["tts_plan"]     # engine, text, voice_id, speed, pitch, mood_hint
+
+# 形象渲染（仅当 avatar enabled）
+avatar_plan = result["output_plan"]["avatar"]
+if avatar_plan["enabled"]:
+    ap = avatar_plan["avatar_plan"]  # expression, animation, pose, energy_level, blink
+
+# 屏幕标注（仅当 overlay enabled）
+overlay_plan = result["output_plan"]["overlay"]
+if overlay_plan["enabled"]:
+    op = overlay_plan["overlay_plan"]  # type, position, content_snippet, steps, opacity
+
+# 后续动作列表
+for action in result["output_plan"]["actions"]:
+    dispatch(action)
+```
+
+---
+
+### 验证路径
+
+```python
+from core.output import OutputOrchestrator
+
+plan = OutputOrchestrator().orchestrate(
+    interaction_envelope=None,
+    persona_state=None,
+    response_text="Hello!",
+)
+assert plan["text"]["enabled"] is True
+assert plan["text"]["content"] == "Hello!"
+assert plan["voice"]["enabled"] is False
+assert plan["actions"] == []
+```
+
+### 运行测试
+
+```bash
+python -m pytest tests/test_pr6_output_orchestrator.py -v --tb=short
+```
