@@ -191,13 +191,31 @@ class MinimalistWindow(QMainWindow):
     """
     Galaxy Windows客户端主窗口
     极简主义设计风格
+
+    Generative UI surfaces (PR-5)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    The window tracks a *current_surface* string.  When the server response
+    includes an ``interaction_envelope`` the client calls
+    :meth:`render_interaction` which delegates to :meth:`switch_surface` to
+    adapt the layout stub.  The existing chat UI remains the fallback when no
+    envelope is present.
     """
-    
+
+    # Mapping from surface_type string to a human-readable panel label
+    _SURFACE_LABELS: Dict[str, str] = {
+        "chat_panel": "● Chat",
+        "deep_thinking_canvas": "● Deep Thinking",
+        "control_console": "● Control Console",
+        "field_assistant_overlay_stub": "● Field Assistant",
+        "ambient_companion": "● Companion",
+    }
+
     def __init__(self):
         super().__init__()
         
         self.tasks: Dict[str, UITask] = {}
         self.l4_thread: Optional[L4WorkerThread] = None
+        self._current_surface: str = "chat_panel"
         
         # 设置窗口
         self.setWindowTitle("Galaxy - AI Assistant")
@@ -486,6 +504,50 @@ class MinimalistWindow(QMainWindow):
             else:
                 self.status_label.setText("● 已停止")
     
+    def switch_surface(self, surface_type: str) -> None:
+        """Switch the active UI surface stub (PR-5 generative UI).
+
+        Updates the window title and the status label to reflect the new
+        surface.  Each surface type is a *stub* — full layout changes are
+        future work — but the state tracking is real so that callers can
+        observe mode transitions.
+
+        Args:
+            surface_type: One of the canonical surface type strings produced
+                by :class:`~core.generative_ui.surface_selector.SurfaceSelector`
+                (e.g. ``"deep_thinking_canvas"``, ``"control_console"``).
+                Unknown values fall back to ``"chat_panel"``.
+        """
+        if not PYQT_AVAILABLE:
+            return
+        previous = self._current_surface
+        self._current_surface = surface_type if surface_type in self._SURFACE_LABELS else "chat_panel"
+        label = self._SURFACE_LABELS.get(self._current_surface, "● Chat")
+        self.status_label.setText(label)
+        if self._current_surface != previous:
+            logger.info("Surface switched: %s → %s", previous, self._current_surface)
+
+    def render_interaction(self, envelope: Dict[str, Any]) -> None:
+        """Update the UI based on the ``interaction_envelope`` from a response.
+
+        Reads the ``output_plan.ui_surface`` key from *envelope* and calls
+        :meth:`switch_surface`.  If *envelope* is ``None`` or malformed the
+        client silently keeps the current surface (fallback behaviour).
+
+        Args:
+            envelope: The ``interaction_envelope`` dict attached to an API
+                response, as produced by
+                :class:`~core.interaction.interaction_builder.InteractionBuilder`.
+        """
+        if not envelope or not isinstance(envelope, dict):
+            return
+        try:
+            output_plan = envelope.get("output_plan") or {}
+            surface_type = output_plan.get("ui_surface", "chat_panel")
+            self.switch_surface(surface_type)
+        except Exception as exc:
+            logger.debug("render_interaction failed (non-fatal): %s", exc)
+
     def _on_command_submitted(self):
         """
         命令提交回调（UI → L4 集成点）
@@ -527,7 +589,13 @@ class MinimalistWindow(QMainWindow):
             self._llm_chat_async(command)
     
     def _llm_chat_async(self, command: str):
-        """异步 LLM 对话（在后台线程执行）"""
+        """异步 LLM 对话（在后台线程执行）
+
+        PR-5 Generative UI: when the API response includes an
+        ``interaction_envelope`` field the result handler calls
+        :meth:`render_interaction` to switch the active surface.  If no
+        envelope is present the existing chat-panel view is kept as-is.
+        """
         from PyQt6.QtCore import QThread
 
         class LLMWorker(QThread):
@@ -536,13 +604,16 @@ class MinimalistWindow(QMainWindow):
             def __init__(self, message: str):
                 super().__init__()
                 self.message = message
+                # PR-5: stores interaction_envelope dict from the last API call
+                self._last_envelope: Optional[dict] = None
 
             def run(self):
-                reply = self._call_llm(self.message)
+                reply, envelope = self._call_llm(self.message)
+                self._last_envelope = envelope
                 self.result_ready.emit(reply)
 
-            def _call_llm(self, message: str) -> str:
-                """调用 LLM API"""
+            def _call_llm(self, message: str):
+                """调用 LLM API，返回 (reply_text, interaction_envelope_or_None)"""
                 api_base = os.environ.get("GALAXY_API_BASE", "http://localhost:8299")
                 dashboard_base = os.environ.get("DASHBOARD_API_BASE", f"http://localhost:{get_service_port('dashboard')}")
 
@@ -552,7 +623,9 @@ class MinimalistWindow(QMainWindow):
                 reply_text = (result.get("response") or result.get("reply")) if result else None
                 if result and result.get("success") and reply_text:
                     model = result.get("model", "")
-                    return f"[{model}] {reply_text}" if model else reply_text
+                    envelope = result.get("interaction_envelope")
+                    text = f"[{model}] {reply_text}" if model else reply_text
+                    return text, envelope
 
                 # 尝试 Dashboard
                 result = self._api_call(f"{dashboard_base}/api/v1/dashboard/chat",
@@ -560,7 +633,9 @@ class MinimalistWindow(QMainWindow):
                 reply_text = (result.get("response") or result.get("reply")) if result else None
                 if result and result.get("success") and reply_text:
                     model = result.get("model", "")
-                    return f"[{model}] {reply_text}" if model else reply_text
+                    envelope = result.get("interaction_envelope")
+                    text = f"[{model}] {reply_text}" if model else reply_text
+                    return text, envelope
 
                 # 直接调用 LLM
                 for key_name, base_url, model in [
@@ -582,11 +657,14 @@ class MinimalistWindow(QMainWindow):
                             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"})
                         with urllib.request.urlopen(req, timeout=30) as resp:
                             data = json.loads(resp.read().decode("utf-8"))
-                            return f"[{model}] {data['choices'][0]['message']['content']}"
+                            return f"[{model}] {data['choices'][0]['message']['content']}", None
                     except Exception:
                         continue
 
-                return f"AI 服务未连接。请在 Dashboard (http://localhost:{get_service_port('dashboard')}) 配置 API Key。"
+                return (
+                    f"AI 服务未连接。请在 Dashboard (http://localhost:{get_service_port('dashboard')}) 配置 API Key。",
+                    None,
+                )
 
             def _api_call(self, url: str, payload: dict) -> Optional[dict]:
                 try:
@@ -599,9 +677,15 @@ class MinimalistWindow(QMainWindow):
                     return None
 
         self._llm_worker = LLMWorker(command)
-        self._llm_worker.result_ready.connect(
-            lambda reply: self._append_output(f"[AI] {reply}\n")
-        )
+
+        def _on_llm_result(reply: str) -> None:
+            self._append_output(f"[AI] {reply}\n")
+            # PR-5: adapt UI surface if the server returned an interaction_envelope
+            envelope = getattr(self._llm_worker, "_last_envelope", None)
+            if envelope:
+                self.render_interaction(envelope)
+
+        self._llm_worker.result_ready.connect(_on_llm_result)
         self._llm_worker.start()
 
     def _parse_user_intent(self, command: str) -> Dict[str, Any]:

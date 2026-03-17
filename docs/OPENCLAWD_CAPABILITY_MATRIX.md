@@ -580,3 +580,74 @@ python -m pytest tests/test_pr4_interaction_envelope.py -v --tb=short
 - `InteractionBuilder` 全输入装配、仅 trace_id/session_id、persona dict/dataclass 两路径、binary key 剔除、error resilience、自定义 output_plan
 - `OpenClawd.process()` 返回 `interaction_envelope`（含 trace_id 一致性、output_plan 完整性）
 - 现有字段非回归检查（`success`, `response`, `intent`, `trace_id`, `metadata`）
+
+---
+
+## 6. 生成式交互运行时 — UI Surface 选择与渲染（PR-5）
+
+### 能力描述
+
+系统根据 `InteractionEnvelope` 中的交互模式（`mode`）动态选择 UI Surface，
+Windows 客户端和 Dashboard 后端均可自适应切换界面布局，现有聊天界面保持回退。
+
+### Surface 类型与映射规则
+
+| 交互模式 (`InteractionMode`) | UI Surface 类型 | 说明 |
+|---|---|---|
+| `CHAT` | `chat_panel` | 默认对话面板，通用回退界面 |
+| `DEEP_THINKING` | `deep_thinking_canvas` | 无限滚动深度分析画布 |
+| `CONTROL_CONSOLE` | `control_console` | 任务/脚本执行控制台 |
+| `FIELD_ASSISTANT` | `field_assistant_overlay_stub` | 现场辅助覆盖层存根（含视觉上下文） |
+| `AMBIENT_COMPANION` | `ambient_companion` | 环境低介入伴侣模式 |
+| `EXECUTION_BRIDGE` | `control_console` | 复用控制台界面 |
+
+### 代码落地点
+
+| 文件 | 内容 |
+|------|------|
+| `core/generative_ui/widget_schema.py` | `SurfaceType` 枚举（5 种 surface）、`SurfaceSpec` 数据类（含 layout_hints）、`get_surface_meta()` |
+| `core/generative_ui/surface_selector.py` | `SurfaceSelector.select_surface(envelope)` — 核心映射逻辑 |
+| `core/generative_ui/runtime.py` | `GenerativeUIRuntime`（façade）、`get_generative_ui_runtime()`（进程级单例） |
+| `core/generative_ui/__init__.py` | 公开 API 入口 |
+| `windows_client/windows_client_integrated.py` | `MinimalistWindow.switch_surface(surface_type)` + `render_interaction(envelope)` |
+| `dashboard/backend/main.py` | `_make_response()` 接受 `interaction_envelope` 参数，输出 `surface_type` + `interaction_envelope` 字段；WebSocket 响应转发 `surface_type` |
+
+### 验证路径
+
+```python
+from core.generative_ui import GenerativeUIRuntime, SurfaceType
+from core.schemas.interaction_envelope import InteractionEnvelope, OutputPlan
+
+runtime = GenerativeUIRuntime()
+
+# CHAT 模式 → chat_panel
+spec = runtime.render_surface({"mode": "chat"})
+assert spec.surface_type == SurfaceType.CHAT_PANEL
+
+# DEEP_THINKING 模式 → deep_thinking_canvas
+spec = runtime.render_surface({"mode": "deep_thinking"})
+assert spec.surface_type == SurfaceType.DEEP_THINKING_CANVAS
+
+# None envelope → chat_panel (safe fallback)
+spec = runtime.render_surface(None)
+assert spec.surface_type == SurfaceType.CHAT_PANEL
+
+# SurfaceSpec 可序列化为 JSON
+import json
+json.dumps(spec.to_dict())  # 不抛异常
+```
+
+### 最小测试
+
+```bash
+python -m pytest tests/test_pr5_generative_ui.py -v --tb=short
+```
+
+41 个测试覆盖：
+- `SurfaceType` 枚举值完整性与字符串 round-trip
+- `SurfaceSpec` 默认构造、`to_dict()` 键集、JSON 可序列化
+- `SurfaceSelector.select_surface()` — 全部 6 种 `InteractionMode` 到 surface 的映射
+- None / dict / 对象 / 枚举 `.mode` 等多种入参形式
+- 未知模式回退到 `chat_panel`
+- `GenerativeUIRuntime.render_surface()` 正常路径与错误容忍
+- `get_generative_ui_runtime()` 单例行为
