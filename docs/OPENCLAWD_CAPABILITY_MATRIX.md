@@ -193,3 +193,114 @@ python -m pytest tests/test_pr5_capability_closure.py -v --tb=short
 python scripts/non_visual_task_demo.py
 python scripts/cross_device_task_demo.py
 ```
+
+---
+
+## 6. Multimodal Perception Bus (PR-1)
+
+### Capability Description
+
+OpenClawd can accept multimodal inputs (images, audio, screen metadata) alongside
+every chat request.  A dedicated **Multimodal Perception Bus** fuses all modalities
+into a single lightweight context dict and injects a compact summary into the LLM
+prompt — without modifying text-only request handling.
+
+### How to Send Multimodal Input
+
+Set the `multimodal_context` field on `ChatRequest`:
+
+```python
+from core.schemas.multimodal import (
+    MultiModalContext, MultiModalImage, MultiModalAudio
+)
+from core.routes._models import ChatRequest
+
+request = ChatRequest(
+    message="What is in this image?",
+    multimodal_context=MultiModalContext(
+        images=[
+            MultiModalImage(
+                mime="image/jpeg",
+                data="<base64-encoded JPEG>",
+                source="webcam",
+            )
+        ],
+        audio=[
+            MultiModalAudio(
+                mime="audio/wav",
+                data="<base64-encoded WAV>",
+                source="microphone",
+            )
+        ],
+        screen={"window_title": "VS Code", "resolution": "2560x1440"},
+    ),
+)
+```
+
+Text-only callers omit `multimodal_context` (or leave it `None`) — the behaviour
+is **identical** to before PR-1.
+
+### Fusion Pipeline Overview
+
+```
+ChatRequest.multimodal_context
+        │
+        ▼
+OpenClawd.process()
+        │
+        ▼
+MultimodalBus.ingest()          ← emits PERCEPTION_INGESTED event
+        │
+        ├─ extracts images / audio metadata (strips base64 payloads)
+        ├─ extracts screen / device metadata
+        │
+        ▼
+ContextFuser.fuse()
+        │
+        ├─ enforces MAX_IMAGES=20 / MAX_AUDIO=10 size limits
+        ├─ builds fusion_summary string, e.g.
+        │    "[Multimodal context: 2 image(s) [webcam], 1 audio clip(s) [microphone]]"
+        │
+        ▼
+Fused context dict              ← emits PERCEPTION_FUSED event
+  {text, images, audio,
+   screen, device,
+   fusion_summary}
+        │
+        ▼
+Handler (e.g. _dispatch_chat)
+  message = original_message + "\n" + fusion_summary
+        │
+        ▼
+LLM prompt (user turn contains fusion summary)
+```
+
+Base64 payloads are **never** stored in the fused dict or written to logs.
+
+### Code Entry Points
+
+| File | Purpose |
+|------|---------|
+| `core/perception/multimodal_bus.py` | `MultimodalBus.ingest()` — unified entry point |
+| `core/perception/context_fuser.py`  | `ContextFuser.fuse()` — pure fusion logic |
+| `core/perception/event_types.py`    | `PERCEPTION_INGESTED`, `PERCEPTION_FUSED` aliases |
+| `integration/event_bus.py`          | `EventType.PERCEPTION_INGESTED/FUSED` enum members |
+| `core/openclawd.py`                 | `process()` wires MultimodalBus and injects summary |
+| `core/routes/_models.py`            | `ChatRequest.multimodal_context` field |
+| `core/schemas/multimodal.py`        | `MultiModalContext`, `MultiModalImage`, `MultiModalAudio` |
+
+### Running the Tests
+
+```bash
+python -m pytest tests/test_pr1_multimodal_bus.py -v --tb=short
+```
+
+All 22 tests cover:
+- Text-only path (no side-effects, no summary appended)
+- Image + audio context → deterministic `fusion_summary`
+- Base64 stripping in fused output
+- Size-limit enforcement (MAX_IMAGES / MAX_AUDIO)
+- `PERCEPTION_INGESTED` / `PERCEPTION_FUSED` event emission
+- EventBus failure is non-fatal
+- `OpenClawd.process()` text-only path unchanged
+- `OpenClawd.process()` with context injects summary into handler message
