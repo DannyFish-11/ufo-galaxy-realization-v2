@@ -2104,7 +2104,8 @@ async def dashboard_chat(request: dict):
 
     def _make_response(response_text: str, success: bool = True, mode: str = "chat",
                        extra_data: Dict = None, error: str = "",
-                       routing: Dict = None, agent_steps: List = None) -> JSONResponse:
+                       routing: Dict = None, agent_steps: List = None,
+                       interaction_envelope: Dict = None) -> JSONResponse:
         resp = UnifiedChatResponse(
             success=success,
             response=response_text,
@@ -2122,6 +2123,12 @@ async def dashboard_chat(request: dict):
             resp_dict["routing"] = routing
         if agent_steps:
             resp_dict["agent_steps"] = agent_steps
+        # PR-5: pass through interaction_envelope (non-breaking; absent when None)
+        if interaction_envelope and isinstance(interaction_envelope, dict):
+            resp_dict["interaction_envelope"] = interaction_envelope
+            output_plan = interaction_envelope.get("output_plan") or {}
+            surface_type = output_plan.get("ui_surface", "chat_panel")
+            resp_dict["surface_type"] = surface_type
         return JSONResponse(resp_dict)
 
     async def _save_assistant_reply(reply_text: str):
@@ -2173,7 +2180,11 @@ async def dashboard_chat(request: dict):
                 result = await galaxy_core.call_node("50", "chat", {"message": message})
                 reply = result.get("response", "处理完成")
                 await _save_assistant_reply(reply)
-                return _make_response(reply)
+                # PR-5: pass through interaction_envelope if present in result
+                return _make_response(
+                    reply,
+                    interaction_envelope=result.get("interaction_envelope"),
+                )
         except Exception as e:
             logger.error(f"Galaxy core dispatch failed: {e}")
             # 降级到 LLM
@@ -2434,10 +2445,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         body = json.loads(ws_response.body)
                     else:
                         body = ws_response if isinstance(ws_response, dict) else {}
-                    await websocket.send_json({
+                    ws_msg: Dict[str, Any] = {
                         "type": "chat_response",
-                        "content": body.get("response", "")
-                    })
+                        "content": body.get("response", ""),
+                    }
+                    # PR-5: forward surface_type and interaction_envelope when present
+                    if "surface_type" in body:
+                        ws_msg["surface_type"] = body["surface_type"]
+                    if "interaction_envelope" in body:
+                        ws_msg["interaction_envelope"] = body["interaction_envelope"]
+                    await websocket.send_json(ws_msg)
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
