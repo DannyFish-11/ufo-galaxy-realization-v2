@@ -772,6 +772,7 @@ class OpenClawd:
         # text-only paths continue to work exactly as before.
         _interaction_dict: Optional[Dict[str, Any]] = None
         _interaction_mode_str: Optional[str] = None
+        _decision = None
         try:
             from core.interaction.scene_interpreter import SceneInterpreter as _SceneInterpreter
 
@@ -915,6 +916,20 @@ class OpenClawd:
                         _persona_state_dict = _ps.to_dict()
                     except Exception as _pe:
                         logger.debug("PersonaState update (kernel path) failed: %s", _pe)
+                    # ── InteractionEnvelope (PR-4) ────────────────────────────
+                    _interaction_envelope_dict: Optional[Dict[str, Any]] = None
+                    try:
+                        from core.interaction.interaction_builder import InteractionBuilder as _IBuilder
+                        _envelope = _IBuilder().build(
+                            trace_id=trace_id,
+                            session_id=session_id,
+                            scene_decision=_decision,
+                            persona_state=_persona_state_dict,
+                            fused_context=_mm_context_dict,
+                        )
+                        _interaction_envelope_dict = _envelope.to_dict()
+                    except Exception as _ie:
+                        logger.debug("InteractionEnvelope build (kernel path) failed: %s", _ie)
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -923,6 +938,7 @@ class OpenClawd:
                         "trace_id": trace_id,
                         "interaction": _interaction_dict,
                         "persona_state": _persona_state_dict,
+                        "interaction_envelope": _interaction_envelope_dict,
                         "metadata": {
                             "request_id": request_id,
                             "trace_id": trace_id,
@@ -1034,6 +1050,21 @@ class OpenClawd:
             except Exception as _pe2:
                 logger.debug("PersonaState update (direct path) failed: %s", _pe2)
 
+            # ── InteractionEnvelope (PR-4) ────────────────────────────────────
+            _interaction_envelope_dict2: Optional[Dict[str, Any]] = None
+            try:
+                from core.interaction.interaction_builder import InteractionBuilder as _IBuilder2
+                _envelope2 = _IBuilder2().build(
+                    trace_id=trace_id,
+                    session_id=session_id,
+                    scene_decision=_decision,
+                    persona_state=_persona_state_dict,
+                    fused_context=_mm_context_dict,
+                )
+                _interaction_envelope_dict2 = _envelope2.to_dict()
+            except Exception as _ie2:
+                logger.debug("InteractionEnvelope build (direct path) failed: %s", _ie2)
+
             return {
                 "success": result.get("success", True),
                 "response": response_text,
@@ -1041,6 +1072,7 @@ class OpenClawd:
                 "trace_id": trace_id,
                 "interaction": _interaction_dict,
                 "persona_state": _persona_state_dict,
+                "interaction_envelope": _interaction_envelope_dict2,
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,
