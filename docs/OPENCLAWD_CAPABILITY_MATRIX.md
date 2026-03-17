@@ -454,3 +454,129 @@ python -m pytest tests/test_persona.py -v --tb=short
 - `StateStore` get / update / reset + EventBus 异常不传播
 - `derive_mood` / `derive_expression_mode` 所有优先级
 - `OpenClawd.process()` 返回 `persona_state` 且文本调用路径的 `response` 字段不变
+
+
+---
+
+## 8. InteractionEnvelope — Unified Interaction Protocol (PR-4)
+
+### 能力描述
+
+**InteractionEnvelope** 是每个请求生命周期内，将前三个 PR 的输出统一装配到一个可序列化对象中的**联合上下文信封**。它由 `InteractionBuilder` 在 `OpenClawd.process()` 的末尾装配，并以 `interaction_envelope` 键附加到响应 payload 中，供 Windows / Android / Dashboard 三端动态渲染 UI 时消费。
+
+核心字段：
+
+| 字段 | 类型 | 来源 |
+|------|------|------|
+| `interaction_id` | `str` (`ix_<hex>`) | 生成于 envelope 构建时，每次请求唯一 |
+| `trace_id` | `str \| null` | 来自 `OpenClawd.process()` 的 `trace_id`，与 `metadata.trace_id` 完全一致 |
+| `session_id` | `str` | 当前会话 ID |
+| `mode` | `str` | `SceneInterpreter` 选出的交互模式（如 `"chat"`, `"deep_thinking"`） |
+| `relationship_mode` | `str` | 关系描述标签（如 `"scholar_companion"`, `"user_companion"`） |
+| `persona_state` | `dict \| null` | `PersonaState.to_dict()` 序列化结果（PR-3）|
+| `multimodal_context` | `dict \| null` | `MultimodalBus.ingest()` 融合结果，已剔除 `images`/`audio` 等二进制字段（PR-1）|
+| `output_plan` | `dict` | 渲染提示：`text`, `voice`, `avatar`, `overlay`, `ui_surface` |
+| `created_at` | `str` (ISO 8601) | 信封构建时的 UTC 时间戳 |
+
+### 代码落地点
+
+| 文件 | 改动内容 |
+|------|----------|
+| `core/schemas/interaction_envelope.py` | **新增**：`OutputPlan` dataclass + `InteractionEnvelope` dataclass（含 `to_dict()` / `model_dump()`） |
+| `core/interaction/interaction_builder.py` | **新增**：`InteractionBuilder.build()`，装配 envelope；自动去除 binary context key；错误时返回 text-only fallback |
+| `core/openclawd.py` | `process()` 在两条返回路径（agent_kernel 路径 + 直接调度路径）末尾各调用 `InteractionBuilder().build()`，将 `interaction_envelope` 写入返回 dict（additive，不改变已有字段） |
+| `core/routes/chat.py` | `/api/v1/chat` 在 `JSONResponse` 中附加 `interaction_envelope`（仅当非 None 时） |
+| `tests/test_pr4_interaction_envelope.py` | **新增**：36 个单元测试 |
+| `docs/OPENCLAWD_CAPABILITY_MATRIX.md` | **更新**：本节 |
+
+### OutputPlan — 各模式默认值
+
+| 交互模式 | `text` | `voice` | `avatar` | `overlay` | `ui_surface` |
+|----------|--------|---------|----------|-----------|--------------|
+| `chat` | ✓ | — | — | — | `chat_panel` |
+| `deep_thinking` | ✓ | — | ✓ | — | `infinite_canvas` |
+| `control_console` | ✓ | — | — | — | `control_console` |
+| `field_assistant` | ✓ | ✓ | ✓ | ✓ | `field_overlay` |
+| `ambient_companion` | ✓ | ✓ | ✓ | — | `ambient` |
+| `execution_bridge` | ✓ | — | — | — | `control_console` |
+
+### 样例 JSON
+
+`/api/v1/chat` 响应中新增的 `interaction_envelope` 字段示例（deep_thinking 场景）：
+
+```json
+{
+  "interaction_envelope": {
+    "interaction_id": "ix_3f7a1c9b2e4d5a60",
+    "trace_id": "8bc4de02f1a34e99b71c55e2d3a70f61",
+    "session_id": "session_4a9f12bc",
+    "mode": "deep_thinking",
+    "relationship_mode": "scholar_companion",
+    "persona_state": {
+      "session_id": "session_4a9f12bc",
+      "mood": "focused",
+      "energy": 0.72,
+      "focus": 0.91,
+      "curiosity": 0.83,
+      "urgency": 0.12,
+      "trust_level": 0.5,
+      "expression_mode": "quiet_luminous",
+      "updated_at": "2026-03-17T05:50:00+00:00"
+    },
+    "multimodal_context": {
+      "fusion_summary": "",
+      "modality_count": 0,
+      "session_id": "session_4a9f12bc"
+    },
+    "output_plan": {
+      "text": true,
+      "voice": false,
+      "avatar": true,
+      "overlay": false,
+      "ui_surface": "infinite_canvas"
+    },
+    "created_at": "2026-03-17T05:50:00.123456+00:00"
+  }
+}
+```
+
+### 客户端消费建议
+
+* **向后兼容**：`interaction_envelope` 仅在成功响应时出现，不存在该字段时客户端应使用默认 UI。
+* **Windows 客户端**：读取 `output_plan.ui_surface` 切换窗口布局；读取 `output_plan.avatar` 决定是否激活 Avatar 渲染层。
+* **Android 客户端**：读取 `output_plan.overlay` 决定是否显示屏幕注解；读取 `output_plan.voice` 决定是否开启 TTS。
+* **Dashboard**：将 `mode` 和 `relationship_mode` 渲染为状态指示器；展示 `persona_state` 情绪仪表盘。
+
+### 验证路径
+
+```python
+from core.schemas.interaction_envelope import InteractionEnvelope, OutputPlan
+from core.interaction.interaction_builder import InteractionBuilder
+from core.interaction.scene_interpreter import SceneInterpreter
+
+decision = SceneInterpreter().interpret(
+    message="请深度分析这套架构设计的底层原理和本质逻辑以及哲学基础",
+)
+envelope = InteractionBuilder().build(
+    trace_id="demo_trace_001",
+    session_id="demo_sess",
+    scene_decision=decision,
+)
+assert envelope.mode == "deep_thinking"
+assert envelope.output_plan.ui_surface == "infinite_canvas"
+d = envelope.to_dict()
+assert d["output_plan"]["avatar"] is True
+```
+
+### 运行测试
+
+```bash
+python -m pytest tests/test_pr4_interaction_envelope.py -v --tb=short
+```
+
+36 个测试覆盖：
+- `OutputPlan` text_only / from_mode（每种模式）/ to_dict 键
+- `InteractionEnvelope` 构建 + to_dict / model_dump 序列化 + 唯一 ID + ISO 时间戳
+- `InteractionBuilder` 全输入装配、仅 trace_id/session_id、persona dict/dataclass 两路径、binary key 剔除、error resilience、自定义 output_plan
+- `OpenClawd.process()` 返回 `interaction_envelope`（含 trace_id 一致性、output_plan 完整性）
+- 现有字段非回归检查（`success`, `response`, `intent`, `trace_id`, `metadata`）
