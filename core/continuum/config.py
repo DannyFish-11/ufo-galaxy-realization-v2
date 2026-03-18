@@ -112,6 +112,28 @@ class FeatureFlags(BaseModel):
         When ``enabled=False`` the orchestrator returns a static formless
         ``ContinuumState`` and skips all computation, adding near-zero
         latency overhead.
+
+    Per-component flags
+    -------------------
+    ``enable_perception``, ``enable_human_field``, ``enable_liminal_field``,
+    and ``enable_decision_gate`` allow individual pipeline stages to be
+    disabled independently.  Disabling a stage causes the orchestrator to
+    substitute a safe default value for that stage's output while keeping
+    all downstream stages operational.  Backward compatibility is preserved:
+    all flags default to ``True``.
+
+    Performance guardrails
+    ----------------------
+    ``max_tick_ms``
+        Per-tick time budget in milliseconds.  When the pipeline exceeds
+        this budget the result is discarded and a degraded formless state
+        is returned (``degrade_reason="tick_budget_exceeded"``).
+        ``0`` means *no limit* (default, preserves existing behaviour).
+    ``sampling_rate``
+        Fraction of ticks that are actually executed (0.0–1.0).  Ticks
+        that are skipped return the previous state unchanged (or a
+        ``formless_default`` on the very first call).
+        ``1.0`` means *run every tick* (default).
     """
 
     enabled: bool = Field(
@@ -130,6 +152,63 @@ class FeatureFlags(BaseModel):
         description=(
             "When True, allows the forbidden formless → manifest direct "
             "transition under explicit emergency conditions."
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Per-component flags
+    # ------------------------------------------------------------------
+
+    enable_perception: bool = Field(
+        default=True,
+        description=(
+            "When False, the perception/PerceptionFrame stage is skipped and a "
+            "minimal default frame is used regardless of caller input."
+        ),
+    )
+    enable_human_field: bool = Field(
+        default=True,
+        description=(
+            "When False, HumanFieldInferrer is skipped and a default "
+            "HumanFieldState is substituted."
+        ),
+    )
+    enable_liminal_field: bool = Field(
+        default=True,
+        description=(
+            "When False, LiminalFieldEngine is skipped; liminal metrics are "
+            "zeroed and unified state is not enriched."
+        ),
+    )
+    enable_decision_gate: bool = Field(
+        default=True,
+        description=(
+            "When False, DecisionGate is skipped and a default DecisionState "
+            "(action_level=OBSERVE) is attached."
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Performance guardrails
+    # ------------------------------------------------------------------
+
+    max_tick_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Per-tick wall-clock time budget in milliseconds.  When the pipeline "
+            "exceeds this value the result is discarded and a degraded formless "
+            "state is returned.  0 means no limit (default)."
+        ),
+    )
+    sampling_rate: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Fraction of continuum ticks that are actually executed.  "
+            "Skipped ticks return the last cached state (or a formless default).  "
+            "1.0 = run every tick (default)."
         ),
     )
 

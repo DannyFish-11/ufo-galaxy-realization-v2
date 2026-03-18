@@ -10,5 +10,11 @@
   "prefer_autonomous": true,
   "parallel_execution_enabled": true,
   "enable_continuum": true,
-  "debug_continuum": false
+  "debug_continuum": false,
+  "enable_perception": true,
+  "enable_human_field": true,
+  "enable_liminal_field": true,
+  "enable_decision_gate": true,
+  "continuum_max_tick_ms": 0,
+  "continuum_sampling_rate": 1.0
 }
