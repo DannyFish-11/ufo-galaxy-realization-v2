@@ -313,6 +313,37 @@ class UnifiedDeviceManager:
                 result.append(device)
         return result
 
+    def get_device_type(self, device_id: str) -> Optional[str]:
+        """Return the normalised device-type string for *device_id*.
+
+        Returns the string value of the device's ``device_type`` field
+        (e.g. ``"android"``, ``"windows"``), or ``None`` when the device
+        is not registered.
+
+        This is the SSOT accessor used by policy modules such as
+        :mod:`core.device_policy` to determine routing behaviour without
+        importing model classes directly.
+
+        Parameters
+        ----------
+        device_id:
+            Unique device identifier.
+
+        Returns
+        -------
+        str | None
+            Lower-case device-type string, or ``None`` if unknown.
+        """
+        device = self._devices.get(device_id)
+        if device is None:
+            return None
+        dt = device.device_type
+        # device_type may be stored as an enum instance or a plain string
+        # depending on whether use_enum_values propagated correctly.
+        if hasattr(dt, "value"):
+            return str(dt.value)
+        return str(dt) if dt else None
+
     def get_device_count(self) -> int:
         """设备总数。"""
         return len(self._devices)

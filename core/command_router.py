@@ -1353,8 +1353,159 @@ class CommandRouter:
             return None
 
     # ------------------------------------------------------------------
-    # Remote Agent Dispatch (PR155)
+    # Remote Agent Dispatch (PR155 + physical-device pre-deploy policy)
     # ------------------------------------------------------------------
+
+    async def _deploy_agent_then_execute(
+        self,
+        device_id: str,
+        device_type: str,
+        agent_id: str,
+        agent_template: str,
+        task: str,
+        session_id: str,
+        trace_id: str,
+        task_id: str,
+        context: Optional[Dict[str, Any]] = None,
+        timeout: float = 60.0,
+    ) -> Dict[str, Any]:
+        """Two-step dispatch for physical devices: agent_deploy → agent_execute.
+
+        Step 1 – Build an :class:`~core.agent_manifest.AgentManifest` for the
+        target device and send it as an ``agent_deploy`` WebSocket message via
+        :mod:`core.routes._shared.connection_manager`.
+
+        Step 2 – On successful send, immediately forward ``agent_execute`` via
+        :meth:`route_command` so that the remote agent receives its task.
+
+        Default behaviour:
+          * Deployment is considered successful when the WebSocket ``send``
+            call returns ``True``.
+          * If the device is offline or the send fails the method returns an
+            error dict immediately (no queuing).
+
+        Parameters
+        ----------
+        device_id:
+            Target device identifier.
+        device_type:
+            Resolved device-type string (used for observability only).
+        agent_id, agent_template, task, session_id, trace_id, task_id,
+        context, timeout:
+            Same semantics as :meth:`dispatch_agent_remote`.
+
+        Returns
+        -------
+        dict
+            Same envelope shape as :meth:`dispatch_agent_remote`.
+        """
+        from core.agent_manifest import AgentManifest
+        from core.routes._shared import connection_manager
+
+        logger.info(
+            "CommandRouter._deploy_agent_then_execute | "
+            "device_id=%s device_type=%s trace_id=%s task_id=%s",
+            device_id, device_type, trace_id, task_id,
+        )
+
+        # ── Step 1: agent_deploy ─────────────────────────────────────────
+        if device_id not in connection_manager.active_devices:
+            logger.warning(
+                "agent_predeploy_required but device offline | "
+                "device_id=%s device_type=%s trace_id=%s task_id=%s",
+                device_id, device_type, trace_id, task_id,
+            )
+            return {
+                "success": False,
+                "agent_id": agent_id,
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "device_id": device_id,
+                "result": None,
+                "error_code": "device_offline",
+                "error_message": (
+                    f"agent_deploy failed: device {device_id} is not connected"
+                ),
+                "via": "command_router",
+            }
+
+        manifest = AgentManifest.create_device_control_agent(
+            target_device=device_id,
+            instruction=task,
+            source_device="server",
+        )
+
+        deploy_message = {
+            "type": "agent_deploy",
+            "manifest": manifest.to_dict(),
+            "checksum": manifest.checksum(),
+            "trace_id": trace_id,
+            "task_id": task_id,
+        }
+
+        deploy_sent = await connection_manager.send_to_device(device_id, deploy_message)
+
+        if not deploy_sent:
+            logger.warning(
+                "agent_deploy send failed | device_id=%s trace_id=%s task_id=%s",
+                device_id, trace_id, task_id,
+            )
+            return {
+                "success": False,
+                "agent_id": agent_id,
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "device_id": device_id,
+                "result": None,
+                "error_code": "deploy_failed",
+                "error_message": (
+                    f"agent_deploy WebSocket send failed for device {device_id}"
+                ),
+                "via": "command_router",
+            }
+
+        logger.info(
+            "agent_deploy sent successfully | manifest_id=%s device_id=%s "
+            "trace_id=%s task_id=%s",
+            manifest.manifest_id[:8], device_id, trace_id, task_id,
+        )
+
+        # ── Step 2: agent_execute ────────────────────────────────────────
+        payload: Dict[str, Any] = {
+            "agent_id": agent_id,
+            "agent_template": agent_template,
+            "task": task,
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "task_id": task_id,
+            "manifest_id": manifest.manifest_id,
+            "context": context or {},
+        }
+
+        cr_result = await self.route_command(
+            device_id=device_id,
+            command="agent_execute",
+            payload=payload,
+            command_id=task_id,
+            task_id=task_id,
+            timeout=timeout,
+            trace_id=trace_id,
+        )
+
+        cr_result.setdefault("agent_id", agent_id)
+        cr_result.setdefault("session_id", session_id)
+        cr_result.setdefault("trace_id", trace_id)
+        cr_result.setdefault("task_id", task_id)
+
+        logger.info(
+            "CommandRouter._deploy_agent_then_execute done | "
+            "trace_id=%s task_id=%s agent_id=%s success=%s latency=%.1fms",
+            trace_id, task_id, agent_id,
+            cr_result.get("success"), cr_result.get("latency_ms", 0.0),
+        )
+        return cr_result
 
     async def dispatch_agent_remote(
         self,
@@ -1373,6 +1524,18 @@ class CommandRouter:
         This implements the **Remote Agent Dispatch** contract (PR155).
         The ``agent_execute`` payload is forwarded via :meth:`route_command`
         so that all existing trace/error/backflow machinery is reused.
+
+        **Physical-device pre-deploy policy** (scheme A):
+        When the target device is a physical/electronic device
+        (ANDROID / IOS / WINDOWS / MACOS / LINUX / IOT / ROBOT / DRONE)
+        the method automatically enforces a strict two-step flow:
+
+        1. ``agent_deploy`` — pushes an :class:`~core.agent_manifest.AgentManifest`
+           to the device via WebSocket.
+        2. ``agent_execute`` — forwards the task once the deploy succeeds.
+
+        Non-physical targets (cloud, browser, …) keep the existing
+        direct-dispatch behaviour.
 
         Parameters
         ----------
@@ -1414,12 +1577,39 @@ class CommandRouter:
                     "via": "command_router",
                 }
         """
+        from core.device_policy import requires_agent_deploy
+        from core.unified.device_manager import get_unified_device_manager
+
         logger.info(
             "CommandRouter.dispatch_agent_remote | trace_id=%s task_id=%s "
             "agent_id=%s device_id=%s template=%s",
             trace_id, task_id, agent_id, device_id, agent_template,
         )
 
+        # ── Physical-device pre-deploy policy ───────────────────────────
+        device_type: str = (
+            get_unified_device_manager().get_device_type(device_id) or "unknown"
+        )
+        if requires_agent_deploy(device_type):
+            logger.info(
+                "agent_predeploy_required | device_id=%s device_type=%s "
+                "trace_id=%s task_id=%s",
+                device_id, device_type, trace_id, task_id,
+            )
+            return await self._deploy_agent_then_execute(
+                device_id=device_id,
+                device_type=device_type,
+                agent_id=agent_id,
+                agent_template=agent_template,
+                task=task,
+                session_id=session_id,
+                trace_id=trace_id,
+                task_id=task_id,
+                context=context,
+                timeout=timeout,
+            )
+
+        # ── Non-physical: direct agent_execute (original path) ──────────
         payload: Dict[str, Any] = {
             "agent_id": agent_id,
             "agent_template": agent_template,
