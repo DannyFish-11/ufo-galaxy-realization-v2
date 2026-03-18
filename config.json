@@ -8,5 +8,7 @@
   "skills": {},
   "nodes": {},
   "prefer_autonomous": true,
-  "parallel_execution_enabled": true
+  "parallel_execution_enabled": true,
+  "enable_continuum": true,
+  "debug_continuum": false
 }

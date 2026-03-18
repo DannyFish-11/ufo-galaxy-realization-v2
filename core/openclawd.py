@@ -489,6 +489,9 @@ class OpenClawd:
         # prefixes prevent accidental collisions between the two namespaces.
         self._cancel_registry: set = set()
 
+        # State Continuum Orchestrator (PR-5): lazy-initialised on first request.
+        self._continuum_orchestrator = None
+
         # Phase 9: 工具权限检查器
         self._tool_permission_checker = None
         try:
@@ -690,6 +693,80 @@ class OpenClawd:
         if group_id and group_id in self._cancel_registry:
             return True
         return False
+
+    # ========================================================================
+    # State Continuum (PR-5)
+    # ========================================================================
+
+    def _get_continuum_orchestrator(self):
+        """Return a cached :class:`~core.continuum.orchestrator.ContinuumOrchestrator`.
+
+        Reads ``enable_continuum`` / ``debug_continuum`` from ``config.json``
+        (via :mod:`core.unified_config`) and passes them as ``extra_flags``
+        to the orchestrator constructor.  The orchestrator is created once and
+        reused across requests so that the :class:`~core.continuum.temporal_engine.TemporalEngine`
+        accumulates state across successive ticks.
+
+        Returns:
+            :class:`~core.continuum.orchestrator.ContinuumOrchestrator` instance,
+            or ``None`` when the import fails or construction raises an exception.
+        """
+        if self._continuum_orchestrator is None:
+            try:
+                from core.unified_config import config as _cfg
+                extra_flags = {
+                    "enable_continuum": _cfg.get("enable_continuum", True),
+                    "debug_continuum": _cfg.get("debug_continuum", False),
+                }
+            except Exception:
+                extra_flags = {}
+            try:
+                from core.continuum.orchestrator import ContinuumOrchestrator
+                self._continuum_orchestrator = ContinuumOrchestrator(extra_flags=extra_flags)
+            except Exception as e:
+                logger.debug("ContinuumOrchestrator unavailable: %s", e)
+        return self._continuum_orchestrator
+
+    def _run_continuum(
+        self,
+        trace_id: str,
+        multimodal_context: Optional[Any] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Run one continuum evaluation cycle and return a serialisable dict.
+
+        Attempts to source a :class:`~core.multimodal.perception_frame.PerceptionFrame`
+        from the multimodal ingress bus.  Falls back to a minimal default
+        frame when the bus is unavailable.
+
+        Args:
+            trace_id:          Correlation ID for the originating request.
+            multimodal_context: Optional multimodal context (unused directly;
+                               reserved for future ingress bus enrichment).
+
+        Returns:
+            A ``dict`` representation of the resulting
+            :class:`~core.continuum.types.ContinuumState`, or ``None`` when
+            the continuum is disabled or an unrecoverable error occurs.
+        """
+        try:
+            orch = self._get_continuum_orchestrator()
+            if orch is None:
+                return None
+
+            # Try to obtain a live PerceptionFrame from the ingress bus.
+            frame = None
+            try:
+                from core.multimodal.ingress_bus import MultimodalIngressBus
+                _bus = MultimodalIngressBus()
+                frame = _bus.build_frame()
+            except Exception:
+                pass  # orchestrator will construct a minimal default
+
+            continuum_state = orch.run(frame=frame, trace_id=trace_id)
+            return continuum_state.model_dump()
+        except Exception as _ce:
+            logger.debug("_run_continuum failed (degrading to None): %s", _ce)
+            return None
 
     # ========================================================================
     # 主入口
@@ -941,6 +1018,11 @@ class OpenClawd:
                         )
                     except Exception as _op:
                         logger.debug("OutputOrchestrator (kernel path) failed: %s", _op)
+                    # ── State Continuum (PR-5) ────────────────────────────────
+                    _continuum_state_dict: Optional[Dict[str, Any]] = self._run_continuum(
+                        trace_id=trace_id,
+                        multimodal_context=multimodal_context,
+                    )
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -951,6 +1033,7 @@ class OpenClawd:
                         "persona_state": _persona_state_dict,
                         "interaction_envelope": _interaction_envelope_dict,
                         "output_plan": _output_plan_dict,
+                        "state_continuum": _continuum_state_dict,
                         "metadata": {
                             "request_id": request_id,
                             "trace_id": trace_id,
@@ -1089,6 +1172,12 @@ class OpenClawd:
             except Exception as _op2:
                 logger.debug("OutputOrchestrator (direct path) failed: %s", _op2)
 
+            # ── State Continuum (PR-5) ────────────────────────────────────────
+            _continuum_state_dict2: Optional[Dict[str, Any]] = self._run_continuum(
+                trace_id=trace_id,
+                multimodal_context=multimodal_context,
+            )
+
             return {
                 "success": result.get("success", True),
                 "response": response_text,
@@ -1098,6 +1187,7 @@ class OpenClawd:
                 "persona_state": _persona_state_dict,
                 "interaction_envelope": _interaction_envelope_dict2,
                 "output_plan": _output_plan_dict2,
+                "state_continuum": _continuum_state_dict2,
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,
