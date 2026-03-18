@@ -40,6 +40,8 @@ Public surface:
   - ReturnResult             (data class)
   - ExpressionEngine         (engine class)
   - ContinuumOrchestrator    (orchestrator class)
+  - ContinuumMetrics         (metrics class)
+  - get_continuum_metrics    (singleton accessor)
 """
 
 from core.continuum.types import (
@@ -75,6 +77,7 @@ from core.continuum.decision_gate import DecisionGate
 from core.continuum.return_engine import ReturnEngine, ReturnTrigger, ReturnAction, ReturnResult
 from core.continuum.expression_engine import ExpressionEngine
 from core.continuum.orchestrator import ContinuumOrchestrator
+from core.continuum.metrics import ContinuumMetrics, get_continuum_metrics
 
 __all__ = [
     # Enums
@@ -120,4 +123,7 @@ __all__ = [
     "ExpressionEngine",
     # Orchestrator
     "ContinuumOrchestrator",
+    # Metrics / observability
+    "ContinuumMetrics",
+    "get_continuum_metrics",
 ]

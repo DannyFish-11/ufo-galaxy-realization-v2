@@ -717,6 +717,12 @@ class OpenClawd:
                 extra_flags = {
                     "enable_continuum": _cfg.get("enable_continuum", True),
                     "debug_continuum": _cfg.get("debug_continuum", False),
+                    "enable_perception": _cfg.get("enable_perception", True),
+                    "enable_human_field": _cfg.get("enable_human_field", True),
+                    "enable_liminal_field": _cfg.get("enable_liminal_field", True),
+                    "enable_decision_gate": _cfg.get("enable_decision_gate", True),
+                    "continuum_max_tick_ms": _cfg.get("continuum_max_tick_ms", 0),
+                    "continuum_sampling_rate": _cfg.get("continuum_sampling_rate", 1.0),
                 }
             except Exception:
                 extra_flags = {}
