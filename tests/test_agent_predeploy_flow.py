@@ -248,6 +248,12 @@ class TestDispatchAgentRemotePhysicalDevice:
 # ---------------------------------------------------------------------------
 
 class TestDispatchAgentRemoteNonPhysical:
+    def setup_method(self):
+        UnifiedDeviceManager._instance = None
+
+    def teardown_method(self, _method):
+        UnifiedDeviceManager._instance = None
+
     def _build_router(self):
         from core.command_router import CommandRouter
         router = CommandRouter.__new__(CommandRouter)
@@ -263,7 +269,6 @@ class TestDispatchAgentRemoteNonPhysical:
     @pytest.mark.parametrize("device_type", ["cloud", "browser", "unknown"])
     async def test_no_deploy_for_non_physical_device(self, device_type: str):
         """Non-physical devices must go directly to agent_execute."""
-        UnifiedDeviceManager._instance = None
         mgr = UnifiedDeviceManager()
 
         device_id, agent_id, trace_id, task_id, session_id = _create_test_ids()
@@ -310,4 +315,44 @@ class TestDispatchAgentRemoteNonPhysical:
         mock_route.assert_called_once()
         result_kw = mock_route.call_args.kwargs
         assert result_kw.get("command") == "agent_execute"
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_no_deploy_for_unregistered_device(self):
+        """Device not registered in UDM → get_device_type returns None → treated as
+        'unknown' → requires_agent_deploy is False → direct agent_execute (no deploy)."""
+        UnifiedDeviceManager()  # create singleton but register nothing
+
+        device_id, agent_id, trace_id, task_id, session_id = _create_test_ids()
+        # device_id is NOT registered
+
+        router = self._build_router()
+
+        fake_route_result = {
+            "success": True,
+            "result": "dispatched",
+            "latency_ms": 2.0,
+            "via": "command_router",
+        }
+
+        fake_cm = MagicMock()
+        fake_cm.active_devices = {device_id}
+        fake_cm.send_to_device = AsyncMock(return_value=True)
+
+        with patch("core.command_router.CommandRouter.route_command", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
+             patch("core.routes._shared.connection_manager", fake_cm):
+            result = await router.dispatch_agent_remote(
+                device_id=device_id,
+                agent_id=agent_id,
+                agent_template="executor",
+                task="query data",
+                session_id=session_id,
+                trace_id=trace_id,
+                task_id=task_id,
+            )
+
+        # No deploy for unregistered (unknown type) device
+        fake_cm.send_to_device.assert_not_called()
+        mock_route.assert_called_once()
+        assert mock_route.call_args.kwargs.get("command") == "agent_execute"
         assert result["success"] is True
