@@ -140,7 +140,7 @@ class TestStructuredLogging:
         orch = ContinuumOrchestrator(config=cfg)
         with caplog.at_level(logging.DEBUG, logger="Galaxy.Continuum.Orchestrator"):
             orch.run(trace_id="log-test-1")
-        tick_records = [r for r in caplog.records if "Continuum tick" in r.message]
+        tick_records = [r for r in caplog.records if "Continuum tick |" in r.message]
         assert len(tick_records) >= 1
 
     def test_debug_flag_off_no_tick_log(self, caplog):

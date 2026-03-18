@@ -182,23 +182,35 @@ class TestSamplingRateGuardrail:
 
     def test_sampling_rate_zero_returns_last_state_after_real_tick(self):
         """After a real tick, skipped ticks return the last cached state."""
-        # Force first tick with rate=1 to cache state, then switch to rate=0
+        # Run a full tick with rate=1.0 to warm the orchestrator
         real_metrics = ContinuumMetrics()
         cfg_full = _make_cfg(sampling_rate=1.0)
         with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=real_metrics):
-            orch = ContinuumOrchestrator(config=cfg_full)
-            first = orch.run(trace_id="first-real")
+            orch_full = ContinuumOrchestrator(config=cfg_full)
+            first = orch_full.run(trace_id="first-real")
 
-        # Now switch to sampling_rate=0 on the same orchestrator
+        # Create a separate orchestrator with rate=0.0; warm it with one real tick
         skip_metrics = ContinuumMetrics()
-        zero_flags = orch._effective_cfg.flags.model_copy(update={"sampling_rate": 0.0})
-        orch._effective_cfg = orch._effective_cfg.model_copy(update={"flags": zero_flags})
-
+        cfg_zero = _make_cfg(sampling_rate=1.0)  # first tick is real
         with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=skip_metrics):
-            skipped = orch.run(trace_id="skipped-tick")
+            orch_skip = ContinuumOrchestrator(config=cfg_zero)
+            primed = orch_skip.run(trace_id="prime")
 
-        # Skipped tick returns the cached last state
-        assert skipped.phase == first.phase
+        # Now switch to rate=0.0 by creating a new orchestrator from a zero-rate config,
+        # but prime its last_state by running one real tick first
+        zero_metrics = ContinuumMetrics()
+        with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=zero_metrics):
+            orch_combo = ContinuumOrchestrator(config=_make_cfg(sampling_rate=1.0))
+            warm_result = orch_combo.run(trace_id="warm")
+
+            # Switch flags to 0.0 sampling via model_copy on effective config
+            new_flags = orch_combo._effective_cfg.flags.model_copy(update={"sampling_rate": 0.0})
+            orch_combo._effective_cfg = orch_combo._effective_cfg.model_copy(update={"flags": new_flags})
+
+            skipped = orch_combo.run(trace_id="skipped-tick")
+
+        # Skipped tick must return the last cached state (same phase as warm run)
+        assert skipped.phase == warm_result.phase
 
     def test_sampling_rate_via_extra_flags(self):
         """sampling_rate can be set through extra_flags dict."""
@@ -285,15 +297,32 @@ class TestGuardrailsIntegration:
         assert snap["phases"][phase] >= 1
 
     def test_budget_exceeded_does_not_cache_last_state(self):
-        """When budget is exceeded the bad result must not pollute _last_state."""
+        """When budget is exceeded the bad result must not become the sampling fallback.
+
+        We verify observable behavior: after a budget-exceeded tick, a subsequent
+        skipped tick (sampling_rate=0) must return the formless default rather than
+        the degraded result (since it was never cached as a good state).
+        """
         metrics = ContinuumMetrics()
+        # max_tick_ms=0.001 will always be exceeded; sampling_rate stays 1.0
         cfg = _make_cfg(max_tick_ms=0.001)
         with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics):
             orch = ContinuumOrchestrator(config=cfg)
-            result = orch.run(trace_id="no-cache")
+            # First tick: pipeline runs but budget is exceeded → degraded formless, not cached
+            exceeded = orch.run(trace_id="budget-exceeded")
+        assert exceeded.degrade_reason == "tick_budget_exceeded"
 
-        # _last_state should remain None since budget was exceeded before caching
-        assert orch._last_state is None
+        # Now switch to sampling_rate=0 to force a skip
+        metrics2 = ContinuumMetrics()
+        new_flags = orch._effective_cfg.flags.model_copy(update={"sampling_rate": 0.0})
+        orch._effective_cfg = orch._effective_cfg.model_copy(update={"flags": new_flags})
+        with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics2):
+            skipped = orch.run(trace_id="after-exceeded")
+
+        # The skipped tick should return formless default (nothing was cached)
+        assert skipped.phase == ContinuumPhase.FORMLESS
+        assert skipped.presence_intensity == 0.0
+        assert skipped.degrade_reason != "tick_budget_exceeded"
 
     def test_multiple_ticks_accumulate_stage_latency(self):
         metrics = ContinuumMetrics()
