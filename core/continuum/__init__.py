@@ -10,6 +10,9 @@ with four phases:
 
 Public surface:
   - ContinuumPhase           (enum)
+  - ActionLevel              (enum)
+  - FormSignature            (enum)
+  - SpatialPresence          (enum)
   - HumanFieldState          (Pydantic model)
   - UnifiedState             (Pydantic model)
   - ContinuumState           (Pydantic model)
@@ -30,6 +33,11 @@ Public surface:
   - StateFusion              (engine class)
   - LiminalFieldEngine       (engine class)
   - LiminalMetrics           (data class)
+  - DecisionGate             (engine class)
+  - ReturnEngine             (engine class)
+  - ReturnTrigger            (enum)
+  - ReturnAction             (enum)
+  - ReturnResult             (data class)
 """
 
 from core.continuum.types import (
@@ -61,6 +69,8 @@ from core.continuum.temporal_engine import (
 from core.continuum.human_field import HumanFieldInferrer, InteractionRhythm
 from core.continuum.state_fusion import StateFusion
 from core.continuum.liminal_field import LiminalFieldEngine, LiminalMetrics
+from core.continuum.decision_gate import DecisionGate
+from core.continuum.return_engine import ReturnEngine, ReturnTrigger, ReturnAction, ReturnResult
 
 __all__ = [
     # Enums
@@ -95,4 +105,11 @@ __all__ = [
     # Liminal field engine
     "LiminalFieldEngine",
     "LiminalMetrics",
+    # Decision gate
+    "DecisionGate",
+    # Return engine
+    "ReturnEngine",
+    "ReturnTrigger",
+    "ReturnAction",
+    "ReturnResult",
 ]
