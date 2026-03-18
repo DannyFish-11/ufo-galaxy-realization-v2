@@ -2,8 +2,9 @@
 core.continuum — State Continuum Protocol
 ==========================================
 
-Defines the data structures and configuration for OpenClawd's state continuum
-system: a continuous, non-UI presence model with four phases:
+Defines the data structures, configuration, and temporal engine for
+OpenClawd's state continuum system: a continuous, non-UI presence model
+with four phases:
 
     Formless → Liminal → Manifest → Receding
 
@@ -18,6 +19,12 @@ Public surface:
   - HysteresisConfig     (Pydantic model)
   - DwellConfig          (Pydantic model)
   - FeatureFlags         (Pydantic model)
+  - TemporalEngine       (engine class)
+  - HysteresisGate       (component class)
+  - DwellGuard           (component class)
+  - apply_ema            (signal helper)
+  - apply_rate_limit     (signal helper)
+  - apply_decay          (signal helper)
 """
 
 from core.continuum.types import (
@@ -38,6 +45,14 @@ from core.continuum.config import (
     FeatureFlags,
     DEFAULT_CONTINUUM_CONFIG,
 )
+from core.continuum.temporal_engine import (
+    TemporalEngine,
+    HysteresisGate,
+    DwellGuard,
+    apply_ema,
+    apply_rate_limit,
+    apply_decay,
+)
 
 __all__ = [
     # Enums
@@ -57,4 +72,11 @@ __all__ = [
     "DwellConfig",
     "FeatureFlags",
     "DEFAULT_CONTINUUM_CONFIG",
+    # Temporal engine
+    "TemporalEngine",
+    "HysteresisGate",
+    "DwellGuard",
+    "apply_ema",
+    "apply_rate_limit",
+    "apply_decay",
 ]
