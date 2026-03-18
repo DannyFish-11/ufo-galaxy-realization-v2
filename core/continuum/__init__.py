@@ -38,6 +38,8 @@ Public surface:
   - ReturnTrigger            (enum)
   - ReturnAction             (enum)
   - ReturnResult             (data class)
+  - ExpressionEngine         (engine class)
+  - ContinuumOrchestrator    (orchestrator class)
 """
 
 from core.continuum.types import (
@@ -71,6 +73,8 @@ from core.continuum.state_fusion import StateFusion
 from core.continuum.liminal_field import LiminalFieldEngine, LiminalMetrics
 from core.continuum.decision_gate import DecisionGate
 from core.continuum.return_engine import ReturnEngine, ReturnTrigger, ReturnAction, ReturnResult
+from core.continuum.expression_engine import ExpressionEngine
+from core.continuum.orchestrator import ContinuumOrchestrator
 
 __all__ = [
     # Enums
@@ -112,4 +116,8 @@ __all__ = [
     "ReturnTrigger",
     "ReturnAction",
     "ReturnResult",
+    # Expression engine
+    "ExpressionEngine",
+    # Orchestrator
+    "ContinuumOrchestrator",
 ]
