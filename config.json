@@ -16,5 +16,7 @@
   "enable_liminal_field": true,
   "enable_decision_gate": true,
   "continuum_max_tick_ms": 0,
-  "continuum_sampling_rate": 1.0
+  "continuum_sampling_rate": 1.0,
+  "enable_system_api": false,
+  "enable_multimodal_ingest": false
 }
