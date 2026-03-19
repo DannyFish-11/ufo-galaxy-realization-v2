@@ -492,6 +492,9 @@ class OpenClawd:
         # State Continuum Orchestrator (PR-5): lazy-initialised on first request.
         self._continuum_orchestrator = None
 
+        # Decision Executor (PR-8): lazy-initialised on first request.
+        self._decision_executor = None
+
         # Phase 9: 工具权限检查器
         self._tool_permission_checker = None
         try:
@@ -774,6 +777,45 @@ class OpenClawd:
             logger.debug("_run_continuum failed (degrading to None): %s", _ce)
             return None
 
+    def _get_decision_executor(self):
+        """Return a cached :class:`~core.execution.decision_executor.DecisionExecutor`.
+
+        The executor is created once and reused across requests.  Returns
+        ``None`` when the module is unavailable so the caller can skip
+        execution silently.
+        """
+        if self._decision_executor is None:
+            try:
+                from core.execution.decision_executor import DecisionExecutor
+                self._decision_executor = DecisionExecutor()
+            except Exception as exc:
+                logger.debug("DecisionExecutor unavailable: %s", exc)
+        return self._decision_executor
+
+    def _run_execution(
+        self,
+        state_continuum: Optional[Dict[str, Any]],
+    ) -> None:
+        """Invoke the decision executor against the continuum state.
+
+        Errors are swallowed so the response flow is never interrupted.
+
+        Args:
+            state_continuum: Serialised ContinuumState dict, or ``None``.
+        """
+        try:
+            executor = self._get_decision_executor()
+            if executor is None:
+                return
+            result = executor.execute(state_continuum)
+            if result.action_taken not in ("noop", "none"):
+                logger.debug(
+                    "_run_execution: action=%s target=%r success=%s",
+                    result.action_taken, result.target, result.success,
+                )
+        except Exception as _ee:
+            logger.debug("_run_execution failed (swallowed): %s", _ee)
+
     # ========================================================================
     # 主入口
     # ========================================================================
@@ -1029,6 +1071,8 @@ class OpenClawd:
                         trace_id=trace_id,
                         multimodal_context=multimodal_context,
                     )
+                    # ── Decision Execution (PR-8) ─────────────────────────────
+                    self._run_execution(_continuum_state_dict)
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -1183,6 +1227,8 @@ class OpenClawd:
                 trace_id=trace_id,
                 multimodal_context=multimodal_context,
             )
+            # ── Decision Execution (PR-8) ─────────────────────────────────────
+            self._run_execution(_continuum_state_dict2)
 
             return {
                 "success": result.get("success", True),
