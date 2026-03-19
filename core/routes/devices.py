@@ -282,18 +282,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         Android 客户端可通过此端点上报心跳，服务端更新 ``last_seen`` 并广播在线状态。
         WebSocket 心跳由 ``/ws/device/{device_id}`` 通道处理（推荐）。
         """
-        if device_id not in registered_devices:
+        # SSOT: check UDM first, fall back to legacy cache for backward compat
+        udm = get_unified_device_manager()
+        udm_dev = None
+        try:
+            udm_dev = udm.get_device(device_id)
+        except Exception:
+            pass
+        if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
-        # 兼容缓存更新
-        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
-        registered_devices[device_id]["status"] = "registered"
-
-        # SSOT: 同步心跳到 UDM
+        # SSOT: 写入 UDM 心跳（优先）
         try:
-            get_unified_device_manager().heartbeat(device_id)
+            udm.heartbeat(device_id)
         except Exception as exc:
             logger.warning("UDM heartbeat 同步失败: %s — %s", device_id, exc)
+
+        # 兼容缓存更新
+        if device_id in registered_devices:
+            registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
+            registered_devices[device_id]["status"] = "registered"
 
         await connection_manager.broadcast_status({
             "type": "device_heartbeat",
@@ -310,18 +318,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         设备断开后可调用此端点彻底注销。若设备仍有活跃 WebSocket 连接，
         该连接不会被强制关闭；重连时设备需重新注册。
         """
-        if device_id not in registered_devices:
+        # SSOT: check UDM first, fall back to legacy cache for backward compat
+        udm = get_unified_device_manager()
+        udm_dev = None
+        try:
+            udm_dev = udm.get_device(device_id)
+        except Exception:
+            pass
+        if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
-        # 兼容缓存清理
-        del registered_devices[device_id]
-        _save_registered_devices(registered_devices)
-
-        # SSOT: 从 UDM 注销
+        # SSOT: 从 UDM 注销（优先）
         try:
-            get_unified_device_manager().unregister_device(device_id)
+            udm.unregister_device(device_id)
         except Exception as exc:
             logger.warning("UDM unregister 同步失败: %s — %s", device_id, exc)
+
+        # 兼容缓存清理
+        if device_id in registered_devices:
+            del registered_devices[device_id]
+            _save_registered_devices(registered_devices)
 
         await connection_manager.broadcast_status({
             "type": "device_unregistered",

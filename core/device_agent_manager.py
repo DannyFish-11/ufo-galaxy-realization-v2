@@ -541,8 +541,13 @@ class DeviceAgentManager:
         self._agent_types[device_type] = agent_class
         logger.info(f"Registered agent type: {device_type.value}")
     
-    async def register_device(self, device_info: DeviceInfo, **kwargs) -> Optional[BaseDeviceAgent]:
-        """注册设备并创建 Agent（同步到统一设备管理器）。"""
+    async def register_device(self, device_info: DeviceInfo, ignore_udm_failure: bool = False, **kwargs) -> Optional[BaseDeviceAgent]:
+        """注册设备并创建 Agent。
+
+        UDM 写入为 SSOT，必须成功。若写入失败且 ``ignore_udm_failure=False``（默认），
+        则回滚本地 agent 并返回 None。调用方可传入 ``ignore_udm_failure=True`` 以降级
+        为仅记录错误而不回滚（非生产环境使用）。
+        """
         if device_info.device_id in self._agents:
             logger.warning(f"Device {device_info.device_id} already registered")
             return self._agents[device_info.device_id]
@@ -556,7 +561,8 @@ class DeviceAgentManager:
         self._agents[device_info.device_id] = agent
         device_info.registered_at = datetime.now()
 
-        # 同步到统一设备管理器
+        # ── SSOT: write to UDM first ──────────────────────────────────────
+        udm_ok = False
         try:
             from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
             utype_str = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
@@ -580,16 +586,34 @@ class DeviceAgentManager:
                 source="device_agent_manager",
             )
             self._unified().register_device(ud)
+            udm_ok = True
         except Exception as exc:
-            logger.warning(f"Failed to sync device {device_info.device_id} to UnifiedDeviceManager: {exc}")
+            if ignore_udm_failure:
+                logger.error(
+                    "DeviceAgentManager.register_device: UDM write failed for %s (ignored) — %s",
+                    device_info.device_id, exc,
+                )
+                udm_ok = True  # Treat as OK when explicitly told to ignore
+            else:
+                # Strict mode: roll back local agent state and propagate error
+                logger.error(
+                    "DeviceAgentManager.register_device: UDM write failed for %s — rolling back — %s",
+                    device_info.device_id, exc,
+                )
+                del self._agents[device_info.device_id]
+                return None
 
         logger.info(f"Device registered: {device_info.device_id} ({device_info.device_type.value})")
         await self._emit("device_registered", device_info)
 
         return agent
 
-    async def unregister_device(self, device_id: str) -> bool:
-        """注销设备（同步到统一设备管理器）。"""
+    async def unregister_device(self, device_id: str, ignore_udm_failure: bool = False) -> bool:
+        """注销设备（UDM 写入为 SSOT）。
+
+        若 UDM 注销失败且 ``ignore_udm_failure=False``（默认），记录错误；本地 agent
+        仍然移除（避免泄漏）。
+        """
         if device_id not in self._agents:
             return False
 
@@ -597,11 +621,20 @@ class DeviceAgentManager:
         await agent.disconnect()
         del self._agents[device_id]
 
-        # 同步到统一设备管理器
+        # ── SSOT: write to UDM first ──────────────────────────────────────
         try:
             self._unified().unregister_device(device_id)
         except Exception as exc:
-            logger.warning(f"Failed to unregister device {device_id} from UnifiedDeviceManager: {exc}")
+            if ignore_udm_failure:
+                logger.error(
+                    "DeviceAgentManager.unregister_device: UDM write failed for %s (ignored) — %s",
+                    device_id, exc,
+                )
+            else:
+                logger.error(
+                    "DeviceAgentManager.unregister_device: UDM write failed for %s — %s",
+                    device_id, exc,
+                )
 
         logger.info(f"Device unregistered: {device_id}")
         await self._emit("device_unregistered", device_id)
