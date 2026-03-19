@@ -23,5 +23,9 @@
   "execution_app_allowlist": [],
   "execution_assist_app": null,
   "enable_desktop_presence_runtime": true,
-  "debug_desktop_presence_runtime": false
+  "debug_desktop_presence_runtime": false,
+  "enable_task_dag": true,
+  "task_dag_default_max_retries": 1,
+  "task_dag_retry_delay_seconds": 1.0,
+  "task_dag_continue_on_failure": true
 }

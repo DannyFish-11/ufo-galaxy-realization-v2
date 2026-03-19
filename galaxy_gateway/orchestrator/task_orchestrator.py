@@ -472,6 +472,163 @@ class TaskOrchestrator:
         logger.info(f"Task cancelled: {task_id}")
         return True
 
+    # ------------------------------------------------------------------
+    # PR-5: DAG-based multi-device task execution
+    # ------------------------------------------------------------------
+
+    async def submit_dag_task(
+        self,
+        subtasks: List[Any],
+        *,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+        context: Optional[Dict[str, Any]] = None,
+        continue_on_failure: bool = True,
+    ) -> Dict[str, Any]:
+        """Execute a list of subtask objects as a TaskGraph DAG.
+
+        This is the PR-5 DAG integration point for the gateway orchestrator.
+        Each subtask is mapped to a ``TaskNode``; nodes without explicit
+        dependencies run concurrently.  Nodes that reference a ``device_id``
+        will have that ID available inside the handler context.
+
+        Falls back to sequential execution if DAG compilation fails.
+
+        Args:
+            subtasks:            Subtask objects (must expose ``task_id``,
+                                 ``name``, ``description``, ``depends_on``,
+                                 ``device_id``).
+            trace_id:            Trace ID propagated into every node.
+            runtime_session_id:  Session ID propagated into every node.
+            context:             Additional context for handlers.
+            continue_on_failure: Keep independent branches running on failure.
+
+        Returns:
+            Dict with ``success``, ``done``, ``failed``, ``skipped``,
+            ``elapsed_ms``, ``graph_id``, ``trace_id``, ``node_statuses``.
+        """
+        if not subtasks:
+            return {"success": True, "done": 0, "failed": 0, "skipped": 0,
+                    "elapsed_ms": 0.0, "graph_id": "", "trace_id": trace_id,
+                    "node_statuses": {}}
+
+        try:
+            from core.task_graph import compile_subtasks_to_graph, RetryPolicy
+        except ImportError as exc:
+            logger.warning(
+                "TaskOrchestrator.submit_dag_task: core.task_graph unavailable (%s). "
+                "Falling back to sequential submission.",
+                exc,
+            )
+            return await self._sequential_fallback(subtasks, trace_id=trace_id)
+
+        policy = RetryPolicy(max_retries=1, retry_delay_seconds=1.0)
+
+        # Named constants for task-completion polling
+        _TASK_COMPLETION_TIMEOUT_SECONDS = 60.0
+        _POLLING_INTERVAL_SECONDS = 0.5
+
+        # Build a handler that submits each subtask as a regular Task
+        orchestrator_ref = self
+
+        async def _device_handler(node: Any, ctx: Dict[str, Any]) -> Dict[str, Any]:
+            """Submit the subtask to the appropriate device and await completion."""
+            device_id: str = node.device_id or ctx.get("default_device_id", "")
+            task = await orchestrator_ref.submit_task(
+                user_request=node.description or node.node_id,
+                target_device=device_id if device_id else None,
+            )
+            # Best-effort: wait up to _TASK_COMPLETION_TIMEOUT_SECONDS for completion
+            deadline = _TASK_COMPLETION_TIMEOUT_SECONDS
+            elapsed = 0.0
+            interval = _POLLING_INTERVAL_SECONDS
+            while elapsed < deadline:
+                t = orchestrator_ref.tasks.get(task.task_id)
+                if t and t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED,
+                                      TaskStatus.CANCELLED):
+                    break
+                await asyncio.sleep(interval)
+                elapsed += interval
+            final = orchestrator_ref.tasks.get(task.task_id)
+            if final and final.status == TaskStatus.FAILED:
+                raise RuntimeError(final.error or f"task {task.task_id} failed")
+            return {"task_id": task.task_id,
+                    "status": final.status.value if final else "unknown"}
+
+        try:
+            graph = compile_subtasks_to_graph(
+                subtasks,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+                default_retry_policy=policy,
+                node_handler=_device_handler,
+            )
+        except ValueError as exc:
+            logger.warning(
+                "TaskOrchestrator.submit_dag_task: DAG compilation failed (%s). "
+                "Falling back to sequential submission.",
+                exc,
+            )
+            return await self._sequential_fallback(subtasks, trace_id=trace_id)
+
+        logger.info(
+            "TaskOrchestrator: executing %d-node TaskGraph | trace_id=%s",
+            len(subtasks),
+            trace_id or graph.trace_id,
+        )
+        exec_ctx = dict(context or {})
+        result = await graph.execute(
+            context=exec_ctx,
+            continue_on_failure=continue_on_failure,
+        )
+        return {
+            "success": result.success,
+            "graph_id": result.graph_id,
+            "trace_id": result.trace_id,
+            "done": result.done_nodes,
+            "failed": result.failed_nodes,
+            "skipped": result.skipped_nodes,
+            "elapsed_ms": result.elapsed_ms,
+            "node_statuses": result.node_statuses,
+        }
+
+    async def _sequential_fallback(
+        self,
+        subtasks: List[Any],
+        *,
+        trace_id: str = "",
+    ) -> Dict[str, Any]:
+        """Fallback: submit subtasks one-by-one in declaration order."""
+        logger.info(
+            "TaskOrchestrator._sequential_fallback: submitting %d tasks linearly | trace_id=%s",
+            len(subtasks),
+            trace_id,
+        )
+        done = 0
+        failed = 0
+        for st in subtasks:
+            try:
+                desc = getattr(st, "description", "") or getattr(st, "name", "")
+                device_id = getattr(st, "device_id", "") or ""
+                task = await self.submit_task(
+                    user_request=desc,
+                    target_device=device_id if device_id else None,
+                )
+                done += 1
+            except Exception as exc:
+                logger.warning("Sequential fallback subtask failed: %s", exc)
+                failed += 1
+        return {
+            "success": failed == 0,
+            "graph_id": "",
+            "trace_id": trace_id,
+            "done": done,
+            "failed": failed,
+            "skipped": 0,
+            "elapsed_ms": 0.0,
+            "node_statuses": {},
+        }
+
 
 class MultiDeviceOrchestrator(TaskOrchestrator):
     """多设备协同编排器"""
