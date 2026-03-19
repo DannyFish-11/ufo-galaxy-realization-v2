@@ -56,21 +56,61 @@ class WindowsAutonomyManager:
     def execute_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行操作
-        
+
+        System API fast-path: actions that map directly to the Windows
+        System API facade (launch_app, focus_window, close_window,
+        get_clipboard, set_clipboard, send_notification) are attempted
+        via the facade first.  All other actions fall through to the
+        existing UIA / input-simulation path.
+
         Args:
             action: 操作描述，格式:
                 {
                     'type': 'click' | 'type' | 'press_key' | 'find_and_click' | ...,
                     'params': {...}
                 }
-        
+
         Returns:
             Dict: 执行结果
         """
+        # ----------------------------------------------------------------
+        # System API fast-path for high-frequency structural actions
+        # ----------------------------------------------------------------
+        _SYSAPI_ACTIONS = {
+            "launch_app", "launch",
+            "focus_window", "focus",
+            "close_window", "close",
+            "get_clipboard", "set_clipboard",
+            "send_notification",
+            "open_file", "move_file", "delete_file",
+            "list_processes", "kill_process",
+            "enumerate_windows",
+        }
+        action_type = action.get('type', '')
+        params = action.get('params', {})
+
+        if action_type in _SYSAPI_ACTIONS:
+            try:
+                from core.system_api.windows_system_api import (  # type: ignore[import]
+                    get_windows_system_api,
+                )
+                facade = get_windows_system_api()
+                if facade.is_available:
+                    resp = facade.dispatch(action_type, params)
+                    if resp.handled:
+                        return {
+                            'success': resp.success,
+                            'error': resp.error,
+                            'via': 'system_api',
+                            **resp.data,
+                        }
+            except Exception as _sapi_err:
+                logger.debug("autonomy_manager | system_api fast-path error: %s", _sapi_err)
+
+        # ----------------------------------------------------------------
+        # Original UIA / input-simulation path
+        # ----------------------------------------------------------------
         try:
-            action_type = action.get('type')
-            params = action.get('params', {})
-            
             if action_type == 'click':
                 return self._action_click(params)
             elif action_type == 'type':

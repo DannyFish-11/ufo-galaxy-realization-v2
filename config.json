@@ -37,5 +37,7 @@
   "transport_prefer_webrtc": true,
   "transport_fallback_to_screenshot": true,
   "enable_state_event_bus": true,
-  "state_event_bus_log_all": false
+  "state_event_bus_log_all": false,
+  "enable_windows_system_api": true,
+  "windows_system_api_log_all": false
 }

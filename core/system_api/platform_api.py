@@ -17,6 +17,10 @@ __all__ = [
     "WindowInfo",
     "HotkeyHandle",
     "TrayHandle",
+    "FileOpResult",
+    "ProcessInfo",
+    "ClipboardResult",
+    "NotificationResult",
     "SystemAPI",
     "NoOpSystemAPI",
 ]
@@ -63,6 +67,44 @@ class TrayHandle:
 
     active: bool = False
     tooltip: str = ""
+
+
+@dataclass
+class FileOpResult:
+    """Result of a file operation."""
+
+    success: bool
+    path: Optional[str] = None
+    error: Optional[str] = None
+
+
+@dataclass
+class ProcessInfo:
+    """Metadata about a running OS process."""
+
+    pid: int
+    name: str
+    status: str = "running"
+    cpu_percent: float = 0.0
+    memory_mb: float = 0.0
+
+
+@dataclass
+class ClipboardResult:
+    """Result of a clipboard read/write operation."""
+
+    success: bool
+    text: Optional[str] = None
+    error: Optional[str] = None
+
+
+@dataclass
+class NotificationResult:
+    """Result of a desktop notification dispatch."""
+
+    success: bool
+    notification_id: Optional[int] = None
+    error: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +252,96 @@ class SystemAPI(ABC):
     def is_available(self) -> bool:
         """True if the platform supports the full API."""
 
+    # ------------------------------------------------------------------
+    # App/window close
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def close_window(self, title_or_hwnd: "str | int") -> bool:
+        """Close (destroy) a window.
+
+        Parameters
+        ----------
+        title_or_hwnd:
+            Window title substring or HWND integer.
+
+        Returns
+        -------
+        bool
+            True if the window was found and a close message was sent.
+        """
+
+    # ------------------------------------------------------------------
+    # File operations
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def open_file(self, path: str) -> FileOpResult:
+        """Open *path* with its default application."""
+
+    @abstractmethod
+    def move_file(self, src: str, dst: str) -> FileOpResult:
+        """Move or rename a file from *src* to *dst*."""
+
+    @abstractmethod
+    def delete_file(self, path: str) -> FileOpResult:
+        """Delete the file at *path* (moves to recycle bin when possible)."""
+
+    # ------------------------------------------------------------------
+    # Process queries
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def list_processes(self) -> List[ProcessInfo]:
+        """Return a snapshot of all running processes."""
+
+    @abstractmethod
+    def kill_process(self, pid: int) -> bool:
+        """Terminate the process identified by *pid*.
+
+        Returns True if the process was found and a kill signal was sent.
+        """
+
+    # ------------------------------------------------------------------
+    # Clipboard
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def get_clipboard(self) -> ClipboardResult:
+        """Read the current clipboard text content."""
+
+    @abstractmethod
+    def set_clipboard(self, text: str) -> ClipboardResult:
+        """Write *text* to the clipboard."""
+
+    # ------------------------------------------------------------------
+    # Notifications
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def send_notification(
+        self,
+        title: str,
+        body: str,
+        icon_path: Optional[str] = None,
+    ) -> NotificationResult:
+        """Display a desktop toast / balloon notification.
+
+        Parameters
+        ----------
+        title:
+            Short notification title.
+        body:
+            Notification body text.
+        icon_path:
+            Optional path to an icon file.
+
+        Returns
+        -------
+        NotificationResult
+            Always returns a result; never raises.
+        """
+
 
 # ---------------------------------------------------------------------------
 # No-op fallback for non-Windows platforms
@@ -269,3 +401,35 @@ class NoOpSystemAPI(SystemAPI):
 
     def destroy_tray_icon(self, handle: TrayHandle) -> None:
         pass
+
+    def close_window(self, title_or_hwnd: "str | int") -> bool:
+        return False
+
+    def open_file(self, path: str) -> FileOpResult:
+        return FileOpResult(success=False, error="platform not supported")
+
+    def move_file(self, src: str, dst: str) -> FileOpResult:
+        return FileOpResult(success=False, error="platform not supported")
+
+    def delete_file(self, path: str) -> FileOpResult:
+        return FileOpResult(success=False, error="platform not supported")
+
+    def list_processes(self) -> List[ProcessInfo]:
+        return []
+
+    def kill_process(self, pid: int) -> bool:
+        return False
+
+    def get_clipboard(self) -> ClipboardResult:
+        return ClipboardResult(success=False, error="platform not supported")
+
+    def set_clipboard(self, text: str) -> ClipboardResult:
+        return ClipboardResult(success=False, error="platform not supported")
+
+    def send_notification(
+        self,
+        title: str,
+        body: str,
+        icon_path: Optional[str] = None,
+    ) -> NotificationResult:
+        return NotificationResult(success=False, error="platform not supported")

@@ -31,6 +31,7 @@ __all__ = [
     "SystemAPI",
     "NoOpSystemAPI",
     "get_system_api",
+    "reset_system_api",
 ]
 
 _instance: "SystemAPI | None" = None

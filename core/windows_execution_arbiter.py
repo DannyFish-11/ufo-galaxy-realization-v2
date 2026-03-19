@@ -162,39 +162,39 @@ ScreenshotGetter = Callable[[str], Awaitable[Optional[str]]]
 
 
 def _make_default_system_api_executor() -> Optional[SystemAPIExecutor]:
-    """Return an async adapter over :mod:`core.system_api` or *None*."""
+    """Return an async adapter over the :class:`~core.system_api.windows_system_api.WindowsSystemAPI`
+    facade or *None* when the facade is disabled / unavailable.
+
+    The facade is the preferred entry-point for all System API actions because
+    it provides a consistent request/response model, structured logging, and
+    in-process metrics.  It routes to the lower-level
+    :class:`~core.system_api.platform_api.SystemAPI` adapter internally.
+    """
 
     try:
-        from core.system_api import get_system_api  # type: ignore[import]
+        from core.system_api.windows_system_api import (  # type: ignore[import]
+            get_windows_system_api,
+        )
 
-        sys_api = get_system_api()
-        if not sys_api.is_available:
+        facade = get_windows_system_api()
+        if not facade.is_available:
             return None
 
         async def _system_api_exec(
             action: str, params: Dict[str, Any], device_id: str
         ) -> Dict[str, Any]:
-            try:
-                if action in ("launch_app", "launch"):
-                    target = params.get("target") or params.get("app", "")
-                    args = params.get("args")
-                    working_dir = params.get("working_dir")
-                    res = sys_api.launch_app(target, args=args, working_dir=working_dir)
-                    return {"success": res.success, "pid": res.pid, "error": res.error}
-                if action in ("focus_window", "focus"):
-                    hwnd = params.get("hwnd")
-                    title = params.get("title") or params.get("window_title")
-                    ok = sys_api.focus_window(hwnd=hwnd, title=title)
-                    return {"success": ok}
-                if action == "enumerate_windows":
-                    windows = sys_api.enumerate_windows(
-                        title_filter=params.get("title_filter")
-                    )
-                    return {"success": True, "windows": [w.__dict__ for w in windows]}
-                # Unknown action – not handled at this level.
-                return {"success": False, "error": f"system_api: unsupported action '{action}'"}
-            except Exception as exc:
-                return {"success": False, "error": str(exc)}
+            resp = facade.dispatch(action, params, device_id=device_id)
+            if not resp.handled:
+                # Facade explicitly says it cannot handle this action.
+                return {
+                    "success": False,
+                    "error": resp.fallback_reason or f"system_api: unsupported action '{action}'",
+                }
+            return {
+                "success": resp.success,
+                "error": resp.error or "",
+                **resp.data,
+            }
 
         return _system_api_exec
     except Exception:
