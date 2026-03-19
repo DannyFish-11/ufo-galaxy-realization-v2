@@ -4,6 +4,7 @@ SSOT (Single Source of Truth) helpers for UDM write-through operations.
 All device state mutations — register, heartbeat, unregister — must go
 through :func:`udm_write_register`, :func:`udm_write_heartbeat`, and
 :func:`udm_write_unregister` **before** any local cache is touched.
+For partial / incremental updates, use :func:`udm_write_upsert`.
 
 If a UDM write fails the helper returns ``False`` and emits a structured
 ``logging.warning`` with a stable ``event`` tag so that callers can gate
@@ -16,6 +17,7 @@ Structured event tags (stable, machine-queryable):
     ssot_udm_write_failed      — register write failed
     ssot_udm_heartbeat_failed  — heartbeat write failed
     ssot_udm_unregister_failed — unregister / offline write failed
+    ssot_udm_upsert_failed     — partial-update (upsert) write failed
 """
 
 from __future__ import annotations
@@ -110,6 +112,36 @@ def udm_write_heartbeat(device_id: str) -> bool:
             device_id,
             exc,
             extra={"event": "ssot_udm_heartbeat_failed", "device_id": device_id},
+        )
+        return False
+
+
+def udm_write_upsert(
+    device_id: str,
+    patch: Dict[str, Any],
+    source: str = "gateway",
+) -> bool:
+    """Perform a partial or full device state update through UnifiedDeviceManager.
+
+    This is the preferred write helper for incremental state changes (e.g.
+    status-only updates, capability changes) that do not require a full
+    re-registration cycle.  Each successful call increments the device's
+    ``state_version`` counter and records ``updated_at``.
+
+    Returns:
+        True  — UDM write succeeded; caller may update local caches.
+        False — UDM write failed; caller must NOT update local caches.
+    """
+    try:
+        _get_udm().upsert_device_state(device_id, patch, source=source)
+        return True
+    except Exception as exc:
+        logger.warning(
+            "SSOT guardrail: UDM upsert failed for device %s — "
+            "local state will NOT be updated. error=%s",
+            device_id,
+            exc,
+            extra={"event": "ssot_udm_upsert_failed", "device_id": device_id},
         )
         return False
 

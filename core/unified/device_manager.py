@@ -37,11 +37,17 @@ class UnifiedDeviceManager:
     公开 API：
         register_device(device: UnifiedDevice) -> None
         unregister_device(device_id: str) -> None
+        upsert_device_state(device_id, patch, source) -> Optional[UnifiedDevice]
         update_device_status(device_id, status) -> None
+        heartbeat(device_id) -> None
         get_device(device_id) -> Optional[UnifiedDevice]
         list_devices() -> List[UnifiedDevice]
         get_devices_by_type(device_type) -> List[UnifiedDevice]
         get_online_devices() -> List[UnifiedDevice]
+
+    所有设备状态写入必须经由本类（SSOT 唯一写入口）。
+    外部代码应优先调用 upsert_device_state() 进行状态更新，
+    update_device_status() 和 heartbeat() 作为向后兼容入口保留。
     """
 
     _instance: Optional["UnifiedDeviceManager"] = None
@@ -176,6 +182,113 @@ class UnifiedDeviceManager:
     # 状态更新
     # ------------------------------------------------------------------
 
+    def upsert_device_state(
+        self,
+        device_id: str,
+        patch: "Dict[str, Any]",
+        source: str = "unknown",
+    ) -> "Optional[UnifiedDevice]":
+        """对已注册设备执行 部分或全量 状态更新（SSOT 唯一写入口）。
+
+        采用 **prefer-latest** 冲突策略：``updated_at`` 时间戳最新的写入总是胜出；
+        每次成功写入后 ``state_version`` 单调递增，便于下游追踪版本漂移。
+
+        支持的 ``patch`` 字段（所有字段均为可选）：
+            - ``status``       (str | UnifiedDeviceStatus)
+            - ``device_name``  (str)
+            - ``ip_address``   (str)
+            - ``port``         (int)
+            - ``capabilities`` (list[str]) — 全量替换
+            - ``metadata``     (dict) — 深度合并
+            - ``source``       (str) — 覆盖来源标记
+
+        Args:
+            device_id: 目标设备 ID。
+            patch:     字段 → 新值的字典，支持部分更新。
+            source:    本次写入的来源标识（如 "heartbeat"、"device_router"、"rest_register"）。
+
+        Returns:
+            更新后的 UnifiedDevice，若设备未找到则返回 None。
+        """
+        device = self._devices.get(device_id)
+        if device is None:
+            logger.warning(
+                "upsert_device_state called for unknown device",
+                extra={"event": "upsert_miss", "device_id": device_id, "source": source},
+            )
+            return None
+
+        now = datetime.now(timezone.utc)
+        fields_changed: list = []
+
+        # -- status --
+        if "status" in patch:
+            new_status = patch["status"]
+            if not isinstance(new_status, UnifiedDeviceStatus):
+                try:
+                    new_status = UnifiedDeviceStatus(str(new_status).lower())
+                except ValueError:
+                    new_status = UnifiedDeviceStatus.ONLINE
+            if device.status != new_status:
+                device.status = new_status
+                fields_changed.append("status")
+
+        # -- device_name --
+        if "device_name" in patch and patch["device_name"]:
+            if device.device_name != patch["device_name"]:
+                device.device_name = patch["device_name"]
+                fields_changed.append("device_name")
+
+        # -- ip_address --
+        if "ip_address" in patch:
+            if device.ip_address != patch["ip_address"]:
+                device.ip_address = patch["ip_address"]
+                fields_changed.append("ip_address")
+
+        # -- port --
+        if "port" in patch:
+            if device.port != patch["port"]:
+                device.port = patch["port"]
+                fields_changed.append("port")
+
+        # -- capabilities (full replace) --
+        if "capabilities" in patch and patch["capabilities"] is not None:
+            new_caps = list(patch["capabilities"])
+            if device.capabilities != new_caps:
+                device.capabilities = new_caps
+                fields_changed.append("capabilities")
+
+        # -- metadata (deep merge) --
+        if "metadata" in patch and isinstance(patch["metadata"], dict):
+            merged = dict(device.metadata or {})
+            merged.update(patch["metadata"])
+            if merged != device.metadata:
+                device.metadata = merged
+                fields_changed.append("metadata")
+
+        # -- source override --
+        if "source" in patch and patch["source"]:
+            device.source = patch["source"]
+
+        # Always update heartbeat timestamp and bump version counter.
+        device.last_heartbeat = now
+        device.updated_at = now
+        device.state_version = (device.state_version or 0) + 1
+
+        logger.info(
+            "Device state upserted",
+            extra={
+                "event": "upsert_device_state",
+                "device_id": device_id,
+                "source": source,
+                "state_version": device.state_version,
+                "fields_changed": fields_changed,
+                "status": device.status,
+                "timestamp": now.isoformat(),
+            },
+        )
+        return device
+
     def update_device_status(self, device_id: str, status: UnifiedDeviceStatus) -> None:
         """更新设备状态。"""
         device = self._devices.get(device_id)
@@ -186,25 +299,40 @@ class UnifiedDeviceManager:
             )
             return
 
+        now = datetime.now(timezone.utc)
         device.status = status
-        device.last_heartbeat = datetime.now(timezone.utc)
+        device.last_heartbeat = now
+        device.updated_at = now
+        device.state_version = (device.state_version or 0) + 1
         logger.debug(
             "Device status updated",
-            extra={"event": "status_update", "device_id": device_id, "status": status},
+            extra={
+                "event": "status_update",
+                "device_id": device_id,
+                "status": status,
+                "state_version": device.state_version,
+            },
         )
 
     def heartbeat(self, device_id: str) -> None:
         """记录设备心跳；若设备处于离线/错误态则自动恢复为 ONLINE。"""
         device = self._devices.get(device_id)
         if device is not None:
-            device.last_heartbeat = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)
+            device.last_heartbeat = now
+            device.updated_at = now
+            device.state_version = (device.state_version or 0) + 1
             active = {UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.ONLINE.value,
                       UnifiedDeviceStatus.BUSY, UnifiedDeviceStatus.BUSY.value}
             if device.status not in active:
                 device.status = UnifiedDeviceStatus.ONLINE
                 logger.info(
                     "Device recovered to ONLINE on heartbeat",
-                    extra={"event": "heartbeat_recovery", "device_id": device_id},
+                    extra={
+                        "event": "heartbeat_recovery",
+                        "device_id": device_id,
+                        "state_version": device.state_version,
+                    },
                 )
 
     async def check_heartbeat_timeouts(

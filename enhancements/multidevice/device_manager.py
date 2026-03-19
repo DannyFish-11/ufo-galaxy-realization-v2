@@ -513,7 +513,20 @@ class DeviceManager:
             if not device:
                 raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
             
-            # Update device status
+            # ── SSOT: write-through to UDM first ──────────────────────────
+            try:
+                self._unified().upsert_device_state(
+                    device_id,
+                    {"status": request.status.value if hasattr(request.status, "value") else str(request.status)},
+                    source="enhancements_multidevice_heartbeat",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync heartbeat for device %s to UnifiedDeviceManager: %s",
+                    device_id, exc,
+                )
+
+            # Update local state after successful UDM write
             device.status = request.status
             device.last_heartbeat = time.time()
             
