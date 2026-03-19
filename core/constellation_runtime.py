@@ -606,3 +606,53 @@ def get_constellation_runtime(
             enable_dag_evolution=enable_dag_evolution,
         )
     return _runtime_instance
+
+
+# ---------------------------------------------------------------------------
+# Legacy path guardrail
+# ---------------------------------------------------------------------------
+
+#: Known legacy orchestrator entry-point paths that should not be invoked
+#: directly as primary system entry points.
+LEGACY_ORCHESTRATOR_PATHS = frozenset(
+    {
+        "nodes.Node_110_SmartOrchestrator.server",
+        "nodes.Node_110_SmartOrchestrator.main",
+        "nodes.Node_81_Orchestrator.main",
+        "nodes.Node_50_Transformer.task_orchestrator",
+        "galaxy_gateway.orchestrator.task_orchestrator",
+    }
+)
+
+
+def warn_legacy_path(
+    caller: str,
+    trace_id: Optional[str] = None,
+    recommendation: str = "Use core.constellation_runtime.get_constellation_runtime() instead.",
+) -> None:
+    """Log a structured deprecation warning when a legacy orchestrator path is invoked.
+
+    This guardrail is called by ConstellationRuntime's internal helpers when
+    they detect that execution originated from a known legacy entry point.
+    It is also exported so that legacy nodes can call it proactively.
+
+    Args:
+        caller:         Module or class name of the legacy caller (e.g.
+                        ``"nodes.Node_110_SmartOrchestrator.server"``).
+        trace_id:       Optional request trace ID for log correlation.
+        recommendation: Human-readable migration guidance.
+
+    Example::
+
+        from core.constellation_runtime import warn_legacy_path
+        warn_legacy_path(
+            caller="nodes.Node_110_SmartOrchestrator.server",
+            trace_id="abc123",
+        )
+    """
+    logger.warning(
+        "LEGACY PATH GUARDRAIL | caller=%r | trace_id=%s | %s",
+        caller,
+        trace_id or "n/a",
+        recommendation,
+    )

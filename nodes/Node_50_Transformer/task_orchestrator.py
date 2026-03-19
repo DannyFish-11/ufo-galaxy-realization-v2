@@ -25,6 +25,7 @@
 
 import asyncio
 import json
+import warnings
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -63,6 +64,14 @@ class TaskOrchestrator:
     
     def __init__(self):
         """初始化编排器"""
+        warnings.warn(
+            "TaskOrchestrator (nodes.Node_50_Transformer.task_orchestrator) is a "
+            "legacy subordinate executor and should not be instantiated directly as a "
+            "system-level entry point. Use ConstellationRuntime instead: "
+            "from core.constellation_runtime import get_constellation_runtime",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.devices: Dict[str, DeviceInfo] = {}
         self.task_executions: Dict[str, TaskExecution] = {}
         self.task_results: Dict[int, Dict[str, Any]] = {}  # step_id -> result

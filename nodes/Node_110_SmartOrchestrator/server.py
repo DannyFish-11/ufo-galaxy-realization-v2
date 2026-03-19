@@ -5,9 +5,17 @@ Node_110_SmartOrchestrator - FastAPI 服务器
 
 架构说明
 --------
-该节点现在是 ConstellationRuntime 的**从属组件**，而非顶级编排入口。
-``/api/v1/orchestrate`` 端点首先委托给 ConstellationRuntime.run()；
-仅当 ConstellationRuntime 不可用时才回退到本地 SmartOrchestrator。
+.. deprecated::
+    该节点是**遗留编排入口**，已被 ConstellationRuntime 取代。
+    ``/api/v1/orchestrate`` 端点首先委托给 ConstellationRuntime.run()；
+    仅当 ConstellationRuntime 不可用时才回退到本地 SmartOrchestrator。
+    直接调用本节点作为系统主入口的行为已废弃。
+
+正确的系统编排入口::
+
+    from core.constellation_runtime import get_constellation_runtime
+    runtime = get_constellation_runtime()
+    result = await runtime.run(task_description="...")
 """
 
 import logging
@@ -31,6 +39,14 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ── Startup deprecation warning ────────────────────────────────────────────
+logger.warning(
+    "DEPRECATION [Node_110_SmartOrchestrator]: This node is a legacy orchestrator "
+    "entry point. All orchestration requests are delegated to ConstellationRuntime. "
+    "Do not invoke this node as a primary system entry point. "
+    "Use core.constellation_runtime.get_constellation_runtime() instead."
+)
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -68,6 +84,15 @@ class OrchestrationRequest(BaseModel):
     """编排任务请求"""
     task_description: str = Field(..., description="任务描述（自然语言）")
     user_context: Optional[Dict[str, Any]] = Field(None, description="用户上下文")
+    legacy_override: bool = Field(
+        False,
+        description=(
+            "Explicitly enable the legacy fallback path. "
+            "When True, the request acknowledges use of the deprecated local SmartOrchestrator "
+            "when ConstellationRuntime is unavailable. A DEPRECATION GUARDRAIL warning is always logged. "
+            "Keep the default (False) for all normal usage."
+        ),
+    )
 
 
 class OrchestrationResponse(BaseModel):
@@ -76,6 +101,10 @@ class OrchestrationResponse(BaseModel):
     status: str
     execution_plan: Dict[str, Any]
     result: Dict[str, Any]
+    served_by: str = Field(
+        "ConstellationRuntime",
+        description="处理本次请求的编排引擎标识。ConstellationRuntime 为正常路径；legacy 为降级路径。",
+    )
 
 
 class TaskStatusResponse(BaseModel):
@@ -133,7 +162,21 @@ async def orchestrate_task(request: OrchestrationRequest):
     2. 若 ConstellationRuntime 不可用则回退到本地 SmartOrchestrator
 
     该端点保持原有 OrchestrationResponse 响应 schema，向后兼容。
+
+    .. deprecated::
+        直接调用此端点作为主编排入口已废弃。
+        请使用 ConstellationRuntime 作为统一入口。
+        若需要显式使用旧版降级路径，请在请求中设置 ``legacy_override=True``。
     """
+    # Guardrail: warn if caller opted into legacy override
+    if request.legacy_override:
+        logger.warning(
+            "DEPRECATION GUARDRAIL [Node_110]: legacy_override=True received. "
+            "Caller is explicitly bypassing ConstellationRuntime. "
+            "task=%r  — migrate to ConstellationRuntime to suppress this warning.",
+            request.task_description[:80],
+        )
+
     logger.info(
         "Received orchestration request (delegating to ConstellationRuntime): %s",
         request.task_description[:100],
@@ -151,13 +194,22 @@ async def orchestrate_task(request: OrchestrationRequest):
             context=request.user_context or {},
         )
         shaped = wrap_as_orchestration_response(cr_result)
-        return OrchestrationResponse(**shaped)
+        return OrchestrationResponse(**shaped, served_by="ConstellationRuntime")
     except Exception as cr_exc:
         logger.warning(
             "ConstellationRuntime 不可用，回退到本地引擎: %s", cr_exc
         )
 
     # ── 2. 本地 SmartOrchestrator 降级路径 ──────────────────────────────
+    # Guardrail: require explicit legacy_override to use fallback path
+    if not request.legacy_override:
+        logger.warning(
+            "DEPRECATION GUARDRAIL [Node_110]: ConstellationRuntime unavailable and "
+            "legacy_override=False. Falling back to legacy SmartOrchestrator. "
+            "Set legacy_override=True in your request to acknowledge this deprecated path. "
+            "task=%r",
+            request.task_description[:80],
+        )
     if _fallback_orchestrator is None:
         raise HTTPException(
             status_code=503,
@@ -168,7 +220,7 @@ async def orchestrate_task(request: OrchestrationRequest):
             task_description=request.task_description,
             user_context=request.user_context,
         )
-        return OrchestrationResponse(**result)
+        return OrchestrationResponse(**result, served_by="legacy")
     except Exception as e:
         logger.error("Orchestration failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
