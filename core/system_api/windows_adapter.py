@@ -9,10 +9,16 @@ Supported operations
 - **launch_app**: ``ShellExecuteW`` with subprocess fallback.
 - **enumerate_windows**: ``EnumWindows`` + ``GetWindowText``.
 - **focus_window**: ``SetForegroundWindow`` / ``ShowWindow``.
+- **close_window**: ``WM_CLOSE`` message via ``PostMessage``.
 - **register_hotkey** / **unregister_hotkey**: ``RegisterHotKey`` / ``UnregisterHotKey``
   with a background message-pump thread.
 - **create_tray_icon** / **destroy_tray_icon**: minimal ``Shell_NotifyIcon``
   stub (interface-complete; functional only when a message loop is running).
+- **open_file**: ``ShellExecuteW`` with "open" verb.
+- **move_file** / **delete_file**: stdlib ``shutil`` / ``os`` operations.
+- **list_processes** / **kill_process**: ``psutil`` with ``os.kill`` fallback.
+- **get_clipboard** / **set_clipboard**: ``ctypes`` CF_UNICODETEXT clipboard access.
+- **send_notification**: ``Shell_NotifyIcon`` balloon tip.
 
 This module must only be imported on Windows.  :func:`core.system_api.get_system_api`
 guards the import so non-Windows hosts never load it.
@@ -23,14 +29,19 @@ import ctypes
 import ctypes.wintypes
 import logging
 import os
+import shutil
 import subprocess
 import threading
 from typing import Callable, Dict, List, Optional
 
 from .platform_api import (
     AppLaunchResult,
+    ClipboardResult,
+    FileOpResult,
     HotkeyHandle,
     NoOpSystemAPI,
+    NotificationResult,
+    ProcessInfo,
     SystemAPI,
     TrayHandle,
     WindowInfo,
@@ -420,3 +431,287 @@ class WindowsAdapter(SystemAPI):
             handle.active = False
         except Exception as exc:
             logger.debug("destroy_tray_icon error: %s", exc)
+
+    # ------------------------------------------------------------------
+    # App/window close
+    # ------------------------------------------------------------------
+
+    def close_window(self, title_or_hwnd: "str | int") -> bool:
+        """Send WM_CLOSE to a window by title substring or HWND."""
+        _WM_CLOSE = 0x0010
+        if not _WIN32_AVAILABLE:
+            return False
+        try:
+            hwnd: Optional[int] = None
+            if isinstance(title_or_hwnd, int):
+                hwnd = title_or_hwnd
+            else:
+                windows = _collect_windows(filter_title=title_or_hwnd)
+                if windows:
+                    hwnd = windows[0].hwnd
+            if hwnd is None:
+                return False
+            _user32.PostMessageW(hwnd, _WM_CLOSE, 0, 0)
+            return True
+        except Exception as exc:
+            logger.debug("close_window error: %s", exc)
+            return False
+
+    # ------------------------------------------------------------------
+    # File operations
+    # ------------------------------------------------------------------
+
+    def open_file(self, path: str) -> FileOpResult:
+        """Open *path* with its default application via ShellExecuteW."""
+        if not path:
+            return FileOpResult(success=False, error="empty path")
+        try:
+            if _WIN32_AVAILABLE:
+                rc = _shell32.ShellExecuteW(None, "open", path, None, None, _SW_SHOW)
+                if rc > 32:
+                    return FileOpResult(success=True, path=path)
+                return FileOpResult(success=False, path=path, error=f"ShellExecuteW rc={rc}")
+            # Non-win32 fallback (should not reach here due to guard in get_system_api)
+            os.startfile(path)  # type: ignore[attr-defined]
+            return FileOpResult(success=True, path=path)
+        except Exception as exc:
+            logger.debug("open_file error: %s", exc)
+            return FileOpResult(success=False, path=path, error=str(exc))
+
+    def move_file(self, src: str, dst: str) -> FileOpResult:
+        """Move or rename a file using :func:`shutil.move`."""
+        try:
+            result = shutil.move(src, dst)
+            return FileOpResult(success=True, path=str(result))
+        except FileNotFoundError:
+            return FileOpResult(success=False, error=f"not found: {src}")
+        except PermissionError as exc:
+            return FileOpResult(success=False, error=f"permission denied: {exc}")
+        except Exception as exc:
+            logger.debug("move_file error: %s", exc)
+            return FileOpResult(success=False, error=str(exc))
+
+    def delete_file(self, path: str) -> FileOpResult:
+        """Delete *path*, preferring recycle-bin (SHFileOperationW) when available."""
+        try:
+            if _WIN32_AVAILABLE:
+                # Use SHFileOperationW to send to recycle bin
+                _FO_DELETE = 0x0003
+                _FOF_ALLOWUNDO = 0x0040
+                _FOF_NOCONFIRMATION = 0x0010
+                _FOF_SILENT = 0x0004
+
+                class _SHFILEOPSTRUCT(ctypes.Structure):
+                    _fields_ = [
+                        ("hwnd", ctypes.c_void_p),
+                        ("wFunc", ctypes.c_uint),
+                        ("pFrom", ctypes.c_wchar_p),
+                        ("pTo", ctypes.c_wchar_p),
+                        ("fFlags", ctypes.c_ushort),
+                        ("fAnyOperationsAborted", ctypes.c_bool),
+                        ("hNameMappings", ctypes.c_void_p),
+                        ("lpszProgressTitle", ctypes.c_wchar_p),
+                    ]
+
+                op = _SHFILEOPSTRUCT()
+                op.wFunc = _FO_DELETE
+                op.pFrom = path + "\x00"
+                op.fFlags = _FOF_ALLOWUNDO | _FOF_NOCONFIRMATION | _FOF_SILENT
+                rc = _shell32.SHFileOperationW(ctypes.byref(op))
+                if rc == 0:
+                    return FileOpResult(success=True, path=path)
+                # Fall through to os.remove on SHFileOperation failure
+            os.remove(path)
+            return FileOpResult(success=True, path=path)
+        except FileNotFoundError:
+            return FileOpResult(success=False, error=f"not found: {path}")
+        except PermissionError as exc:
+            return FileOpResult(success=False, error=f"permission denied: {exc}")
+        except Exception as exc:
+            logger.debug("delete_file error: %s", exc)
+            return FileOpResult(success=False, error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Process queries
+    # ------------------------------------------------------------------
+
+    def list_processes(self) -> List[ProcessInfo]:
+        """Return a snapshot of running processes using psutil or WMIC fallback."""
+        try:
+            import psutil  # type: ignore[import]
+            result: List[ProcessInfo] = []
+            for proc in psutil.process_iter(["pid", "name", "status"]):
+                try:
+                    info = proc.info
+                    result.append(
+                        ProcessInfo(
+                            pid=info["pid"],
+                            name=info.get("name") or "",
+                            status=info.get("status") or "running",
+                        )
+                    )
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            return result
+        except ImportError:
+            pass
+        # WMIC fallback
+        try:
+            out = subprocess.check_output(
+                ["wmic", "process", "get", "ProcessId,Name"],
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            ).decode(errors="replace")
+            procs: List[ProcessInfo] = []
+            for line in out.splitlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 2:
+                    try:
+                        procs.append(ProcessInfo(pid=int(parts[-1]), name=" ".join(parts[:-1])))
+                    except ValueError:
+                        continue
+            return procs
+        except Exception as exc:
+            logger.debug("list_processes error: %s", exc)
+            return []
+
+    def kill_process(self, pid: int) -> bool:
+        """Terminate process *pid* using psutil or os.kill fallback."""
+        try:
+            import psutil  # type: ignore[import]
+            try:
+                proc = psutil.Process(pid)
+                proc.terminate()
+                return True
+            except psutil.NoSuchProcess:
+                return False
+            except psutil.AccessDenied as exc:
+                logger.debug("kill_process psutil denied pid=%d: %s", pid, exc)
+                return False
+        except ImportError:
+            pass
+        try:
+            os.kill(pid, 15)  # SIGTERM
+            return True
+        except ProcessLookupError:
+            return False
+        except Exception as exc:
+            logger.debug("kill_process error pid=%d: %s", pid, exc)
+            return False
+
+    # ------------------------------------------------------------------
+    # Clipboard
+    # ------------------------------------------------------------------
+
+    def get_clipboard(self) -> ClipboardResult:
+        """Read plain-text content from the Windows clipboard."""
+        _CF_UNICODETEXT = 13
+        if not _WIN32_AVAILABLE:
+            return ClipboardResult(success=False, error="Win32 not available")
+        try:
+            if not _user32.OpenClipboard(None):
+                return ClipboardResult(success=False, error="OpenClipboard failed")
+            try:
+                h_mem = _user32.GetClipboardData(_CF_UNICODETEXT)
+                if not h_mem:
+                    return ClipboardResult(success=True, text="")
+                _kernel32.GlobalLock.restype = ctypes.c_void_p
+                ptr = _kernel32.GlobalLock(h_mem)
+                if not ptr:
+                    return ClipboardResult(success=False, error="GlobalLock failed")
+                try:
+                    text = ctypes.wstring_at(ptr)
+                finally:
+                    _kernel32.GlobalUnlock(h_mem)
+                return ClipboardResult(success=True, text=text)
+            finally:
+                _user32.CloseClipboard()
+        except Exception as exc:
+            logger.debug("get_clipboard error: %s", exc)
+            return ClipboardResult(success=False, error=str(exc))
+
+    def set_clipboard(self, text: str) -> ClipboardResult:
+        """Write *text* to the Windows clipboard as CF_UNICODETEXT."""
+        _CF_UNICODETEXT = 13
+        _GMEM_MOVEABLE = 0x0002
+        if not _WIN32_AVAILABLE:
+            return ClipboardResult(success=False, error="Win32 not available")
+        try:
+            encoded = (text + "\x00").encode("utf-16-le")
+            size = len(encoded)
+            h_mem = _kernel32.GlobalAlloc(_GMEM_MOVEABLE, size)
+            if not h_mem:
+                return ClipboardResult(success=False, error="GlobalAlloc failed")
+            _kernel32.GlobalLock.restype = ctypes.c_void_p
+            ptr = _kernel32.GlobalLock(h_mem)
+            if not ptr:
+                _kernel32.GlobalFree(h_mem)
+                return ClipboardResult(success=False, error="GlobalLock failed")
+            try:
+                ctypes.memmove(ptr, encoded, size)
+            finally:
+                _kernel32.GlobalUnlock(h_mem)
+            if not _user32.OpenClipboard(None):
+                _kernel32.GlobalFree(h_mem)
+                return ClipboardResult(success=False, error="OpenClipboard failed")
+            try:
+                _user32.EmptyClipboard()
+                _user32.SetClipboardData(_CF_UNICODETEXT, h_mem)
+                return ClipboardResult(success=True)
+            finally:
+                _user32.CloseClipboard()
+        except Exception as exc:
+            logger.debug("set_clipboard error: %s", exc)
+            return ClipboardResult(success=False, error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Notifications
+    # ------------------------------------------------------------------
+
+    def send_notification(
+        self,
+        title: str,
+        body: str,
+        icon_path: Optional[str] = None,
+    ) -> NotificationResult:
+        """Show a balloon tooltip via Shell_NotifyIcon NIIF_INFO."""
+        _NIIF_INFO = 0x00000001
+        _NIF_INFO = 0x00000010
+        _NIM_MODIFY = 0x00000001
+
+        if not _WIN32_AVAILABLE:
+            return NotificationResult(success=False, error="Win32 not available")
+        try:
+            class _NOTIFYICONDATAEX(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", ctypes.c_ulong),
+                    ("hWnd", ctypes.c_void_p),
+                    ("uID", ctypes.c_uint),
+                    ("uFlags", ctypes.c_uint),
+                    ("uCallbackMessage", ctypes.c_uint),
+                    ("hIcon", ctypes.c_void_p),
+                    ("szTip", ctypes.c_wchar * 128),
+                    ("dwState", ctypes.c_ulong),
+                    ("dwStateMask", ctypes.c_ulong),
+                    ("szInfo", ctypes.c_wchar * 256),
+                    ("uTimeout", ctypes.c_uint),
+                    ("szInfoTitle", ctypes.c_wchar * 64),
+                    ("dwInfoFlags", ctypes.c_ulong),
+                ]
+
+            data = _NOTIFYICONDATAEX()
+            data.cbSize = ctypes.sizeof(_NOTIFYICONDATAEX)
+            data.uID = 1
+            data.uFlags = _NIF_INFO
+            data.szInfoTitle = title[:63]
+            data.szInfo = body[:255]
+            data.dwInfoFlags = _NIIF_INFO
+            data.uTimeout = 5000
+
+            # NIM_ADD first (may already exist — ignore failure), then modify
+            _shell32.Shell_NotifyIconW(_NIM_ADD, ctypes.byref(data))
+            rc = _shell32.Shell_NotifyIconW(_NIM_MODIFY, ctypes.byref(data))
+            return NotificationResult(success=bool(rc), notification_id=1)
+        except Exception as exc:
+            logger.debug("send_notification error: %s", exc)
+            return NotificationResult(success=False, error=str(exc))

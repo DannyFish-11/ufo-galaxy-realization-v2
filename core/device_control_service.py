@@ -307,36 +307,49 @@ class DeviceControlService:
     ) -> Dict[str, Any]:
         """
         打开应用
-        
-        真正执行：
-        - Windows: os.startfile() 或 subprocess
-        - Android: adb shell am start 或 Intent
+
+        Windows path: prefer System API facade (launch_app) before
+        falling back to the Node_45_Desktop HTTP API.
+        Android path: adb shell am start / Intent (unchanged).
         """
         device = self.get_device(device_id)
         if not device:
             return {"success": False, "error": "Device not found"}
-        
+
         try:
-            client = await self._get_client()
-            
-            # 应用包名映射
-            app_packages = {
-                "微信": "com.tencent.mm",
-                "淘宝": "com.taobao.taobao",
-                "抖音": "com.ss.android.ugc.aweme",
-                "QQ": "com.tencent.mobileqq",
-                "支付宝": "com.eg.android.AlipayGphone",
-                "浏览器": "com.android.browser",
-                "设置": "com.android.settings",
-            }
-            
+            # ----------------------------------------------------------------
+            # Windows fast-path: use System API facade
+            # ----------------------------------------------------------------
             if device.platform == DevicePlatform.WINDOWS:
-                # Windows 打开应用
+                try:
+                    from core.system_api.windows_system_api import (  # type: ignore[import]
+                        get_windows_system_api,
+                    )
+                    facade = get_windows_system_api()
+                    if facade.is_available:
+                        resp = facade.dispatch(
+                            "launch_app",
+                            {"target": app_name},
+                            device_id=device_id,
+                        )
+                        if resp.handled:
+                            logger.info(
+                                "device_control | open_app via system_api | "
+                                "device=%s app=%s success=%s",
+                                device_id, app_name, resp.success,
+                            )
+                            return {"success": resp.success, "error": resp.error, **resp.data}
+                except Exception as _sapi_err:
+                    logger.debug(
+                        "device_control | system_api open_app fallback | %s", _sapi_err
+                    )
+
+                # Fallback: Node_45_Desktop HTTP API
+                client = await self._get_client()
                 app_paths = {
                     "微信": "C:\\Program Files\\Tencent\\WeChat\\WeChat.exe",
                     "浏览器": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                 }
-                
                 app_path = app_paths.get(app_name)
                 if app_path:
                     response = await client.post(
@@ -346,28 +359,34 @@ class DeviceControlService:
                     result = response.json()
                 else:
                     result = {"success": True, "message": f"App {app_name} not configured"}
-                
-                logger.info(f"Windows open_app: {app_name} -> {result}")
+                logger.info("Windows open_app (node fallback): %s -> %s", app_name, result)
                 return result
-            
-            elif device.platform == DevicePlatform.ANDROID:
-                # Android 打开应用
+
+            # ----------------------------------------------------------------
+            # Android path (unchanged)
+            # ----------------------------------------------------------------
+            client = await self._get_client()
+            app_packages = {
+                "微信": "com.tencent.mm",
+                "淘宝": "com.taobao.taobao",
+                "抖音": "com.ss.android.ugc.aweme",
+                "QQ": "com.tencent.mobileqq",
+                "支付宝": "com.eg.android.AlipayGphone",
+                "浏览器": "com.android.browser",
+                "设置": "com.android.settings",
+            }
+            if device.platform == DevicePlatform.ANDROID:
                 package = app_packages.get(app_name, app_name)
-                
                 response = await client.post(
                     f"{self.node_urls['adb']}/start_app",
-                    json={
-                        "device_id": device_id,
-                        "package": package
-                    }
+                    json={"device_id": device_id, "package": package}
                 )
                 result = response.json()
-                logger.info(f"Android open_app: {app_name} ({package}) -> {result}")
+                logger.info("Android open_app: %s (%s) -> %s", app_name, package, result)
                 return result
-            
-            else:
-                return {"success": False, "error": f"Unsupported platform: {device.platform}"}
-        
+
+            return {"success": False, "error": f"Unsupported platform: {device.platform}"}
+
         except Exception as e:
             logger.error(f"Open app failed: {e}")
             return {"success": False, "error": str(e)}
