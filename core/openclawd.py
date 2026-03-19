@@ -2392,25 +2392,100 @@ class OpenClawd:
                     return {"success": False, "error": f"无效 MCP 工具名: {tool_name}"}
                 server_id, mcp_tool_name = parts[1], parts[2]
 
+                # Emit contract-level observability for every MCP call.
+                from core.skill_contract import (
+                    SkillRequest as _SkillRequest,
+                    SkillMetrics as _SkillMetrics,
+                    SkillResponse as _SkillResponse,
+                    SkillErrorCode as _SkillErrorCode,
+                )
+                from core.skill_registry import get_skill_registry as _get_registry
+                import time as _time
+
+                _mcp_req = _SkillRequest(
+                    skill_name=tool_name,
+                    inputs=arguments,
+                    device_id=getattr(self, "_current_device_id", ""),
+                    runtime_session_id=getattr(self, "_current_session_id", ""),
+                    caller="openclawd",
+                )
+                _mcp_metrics = _SkillMetrics(started_at=_time.time(), executor=f"mcp:{server_id}")
+
                 # 特殊处理 gateway 自造工具
                 if server_id == "gateway":
                     try:
                         from core.mcp_gateway import get_mcp_gateway
                         gateway = get_mcp_gateway()
                         result = await gateway.execute_tool(mcp_tool_name, arguments)
+                        _mcp_metrics.finish()
+                        _get_registry()._emit_log(
+                            _mcp_req,
+                            _SkillResponse.success(tool_name, _mcp_req.trace_id, result, _mcp_metrics),
+                        )
                         return {"success": True, "result": result}
                     except Exception as e:
+                        _mcp_metrics.finish()
+                        _get_registry()._emit_log(
+                            _mcp_req,
+                            _SkillResponse.failure(tool_name, _mcp_req.trace_id, _SkillErrorCode.EXECUTION_ERROR, str(e), metrics=_mcp_metrics),
+                        )
                         return {"success": False, "error": f"Gateway 工具执行失败: {e}"}
 
                 from core.mcp_loader import mcp_loader
-                result = await mcp_loader.call_tool(server_id, mcp_tool_name, arguments)
-                return {"success": True, "result": result}
+                try:
+                    result = await mcp_loader.call_tool(server_id, mcp_tool_name, arguments)
+                    _mcp_metrics.finish()
+                    _get_registry()._emit_log(
+                        _mcp_req,
+                        _SkillResponse.success(tool_name, _mcp_req.trace_id, result, _mcp_metrics),
+                    )
+                    return {"success": True, "result": result}
+                except Exception as e:
+                    _mcp_metrics.finish()
+                    _get_registry()._emit_log(
+                        _mcp_req,
+                        _SkillResponse.failure(tool_name, _mcp_req.trace_id, _SkillErrorCode.EXECUTION_ERROR, str(e), metrics=_mcp_metrics),
+                    )
+                    raise
 
             elif tool_name.startswith("skill__"):
                 skill_id = tool_name[7:]  # len("skill__") == 7
-                from core.skill_loader import skill_loader
-                result = await skill_loader.execute(skill_id, **arguments)
-                return {"success": True, "result": result}
+                # Route all skill invocations through the unified Skill Registry
+                # so every call is validated, permission-checked, and observed.
+                from core.skill_contract import SkillRequest as _SkillRequest
+                from core.skill_registry import get_skill_registry as _get_registry
+                from core.skill_loader import skill_loader as _skill_loader
+
+                _registry = _get_registry()
+
+                # Lazily register an adapter for this skill if needed.
+                if not _registry.has_skill(tool_name):
+                    def _make_skill_adapter(_sid: str):
+                        async def _adapter(**kwargs):
+                            return await _skill_loader.execute(_sid, **kwargs)
+                        return _adapter
+                    _registry.register_skill(
+                        name=tool_name,
+                        handler=_make_skill_adapter(skill_id),
+                        source="skill_loader_lazy",
+                        description=f"Adapter for skill_loader skill '{skill_id}'",
+                    )
+
+                _req = _SkillRequest(
+                    skill_name=tool_name,
+                    inputs=arguments,
+                    device_id=getattr(self, "_current_device_id", ""),
+                    runtime_session_id=getattr(self, "_current_session_id", ""),
+                    caller="openclawd",
+                )
+                _resp = await _registry.invoke(_req)
+                if _resp.ok:
+                    return {"success": True, "result": _resp.outputs}
+                _err = _resp.first_error
+                return {
+                    "success": False,
+                    "error": _err.message if _err else "Skill invocation failed",
+                }
 
             elif tool_name.startswith("node__"):
                 parts = tool_name.split("__", 2)
