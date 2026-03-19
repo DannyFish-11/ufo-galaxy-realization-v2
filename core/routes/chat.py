@@ -67,10 +67,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
         """
-        统一对话接口 — OpenClawd 唯一入口。
+        统一对话接口 — DesktopPresenceRuntime → OpenClawd 唯一入口。
 
-        架构约束（PR86）：
-        - /api/v1/chat 只调用 OpenClawd.process()
+        架构约束（PR86 + PR-1 Runtime）：
+        - /api/v1/chat 通过 DesktopPresenceRuntime 路由到 OpenClawd.process()
+        - DesktopPresenceRuntime 驱动三态推进（silent→liminal→manifest→silent）
         - AgentKernel 由 OpenClawd 内部调用，不在此处直接使用
         - 所有 UI (Dashboard / Windows / Android) 统一调用此端点
         - SOUL 注入规则由 OpenClawd 内部统一控制
@@ -81,13 +82,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         import time as _time
         _t0 = _time.monotonic()
 
-        # ── 唯一入口: OpenClawd 母体智能体 ──
+        # ── 统一控制面: DesktopPresenceRuntime → OpenClawd 母体智能体 ──
+        # DesktopPresenceRuntime 负责三态推进和 runtime_session_id 生成；
         # OpenClawd 内部嵌入 AgentKernel；SOUL 注入规则由 OpenClawd 统一管理。
         try:
-            from core.openclawd import get_openclawd
-            clawd = get_openclawd()
-            result = await clawd.process(
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            runtime = get_desktop_presence_runtime()
+            result = await runtime.handle_request(
                 message=req.message,
+                source="chat",
                 device_id=req.device_id,
                 session_id=req.session_id,
                 context=req.context,
@@ -95,7 +98,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 multimodal_context=req.multimodal_context,
             )
             metadata = result.get("metadata", {})
-            trace_id = result.get("trace_id") or metadata.get("trace_id") or metadata.get("request_id", "")
+            trace_id = (
+                result.get("runtime_session_id")
+                or result.get("trace_id")
+                or metadata.get("trace_id")
+                or metadata.get("request_id", "")
+            )
 
             resp = UnifiedChatResponse(
                 success=result.get("success", False),
@@ -111,6 +119,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             resp_dict = resp.to_json_response()
             resp_dict["reply"] = result.get("response", "")
             resp_dict["trace_id"] = trace_id
+            resp_dict["runtime_session_id"] = result.get("runtime_session_id", trace_id)
             # ── InteractionEnvelope (PR-4) — non-breaking, absent when None ──
             _ie = result.get("interaction_envelope")
             if _ie is not None:

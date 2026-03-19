@@ -3,9 +3,8 @@ Galaxy - 端到端编排器（便捷接口）
 ================================
 
 提供 process_user_input() 函数作为统一入口，
-内部委托给 EndToEndPipeline.execute() 或（当可用时）
-ConstellationRuntime.run() 以获得完整的 TaskConstellation
-规划→DAG→执行闭环。
+内部委托给 DesktopPresenceRuntime（控制面）再流转到
+ConstellationRuntime.run() / EndToEndPipeline.execute()。
 
 用法:
     from core.e2e_orchestrator import process_user_input
@@ -36,12 +35,18 @@ async def process_user_input(
     统一用户输入处理入口。
 
     完整链路:
-      唤醒 → 会话管理 → 意图解析 → 智能路由 → Agent/LLM → 结果广播
+      唤醒 → 会话管理 → DesktopPresenceRuntime（三态控制面）
+      → ConstellationRuntime / EndToEndPipeline → 结果广播
 
-    默认通过 :class:`core.constellation_runtime.ConstellationRuntime` 处理，
-    以获得完整的 TaskConstellation 规划→DAG→执行闭环；降级到
-    :class:`core.e2e_pipeline.EndToEndPipeline`。
-    传入 ``use_constellation=False`` 可显式绕过 ConstellationRuntime。
+    所有顶层 E2E 请求统一通过 :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`
+    处理，保证三态推进（silent→liminal→manifest→silent）闭环及
+    ``runtime_session_id`` 全链路透传。
+
+    降级行为:
+    - 若 DesktopPresenceRuntime 不可用，则直接调用 ConstellationRuntime
+      并打印警告；再不可用则降级到 EndToEndPipeline。
+    - 传入 ``use_constellation=False`` 可显式绕过 ConstellationRuntime（已废弃，
+      仍触发警告）。
 
     Args:
         message: 用户输入文本
@@ -59,6 +64,7 @@ async def process_user_input(
             "mode": str,       # "chat" | "device_control" | "agent_task" | "fallback" | "dag"
             "data": {...},
             "devices_notified": [str],
+            "runtime_session_id": str,
         }
     """
     # ── Guardrail: warn when ConstellationRuntime is explicitly bypassed ──────
@@ -76,7 +82,30 @@ async def process_user_input(
             message[:80],
         )
 
-    # ── ConstellationRuntime 优先路径 ──────────────────────────────────
+    # ── Primary path: DesktopPresenceRuntime（控制面）────────────────────────
+    try:
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+        runtime = get_desktop_presence_runtime()
+        result = await runtime.handle_request(
+            message=message,
+            source="e2e",
+            device_id=device_id,
+            session_id=session_id,
+            user_id=user_id,
+            context=context,
+            use_constellation=use_constellation,
+        )
+        # Normalise: e2e callers expect "reply" not "response"
+        if "reply" not in result:
+            result["reply"] = result.get("response", "")
+        result.setdefault("devices_notified", [])
+        return result
+    except Exception as exc:
+        logger.warning(
+            "DesktopPresenceRuntime unavailable in E2EOrchestrator, falling back: %s", exc
+        )
+
+    # ── Fallback: ConstellationRuntime 优先路径 ──────────────────────────────
     if use_constellation:
         try:
             from core.constellation_runtime import get_constellation_runtime

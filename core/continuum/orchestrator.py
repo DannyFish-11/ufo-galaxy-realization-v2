@@ -155,23 +155,32 @@ class ContinuumOrchestrator:
         elapsed_ms: Optional[float] = None,
         rhythm: Optional[InteractionRhythm] = None,
         world_context: Optional[Dict[str, Any]] = None,
+        runtime_session_id: Optional[str] = None,
     ) -> ContinuumState:
         """Execute one full continuum evaluation cycle.
 
         Args:
-            frame:         Optional :class:`~core.multimodal.perception_frame.PerceptionFrame`
-                           sourced from the multimodal ingress bus.  When
-                           ``None``, a minimal default frame is constructed.
-            trace_id:      Correlation ID propagated from the calling request.
-                           Written into :attr:`~core.continuum.types.ContinuumState.trace_id`.
-            elapsed_ms:    Milliseconds since the previous tick/request, used
-                           by the return engine to detect timeouts.  When
-                           ``None``, defaults to ``0``.
-            rhythm:        Optional :class:`~core.continuum.human_field.InteractionRhythm`
-                           summary forwarded to the human-field inferrer.
-            world_context: Optional world/context dict forwarded to state
-                           fusion.  Recognised keys: ``context_utility``,
-                           ``urgency``, ``action_risk``, ``uncertainty``.
+            frame:              Optional :class:`~core.multimodal.perception_frame.PerceptionFrame`
+                                sourced from the multimodal ingress bus.  When
+                                ``None``, a minimal default frame is constructed.
+            trace_id:           Correlation ID propagated from the calling request.
+                                Written into :attr:`~core.continuum.types.ContinuumState.trace_id`.
+            elapsed_ms:         Milliseconds since the previous tick/request, used
+                                by the return engine to detect timeouts.  When
+                                ``None``, defaults to ``0``.
+            rhythm:             Optional :class:`~core.continuum.human_field.InteractionRhythm`
+                                summary forwarded to the human-field inferrer.
+            world_context:      Optional world/context dict forwarded to state
+                                fusion.  Recognised keys: ``context_utility``,
+                                ``urgency``, ``action_risk``, ``uncertainty``.
+            runtime_session_id: Optional identifier from
+                                :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`.
+                                When provided, it is used as ``trace_id`` (taking
+                                precedence) so that all continuum log entries can be
+                                correlated back to the originating runtime session.
+                                This is the mechanism by which the runtime drives the
+                                continuum rather than the continuum acting as its own
+                                entrypoint.
 
         Returns:
             A :class:`~core.continuum.types.ContinuumState` snapshot.
@@ -179,6 +188,14 @@ class ContinuumOrchestrator:
             the snapshot has ``degraded=True`` and
             ``phase=ContinuumPhase.FORMLESS``.
         """
+        # runtime_session_id takes precedence as the canonical trace correlation key.
+        effective_trace_id = runtime_session_id or trace_id
+        if runtime_session_id:
+            logger.debug(
+                "ContinuumOrchestrator.run driven by DesktopPresenceRuntime | "
+                "runtime_session_id=%s",
+                runtime_session_id,
+            )
         if not self._effective_cfg.flags.enabled:
             return ContinuumState.formless_default()
 
@@ -199,7 +216,7 @@ class ContinuumOrchestrator:
                 if flags.debug:
                     logger.debug(
                         "Continuum tick SKIPPED (sampling) | trace=%s sampling_rate=%.3f",
-                        trace_id,
+                        effective_trace_id,
                         flags.sampling_rate,
                     )
                 return fallback
@@ -209,7 +226,7 @@ class ContinuumOrchestrator:
         try:
             result = self._run_pipeline(
                 frame=frame,
-                trace_id=trace_id,
+                trace_id=effective_trace_id,
                 elapsed_ms=elapsed_ms or 0.0,
                 rhythm=rhythm,
                 world_context=world_context,
@@ -217,7 +234,7 @@ class ContinuumOrchestrator:
         except Exception as exc:
             logger.error(
                 "ContinuumOrchestrator.run failed (trace_id=%s): %s",
-                trace_id,
+                effective_trace_id,
                 exc,
                 exc_info=True,
             )
@@ -232,7 +249,7 @@ class ContinuumOrchestrator:
                 presence_intensity=0.0,
                 degraded=True,
                 degrade_reason="continuum_internal_error",
-                trace_id=trace_id or ContinuumState.__fields__["trace_id"].default_factory(),
+                trace_id=effective_trace_id or ContinuumState.__fields__["trace_id"].default_factory(),
                 metadata={"error": str(exc)},
             )
 
@@ -245,14 +262,14 @@ class ContinuumOrchestrator:
         if flags.max_tick_ms > 0.0 and elapsed_ms_tick > flags.max_tick_ms:
             logger.warning(
                 "Continuum tick budget exceeded | trace=%s elapsed_ms=%.1f max_ms=%.1f — degrading to formless",
-                trace_id,
+                effective_trace_id,
                 elapsed_ms_tick,
                 flags.max_tick_ms,
             )
             budget_exceeded = True
             degraded_result = ContinuumState.degraded_fallback("tick_budget_exceeded")
-            if trace_id:
-                degraded_result = degraded_result.model_copy(update={"trace_id": trace_id})
+            if effective_trace_id:
+                degraded_result = degraded_result.model_copy(update={"trace_id": effective_trace_id})
             metrics.record_tick(
                 phase="formless",
                 elapsed_ms=elapsed_ms_tick,
@@ -268,7 +285,7 @@ class ContinuumOrchestrator:
             logger.debug(
                 "Continuum tick | trace=%s phase=%s intensity=%.3f "
                 "coherence=%.3f action=%s degraded=%s elapsed_ms=%.2f",
-                trace_id,
+                effective_trace_id,
                 result.phase.value,
                 result.presence_intensity,
                 result.coherence,
