@@ -1036,6 +1036,17 @@ class OpenClawd:
                         provider_info.get("provider", ""),
                         provider_info.get("model", ""),
                     )
+                    # PR-2: Log primary decision authority (kernel path).
+                    try:
+                        from core.model_role_policy import get_policy as _get_policy_k
+                        _get_policy_k().log_primary_authority(
+                            "openclawd",
+                            trace_id=trace_id,
+                            model=kernel_result.model or provider_info.get("model", ""),
+                            intent=kernel_result.intent.raw_intent if kernel_result.intent else "",
+                        )
+                    except Exception as _rp_k_err:
+                        logger.debug("model_role_policy log (kernel) skipped: %s", _rp_k_err)
                     latency_ms = (time.monotonic() - t0) * 1000
                     await self._record_turn(session_id, "user", message)
                     await self._record_turn(session_id, "assistant", kernel_result.reply)
@@ -1186,6 +1197,19 @@ class OpenClawd:
                 provider_info.get("provider", ""),
                 provider_info.get("model", ""),
             )
+
+            # PR-2: Log primary decision authority so observability confirms
+            # that OpenClawd is the sole decision maker for this request.
+            try:
+                from core.model_role_policy import get_policy as _get_policy
+                _get_policy().log_primary_authority(
+                    "openclawd",
+                    trace_id=trace_id,
+                    model=provider_info.get("model", ""),
+                    intent=intent_type,
+                )
+            except Exception as _rp_err:
+                logger.debug("model_role_policy log skipped: %s", _rp_err)
 
             # Step 2e: 记录助手回复到会话记忆
             response_text = result.get("response", "")

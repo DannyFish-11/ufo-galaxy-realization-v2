@@ -109,9 +109,28 @@ class TaskOrchestrator:
         user_request: str,
         priority: TaskPriority = TaskPriority.NORMAL,
         target_device: Optional[str] = None,
-        timeout: int = 300
+        timeout: int = 300,
+        openclawd_decision: Optional[Dict[str, Any]] = None,
     ) -> Task:
-        """提交新任务（PR-2：立即转换为 TaskEnvelope，内部唯一任务格式）。"""
+        """提交新任务（PR-2：立即转换为 TaskEnvelope，内部唯一任务格式）。
+
+        PR-2 constraint: The TaskOrchestrator is an **orchestration/transport**
+        component.  It schedules and dispatches the plan it receives; it must
+        NOT re-interpret the user request, re-score plans, or produce a new
+        primary decision.
+
+        Args:
+            user_request:       Natural-language request string (forwarded,
+                                not re-evaluated here).
+            priority:           Task queue priority.
+            target_device:      Optional explicit device assignment.
+            timeout:            Task timeout in seconds.
+            openclawd_decision: Optional dict containing the pre-formed
+                                decision from OpenClawd (e.g. intent, model
+                                used, trace_id).  When present it is stored in
+                                the task envelope's metadata so the full trace
+                                remains auditable.
+        """
         task_id = str(uuid.uuid4())
         task = Task(
             task_id=task_id,
@@ -129,6 +148,11 @@ class TaskOrchestrator:
         # all downstream internal processing uses the unified format.
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+            _meta: Dict[str, Any] = {
+                "priority_label": priority.name if hasattr(priority, "name") else "",
+            }
+            if openclawd_decision:
+                _meta["openclawd_decision"] = openclawd_decision
             _envelope = _TaskEnvelope(
                 task_id=task_id,
                 source="task_orchestrator",
@@ -137,7 +161,7 @@ class TaskOrchestrator:
                 args={"user_request": user_request},
                 priority=priority.value if hasattr(priority, "value") else 5,
                 timeout=float(timeout),
-                metadata={"priority_label": priority.name if hasattr(priority, "name") else ""},
+                metadata=_meta,
             )
             self._task_envelopes[task_id] = _envelope
             logger.debug(
@@ -170,7 +194,12 @@ class TaskOrchestrator:
                 logger.error(f"Task worker error: {e}")
     
     async def _process_task(self, task: Task):
-        """处理单个任务（PR-2：通过 TaskEnvelope 追踪生命周期）。"""
+        """处理单个任务（PR-2：通过 TaskEnvelope 追踪生命周期）。
+
+        PR-2 constraint: _process_task is **orchestration-only**.  It selects
+        a device and dispatches the task as received.  It must NOT re-evaluate
+        the user intent, re-score the plan, or produce a new primary decision.
+        """
         logger.info(f"Processing task: {task.task_id}")
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.utcnow()
@@ -178,12 +207,16 @@ class TaskOrchestrator:
         # PR-2: retrieve or construct the envelope for this task.
         envelope = self._task_envelopes.get(task.task_id)
         if envelope is not None:
+            # PR-2: log the authority recorded in the envelope so the trace
+            # shows that TaskOrchestrator is acting as transport, not decider.
+            _oc_decision = (envelope.metadata or {}).get("openclawd_decision")
             logger.debug(
-                "TaskOrchestrator._process_task | task_id=%s trace_id=%s request='%.50s' device=%s",
+                "TaskOrchestrator._process_task | task_id=%s trace_id=%s request='%.50s' device=%s openclawd_authority=%s",
                 envelope.task_id,
                 envelope.trace_id,
                 task.user_request,
                 task.assigned_device or "unassigned",
+                bool(_oc_decision),
             )
             # PR-5 Cap 1: lifecycle created → running
             try:
@@ -321,7 +354,13 @@ class TaskOrchestrator:
         return selected
     
     async def _decompose_task(self, task: Task) -> List[Command]:
-        """分解任务为命令序列"""
+        """分解任务为命令序列。
+
+        PR-2: This method translates the *already-decided* action (as expressed
+        in ``task.user_request``) into low-level device commands.  It performs
+        **structural decomposition only** — it does NOT re-evaluate intent,
+        re-score plans, or replace the primary decision produced by OpenClawd.
+        """
         commands = []
         request = task.user_request.lower()
         
