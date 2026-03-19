@@ -12,13 +12,17 @@ SmartTransportRouter - 智能传输路由
 作者：Manus AI
 """
 
+import logging
 import os
 import asyncio
 import httpx
-from typing import Optional, Dict, Any, Literal
+from typing import Callable, List, Optional, Dict, Any, Literal
 from enum import Enum
 from pydantic import BaseModel
 from core.port_config import get_service_port
+from core.multimodal.multimodal_events import TransportFallbackEvent, MultimodalEvent
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # 传输方式枚举
@@ -97,7 +101,20 @@ class SmartTransportRouter:
         
         # 设备状态缓存
         self.device_status = {}
+
+        # PR-7: event listeners for fallback / transport events
+        self._event_listeners: List[Callable[[MultimodalEvent], None]] = []
         
+    def add_event_listener(
+        self, listener: Callable[[MultimodalEvent], None]
+    ) -> None:
+        """Register a listener for transport :class:`MultimodalEvent` objects.
+
+        Listeners receive :class:`TransportFallbackEvent` when WebRTC is
+        unavailable and the router falls back to a screenshot-based method.
+        """
+        self._event_listeners.append(listener)
+
     async def route(self, request: TransportRequest) -> TransportResponse:
         """
         智能路由：根据请求选择最佳传输方式
@@ -105,10 +122,37 @@ class SmartTransportRouter:
         默认路由返回 Gateway WS 端点（AIP v3）。
         仅当对应通道被明确启用（GALAXY_ENABLE_WEBRTC/SCRCPY/MQTT）时，
         才返回直连 Node 端点。
+
+        PR-7: WebRTC is preferred for real-time/interactive tasks when
+        available.  A :class:`TransportFallbackEvent` is emitted whenever
+        the router degrades from WebRTC to a screenshot-based method.
         """
         
-        # 1. 确定传输方式
+        # PR-7: When WebRTC is the preferred method for real-time tasks but is
+        # unavailable, determine the intended method before selection so a
+        # fallback event can be emitted.
+        prefer_webrtc: bool = (
+            self.webrtc_enabled and request.task_type in ("dynamic", "interactive")
+        )
+
         method = await self._select_transport_method(request)
+
+        # Emit a fallback event when WebRTC was the intended method but was
+        # not selected (e.g., node unreachable or channel disabled).
+        if prefer_webrtc and method != TransportMethod.WEBRTC:
+            self._emit_event(
+                TransportFallbackEvent(
+                    from_method="webrtc",
+                    to_method=method.value,
+                    reason="webrtc_unavailable_or_unreachable",
+                    device_id=request.device_id,
+                )
+            )
+            logger.info(
+                "TransportRouter: WebRTC unavailable for device=%s; falling back to %s",
+                request.device_id,
+                method.value,
+            )
         
         # 2. 确定网络层
         network = await self._select_network_layer(request.device_id)
@@ -133,6 +177,14 @@ class SmartTransportRouter:
                 "realtime": request.realtime
             }
         )
+
+    def _emit_event(self, event: MultimodalEvent) -> None:
+        """Dispatch a :class:`MultimodalEvent` to all registered listeners."""
+        for listener in list(self._event_listeners):
+            try:
+                listener(event)
+            except Exception as exc:
+                logger.debug("TransportRouter event listener error: %s", exc)
     
     async def _select_transport_method(self, request: TransportRequest) -> TransportMethod:
         """选择传输方式
