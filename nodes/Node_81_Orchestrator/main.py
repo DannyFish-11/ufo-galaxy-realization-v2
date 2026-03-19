@@ -150,6 +150,15 @@ class WorkflowRequest(BaseModel):
     tasks: List[Task]
     save_to_memory: bool = True
     user_id: Optional[str] = "default"
+    legacy_override: bool = Field(
+        False,
+        description=(
+            "Explicitly enable the legacy fallback path. "
+            "When True, the request acknowledges use of the deprecated local workflow engine "
+            "when ConstellationRuntime is unavailable. A DEPRECATION GUARDRAIL warning is always logged. "
+            "Keep the default (False) for all normal usage."
+        ),
+    )
 
 class TaskResult(BaseModel):
     task_id: str
@@ -518,6 +527,12 @@ orchestrator = OrchestratorService()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
+    logger.warning(
+        "DEPRECATION [Node_81_Orchestrator]: This node is a legacy helper/subordinate "
+        "orchestrator. The /workflow endpoint delegates to ConstellationRuntime. "
+        "Do not invoke this node as a primary system entry point. "
+        "Use core.constellation_runtime.get_constellation_runtime() instead."
+    )
     logger.info("Starting Node 81: Orchestrator")
     yield
     await orchestrator.close()
@@ -578,7 +593,21 @@ async def execute_workflow(request: WorkflowRequest, background_tasks: Backgroun
     2. 若 ConstellationRuntime 不可用则回退到本地工作流引擎
 
     返回 WorkflowResult 兼容结构，确保向后兼容。
+
+    .. deprecated::
+        直接调用此端点作为主编排入口已废弃。
+        请使用 ConstellationRuntime 作为统一入口。
+        若需要显式使用旧版降级路径，请在请求中设置 ``legacy_override=True``。
     """
+    # Guardrail: warn if caller opted into legacy override
+    if request.legacy_override:
+        logger.warning(
+            "DEPRECATION GUARDRAIL [Node_81]: legacy_override=True received. "
+            "Caller is explicitly bypassing ConstellationRuntime. "
+            "workflow=%r  — migrate to ConstellationRuntime to suppress this warning.",
+            request.description[:80],
+        )
+
     # ── 1. ConstellationRuntime 主路径 ──────────────────────────────────
     try:
         from core.constellation_runtime import (
@@ -615,6 +644,15 @@ async def execute_workflow(request: WorkflowRequest, background_tasks: Backgroun
         )
 
     # ── 2. 本地工作流引擎降级路径 ────────────────────────────────────────
+    # Guardrail: log structured warning about legacy fallback
+    if not request.legacy_override:
+        logger.warning(
+            "DEPRECATION GUARDRAIL [Node_81]: ConstellationRuntime unavailable and "
+            "legacy_override=False. Falling back to legacy local workflow engine. "
+            "Set legacy_override=True in your request to acknowledge this deprecated path. "
+            "workflow=%r",
+            request.description[:80],
+        )
     result = await orchestrator.execute_workflow(request)
     return result
 
