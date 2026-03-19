@@ -10,6 +10,10 @@ Galaxy 统一模块公开导出入口。
         UnifiedDeviceManager, get_unified_device_manager,
         UnifiedConfigManager, get_unified_config_manager,
         UnifiedLLMRouter, get_unified_llm_router,
+        # PR-1 additions
+        EntrypointRouter, get_entrypoint_router, reset_entrypoint_router,
+        DeviceState, TaskState, CognitiveState, PresenceState, ExecutionState,
+        EntryPath, TaskStatus, PresencePhase, ExecutionStatus,
     )
 """
 
@@ -46,6 +50,24 @@ from .connection_manager import UnifiedConnectionManager, get_unified_connection
 from .device_manager import UnifiedDeviceManager, get_unified_device_manager
 from .config_manager import UnifiedConfigManager, get_unified_config_manager
 from .llm_router import UnifiedLLMRouter, get_unified_llm_router
+# PR-1: entrypoint router
+from .entrypoint_router import (
+    EntrypointRouter,
+    get_entrypoint_router,
+    reset_entrypoint_router,
+)
+# PR-1: unified state schema
+from .state_schema import (
+    EntryPath,
+    TaskStatus,
+    PresencePhase,
+    ExecutionStatus,
+    DeviceState,
+    TaskState,
+    CognitiveState,
+    PresenceState,
+    ExecutionState,
+)
 
 __all__ = [
     # exceptions
@@ -84,4 +106,18 @@ __all__ = [
     "get_unified_config_manager",
     "UnifiedLLMRouter",
     "get_unified_llm_router",
+    # PR-1: entrypoint router
+    "EntrypointRouter",
+    "get_entrypoint_router",
+    "reset_entrypoint_router",
+    # PR-1: state schema
+    "EntryPath",
+    "TaskStatus",
+    "PresencePhase",
+    "ExecutionStatus",
+    "DeviceState",
+    "TaskState",
+    "CognitiveState",
+    "PresenceState",
+    "ExecutionState",
 ]

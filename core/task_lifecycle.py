@@ -73,7 +73,11 @@ def _emit_lifecycle_event(envelope: Any, status: str) -> None:
 
 
 def _emit_state_bus_event(envelope: Any, status: str) -> None:
-    """Best-effort PR-8 state event emission for task lifecycle transitions."""
+    """Best-effort PR-8 state event emission for task lifecycle transitions.
+
+    PR-1 Block-1 update: also emits a unified ``TaskState`` object via
+    ``emit_state()`` so downstream consumers can use typed state objects.
+    """
     try:
         from core.state_event_bus import emit as _seb_emit, StateEventType
         _type_map = {
@@ -95,6 +99,22 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
             trace_id=getattr(envelope, "trace_id", None),
             runtime_session_id=getattr(envelope, "session_id", None),
         )
+    except Exception:
+        pass
+
+    # PR-1 Block-1: emit unified TaskState object for typed consumers
+    try:
+        from core.state_event_bus import emit_state as _seb_emit_state
+        from core.unified.state_schema import TaskState
+        ts = TaskState(
+            task_id=getattr(envelope, "task_id", ""),
+            trace_id=getattr(envelope, "trace_id", ""),
+            session_id=getattr(envelope, "session_id", ""),
+            tool_name=getattr(envelope, "tool_name", ""),
+            status=status,
+            entry_path="canonical",
+        )
+        _seb_emit_state(ts, source="task_lifecycle_manager")
     except Exception:
         pass
 
