@@ -882,6 +882,11 @@ class OpenClawd:
                 runtime_session_id,
             )
 
+        # PR-8: store trace/session on self so _dispatch_tool_call can read them.
+        self._current_trace_id = trace_id
+        self._current_session_id = session_id
+        self._current_device_id = device_id or ""
+
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
 
@@ -2363,6 +2368,22 @@ class OpenClawd:
         Returns:
             {"success": bool, "result": Any, "error": Optional[str]}
         """
+        # PR-8: emit SKILL_INVOKED before dispatch so the trace is recorded
+        # even if the call fails.
+        _pr8_trace_id = getattr(self, "_current_trace_id", None)
+        _pr8_session_id = getattr(self, "_current_session_id", None)
+        try:
+            from core.state_event_bus import emit as _seb_emit, StateEventType
+            _seb_emit(
+                StateEventType.SKILL_INVOKED,
+                source="openclawd",
+                payload={"tool_name": tool_name},
+                trace_id=_pr8_trace_id,
+                runtime_session_id=_pr8_session_id,
+            )
+        except Exception:
+            pass
+
         # Phase 9: 工具调用权限检查
         if self._tool_permission_checker:
             try:
@@ -2525,6 +2546,18 @@ class OpenClawd:
 
         except Exception as e:
             logger.warning(f"工具执行失败 [{tool_name}]: {e}")
+            # PR-8: emit SKILL_FAILED on unhandled exception.
+            try:
+                from core.state_event_bus import emit as _seb_emit, StateEventType
+                _seb_emit(
+                    StateEventType.SKILL_FAILED,
+                    source="openclawd",
+                    payload={"tool_name": tool_name, "error": str(e)},
+                    trace_id=_pr8_trace_id,
+                    runtime_session_id=_pr8_session_id,
+                )
+            except Exception:
+                pass
             return {"success": False, "error": str(e)}
 
     # ========================================================================
