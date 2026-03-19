@@ -38,13 +38,10 @@ except ImportError:
     NodeProtocolClient = NodeProtocolServer = None
 
 try:
-    from enhancements.multidevice.device_protocol import (
+    from galaxy_gateway.protocol.aip_v3 import (
         AIPMessage, MessageType as AIPMessageType
     )
-    try:
-        from enhancements.multidevice.device_protocol import AIPProtocol
-    except ImportError:
-        AIPProtocol = None
+    AIPProtocol = None  # no AIPProtocol in v3; legacy enhancements only
 except ImportError:
     AIPMessage = AIPMessageType = AIPProtocol = None
 
