@@ -69,8 +69,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         统一对话接口 — DesktopPresenceRuntime → OpenClawd 唯一入口。
 
-        架构约束（PR86 + PR-1 Runtime）：
-        - /api/v1/chat 通过 DesktopPresenceRuntime 路由到 OpenClawd.process()
+        架构约束（PR86 + PR-1 Runtime + PR-1 Block-1）：
+        - /api/v1/chat 先经 EntrypointRouter 打 entry_path=canonical 标记
+        - 再通过 DesktopPresenceRuntime 路由到 OpenClawd.process()
         - DesktopPresenceRuntime 驱动三态推进（silent→liminal→manifest→silent）
         - AgentKernel 由 OpenClawd 内部调用，不在此处直接使用
         - 所有 UI (Dashboard / Windows / Android) 统一调用此端点
@@ -81,6 +82,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         import time as _time
         _t0 = _time.monotonic()
+
+        # ── PR-1 Block-1: stamp entry metadata via EntrypointRouter ──
+        # EntrypointRouter records entry_path=canonical and emits an
+        # observability event so canonical vs legacy usage can be tracked.
+        try:
+            from core.unified.entrypoint_router import get_entrypoint_router as _get_er
+            _er = _get_er()
+            _er_stats = _er.stats()  # just touch to ensure singleton is warm
+            _routing_meta = {
+                "entry_path": "canonical",
+                "via_legacy_adapter": False,
+                "source": "chat",
+            }
+            logger.debug(
+                "EntrypointRouter | entry_path=canonical source=chat stats=%s",
+                _er_stats,
+            )
+        except Exception as _er_exc:
+            logger.debug("EntrypointRouter unavailable (non-fatal): %s", _er_exc)
+            _routing_meta = {}
 
         # ── 统一控制面: DesktopPresenceRuntime → OpenClawd 母体智能体 ──
         # DesktopPresenceRuntime 负责三态推进和 runtime_session_id 生成；

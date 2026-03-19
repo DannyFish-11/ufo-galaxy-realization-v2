@@ -404,3 +404,81 @@ def emit(
         )
     except Exception as _exc:
         logger.debug("state_event_bus.emit failed (non-fatal): %s", _exc)
+
+
+def emit_state(
+    state_object: Any,
+    source: str,
+    event_type: Optional[Union[StateEventType, str]] = None,
+) -> None:
+    """Best-effort publish a unified state schema object to the event bus.
+
+    PR-1 Block-1 — accepts objects from ``core.unified.state_schema``
+    (``DeviceState``, ``TaskState``, ``CognitiveState``, ``PresenceState``,
+    ``ExecutionState``) and converts them to ``StateEvent`` payloads.
+
+    If ``event_type`` is not provided, an appropriate type is inferred from
+    the object class:
+      - ``DeviceState``    → ``StateEventType.DEVICE_UPDATED``
+      - ``TaskState``      → status-dependent (TASK_STARTED / TASK_DONE / TASK_FAILED)
+      - ``PresenceState``  → phase-dependent (PHASE_SILENT / PHASE_LIMINAL / PHASE_MANIFEST)
+      - ``CognitiveState`` → ``StateEventType.TASK_STARTED`` (used as generic)
+      - ``ExecutionState`` → ``StateEventType.TASK_STARTED`` (used as generic)
+
+    Never raises — all exceptions are swallowed.
+
+    Usage::
+
+        from core.state_event_bus import emit_state
+        from core.unified.state_schema import TaskState
+
+        ts = TaskState(task_id="t-1", tool_name="open_app", status="running")
+        emit_state(ts, source="my_module")
+    """
+    try:
+        # Convert the state object to a dict payload
+        if hasattr(state_object, "to_dict"):
+            payload = state_object.to_dict()
+        elif hasattr(state_object, "__dict__"):
+            payload = {k: v for k, v in state_object.__dict__.items() if not k.startswith("_")}
+        else:
+            payload = {"value": str(state_object)}
+
+        # Determine event type if not supplied
+        if event_type is None:
+            cls_name = type(state_object).__name__
+            if cls_name == "DeviceState":
+                event_type = StateEventType.DEVICE_UPDATED
+            elif cls_name == "TaskState":
+                status = getattr(state_object, "status", "")
+                if status == "running":
+                    event_type = StateEventType.TASK_STARTED
+                elif status == "done":
+                    event_type = StateEventType.TASK_DONE
+                elif status == "failed":
+                    event_type = StateEventType.TASK_FAILED
+                else:
+                    event_type = StateEventType.TASK_STARTED
+            elif cls_name == "PresenceState":
+                phase = getattr(state_object, "phase", "")
+                if phase == "liminal":
+                    event_type = StateEventType.PHASE_LIMINAL
+                elif phase == "manifest":
+                    event_type = StateEventType.PHASE_MANIFEST
+                else:
+                    event_type = StateEventType.PHASE_SILENT
+            else:
+                event_type = StateEventType.TASK_STARTED
+
+        trace_id = payload.get("trace_id") or None
+        runtime_session_id = payload.get("runtime_session_id") or payload.get("session_id") or None
+
+        emit(
+            event_type,
+            source=source,
+            payload=payload,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id,
+        )
+    except Exception as _exc:
+        logger.debug("state_event_bus.emit_state failed (non-fatal): %s", _exc)

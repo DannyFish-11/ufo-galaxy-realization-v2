@@ -882,6 +882,20 @@ class OpenClawd:
                 runtime_session_id,
             )
 
+        # PR-1 Block-1: stamp entry metadata via EntrypointRouter for observability.
+        # This is a best-effort, non-blocking call; failures never affect the request.
+        try:
+            from core.unified.entrypoint_router import get_entrypoint_router as _get_er
+            _get_er()._emit_routing_event({
+                "entry_path": "canonical",
+                "via_legacy_adapter": False,
+                "source": "openclawd.process",
+                "trace_id": trace_id,
+                "routed_at": t0,
+            })
+        except Exception:
+            pass
+
         # PR-8: store trace/session on self so _dispatch_tool_call can read them.
         self._current_trace_id = trace_id
         self._current_session_id = session_id
