@@ -475,6 +475,32 @@ def create_screenshot_message(
     )
 
 
+def create_gui_scroll_message(
+    device_id: str,
+    x: int,
+    y: int,
+    direction: str = "down",
+    delta: int = 300,
+    task_id: Optional[str] = None,
+) -> AIPMessage:
+    """Create a canonical GUI scroll message.
+
+    :param device_id: Target device identifier.
+    :param x: X coordinate of the scroll origin.
+    :param y: Y coordinate of the scroll origin.
+    :param direction: Scroll direction — ``"up"``, ``"down"``, ``"left"``, or
+        ``"right"`` (default ``"down"``).
+    :param delta: Pixel distance or step count (default 300).
+    :param task_id: Optional task identifier.
+    """
+    return AIPMessage(
+        type=MessageType.GUI_SCROLL,
+        device_id=device_id,
+        task_id=task_id,
+        payload={"x": x, "y": y, "direction": direction, "delta": delta},
+    )
+
+
 def create_error_message(
     device_id: str,
     error: str,
@@ -553,13 +579,28 @@ def parse_message(data: Union[str, dict]) -> AIPMessage:
     return AIPMessage.model_validate(data)
 
 
-def validate_message(message: AIPMessage) -> bool:
-    """验证消息完整性"""
+def validate_message(message: AIPMessage) -> tuple:
+    """Validate AIP message integrity.
+
+    Returns a ``(valid: bool, error: Optional[str])`` tuple so callers can
+    surface a human-readable reason when validation fails.
+
+    Basic invariants checked:
+    * ``device_id`` must be a non-empty string.
+    * ``type`` must be set.
+    * ``version`` must start with ``"3"`` (AIP v3+).
+
+    :param message: The :class:`AIPMessage` to validate.
+    :returns: ``(True, None)`` on success; ``(False, reason)`` on failure.
+    """
     if not message.device_id:
-        return False
+        return False, "Missing or empty 'device_id'"
     if not message.type:
-        return False
-    return True
+        return False, "Missing 'type'"
+    version = getattr(message, "version", None) or ""
+    if not version.startswith("3"):
+        return False, f"AIP version {version!r} is not a supported v3 version"
+    return True, None
 
 
 # ============================================================================

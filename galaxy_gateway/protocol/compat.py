@@ -38,7 +38,7 @@ Usage::
 import json
 import logging
 import uuid
-from typing import Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from .aip_v3 import AIPMessage, MessageType, parse_message
 
@@ -448,3 +448,51 @@ def extract_parallel_result_payload(message: AIPMessage):
     except Exception as exc:
         logger.warning("extract_parallel_result_payload: parse failed: %s", exc)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Action-name normalisation shim
+# ---------------------------------------------------------------------------
+
+def normalize_action_in_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve legacy action / command names inside a raw payload dict to their
+    canonical :class:`~galaxy_gateway.protocol.actions.ActionType` string.
+
+    This is the **only** place outside of
+    :mod:`galaxy_gateway.protocol.actions` that is permitted to reference
+    :data:`~galaxy_gateway.protocol.actions.LEGACY_ACTION_MAP`.  All
+    canonical-path handlers receive already-normalised payloads and must never
+    branch on legacy names.
+
+    Fields inspected (at most one level deep):
+
+    * ``payload["command"]``  — top-level command key used by
+      :class:`~galaxy_gateway.android_granular_adapter.AndroidGranularAdapter`
+      when dispatching :attr:`~galaxy_gateway.protocol.aip_v3.MessageType.COMMAND`
+      messages.
+    * Each item in ``payload["commands"]`` that is a dict — the ``tool_name``
+      key of each :class:`~galaxy_gateway.protocol.aip_v3.Command`-like object.
+
+    :param payload: Raw payload dict from an incoming message.  **Not mutated.**
+    :returns: A new dict with legacy action/command names replaced by their
+        canonical equivalents.  Unchanged keys are passed through as-is.
+    """
+    from .actions import normalize_action_name  # local import avoids circular deps
+
+    out: Dict[str, Any] = dict(payload)
+
+    # Normalise top-level "command" key
+    if "command" in out and isinstance(out["command"], str):
+        out["command"] = normalize_action_name(out["command"])
+
+    # Normalise tool_name inside each command item in "commands" list
+    raw_commands = out.get("commands")
+    if isinstance(raw_commands, list):
+        normalised_commands: List[Any] = []
+        for item in raw_commands:
+            if isinstance(item, dict) and "tool_name" in item:
+                item = {**item, "tool_name": normalize_action_name(item["tool_name"])}
+            normalised_commands.append(item)
+        out["commands"] = normalised_commands
+
+    return out

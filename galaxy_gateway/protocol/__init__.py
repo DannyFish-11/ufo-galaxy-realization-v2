@@ -4,7 +4,23 @@ AIP v3.0 协议模块
 导出所有协议相关的类和函数
 """
 
-from .compat import parse_message_compat
+from .compat import parse_message_compat, normalize_action_in_payload
+from .actions import (
+    ActionType,
+    LEGACY_ACTION_MAP,
+    ClickPayload,
+    SwipePayload,
+    ScrollPayload,
+    TypePayload,
+    KeyPressPayload,
+    ScreenshotPayload,
+    AppLaunchPayload,
+    ShellPayload,
+    ClipboardPayload,
+    normalize_action_name,
+    validate_action_payload,
+    get_payload_schema,
+)
 from .aip_v3 import (
     # 枚举类型
     AIPDeviceType,
@@ -29,6 +45,7 @@ from .aip_v3 import (
     create_task_message,
     create_gui_click_message,
     create_gui_input_message,
+    create_gui_scroll_message,
     create_screenshot_message,
     create_error_message,
     parse_message,
@@ -39,8 +56,27 @@ from .aip_v3 import (
 )
 
 __all__ = [
+    # Legacy compat / shim
+    "parse_message_compat",
+    "normalize_action_in_payload",
+    # Canonical action vocabulary
+    "ActionType",
+    "LEGACY_ACTION_MAP",
+    "ClickPayload",
+    "SwipePayload",
+    "ScrollPayload",
+    "TypePayload",
+    "KeyPressPayload",
+    "ScreenshotPayload",
+    "AppLaunchPayload",
+    "ShellPayload",
+    "ClipboardPayload",
+    "normalize_action_name",
+    "validate_action_payload",
+    "get_payload_schema",
+    # AIP v3 types
     "DeviceType",
-    "DevicePlatform", 
+    "DevicePlatform",
     "DeviceCapability",
     "MessageType",
     "TaskStatus",
@@ -56,10 +92,10 @@ __all__ = [
     "create_task_message",
     "create_gui_click_message",
     "create_gui_input_message",
+    "create_gui_scroll_message",
     "create_screenshot_message",
     "create_error_message",
     "parse_message",
     "validate_message",
-    "parse_message_compat",
     "UnifiedMessageTypes",
 ]
