@@ -48,6 +48,16 @@ from typing import Any, Dict, List, Optional, Callable
 logger = logging.getLogger("Galaxy.DeviceRegistry")
 
 
+def _get_udm():
+    """Lazily return the UnifiedDeviceManager singleton (avoids circular imports)."""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+        return get_unified_device_manager()
+    except Exception as _e:
+        logger.debug("_get_udm: failed to obtain UDM singleton — %s", _e)
+        return None
+
+
 # ============================================================================
 # 数据模型 — 统一使用 core.schemas.device 中的 Pydantic V2 模型
 # ============================================================================
@@ -208,7 +218,24 @@ class DeviceRegistry:
             last_heartbeat=now,
         )
         
-        # 存储
+        # ── SSOT: write to UDM first ─────────────────────────────────────
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                udm.register_device_from_dict(device_id, {
+                    "device_name": name or f"{device_type}_{device_id[:8]}",
+                    "device_type": device_type,
+                    "capabilities": capabilities or [],
+                    "source": "device_registry",
+                    **(_metadata or {}),
+                })
+                logger.debug("DeviceRegistry.register: UDM write succeeded for %s", device_id)
+            except Exception as _udm_err:
+                logger.warning(
+                    "DeviceRegistry.register: UDM write failed for %s — %s", device_id, _udm_err
+                )
+
+        # 存储本地缓存
         self.devices[device_id] = device
         
         # 更新索引
@@ -226,6 +253,17 @@ class DeviceRegistry:
     
     async def unregister(self, device_id: str) -> bool:
         """注销设备"""
+        # ── SSOT: write to UDM first ─────────────────────────────────────
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                udm.unregister_device(device_id)
+                logger.debug("DeviceRegistry.unregister: UDM write succeeded for %s", device_id)
+            except Exception as _udm_err:
+                logger.warning(
+                    "DeviceRegistry.unregister: UDM write failed for %s — %s", device_id, _udm_err
+                )
+
         device = self.devices.pop(device_id, None)
         if device is None:
             return False
@@ -241,7 +279,16 @@ class DeviceRegistry:
         return True
     
     def get(self, device_id: str) -> Optional[Device]:
-        """获取设备"""
+        """获取设备（优先从 UDM 读取，本地缓存作为后备）"""
+        # Prefer UDM (SSOT) when available
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                udm_dev = udm.get_device(device_id)
+                if udm_dev is not None:
+                    return self.devices.get(device_id)  # return local wrapper if present
+            except Exception:
+                pass
         return self.devices.get(device_id)
     
     async def get_or_create(self, device_id: str, **kwargs) -> Device:
@@ -316,7 +363,23 @@ class DeviceRegistry:
         device_type: str = None,
         status: DeviceStatus = None,
     ) -> List[Device]:
-        """列出设备"""
+        """列出设备（优先从 UDM 读取，本地缓存补充遗留条目）"""
+        # Use local cache as primary source but reflect online/offline status from UDM
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                udm_ids = {d.device_id for d in udm.list_devices()}
+                # Bring UDM status into the local cache entries
+                for did in list(self.devices.keys()):
+                    udm_dev = udm.get_device(did)
+                    if udm_dev is not None:
+                        try:
+                            self.devices[did].status = DeviceStatus(udm_dev.status.value if hasattr(udm_dev.status, "value") else str(udm_dev.status).lower())
+                        except ValueError:
+                            pass
+            except Exception:
+                pass
+
         results = list(self.devices.values())
         
         if device_type:
@@ -346,6 +409,25 @@ class DeviceRegistry:
         if not device:
             return False
         
+        # ── SSOT: write to UDM first ─────────────────────────────────────
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                if heartbeat:
+                    udm.heartbeat(device_id)
+                if status is not None:
+                    from core.unified.models import UnifiedDeviceStatus
+                    try:
+                        udm_status = UnifiedDeviceStatus(status.value if hasattr(status, "value") else str(status).lower())
+                    except ValueError:
+                        udm_status = UnifiedDeviceStatus.ONLINE
+                    udm.update_device_status(device_id, udm_status)
+                logger.debug("DeviceRegistry.update_status: UDM write succeeded for %s", device_id)
+            except Exception as _udm_err:
+                logger.warning(
+                    "DeviceRegistry.update_status: UDM write failed for %s — %s", device_id, _udm_err
+                )
+
         now = time.time()
         device.last_seen = now
         

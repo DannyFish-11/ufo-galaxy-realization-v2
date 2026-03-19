@@ -61,6 +61,16 @@ from core.device_types import DeviceType, resolve_device_type  # noqa: E402
 from galaxy_gateway.capability_registry import get_gateway_capability_registry  # noqa: E402
 
 
+def _get_udm():
+    """Lazily return the UnifiedDeviceManager singleton (avoids circular imports)."""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+        return get_unified_device_manager()
+    except Exception as _e:
+        logger.debug("_get_udm: failed to obtain UDM singleton — %s", _e)
+        return None
+
+
 def map_device_type_to_platform(aip_device_type: str) -> str:
     """将 AIP v3 DeviceType 字符串映射为路由层平台大类（公共接口）。
 
@@ -166,8 +176,26 @@ class DeviceRouter:
     def register_device(self, device_id: str, device_type: str,
                        capabilities: List[str], websocket=None,
                        metadata: Optional[Dict[str, Any]] = None) -> bool:
-        """注册设备"""
+        """注册设备（写入 UDM SSOT，本地 self.devices 仅用于 WebSocket 连接管理）"""
         try:
+            # ── SSOT: write to UDM first ──────────────────────────────────
+            udm = _get_udm()
+            if udm is not None:
+                try:
+                    udm.register_device_from_dict(device_id, {
+                        "device_name": device_id,
+                        "device_type": device_type,
+                        "capabilities": capabilities,
+                        "source": "device_router",
+                        **(metadata or {}),
+                    })
+                    logger.debug("DeviceRouter.register_device: UDM write succeeded for %s", device_id)
+                except Exception as _udm_err:
+                    logger.warning(
+                        "DeviceRouter.register_device: UDM write failed for %s — %s",
+                        device_id, _udm_err,
+                    )
+
             device = Device(device_id, device_type, capabilities, metadata=metadata)
             device.websocket = websocket
             self.devices[device_id] = device
@@ -193,8 +221,22 @@ class DeviceRouter:
             return False
     
     def unregister_device(self, device_id: str) -> bool:
-        """注销设备，同时清理 GatewayCapabilityRegistry 中的能力记录。"""
+        """注销设备（写入 UDM SSOT，同时清理本地连接表和 GatewayCapabilityRegistry）"""
         try:
+            # ── SSOT: write to UDM first ──────────────────────────────────
+            udm = _get_udm()
+            if udm is not None:
+                try:
+                    udm.unregister_device(device_id)
+                    logger.debug(
+                        "DeviceRouter.unregister_device: UDM write succeeded for %s", device_id
+                    )
+                except Exception as _udm_err:
+                    logger.warning(
+                        "DeviceRouter.unregister_device: UDM write failed for %s — %s",
+                        device_id, _udm_err,
+                    )
+
             if device_id in self.devices:
                 del self.devices[device_id]
 
@@ -882,7 +924,43 @@ class DeviceRouter:
         }
 
     def get_device_status(self) -> Dict:
-        """获取所有设备状态"""
+        """获取所有设备状态（SSOT: UDM，本地 self.devices 补充遗留 WebSocket 连接信息）"""
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                udm_devices = udm.list_devices()
+                # Build result from UDM as SSOT
+                udm_result = {
+                    "total_devices": len(udm_devices),
+                    "online_devices": sum(
+                        1 for d in udm_devices
+                        if str(getattr(d.status, "value", d.status)).lower() in ("online", "busy")
+                    ),
+                    "devices": [
+                        {
+                            "device_id": d.device_id,
+                            "device_name": d.device_name,
+                            "device_type": d.device_type.value if hasattr(d.device_type, "value") else str(d.device_type),
+                            "status": d.status.value if hasattr(d.status, "value") else str(d.status),
+                            "capabilities": list(d.capabilities or []),
+                            "source": "udm",
+                        }
+                        for d in udm_devices
+                    ],
+                }
+                # Merge in WebSocket connection info from local table (read-only supplement)
+                local_ids = {d["device_id"] for d in udm_result["devices"]}
+                for did, dev in self.devices.items():
+                    if did not in local_ids:
+                        udm_result["devices"].append(dev.to_dict())
+                        udm_result["total_devices"] += 1
+                        if dev.status == "online":
+                            udm_result["online_devices"] += 1
+                return udm_result
+            except Exception as _udm_err:
+                logger.warning("get_device_status: UDM read failed, falling back to local table — %s", _udm_err)
+
+        # Fallback: local connection table only
         return {
             "total_devices": len(self.devices),
             "online_devices": len([d for d in self.devices.values() if d.status == "online"]),
