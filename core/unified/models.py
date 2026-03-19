@@ -92,6 +92,10 @@ class UnifiedDevice(BaseModel):
     last_heartbeat: Optional[datetime] = None
     # source 字段标记设备信息来源，便于调试
     source: str = "unknown"
+    # state_version 单调递增版本号，每次状态写入后自增；用于冲突检测（prefer-latest 策略）
+    state_version: int = 0
+    # updated_at 最后一次状态更新时间戳（UTC），用于时间戳冲突策略
+    updated_at: Optional[datetime] = None
 
     model_config = {"use_enum_values": True}
 
