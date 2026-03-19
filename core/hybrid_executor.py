@@ -258,6 +258,7 @@ class HybridExecutionArbiter:
         instruction: str = "",
         force_level: ExecutionLevel = None,
         windows_arbiter=None,
+        decision_authority: str = "",
     ) -> HybridResult:
         """
         混合执行入口
@@ -271,11 +272,29 @@ class HybridExecutionArbiter:
             force_level: 强制使用指定级别 (跳过降级)
             windows_arbiter: 可选的 WindowsExecutionArbiter 实例，覆盖默认单例
                 (用于测试注入). 传入 False 可强制禁用 Windows 路由.
+            decision_authority: PR-2 — identifier of the component that made
+                the primary decision (e.g. ``"openclawd"``).  When provided,
+                it is logged so the trace shows who owns the decision.
+                HybridExecutor itself never *makes* a primary decision; it
+                only executes what it receives.
         """
         params = params or {}
         request_id = str(uuid.uuid4())[:12]
         start = time.time()
         self._stats["total"] += 1
+
+        # PR-2: Log that HybridExecutor is acting as executor, not decision
+        # maker.  We do NOT re-evaluate intent or re-score the plan here.
+        if decision_authority:
+            logger.debug(
+                "hybrid_executor | executing decision from authority=%s | "
+                "device=%s app=%s action=%s request_id=%s",
+                decision_authority,
+                device_id,
+                app_id,
+                action,
+                request_id,
+            )
 
         # ------------------------------------------------------------------
         # Windows fast-path: delegate to WindowsExecutionArbiter which
@@ -295,6 +314,9 @@ class HybridExecutionArbiter:
             )
 
         # 确定执行级别序列
+        # PR-2: The level sequence is derived solely from the registered app
+        # capabilities and the caller-supplied force_level.  HybridExecutor
+        # does NOT re-interpret the intent or change the plan.
         if force_level:
             levels = [force_level]
         else:
@@ -327,6 +349,9 @@ class HybridExecutionArbiter:
             )
 
         # 所有级别都失败
+        # PR-2: Fallback exhaustion — this is a transport-level failure, NOT
+        # a re-decision.  We return a failed result without altering the
+        # original action or intent received from the primary authority.
         self._stats["all_failed"] += 1
         result = HybridResult(
             request_id=request_id,
