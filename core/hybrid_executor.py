@@ -18,6 +18,12 @@ Phase 3 Matrix OS 核心组件。
   - 根据目标应用的能力声明决定首选执行级别
   - 如果已知某应用有 A2A API, 直接跳到 L1
   - 如果已知某应用只有 GUI, 跳过 L1
+
+Windows 特殊路径:
+  对于 Windows 平台请求, HybridExecutionArbiter 委托给
+  :class:`core.windows_execution_arbiter.WindowsExecutionArbiter`,
+  后者强制执行更精细的四级回退链:
+    System API → UIAutomation → GUI automation → VLM
 """
 
 import asyncio
@@ -222,6 +228,27 @@ class HybridExecutionArbiter:
         if screenshot:
             self._screenshot = screenshot
 
+    @staticmethod
+    def _is_windows_device(device_id: str) -> bool:
+        """Heuristic: return True when *device_id* identifies a Windows host.
+
+        A device is treated as Windows when its identifier starts with
+        ``"windows"`` (case-insensitive) or ends with ``":win"`` or
+        ``":windows"``.  This keeps the check cheap and dependency-free while
+        covering the common naming conventions used in this codebase.
+
+        The special ``"local"`` identifier is treated as Windows only when the
+        current process is actually running on Win32 (``sys.platform``).
+        """
+        import sys as _sys
+        lower = device_id.lower()
+        return (
+            lower.startswith("windows")
+            or lower.endswith(":win")
+            or lower.endswith(":windows")
+            or (lower == "local" and _sys.platform == "win32")
+        )
+
     async def execute(
         self,
         device_id: str,
@@ -230,6 +257,7 @@ class HybridExecutionArbiter:
         params: Dict[str, Any] = None,
         instruction: str = "",
         force_level: ExecutionLevel = None,
+        windows_arbiter=None,
     ) -> HybridResult:
         """
         混合执行入口
@@ -241,11 +269,30 @@ class HybridExecutionArbiter:
             params: 动作参数
             instruction: 自然语言指令 (VLM 模式使用)
             force_level: 强制使用指定级别 (跳过降级)
+            windows_arbiter: 可选的 WindowsExecutionArbiter 实例，覆盖默认单例
+                (用于测试注入). 传入 False 可强制禁用 Windows 路由.
         """
         params = params or {}
         request_id = str(uuid.uuid4())[:12]
         start = time.time()
         self._stats["total"] += 1
+
+        # ------------------------------------------------------------------
+        # Windows fast-path: delegate to WindowsExecutionArbiter which
+        # enforces the strict System API → UIA → GUI → VLM fallback chain.
+        # Only skip when the caller explicitly passes windows_arbiter=False.
+        # ------------------------------------------------------------------
+        if windows_arbiter is not False and self._is_windows_device(device_id):
+            return await self._execute_windows(
+                device_id=device_id,
+                app_id=app_id,
+                action=action,
+                params=params,
+                instruction=instruction,
+                request_id=request_id,
+                start=start,
+                windows_arbiter=windows_arbiter,
+            )
 
         # 确定执行级别序列
         if force_level:
@@ -291,6 +338,94 @@ class HybridExecutionArbiter:
         )
         self._record(result)
         return result
+
+    async def _execute_windows(
+        self,
+        device_id: str,
+        app_id: str,
+        action: str,
+        params: Dict[str, Any],
+        instruction: str,
+        request_id: str,
+        start: float,
+        windows_arbiter=None,
+    ) -> "HybridResult":
+        """Delegate a Windows execution request to the WindowsExecutionArbiter.
+
+        The Windows arbiter enforces the strict fallback chain:
+          System API → UIA → GUI automation → VLM
+
+        The result is mapped back to a :class:`HybridResult` so callers do
+        not need to know which arbiter handled the request.
+        """
+        try:
+            from core.windows_execution_arbiter import (  # type: ignore[import]
+                get_windows_arbiter,
+                WinExecLevel,
+            )
+
+            arbiter = windows_arbiter or get_windows_arbiter()
+            # Propagate VLM / screenshot executors from this instance (if wired)
+            # using the public set_executors() API to respect encapsulation.
+            propagate: dict = {}
+            if self._vlm is not None and arbiter._vlm is None:
+                propagate["vlm"] = self._vlm
+            if self._screenshot is not None and arbiter._screenshot is None:
+                propagate["screenshot"] = self._screenshot
+            if propagate:
+                arbiter.set_executors(**propagate)
+
+            win_result = await arbiter.execute(
+                action=action,
+                params=params,
+                device_id=device_id,
+                instruction=instruction or f"{action} {app_id}",
+            )
+
+            # Map WinExecLevel to the nearest ExecutionLevel for compatibility.
+            _level_map = {
+                WinExecLevel.SYSTEM_API: ExecutionLevel.A2A,
+                WinExecLevel.UIA: ExecutionLevel.GUI,
+                WinExecLevel.GUI: ExecutionLevel.GUI,
+                WinExecLevel.VLM: ExecutionLevel.VLM,
+            }
+            mapped_level = _level_map.get(win_result.final_level, ExecutionLevel.GUI)
+
+            if win_result.success:
+                self._stats[f"{mapped_level.value}_success"] += 1
+            else:
+                self._stats["all_failed"] += 1
+
+            hybrid = HybridResult(
+                request_id=request_id,
+                success=win_result.success,
+                final_level=mapped_level,
+                result=win_result.result,
+                attempts=win_result.attempts,
+                total_latency_ms=(time.time() - start) * 1000,
+            )
+            self._record(hybrid)
+            return hybrid
+
+        except Exception as exc:
+            logger.exception(
+                "hybrid_executor | windows_delegate_failed | device=%s | action=%s | error=%s",
+                device_id,
+                action,
+                exc,
+            )
+            # Fall through to a failure result so execution still returns cleanly.
+            self._stats["all_failed"] += 1
+            fallback = HybridResult(
+                request_id=request_id,
+                success=False,
+                final_level=ExecutionLevel.A2A,
+                result={"error": f"Windows arbiter delegation failed: {exc}"},
+                attempts=[],
+                total_latency_ms=(time.time() - start) * 1000,
+            )
+            self._record(fallback)
+            return fallback
 
     async def _try_level(
         self,
