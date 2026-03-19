@@ -2,6 +2,12 @@
 Node_110_SmartOrchestrator - FastAPI 服务器
 
 提供智能任务编排的 REST API
+
+架构说明
+--------
+该节点现在是 ConstellationRuntime 的**从属组件**，而非顶级编排入口。
+``/api/v1/orchestrate`` 端点首先委托给 ConstellationRuntime.run()；
+仅当 ConstellationRuntime 不可用时才回退到本地 SmartOrchestrator。
 """
 
 import logging
@@ -12,7 +18,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import uvicorn
 
-from core.orchestrator_engine import SmartOrchestrator
+try:
+    from core.orchestrator_engine import SmartOrchestrator
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
+    SmartOrchestrator = None  # type: ignore[assignment,misc]
+
 from nodes.common.cors_config import get_cors_origins
 
 # 配置日志
@@ -25,8 +35,8 @@ logger = logging.getLogger(__name__)
 # 创建 FastAPI 应用
 app = FastAPI(
     title="Node_110_SmartOrchestrator",
-    description="智能任务编排引擎 - 自动分析、匹配、编排和执行任务",
-    version="1.0.0"
+    description="智能任务编排引擎 - 委托给 ConstellationRuntime，保留旧引擎作为降级策略",
+    version="2.0.0"
 )
 
 # 添加 CORS 中间件
@@ -38,14 +48,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 初始化编排引擎
+# 本地降级编排引擎（仅在 ConstellationRuntime 不可用时使用）
 orchestrator_config = {
     "node_01_url": "http://localhost:8001",
     "node_02_url": "http://localhost:8002",
     "node_67_url": "http://localhost:8067",
     "node_103_url": "http://localhost:8103"
 }
-orchestrator = SmartOrchestrator(orchestrator_config)
+try:
+    _fallback_orchestrator = SmartOrchestrator(orchestrator_config) if SmartOrchestrator is not None else None
+except Exception as _e:  # pragma: no cover
+    logger.warning("SmartOrchestrator (fallback) 初始化失败: %s", _e)
+    _fallback_orchestrator = None
 
 
 # ==================== 请求/响应模型 ====================
@@ -113,27 +127,50 @@ async def health_check():
 async def orchestrate_task(request: OrchestrationRequest):
     """
     编排任务
-    
-    该端点接收自然语言任务描述，自动：
-    1. 调用 Node_01 分析任务
-    2. 查询 Node_67 获取节点健康状态
-    3. 匹配最适合的节点
-    4. 生成执行计划
-    5. 通过 Node_02 执行任务
-    6. 存储编排知识到 Node_103
+
+    委托链路：
+    1. 首先尝试 ConstellationRuntime.run()（系统级统一编排入口）
+    2. 若 ConstellationRuntime 不可用则回退到本地 SmartOrchestrator
+
+    该端点保持原有 OrchestrationResponse 响应 schema，向后兼容。
     """
+    logger.info(
+        "Received orchestration request (delegating to ConstellationRuntime): %s",
+        request.task_description[:100],
+    )
+
+    # ── 1. ConstellationRuntime 主路径 ──────────────────────────────────
     try:
-        logger.info(f"Received orchestration request: {request.task_description[:100]}...")
-        
-        result = await orchestrator.orchestrate_task(
-            task_description=request.task_description,
-            user_context=request.user_context
+        from core.constellation_runtime import (
+            get_constellation_runtime,
+            wrap_as_orchestration_response,
         )
-        
+        runtime = get_constellation_runtime()
+        cr_result = await runtime.run(
+            task_description=request.task_description,
+            context=request.user_context or {},
+        )
+        shaped = wrap_as_orchestration_response(cr_result)
+        return OrchestrationResponse(**shaped)
+    except Exception as cr_exc:
+        logger.warning(
+            "ConstellationRuntime 不可用，回退到本地引擎: %s", cr_exc
+        )
+
+    # ── 2. 本地 SmartOrchestrator 降级路径 ──────────────────────────────
+    if _fallback_orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="编排引擎不可用（ConstellationRuntime 和 SmartOrchestrator 均不可用）",
+        )
+    try:
+        result = await _fallback_orchestrator.orchestrate_task(
+            task_description=request.task_description,
+            user_context=request.user_context,
+        )
         return OrchestrationResponse(**result)
-        
     except Exception as e:
-        logger.error(f"Orchestration failed: {e}", exc_info=True)
+        logger.error("Orchestration failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -145,7 +182,9 @@ async def get_task_status(task_id: str):
     查询指定任务的当前状态和结果
     """
     try:
-        task_info = await orchestrator.get_task_status(task_id)
+        if _fallback_orchestrator is None:
+            raise HTTPException(status_code=503, detail="编排引擎不可用")
+        task_info = await _fallback_orchestrator.get_task_status(task_id)
         
         if task_info is None:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
@@ -172,7 +211,9 @@ async def optimize_task(task_id: str):
     基于当前节点健康状态和历史数据，优化任务的执行计划
     """
     try:
-        result = await orchestrator.optimize_execution_plan(task_id)
+        if _fallback_orchestrator is None:
+            raise HTTPException(status_code=503, detail="编排引擎不可用")
+        result = await _fallback_orchestrator.optimize_execution_plan(task_id)
         return OptimizationResponse(**result)
         
     except ValueError as e:
@@ -190,7 +231,9 @@ async def get_capabilities():
     返回当前系统的节点数量、健康状态、可用能力和统计信息
     """
     try:
-        capabilities = orchestrator.get_system_capabilities()
+        if _fallback_orchestrator is None:
+            raise HTTPException(status_code=503, detail="编排引擎不可用")
+        capabilities = _fallback_orchestrator.get_system_capabilities()
         return CapabilitiesResponse(**capabilities)
         
     except Exception as e:
