@@ -740,6 +740,7 @@ class OpenClawd:
         self,
         trace_id: str,
         multimodal_context: Optional[Any] = None,
+        runtime_session_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Run one continuum evaluation cycle and return a serialisable dict.
 
@@ -748,9 +749,13 @@ class OpenClawd:
         frame when the bus is unavailable.
 
         Args:
-            trace_id:          Correlation ID for the originating request.
+            trace_id:           Correlation ID for the originating request.
             multimodal_context: Optional multimodal context (unused directly;
                                reserved for future ingress bus enrichment).
+            runtime_session_id: Optional identifier from
+                               :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`.
+                               Forwarded to the continuum orchestrator so that
+                               evaluation log entries carry the runtime correlation key.
 
         Returns:
             A ``dict`` representation of the resulting
@@ -771,7 +776,11 @@ class OpenClawd:
             except Exception:
                 pass  # orchestrator will construct a minimal default
 
-            continuum_state = orch.run(frame=frame, trace_id=trace_id)
+            continuum_state = orch.run(
+                frame=frame,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+            )
             return continuum_state.model_dump()
         except Exception as _ce:
             logger.debug("_run_continuum failed (degrading to None): %s", _ce)
@@ -828,6 +837,7 @@ class OpenClawd:
         context: Optional[List[Dict]] = None,
         required_capabilities: Optional[List[str]] = None,
         multimodal_context: Optional[Any] = None,
+        runtime_session_id: Optional[str] = None,
     ) -> dict:
         """主入口 — PR86 架构：OpenClawd 是唯一入口，内嵌 AgentKernel
 
@@ -848,6 +858,11 @@ class OpenClawd:
                 ``multimodal_context.images`` carries base64-encoded image payloads
                 that are forwarded to the model router.  Text-only requests leave
                 this as ``None`` and existing behaviour is fully preserved.
+            runtime_session_id: Optional identifier from
+                :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`.
+                When provided, it is used as ``trace_id`` so that all log
+                entries within this request can be correlated back to the
+                originating runtime session.
 
         Returns:
             统一响应 dict: {success, response, intent, metadata}
@@ -857,10 +872,15 @@ class OpenClawd:
         t0 = time.monotonic()
         request_id = uuid.uuid4().hex
         # trace_id is the stable end-to-end identifier for this request.
-        # It equals request_id at the top level and is threaded through all
-        # internal dispatch hops so that every lifecycle log entry can be
-        # correlated back to the originating request.
-        trace_id = request_id
+        # When a runtime_session_id is provided (routed through
+        # DesktopPresenceRuntime) it is used as the trace_id so that every
+        # downstream log entry carries the same correlation key.
+        trace_id = runtime_session_id if runtime_session_id else request_id
+        if runtime_session_id:
+            logger.debug(
+                "OpenClawd.process invoked via DesktopPresenceRuntime | runtime_session_id=%s",
+                runtime_session_id,
+            )
 
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
@@ -1070,6 +1090,7 @@ class OpenClawd:
                     _continuum_state_dict: Optional[Dict[str, Any]] = self._run_continuum(
                         trace_id=trace_id,
                         multimodal_context=multimodal_context,
+                        runtime_session_id=runtime_session_id,
                     )
                     # ── Decision Execution (PR-8) ─────────────────────────────
                     self._run_execution(_continuum_state_dict)
@@ -1079,6 +1100,7 @@ class OpenClawd:
                         "intent": kernel_result.intent.raw_intent,
                         "error": kernel_result.error,
                         "trace_id": trace_id,
+                        "runtime_session_id": runtime_session_id or trace_id,
                         "interaction": _interaction_dict,
                         "persona_state": _persona_state_dict,
                         "interaction_envelope": _interaction_envelope_dict,
@@ -1087,6 +1109,7 @@ class OpenClawd:
                         "metadata": {
                             "request_id": request_id,
                             "trace_id": trace_id,
+                            "runtime_session_id": runtime_session_id or trace_id,
                             "session_id": session_id,
                             "device_id": device_id,
                             "latency_ms": round(latency_ms, 1),
@@ -1226,6 +1249,7 @@ class OpenClawd:
             _continuum_state_dict2: Optional[Dict[str, Any]] = self._run_continuum(
                 trace_id=trace_id,
                 multimodal_context=multimodal_context,
+                runtime_session_id=runtime_session_id,
             )
             # ── Decision Execution (PR-8) ─────────────────────────────────────
             self._run_execution(_continuum_state_dict2)
@@ -1235,6 +1259,7 @@ class OpenClawd:
                 "response": response_text,
                 "intent": intent_type,
                 "trace_id": trace_id,
+                "runtime_session_id": runtime_session_id or trace_id,
                 "interaction": _interaction_dict,
                 "persona_state": _persona_state_dict,
                 "interaction_envelope": _interaction_envelope_dict2,
@@ -1243,6 +1268,7 @@ class OpenClawd:
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,
+                    "runtime_session_id": runtime_session_id or trace_id,
                     "session_id": session_id,
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),

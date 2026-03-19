@@ -65,17 +65,26 @@ class TestOpenClawdSoleEntrypoint:
         )
 
     def test_chat_route_calls_openclawd(self):
-        """create_router 中的 chat 端点必须调用 OpenClawd.process()。"""
+        """create_router 中的 chat 端点必须（直接或通过 DesktopPresenceRuntime）调用 OpenClawd。
+
+        PR-1 架构更新：chat.py 通过 DesktopPresenceRuntime 路由，
+        DesktopPresenceRuntime 内部调用 OpenClawd.process()。
+        因此允许两种形式：
+        - 直接调用：clawd.process（PR86 原始形式）
+        - 通过 runtime：runtime.handle_request（PR-1 新形式）
+        两者都保证 OpenClawd 是最终处理者。
+        """
         import pathlib
 
         chat_file = pathlib.Path(__file__).parent.parent / "core" / "routes" / "chat.py"
         source = chat_file.read_text(encoding="utf-8")
 
-        assert "get_openclawd" in source or "OpenClawd" in source, (
-            "chat.py 必须调用 OpenClawd"
+        assert "get_openclawd" in source or "OpenClawd" in source or "desktop_presence_runtime" in source, (
+            "chat.py 必须调用 OpenClawd 或通过 DesktopPresenceRuntime 路由到 OpenClawd"
         )
-        assert "clawd.process" in source, (
-            "chat.py 必须调用 clawd.process()"
+        # Either the direct call OR the runtime.handle_request call must be present
+        assert "clawd.process" in source or "runtime.handle_request" in source, (
+            "chat.py 必须调用 clawd.process() 或 runtime.handle_request()"
         )
 
 
