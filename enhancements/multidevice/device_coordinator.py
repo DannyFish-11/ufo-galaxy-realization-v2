@@ -573,11 +573,21 @@ class DeviceCoordinator:
                 self._messages_received += 1
 
                 try:
-                    # AIP v3.0 JSON 优先，回退到 v2.0 binary
+                    # AIP v3.0 JSON 优先；binary v2.0 通过 compat 适配器转换
                     if is_text:
                         message = AIPMessage.from_json(data)
                     else:
-                        message = AIPMessage.from_bytes(data)
+                        # Route binary v2.0 frames through the canonical compat
+                        # adapter so that the business layer only ever sees
+                        # AIP v3 AIPMessage objects.
+                        from galaxy_gateway.protocol.compat import (
+                            aip_v2_binary_to_v3,
+                            parse_message_compat,
+                        )
+                        v3_dict = aip_v2_binary_to_v3(data)
+                        if v3_dict is None:
+                            raise ProtocolError("Invalid AIP v2 binary frame")
+                        message = parse_message_compat(v3_dict)
                     message.source_device = session.session_id
                     
                     # Validate message
