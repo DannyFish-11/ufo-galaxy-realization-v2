@@ -1,6 +1,18 @@
 """
 跨设备任务编排器
 
+.. note::
+    **从属组件（Legacy Executor）**
+
+    该模块是一个历史遗留执行器，现在仅作为 ConstellationRuntime 或其他
+    上层编排器的从属执行组件使用，**不应**被用作系统级入口点。
+
+    正确的系统编排入口为::
+
+        from core.constellation_runtime import get_constellation_runtime
+        runtime = get_constellation_runtime()
+        result = await runtime.run(task_description="...")
+
 功能：
 1. 接收来自 NLU 引擎的任务步骤
 2. 将任务分发到不同的设备

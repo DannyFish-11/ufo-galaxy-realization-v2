@@ -2,18 +2,19 @@
 Node 81: Orchestrator - 统一编排器
 智能任务编排、工作流管理、节点协调
 
+架构说明
+--------
+该节点现在是 ConstellationRuntime 的**从属组件**，而非顶级编排入口。
+``/workflow`` 端点首先委托给 ConstellationRuntime.run()；仅当
+ConstellationRuntime 不可用时才回退到本地工作流引擎。
+``/decompose`` 保留为纯规划/分解辅助模块，可由 ConstellationRuntime 调用。
+
 功能：
-1. 任务分解 - 将复杂任务分解为子任务
+1. 任务分解 - 将复杂任务分解为子任务（辅助角色）
 2. 节点选择 - 智能选择最合适的节点
-3. 工作流编排 - 管理任务执行流程
+3. 工作流编排 - 管理任务执行流程（降级策略）
 4. 结果聚合 - 汇总各节点结果
 5. 错误处理 - 自动重试和降级
-
-优势：
-- 简化复杂任务
-- 自动化工作流
-- 智能节点调度
-- 容错和重试
 
 集成：
 - 与 Node 79 (Local LLM) 配合实现智能任务分解
@@ -570,7 +571,50 @@ async def get_status():
 
 @app.post("/workflow")
 async def execute_workflow(request: WorkflowRequest, background_tasks: BackgroundTasks):
-    """执行工作流"""
+    """执行工作流
+
+    委托链路：
+    1. 首先尝试 ConstellationRuntime.run()（系统级统一编排入口）
+    2. 若 ConstellationRuntime 不可用则回退到本地工作流引擎
+
+    返回 WorkflowResult 兼容结构，确保向后兼容。
+    """
+    # ── 1. ConstellationRuntime 主路径 ──────────────────────────────────
+    try:
+        from core.constellation_runtime import (
+            get_constellation_runtime,
+            wrap_as_orchestration_response,
+        )
+        runtime = get_constellation_runtime()
+        cr_result = await runtime.run(
+            task_description=request.description,
+            user_id=request.user_id or "default",
+        )
+        # Shape ConstellationRuntime result into WorkflowResult-compatible response
+        shaped = wrap_as_orchestration_response(cr_result)
+        cr_status = TaskStatus.COMPLETED if cr_result.get("success") else TaskStatus.FAILED
+        now = datetime.now().isoformat()
+        return WorkflowResult(
+            workflow_id=shaped["task_id"],
+            status=cr_status,
+            tasks=[
+                TaskResult(
+                    task_id=shaped["task_id"],
+                    status=cr_status,
+                    result=shaped["result"],
+                    started_at=now,
+                    completed_at=now,
+                )
+            ],
+            started_at=now,
+            completed_at=now,
+        )
+    except Exception as cr_exc:
+        logger.warning(
+            "ConstellationRuntime 不可用，回退到本地工作流引擎: %s", cr_exc
+        )
+
+    # ── 2. 本地工作流引擎降级路径 ────────────────────────────────────────
     result = await orchestrator.execute_workflow(request)
     return result
 

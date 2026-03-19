@@ -540,6 +540,54 @@ class ConstellationRuntime:
 
 
 # ---------------------------------------------------------------------------
+# Response shape helpers
+# ---------------------------------------------------------------------------
+
+def wrap_as_orchestration_response(
+    cr_result: Dict[str, Any],
+    task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Wrap a :meth:`ConstellationRuntime.run` result into an
+    ``OrchestrationResponse``-compatible dict.
+
+    This helper exists so that Node_110 / Node_81 can delegate to
+    ConstellationRuntime while still returning the response schema their
+    existing clients expect.
+
+    Args:
+        cr_result: The dict returned by :meth:`ConstellationRuntime.run`.
+        task_id:   Optional task ID to embed in the response.  Defaults to
+                   the ``trace_id`` from *cr_result*.
+
+    Returns:
+        A dict with keys ``task_id``, ``status``, ``execution_plan``, and
+        ``result`` — matching the ``OrchestrationResponse`` model used by
+        Node_110, and enriched with ``trace_id`` / ``session_id`` for
+        Node_81 consumers.
+    """
+    resolved_task_id = task_id or cr_result.get("trace_id") or uuid.uuid4().hex[:12]
+    status = "completed" if cr_result.get("success") else "failed"
+    return {
+        "task_id": resolved_task_id,
+        "status": status,
+        "execution_plan": {
+            "mode": cr_result.get("mode", "dag"),
+            "trace_id": cr_result.get("trace_id"),
+            "session_id": cr_result.get("session_id"),
+        },
+        "result": {
+            "reply": cr_result.get("reply", ""),
+            "success": cr_result.get("success", False),
+            "data": cr_result.get("data", {}),
+            "elapsed_ms": cr_result.get("elapsed_ms"),
+        },
+        # Pass-through fields for Node_81 consumers
+        "trace_id": cr_result.get("trace_id"),
+        "session_id": cr_result.get("session_id"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Singleton factory
 # ---------------------------------------------------------------------------
 
