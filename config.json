@@ -35,5 +35,7 @@
   "audio_capture_chunk_ms": 100,
   "audio_capture_latency_warning_ms": 200.0,
   "transport_prefer_webrtc": true,
-  "transport_fallback_to_screenshot": true
+  "transport_fallback_to_screenshot": true,
+  "enable_state_event_bus": true,
+  "state_event_bus_log_all": false
 }

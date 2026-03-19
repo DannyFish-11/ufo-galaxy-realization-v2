@@ -56,16 +56,45 @@ def _emit_lifecycle_event(envelope: Any, status: str) -> None:
     try:
         from integration.event_bus import event_bus, EventType
         et = getattr(EventType, "TASK_LIFECYCLE", None)
+        if et is not None:
+            event_bus.publish_sync(et, "task_lifecycle_manager", {
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "session_id": envelope.session_id,
+                "tool_name": envelope.tool_name,
+                "status": status,
+                "ts": time.time(),
+            })
+    except Exception:
+        pass
+
+    # PR-8: also emit on the unified StateEventBus
+    _emit_state_bus_event(envelope, status)
+
+
+def _emit_state_bus_event(envelope: Any, status: str) -> None:
+    """Best-effort PR-8 state event emission for task lifecycle transitions."""
+    try:
+        from core.state_event_bus import emit as _seb_emit, StateEventType
+        _type_map = {
+            "running": StateEventType.TASK_STARTED,
+            "done":    StateEventType.TASK_DONE,
+            "failed":  StateEventType.TASK_FAILED,
+        }
+        et = _type_map.get(status)
         if et is None:
             return
-        event_bus.publish_sync(et, "task_lifecycle_manager", {
-            "task_id": envelope.task_id,
-            "trace_id": envelope.trace_id,
-            "session_id": envelope.session_id,
-            "tool_name": envelope.tool_name,
-            "status": status,
-            "ts": time.time(),
-        })
+        _seb_emit(
+            et,
+            source="task_lifecycle_manager",
+            payload={
+                "task_id": getattr(envelope, "task_id", ""),
+                "tool_name": getattr(envelope, "tool_name", ""),
+                "lifecycle_status": status,
+            },
+            trace_id=getattr(envelope, "trace_id", None),
+            runtime_session_id=getattr(envelope, "session_id", None),
+        )
     except Exception:
         pass
 

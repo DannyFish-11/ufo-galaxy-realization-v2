@@ -122,6 +122,29 @@ class RuntimeSession:
             old_state.value,
             new_state.value,
         )
+        # PR-8: emit phase transition on the unified state event bus.
+        try:
+            from core.state_event_bus import emit as _seb_emit, StateEventType
+            _phase_map = {
+                TriState.SILENT:   StateEventType.PHASE_SILENT,
+                TriState.LIMINAL:  StateEventType.PHASE_LIMINAL,
+                TriState.MANIFEST: StateEventType.PHASE_MANIFEST,
+            }
+            et = _phase_map.get(new_state)
+            if et is not None:
+                _seb_emit(
+                    et,
+                    source="desktop_presence_runtime",
+                    payload={
+                        "from_phase": old_state.value,
+                        "to_phase": new_state.value,
+                        "request_source": self.source,
+                    },
+                    trace_id=self.trace_id,
+                    runtime_session_id=self.runtime_session_id,
+                )
+        except Exception:
+            pass
 
     def elapsed_ms(self) -> float:
         """Return elapsed milliseconds since session creation."""
