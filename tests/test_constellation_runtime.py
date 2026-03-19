@@ -225,13 +225,13 @@ class TestAuditLedgerEvents:
 
 
 # ===========================================================================
-# F) Backward-compat: e2e_orchestrator legacy path
+# F) Backward-compat: e2e_orchestrator legacy path + default routing
 # ===========================================================================
 
 class TestE2EOrchestratorBackwardCompat:
     @pytest.mark.asyncio
     async def test_legacy_path_when_constellation_disabled(self):
-        """process_user_input without use_constellation should hit pipeline."""
+        """process_user_input with use_constellation=False should hit pipeline."""
         pipeline_called = []
 
         class _FakePipeline:
@@ -250,3 +250,27 @@ class TestE2EOrchestratorBackwardCompat:
 
         assert result["success"] is True
         assert len(pipeline_called) == 1
+
+    @pytest.mark.asyncio
+    async def test_default_prefers_constellation_runtime(self):
+        """process_user_input with no use_constellation arg should default to ConstellationRuntime."""
+        mock_runtime = MagicMock()
+        mock_runtime.run = AsyncMock(return_value={
+            "success": True,
+            "reply": "dag reply",
+            "session_id": "sess-cr",
+            "mode": "dag",
+            "data": {},
+            "trace_id": "tr-abc",
+        })
+
+        with patch(
+            "core.constellation_runtime.get_constellation_runtime",
+            return_value=mock_runtime,
+        ):
+            from core.e2e_orchestrator import process_user_input
+            result = await process_user_input(message="test default")
+
+        assert result["success"] is True
+        assert result["mode"] == "dag"
+        mock_runtime.run.assert_called_once()

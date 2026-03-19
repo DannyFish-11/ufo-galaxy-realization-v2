@@ -30,7 +30,7 @@ async def process_user_input(
     session_id: Optional[str] = None,
     user_id: str = "default",
     context: Optional[List[Dict]] = None,
-    use_constellation: bool = False,
+    use_constellation: bool = True,
 ) -> Dict[str, Any]:
     """
     统一用户输入处理入口。
@@ -38,10 +38,10 @@ async def process_user_input(
     完整链路:
       唤醒 → 会话管理 → 意图解析 → 智能路由 → Agent/LLM → 结果广播
 
-    当 ``use_constellation=True`` 时，优先通过
-    :class:`core.constellation_runtime.ConstellationRuntime` 处理，
+    默认通过 :class:`core.constellation_runtime.ConstellationRuntime` 处理，
     以获得完整的 TaskConstellation 规划→DAG→执行闭环；降级到
     :class:`core.e2e_pipeline.EndToEndPipeline`。
+    传入 ``use_constellation=False`` 可显式绕过 ConstellationRuntime。
 
     Args:
         message: 用户输入文本
@@ -49,7 +49,7 @@ async def process_user_input(
         session_id: 会话 ID（可选，为 None 时自动创建/复用）
         user_id: 用户 ID（用于跨设备会话关联）
         context: 额外上下文（可选）
-        use_constellation: 是否优先走 ConstellationRuntime
+        use_constellation: 是否优先走 ConstellationRuntime（默认 True）
 
     Returns:
         {

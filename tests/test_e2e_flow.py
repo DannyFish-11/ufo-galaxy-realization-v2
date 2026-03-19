@@ -43,7 +43,7 @@ class TestE2EOrchestrator:
 
     @pytest.mark.asyncio
     async def test_process_user_input_delegates_to_pipeline(self):
-        """process_user_input should call pipeline.execute()."""
+        """process_user_input with use_constellation=False should call pipeline.execute()."""
         mock_pipeline = MagicMock()
         mock_pipeline.execute = AsyncMock(return_value={
             "success": True,
@@ -61,6 +61,7 @@ class TestE2EOrchestrator:
                 message="你好",
                 device_id="phone_01",
                 user_id="user_001",
+                use_constellation=False,
             )
 
             assert result["success"] is True
@@ -72,6 +73,36 @@ class TestE2EOrchestrator:
                 session_id=None,
                 context=None,
             )
+
+    @pytest.mark.asyncio
+    async def test_process_user_input_default_uses_constellation(self):
+        """process_user_input default (no use_constellation arg) should prefer ConstellationRuntime."""
+        mock_runtime = MagicMock()
+        mock_runtime.run = AsyncMock(return_value={
+            "success": True,
+            "reply": "constellation reply",
+            "session_id": "cr-session",
+            "mode": "dag",
+            "data": {},
+            "trace_id": "tr-001",
+        })
+
+        with patch(
+            "core.constellation_runtime.get_constellation_runtime",
+            return_value=mock_runtime,
+        ):
+            from core.e2e_orchestrator import process_user_input
+
+            result = await process_user_input(
+                message="你好",
+                device_id="phone_01",
+                user_id="user_001",
+            )
+
+        assert result["success"] is True
+        assert result["reply"] == "constellation reply"
+        assert result["mode"] == "dag"
+        mock_runtime.run.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_process_wake_event_creates_session(self):

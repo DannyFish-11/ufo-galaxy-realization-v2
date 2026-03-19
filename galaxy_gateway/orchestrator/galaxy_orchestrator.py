@@ -723,23 +723,11 @@ class GalaxyOrchestrator:
         })
 
         try:
-            # ── ConstellationRuntime 路由（跨设备 / DAG 任务）──────────────────
+            # ── ConstellationRuntime 路由（默认走 ConstellationRuntime）──────────
             ctx = context or {}
-            use_constellation = ctx.get("use_constellation", False)
-            if not use_constellation:
-                # Auto-detect: try a lightweight intent check
-                try:
-                    intent_preview = await self.gateway.understand_intent(request, context)
-                    use_constellation = intent_preview.get("intent_type", "") in (
-                        "cross_device", "constellation", "analysis", "multi_step"
-                    )
-                    # Store intent preview so we don't call understand_intent twice
-                    precomputed_intent = intent_preview
-                except Exception:
-                    precomputed_intent = None
-                    use_constellation = False
-            else:
-                precomputed_intent = None
+            # Default to ConstellationRuntime; respect explicit use_constellation=False
+            use_constellation = ctx.get("use_constellation", True)
+            precomputed_intent = None
 
             if use_constellation:
                 try:
