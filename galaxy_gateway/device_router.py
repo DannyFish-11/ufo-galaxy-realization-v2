@@ -652,8 +652,37 @@ class DeviceRouter:
             logger.warning(f"⚠️ 没有在线的 {target_device_type} 设备")
             return []
 
-        # 简单策略：返回第一个设备
-        # 实际可以根据设备负载、能力等进行智能选择
+        # PR-3: Delegate final device selection to DevicePoolManager so that all
+        # scheduling decisions (health scoring, circuit-breaker, strategy) pass
+        # through the single unified pool entry point.  The candidate list built
+        # above (exec_mode / autonomous filtering) is registered into the pool
+        # on-the-fly so the pool can apply its scoring logic.  When the pool is
+        # unavailable we fall back to the first preferred candidate.
+        required_caps: List[str] = analysis.get("required_capabilities", [])
+        try:
+            from core.device_pool_manager import get_device_pool_manager
+            pool = get_device_pool_manager()
+            preferred_ids = {d.device_id for d in preferred}
+            selected_id = pool.select_device(
+                required_capabilities=required_caps or None,
+                device_type=target_device_type.value if hasattr(target_device_type, "value") else str(target_device_type),
+                exclude=[d.device_id for d in devices if d.device_id not in preferred_ids],
+            )
+            if selected_id:
+                matched = next((d for d in preferred if d.device_id == selected_id), None)
+                if matched:
+                    logger.debug(
+                        "_select_devices: DevicePoolManager selected %s", selected_id
+                    )
+                    return [matched]
+            # Pool returned no match (e.g. devices not registered in pool yet) –
+            # fall through to first-preferred fallback below.
+        except Exception as _pool_err:
+            logger.warning(
+                "_select_devices: DevicePoolManager unavailable, using first-preferred fallback: %s",
+                _pool_err,
+            )
+
         return [preferred[0]]
     
     def _create_task(self, command: str, analysis: Dict, target_devices: List[Device]) -> Dict:

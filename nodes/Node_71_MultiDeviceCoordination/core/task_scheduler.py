@@ -1,6 +1,25 @@
 """
 Node 71 - Task Scheduler Module
 任务调度模块，实现多策略任务分配和执行管理
+
+⚠️  ARCHITECTURE NOTE — PR-3 (Device Scheduling Unification)
+─────────────────────────────────────────────────────────────
+Node 71 is a **strategy provider / data-source** for the system-wide
+DevicePoolManager (``core.device_pool_manager``).  It is NOT the primary
+device-scheduling entry point.
+
+All external callers (DeviceOrchestrator, CommandRouter, galaxy_gateway
+DeviceRouter) MUST route device-selection through:
+
+    from core.device_pool_manager import get_device_pool_manager
+    pool = get_device_pool_manager()
+    device_id = pool.select_device(required_capabilities=[...])
+
+The ``DeviceSelector`` and ``TaskScheduler`` classes in this module expose
+rich scheduling strategies (PRIORITY, FAIR, ROUND_ROBIN, LEAST_LOADED,
+CAPABILITY, LOCATION, RANDOM) that can be registered as pluggable
+strategy providers inside DevicePoolManager.  They MUST NOT be used as
+standalone orchestrators from outside Node 71.
 """
 import asyncio
 import logging
@@ -98,8 +117,14 @@ class SchedulerConfig:
 
 class DeviceSelector:
     """
-    设备选择器
-    实现多种设备选择策略
+    设备选择器 — Node 71 内部策略实现。
+    实现多种设备选择策略。
+
+    ⚠️  STRATEGY PROVIDER ONLY (PR-3)
+    External modules must use ``core.device_pool_manager.get_device_pool_manager()``
+    for all device-selection decisions.  This class is an internal Node 71
+    component that provides strategy implementations; it is NOT the system
+    scheduling entry point.
     """
     
     def __init__(self, registry: DeviceRegistry):
@@ -409,8 +434,14 @@ class DependencyResolver:
 
 class TaskScheduler:
     """
-    任务调度器
-    管理任务的调度、执行和监控
+    任务调度器 — Node 71 内部调度实现。
+    管理任务的调度、执行和监控。
+
+    ⚠️  STRATEGY PROVIDER ONLY (PR-3)
+    This class exposes scheduling logic that is consumed by the system-wide
+    ``core.device_pool_manager.DevicePoolManager``.  It is NOT a standalone
+    orchestration entry point.  External modules must never call this class
+    directly for device selection; use ``get_device_pool_manager()`` instead.
     """
     
     def __init__(

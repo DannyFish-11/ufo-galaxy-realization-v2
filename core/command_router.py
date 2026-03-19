@@ -684,20 +684,52 @@ class CommandRouter:
             pass
 
         if not envelope.targets:
-            return {
-                "request_id": envelope.task_id,
-                "task_id": envelope.task_id,
-                "trace_id": envelope.trace_id,
-                "command_id": envelope.task_id,
-                "device_id": "",
-                "command": envelope.tool_name,
-                "via": "command_router",
-                "success": False,
-                "result": None,
-                "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
-                "error_message": "TaskEnvelope.targets 为空，无法路由",
-                "latency_ms": 0.0,
-            }
+            # PR-3: When required_capabilities are present but no explicit target is
+            # given, delegate to DevicePoolManager to select a suitable device.
+            # Explicit targets (even empty-string) must NOT be overridden here —
+            # only truly target-less envelopes trigger automatic selection.
+            _caps_for_pool: Optional[List[str]] = None
+            _meta_caps_early = (envelope.metadata or {}).get("required_capabilities")
+            if envelope.required_capabilities:
+                _caps_for_pool = list(envelope.required_capabilities)
+            elif isinstance(_meta_caps_early, list) and _meta_caps_early:
+                _caps_for_pool = [str(c) for c in _meta_caps_early]
+
+            _pool_selected: Optional[str] = None
+            if _caps_for_pool is not None:
+                try:
+                    from core.device_pool_manager import get_device_pool_manager
+                    _pool_selected = get_device_pool_manager().select_device(
+                        required_capabilities=_caps_for_pool,
+                    )
+                    if _pool_selected:
+                        logger.debug(
+                            "PR-3: DevicePoolManager selected %s for caps=%s",
+                            _pool_selected, _caps_for_pool,
+                        )
+                except Exception as _pool_exc:
+                    logger.warning(
+                        "PR-3: DevicePoolManager.select_device failed (fail-open): %s",
+                        _pool_exc,
+                    )
+
+            if _pool_selected:
+                envelope = envelope.model_copy(update={"targets": [_pool_selected]})
+            else:
+                return {
+                    "request_id": envelope.task_id,
+                    "task_id": envelope.task_id,
+                    "trace_id": envelope.trace_id,
+                    "command_id": envelope.task_id,
+                    "device_id": "",
+                    "command": envelope.tool_name,
+                    "via": "command_router",
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                    "error_message": "TaskEnvelope.targets 为空，无法路由",
+                    "latency_ms": 0.0,
+                }
 
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:
