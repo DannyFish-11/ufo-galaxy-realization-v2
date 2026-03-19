@@ -6,6 +6,13 @@ Galaxy - 端到端编排器（便捷接口）
 内部委托给 DesktopPresenceRuntime（控制面）再流转到
 ConstellationRuntime.run() / EndToEndPipeline.execute()。
 
+PR-5 DAG 集成
+-------------
+当 ``enable_task_dag=true``（config.json）时，该模块同时暴露
+:func:`compile_and_run_dag` 便捷入口，将高级计划编译成
+:class:`~core.task_graph.TaskGraph` 并并行执行。
+若 DAG 编译失败，会自动回退到现有线性执行路径并记录警告。
+
 用法:
     from core.e2e_orchestrator import process_user_input
 
@@ -21,6 +28,111 @@ import logging
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.E2EOrchestrator")
+
+
+# ---------------------------------------------------------------------------
+# PR-5: DAG execution helpers
+# ---------------------------------------------------------------------------
+
+def _is_dag_enabled() -> bool:
+    """Return True when the task-DAG feature flag is on."""
+    try:
+        from core.unified_config import get_config
+        cfg = get_config()
+        if hasattr(cfg, "get"):
+            return bool(cfg.get("enable_task_dag", True))
+        return bool(getattr(cfg, "enable_task_dag", True))
+    except Exception:
+        return True  # default-on when config unavailable
+
+
+async def compile_and_run_dag(
+    subtasks: List[Any],
+    *,
+    trace_id: str = "",
+    runtime_session_id: str = "",
+    context: Optional[Dict[str, Any]] = None,
+    continue_on_failure: bool = True,
+) -> Dict[str, Any]:
+    """Compile a list of subtask objects into a :class:`~core.task_graph.TaskGraph`
+    and execute it with parallel scheduling.
+
+    This is the PR-5 DAG execution path.  It is used internally by
+    :func:`process_user_input` when ``enable_task_dag`` is ``True`` and a plan
+    is available, and may also be called directly by orchestrators that already
+    hold a decomposed subtask list.
+
+    Args:
+        subtasks:            List of objects with ``task_id``, ``name``,
+                             ``description``, ``depends_on``, ``device_id``
+                             attributes (compatible with
+                             :class:`~core.schemas.orchestration.SubTask`).
+        trace_id:            Trace identifier propagated into every node.
+        runtime_session_id:  Session identifier propagated into every node.
+        context:             Additional key-value context for handlers.
+        continue_on_failure: When ``True`` (default), failed nodes skip their
+                             dependents; independent branches keep running.
+
+    Returns:
+        Dict with keys ``success``, ``done``, ``failed``, ``skipped``,
+        ``elapsed_ms``, ``graph_id``, ``trace_id``, ``node_statuses``.
+    """
+    from core.task_graph import compile_subtasks_to_graph, RetryPolicy
+
+    # Read retry defaults from config
+    max_retries = 1
+    retry_delay = 1.0
+    try:
+        from core.unified_config import get_config
+        cfg = get_config()
+        _get = cfg.get if hasattr(cfg, "get") else lambda k, d: getattr(cfg, k, d)
+        max_retries = int(_get("task_dag_default_max_retries", 1))
+        retry_delay = float(_get("task_dag_retry_delay_seconds", 1.0))
+    except Exception:
+        pass
+
+    policy = RetryPolicy(max_retries=max_retries, retry_delay_seconds=retry_delay)
+
+    try:
+        graph = compile_subtasks_to_graph(
+            subtasks,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id,
+            default_retry_policy=policy,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "compile_and_run_dag: DAG compilation failed (%s), "
+            "caller should fall back to linear execution.",
+            exc,
+        )
+        return {
+            "success": False,
+            "error": f"DAG compilation failed: {exc}",
+            "graph_id": "",
+            "trace_id": trace_id,
+            "done": 0,
+            "failed": 0,
+            "skipped": 0,
+            "elapsed_ms": 0.0,
+            "node_statuses": {},
+        }
+
+    result = await graph.execute(
+        context=context or {},
+        continue_on_failure=continue_on_failure,
+    )
+    return {
+        "success": result.success,
+        "graph_id": result.graph_id,
+        "trace_id": result.trace_id,
+        "done": result.done_nodes,
+        "failed": result.failed_nodes,
+        "skipped": result.skipped_nodes,
+        "elapsed_ms": result.elapsed_ms,
+        "node_statuses": result.node_statuses,
+        "error": result.error,
+    }
 
 
 async def process_user_input(
@@ -125,6 +237,37 @@ async def process_user_input(
                 user_id=user_id,
                 context=ctx,
             )
+            # PR-5: when the result carries a subtask list, fan out through
+            # the TaskGraph engine for parallel execution and per-node
+            # lifecycle observability (gated by enable_task_dag flag).
+            _subtasks = result.get("subtasks") or result.get("data", {}).get("subtasks")
+            if _subtasks and _is_dag_enabled():
+                import uuid as _uuid
+                _trace = result.get("trace_id") or ctx.get("trace_id") or _uuid.uuid4().hex[:12]
+                _session = result.get("runtime_session_id") or session_id or ""
+                logger.info(
+                    "E2EOrchestrator: compiling %d subtasks into TaskGraph | trace_id=%s",
+                    len(_subtasks),
+                    _trace,
+                )
+                try:
+                    _dag_result = await compile_and_run_dag(
+                        _subtasks,
+                        trace_id=_trace,
+                        runtime_session_id=_session,
+                        context={"device_id": device_id, "user_id": user_id},
+                    )
+                    result.setdefault("data", {})["dag"] = _dag_result
+                    # mode="dag" signals that the response was produced via parallel
+                    # TaskGraph execution (PR-5). Other possible values set by the
+                    # runtime are "chat", "device_control", "agent_task", "fallback".
+                    result["mode"] = "dag"
+                except Exception as _dag_exc:
+                    logger.warning(
+                        "E2EOrchestrator: TaskGraph execution failed, "
+                        "results from ConstellationRuntime used as-is: %s",
+                        _dag_exc,
+                    )
             return {
                 "success": result.get("success", False),
                 "reply": result.get("reply", ""),
