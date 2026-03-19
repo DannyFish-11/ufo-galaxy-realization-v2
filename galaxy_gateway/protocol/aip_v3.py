@@ -375,6 +375,16 @@ class AIPMessage(BaseModel):
     # task_type 用于区分 goal_execution / parallel_subtask 等高层任务类型
     task_type: Optional[str] = None
 
+    # PR-2: Unified envelope fields — trace propagation across all hops
+    trace_id: Optional[str] = None
+    """Distributed trace identifier propagated through planner → gateway → device."""
+
+    runtime_session_id: Optional[str] = None
+    """Session scope identifier tying commands to a single user/agent interaction."""
+
+    idempotency_key: Optional[str] = None
+    """Client-supplied dedup key. Auto-generated from task_id when absent in compat layer."""
+
     # 命令相关
     commands: List[Command] = Field(default_factory=list)
     results: List[CommandResult] = Field(default_factory=list)

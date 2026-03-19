@@ -14,6 +14,13 @@ Galaxy 统一模块公开导出入口。
         EntrypointRouter, get_entrypoint_router, reset_entrypoint_router,
         DeviceState, TaskState, CognitiveState, PresenceState, ExecutionState,
         EntryPath, TaskStatus, PresencePhase, ExecutionStatus,
+        # PR-2 additions
+        CommandEnvelope, ResultEnvelope, ENVELOPE_VERSION,
+        EnvelopeValidationError, validate_command_envelope, validate_result_envelope,
+        log_command_envelope, log_result_envelope,
+        CapabilityContract, CapabilitySource, CapabilityContractError,
+        validate_capability_contract, is_valid_capability_contract,
+        CapabilityResolver, get_capability_resolver, reset_capability_resolver,
     )
 """
 
@@ -68,6 +75,30 @@ from .state_schema import (
     PresenceState,
     ExecutionState,
 )
+# PR-2: command envelope
+from .command_envelope import (
+    CommandEnvelope,
+    ResultEnvelope,
+    ENVELOPE_VERSION,
+    EnvelopeValidationError,
+    validate_command_envelope,
+    validate_result_envelope,
+    log_command_envelope,
+    log_result_envelope,
+)
+# PR-2: capability contract + resolver
+from .capability_contract import (
+    CapabilityContract,
+    CapabilitySource,
+    CapabilityContractError,
+    validate_capability_contract,
+    is_valid_capability_contract,
+)
+from .capability_resolver import (
+    CapabilityResolver,
+    get_capability_resolver,
+    reset_capability_resolver,
+)
 
 __all__ = [
     # exceptions
@@ -120,4 +151,22 @@ __all__ = [
     "CognitiveState",
     "PresenceState",
     "ExecutionState",
+    # PR-2: command envelope
+    "CommandEnvelope",
+    "ResultEnvelope",
+    "ENVELOPE_VERSION",
+    "EnvelopeValidationError",
+    "validate_command_envelope",
+    "validate_result_envelope",
+    "log_command_envelope",
+    "log_result_envelope",
+    # PR-2: capability contract + resolver
+    "CapabilityContract",
+    "CapabilitySource",
+    "CapabilityContractError",
+    "validate_capability_contract",
+    "is_valid_capability_contract",
+    "CapabilityResolver",
+    "get_capability_resolver",
+    "reset_capability_resolver",
 ]

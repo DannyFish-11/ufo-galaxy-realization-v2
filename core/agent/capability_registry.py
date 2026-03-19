@@ -129,9 +129,56 @@ class CapabilityRegistry:
         ]
 
     def register(self, item: CapabilityItem) -> None:
-        """手动注册一个能力条目。"""
+        """手动注册一个能力条目（unified contract 校验 → 失败则跳过）。"""
+        if not self._validate_via_contract(item):
+            return
         self._items[item.name] = item
         logger.debug("能力已注册: %s (%s)", item.name, item.source)
+
+    def _validate_via_contract(self, item: CapabilityItem) -> bool:
+        """PR-2: 通过统一能力合同校验 CapabilityItem。
+
+        Uses :func:`~core.unified.capability_contract.validate_capability_contract`
+        so that the unified schema rules are enforced at registration time.
+
+        Returns:
+            True  — 校验通过
+            False — 校验失败（已记录错误，调用方应跳过注入）
+        """
+        try:
+            from core.unified.capability_contract import (
+                CapabilityContract,
+                CapabilityContractError,
+                CapabilitySource,
+                validate_capability_contract,
+            )
+            src_val = getattr(item, "source", "unknown") or "unknown"
+            try:
+                src = CapabilitySource(src_val)
+            except ValueError:
+                src = CapabilitySource.UNKNOWN
+            contract = CapabilityContract(
+                name=item.name,
+                description=item.description,
+                source=src,
+                source_id=item.source_id,
+                parameters=item.parameters or {},
+                available=item.available,
+                metadata=item.metadata or {},
+            )
+            validate_capability_contract(contract)
+            return True
+        except Exception as exc:
+            violations = getattr(exc, "violations", [str(exc)])
+            msg = f"capability_contract validation failed for '{item.name}': {violations}"
+            logger.warning(msg)
+            self._validation_errors.append({
+                "source": getattr(item, "source", "?"),
+                "id": item.name,
+                "error": msg,
+                "violations": violations,
+            })
+            return False
 
     def to_tool_schemas(self) -> List[Dict[str, Any]]:
         """返回所有可用能力的 OpenAI function calling 格式 schema 列表。"""
@@ -183,13 +230,13 @@ class CapabilityRegistry:
         parameters: Dict[str, Any],
         server_name: str = "",
     ) -> None:
-        """将单个 MCP 工具直接注入能力总线（schema 校验 → 不通过则记录错误并跳过）。"""
+        """将单个 MCP 工具直接注入能力总线（unified contract 校验 → 不通过则记录错误并跳过）。"""
         if not tool_name:
             return
         if not self._validate_parameters_schema(parameters, "mcp", f"{server_id}/{tool_name}"):
             return
         key = f"mcp__{server_id}__{tool_name}"
-        self._items[key] = CapabilityItem(
+        item = CapabilityItem(
             name=key,
             description=f"[MCP:{server_name or server_id}] {description}",
             source="mcp",
@@ -197,6 +244,9 @@ class CapabilityRegistry:
             parameters=parameters or {},
             available=True,
         )
+        if not self._validate_via_contract(item):
+            return
+        self._items[key] = item
         logger.debug("MCP 工具已注入能力总线: %s", key)
 
     def inject_skill(
@@ -206,13 +256,13 @@ class CapabilityRegistry:
         description: str,
         parameters: Dict[str, Any],
     ) -> None:
-        """将单个 Skill 直接注入能力总线（schema 校验 → 不通过则记录错误并跳过）。"""
+        """将单个 Skill 直接注入能力总线（unified contract 校验 → 不通过则记录错误并跳过）。"""
         if not skill_id:
             return
         if not self._validate_parameters_schema(parameters, "skill", skill_id):
             return
         key = f"skill__{skill_id}"
-        self._items[key] = CapabilityItem(
+        item = CapabilityItem(
             name=key,
             description=f"[Skill] {description or skill_name}",
             source="skill",
@@ -220,6 +270,9 @@ class CapabilityRegistry:
             parameters=parameters or {},
             available=True,
         )
+        if not self._validate_via_contract(item):
+            return
+        self._items[key] = item
         logger.debug("Skill 已注入能力总线: %s", key)
 
     def eject(self, name: str) -> None:
