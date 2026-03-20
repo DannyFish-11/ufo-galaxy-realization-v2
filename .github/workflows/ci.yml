@@ -198,6 +198,92 @@ jobs:
           test -x scripts/quick_verify.sh
           echo "✅ scripts/quick_verify.sh is executable."
 
+  conformance-tests:
+    # PR-7 Final: AIP v3 envelope, gateway routing, NATS trace, and UDM SSOT
+    # conformance tests — must all pass before merging to main.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run conformance suite
+        run: |
+          python -m pytest tests/conformance/ -v --tb=short
+          echo "✅ Conformance suite passed."
+
+  chaos-tests:
+    # PR-7 Final: Chaos test suite (disconnect, latency, duplicate message,
+    # partial failure) — validates resilience across all U1–U33 paths.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run chaos suite
+        run: |
+          python -m pytest tests/chaos/ -v --tb=short
+          echo "✅ Chaos suite passed."
+
+  ssot-udm-conformance:
+    # PR-7 Final: SSOT / UDM conformance — all device state writes must go
+    # through UnifiedDeviceManager.  The AST-based audit script is also run
+    # to catch any bypass paths that may have been introduced.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run UDM SSOT conformance tests
+        run: |
+          python -m pytest tests/conformance/test_udm_ssot_conformance.py \
+            -v --tb=short
+          echo "✅ UDM SSOT conformance tests passed."
+      - name: Run UDM write-path audit script
+        run: |
+          python scripts/audit_udm_write_paths.py
+          echo "✅ UDM write-path audit passed."
+      - name: Run canonical path audit script
+        run: |
+          python scripts/audit_unified_paths.py
+          echo "✅ Canonical path audit passed."
+
+  system-readiness-check:
+    # PR-7 Final: Run the system readiness report generator to verify all
+    # U1–U33 artifacts, canonical modules, and CI jobs are in place.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Generate system readiness report
+        run: |
+          python scripts/generate_system_readiness_report.py --json
+          echo "✅ System readiness report generated."
+      - name: Run PR7 final consolidation tests
+        run: |
+          python -m pytest tests/test_pr7_final_consolidation.py -v --tb=short
+          echo "✅ PR7 final consolidation tests passed."
+
   test:
     runs-on: ubuntu-latest
     permissions:
