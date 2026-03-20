@@ -263,6 +263,7 @@ def reset_entrypoint_router() -> None:
 def resolve_entry_mode(
     explicit_entry_mode: Optional[str] = None,
     *,
+    target_device: Optional[str] = None,
     trace_id: str = "",
     source: str = "",
 ) -> str:
@@ -271,16 +272,26 @@ def resolve_entry_mode(
     Resolution rules (applied in order):
 
     1. If *explicit_entry_mode* is provided by the caller, use it as-is.
-    2. Else, if cross-device routing is **enabled** *and* more than one device
-       is currently registered/available, return ``"cross_device"``.
+    2. Else, if cross-device routing is **enabled** *and* either:
+
+       - *target_device* is explicitly specified in the request, **or**
+       - more than one device is currently registered/available (>=2),
+
+       return ``"cross_device"``.
     3. Else return ``"local"``.
 
     The result is always emitted as a :data:`StateEventType.ENTRY_MODE_RESOLVED`
-    event on the state event bus (best-effort, never raises).
+    event on the state event bus (best-effort, never raises).  When
+    ``"cross_device"`` is selected automatically, an additional INFO-level
+    structured log entry is written that includes *device_count* and *trace_id*
+    so operators can correlate the selection decision.
 
     Args:
         explicit_entry_mode: Optional caller-supplied override.  When not
             ``None`` (and not an empty string) it is returned unchanged.
+        target_device: Optional explicit target device ID from the request.
+            When provided (and cross-device is enabled), forces
+            ``"cross_device"`` mode regardless of the online device count.
         trace_id: End-to-end correlation ID for the current request.
         source: Human-readable label for the calling module (for observability).
 
@@ -288,14 +299,15 @@ def resolve_entry_mode(
         One of ``"local"``, ``"cross_device"``, or the caller-supplied value.
     """
     resolved: str
+    resolution_source: str
+    _device_count: int = 0
 
     if explicit_entry_mode:
         resolved = explicit_entry_mode
         resolution_source = "caller_explicit"
     else:
-        # Determine mode from cross-device switch + device registry
+        # Determine mode from cross-device switch + device registry / target
         _cross_device_on = False
-        _device_count = 0
         try:
             from galaxy_gateway.cross_device_switch import is_cross_device_enabled
             _cross_device_on = is_cross_device_enabled()
@@ -309,9 +321,25 @@ def resolve_entry_mode(
             except Exception:
                 pass
 
-        if _cross_device_on and _device_count > 1:
+        _explicit_target = bool(target_device and target_device.strip())
+        _has_multiple_devices = _device_count >= 2
+
+        if _cross_device_on and (_explicit_target or _has_multiple_devices):
             resolved = "cross_device"
-            resolution_source = "auto_cross_device"
+            if _explicit_target:
+                resolution_source = "auto_target_device"
+            else:
+                resolution_source = "auto_cross_device"
+            # Structured INFO log for observability
+            logger.info(
+                "cross_device_mode_selected source=%s trace_id=%s "
+                "device_count=%d target_device=%s resolution_source=%s",
+                source or "entrypoint_router",
+                trace_id,
+                _device_count,
+                target_device or "",
+                resolution_source,
+            )
         else:
             resolved = "local"
             resolution_source = "auto_local"
@@ -324,7 +352,9 @@ def resolve_entry_mode(
             source=source or "entrypoint_router",
             payload={
                 "entry_mode": resolved,
-                "source": resolution_source,
+                "resolution_source": resolution_source,
+                "device_count": _device_count,
+                "target_device": target_device or "",
                 "trace_id": trace_id,
             },
             trace_id=trace_id,

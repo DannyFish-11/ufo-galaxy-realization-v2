@@ -62,6 +62,10 @@ class ChatRequest(BaseModel):
     # When absent, the mode is auto-resolved from the cross-device switch and
     # device registry.  One of: "local" | "cross_device" | "hybrid".
     entry_mode: Optional[str] = None
+    # PR-5 Cross-device: explicit target device ID for this request.
+    # When provided (and cross-device routing is enabled), forces cross_device
+    # mode regardless of the online device count.
+    target_device: Optional[str] = None
 
 
 class NodeCallRequest(BaseModel):
