@@ -233,6 +233,7 @@ async def process_user_input(
     user_id: str = "default",
     context: Optional[List[Dict]] = None,
     use_constellation: bool = True,
+    entry_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     统一用户输入处理入口。
@@ -258,6 +259,9 @@ async def process_user_input(
         user_id: 用户 ID（用于跨设备会话关联）
         context: 额外上下文（可选）
         use_constellation: 是否优先走 ConstellationRuntime（默认 True）
+        entry_mode: Optional caller-supplied execution mode override
+            (``"local"`` | ``"cross_device"`` | ``"hybrid"``).  When absent
+            the mode is auto-resolved inside :func:`resolve_entry_mode`.
 
     Returns:
         {
@@ -285,6 +289,17 @@ async def process_user_input(
             message[:80],
         )
 
+    # ── PR-1 EntryMode: resolve execution mode for this request ──
+    _resolved_entry_mode = "local"
+    try:
+        from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
+        _resolved_entry_mode = _resolve_em(
+            explicit_entry_mode=entry_mode or None,
+            source="core.e2e_orchestrator",
+        )
+    except Exception as _em_exc:
+        logger.debug("resolve_entry_mode failed (non-fatal): %s", _em_exc)
+
     # ── Primary path: DesktopPresenceRuntime（控制面）────────────────────────
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
@@ -297,6 +312,7 @@ async def process_user_input(
             user_id=user_id,
             context=context,
             use_constellation=use_constellation,
+            entry_mode=_resolved_entry_mode,
         )
         # Normalise: e2e callers expect "reply" not "response"
         if "reply" not in result:

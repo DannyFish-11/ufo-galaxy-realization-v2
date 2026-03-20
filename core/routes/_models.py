@@ -58,6 +58,10 @@ class ChatRequest(BaseModel):
     # When present, ``multimodal_context.images`` carries base64-encoded image
     # payloads that are forwarded unchanged to the model router.
     multimodal_context: Optional[MultiModalContext] = None
+    # PR-1 EntryMode: caller-supplied execution mode override.
+    # When absent, the mode is auto-resolved from the cross-device switch and
+    # device registry.  One of: "local" | "cross_device" | "hybrid".
+    entry_mode: Optional[str] = None
 
 
 class NodeCallRequest(BaseModel):

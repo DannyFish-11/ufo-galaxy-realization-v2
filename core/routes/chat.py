@@ -86,6 +86,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # ── PR-1 Block-1: stamp entry metadata via EntrypointRouter ──
         # EntrypointRouter records entry_path=canonical and emits an
         # observability event so canonical vs legacy usage can be tracked.
+        _trace_id_for_entry = ""
         try:
             from core.unified.entrypoint_router import get_entrypoint_router as _get_er
             _er = _get_er()
@@ -103,6 +104,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.debug("EntrypointRouter unavailable (non-fatal): %s", _er_exc)
             _routing_meta = {}
 
+        # ── PR-1 EntryMode: resolve execution mode for this request ──
+        # Respects explicit override from the caller; falls back to auto-detection.
+        _entry_mode = "local"
+        try:
+            from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
+            _entry_mode = _resolve_em(
+                explicit_entry_mode=req.entry_mode or None,
+                trace_id=_trace_id_for_entry,
+                source="core.routes.chat",
+            )
+        except Exception as _em_exc:
+            logger.debug("resolve_entry_mode failed (non-fatal): %s", _em_exc)
+
         # ── 统一控制面: DesktopPresenceRuntime → OpenClawd 母体智能体 ──
         # DesktopPresenceRuntime 负责三态推进和 runtime_session_id 生成；
         # OpenClawd 内部嵌入 AgentKernel；SOUL 注入规则由 OpenClawd 统一管理。
@@ -117,6 +131,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 context=req.context,
                 required_capabilities=req.required_capabilities,
                 multimodal_context=req.multimodal_context,
+                entry_mode=_entry_mode,
             )
             metadata = result.get("metadata", {})
             trace_id = (

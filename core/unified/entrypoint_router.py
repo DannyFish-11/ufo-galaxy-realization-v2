@@ -256,8 +256,88 @@ def reset_entrypoint_router() -> None:
     _entrypoint_router_instance = None
 
 
+# ---------------------------------------------------------------------------
+# Entry-mode resolution (PR-1 EntryMode unification)
+# ---------------------------------------------------------------------------
+
+def resolve_entry_mode(
+    explicit_entry_mode: Optional[str] = None,
+    *,
+    trace_id: str = "",
+    source: str = "",
+) -> str:
+    """Resolve the ``entry_mode`` for a request and emit an observability event.
+
+    Resolution rules (applied in order):
+
+    1. If *explicit_entry_mode* is provided by the caller, use it as-is.
+    2. Else, if cross-device routing is **enabled** *and* more than one device
+       is currently registered/available, return ``"cross_device"``.
+    3. Else return ``"local"``.
+
+    The result is always emitted as a :data:`StateEventType.ENTRY_MODE_RESOLVED`
+    event on the state event bus (best-effort, never raises).
+
+    Args:
+        explicit_entry_mode: Optional caller-supplied override.  When not
+            ``None`` (and not an empty string) it is returned unchanged.
+        trace_id: End-to-end correlation ID for the current request.
+        source: Human-readable label for the calling module (for observability).
+
+    Returns:
+        One of ``"local"``, ``"cross_device"``, or the caller-supplied value.
+    """
+    resolved: str
+
+    if explicit_entry_mode:
+        resolved = explicit_entry_mode
+        resolution_source = "caller_explicit"
+    else:
+        # Determine mode from cross-device switch + device registry
+        _cross_device_on = False
+        _device_count = 0
+        try:
+            from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+            _cross_device_on = is_cross_device_enabled()
+        except Exception:
+            pass
+
+        if _cross_device_on:
+            try:
+                from core.unified.device_manager import get_unified_device_manager
+                _device_count = get_unified_device_manager().get_online_count()
+            except Exception:
+                pass
+
+        if _cross_device_on and _device_count > 1:
+            resolved = "cross_device"
+            resolution_source = "auto_cross_device"
+        else:
+            resolved = "local"
+            resolution_source = "auto_local"
+
+    # Best-effort observability event
+    try:
+        from core.state_event_bus import emit as _seb_emit, StateEventType
+        _seb_emit(
+            StateEventType.ENTRY_MODE_RESOLVED,
+            source=source or "entrypoint_router",
+            payload={
+                "entry_mode": resolved,
+                "source": resolution_source,
+                "trace_id": trace_id,
+            },
+            trace_id=trace_id,
+        )
+    except Exception:
+        pass
+
+    return resolved
+
+
 __all__ = [
     "EntrypointRouter",
     "get_entrypoint_router",
     "reset_entrypoint_router",
+    "resolve_entry_mode",
 ]

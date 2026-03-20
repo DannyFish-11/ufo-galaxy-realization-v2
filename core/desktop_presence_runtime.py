@@ -197,6 +197,7 @@ class DesktopPresenceRuntime:
         required_capabilities: Optional[List[str]] = None,
         multimodal_context: Optional[Any] = None,
         use_constellation: bool = True,
+        entry_mode: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Handle a top-level request through the unified tri-state lifecycle.
@@ -226,6 +227,10 @@ class DesktopPresenceRuntime:
             multimodal_context: Multi-modal payload bundle (PR-1).
             use_constellation: When *True* (default) prefer
                 ConstellationRuntime for ``source="e2e"`` requests.
+            entry_mode: Pre-resolved execution mode (``"local"`` |
+                ``"cross_device"`` | ``"hybrid"``).  When provided it is
+                forwarded to OpenClawd without modification so the correct
+                mode is reflected in response metadata.
             **kwargs: Additional keyword arguments forwarded to the underlying
                 handler.
 
@@ -277,6 +282,7 @@ class DesktopPresenceRuntime:
                 required_capabilities=required_capabilities,
                 multimodal_context=multimodal_context,
                 use_constellation=use_constellation,
+                entry_mode=entry_mode,
                 **kwargs,
             )
 
@@ -350,6 +356,7 @@ class DesktopPresenceRuntime:
         required_capabilities: Optional[List[str]],
         multimodal_context: Optional[Any],
         use_constellation: bool,
+        entry_mode: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Route to the correct underlying handler based on *source*.
@@ -371,6 +378,7 @@ class DesktopPresenceRuntime:
                 context=context,
                 required_capabilities=required_capabilities,
                 multimodal_context=multimodal_context,
+                entry_mode=entry_mode,
             )
 
         if source == "e2e":
@@ -400,6 +408,7 @@ class DesktopPresenceRuntime:
             context=context,
             required_capabilities=required_capabilities,
             multimodal_context=multimodal_context,
+            entry_mode=entry_mode,
         )
 
     # ------------------------------------------------------------------
@@ -415,6 +424,7 @@ class DesktopPresenceRuntime:
         context: Optional[List[Dict]],
         required_capabilities: Optional[List[str]],
         multimodal_context: Optional[Any],
+        entry_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Delegate to OpenClawd.process() with runtime_session_id propagation."""
         from core.openclawd import get_openclawd
@@ -428,6 +438,7 @@ class DesktopPresenceRuntime:
             required_capabilities=required_capabilities,
             multimodal_context=multimodal_context,
             runtime_session_id=rsession.runtime_session_id,
+            entry_mode=entry_mode,
         )
         # Normalise the result to always contain "response" (OpenClawd uses it)
         result.setdefault("response", result.get("reply", ""))

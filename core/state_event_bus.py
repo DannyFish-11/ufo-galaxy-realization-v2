@@ -96,6 +96,9 @@ class StateEventType(str, Enum):
     MESH_UPDATED       = "mesh.updated"        # body mesh topology changed
     TASK_CANCELLED     = "task.cancelled"      # task cancelled by cancel/interrupt signal
 
+    # ── Entry-mode unification (PR-1 EntryMode) ────────────────────────────
+    ENTRY_MODE_RESOLVED = "entry_mode.resolved"  # entry_mode stamped on a request
+
     # ── Generic / passthrough ─────────────────────────────────────────────
     GENERIC         = "generic"         # uncategorised event
 
