@@ -2,6 +2,24 @@
 Windows 本地 MCP Server
 =======================
 
+.. deprecated::
+    This module is **deprecated** and is no longer the primary Windows
+    execution path.
+
+    The unified Windows execution pipeline is::
+
+        AIP ingress (windows_aip_client.py)
+            ↓
+        WindowsExecutionArbiter.route_command()
+            ↓  fallback chain: system_api → UIA → GUI → VLM
+        WindowsAutonomyManager
+
+    This MCP server path (stdio JSON-RPC) exposed local Windows capabilities
+    as MCP tools.  It remains in the codebase for compatibility reference only
+    and MUST NOT be used as an active primary path in new deployments.
+
+    See ``docs/WINDOWS_EXECUTION_PIPELINE.md`` for the current architecture.
+
 将 windows_client/autonomy/ 的本地能力暴露为标准 MCP JSON-RPC 工具，
 使大模型（ReAct Agent）可以直接调用 Windows UI 自动化能力。
 
@@ -24,8 +42,17 @@ Windows 本地 MCP Server
     兼容 core/mcp_loader.py 的 MCPLoader
 
 Author: Galaxy Team
-Version: 1.0.0
+Version: 1.0.0 (deprecated)
 """
+
+import warnings
+warnings.warn(
+    "windows_mcp_server.py is deprecated and is no longer the primary Windows "
+    "execution path.  Use windows_aip_client.py → WindowsExecutionArbiter instead.  "
+    "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
 import json
 import sys
@@ -40,6 +67,11 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger("windows-mcp-server")
+logger.warning(
+    "windows_mcp_server.py is DEPRECATED.  "
+    "Primary Windows execution now routes through WindowsExecutionArbiter via "
+    "windows_aip_client.py.  See docs/WINDOWS_EXECUTION_PIPELINE.md."
+)
 
 
 # ============================================================================

@@ -1,115 +1,117 @@
-# Windows MCP Server & AIP 客户端 使用说明
+# Windows Execution Pipeline
 
-本文档说明如何启动 **Windows 本地 MCP Server** 并将 Windows 主机注册到
-Galaxy 服务端，使大模型（ReAct Agent）可以直接调用 Windows UI 自动化能力。
-
----
-
-## 一、Windows MCP Server
-
-### 功能
-
-将 `windows_client/autonomy/` 的本地能力暴露为标准 MCP 工具，工具列表：
-
-| 工具名 | 说明 |
-|--------|------|
-| `get_screen_state` | 获取前台窗口 UI 树（可操作元素层级） |
-| `click` | 鼠标点击（坐标） |
-| `type` | 键入文本 |
-| `press_key` | 按单个键（enter / escape / f5 …） |
-| `press_keys` | 按组合键（['ctrl','c'] …） |
-| `scroll` | 滚动鼠标滚轮 |
-| `find_and_click` | 按 UI 元素名/AutomationId 查找并点击 |
-| `find_and_type` | 按 UI 元素名/AutomationId 查找并输入 |
-| `screenshot` | 截屏并返回 base64 PNG |
-
-### 依赖
-
-```bash
-pip install pillow   # 截屏支持（可选，也可用 pyautogui）
-# Windows 下 autonomy/ 还需要 comtypes（UI Automation）
-pip install comtypes
-```
-
-### 启动命令
-
-```bash
-# 在 Windows 上，从仓库根目录执行
-python windows_client/windows_mcp_server.py
-```
-
-MCP Server 通过 **stdio** 通信（JSON-RPC 2.0），由 `core/mcp_loader.py` 子进程启动。
+> **This document describes the current (unified) Windows execution architecture.**
+> The legacy Windows MCP Server path documented previously has been retired.
+> See the [Deprecated Paths](#deprecated-paths) section at the bottom.
 
 ---
 
-## 二、通过 API 加载 Windows MCP Server
+## Active Windows Execution Pipeline
 
-服务端启动后，通过 REST API 加载 Windows MCP Server：
+All Windows local execution flows through a single, unified pipeline:
 
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/mcp/load \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "windows-local",
-    "command": "python windows_client/windows_mcp_server.py"
-  }'
+```
+AIP ingress
+(windows_aip_client.py)
+        │
+        │  WebSocket /ws/device/{device_id}
+        │  AIP v3.0 handshake + capability_report
+        │
+        ▼
+WindowsExecutionArbiter         ← core/windows_execution_arbiter.py
+(route_command / execute)       ← unified execution entry point
+        │
+        │  strict fallback chain:
+        │
+        ├─ Level 1: System API   (Win32 / OS calls)
+        ├─ Level 2: UIA          (WindowsAutonomyManager — COM accessibility)
+        ├─ Level 3: GUI          (coordinate-based input simulation)
+        └─ Level 4: VLM          (screenshot + vision-language model, last resort)
 ```
 
-响应示例：
-```json
-{
-  "success": true,
-  "server_id": "a1b2c3d4",
-  "name": "windows-local",
-  "status": "running"
-}
-```
-
-加载成功后，工具将自动通过 `scheduler.inject_mcp_tools()` 注入到 ReAct Agent
-可调用列表，工具名格式为 `mcp_{server_id}_{tool_name}`。
-
-### 验证工具已加载
-
-```bash
-curl http://127.0.0.1:8000/api/v1/mcp/{server_id}/tools
-```
+This is the **only** active Windows execution path.
 
 ---
 
-## 三、Windows AIP 设备注册
+## Quick Start
 
-让 Windows 主机作为设备加入 AIP 网络，与 Android 端一致被调度器识别：
+### 1. Start the Galaxy server
 
 ```bash
-# 在 Windows 上执行（需要安装 websockets）
+python main.py   # or: uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### 2. Register the Windows device
+
+```bash
 pip install websockets
 python windows_client/windows_aip_client.py --host 127.0.0.1 --port 8000
 ```
 
-参数说明：
+Optional parameters:
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--host` | `127.0.0.1` | 服务端地址 |
-| `--port` | `8000` | 服务端端口 |
-| `--device-id` | 自动生成 | 自定义设备 ID |
+| Parameter | Default | Description |
+|---|---|---|
+| `--host` | `127.0.0.1` | Server address |
+| `--port` | `8000` | Server port |
+| `--device-id` | auto-generated | Custom device ID |
 
-客户端启动后会：
-1. 连接 `ws://{host}:{port}/ws/device/{device_id}`
-2. 发送 `device_register`（AIP v3.0 握手）
-3. 发送 `capability_report`（上报 `supported_actions` 列表）
-4. 维持心跳（每 30 秒）
-5. 接收并执行服务端下发的任务命令
+The client will:
+1. Connect to `ws://{host}:{port}/ws/device/{device_id}`
+2. Send `device_register` (AIP v3.0 handshake)
+3. Send `capability_report` (supported actions list)
+4. Maintain heartbeat (every 30 s)
+5. Receive and execute incoming commands through `WindowsExecutionArbiter`
+
+### 3. Send a task
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/agent/autonomous \
+  -H "Content-Type: application/json" \
+  -d '{"instruction": "截取当前屏幕截图"}'
+```
 
 ---
 
-## 四、推荐工作流
+## Supported Actions
 
-```
-1. 启动服务端:       python main.py  (或 uvicorn ...)
-2. 加载 MCP Server:  POST /api/v1/mcp/load {"name":"windows-local","command":"python windows_client/windows_mcp_server.py"}
-3. 注册 Windows 设备: python windows_client/windows_aip_client.py
-4. 发起 Agent 任务:  POST /api/v1/agent/autonomous {"instruction":"截取当前屏幕截图"}
-```
+| Action | Description |
+|---|---|
+| `get_screen_state` | Get foreground window UI tree (accessible elements) |
+| `click` | Mouse click (coordinates) |
+| `type` | Type text |
+| `press_key` | Press a single key (enter / escape / f5 …) |
+| `press_keys` | Press a key combination (['ctrl','c'] …) |
+| `scroll` | Mouse wheel scroll |
+| `find_and_click` | Find UI element by name/AutomationId and click |
+| `find_and_type` | Find UI element and type text |
+| `screenshot` | Capture screen, return base64 PNG |
 
-ReAct Agent 会自动选择 `mcp_*_screenshot` 工具执行截屏并返回结果。
+---
+
+## Desktop Status Board
+
+The Windows desktop UI (`windows_client/ui/galaxy_client_ui.py`) is a
+**tri-state status mapping panel** — it displays the current `TriStatePhase`
+(`silent` / `liminal` / `manifest`) and device state.
+
+It is **not** a chat input surface.  Input to OpenClawd is handled exclusively
+through the AIP ingress pipeline.
+
+See [WINDOWS_STATUS_BOARD.md](WINDOWS_STATUS_BOARD.md) for more details.
+
+---
+
+## Deprecated Paths
+
+The following modules are **deprecated** and must not be used as active primary
+paths in new deployments:
+
+| Module | Status | Reason |
+|---|---|---|
+| `windows_client/windows_mcp_server.py` | Deprecated | MCP stdio path replaced by AIP → Arbiter |
+| `windows_client/ui_sidebar.py` | Deprecated | Old Tk chat sidebar; replaced by status board |
+| `windows_client/client.py` | Deprecated | Old bespoke Gateway/AIP handler |
+| `windows_client/desktop_automation.py` | Deprecated | pyautogui path; now a GUI fallback level inside Arbiter |
+
+All deprecated modules emit a `DeprecationWarning` when imported.

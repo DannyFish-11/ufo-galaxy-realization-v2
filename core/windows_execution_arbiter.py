@@ -474,6 +474,64 @@ class WindowsExecutionArbiter:
         """Return recent execution results (newest last)."""
         return self._history[-limit:]
 
+    def route_command(
+        self,
+        action: str,
+        params: Optional[Dict[str, Any]] = None,
+        device_id: str = "local",
+        instruction: str = "",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Synchronous wrapper around :meth:`execute` for use in non-async callers.
+
+        This is the **unified entry point** for the Windows AIP client and any
+        other synchronous caller that needs to dispatch a Windows action.  It
+        runs :meth:`execute` inside a new or existing event loop and returns
+        the plain dict representation of :class:`WinExecResult`.
+
+        Parameters
+        ----------
+        action:
+            Action name (e.g. ``"click"``, ``"launch_app"``, ``"screenshot"``).
+        params:
+            Action parameters dict.
+        device_id:
+            Target device identifier.
+        instruction:
+            Natural-language instruction forwarded to the VLM executor.
+        context:
+            Optional ambient context.
+
+        Returns
+        -------
+        dict
+            ``WinExecResult.to_dict()`` with at minimum ``success``,
+            ``final_level``, and ``result`` keys.
+        """
+        coro = self.execute(
+            action=action,
+            params=params,
+            device_id=device_id,
+            instruction=instruction,
+            context=context,
+        )
+        try:
+            loop = asyncio.get_running_loop()
+            # Already inside a running event loop — cannot call run_until_complete.
+            # Dispatch to a separate thread with its own event loop via asyncio.run().
+            # Note: this approach spawns a new thread and loop, so thread-local state
+            # or resources tied to the caller's loop are NOT shared.  For most Windows
+            # automation actions this is acceptable; callers that need tighter loop
+            # coupling should use `await execute(...)` directly.
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(asyncio.run, coro)
+                win_result = future.result(timeout=30)
+        except RuntimeError:
+            # No running event loop — use asyncio.run() which creates one.
+            win_result = asyncio.run(coro)
+        return win_result.to_dict()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

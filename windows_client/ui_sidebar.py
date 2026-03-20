@@ -1,3 +1,22 @@
+# DEPRECATED — Legacy Windows sidebar UI
+#
+# This module is no longer an active primary path.  The Windows desktop UI
+# is now positioned as a **status board** (tri-state mapping panel), NOT a
+# chat input surface.
+#
+# Active Windows execution path:
+#   windows_aip_client.py → WindowsExecutionArbiter → WindowsAutonomyManager
+#
+# See docs/WINDOWS_EXECUTION_PIPELINE.md and docs/WINDOWS_STATUS_BOARD.md.
+import warnings
+warnings.warn(
+    "ui_sidebar.py is deprecated and must not be used as a primary Windows "
+    "execution or chat-input path.  Use windows_aip_client.py instead.  "
+    "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
+    DeprecationWarning,
+    stacklevel=1,
+)
+
 import tkinter as tk
 from tkinter import scrolledtext
 import threading

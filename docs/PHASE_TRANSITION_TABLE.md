@@ -3,6 +3,22 @@
 > Allowed transitions for `ContinuumPhase`.  
 > Any transition not listed here is **forbidden** and must be rejected by the temporal engine.
 
+> **Note on `receding`:** This is an **internal return/rollback mechanism** only.
+> It is NOT a public primary state and must never be surfaced to external consumers.
+> External status projections map `receding → silent` via `ContinuumState.tri_state_phase`.
+
+---
+
+## Public Tri-State Model
+
+External consumers see only three states (`TriStatePhase`):
+
+| Public State | Internal Phase(s) |
+|---|---|
+| `silent` | `formless`, `receding` (collapsed) |
+| `liminal` | `liminal` |
+| `manifest` | `manifest` |
+
 ---
 
 ## Allowed Transitions

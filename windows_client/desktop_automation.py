@@ -1,3 +1,21 @@
+# DEPRECATED — Legacy pyautogui-based desktop automation
+#
+# This module is no longer an active primary path.  Coordinate-based GUI
+# automation is handled as a fallback level inside WindowsExecutionArbiter.
+#
+# Active Windows execution path:
+#   windows_aip_client.py → WindowsExecutionArbiter → WindowsAutonomyManager
+#
+# See docs/WINDOWS_EXECUTION_PIPELINE.md.
+import warnings
+warnings.warn(
+    "desktop_automation.py is deprecated.  GUI automation is now a fallback "
+    "level inside WindowsExecutionArbiter.  Use windows_aip_client.py.  "
+    "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
+    DeprecationWarning,
+    stacklevel=1,
+)
+
 import pyautogui
 import time
 import os

@@ -8,15 +8,43 @@
 
 ## 1. Purpose
 
-The State Continuum upgrades OpenClawd from a discrete request/response assistant into a **continuously-present state entity**.  The system is always in one of four phases; transitions are smooth, governed by hysteresis and dwell constraints, and fully reversible.
+The State Continuum upgrades OpenClawd from a discrete request/response assistant into a **continuously-present state entity**.  The system moves through a tri-state public model; transitions are smooth, governed by hysteresis and dwell constraints, and fully reversible.
 
 ---
 
-## 2. Phase Model
+## 2. Public Tri-State Model
+
+External consumers (APIs, desktop status boards, documentation) interact with
+**three** public-facing states:
+
+| Public State | Meaning | `presence_intensity` range |
+|---|---|---|
+| `silent` | Native multimodal ingress, minimal footprint | 0.0 – 0.2 |
+| `liminal` | Intent forming; single-device ↔ cross-device bridge | 0.2 – 0.7 |
+| `manifest` | Structure formed, action in progress | 0.7 – 1.0 |
+
+> **Note:** `receding` is an **internal return/rollback mechanism** and is NOT
+> a public primary state.  It is never surfaced to external consumers.  Use
+> `ContinuumState.tri_state_phase` (a `TriStatePhase` enum) for all outward
+> projections.
+
+### Why three states?
+
+`silent` is the native multimodal *intake* state — the system is always alive
+and receiving inputs (audio, visual, touch, text) even when outwardly quiet.
+`liminal` is the *bridging* state where single-device local execution can
+smoothly expand into cross-device coordination.  `manifest` is the *execution*
+state where all action paths (local UIA, system-API, cross-device) operate.
+
+---
+
+## 3. Internal Phase Lifecycle
+
+The continuum engine uses four internal phases for precise transition control:
 
 ```
          ┌─────────────────────────────────────────────────────────────┐
-         │                   State Continuum Lifecycle                  │
+         │               Internal State Continuum Lifecycle             │
          └─────────────────────────────────────────────────────────────┘
 
   ┌───────────┐   intent↑ / coherence↑       ┌───────────┐
@@ -28,25 +56,31 @@ The State Continuum upgrades OpenClawd from a discrete request/response assistan
                                   decision ≥ assist │
                                                     ▼
   ┌───────────┐   task done / value drop       ┌───────────┐
-  │  RECEDING │ ◀─────────────────────────────│  MANIFEST │
-  │ (fading)  │                                │  (active) │
+  │  RECEDING │◀──────────────────────────────│  MANIFEST │
+  │ (internal)│                                │  (active) │
   └───────────┘                                └───────────┘
         │        presence < floor
         └────────────────────────────────────▶ FORMLESS
 ```
 
-| Phase | Meaning | Default presence_intensity |
+| Internal Phase | Public Projection | Meaning |
 |---|---|---|
-| `formless` | Silent sensing, minimal footprint | 0.0 – 0.2 |
-| `liminal` | Intent forming, structure undecided | 0.2 – 0.7 |
-| `manifest` | Structure stable, action in progress | 0.7 – 1.0 |
-| `receding` | Expression dissolving | 0.7 → 0.0 |
+| `formless` | `silent` | Silent sensing, minimal footprint |
+| `liminal` | `liminal` | Intent forming, structure undecided |
+| `manifest` | `manifest` | Structure stable, action in progress |
+| `receding` | `silent` *(collapsed)* | **Internal only** — expression dissolving, returning to silence |
+
+**`receding` is never exposed externally.**  It collapses to `silent` when
+projected via `ContinuumState.tri_state_phase`.
 
 ---
 
-## 3. Wire Format — `state_continuum`
+## 4. Wire Format — `state_continuum`
 
 Appended to every OpenClawd response as an **optional, additive field**.  Existing response fields are unchanged.
+
+The `phase` field carries the **internal** `ContinuumPhase` value; external
+consumers SHOULD prefer `tri_state_phase` for display and routing decisions.
 
 ```json
 {
@@ -86,6 +120,17 @@ Appended to every OpenClawd response as an **optional, additive field**.  Existi
 }
 ```
 
+### Public projection
+
+Use `ContinuumState.tri_state_phase` to get a `TriStatePhase` value (`silent`,
+`liminal`, or `manifest`) suitable for status boards and external APIs:
+
+```python
+from core.continuum import TriStatePhase, continuum_to_tri_state
+
+pub = state.tri_state_phase   # TriStatePhase.SILENT | LIMINAL | MANIFEST
+```
+
 ### Degraded Fallback
 
 When the continuum engine encounters an unhandled error, it returns a safe `formless` state without interrupting the main response:
@@ -104,7 +149,7 @@ When the continuum engine encounters an unhandled error, it returns a safe `form
 
 ---
 
-## 4. Core Computational Pipeline
+## 5. Core Computational Pipeline
 
 Each evaluation cycle executes the following stages in order:
 
@@ -134,14 +179,15 @@ Expression Planner         ← map phase + decision → ExpressionState (non-UI)
       │
       ▼
 Return Engine              ← check exit conditions → trigger receding if needed
-      │
+      │                                              (internal only)
       ▼
 ContinuumState             ← assemble final output
+                             (.tri_state_phase = public projection)
 ```
 
 ---
 
-## 5. Decision Gate Formula
+## 6. Decision Gate Formula
 
 ```
 value             = intent_probability × context_utility × urgency
@@ -160,7 +206,7 @@ should_act_score  = value − interruption_cost − risk_cost
 
 ---
 
-## 6. Backward Compatibility
+## 7. Backward Compatibility
 
 - The `state_continuum` field is **additive**.  Clients that do not consume it are unaffected.
 - All existing request/response fields remain unchanged.
@@ -169,17 +215,18 @@ should_act_score  = value − interruption_cost − risk_cost
 
 ---
 
-## 7. Key Constraints
+## 8. Key Constraints
 
 1. **Not UI semantics** — `ExpressionState` fields describe presence energy, not widget properties.
 2. **No hard phase jumps** — `formless → manifest` is forbidden except in emergency mode (`allow_emergency_jump: true`).
-3. **Default silent** — initial state is always `formless`.
+3. **Default silent** — initial state is always `formless` (projects to `silent`).
 4. **Always reversible** — any path through the graph ends at `formless`.
 5. **Interrupt on value** — action only when `should_act_score` exceeds the threshold.
+6. **Three public states** — external code MUST use `TriStatePhase` / `tri_state_phase`; never depend on `receding` being visible externally.
 
 ---
 
-## 8. Configuration Reference
+## 9. Configuration Reference
 
 See [`core/continuum/config.py`](../core/continuum/config.py) and the
 [`ContinuumConfig`](../core/continuum/config.py) Pydantic model for all
@@ -198,16 +245,16 @@ Key defaults:
 | `hysteresis.manifest_exit` | 0.52 | |
 | `dwell.liminal_ms` | 800 | |
 | `dwell.manifest_ms` | 1200 | |
-| `dwell.receding_ms` | 600 | |
-| `timeout_receding_ms` | 5000 | Idle → receding |
+| `dwell.receding_ms` | 600 | Internal only |
+| `timeout_receding_ms` | 5000 | Idle → receding (internal) |
 
 ---
 
-## 9. Module Map
+## 10. Module Map
 
 | Module | Responsibility |
 |---|---|
-| `core/continuum/types.py` | Canonical enums and Pydantic models |
+| `core/continuum/types.py` | Canonical enums (`TriStatePhase`, `ContinuumPhase`) and Pydantic models |
 | `core/continuum/config.py` | Configuration structures and defaults |
 | `core/continuum/human_field.py` | Human field inference engine *(PR-3)* |
 | `core/continuum/state_fusion.py` | Multi-source state fusion *(PR-3)* |
@@ -215,9 +262,11 @@ Key defaults:
 | `core/continuum/liminal_field.py` | Liminal field computation *(PR-3)* |
 | `core/continuum/decision_gate.py` | Decision gate formula *(PR-4)* |
 | `core/continuum/expression_engine.py` | Expression planner *(PR-5)* |
-| `core/continuum/return_engine.py` | Return-to-formless logic *(PR-4)* |
+| `core/continuum/return_engine.py` | Return-to-formless logic *(PR-4)* — internal |
 | `core/continuum/orchestrator.py` | Single entry-point `run_cycle()` *(PR-5)* |
 
 ---
 
 *Protocol version 1 — subject to additive change only.*
+
+---
