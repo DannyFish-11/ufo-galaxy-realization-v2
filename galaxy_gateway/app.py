@@ -989,6 +989,10 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     device_id: Optional[str] = None
     context: Optional[dict] = None
+    # PR-1 EntryMode: caller-supplied execution mode override.
+    # When absent, the mode is auto-resolved from the cross-device switch and
+    # device registry.  One of: "local" | "cross_device" | "hybrid".
+    entry_mode: Optional[str] = None
 
 
 @app.post("/api/v1/chat")
@@ -1004,12 +1008,24 @@ async def chat_endpoint(request: ChatRequest, auth: dict = Depends(_require_auth
         logger.warning("OpenClawd 未初始化，chat 端点不可用")
         raise HTTPException(status_code=503, detail="AI service not available")
 
+    # ── PR-1 EntryMode: resolve execution mode for this request ──
+    _entry_mode = "local"
+    try:
+        from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
+        _entry_mode = _resolve_em(
+            explicit_entry_mode=request.entry_mode or None,
+            source="galaxy_gateway.app",
+        )
+    except Exception as _em_exc:
+        logger.debug("resolve_entry_mode failed (non-fatal): %s", _em_exc)
+
     try:
         result = await openclawd_instance.process(
             message=request.message,
             session_id=request.session_id or "gateway_default",
             device_id=request.device_id,
             context=request.context or {},
+            entry_mode=_entry_mode,
         )
         # 确保向后兼容字段存在（reply 是 response 的别名，供旧版客户端使用）
         if isinstance(result, dict) and "reply" not in result:

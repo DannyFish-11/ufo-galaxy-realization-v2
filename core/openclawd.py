@@ -838,6 +838,7 @@ class OpenClawd:
         required_capabilities: Optional[List[str]] = None,
         multimodal_context: Optional[Any] = None,
         runtime_session_id: Optional[str] = None,
+        entry_mode: Optional[str] = None,
     ) -> dict:
         """主入口 — PR86 架构：OpenClawd 是唯一入口，内嵌 AgentKernel
 
@@ -863,6 +864,12 @@ class OpenClawd:
                 When provided, it is used as ``trace_id`` so that all log
                 entries within this request can be correlated back to the
                 originating runtime session.
+            entry_mode: Execution mode stamped at the ingress layer
+                (``"local"`` | ``"cross_device"`` | ``"hybrid"``).  When
+                ``None`` or absent the mode defaults to ``"local"`` and
+                behaviour is fully backward-compatible.  The resolved value
+                is echoed in ``response.metadata.entry_mode`` so downstream
+                systems can observe which mode was chosen.
 
         Returns:
             统一响应 dict: {success, response, intent, metadata}
@@ -881,6 +888,15 @@ class OpenClawd:
                 "OpenClawd.process invoked via DesktopPresenceRuntime | runtime_session_id=%s",
                 runtime_session_id,
             )
+
+        # PR-1 EntryMode: normalise and log the resolved execution mode.
+        # When not provided, fall back to "local" to maintain backward compat.
+        _entry_mode: str = entry_mode or "local"
+        logger.debug(
+            "OpenClawd.process | entry_mode=%s trace_id=%s",
+            _entry_mode,
+            trace_id,
+        )
 
         # PR-1 Block-1: stamp entry metadata via EntrypointRouter for observability.
         # This is a best-effort, non-blocking call; failures never affect the request.
@@ -1147,6 +1163,7 @@ class OpenClawd:
                             "mode": mode,
                             "model": kernel_result.model,
                             "handler": "agent_kernel",
+                            "entry_mode": _entry_mode,
                             **provider_info,
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
@@ -1318,6 +1335,7 @@ class OpenClawd:
                     "confidence": parsed_intent.confidence if parsed_intent else 0.0,
                     "suggestions": parsed_intent.suggestions if parsed_intent else [],
                     "handler": handler_name,
+                    "entry_mode": _entry_mode,
                     **provider_info,
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,
@@ -1356,6 +1374,7 @@ class OpenClawd:
                     "session_id": session_id,
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
+                    "entry_mode": _entry_mode,
                     "error": str(e),
                 },
             }
