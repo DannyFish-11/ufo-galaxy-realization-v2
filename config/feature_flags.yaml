@@ -1,0 +1,101 @@
+# config/feature_flags.yaml
+# ==========================
+# Block-5: Feature Flags for Staged Rollout & Fast Rollback
+#
+# Each flag controls a specific Galaxy capability or Block-5 subsystem.
+# Setting a flag to `false` disables the feature system-wide without
+# requiring a code deploy.  Flags are loaded at startup and can be
+# hot-reloaded via the ReleaseGate API.
+#
+# Format:
+#   <flag_name>:
+#     enabled: <bool>
+#     rollout_percentage: <0-100>   # 0 = nobody, 100 = everyone
+#     description: <string>
+#     owner: <team or component>
+
+# ---------------------------------------------------------------------------
+# Block-5: Reliability & Governance
+# ---------------------------------------------------------------------------
+
+error_taxonomy_enforcement:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enforce unified error taxonomy (error_codes + error_mapper) on all paths"
+  owner: "block5/reliability"
+
+idempotency_guard:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable idempotency dedup store for CommandEnvelope processing"
+  owner: "block5/reliability"
+
+global_arbiter:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable GlobalArbiter for task scheduling priority/preemption/fairness"
+  owner: "block5/arbiter"
+
+chaos_testing:
+  enabled: false
+  rollout_percentage: 0
+  description: "Enable chaos testing harness (disconnect/latency/duplicate injection)"
+  owner: "block5/chaos"
+
+# ---------------------------------------------------------------------------
+# Block-4: Body Mesh / HITL
+# ---------------------------------------------------------------------------
+
+body_mesh:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable Body Mesh registry and device role allocation"
+  owner: "block4/mesh"
+
+hitl_policy:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable HITL policy gating for manifest transitions"
+  owner: "block4/hitl"
+
+# ---------------------------------------------------------------------------
+# Block-3: Cognitive Engine
+# ---------------------------------------------------------------------------
+
+cognitive_field_engine:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable continuous cognitive field engine"
+  owner: "block3/cognitive"
+
+memory_split:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable working/long-term memory split"
+  owner: "block3/cognitive"
+
+# ---------------------------------------------------------------------------
+# Block-2: Protocol / Execution
+# ---------------------------------------------------------------------------
+
+task_dag:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enable TaskGraph DAG-based execution (replaces linear fallback)"
+  owner: "block2/execution"
+
+capability_contract:
+  enabled: true
+  rollout_percentage: 100
+  description: "Enforce CapabilityContract validation on registration"
+  owner: "block2/protocol"
+
+# ---------------------------------------------------------------------------
+# Block-1: Architecture / Entrypoint
+# ---------------------------------------------------------------------------
+
+unified_entrypoint:
+  enabled: true
+  rollout_percentage: 100
+  description: "Route all requests through unified EntrypointRouter"
+  owner: "block1/architecture"

@@ -21,6 +21,16 @@ Galaxy 统一模块公开导出入口。
         CapabilityContract, CapabilitySource, CapabilityContractError,
         validate_capability_contract, is_valid_capability_contract,
         CapabilityResolver, get_capability_resolver, reset_capability_resolver,
+        # Block-5 additions
+        GalaxyErrorCode, ErrorPayload, Retryable, ErrorSeverity, ErrorDomain,
+        is_retryable, get_error_descriptor,
+        ErrorMapper,
+        IdempotencyStore, IdempotencyEntry, IdempotencyStatus,
+        DuplicateCommandError, IdempotencyConflictError,
+        get_idempotency_store, reset_idempotency_store,
+        check_idempotency, record_idempotency, make_payload_hash,
+        ReleaseGate, FeatureDisabledError, RolloutBlockedError,
+        get_release_gate, reset_release_gate,
     )
 """
 
@@ -108,6 +118,39 @@ from .capability_resolver import (
     get_capability_resolver,
     reset_capability_resolver,
 )
+# Block-5: error taxonomy
+from .error_codes import (
+    GalaxyErrorCode,
+    ErrorPayload,
+    Retryable,
+    ErrorSeverity,
+    ErrorDomain,
+    is_retryable,
+    get_descriptor as get_error_descriptor,
+)
+# Block-5: error mapper
+from .error_mapper import ErrorMapper
+# Block-5: idempotency
+from .idempotency import (
+    IdempotencyStore,
+    IdempotencyEntry,
+    IdempotencyStatus,
+    DuplicateCommandError,
+    IdempotencyConflictError,
+    get_idempotency_store,
+    reset_idempotency_store,
+    check_idempotency,
+    record_idempotency,
+    make_payload_hash,
+)
+# Block-5: release gate
+from .release_gate import (
+    ReleaseGate,
+    FeatureDisabledError,
+    RolloutBlockedError,
+    get_release_gate,
+    reset_release_gate,
+)
 
 __all__ = [
     # exceptions
@@ -185,4 +228,31 @@ __all__ = [
     "CapabilityResolver",
     "get_capability_resolver",
     "reset_capability_resolver",
+    # Block-5: error taxonomy
+    "GalaxyErrorCode",
+    "ErrorPayload",
+    "Retryable",
+    "ErrorSeverity",
+    "ErrorDomain",
+    "is_retryable",
+    "get_error_descriptor",
+    # Block-5: error mapper
+    "ErrorMapper",
+    # Block-5: idempotency
+    "IdempotencyStore",
+    "IdempotencyEntry",
+    "IdempotencyStatus",
+    "DuplicateCommandError",
+    "IdempotencyConflictError",
+    "get_idempotency_store",
+    "reset_idempotency_store",
+    "check_idempotency",
+    "record_idempotency",
+    "make_payload_hash",
+    # Block-5: release gate
+    "ReleaseGate",
+    "FeatureDisabledError",
+    "RolloutBlockedError",
+    "get_release_gate",
+    "reset_release_gate",
 ]
