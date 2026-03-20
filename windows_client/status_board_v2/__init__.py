@@ -12,6 +12,7 @@ visualises:
 - Model topology weights (top-N by weight)            → TopologySurface
 - Active devices and execution stage                  → DeviceSurface
 - Presence/coherence/tendency metrics                 → MetricsSurface
+- Liminal spatial projection dimensions               → LiminalSurface
 
 READ-ONLY GUARANTEE
 -------------------
@@ -27,10 +28,12 @@ All command execution remains in::
 
 from .app import main, run, StatusBoardV2App
 from .projection_reader import ProjectionReader
+from .liminal_surface import LiminalSurface
 
 __all__ = [
     "main",
     "run",
     "StatusBoardV2App",
     "ProjectionReader",
+    "LiminalSurface",
 ]
