@@ -78,6 +78,8 @@ from .state_schema import (
 # PR-2: command envelope
 from .command_envelope import (
     CommandEnvelope,
+    CommandVerb,
+    CancelReason,
     ResultEnvelope,
     ENVELOPE_VERSION,
     EnvelopeValidationError,
@@ -85,6 +87,13 @@ from .command_envelope import (
     validate_result_envelope,
     log_command_envelope,
     log_result_envelope,
+)
+# PR-4: device health scorer
+from .device_health import (
+    DeviceHealthScorer,
+    HealthScore,
+    get_device_health_scorer,
+    reset_device_health_scorer,
 )
 # PR-2: capability contract + resolver
 from .capability_contract import (
@@ -153,6 +162,8 @@ __all__ = [
     "ExecutionState",
     # PR-2: command envelope
     "CommandEnvelope",
+    "CommandVerb",
+    "CancelReason",
     "ResultEnvelope",
     "ENVELOPE_VERSION",
     "EnvelopeValidationError",
@@ -160,6 +171,11 @@ __all__ = [
     "validate_result_envelope",
     "log_command_envelope",
     "log_result_envelope",
+    # PR-4: device health
+    "DeviceHealthScorer",
+    "HealthScore",
+    "get_device_health_scorer",
+    "reset_device_health_scorer",
     # PR-2: capability contract + resolver
     "CapabilityContract",
     "CapabilitySource",

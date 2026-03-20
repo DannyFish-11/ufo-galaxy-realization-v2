@@ -59,11 +59,13 @@ logger = logging.getLogger("Galaxy.TaskGraph")
 
 class NodeStatus(str, Enum):
     """Lifecycle states for a single DAG node."""
-    PENDING = "pending"
-    RUNNING = "running"
-    DONE = "done"
-    FAILED = "failed"
-    SKIPPED = "skipped"
+    PENDING    = "pending"
+    RUNNING    = "running"
+    DONE       = "done"
+    FAILED     = "failed"
+    SKIPPED    = "skipped"
+    CANCELLED  = "cancelled"   # Block-4: cancel signal received
+    INTERRUPTED = "interrupted"  # Block-4: immediate abort signal
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +216,10 @@ class TaskGraph:
         # Adjacency: predecessor_id → list of (successor_id, condition)
         self._successors: Dict[str, List[TaskEdge]] = defaultdict(list)
 
+        # Block-4: cancellation flag
+        self._cancel_requested: bool = False
+        self._interrupt_requested: bool = False
+
     # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------
@@ -286,6 +292,69 @@ class TaskGraph:
         edge = TaskEdge(from_node=from_node_id, to_node=to_node_id, condition=condition)
         self._edges.append(edge)
         return edge
+
+    # ------------------------------------------------------------------
+    # Block-4: Cancellation / interrupt
+    # ------------------------------------------------------------------
+
+    def cancel(self, reason: str = "") -> None:
+        """Request graceful cancellation of the running graph.
+
+        After this is called, no new nodes will be started and any nodes
+        currently pending will be marked :attr:`NodeStatus.CANCELLED`.
+        Already-running nodes are allowed to finish naturally.
+
+        Args:
+            reason:  Human-readable reason for cancellation.
+        """
+        self._cancel_requested = True
+        logger.info(
+            "TaskGraph '%s' | cancel requested reason=%r trace_id=%s",
+            self.graph_id,
+            reason,
+            self.trace_id,
+        )
+        self._emit_cancel_event("cancel", reason)
+
+    def interrupt(self, reason: str = "") -> None:
+        """Request immediate interruption of the running graph.
+
+        After this is called all pending nodes are marked
+        :attr:`NodeStatus.INTERRUPTED` and execution halts at the next
+        scheduling opportunity.
+
+        Args:
+            reason:  Human-readable reason for interruption.
+        """
+        self._interrupt_requested = True
+        self._cancel_requested = True  # also stop new nodes
+        logger.info(
+            "TaskGraph '%s' | interrupt requested reason=%r trace_id=%s",
+            self.graph_id,
+            reason,
+            self.trace_id,
+        )
+        self._emit_cancel_event("interrupt", reason)
+
+    def _emit_cancel_event(self, verb: str, reason: str) -> None:
+        """Best-effort StateEventBus emission for cancel/interrupt."""
+        try:
+            from core.state_event_bus import get_state_event_bus, StateEventType
+            bus = get_state_event_bus()
+            event_type = getattr(StateEventType, "TASK_FAILED", StateEventType.GENERIC)
+            bus.publish(
+                event_type,
+                source="task_graph",
+                payload={
+                    "event": f"task_graph.{verb}",
+                    "graph_id": self.graph_id,
+                    "reason": reason,
+                },
+                trace_id=self.trace_id,
+                runtime_session_id=self.runtime_session_id,
+            )
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Topological utilities (internal)
@@ -544,12 +613,38 @@ class TaskGraph:
 
         for layer_idx, layer_node_ids in enumerate(layers):
             if halt:
-                # Mark remaining nodes as skipped
+                # Mark remaining nodes as skipped / cancelled
                 for nid in layer_node_ids:
                     node = self._nodes[nid]
                     if node.status == NodeStatus.PENDING:
-                        node.status = NodeStatus.SKIPPED
-                        self._emit_node_event(node, NodeStatus.SKIPPED)
+                        if self._cancel_requested:
+                            new_status = (
+                                NodeStatus.INTERRUPTED
+                                if self._interrupt_requested
+                                else NodeStatus.CANCELLED
+                            )
+                            node.status = new_status
+                            node.error = "interrupted by graph.interrupt()" if self._interrupt_requested else "cancelled by graph.cancel()"
+                            self._emit_node_event(node, new_status)
+                        else:
+                            node.status = NodeStatus.SKIPPED
+                            self._emit_node_event(node, NodeStatus.SKIPPED)
+                continue
+
+            # Block-4: check cancel/interrupt at each layer boundary
+            if self._cancel_requested:
+                cancel_status = (
+                    NodeStatus.INTERRUPTED
+                    if self._interrupt_requested
+                    else NodeStatus.CANCELLED
+                )
+                for nid in layer_node_ids:
+                    node = self._nodes[nid]
+                    if node.status == NodeStatus.PENDING:
+                        node.status = cancel_status
+                        node.error = f"graph {cancel_status.value}"
+                        self._emit_node_event(node, cancel_status)
+                halt = True
                 continue
 
             # Determine which nodes in this layer can run vs. must be skipped
@@ -620,7 +715,7 @@ class TaskGraph:
                 result.done_nodes += 1
             elif node.status == NodeStatus.FAILED:
                 result.failed_nodes += 1
-            elif node.status == NodeStatus.SKIPPED:
+            elif node.status in (NodeStatus.SKIPPED, NodeStatus.CANCELLED, NodeStatus.INTERRUPTED):
                 result.skipped_nodes += 1
 
         result.success = result.failed_nodes == 0

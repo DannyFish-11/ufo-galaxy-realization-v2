@@ -315,7 +315,12 @@ class UnifiedDeviceManager:
         )
 
     def heartbeat(self, device_id: str) -> None:
-        """记录设备心跳；若设备处于离线/错误态则自动恢复为 ONLINE。"""
+        """记录设备心跳；若设备处于离线/错误态则自动恢复为 ONLINE。
+
+        Block-4 addition: also records a heartbeat sample in
+        :class:`~core.unified.device_health.DeviceHealthScorer` for health
+        scoring purposes.
+        """
         device = self._devices.get(device_id)
         if device is not None:
             now = datetime.now(timezone.utc)
@@ -334,6 +339,13 @@ class UnifiedDeviceManager:
                         "state_version": device.state_version,
                     },
                 )
+
+        # Block-4: feed heartbeat into health scorer
+        try:
+            from core.unified.device_health import get_device_health_scorer
+            get_device_health_scorer().heartbeat(device_id)
+        except Exception:
+            pass
 
     async def check_heartbeat_timeouts(
         self,
@@ -416,6 +428,39 @@ class UnifiedDeviceManager:
             UnifiedDeviceStatus.BUSY.value, UnifiedDeviceStatus.BUSY,
         }
         return [d for d in self._devices.values() if d.status in online_values]
+
+    def get_device_health(self, device_id: str) -> Optional[Any]:
+        """Return the :class:`~core.unified.device_health.HealthScore` for *device_id*.
+
+        Returns ``None`` if the health scorer is unavailable.
+
+        Block-4 addition.
+        """
+        try:
+            from core.unified.device_health import get_device_health_scorer
+            return get_device_health_scorer().score(device_id)
+        except Exception:
+            return None
+
+    def get_online_devices_by_health(self) -> List[UnifiedDevice]:
+        """Return online devices ordered by descending health score.
+
+        Devices without health data are placed at the end of the list with a
+        default score of 1.0 (optimistic).
+
+        Block-4 addition.
+        """
+        devices = self.get_online_devices()
+        try:
+            from core.unified.device_health import get_device_health_scorer
+            scorer = get_device_health_scorer()
+            return sorted(
+                devices,
+                key=lambda d: scorer.score(d.device_id).total_score,
+                reverse=True,
+            )
+        except Exception:
+            return devices
 
     def get_autonomous_devices(self) -> List[UnifiedDevice]:
         """返回声明了高层自治能力的在线设备（metadata.goal_execution_enabled=True）。"""

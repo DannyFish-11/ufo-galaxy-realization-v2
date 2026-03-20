@@ -52,7 +52,8 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Unified.CommandEnvelope")
 
@@ -62,6 +63,40 @@ logger = logging.getLogger("Galaxy.Unified.CommandEnvelope")
 
 ENVELOPE_VERSION = "3.0"
 """Current canonical protocol version carried in all envelopes."""
+
+
+# ---------------------------------------------------------------------------
+# Command verbs (Block-4 — cancel / interrupt)
+# ---------------------------------------------------------------------------
+
+
+class CommandVerb(str, Enum):
+    """Canonical command verbs that qualify the *intent* of an envelope.
+
+    These verbs allow any component in the chain to detect and propagate
+    cancellation/interrupt signals without inspecting the payload.
+
+    :attr:`EXECUTE`   — normal execution request (default).
+    :attr:`CANCEL`    — request graceful cancellation of a running task.
+    :attr:`INTERRUPT` — request immediate interruption (best-effort abort).
+    :attr:`QUERY`     — read-only status query; no side effects.
+    """
+
+    EXECUTE   = "execute"
+    CANCEL    = "cancel"
+    INTERRUPT = "interrupt"
+    QUERY     = "query"
+
+
+class CancelReason(str, Enum):
+    """Standardised reasons for a cancel/interrupt verb."""
+
+    USER_REQUEST     = "user_request"
+    TIMEOUT          = "timeout"
+    HEALTH_DEGRADED  = "health_degraded"
+    POLICY_REJECTED  = "policy_rejected"
+    SUPERSEDED       = "superseded"
+    UNKNOWN          = "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +137,20 @@ class CommandEnvelope:
     version: str = ENVELOPE_VERSION
     """Protocol version string — MUST match :data:`ENVELOPE_VERSION`."""
 
+    # ── Verb (Block-4: cancel / interrupt) ──────────────────────────────────
+    verb: CommandVerb = CommandVerb.EXECUTE
+    """Command intent verb.  Use :attr:`CommandVerb.CANCEL` or
+    :attr:`CommandVerb.INTERRUPT` to signal cancellation/interrupt to all
+    components that process this envelope."""
+
+    cancel_reason: Optional[CancelReason] = None
+    """Reason for cancellation/interrupt — populated when
+    ``verb`` is :attr:`CommandVerb.CANCEL` or :attr:`CommandVerb.INTERRUPT`."""
+
+    cancel_target_task_ids: List[str] = field(default_factory=list)
+    """Explicit list of task_ids to cancel.  Empty means cancel the task
+    identified by :attr:`task_id`."""
+
     # ── Idempotency ─────────────────────────────────────────────────────────
     idempotency_key: Optional[str] = None
     """Client-supplied dedup key.  Auto-generated from *task_id* when absent.
@@ -137,6 +186,13 @@ class CommandEnvelope:
             "task_id": self.task_id,
             "device_id": self.device_id,
             "version": self.version,
+            "verb": self.verb.value if isinstance(self.verb, CommandVerb) else self.verb,
+            "cancel_reason": (
+                self.cancel_reason.value
+                if isinstance(self.cancel_reason, CancelReason)
+                else self.cancel_reason
+            ),
+            "cancel_target_task_ids": list(self.cancel_target_task_ids),
             "idempotency_key": self.idempotency_key,
             "payload": dict(self.payload),
             "response_metadata": dict(self.response_metadata),
@@ -153,7 +209,8 @@ class CommandEnvelope:
         """
         known = {
             "trace_id", "runtime_session_id", "task_id", "device_id",
-            "version", "idempotency_key", "payload", "response_metadata",
+            "version", "verb", "cancel_reason", "cancel_target_task_ids",
+            "idempotency_key", "payload", "response_metadata",
             "created_at", "extra",
         }
         kwargs: Dict[str, Any] = {}
@@ -165,6 +222,17 @@ class CommandEnvelope:
                 extra[k] = v
         if extra:
             kwargs.setdefault("extra", {}).update(extra)
+        # Coerce string values back to enums
+        if "verb" in kwargs and isinstance(kwargs["verb"], str):
+            try:
+                kwargs["verb"] = CommandVerb(kwargs["verb"])
+            except ValueError:
+                kwargs.pop("verb")
+        if "cancel_reason" in kwargs and isinstance(kwargs["cancel_reason"], str):
+            try:
+                kwargs["cancel_reason"] = CancelReason(kwargs["cancel_reason"])
+            except ValueError:
+                kwargs.pop("cancel_reason")
         return cls(**kwargs)
 
     @classmethod
@@ -210,6 +278,76 @@ class CommandEnvelope:
             payload=dict(msg.payload) if isinstance(getattr(msg, "payload", None), dict) else {},
             extra={"message_id": getattr(msg, "message_id", ""), "type": str(getattr(msg, "type", ""))},
         )
+
+    # ── Cancel / interrupt factories (Block-4) ──────────────────────────────
+
+    @classmethod
+    def make_cancel(
+        cls,
+        task_id: str,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+        device_id: str = "",
+        cancel_reason: CancelReason = CancelReason.USER_REQUEST,
+        cancel_target_task_ids: Optional[List[str]] = None,
+    ) -> "CommandEnvelope":
+        """Create a CANCEL envelope targeting *task_id*.
+
+        Args:
+            task_id:                 Task to cancel.
+            trace_id:                Trace identifier (generated if empty).
+            runtime_session_id:      Session identifier (generated if empty).
+            device_id:               Target device (empty = broadcast).
+            cancel_reason:           Reason for cancellation.
+            cancel_target_task_ids:  Additional task IDs to cancel together.
+
+        Returns:
+            A :class:`CommandEnvelope` with ``verb=CANCEL``.
+        """
+        return cls(
+            trace_id=trace_id or f"trace_{uuid.uuid4().hex[:12]}",
+            runtime_session_id=runtime_session_id or f"session_{uuid.uuid4().hex[:12]}",
+            task_id=task_id,
+            device_id=device_id,
+            verb=CommandVerb.CANCEL,
+            cancel_reason=cancel_reason,
+            cancel_target_task_ids=list(cancel_target_task_ids or [task_id]),
+        )
+
+    @classmethod
+    def make_interrupt(
+        cls,
+        task_id: str,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+        device_id: str = "",
+        cancel_reason: CancelReason = CancelReason.USER_REQUEST,
+    ) -> "CommandEnvelope":
+        """Create an INTERRUPT envelope targeting *task_id*.
+
+        Args:
+            task_id:             Task to interrupt.
+            trace_id:            Trace identifier (generated if empty).
+            runtime_session_id:  Session identifier (generated if empty).
+            device_id:           Target device (empty = broadcast).
+            cancel_reason:       Reason for interruption.
+
+        Returns:
+            A :class:`CommandEnvelope` with ``verb=INTERRUPT``.
+        """
+        return cls(
+            trace_id=trace_id or f"trace_{uuid.uuid4().hex[:12]}",
+            runtime_session_id=runtime_session_id or f"session_{uuid.uuid4().hex[:12]}",
+            task_id=task_id,
+            device_id=device_id,
+            verb=CommandVerb.INTERRUPT,
+            cancel_reason=cancel_reason,
+            cancel_target_task_ids=[task_id],
+        )
+
+    def is_cancel(self) -> bool:
+        """Return ``True`` if this envelope carries a cancel or interrupt verb."""
+        return self.verb in (CommandVerb.CANCEL, CommandVerb.INTERRUPT)
 
 
 # ---------------------------------------------------------------------------
