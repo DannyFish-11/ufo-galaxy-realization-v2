@@ -32,7 +32,8 @@ Quick start::
     })
     entry = bridge.bridge_provider(snapshot)
 
-See ``docs/MODEL_TOPOLOGY_BRIDGE.md`` for the full design rationale.
+See ``docs/MODEL_TOPOLOGY_BRIDGE.md`` for the bridge design rationale.
+See ``docs/MODEL_SUPPLY_TOPOLOGY.md`` for the topology core design.
 """
 
 from .config_bridge import ConfigBridge
@@ -57,6 +58,13 @@ from .topology_types import (
     TopologyRole,
 )
 
+# --- Topology core (PR-2) ---
+from .model_node import EdgeKind, LocalityHint, ModelNode, node_from_entry
+from .model_supply_graph import GraphEdge, ModelSupplyGraph
+from .model_weight_field import ModelWeightField, apply_weight_fields, compute_weight_field
+from .routing_policy import PolicyConfig
+from .topology_router import TopologyRoutePlan, TopologyRouter
+
 __all__ = [
     # Bridge
     "ConfigBridge",
@@ -80,4 +88,17 @@ __all__ = [
     "ProviderIdentity",
     "ScoringProfile",
     "TopologyRole",
+    # Topology core (PR-2)
+    "EdgeKind",
+    "GraphEdge",
+    "LocalityHint",
+    "ModelNode",
+    "ModelSupplyGraph",
+    "ModelWeightField",
+    "PolicyConfig",
+    "TopologyRoutePlan",
+    "TopologyRouter",
+    "apply_weight_fields",
+    "compute_weight_field",
+    "node_from_entry",
 ]
