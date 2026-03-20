@@ -95,6 +95,7 @@ class CapabilityRegistry:
             return
         self._initialized = True
         self._items: Dict[str, CapabilityItem] = {}
+        self._lock = threading.Lock()  # used by NodeFabricRegistry.expire_stale_capabilities
         self._refresh_lock: Optional[asyncio.Lock] = None  # created lazily in async context
         self._last_refresh: float = 0.0
         self._refresh_interval: float = 120.0  # 2 分钟自动刷新
@@ -280,6 +281,22 @@ class CapabilityRegistry:
         removed = self._items.pop(name, None)
         if removed:
             logger.debug("能力已从总线移除: %s", name)
+
+    def inject_item(self, item: CapabilityItem) -> None:
+        """
+        直接注入任意 CapabilityItem（Block-6：Node Fabric 能力同步入口）。
+
+        与 inject_mcp_tool / inject_skill 不同，本方法接受已构造好的
+        CapabilityItem，适用于 NodeFabricRegistry → CapabilityRegistry 同步。
+
+        通过 unified contract 校验后写入；校验失败则记录错误并跳过。
+        """
+        if not item.name:
+            return
+        if not self._validate_via_contract(item):
+            return
+        self._items[item.name] = item
+        logger.debug("CapabilityItem injected: %s (source=%s)", item.name, item.source)
 
     # ──────────────────────────────────────────────────────────────────
     # 刷新逻辑

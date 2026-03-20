@@ -113,8 +113,8 @@ class DeviceRegistrationError(DeviceManagerError):
 class ConfigError(GalaxyError):
     """配置管理器通用异常"""
 
-    def __init__(self, message: str, **extra: object) -> None:
-        super().__init__(message, code="CONFIG_ERROR", **extra)
+    def __init__(self, message: str, code: str = "CONFIG_ERROR", **extra: object) -> None:
+        super().__init__(message, code=code, **extra)
 
 
 class ConfigKeyNotFoundError(ConfigError):
@@ -132,8 +132,8 @@ class ConfigKeyNotFoundError(ConfigError):
 class LLMRouterError(GalaxyError):
     """LLM 路由器通用异常"""
 
-    def __init__(self, message: str, **extra: object) -> None:
-        super().__init__(message, code="LLM_ROUTER_ERROR", **extra)
+    def __init__(self, message: str, code: str = "LLM_ROUTER_ERROR", **extra: object) -> None:
+        super().__init__(message, code=code, **extra)
 
 
 class NoAvailableProviderError(LLMRouterError):
