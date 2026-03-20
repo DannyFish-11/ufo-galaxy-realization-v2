@@ -243,6 +243,21 @@ class DesktopPresenceRuntime:
         """
         rsession = self._create_session(source)
 
+        # Block-3: _cognitive_snap will hold the StateInterpreter result and is attached
+        # to the response as an additive observability field.  Declared here (before the
+        # try/finally block) so it's accessible in both the success and error paths.
+        _cognitive_snap: Optional[Dict[str, Any]] = None
+
+        # Notify the continuous cognitive field engine that a request has arrived.
+        # Best-effort — failures must never block the request path.
+        try:
+            from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+            get_cognitive_field_engine().notify_request(
+                trace_id=rsession.runtime_session_id,
+            )
+        except Exception as _cfe_err:
+            logger.debug("cognitive_field_engine.notify_request failed (non-fatal): %s", _cfe_err)
+
         # SILENT → LIMINAL: request received, starting evaluation
         rsession.advance(TriState.LIMINAL)
         self._log_request_start(rsession, message, session_id, device_id)
@@ -284,11 +299,33 @@ class DesktopPresenceRuntime:
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
 
+            # Block-3: Notify decay controller that execution completed so the
+            # cognitive field begins its manifest→liminal→passive reabsorption.
+            try:
+                from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+                get_cognitive_field_engine().notify_task_complete(
+                    trace_id=rsession.runtime_session_id,
+                )
+            except Exception as _decay_err:
+                logger.debug("cognitive decay trigger failed (non-fatal): %s", _decay_err)
+
+            # Block-3: Derive the interpreted tri-state from the continuous field.
+            # This is additive — the existing ``rsession.tristate`` is unchanged.
+            try:
+                from core.cognitive.state_interpreter import get_state_interpreter
+                _interp = get_state_interpreter().interpret()
+                _cognitive_snap = _interp.to_dict()
+            except Exception as _interp_err:
+                logger.debug("state_interpreter.interpret failed (non-fatal): %s", _interp_err)
+
         # Augment result with runtime observability fields
         result.setdefault("runtime_session_id", rsession.runtime_session_id)
         result.setdefault("trace_id", rsession.runtime_session_id)
         result["tristate"] = rsession.tristate.value
         result["entrypoint_source"] = source
+        # Block-3: attach the continuous cognitive state snapshot (additive, optional).
+        if _cognitive_snap is not None:
+            result["cognitive_state"] = _cognitive_snap
         return result
 
     # ------------------------------------------------------------------

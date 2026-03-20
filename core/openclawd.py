@@ -2971,10 +2971,47 @@ class OpenClawd:
                 },
             ]
 
+            # Block-3: Inject long-term memory preferences as an additive system
+            # context message.  Best-effort — failures must not block the chat path.
+            try:
+                from core.cognitive.long_term_memory import get_long_term_memory
+                _ltm = get_long_term_memory()
+                _prefs = _ltm.retrieve_all(namespace="preferences")
+                if _prefs:
+                    _pref_lines = [
+                        f"- {e['key']}: {e['value']}" for e in _prefs[:10]
+                    ]
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "[Long-term memory — user preferences]\n"
+                            + "\n".join(_pref_lines)
+                        ),
+                    })
+            except Exception as _ltm_err:
+                logger.debug("LongTermMemory inject failed (non-fatal): %s", _ltm_err)
+
+            # Block-3: Use working memory entries when available; fall back to
+            # _session_memory so all existing behaviour is preserved.
+            _wm_entries = []
+            try:
+                from core.cognitive.working_memory import get_working_memory
+                _wm_entries = get_working_memory().get(
+                    session_id=session_id, last_n=10
+                )
+            except Exception as _wm_err:
+                logger.debug("WorkingMemory.get failed (non-fatal): %s", _wm_err)
+
             # 添加会话历史
             session_history = self._session_memory.get(session_id, [])
-            for turn in session_history[-10:]:
-                messages.append(turn)
+            # Block-3: prefer working memory entries; fall back to session_memory preserving
+            # original dict structure for full backward compatibility.
+            if _wm_entries:
+                for turn in _wm_entries:
+                    messages.append({"role": turn["role"], "content": turn["content"]})
+            else:
+                for turn in session_history[-10:]:
+                    messages.append(turn)
 
             messages.append({"role": "user", "content": message})
 
@@ -3609,6 +3646,19 @@ class OpenClawd:
 
             memory = get_conversation_memory()
             await memory.add_turn(session_id, role, content)
+        except Exception:
+            pass
+
+        # Block-3: mirror the turn into working memory for continuous cognition.
+        try:
+            from core.cognitive.working_memory import get_working_memory
+            trace_id = getattr(self, "_current_trace_id", "") or ""
+            get_working_memory().add(
+                session_id=session_id,
+                role=role,
+                content=content,
+                trace_id=trace_id,
+            )
         except Exception:
             pass
 
