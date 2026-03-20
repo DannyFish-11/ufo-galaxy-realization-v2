@@ -39,5 +39,23 @@
   "enable_state_event_bus": true,
   "state_event_bus_log_all": false,
   "enable_windows_system_api": true,
-  "windows_system_api_log_all": false
+  "windows_system_api_log_all": false,
+
+  "_comment_block3_cognitive": "Block-3: Continuous Cognitive Engine flags",
+  "enable_cognitive_field_engine": true,
+  "cognitive_field_tick_interval_s": 5.0,
+  "cognitive_manifest_threshold": 0.65,
+  "cognitive_passive_threshold": 0.20,
+  "cognitive_uncertainty_cap": 0.70,
+  "cognitive_liminal_min_dwell_s": 1.5,
+  "cognitive_liminal_volatility_window": 5,
+  "cognitive_liminal_volatility_penalty": 0.10,
+  "cognitive_decay_rate": 0.10,
+  "cognitive_decay_step_interval_s": 0.5,
+  "cognitive_decay_steps": 8,
+
+  "_comment_block3_memory": "Block-3: Working vs Long-term Memory split flags",
+  "enable_cognitive_memory_split": true,
+  "working_memory_capacity": 20,
+  "long_term_memory_max_entries": 500
 }
