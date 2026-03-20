@@ -22,6 +22,8 @@ Test groups
   N) DecisionExecutor.execute — execute: allowlisted target → launched.
   O) DecisionExecutor.execute — internal error is swallowed, returns ExecutionResult.
   P) DecisionExecutor._get_policy caches the PolicyGate.
+  Q) DecisionExecutor.execute — entry_mode gating (PR-2).
+  R) _extract_trace_id helper.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from core.execution.decision_executor import (
     PolicyGate,
     _extract_action_level,
     _extract_execution_target,
+    _extract_trace_id,
 )
 from core.system_api.platform_api import AppLaunchResult, NoOpSystemAPI
 
@@ -393,3 +396,147 @@ class TestPolicyCache:
             pg1 = executor._get_policy()
             pg2 = executor._get_policy()
             assert pg1 is pg2
+
+
+# ---------------------------------------------------------------------------
+# Q) entry_mode gating (PR-2)
+# ---------------------------------------------------------------------------
+
+class TestEntryModeGating:
+    """Validate mode-aware execution gating introduced in PR-2."""
+
+    def test_local_mode_allows_execution_when_allowlist_permits(self):
+        """entry_mode=local: execution proceeds when the allowlist passes."""
+        api = MagicMock()
+        api.launch_app.return_value = AppLaunchResult(success=True, pid=7)
+        executor = _make_executor(
+            enabled=True,
+            allowlist=["notepad.exe"],
+            system_api=api,
+        )
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        result = executor.execute(state, entry_mode="local")
+        assert result.action_taken == "launch_app"
+        assert result.success
+        api.launch_app.assert_called_once_with("notepad.exe")
+
+    def test_cross_device_mode_blocks_execution_by_default(self):
+        """entry_mode=cross_device: execution is skipped even when allowlist would permit."""
+        api = MagicMock()
+        api.launch_app.return_value = AppLaunchResult(success=True, pid=8)
+        executor = _make_executor(
+            enabled=True,
+            allowlist=["notepad.exe"],
+            system_api=api,
+        )
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        result = executor.execute(state, entry_mode="cross_device")
+        assert result.action_taken == "noop"
+        assert result.success
+        assert result.skipped_reason == "entry_mode=cross_device"
+        api.launch_app.assert_not_called()
+
+    def test_cross_device_also_blocks_assist(self):
+        """entry_mode=cross_device blocks assist actions too."""
+        api = MagicMock()
+        executor = _make_executor(
+            enabled=True,
+            allowlist=["notepad.exe"],
+            assist_app="notepad.exe",
+            system_api=api,
+        )
+        state = _make_continuum(action_level="assist")
+        result = executor.execute(state, entry_mode="cross_device")
+        assert result.skipped_reason == "entry_mode=cross_device"
+        api.focus_window.assert_not_called()
+
+    def test_missing_entry_mode_preserves_existing_behavior(self):
+        """entry_mode=None: config-based policy gates remain authoritative."""
+        executor = _make_executor(enabled=False)
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        result = executor.execute(state)  # no entry_mode kwarg
+        assert result.skipped_reason == "enable_system_actions=false"
+
+    def test_missing_entry_mode_allows_when_policy_enabled(self):
+        """entry_mode=None with policy enabled: execution proceeds normally."""
+        api = MagicMock()
+        api.launch_app.return_value = AppLaunchResult(success=True, pid=9)
+        executor = _make_executor(
+            enabled=True,
+            allowlist=["notepad.exe"],
+            system_api=api,
+        )
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        result = executor.execute(state)  # no entry_mode kwarg
+        assert result.action_taken == "launch_app"
+        assert result.success
+
+    def test_cross_device_with_force_local_execution_overrides_block(self):
+        """entry_mode=cross_device + force_local_execution=True: execution proceeds."""
+        api = MagicMock()
+        api.launch_app.return_value = AppLaunchResult(success=True, pid=10)
+        executor = _make_executor(
+            enabled=True,
+            allowlist=["notepad.exe"],
+            system_api=api,
+        )
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        result = executor.execute(state, entry_mode="cross_device", force_local_execution=True)
+        assert result.action_taken == "launch_app"
+        assert result.success
+        api.launch_app.assert_called_once_with("notepad.exe")
+
+    def test_cross_device_skipped_log_contains_structured_fields(self, caplog):
+        """Verify structured log is emitted when cross_device blocks execution."""
+        import logging
+        executor = _make_executor(enabled=True, allowlist=["notepad.exe"])
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        state["metadata"]["trace_id"] = "trace-abc-123"
+        with caplog.at_level(logging.INFO, logger="core.execution.decision_executor"):
+            executor.execute(state, entry_mode="cross_device")
+        assert any(
+            "entry_mode=cross_device" in record.message
+            and "trace-abc-123" in record.message
+            and "skipped_reason=entry_mode=cross_device" in record.message
+            for record in caplog.records
+        ), f"Expected structured log not found; records: {[r.message for r in caplog.records]}"
+
+    def test_hybrid_mode_does_not_block_execution(self):
+        """entry_mode=hybrid falls through to config-based policy (not blocked)."""
+        api = MagicMock()
+        api.launch_app.return_value = AppLaunchResult(success=True, pid=11)
+        executor = _make_executor(
+            enabled=True,
+            allowlist=["notepad.exe"],
+            system_api=api,
+        )
+        state = _make_continuum(action_level="execute", execution_target="notepad.exe")
+        result = executor.execute(state, entry_mode="hybrid")
+        assert result.action_taken == "launch_app"
+        assert result.success
+
+
+# ---------------------------------------------------------------------------
+# R) _extract_trace_id helper
+# ---------------------------------------------------------------------------
+
+class TestExtractTraceId:
+    def test_none_returns_empty(self):
+        assert _extract_trace_id(None) == ""
+
+    def test_empty_dict_returns_empty(self):
+        assert _extract_trace_id({}) == ""
+
+    def test_missing_metadata_returns_empty(self):
+        assert _extract_trace_id({"phase": "manifest"}) == ""
+
+    def test_trace_id_present(self):
+        state = {"metadata": {"trace_id": "abc-123"}}
+        assert _extract_trace_id(state) == "abc-123"
+
+    def test_none_trace_id_returns_empty(self):
+        state = {"metadata": {"trace_id": None}}
+        assert _extract_trace_id(state) == ""
+
+    def test_non_dict_returns_empty(self):
+        assert _extract_trace_id("not a dict") == ""  # type: ignore[arg-type]
