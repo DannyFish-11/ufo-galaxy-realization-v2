@@ -14,6 +14,7 @@ Test groups
      triggered without breaking the response structure.
   E) Backward compatibility: execution errors never surface in the response.
   F) _run_execution with enabled actions and allowlisted target — launch triggered.
+  G) _run_execution entry_mode forwarding (PR-2).
 """
 
 from __future__ import annotations
@@ -119,7 +120,10 @@ class TestRunExecution:
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
         oc._decision_executor = mock_executor
         oc._run_execution(None)
-        mock_executor.execute.assert_called_once_with(None)
+        # Verify None was passed as the state_continuum positional argument
+        call_args = mock_executor.execute.call_args
+        assert call_args is not None
+        assert call_args.args[0] is None
 
 
 # ---------------------------------------------------------------------------
@@ -254,3 +258,79 @@ class TestEnabledExecutionFlow:
         }
         oc._run_execution(state)
         api.focus_window.assert_called_once_with("notepad.exe")
+
+
+# ---------------------------------------------------------------------------
+# G) _run_execution entry_mode forwarding (PR-2)
+# ---------------------------------------------------------------------------
+
+class TestRunExecutionEntryMode:
+    """Verify that _run_execution correctly forwards entry_mode to the executor."""
+
+    def test_entry_mode_local_forwarded_to_executor(self):
+        from core.openclawd import OpenClawd
+        oc = _make_openclawd()
+        mock_executor = MagicMock(spec=DecisionExecutor)
+        mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
+        oc._decision_executor = mock_executor
+        state = {"decision": {"action_level": "observe"}}
+        oc._run_execution(state, entry_mode="local")
+        call_kwargs = mock_executor.execute.call_args
+        assert call_kwargs is not None
+        assert call_kwargs.kwargs.get("entry_mode") == "local"
+
+    def test_entry_mode_cross_device_blocks_launch(self):
+        """When entry_mode=cross_device, executor should skip execution."""
+        from core.openclawd import OpenClawd
+        oc = _make_openclawd()
+        api = MagicMock()
+        executor = DecisionExecutor()
+        executor._policy = PolicyGate(enabled=True, allowlist=["notepad.exe"])
+        executor._get_system_api = lambda: api  # type: ignore[method-assign]
+        executor._get_assist_app = lambda: None  # type: ignore[method-assign]
+        oc._decision_executor = executor
+
+        state = {
+            "phase": "manifest",
+            "decision": {"action_level": "execute"},
+            "metadata": {"execution_target": "notepad.exe"},
+        }
+        oc._run_execution(state, entry_mode="cross_device")
+        api.launch_app.assert_not_called()
+
+    def test_entry_mode_none_preserves_existing_behavior(self):
+        """When entry_mode is not provided, existing behavior is preserved."""
+        from core.openclawd import OpenClawd
+        oc = _make_openclawd()
+        mock_executor = MagicMock(spec=DecisionExecutor)
+        mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
+        oc._decision_executor = mock_executor
+        state = {"decision": {"action_level": "observe"}}
+        oc._run_execution(state)  # no entry_mode
+        call_kwargs = mock_executor.execute.call_args
+        assert call_kwargs is not None
+        # entry_mode should be None (default)
+        assert call_kwargs.kwargs.get("entry_mode") is None
+
+    def test_force_local_execution_in_metadata_overrides_cross_device(self):
+        """force_local_execution=True in state_continuum metadata overrides cross_device block."""
+        from core.openclawd import OpenClawd
+        oc = _make_openclawd()
+        api = MagicMock()
+        api.launch_app.return_value = AppLaunchResult(success=True, pid=99)
+        executor = DecisionExecutor()
+        executor._policy = PolicyGate(enabled=True, allowlist=["notepad.exe"])
+        executor._get_system_api = lambda: api  # type: ignore[method-assign]
+        executor._get_assist_app = lambda: None  # type: ignore[method-assign]
+        oc._decision_executor = executor
+
+        state = {
+            "phase": "manifest",
+            "decision": {"action_level": "execute"},
+            "metadata": {
+                "execution_target": "notepad.exe",
+                "force_local_execution": True,
+            },
+        }
+        oc._run_execution(state, entry_mode="cross_device")
+        api.launch_app.assert_called_once_with("notepad.exe")

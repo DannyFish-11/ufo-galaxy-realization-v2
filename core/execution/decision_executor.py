@@ -212,6 +212,8 @@ class DecisionExecutor:
     def execute(
         self,
         state_continuum: Optional[Dict[str, Any]],
+        entry_mode: Optional[str] = None,
+        force_local_execution: bool = False,
     ) -> ExecutionResult:
         """Dispatch an OS action derived from *state_continuum*.
 
@@ -221,6 +223,16 @@ class DecisionExecutor:
             Serialised :class:`~core.continuum.types.ContinuumState` dict
             (as returned by ``OpenClawd._run_continuum()``).  A ``None``
             value is treated as *observe* (no-op).
+        entry_mode:
+            Execution mode stamped at the ingress layer
+            (``"local"`` | ``"cross_device"`` | ``"hybrid"`` | ``None``).
+            When ``None`` or ``"local"``, existing config-based policy gates
+            remain authoritative (backward-compatible).  When
+            ``"cross_device"``, execution is **blocked** unless
+            *force_local_execution* is ``True``.
+        force_local_execution:
+            Explicit override that re-enables local execution even when
+            ``entry_mode="cross_device"``.  Defaults to ``False``.
 
         Returns
         -------
@@ -228,7 +240,11 @@ class DecisionExecutor:
             Always returned; never raises.
         """
         try:
-            return self._execute_inner(state_continuum)
+            return self._execute_inner(
+                state_continuum,
+                entry_mode=entry_mode,
+                force_local_execution=force_local_execution,
+            )
         except Exception as exc:
             logger.debug("DecisionExecutor.execute error (swallowed): %s", exc)
             return ExecutionResult(
@@ -240,6 +256,8 @@ class DecisionExecutor:
     def _execute_inner(
         self,
         state_continuum: Optional[Dict[str, Any]],
+        entry_mode: Optional[str] = None,
+        force_local_execution: bool = False,
     ) -> ExecutionResult:
         """Core dispatch logic — called inside a try/except in :meth:`execute`."""
         # ── 1. Extract action_level from continuum dict ──────────────────────
@@ -256,7 +274,25 @@ class DecisionExecutor:
                 skipped_reason=f"action_level={action_level_str}",
             )
 
-        # ── 3. Policy gate check ─────────────────────────────────────────────
+        # ── 3. entry_mode gating ────────────────────────────────────────────
+        # When entry_mode=cross_device, execution is disabled unless the caller
+        # explicitly sets force_local_execution=True.  Missing entry_mode (None)
+        # or "local" fall through to the existing config-based policy gate so
+        # that all existing behaviour is fully preserved.
+        if entry_mode == "cross_device" and not force_local_execution:
+            _trace_id = _extract_trace_id(state_continuum)
+            logger.info(
+                "DecisionExecutor: execution skipped | entry_mode=%s trace_id=%s skipped_reason=entry_mode=cross_device",
+                entry_mode,
+                _trace_id,
+            )
+            return ExecutionResult(
+                action_taken="noop",
+                success=True,
+                skipped_reason="entry_mode=cross_device",
+            )
+
+        # ── 4. Policy gate check ─────────────────────────────────────────────
         policy = self._get_policy()
         if not policy.is_enabled:
             logger.debug(
@@ -269,7 +305,7 @@ class DecisionExecutor:
                 skipped_reason="enable_system_actions=false",
             )
 
-        # ── 4. Dispatch by action level ──────────────────────────────────────
+        # ── 5. Dispatch by action level ──────────────────────────────────────
         if action_level_str == "assist":
             return self._dispatch_assist(policy)
         if action_level_str == "execute":
@@ -423,3 +459,20 @@ def _extract_execution_target(state_continuum: Optional[Dict[str, Any]]) -> Opti
     except Exception:
         pass
     return None
+
+
+def _extract_trace_id(state_continuum: Optional[Dict[str, Any]]) -> str:
+    """Return the trace_id from the continuum state metadata, or empty string.
+
+    Looks for ``state_continuum["metadata"]["trace_id"]``.
+    Used for structured logging when execution is skipped.
+    """
+    if not state_continuum or not isinstance(state_continuum, dict):
+        return ""
+    try:
+        meta = state_continuum.get("metadata") or {}
+        if isinstance(meta, dict):
+            return str(meta.get("trace_id") or "")
+    except Exception:
+        pass
+    return ""

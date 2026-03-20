@@ -804,6 +804,7 @@ class OpenClawd:
     def _run_execution(
         self,
         state_continuum: Optional[Dict[str, Any]],
+        entry_mode: Optional[str] = None,
     ) -> None:
         """Invoke the decision executor against the continuum state.
 
@@ -811,12 +812,28 @@ class OpenClawd:
 
         Args:
             state_continuum: Serialised ContinuumState dict, or ``None``.
+            entry_mode: Execution mode from the ingress layer
+                (``"local"`` | ``"cross_device"`` | ``"hybrid"`` | ``None``).
+                Forwarded to :meth:`~core.execution.decision_executor.DecisionExecutor.execute`
+                for mode-aware gating.  When ``None`` the executor falls back
+                to config-based policy (backward-compatible).
         """
         try:
             executor = self._get_decision_executor()
             if executor is None:
                 return
-            result = executor.execute(state_continuum)
+            # Extract force_local_execution override from state_continuum metadata
+            # (allows per-request override when entry_mode=cross_device).
+            _force: bool = False
+            if state_continuum and isinstance(state_continuum, dict):
+                _meta = state_continuum.get("metadata") or {}
+                if isinstance(_meta, dict):
+                    _force = bool(_meta.get("force_local_execution", False))
+            result = executor.execute(
+                state_continuum,
+                entry_mode=entry_mode,
+                force_local_execution=_force,
+            )
             if result.action_taken not in ("noop", "none"):
                 logger.debug(
                     "_run_execution: action=%s target=%r success=%s",
@@ -1139,7 +1156,7 @@ class OpenClawd:
                         runtime_session_id=runtime_session_id,
                     )
                     # ── Decision Execution (PR-8) ─────────────────────────────
-                    self._run_execution(_continuum_state_dict)
+                    self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -1312,7 +1329,7 @@ class OpenClawd:
                 runtime_session_id=runtime_session_id,
             )
             # ── Decision Execution (PR-8) ─────────────────────────────────────
-            self._run_execution(_continuum_state_dict2)
+            self._run_execution(_continuum_state_dict2, entry_mode=_entry_mode)
 
             return {
                 "success": result.get("success", True),
