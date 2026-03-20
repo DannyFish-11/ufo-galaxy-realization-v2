@@ -61,6 +61,7 @@ from .domain_surface import DomainSurface
 from .topology_surface import TopologySurface
 from .device_surface import DeviceSurface
 from .metrics_surface import MetricsSurface
+from .liminal_surface import LiminalSurface
 
 _RESET = _ansi.RESET
 _BOLD = _ansi.BOLD
@@ -103,6 +104,7 @@ class StatusBoardV2App:
         self._topology = TopologySurface()
         self._device = DeviceSurface()
         self._metrics = MetricsSurface()
+        self._liminal = LiminalSurface()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -144,6 +146,7 @@ class StatusBoardV2App:
             self._topology.render(projection),
             self._device.render(projection),
             self._metrics.render(projection),
+            self._liminal.render(projection),
             _ansi.c(_BOARD_SEPARATOR, _BOLD),
         ]
         return "\n".join(parts)
