@@ -93,10 +93,13 @@ def enforce_aip_v3(data: dict) -> None:
 
 def inject_trace_metadata(data: dict) -> dict:
     """
-    Ensure *data* contains ``trace_id`` and ``route_mode``.
+    Ensure *data* contains ``trace_id``, ``route_mode``, ``runtime_session_id``,
+    and ``idempotency_key`` (PR-2 unified envelope fields).
 
-    * ``trace_id``   – generated as a new UUID when absent.
-    * ``route_mode`` – defaults to :data:`_DEFAULT_ROUTE_MODE` when absent.
+    * ``trace_id``           – generated as a new UUID when absent.
+    * ``route_mode``         – defaults to :data:`_DEFAULT_ROUTE_MODE` when absent.
+    * ``runtime_session_id`` – generated when absent (session scope for the interaction).
+    * ``idempotency_key``    – derived from ``task_id`` or generated when absent.
 
     A structured log entry is emitted for each injected field so that
     operators can identify clients that do not send these fields.
@@ -115,6 +118,17 @@ def inject_trace_metadata(data: dict) -> dict:
         out["route_mode"] = _DEFAULT_ROUTE_MODE
         injected.append("route_mode")
 
+    # PR-2: runtime_session_id
+    if not out.get("runtime_session_id"):
+        out["runtime_session_id"] = f"session_{uuid.uuid4().hex[:12]}"
+        injected.append("runtime_session_id")
+
+    # PR-2: idempotency_key — derive from task_id when available
+    if not out.get("idempotency_key"):
+        task_id = out.get("task_id", "")
+        out["idempotency_key"] = f"idem_{task_id}" if task_id else f"idem_{uuid.uuid4().hex[:16]}"
+        injected.append("idempotency_key")
+
     if injected:
         logger.info(
             "Injected missing AIP metadata fields",
@@ -123,6 +137,8 @@ def inject_trace_metadata(data: dict) -> dict:
                 "injected_fields": injected,
                 "trace_id": out["trace_id"],
                 "route_mode": out["route_mode"],
+                "runtime_session_id": out.get("runtime_session_id", ""),
+                "idempotency_key": out.get("idempotency_key", ""),
                 "device_id": out.get("device_id", "unknown"),
                 "message_type": out.get("type", "unknown"),
             },

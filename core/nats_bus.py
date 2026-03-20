@@ -98,6 +98,66 @@ _STREAMS = {
 }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PR-2: Standardized topic namespace
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class NATSTopics:
+    """Canonical NATS subject prefixes for PR-2 unified bus.
+
+    All internal publishers and subscribers MUST use these constants so that
+    the topic contract is a single source of truth.
+
+    Topic hierarchy:
+      task.*          — task lifecycle (dispatch, result, cancel, status)
+      device.*        — device events (register, heartbeat, status, presence)
+      presence.*      — presence/projection events
+      capability.*    — capability registration and resolution events
+      audit.*         — audit log entries
+    """
+
+    # ── Task plane ───────────────────────────────────────────────────────────
+    TASK_DISPATCH = "galaxy.task.dispatch"
+    TASK_RESULT = "galaxy.task.result"
+    TASK_CANCEL = "galaxy.task.cancel"
+    TASK_STATUS = "galaxy.task.status"
+
+    # ── Device plane ─────────────────────────────────────────────────────────
+    DEVICE_REGISTER = "galaxy.device.register"
+    DEVICE_HEARTBEAT = "galaxy.device.heartbeat"
+    DEVICE_STATUS = "galaxy.device.status"
+    DEVICE_PRESENCE = "galaxy.device.presence"
+
+    # ── Presence plane ───────────────────────────────────────────────────────
+    PRESENCE_STATE = "galaxy.presence.state"
+    PRESENCE_PROJECTION = "galaxy.presence.projection"
+
+    # ── Capability plane ─────────────────────────────────────────────────────
+    CAPABILITY_REGISTERED = "galaxy.capability.registered"
+    CAPABILITY_REMOVED = "galaxy.capability.removed"
+
+    # ── Audit plane ──────────────────────────────────────────────────────────
+    AUDIT_COMMAND = "galaxy.audit.command"
+    AUDIT_RESULT = "galaxy.audit.result"
+    AUDIT_VIOLATION = "galaxy.audit.violation"
+
+    @classmethod
+    def task_dispatch(cls, target: str) -> str:
+        return f"{cls.TASK_DISPATCH}.{target}"
+
+    @classmethod
+    def task_result(cls, task_id: str) -> str:
+        return f"{cls.TASK_RESULT}.{task_id}"
+
+    @classmethod
+    def device_heartbeat(cls, device_id: str) -> str:
+        return f"{cls.DEVICE_HEARTBEAT}.{device_id}"
+
+    @classmethod
+    def capability_registered(cls, source: str) -> str:
+        return f"{cls.CAPABILITY_REGISTERED}.{source}"
+
+
 class NATSBus:
     """NATS JetStream client for distributed task dispatch.
 
@@ -275,6 +335,96 @@ class NATSBus:
         data = envelope.model_dump(mode="json", exclude_none=True)
         data["_nats_schema"] = "TaskEnvelope"
         return await self._publish(subject, data)
+
+    # ── PR-2: Canonical trace-propagating publish methods ───────────────────
+
+    def _ensure_trace_fields(self, data: dict, trace_id: str = "", runtime_session_id: str = "") -> dict:
+        """Ensure *data* carries trace_id and runtime_session_id for NATS messages.
+
+        This method is the NATS-layer equivalent of
+        :func:`~galaxy_gateway.protocol.compat.inject_trace_metadata`
+        and enforces the PR-2 unified envelope contract on every published
+        message.
+        """
+        import uuid as _uuid_lib
+        out = dict(data)
+        if not out.get("trace_id"):
+            out["trace_id"] = trace_id or f"trace_{_uuid_lib.uuid4().hex[:12]}"
+        if not out.get("runtime_session_id"):
+            out["runtime_session_id"] = runtime_session_id or f"session_{_uuid_lib.uuid4().hex[:12]}"
+        return out
+
+    async def publish_task_event(
+        self,
+        topic_suffix: str,
+        data: dict,
+        *,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> dict:
+        """Publish to the canonical ``galaxy.task.*`` namespace with trace propagation.
+
+        Args:
+            topic_suffix: Sub-topic path (e.g. ``"dispatch.worker_01"``).
+            data:          Message payload dict (will be augmented with trace fields).
+            trace_id:      Distributed trace identifier.
+            runtime_session_id: Session scope identifier.
+        """
+        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id)
+        payload["_nats_schema"] = "UnifiedTaskEvent"
+        return await self._publish(f"galaxy.task.{topic_suffix}", payload)
+
+    async def publish_device_event(
+        self,
+        topic_suffix: str,
+        data: dict,
+        *,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> dict:
+        """Publish to the canonical ``galaxy.device.*`` namespace with trace propagation."""
+        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id)
+        payload["_nats_schema"] = "UnifiedDeviceEvent"
+        return await self._publish(f"galaxy.device.{topic_suffix}", payload)
+
+    async def publish_presence_event(
+        self,
+        topic_suffix: str,
+        data: dict,
+        *,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> dict:
+        """Publish to the canonical ``galaxy.presence.*`` namespace with trace propagation."""
+        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id)
+        payload["_nats_schema"] = "UnifiedPresenceEvent"
+        return await self._publish(f"galaxy.presence.{topic_suffix}", payload)
+
+    async def publish_capability_event(
+        self,
+        topic_suffix: str,
+        data: dict,
+        *,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> dict:
+        """Publish to the canonical ``galaxy.capability.*`` namespace with trace propagation."""
+        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id)
+        payload["_nats_schema"] = "UnifiedCapabilityEvent"
+        return await self._publish(f"galaxy.capability.{topic_suffix}", payload)
+
+    async def publish_audit_event(
+        self,
+        topic_suffix: str,
+        data: dict,
+        *,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> dict:
+        """Publish to the canonical ``galaxy.audit.*`` namespace with trace propagation."""
+        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id)
+        payload["_nats_schema"] = "UnifiedAuditEvent"
+        return await self._publish(f"galaxy.audit.{topic_suffix}", payload)
 
     # ── Subscribe methods ───────────────────────────────────────────────────
 

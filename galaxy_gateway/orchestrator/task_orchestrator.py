@@ -676,32 +676,78 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
         self,
         user_request: str,
         device_ids: List[str],
-        coordination_mode: str = "parallel"  # parallel, sequential, conditional
-    ) -> List[Task]:
-        """提交多设备协同任务"""
-        tasks = []
-        
-        if coordination_mode == "parallel":
-            # 并行执行
-            for device_id in device_ids:
-                task = await self.submit_task(
-                    user_request=user_request,
-                    target_device=device_id
-                )
-                tasks.append(task)
-        
-        elif coordination_mode == "sequential":
-            # 顺序执行
-            for device_id in device_ids:
-                task = await self.submit_task(
-                    user_request=user_request,
-                    target_device=device_id
-                )
-                tasks.append(task)
-                # 等待当前任务完成
-                await self._wait_for_completion(task)
-        
-        return tasks
+        coordination_mode: str = "parallel",  # parallel, sequential, conditional
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> Dict[str, Any]:
+        """提交多设备协同任务 — PR-2: 所有多设备任务强制经过 TaskGraph.
+
+        All multi-device tasks are routed through :meth:`submit_dag_task` so
+        that execution is fully traced and no bypass path exists.  The legacy
+        ``List[Task]`` return type has been replaced with the canonical
+        ``Dict[str, Any]`` result from the TaskGraph executor.
+
+        Legacy callers that expected ``List[Task]`` should migrate to
+        inspecting ``result["node_statuses"]`` instead.
+        """
+        if not device_ids:
+            return {
+                "success": True,
+                "done": 0,
+                "failed": 0,
+                "skipped": 0,
+                "elapsed_ms": 0.0,
+                "graph_id": "",
+                "trace_id": trace_id,
+                "node_statuses": {},
+            }
+
+        import uuid as _uuid_lib
+
+        trace_id = trace_id or f"trace_{_uuid_lib.uuid4().hex[:12]}"
+        runtime_session_id = runtime_session_id or f"session_{_uuid_lib.uuid4().hex[:12]}"
+
+        # Build lightweight subtask objects that compile_subtasks_to_graph understands
+        import types
+        subtasks = []
+        for idx, device_id in enumerate(device_ids):
+            st = types.SimpleNamespace(
+                task_id=f"subtask_{idx}_{_uuid_lib.uuid4().hex[:8]}",
+                name=f"task_on_{device_id}",
+                description=user_request,
+                device_id=device_id,
+                depends_on=[f"subtask_{idx - 1}"] if coordination_mode == "sequential" and idx > 0 else [],
+            )
+            subtasks.append(st)
+
+        logger.info(
+            "PR-2 submit_multi_device_task: routing %d devices through TaskGraph "
+            "| mode=%s trace_id=%s",
+            len(device_ids),
+            coordination_mode,
+            trace_id,
+        )
+
+        # Log command envelope for observability
+        try:
+            from core.unified.command_envelope import CommandEnvelope, log_command_envelope
+            env = CommandEnvelope(
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+                task_id=f"multi_{_uuid_lib.uuid4().hex[:8]}",
+                device_id=",".join(device_ids),
+                payload={"coordination_mode": coordination_mode, "device_count": len(device_ids)},
+            )
+            log_command_envelope(env, event="multi_device_task_submitted")
+        except Exception:
+            pass
+
+        return await self.submit_dag_task(
+            subtasks,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id,
+            continue_on_failure=(coordination_mode != "sequential"),
+        )
     
     async def broadcast_command(self, command: Command) -> Dict[str, CommandResult]:
         """向所有设备广播命令"""
