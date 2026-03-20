@@ -180,6 +180,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(device_health_router)
     except Exception:
         pass
+    # PR-4 Status Board V2: read-only RuntimeProjection endpoint
+    try:
+        from core.routes import projection as projection_routes
+        router.include_router(projection_routes.create_router())
+    except Exception:
+        pass
 
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream

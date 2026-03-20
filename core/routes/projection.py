@@ -1,0 +1,215 @@
+"""
+core/routes/projection.py
+==========================
+Read-only RuntimeProjection endpoint for the Status Board V2.
+
+This module exposes a **single GET endpoint** that assembles the current
+:class:`~core.projection.RuntimeProjection` and returns it as JSON.
+
+Routes
+------
+  GET /api/v1/projection/runtime
+      Returns the current RuntimeProjection assembled from live ContinuumState
+      (and an optional TopologyRoutePlan if the model topology layer is
+      available).
+
+Design constraints
+------------------
+- **Read-only** — this router never writes state, sends commands, or triggers
+  actions.  It only reads and serialises.
+- **Not dashboard** — this module is part of ``core/routes/``, intentionally
+  separate from ``dashboard/backend/``.
+- **Graceful degradation** — if the continuum layer or topology layer is
+  unavailable the endpoint returns a minimal valid projection rather than an
+  error, so that the status board always has something to display.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+logger = logging.getLogger("Galaxy.Routes.Projection")
+
+
+def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
+    """Create and return the projection router.
+
+    The ``service_manager`` and ``config`` parameters follow the same
+    convention used by all other ``core/routes/`` modules and are accepted
+    (but not required) to allow uniform registration in ``core/api_routes.py``.
+    """
+    router = APIRouter()
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/runtime
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/runtime")
+    async def get_runtime_projection() -> JSONResponse:
+        """Return the current RuntimeProjection as JSON.
+
+        This endpoint is **read-only**.  It assembles a
+        :class:`~core.projection.RuntimeProjection` from the live
+        ``ContinuumState`` (and optionally the ``TopologyRoutePlan`` if
+        the model topology layer has been initialised) and returns a
+        stable JSON payload.
+
+        The Status Board V2 polls this endpoint to render all its surfaces.
+
+        Response schema
+        ---------------
+        See :class:`~core.projection.RuntimeProjection` for the full field
+        reference.  Every field maps directly to a surface in the status board:
+
+        - ``tri_state_phase``        → PhaseSurface
+        - ``runtime_domain``         → DomainSurface
+        - ``primary_model_id``       → TopologySurface
+        - ``support_model_ids``      → TopologySurface
+        - ``active_weights``         → TopologySurface
+        - ``active_device_ids``      → DeviceSurface
+        - ``execution_stage``        → DeviceSurface
+        - ``presence_intensity``     → MetricsSurface
+        - ``coherence``              → MetricsSurface
+        - ``collapse_tendency``      → MetricsSurface
+        - ``retreat_tendency``       → MetricsSurface
+        """
+        payload = _assemble_projection()
+        return JSONResponse(content=payload)
+
+    return router
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _assemble_projection() -> Dict[str, Any]:
+    """Assemble a projection dict from live runtime state.
+
+    Always returns a valid dict.  Individual sub-components (continuum, topology)
+    are optional; missing components fall back to safe defaults so that the
+    status board is never blocked by a partially initialised system.
+
+    Import errors (e.g. missing optional transitive dependencies) are caught
+    and result in the minimal fallback payload rather than a 500 error.
+    """
+    try:
+        from core.projection import build_runtime_projection, ExecutionSummary
+        from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
+    except Exception as exc:
+        logger.warning("Projection imports unavailable, returning minimal payload: %s", exc)
+        return _minimal_fallback_payload()
+
+    # --- 1. Continuum state ------------------------------------------------
+    continuum_state = _get_continuum_state()
+
+    # --- 2. Optional topology route plan -----------------------------------
+    route_plan = _get_route_plan(continuum_state)
+
+    # --- 3. Optional execution summary ------------------------------------
+    execution_summary = _get_execution_summary()
+
+    # --- 4. Build and serialise -------------------------------------------
+    try:
+        if continuum_state is None:
+            return _minimal_fallback_payload()
+        projection = build_runtime_projection(
+            continuum_state=continuum_state,
+            route_plan=route_plan,
+            execution_summary=execution_summary,
+            timestamp=time.time(),
+        )
+        return projection.to_dict()
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Projection assembly failed, returning minimal payload: %s", exc)
+        return _minimal_fallback_payload()
+
+
+def _get_continuum_state():
+    """Return the live ContinuumState, or a minimal silent state on failure."""
+    try:
+        # Try the cognitive field engine first (Block-3 integration).
+        from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
+        engine = CognitiveFieldEngine.get_instance()
+        if engine is not None and hasattr(engine, "get_continuum_state"):
+            state = engine.get_continuum_state()
+            if state is not None:
+                return state
+    except Exception:
+        pass
+
+    try:
+        # Fallback: desktop presence runtime if available.
+        from core.desktop_presence_runtime import get_presence_runtime
+        runtime = get_presence_runtime()
+        if runtime is not None and hasattr(runtime, "get_continuum_state"):
+            state = runtime.get_continuum_state()
+            if state is not None:
+                return state
+    except Exception:
+        pass
+
+    try:
+        # Final fallback: minimal silent state so the board always renders.
+        from core.continuum.types import ContinuumPhase, ContinuumState
+        return ContinuumState(phase=ContinuumPhase.FORMLESS)
+    except Exception:
+        return None
+
+
+def _get_route_plan(continuum_state):
+    """Return the current TopologyRoutePlan, or None if topology is not ready."""
+    try:
+        from core.model_topology import TopologyRouter, ProviderInventory
+        from core.continuum.types import RuntimeDomain
+
+        inventory = ProviderInventory.from_config()
+        router = TopologyRouter(inventory)
+        domain = continuum_state.runtime_domain or RuntimeDomain.LOCAL
+        return router.route(continuum_state.tri_state_phase, domain)
+    except Exception:
+        return None
+
+
+def _get_execution_summary() -> Optional[Any]:
+    """Return an ExecutionSummary if execution context is available."""
+    try:
+        from core.projection import ExecutionSummary
+
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager.get_instance()
+            if udm is None:
+                return None
+            online = udm.get_online_devices() if hasattr(udm, "get_online_devices") else []
+            device_ids = [d.device_id for d in online] if online else []
+            return ExecutionSummary(active_device_ids=device_ids)
+        except Exception:
+            return None
+    except Exception:
+        return None
+
+
+def _minimal_fallback_payload() -> Dict[str, Any]:
+    """Return a minimal valid projection payload for failure cases."""
+    return {
+        "tri_state_phase": "silent",
+        "runtime_domain": None,
+        "presence_intensity": None,
+        "coherence": None,
+        "collapse_tendency": None,
+        "retreat_tendency": None,
+        "primary_model_id": None,
+        "support_model_ids": [],
+        "active_weights": {},
+        "route_reason": None,
+        "active_device_ids": [],
+        "execution_stage": None,
+        "current_task_summary": None,
+        "timestamp": time.time(),
+    }
