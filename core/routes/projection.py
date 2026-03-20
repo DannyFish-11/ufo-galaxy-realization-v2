@@ -3,15 +3,18 @@ core/routes/projection.py
 ==========================
 Read-only RuntimeProjection endpoint for the Status Board V2.
 
-This module exposes a **single GET endpoint** that assembles the current
-:class:`~core.projection.RuntimeProjection` and returns it as JSON.
+This module exposes **two GET endpoints**:
 
-Routes
-------
   GET /api/v1/projection/runtime
       Returns the current RuntimeProjection assembled from live ContinuumState
       (and an optional TopologyRoutePlan if the model topology layer is
       available).
+
+  GET /api/v1/projection/return
+      Returns the current ReturnSummary (PR-10 return intelligence) alongside
+      the RuntimeProjection.  The payload contains all RuntimeProjection fields
+      plus a nested ``"return_intelligence"`` key populated by the
+      return-intelligence adapter.
 
 Design constraints
 ------------------
@@ -79,6 +82,48 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         - ``retreat_tendency``       → MetricsSurface
         """
         payload = _assemble_projection()
+        return JSONResponse(content=payload)
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/return
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/return")
+    async def get_return_projection() -> JSONResponse:
+        """Return the current RuntimeProjection enriched with return intelligence.
+
+        This endpoint is **read-only**.  It returns all standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"return_intelligence"`` key containing the
+        :class:`~core.return_intelligence.ReturnSummary` for the current
+        continuum state.
+
+        The ``"return_intelligence"`` key is safe for public consumers —
+        it never exposes the internal ``receding`` phase.
+
+        Response schema (additions over /runtime)
+        ------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "return_intelligence": {
+                "is_returning": false,
+                "return_mode": "none",
+                "return_action": null,
+                "return_trigger": null,
+                "decay_amount": 0.0,
+                "reason": "no return active",
+                "affects_manifest": false,
+                "affects_liminal": false
+              }
+            }
+
+        This endpoint is consumed by the ReturnSurface in Status Board V2
+        and any other downstream systems that need return context.
+        """
+        payload = _assemble_projection_with_return()
         return JSONResponse(content=payload)
 
     return router
@@ -213,3 +258,46 @@ def _minimal_fallback_payload() -> Dict[str, Any]:
         "current_task_summary": None,
         "timestamp": time.time(),
     }
+
+
+def _assemble_projection_with_return() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with return-intelligence data.
+
+    Builds the standard projection first, then attaches the return summary
+    derived from the live continuum state.  Always returns a valid dict with
+    a ``"return_intelligence"`` key even when the return layer is unavailable.
+    """
+    base = _assemble_projection()
+
+    try:
+        from core.return_intelligence import build_return_summary, attach_return_summary, IDLE_RETURN_SUMMARY
+
+        continuum_state = _get_continuum_state()
+        if continuum_state is None:
+            return attach_return_summary(base, IDLE_RETURN_SUMMARY)
+
+        try:
+            from core.continuum.return_engine import ReturnEngine
+            engine = ReturnEngine()
+            result = engine.evaluate(continuum_state)
+            summary = build_return_summary(result)
+        except Exception as exc:
+            logger.warning("Return engine evaluation failed, using idle summary: %s", exc)
+            summary = IDLE_RETURN_SUMMARY
+
+        return attach_return_summary(base, summary)
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Return-intelligence assembly failed, returning base projection: %s", exc)
+        # Attach a minimal idle return intelligence block so consumers always find the key.
+        base["return_intelligence"] = {
+            "is_returning": False,
+            "return_mode": "none",
+            "return_action": None,
+            "return_trigger": None,
+            "decay_amount": 0.0,
+            "reason": "return intelligence unavailable",
+            "affects_manifest": False,
+            "affects_liminal": False,
+        }
+        return base

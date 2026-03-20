@@ -14,6 +14,7 @@ and renders it using seven lightweight text surfaces:
   MetricsSurface   — presence_intensity, coherence, collapse/retreat tendency
   LiminalSurface   — liminal spatial projection dimensions (PR-5)
   ManifestSurface  — manifest-stage 显现台 execution surface (PR-6)
+  ReturnSurface    — return-intelligence summary (PR-10)
 
 READ-ONLY GUARANTEE
 -------------------
@@ -65,6 +66,7 @@ from .device_surface import DeviceSurface
 from .metrics_surface import MetricsSurface
 from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
+from .return_surface import ReturnSurface
 
 _RESET = _ansi.RESET
 _BOLD = _ansi.BOLD
@@ -109,6 +111,7 @@ class StatusBoardV2App:
         self._metrics = MetricsSurface()
         self._liminal = LiminalSurface()
         self._manifest = ManifestSurface()
+        self._return = ReturnSurface()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -152,6 +155,7 @@ class StatusBoardV2App:
             self._metrics.render(projection),
             self._liminal.render(projection),
             self._manifest.render(projection),
+            self._return.render(projection),
             _ansi.c(_BOARD_SEPARATOR, _BOLD),
         ]
         return "\n".join(parts)

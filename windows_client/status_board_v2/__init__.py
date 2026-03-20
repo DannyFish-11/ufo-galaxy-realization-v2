@@ -14,6 +14,7 @@ visualises:
 - Presence/coherence/tendency metrics                 → MetricsSurface
 - Liminal spatial projection dimensions               → LiminalSurface
 - Manifest stage (显现台) execution surface           → ManifestSurface
+- Return intelligence summary                         → ReturnSurface
 
 READ-ONLY GUARANTEE
 -------------------
@@ -31,6 +32,7 @@ from .app import main, run, StatusBoardV2App
 from .projection_reader import ProjectionReader
 from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
+from .return_surface import ReturnSurface
 
 __all__ = [
     "main",
@@ -39,4 +41,5 @@ __all__ = [
     "ProjectionReader",
     "LiminalSurface",
     "ManifestSurface",
+    "ReturnSurface",
 ]
