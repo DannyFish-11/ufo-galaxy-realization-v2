@@ -1,6 +1,6 @@
 """
-Galaxy - Observability Routes (PR-C / Phase E)
-===============================================
+Galaxy - Observability Routes (PR-C / Phase E / PR-7)
+======================================================
 
 Dashboard 可观测性端点，提供：
   - 活跃模型路由及 Fallback 状态
@@ -8,16 +8,20 @@ Dashboard 可观测性端点，提供：
   - 近期工具 / 设备调用记录
   - 按 task_id 或 command_id 查询 trace
   - NATS Bus 健康与统计 (Phase E)
+  - 统一执行观测模式 schema (PR-7, read-only, additive)
 
 Routes:
-  GET /api/v1/observability/model-route        - 活跃 LLM 路由 + Fallback 列表
-  GET /api/v1/observability/gateway            - 网关 & 设备在线状态汇总
-  GET /api/v1/observability/recent-calls       - 近期工具 / 设备调用（最多 50 条）
-  GET /api/v1/observability/trace/{id}         - 按 task_id 或 command_id 查 trace
-  GET /api/v1/observability/stats              - trace 存储统计
-  GET /health/nats                             - NATS bus 连接状态与统计 (Phase E)
-  GET /api/v1/observability/nats               - NATS bus + MasterBrain 拓扑 (Phase E)
-  GET /api/v1/observability/bus-events         - 最近 NATS 总线事件 (Phase E)
+  GET /api/v1/observability/model-route              - 活跃 LLM 路由 + Fallback 列表
+  GET /api/v1/observability/gateway                  - 网关 & 设备在线状态汇总
+  GET /api/v1/observability/recent-calls             - 近期工具 / 设备调用（最多 50 条）
+  GET /api/v1/observability/trace/{id}               - 按 task_id 或 command_id 查 trace
+  GET /api/v1/observability/stats                    - trace 存储统计
+  GET /health/nats                                   - NATS bus 连接状态与统计 (Phase E)
+  GET /api/v1/observability/nats                     - NATS bus + MasterBrain 拓扑 (Phase E)
+  GET /api/v1/observability/bus-events               - 最近 NATS 总线事件 (Phase E)
+  GET /api/v1/observability/execution/schema         - 统一执行 schema 元数据 (PR-7)
+  GET /api/v1/observability/execution/recent-events  - 最近统一执行事件 (PR-7)
+  GET /api/v1/observability/execution/trace/{id}     - 统一 trace 上下文查询 (PR-7)
 """
 
 import logging
@@ -338,5 +342,155 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:
             logger.warning("bus-events error: %s", exc)
             return JSONResponse({"error": str(exc), "events": []}, status_code=500)
+
+    # ── PR-7: Unified Execution Observability (read-only, additive) ──────
+
+    @router.get("/api/v1/observability/execution/schema")
+    async def execution_schema_meta():
+        """Return metadata describing the unified execution observability schema.
+
+        Exposes the stable enum values for :class:`ExecutorLevel` and
+        :class:`FallbackReason` so that consumers can validate / display
+        them without importing Python modules.
+
+        This endpoint is read-only and additive (PR-7).
+        """
+        try:
+            from core.execution_observability import ExecutorLevel, FallbackReason
+
+            return JSONResponse({
+                "schema_version": "pr7-v1",
+                "executor_levels": [e.value for e in ExecutorLevel],
+                "fallback_reasons": [r.value for r in FallbackReason],
+                "trace_fields": [
+                    "trace_id",
+                    "runtime_session_id",
+                    "task_id",
+                    "action_id",
+                ],
+                "event_fields": [
+                    "event_id",
+                    "timestamp",
+                    "trace",
+                    "executor_level",
+                    "fallback",
+                    "tri_state_phase",
+                    "runtime_domain",
+                    "message",
+                    "metadata",
+                ],
+                "description": (
+                    "Unified execution observability schema (PR-7). "
+                    "Use normalizers from core.execution_observability.normalizers "
+                    "to convert existing path payloads into ExecutionEvent objects."
+                ),
+            })
+        except Exception as exc:
+            logger.warning("execution/schema error: %s", exc)
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @router.get("/api/v1/observability/execution/recent-events")
+    async def execution_recent_events(
+        limit: int = Query(default=20, ge=1, le=100, description="返回条数"),
+    ):
+        """Return the most recent unified execution events from GatewayTraceStore.
+
+        Normalises existing ``GatewayTraceStore`` records into the PR-7
+        :class:`~core.execution_observability.ExecutionEvent` schema.
+
+        This endpoint is read-only and additive (PR-7).
+        """
+        try:
+            from core.command_router import get_gateway_trace_store
+            from core.execution_observability.normalizers import normalize_observability_payload
+
+            store = get_gateway_trace_store()
+            raw_entries = store.recent(limit)
+            events = []
+            for entry in raw_entries:
+                try:
+                    ev = normalize_observability_payload(entry)
+                    events.append(ev.to_dict())
+                except Exception as inner_exc:
+                    logger.debug("execution/recent-events: normalise error: %s", inner_exc)
+                    events.append({"raw": entry, "normalise_error": str(inner_exc)})
+
+            return JSONResponse({
+                "count": len(events),
+                "schema_version": "pr7-v1",
+                "events": events,
+            })
+        except Exception as exc:
+            logger.warning("execution/recent-events error: %s", exc)
+            return JSONResponse({"error": str(exc), "count": 0, "events": []})
+
+    @router.get("/api/v1/observability/execution/trace/{trace_id}")
+    async def execution_trace_lookup(
+        trace_id: str,
+    ):
+        """Look up a unified execution trace by trace_id / task_id / command_id.
+
+        Normalises the raw GatewayTraceStore result into the PR-7
+        :class:`~core.execution_observability.TraceCorrelation` shape so
+        that callers get a consistent envelope regardless of which orchestration
+        path originated the trace.
+
+        This endpoint is read-only and additive (PR-7).
+        """
+        try:
+            from core.command_router import get_gateway_trace_store
+            from core.execution_observability import TraceCorrelation
+            from core.execution_observability.normalizers import normalize_observability_payload
+
+            store = get_gateway_trace_store()
+
+            # Try command_id first, then task_id (mirrors existing trace endpoint)
+            entry = store.lookup_by_command_id(trace_id)
+            if entry is not None:
+                ev = normalize_observability_payload(entry)
+                return JSONResponse({
+                    "found": True,
+                    "id_type": "command_id",
+                    "schema_version": "pr7-v1",
+                    "trace": ev.trace.to_dict(),
+                    "event": ev.to_dict(),
+                })
+
+            entries = store.lookup_by_task_id(trace_id)
+            if entries:
+                # Return the trace correlation from the first entry; all share
+                # the same task_id so traces are consistent.
+                events = []
+                for raw in entries:
+                    try:
+                        ev = normalize_observability_payload(raw)
+                        events.append(ev.to_dict())
+                    except Exception:
+                        events.append({"raw": raw})
+                first_trace = TraceCorrelation(
+                    trace_id=entries[0].get("trace_id", trace_id),
+                    runtime_session_id=entries[0].get("runtime_session_id", ""),
+                    task_id=trace_id,
+                ).to_dict()
+                return JSONResponse({
+                    "found": True,
+                    "id_type": "task_id",
+                    "schema_version": "pr7-v1",
+                    "trace": first_trace,
+                    "count": len(events),
+                    "events": events,
+                })
+
+            return JSONResponse(
+                {
+                    "found": False,
+                    "trace_id": trace_id,
+                    "schema_version": "pr7-v1",
+                },
+                status_code=404,
+            )
+        except Exception as exc:
+            logger.warning("execution/trace error: %s", exc)
+            return JSONResponse({"error": str(exc), "found": False}, status_code=500)
 
     return router
