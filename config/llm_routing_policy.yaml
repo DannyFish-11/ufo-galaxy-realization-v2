@@ -1,0 +1,121 @@
+# config/llm_routing_policy.yaml
+# ================================
+# Galaxy Multi-LLM 路由策略配置（Block-6 / PR-6）
+#
+# 字段说明：
+#   priorities      — 任务类型 → 提供商优先顺序（index 0 最高优先）
+#   constraints     — 可选约束（max_tokens / require_tools / ...）
+#   fallback_chain  — 所有优先提供商不可用时的最终回退链
+#   cost_budget     — 每 1k token 最大允许费用（USD）
+#   slo             — SLO 阈值（latency_ms / min_success_rate）
+
+version: "1"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 全局默认 fallback（任何任务类型均可用）
+# ─────────────────────────────────────────────────────────────────────────────
+global_fallback_chain:
+  - deepseek
+  - openai
+  - anthropic
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 全局 SLO / 预算
+# ─────────────────────────────────────────────────────────────────────────────
+global_slo:
+  max_latency_ms: 30000        # 30 s
+  min_success_rate: 0.90       # 90 %
+  max_cost_per_1k_tokens: 0.06 # USD — 超过此值触发降级
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 任务类型路由规则
+# ─────────────────────────────────────────────────────────────────────────────
+task_routing:
+
+  reasoning:
+    priorities: [anthropic, openai, google, deepseek, xai]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.15
+    slo:
+      max_latency_ms: 60000
+      min_success_rate: 0.88
+    fallback_chain: [deepseek, openai]
+
+  fast_response:
+    priorities: [deepseek, groq, google, openai, moonshot]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.01
+    slo:
+      max_latency_ms: 5000
+      min_success_rate: 0.95
+    fallback_chain: [openai, anthropic]
+
+  coding:
+    priorities: [deepseek, qwen, anthropic, openai]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.03
+    slo:
+      max_latency_ms: 45000
+      min_success_rate: 0.90
+    fallback_chain: [openai, anthropic]
+
+  creative:
+    priorities: [openai, anthropic, mistral, deepseek]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.06
+    slo:
+      max_latency_ms: 30000
+      min_success_rate: 0.88
+    fallback_chain: [deepseek, openai]
+
+  analysis:
+    priorities: [anthropic, openai, google, perplexity, deepseek]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.08
+    slo:
+      max_latency_ms: 45000
+      min_success_rate: 0.90
+    fallback_chain: [deepseek, openai]
+
+  planning:
+    priorities: [anthropic, openai, xai, deepseek]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.12
+    slo:
+      max_latency_ms: 60000
+      min_success_rate: 0.88
+    fallback_chain: [openai, deepseek]
+
+  agent_control:
+    priorities: [anthropic, openai, deepseek]
+    constraints:
+      require_tools: true
+    cost_budget:
+      max_cost_per_1k_tokens: 0.10
+    slo:
+      max_latency_ms: 30000
+      min_success_rate: 0.92
+    fallback_chain: [openai, anthropic]
+
+  general:
+    priorities: [openai, anthropic, deepseek, google]
+    constraints:
+      require_tools: false
+    cost_budget:
+      max_cost_per_1k_tokens: 0.05
+    slo:
+      max_latency_ms: 30000
+      min_success_rate: 0.90
+    fallback_chain: [deepseek, openai]
