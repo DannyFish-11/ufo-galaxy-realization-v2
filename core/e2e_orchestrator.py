@@ -234,6 +234,7 @@ async def process_user_input(
     context: Optional[List[Dict]] = None,
     use_constellation: bool = True,
     entry_mode: Optional[str] = None,
+    target_device: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     统一用户输入处理入口。
@@ -262,6 +263,9 @@ async def process_user_input(
         entry_mode: Optional caller-supplied execution mode override
             (``"local"`` | ``"cross_device"`` | ``"hybrid"``).  When absent
             the mode is auto-resolved inside :func:`resolve_entry_mode`.
+        target_device: Optional explicit target device ID.  When provided
+            (and cross-device routing is enabled) forces ``"cross_device"``
+            mode regardless of online device count.
 
     Returns:
         {
@@ -289,12 +293,13 @@ async def process_user_input(
             message[:80],
         )
 
-    # ── PR-1 EntryMode: resolve execution mode for this request ──
+    # ── PR-5 EntryMode: resolve execution mode (with target_device support) ──
     _resolved_entry_mode = "local"
     try:
         from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
         _resolved_entry_mode = _resolve_em(
             explicit_entry_mode=entry_mode or None,
+            target_device=target_device or None,
             source="core.e2e_orchestrator",
         )
     except Exception as _em_exc:

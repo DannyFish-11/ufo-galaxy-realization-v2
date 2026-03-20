@@ -996,6 +996,10 @@ class ChatRequest(BaseModel):
     # When absent, the mode is auto-resolved from the cross-device switch and
     # device registry.  One of: "local" | "cross_device" | "hybrid".
     entry_mode: Optional[str] = None
+    # PR-5 Cross-device: explicit target device ID for this request.
+    # When provided (and cross-device routing is enabled), forces cross_device
+    # mode regardless of the online device count.
+    target_device: Optional[str] = None
 
 
 @app.post("/api/v1/chat")
@@ -1011,12 +1015,13 @@ async def chat_endpoint(request: ChatRequest, auth: dict = Depends(_require_auth
         logger.warning("OpenClawd 未初始化，chat 端点不可用")
         raise HTTPException(status_code=503, detail="AI service not available")
 
-    # ── PR-1 EntryMode: resolve execution mode for this request ──
+    # ── PR-5 EntryMode: resolve execution mode (with target_device support) ──
     _entry_mode = "local"
     try:
         from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
         _entry_mode = _resolve_em(
             explicit_entry_mode=request.entry_mode or None,
+            target_device=request.target_device or None,
             source="galaxy_gateway.app",
         )
     except Exception as _em_exc:

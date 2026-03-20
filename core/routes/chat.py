@@ -111,6 +111,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
             _entry_mode = _resolve_em(
                 explicit_entry_mode=req.entry_mode or None,
+                target_device=req.target_device or None,
                 trace_id=_trace_id_for_entry,
                 source="core.routes.chat",
             )
