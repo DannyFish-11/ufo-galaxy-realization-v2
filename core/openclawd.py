@@ -812,7 +812,7 @@ class OpenClawd:
         self,
         state_continuum: Optional[Dict[str, Any]],
         entry_mode: Optional[str] = None,
-    ) -> None:
+    ) -> Dict[str, Any]:
         """Invoke the decision executor against the continuum state.
 
         Errors are swallowed so the response flow is never interrupted.
@@ -824,11 +824,20 @@ class OpenClawd:
                 Forwarded to :meth:`~core.execution.decision_executor.DecisionExecutor.execute`
                 for mode-aware gating.  When ``None`` the executor falls back
                 to config-based policy (backward-compatible).
+
+        Returns:
+            Serialisable dict representation of the
+            :class:`~core.execution.decision_executor.ExecutionResult`
+            (always returned, never raises).
         """
         try:
             executor = self._get_decision_executor()
             if executor is None:
-                return
+                return {
+                    "action_taken": "none",
+                    "success": False,
+                    "skipped_reason": "executor_unavailable",
+                }
             # Extract force_local_execution override from state_continuum metadata
             # (allows per-request override when entry_mode=cross_device).
             _force: bool = False
@@ -846,8 +855,56 @@ class OpenClawd:
                     "_run_execution: action=%s target=%r success=%s",
                     result.action_taken, result.target, result.success,
                 )
+            return {
+                "action_taken": result.action_taken,
+                "target": result.target,
+                "success": result.success,
+                "skipped_reason": result.skipped_reason,
+                "metadata": result.metadata,
+            }
         except Exception as _ee:
             logger.debug("_run_execution failed (swallowed): %s", _ee)
+            return {
+                "action_taken": "error",
+                "success": False,
+                "skipped_reason": f"internal_error: {_ee}",
+            }
+
+    @staticmethod
+    def _determine_execution_path(
+        entry_mode: str,
+        execution_result: Dict[str, Any],
+        cross_device_dispatched: bool = False,
+    ) -> str:
+        """Derive the ``execution_path`` value from gate decisions (PR-4).
+
+        Parameters
+        ----------
+        entry_mode:
+            Normalised mode string (``"local"`` | ``"cross_device"`` | ``"hybrid"``).
+        execution_result:
+            Serialised dict returned by :meth:`_run_execution`.
+        cross_device_dispatched:
+            ``True`` when the request was forwarded to a remote device (i.e.
+            ``metadata.remote_dispatch`` was set by the handler).
+
+        Returns
+        -------
+        str
+            One of ``"local"``, ``"cross_device"``, ``"hybrid"``, or ``"none"``.
+        """
+        action_taken = execution_result.get("action_taken", "none")
+        local_executed = action_taken not in ("none", "noop", "error")
+
+        if local_executed and cross_device_dispatched:
+            return "hybrid"
+        if cross_device_dispatched or entry_mode == "cross_device":
+            return "cross_device"
+        if entry_mode == "hybrid":
+            return "hybrid"
+        if local_executed:
+            return "local"
+        return "none"
 
     # ========================================================================
     # 主入口
@@ -1162,8 +1219,19 @@ class OpenClawd:
                         multimodal_context=multimodal_context,
                         runtime_session_id=runtime_session_id,
                     )
-                    # ── Decision Execution (PR-8) ─────────────────────────────
-                    self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
+                    # ── Decision Execution (PR-8 / PR-4) ─────────────────────
+                    _exec_result_k = self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
+                    _exec_path_k = self._determine_execution_path(
+                        entry_mode=_entry_mode,
+                        execution_result=_exec_result_k,
+                    )
+                    # PR-4: structured observability log whenever execution_path is set.
+                    logger.info(
+                        "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s",
+                        trace_id, _entry_mode, _exec_path_k,
+                    )
+                    if _exec_path_k == "none":
+                        _exec_result_k.setdefault("skipped_reason", "no_execution")
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -1171,6 +1239,8 @@ class OpenClawd:
                         "error": kernel_result.error,
                         "trace_id": trace_id,
                         "runtime_session_id": runtime_session_id or trace_id,
+                        "execution_path": _exec_path_k,
+                        "execution_result": _exec_result_k,
                         "interaction": _interaction_dict,
                         "persona_state": _persona_state_dict,
                         "interaction_envelope": _interaction_envelope_dict,
@@ -1188,6 +1258,7 @@ class OpenClawd:
                             "model": kernel_result.model,
                             "handler": "agent_kernel",
                             "entry_mode": _entry_mode,
+                            "execution_path": _exec_path_k,
                             **provider_info,
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
@@ -1335,8 +1406,29 @@ class OpenClawd:
                 multimodal_context=multimodal_context,
                 runtime_session_id=runtime_session_id,
             )
-            # ── Decision Execution (PR-8) ─────────────────────────────────────
-            self._run_execution(_continuum_state_dict2, entry_mode=_entry_mode)
+            # ── Decision Execution (PR-8 / PR-4) ─────────────────────────────
+            _exec_result2 = self._run_execution(_continuum_state_dict2, entry_mode=_entry_mode)
+            # Detect whether a cross-device dispatch occurred (set by handlers).
+            _cross_device2 = bool(result.get("metadata", {}).get("remote_dispatch", False))
+            _exec_path2 = self._determine_execution_path(
+                entry_mode=_entry_mode,
+                execution_result=_exec_result2,
+                cross_device_dispatched=_cross_device2,
+            )
+            # PR-4: structured observability log whenever execution_path is set.
+            logger.info(
+                "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s",
+                trace_id, _entry_mode, _exec_path2,
+            )
+            if _exec_path2 == "none":
+                _exec_result2.setdefault("skipped_reason", "no_execution")
+            # Attach cross-device summary when applicable.
+            if _cross_device2:
+                _exec_result2["cross_device_summary"] = {
+                    "request_id": request_id,
+                    "device_ids": [device_id] if device_id else [],
+                    "status": "dispatched" if result.get("success") else "failed",
+                }
 
             return {
                 "success": result.get("success", True),
@@ -1344,6 +1436,8 @@ class OpenClawd:
                 "intent": intent_type,
                 "trace_id": trace_id,
                 "runtime_session_id": runtime_session_id or trace_id,
+                "execution_path": _exec_path2,
+                "execution_result": _exec_result2,
                 "interaction": _interaction_dict,
                 "persona_state": _persona_state_dict,
                 "interaction_envelope": _interaction_envelope_dict2,
@@ -1360,6 +1454,7 @@ class OpenClawd:
                     "suggestions": parsed_intent.suggestions if parsed_intent else [],
                     "handler": handler_name,
                     "entry_mode": _entry_mode,
+                    "execution_path": _exec_path2,
                     **provider_info,
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,
@@ -1392,6 +1487,12 @@ class OpenClawd:
                 "response": f"处理请求时发生错误: {str(e)}",
                 "intent": "error",
                 "trace_id": trace_id,
+                "execution_path": "none",
+                "execution_result": {
+                    "action_taken": "none",
+                    "success": False,
+                    "skipped_reason": f"process_error: {e}",
+                },
                 "metadata": {
                     "request_id": request_id,
                     "trace_id": trace_id,
@@ -1399,6 +1500,7 @@ class OpenClawd:
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
                     "entry_mode": _entry_mode,
+                    "execution_path": "none",
                     "error": str(e),
                 },
             }
