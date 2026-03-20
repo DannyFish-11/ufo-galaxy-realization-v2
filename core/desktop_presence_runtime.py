@@ -181,6 +181,11 @@ class DesktopPresenceRuntime:
         self._active_sessions: Dict[str, RuntimeSession] = {}
         logger.info("DesktopPresenceRuntime initialised")
 
+        # PR-3: Optionally autostart MultimodalIngressBus when
+        # enable_multimodal_ingest is True in config.  Failures are silent so
+        # that text-only deployments are completely unaffected.
+        self._try_start_ingest_bus()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -507,6 +512,22 @@ class DesktopPresenceRuntime:
     # ------------------------------------------------------------------
     # Observability helpers
     # ------------------------------------------------------------------
+
+    def _try_start_ingest_bus(self) -> None:
+        """Optionally start MultimodalIngressBus based on config flags.
+
+        PR-3: Called from ``__init__``.  Gracefully degrades when the flag is
+        disabled or when audio/video deps are absent.
+        """
+        try:
+            from core.multimodal.ingest_runtime import start_ingest_bus
+            started = start_ingest_bus(runtime_session_id=None)
+            if started:
+                logger.info("DesktopPresenceRuntime: multimodal ingest bus started")
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err
+            )
 
     def _log_request_start(
         self,

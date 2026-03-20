@@ -767,12 +767,19 @@ class OpenClawd:
             if orch is None:
                 return None
 
-            # Try to obtain a live PerceptionFrame from the ingress bus.
+            # Try to obtain a live PerceptionFrame from the running singleton
+            # ingress bus (PR-3).  If the singleton is not running (bus disabled
+            # or no pipelines wired) fall back to a fresh bus instance that
+            # returns a default frame with all-missing quality.
             frame = None
             try:
-                from core.multimodal.ingress_bus import MultimodalIngressBus
-                _bus = MultimodalIngressBus()
-                frame = _bus.build_frame()
+                from core.multimodal.ingest_runtime import get_ingest_bus as _get_ingest_bus
+                _running_bus = _get_ingest_bus()
+                if _running_bus is not None:
+                    frame = _running_bus.build_frame()
+                else:
+                    from core.multimodal.ingress_bus import MultimodalIngressBus
+                    frame = MultimodalIngressBus().build_frame()
             except Exception:
                 pass  # orchestrator will construct a minimal default
 
