@@ -99,6 +99,9 @@ class StateEventType(str, Enum):
     # ── Entry-mode unification (PR-1 EntryMode) ────────────────────────────
     ENTRY_MODE_RESOLVED = "entry_mode.resolved"  # entry_mode stamped on a request
 
+    # ── Multimodal ingest (PR-3) ───────────────────────────────────────────
+    MULTIMODAL_INGEST_ACTIVE = "multimodal.ingest.active"  # ingest bus started/running
+
     # ── Generic / passthrough ─────────────────────────────────────────────
     GENERIC         = "generic"         # uncategorised event
 

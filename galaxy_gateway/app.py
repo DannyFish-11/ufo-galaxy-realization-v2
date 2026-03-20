@@ -989,6 +989,9 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     device_id: Optional[str] = None
     context: Optional[dict] = None
+    # PR-3: multimodal context bundle — absent for text-only requests.
+    # Passed through intact to OpenClawd.process() for multimodal fusion.
+    multimodal_context: Optional[dict] = None
     # PR-1 EntryMode: caller-supplied execution mode override.
     # When absent, the mode is auto-resolved from the cross-device switch and
     # device registry.  One of: "local" | "cross_device" | "hybrid".
@@ -1025,6 +1028,7 @@ async def chat_endpoint(request: ChatRequest, auth: dict = Depends(_require_auth
             session_id=request.session_id or "gateway_default",
             device_id=request.device_id,
             context=request.context or {},
+            multimodal_context=request.multimodal_context,
             entry_mode=_entry_mode,
         )
         # 确保向后兼容字段存在（reply 是 response 的别名，供旧版客户端使用）
