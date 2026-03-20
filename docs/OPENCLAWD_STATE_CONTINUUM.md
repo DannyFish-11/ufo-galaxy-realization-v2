@@ -12,10 +12,14 @@ The State Continuum upgrades OpenClawd from a discrete request/response assistan
 
 ---
 
-## 2. Public Tri-State Model
+## 2. Two-Dimensional Public Model
 
-External consumers (APIs, desktop status boards, documentation) interact with
-**three** public-facing states:
+The continuum exposes **two public dimensions** to external consumers
+(APIs, desktop status boards, documentation):
+
+### Dimension 1 — Tri-State Phase (`TriStatePhase`)
+
+*What* the system is doing.
 
 | Public State | Meaning | `presence_intensity` range |
 |---|---|---|
@@ -27,6 +31,27 @@ External consumers (APIs, desktop status boards, documentation) interact with
 > a public primary state.  It is never surfaced to external consumers.  Use
 > `ContinuumState.tri_state_phase` (a `TriStatePhase` enum) for all outward
 > projections.
+
+### Dimension 2 — Runtime Domain (`RuntimeDomain`)
+
+*Where* execution is happening.
+
+| Domain | Meaning |
+|---|---|
+| `local` | Execution confined to this single device / process |
+| `cross_device` | Execution spans multiple devices or remote nodes |
+| `transition` | Actively deciding between local and cross-device routing |
+| `null` / `None` | Domain not yet determined (early formless phase) |
+
+Combining both dimensions gives the full system posture:
+
+| Phase | Domain | Meaning |
+|---|---|---|
+| `silent` | `local` | Sensing only, single device |
+| `liminal` | `local` | Intent forming on this device |
+| `liminal` | `transition` | Deciding whether to expand cross-device |
+| `manifest` | `local` | Executing on this device |
+| `manifest` | `cross_device` | Executing across remote nodes |
 
 ### Why three states?
 
@@ -81,6 +106,7 @@ Appended to every OpenClawd response as an **optional, additive field**.  Existi
 
 The `phase` field carries the **internal** `ContinuumPhase` value; external
 consumers SHOULD prefer `tri_state_phase` for display and routing decisions.
+`runtime_domain` is `null` until the domain is determined.
 
 ```json
 {
@@ -94,6 +120,7 @@ consumers SHOULD prefer `tri_state_phase` for display and routing decisions.
     "collapse_tendency": 0.27,
     "retreat_tendency": 0.08,
     "stability": 0.82,
+    "runtime_domain": "transition",
     "decision": {
       "should_act_score": 0.31,
       "action_level": "assist",
@@ -122,13 +149,14 @@ consumers SHOULD prefer `tri_state_phase` for display and routing decisions.
 
 ### Public projection
 
-Use `ContinuumState.tri_state_phase` to get a `TriStatePhase` value (`silent`,
-`liminal`, or `manifest`) suitable for status boards and external APIs:
+Use `ContinuumState.tri_state_phase` and `ContinuumState.runtime_domain` for
+the full two-dimensional system posture:
 
 ```python
-from core.continuum import TriStatePhase, continuum_to_tri_state
+from core.continuum import TriStatePhase, RuntimeDomain
 
-pub = state.tri_state_phase   # TriStatePhase.SILENT | LIMINAL | MANIFEST
+pub_phase = state.tri_state_phase   # TriStatePhase.SILENT | LIMINAL | MANIFEST
+domain    = state.runtime_domain    # RuntimeDomain.LOCAL | CROSS_DEVICE | TRANSITION | None
 ```
 
 ### Degraded Fallback
@@ -141,6 +169,7 @@ When the continuum engine encounters an unhandled error, it returns a safe `form
     "version": 1,
     "phase": "formless",
     "presence_intensity": 0.0,
+    "runtime_domain": null,
     "degraded": true,
     "degrade_reason": "continuum_internal_error"
   }
@@ -182,7 +211,8 @@ Return Engine              ← check exit conditions → trigger receding if nee
       │                                              (internal only)
       ▼
 ContinuumState             ← assemble final output
-                             (.tri_state_phase = public projection)
+                             (.tri_state_phase = public phase dimension)
+                             (.runtime_domain  = public domain dimension)
 ```
 
 ---
@@ -210,6 +240,7 @@ should_act_score  = value − interruption_cost − risk_cost
 
 - The `state_continuum` field is **additive**.  Clients that do not consume it are unaffected.
 - All existing request/response fields remain unchanged.
+- `runtime_domain` is a new **additive** field with a `null` default — consumers that do not read it are unaffected.
 - When `flags.enabled = False`, the field is omitted entirely.
 - On engine error, the field is present but carries `degraded: true` and a safe formless state.
 
@@ -223,6 +254,7 @@ should_act_score  = value − interruption_cost − risk_cost
 4. **Always reversible** — any path through the graph ends at `formless`.
 5. **Interrupt on value** — action only when `should_act_score` exceeds the threshold.
 6. **Three public states** — external code MUST use `TriStatePhase` / `tri_state_phase`; never depend on `receding` being visible externally.
+7. **Two public dimensions** — always use both `tri_state_phase` and `runtime_domain` together for the complete system posture.
 
 ---
 
@@ -254,7 +286,7 @@ Key defaults:
 
 | Module | Responsibility |
 |---|---|
-| `core/continuum/types.py` | Canonical enums (`TriStatePhase`, `ContinuumPhase`) and Pydantic models |
+| `core/continuum/types.py` | Canonical enums (`TriStatePhase`, `ContinuumPhase`, `RuntimeDomain`) and Pydantic models |
 | `core/continuum/config.py` | Configuration structures and defaults |
 | `core/continuum/human_field.py` | Human field inference engine *(PR-3)* |
 | `core/continuum/state_fusion.py` | Multi-source state fusion *(PR-3)* |

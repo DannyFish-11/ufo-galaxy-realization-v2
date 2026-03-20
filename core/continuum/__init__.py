@@ -5,13 +5,21 @@ core.continuum — State Continuum Protocol
 Defines the data structures, configuration, and engines for
 OpenClawd's state continuum system.
 
-Public-facing tri-state model
+Two-dimensional public model
 ------------------------------
-External APIs and documentation use :class:`TriStatePhase`:
+The continuum exposes two public dimensions:
 
-    silent   — native multimodal ingress, minimal footprint
-    liminal  — intent forming; single-device ↔ cross-device bridge
-    manifest — structure formed, action in progress
+1. **Tri-state phase** (:class:`TriStatePhase`) — *what* the system is doing:
+
+       silent   — native multimodal ingress, minimal footprint
+       liminal  — intent forming; single-device ↔ cross-device bridge
+       manifest — structure formed, action in progress
+
+2. **Runtime domain** (:class:`RuntimeDomain`) — *where* execution runs:
+
+       local        — confined to this single device / process
+       cross_device — spanning multiple devices or remote nodes
+       transition   — deciding between local and cross-device routing
 
 Internal phase lifecycle (full continuum)
 ------------------------------------------
@@ -22,7 +30,8 @@ public primary state.  Use :func:`continuum_to_tri_state` to project
 any internal phase to its public tri-state equivalent.
 
 Public surface:
-  - TriStatePhase            (public enum — use for external APIs/docs)
+  - TriStatePhase            (public enum — tri-state, first dimension)
+  - RuntimeDomain            (public enum — local/cross_device, second dimension)
   - ContinuumPhase           (internal enum — four phases)
   - continuum_to_tri_state   (projection helper)
   - ActionLevel              (enum)
@@ -30,7 +39,7 @@ Public surface:
   - SpatialPresence          (enum)
   - HumanFieldState          (Pydantic model)
   - UnifiedState             (Pydantic model)
-  - ContinuumState           (Pydantic model; has .tri_state_phase property)
+  - ContinuumState           (Pydantic model; has .tri_state_phase and .runtime_domain)
   - DecisionState            (Pydantic model)
   - ExpressionState          (Pydantic model)
   - ContinuumConfig          (Pydantic model)
@@ -62,6 +71,7 @@ Public surface:
 from core.continuum.types import (
     TriStatePhase,
     ContinuumPhase,
+    RuntimeDomain,
     continuum_to_tri_state,
     HumanFieldState,
     UnifiedState,
@@ -100,6 +110,8 @@ __all__ = [
     # Public tri-state (use for external APIs/docs)
     "TriStatePhase",
     "continuum_to_tri_state",
+    # Public runtime domain (second dimension — local vs cross-device)
+    "RuntimeDomain",
     # Internal enums
     "ContinuumPhase",
     "ActionLevel",
