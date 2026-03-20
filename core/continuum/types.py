@@ -5,13 +5,21 @@ core.continuum.types — State Continuum Protocol Data Structures
 Defines the canonical types for OpenClawd's state continuum system.
 All models are serializable to dict/JSON and carry no UI semantics.
 
-Public-facing tri-state model
+Two-dimensional public model
 ------------------------------
-OpenClawd exposes **three** primary states to external consumers:
+The continuum exposes **two** public dimensions to external consumers:
 
-    silent   — native multimodal ingress, minimal footprint
-    liminal  — intent forming; single-device ↔ cross-device transition zone
-    manifest — structure formed, action in progress or ready
+1. **Tri-state phase** (``TriStatePhase``) — *what* the system is doing:
+
+       silent   — native multimodal ingress, minimal footprint
+       liminal  — intent forming; single-device ↔ cross-device transition zone
+       manifest — structure formed, action in progress or ready
+
+2. **Runtime domain** (``RuntimeDomain``) — *where* execution is happening:
+
+       local        — confined to this single device / process
+       cross_device — spanning multiple devices or remote nodes
+       transition   — actively deciding between local and cross-device routing
 
 Internal phase lifecycle (full continuum)
 ------------------------------------------
@@ -110,6 +118,43 @@ class ContinuumPhase(str, Enum):
     It is NOT a public primary state and must not appear in external
     status projections, API responses, or documentation.
     Maps to :attr:`TriStatePhase.SILENT` when projected publicly.
+    """
+
+
+class RuntimeDomain(str, Enum):
+    """The runtime execution domain — the second public dimension of the continuum.
+
+    ``TriStatePhase`` (silent / liminal / manifest) describes *what* the system
+    is doing.  ``RuntimeDomain`` describes *where* execution is happening.
+
+    External consumers (status boards, APIs, docs) combine both dimensions to
+    understand the full system posture:
+
+    +---------+--------------+----------------------------------------------+
+    | Phase   | Domain       | Meaning                                      |
+    +=========+==============+==============================================+
+    | silent  | local        | Sensing only, single device                  |
+    | liminal | local        | Intent forming on this device                |
+    | liminal | transition   | Deciding whether to expand cross-device      |
+    | manifest| local        | Executing on this device                     |
+    | manifest| cross_device | Executing across remote nodes                |
+    +---------+--------------+----------------------------------------------+
+
+    A ``None`` value in :attr:`ContinuumState.runtime_domain` means the domain
+    has not yet been determined (e.g. very early in the formless phase).
+    """
+
+    LOCAL = "local"
+    """Execution is confined to this single device / process."""
+
+    CROSS_DEVICE = "cross_device"
+    """Execution spans multiple devices or remote nodes."""
+
+    TRANSITION = "transition"
+    """The system is actively deciding between local and cross-device routing.
+
+    Typically observed during the ``liminal`` tri-state phase while the
+    capability resolver is evaluating available remote nodes.
     """
 
 
@@ -478,6 +523,14 @@ class ContinuumState(BaseModel):
     expression: ExpressionState = Field(
         default_factory=ExpressionState,
         description="Expression parameters for this cycle.",
+    )
+    runtime_domain: Optional[RuntimeDomain] = Field(
+        default=None,
+        description=(
+            "Second public dimension: where execution is happening.  "
+            "None while the domain is undetermined (early formless phase).  "
+            "Use alongside tri_state_phase for the full system posture."
+        ),
     )
     degraded: bool = Field(
         default=False,
