@@ -5,13 +5,15 @@ Status Board V2 — main application entry point.
 
 This is a **read-only** CLI status board that consumes the
 :class:`~core.projection.RuntimeProjection` produced by the Galaxy server
-and renders it using five lightweight text surfaces:
+and renders it using seven lightweight text surfaces:
 
   PhaseSurface     — tri_state_phase
   DomainSurface    — runtime_domain
   TopologySurface  — primary/support models, weight bars, route reason
   DeviceSurface    — active devices, execution stage, task summary
   MetricsSurface   — presence_intensity, coherence, collapse/retreat tendency
+  LiminalSurface   — liminal spatial projection dimensions (PR-5)
+  ManifestSurface  — manifest-stage 显现台 execution surface (PR-6)
 
 READ-ONLY GUARANTEE
 -------------------
@@ -62,6 +64,7 @@ from .topology_surface import TopologySurface
 from .device_surface import DeviceSurface
 from .metrics_surface import MetricsSurface
 from .liminal_surface import LiminalSurface
+from .manifest_surface import ManifestSurface
 
 _RESET = _ansi.RESET
 _BOLD = _ansi.BOLD
@@ -105,6 +108,7 @@ class StatusBoardV2App:
         self._device = DeviceSurface()
         self._metrics = MetricsSurface()
         self._liminal = LiminalSurface()
+        self._manifest = ManifestSurface()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -147,6 +151,7 @@ class StatusBoardV2App:
             self._device.render(projection),
             self._metrics.render(projection),
             self._liminal.render(projection),
+            self._manifest.render(projection),
             _ansi.c(_BOARD_SEPARATOR, _BOLD),
         ]
         return "\n".join(parts)
