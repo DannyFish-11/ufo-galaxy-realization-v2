@@ -13,6 +13,7 @@ visualises:
 - Active devices and execution stage                  → DeviceSurface
 - Presence/coherence/tendency metrics                 → MetricsSurface
 - Liminal spatial projection dimensions               → LiminalSurface
+- Manifest stage (显现台) execution surface           → ManifestSurface
 
 READ-ONLY GUARANTEE
 -------------------
@@ -29,6 +30,7 @@ All command execution remains in::
 from .app import main, run, StatusBoardV2App
 from .projection_reader import ProjectionReader
 from .liminal_surface import LiminalSurface
+from .manifest_surface import ManifestSurface
 
 __all__ = [
     "main",
@@ -36,4 +38,5 @@ __all__ = [
     "StatusBoardV2App",
     "ProjectionReader",
     "LiminalSurface",
+    "ManifestSurface",
 ]
