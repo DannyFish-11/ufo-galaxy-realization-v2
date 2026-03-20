@@ -3461,3 +3461,185 @@ async def dashboard_github_status():
     except Exception as exc:
         return {"success": False, "error": str(exc)}
 
+
+
+# ============================================================================
+# Block-4: Body Mesh + Device Health + HITL Endpoints
+# ============================================================================
+
+
+# --- Body Mesh topology ---
+
+
+@app.get("/api/v1/mesh/topology")
+async def get_mesh_topology():
+    """Return the current Body Mesh topology (for manifest mesh console)."""
+    try:
+        from core.mesh.body_mesh_registry import get_body_mesh_registry
+        registry = get_body_mesh_registry()
+        return registry.snapshot()
+    except Exception as exc:
+        return {"success": False, "error": str(exc), "total": 0, "entries": []}
+
+
+@app.get("/api/v1/mesh/assignment")
+async def get_mesh_assignment(session_id: Optional[str] = None):
+    """Return primary/secondary body assignment for a session."""
+    try:
+        from core.mesh.body_mesh_registry import get_body_mesh_registry
+        registry = get_body_mesh_registry()
+        assignment = registry.compute_assignment(session_id=session_id)
+        return assignment.to_dict()
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.post("/api/v1/mesh/allocate")
+async def trigger_mesh_allocation(session_id: Optional[str] = None):
+    """Trigger role allocation for all registered devices."""
+    try:
+        from core.mesh.device_role_allocator import get_device_role_allocator
+        allocator = get_device_role_allocator()
+        results = allocator.allocate_all(session_id=session_id)
+        return {"success": True, "allocated": [r.to_dict() for r in results]}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# --- Device health ---
+
+
+@app.get("/api/v1/devices/health")
+async def get_all_device_health():
+    """Return health scores for all devices."""
+    try:
+        from core.unified.device_health import get_device_health_scorer
+        scorer = get_device_health_scorer()
+        return scorer.snapshot()
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.get("/api/v1/devices/{device_id}/health")
+async def get_device_health(device_id: str):
+    """Return the health score for a specific device."""
+    try:
+        from core.unified.device_health import get_device_health_scorer
+        scorer = get_device_health_scorer()
+        hs = scorer.score(device_id)
+        return hs.to_dict()
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# --- HITL policy ---
+
+
+@app.get("/api/v1/hitl/requests")
+async def get_hitl_pending_requests():
+    """Return all pending HITL confirmation requests."""
+    try:
+        from core.policy.hitl_policy import get_hitl_policy
+        policy = get_hitl_policy()
+        return {
+            "pending": [r.to_dict() for r in policy.pending_requests()],
+            "count": len(policy.pending_requests()),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+class HITLDecideBody(BaseModel):
+    request_id: str
+    approve: bool
+    reason: Optional[str] = ""
+    decided_by: Optional[str] = "dashboard_user"
+
+
+@app.post("/api/v1/hitl/decide")
+async def hitl_decide(body: HITLDecideBody):
+    """Submit a human decision for a pending HITL request."""
+    try:
+        from core.policy.hitl_policy import get_hitl_policy
+        policy = get_hitl_policy()
+        decision = policy.decide(
+            request_id=body.request_id,
+            approve=body.approve,
+            decided_by=body.decided_by or "dashboard_user",
+            reason=body.reason or "",
+        )
+        if decision is None:
+            return {"success": False, "error": f"Request {body.request_id!r} not found"}
+        return {"success": True, "decision": decision.to_dict()}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.get("/api/v1/hitl/history")
+async def get_hitl_history(n: int = 50):
+    """Return recent HITL decision history."""
+    try:
+        from core.policy.hitl_policy import get_hitl_policy
+        policy = get_hitl_policy()
+        return {
+            "history": [d.to_dict() for d in policy.decision_history(n=n)],
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.get("/api/v1/hitl/mode")
+async def get_hitl_mode():
+    """Return the current HITL policy mode."""
+    try:
+        from core.policy.hitl_policy import get_hitl_policy
+        policy = get_hitl_policy()
+        return {"mode": policy.mode.value}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+class HITLModeBody(BaseModel):
+    mode: str  # "auto" | "semi" | "manual"
+
+
+@app.post("/api/v1/hitl/mode")
+async def set_hitl_mode(body: HITLModeBody):
+    """Update the HITL policy mode."""
+    try:
+        from core.policy.hitl_policy import get_hitl_policy, HITLMode
+        policy = get_hitl_policy()
+        policy.mode = HITLMode(body.mode)
+        return {"success": True, "mode": policy.mode.value}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# --- Presence projection ---
+
+
+@app.get("/api/v1/presence/events")
+async def get_presence_events(n: int = 20):
+    """Return the most recent presence projection events."""
+    try:
+        from core.presence.presence_projection import get_presence_projection
+        proj = get_presence_projection()
+        events = proj.last_events(n=n)
+        return {"events": [e.to_dict() for e in events]}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.post("/api/v1/presence/project")
+async def trigger_presence_projection(session_id: Optional[str] = None):
+    """Manually trigger a presence projection for a session."""
+    try:
+        from core.presence.presence_director import get_presence_director
+        director = get_presence_director()
+        events = director.refresh_presence(
+            cognitive_state={"manual_trigger": True},
+            session_id=session_id,
+        )
+        return {"success": True, "projected_to": len(events), "events": [e.to_dict() for e in events]}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}

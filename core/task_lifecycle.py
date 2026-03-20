@@ -81,9 +81,12 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
     try:
         from core.state_event_bus import emit as _seb_emit, StateEventType
         _type_map = {
-            "running": StateEventType.TASK_STARTED,
-            "done":    StateEventType.TASK_DONE,
-            "failed":  StateEventType.TASK_FAILED,
+            "running":     StateEventType.TASK_STARTED,
+            "done":        StateEventType.TASK_DONE,
+            "failed":      StateEventType.TASK_FAILED,
+            # Block-4 new terminal states: map to TASK_FAILED for bus compat
+            "cancelled":   StateEventType.TASK_FAILED,
+            "interrupted": StateEventType.TASK_FAILED,
         }
         et = _type_map.get(status)
         if et is None:
@@ -181,6 +184,66 @@ class TaskLifecycleManager:
         )
         _emit_lifecycle_event(updated, "failed")
         self._write_memory(updated, result_summary=f"FAILED: {error}", success=False)
+        return updated
+
+    def mark_cancelled(
+        self,
+        envelope: Any,
+        reason: str = "",
+    ) -> Any:
+        """Transition envelope to 'cancelled' terminal state.
+
+        Block-4 addition: propagates a cancel signal for end-to-end cancellation.
+        Emits M2 ``task.lifecycle`` event and writes a cancellation summary.
+        """
+        # Use .transition() if the envelope supports it; otherwise mutate lifecycle_status.
+        try:
+            updated = envelope.transition("cancelled")
+        except Exception:
+            updated = envelope
+            try:
+                object.__setattr__(updated, "lifecycle_status", "cancelled")
+            except Exception:
+                pass
+
+        logger.info(
+            "task.lifecycle | task_id=%s trace_id=%s status=cancelled tool=%s reason=%r",
+            getattr(updated, "task_id", ""),
+            getattr(updated, "trace_id", ""),
+            getattr(updated, "tool_name", ""),
+            reason[:200] if reason else "",
+        )
+        _emit_lifecycle_event(updated, "cancelled")
+        self._write_memory(updated, result_summary=f"CANCELLED: {reason}", success=False)
+        return updated
+
+    def mark_interrupted(
+        self,
+        envelope: Any,
+        reason: str = "",
+    ) -> Any:
+        """Transition envelope to 'interrupted' terminal state.
+
+        Block-4 addition: propagates an interrupt signal.
+        """
+        try:
+            updated = envelope.transition("interrupted")
+        except Exception:
+            updated = envelope
+            try:
+                object.__setattr__(updated, "lifecycle_status", "interrupted")
+            except Exception:
+                pass
+
+        logger.info(
+            "task.lifecycle | task_id=%s trace_id=%s status=interrupted tool=%s reason=%r",
+            getattr(updated, "task_id", ""),
+            getattr(updated, "trace_id", ""),
+            getattr(updated, "tool_name", ""),
+            reason[:200] if reason else "",
+        )
+        _emit_lifecycle_event(updated, "interrupted")
+        self._write_memory(updated, result_summary=f"INTERRUPTED: {reason}", success=False)
         return updated
 
     # ── Memory backflow (Capability 3) ──────────────────────────────────────

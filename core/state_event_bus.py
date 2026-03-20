@@ -90,6 +90,12 @@ class StateEventType(str, Enum):
     # ── Device state ───────────────────────────────────────────────────────
     DEVICE_UPDATED  = "device.updated"  # device state / capability updated
 
+    # ── Block-4: Presence / mesh / HITL ───────────────────────────────────
+    PRESENCE_PROJECTED = "presence.projected"  # cognitive state projected to device(s)
+    HITL_EVALUATED     = "hitl.evaluated"      # HITL gate evaluation completed
+    MESH_UPDATED       = "mesh.updated"        # body mesh topology changed
+    TASK_CANCELLED     = "task.cancelled"      # task cancelled by cancel/interrupt signal
+
     # ── Generic / passthrough ─────────────────────────────────────────────
     GENERIC         = "generic"         # uncategorised event
 
