@@ -10,13 +10,27 @@ Windows AIP v3.0 客户端
   2. 发送 device_register（AIP v3.0 握手）
   3. 发送 capability_report（supported_actions 列表）
   4. 维护心跳保活
-  5. 接收并执行服务端下发的任务命令（使用 autonomy_manager）
+  5. 接收并执行服务端下发的任务命令（统一通过 WindowsExecutionArbiter）
+
+执行管道
+--------
+所有入站命令经由统一执行仲裁器路由::
+
+    AIP ingress (this file)
+        ↓
+    WindowsExecutionArbiter.route_command()      ← 唯一执行入口
+        ↓  fallback chain: system_api → UIA → GUI → VLM
+    WindowsAutonomyManager  (UIA adapter)
+
+旧版本的多路命令分支（bespoke action_types 字典）已被替换。
+遗留路径（windows_mcp_server.py、ui_sidebar.py、client.py、
+desktop_automation.py）已被弃用，不再是主执行路径。
 
 启动方式:
     python windows_client/windows_aip_client.py --host 127.0.0.1 --port 8000
 
 Author: Galaxy Team
-Version: 1.0.0
+Version: 2.0.0
 """
 
 import asyncio
@@ -33,7 +47,7 @@ logger = logging.getLogger("windows-aip-client")
 
 
 # ============================================================================
-# Windows 设备支持的 actions（与 MCP Server 工具对齐）
+# Windows 设备支持的 actions（与 Arbiter fallback chain 对齐）
 # ============================================================================
 
 WINDOWS_SUPPORTED_ACTIONS = [
@@ -50,81 +64,73 @@ WINDOWS_SUPPORTED_ACTIONS = [
 
 
 # ============================================================================
-# 懒加载 WindowsAutonomyManager
+# 懒加载 WindowsExecutionArbiter（统一执行仲裁器）
 # ============================================================================
 
-_manager = None
+_arbiter = None
 
 
-def _get_manager():
-    global _manager
-    if _manager is None:
+def _get_arbiter():
+    """Return the singleton :class:`WindowsExecutionArbiter`.
+
+    This is the **only** execution entry point for the AIP client.
+    All task_type / command routing goes through ``arbiter.route_command()``.
+    """
+    global _arbiter
+    if _arbiter is None:
         try:
             _client_dir = os.path.dirname(os.path.abspath(__file__))
             _root_dir = os.path.dirname(_client_dir)
             for p in [_client_dir, _root_dir]:
                 if p not in sys.path:
                     sys.path.insert(0, p)
-            from windows_client.autonomy.autonomy_manager import WindowsAutonomyManager
-            _manager = WindowsAutonomyManager()
-            logger.info("WindowsAutonomyManager 已就绪")
+            from core.windows_execution_arbiter import get_windows_arbiter
+            _arbiter = get_windows_arbiter()
+            logger.info("WindowsExecutionArbiter 已就绪")
         except Exception as e:
-            logger.warning(f"WindowsAutonomyManager 不可用: {e}")
-    return _manager
+            logger.warning(f"WindowsExecutionArbiter 不可用: {e}")
+    return _arbiter
 
 
 # ============================================================================
-# 命令执行
+# 命令执行 — 统一通过仲裁器路由
 # ============================================================================
 
 def _execute_command(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """根据 task_type 调用本地能力"""
-    if task_type == "screenshot":
-        try:
-            import PIL.ImageGrab as ImageGrab
-            import io, base64
-            img = ImageGrab.grab()
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            b64 = base64.b64encode(buf.getvalue()).decode()
-            return {"success": True, "image_base64": b64}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+    """Route a device command through :class:`WindowsExecutionArbiter`.
 
-    manager = _get_manager()
-    if manager is None:
-        return {"success": False, "error": "autonomy manager unavailable"}
+    This replaces the previous bespoke per-action branching logic.
+    The arbiter applies its strict fallback chain:
+    system_api → UIA (via WindowsAutonomyManager) → GUI → VLM.
+    """
+    arbiter = _get_arbiter()
+    if arbiter is None:
+        return {"success": False, "error": "execution arbiter unavailable"}
 
-    action_types = {
-        "get_screen_state": lambda p: manager.get_screen_state(),
-        "click": lambda p: manager.execute_action({"type": "click", "params": p}),
-        "type": lambda p: manager.execute_action({"type": "type", "params": p}),
-        "press_key": lambda p: manager.execute_action({"type": "press_key", "params": p}),
-        "press_keys": lambda p: manager.execute_action({"type": "press_keys", "params": p}),
-        "scroll": lambda p: manager.execute_action({"type": "scroll", "params": p}),
-        "find_and_click": lambda p: manager.execute_action({"type": "find_and_click", "params": p}),
-        "find_and_type": lambda p: manager.execute_action({"type": "find_and_type", "params": p}),
-    }
-
-    handler = action_types.get(task_type)
-    if handler:
-        return handler(payload)
-
-    # 通用 execute_task 兼容
-    return manager.execute_action({"type": task_type, "params": payload})
+    result = arbiter.route_command(
+        action=task_type,
+        params=payload,
+        device_id="local",
+    )
+    # Normalise to the flat dict shape callers expect
+    if isinstance(result, dict) and "result" in result:
+        merged = {"success": result.get("success", False)}
+        merged.update(result.get("result", {}))
+        return merged
+    return result
 
 
 def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a remote ``agent_execute`` payload on the local Windows device.
 
-    Tries to run through ``WindowsAutonomyManager`` if available.  Returns a
-    structured result that preserves ``agent_id``, ``task_id``, and
-    ``trace_id`` for end-to-end correlation (PR155).
+    Routes through :class:`WindowsExecutionArbiter` as a generic
+    ``agent_task`` action, preserving all correlation IDs for end-to-end
+    tracing (PR155/PR158).
 
     Supports the extended **SwarmAgentManifest** context keys introduced in
     PR158: ``system_prompt``, ``tool_schemas``, ``memory_snapshot``, and
     ``manifest_id`` are extracted from the ``context`` sub-dict and forwarded
-    to the autonomy manager when present.
+    to the arbiter when present.
 
     Parameters
     ----------
@@ -145,10 +151,7 @@ def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     agent_template = payload.get("agent_template", "")
     context = payload.get("context", {})
 
-    # PR158: extract SwarmAgentManifest fields from context
-    system_prompt = context.get("system_prompt", "")
-    tool_schemas = context.get("tool_schemas", [])
-    memory_snapshot = context.get("memory_snapshot", {})
+    # PR158: manifest_id is carried inside context and forwarded via context dict
     manifest_id = context.get("manifest_id", "")
 
     logger.info(
@@ -157,43 +160,14 @@ def _execute_agent_task(payload: Dict[str, Any]) -> Dict[str, Any]:
         agent_id, task_id, trace_id, agent_template, manifest_id, task_text,
     )
 
-    manager = _get_manager()
-
-    # Build enriched execution request that carries manifest fields
-    agent_request = {
-        "task": task_text,
-        "agent_template": agent_template,
-        "context": context,
-    }
-    if system_prompt:
-        agent_request["system_prompt"] = system_prompt
-    if tool_schemas:
-        agent_request["tool_schemas"] = tool_schemas
-    if memory_snapshot:
-        agent_request["memory_snapshot"] = memory_snapshot
-    if manifest_id:
-        agent_request["manifest_id"] = manifest_id
-
-    try:
-        if manager is not None and hasattr(manager, "execute_agent_task"):
-            # WindowsAutonomyManager supports agent task execution
-            result = manager.execute_agent_task(agent_request)
-        elif manager is not None:
-            # Fallback: treat task as a generic autonomy action
-            result = manager.execute_action({
-                "type": "agent_task",
-                "params": {"task": task_text, "context": context},
-            })
-        else:
-            # No autonomy manager — return acknowledgement
-            result = {
-                "success": True,
-                "output": f"[agent_execute] task received on Windows device: {task_text[:120]}",
-                "note": "autonomy_manager unavailable; acknowledged only",
-            }
-    except Exception as exc:
-        logger.error("[agent_execute] execution error: %s", exc)
-        result = {"success": False, "error": str(exc)}
+    result = _execute_command(
+        "agent_task",
+        {
+            "task": task_text,
+            "agent_template": agent_template,
+            "context": context,
+        },
+    )
 
     # Ensure result is always a plain dict before setting correlation IDs
     if not isinstance(result, dict):

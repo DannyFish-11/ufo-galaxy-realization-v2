@@ -3,19 +3,34 @@ core.continuum — State Continuum Protocol
 ==========================================
 
 Defines the data structures, configuration, and engines for
-OpenClawd's state continuum system: a continuous, non-UI presence model
-with four phases:
+OpenClawd's state continuum system.
 
-    Formless → Liminal → Manifest → Receding
+Public-facing tri-state model
+------------------------------
+External APIs and documentation use :class:`TriStatePhase`:
+
+    silent   — native multimodal ingress, minimal footprint
+    liminal  — intent forming; single-device ↔ cross-device bridge
+    manifest — structure formed, action in progress
+
+Internal phase lifecycle (full continuum)
+------------------------------------------
+    formless → liminal → manifest → receding → formless
+
+``receding`` is an internal return/rollback mechanism and is NOT a
+public primary state.  Use :func:`continuum_to_tri_state` to project
+any internal phase to its public tri-state equivalent.
 
 Public surface:
-  - ContinuumPhase           (enum)
+  - TriStatePhase            (public enum — use for external APIs/docs)
+  - ContinuumPhase           (internal enum — four phases)
+  - continuum_to_tri_state   (projection helper)
   - ActionLevel              (enum)
   - FormSignature            (enum)
   - SpatialPresence          (enum)
   - HumanFieldState          (Pydantic model)
   - UnifiedState             (Pydantic model)
-  - ContinuumState           (Pydantic model)
+  - ContinuumState           (Pydantic model; has .tri_state_phase property)
   - DecisionState            (Pydantic model)
   - ExpressionState          (Pydantic model)
   - ContinuumConfig          (Pydantic model)
@@ -45,7 +60,9 @@ Public surface:
 """
 
 from core.continuum.types import (
+    TriStatePhase,
     ContinuumPhase,
+    continuum_to_tri_state,
     HumanFieldState,
     UnifiedState,
     ContinuumState,
@@ -80,7 +97,10 @@ from core.continuum.orchestrator import ContinuumOrchestrator
 from core.continuum.metrics import ContinuumMetrics, get_continuum_metrics
 
 __all__ = [
-    # Enums
+    # Public tri-state (use for external APIs/docs)
+    "TriStatePhase",
+    "continuum_to_tri_state",
+    # Internal enums
     "ContinuumPhase",
     "ActionLevel",
     "FormSignature",

@@ -5,8 +5,22 @@ core.continuum.types — State Continuum Protocol Data Structures
 Defines the canonical types for OpenClawd's state continuum system.
 All models are serializable to dict/JSON and carry no UI semantics.
 
-Phase lifecycle:
+Public-facing tri-state model
+------------------------------
+OpenClawd exposes **three** primary states to external consumers:
+
+    silent   — native multimodal ingress, minimal footprint
+    liminal  — intent forming; single-device ↔ cross-device transition zone
+    manifest — structure formed, action in progress or ready
+
+Internal phase lifecycle (full continuum)
+------------------------------------------
     formless  →  liminal  →  manifest  →  receding  →  formless
+
+``receding`` is an **internal return/rollback mechanism** and is NOT a
+public primary state.  External status projections and documentation MUST
+use :class:`TriStatePhase` rather than :class:`ContinuumPhase` to avoid
+exposing implementation details.
 """
 
 from __future__ import annotations
@@ -24,25 +38,95 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
+class TriStatePhase(str, Enum):
+    """The three public-facing states of the OpenClawd state continuum.
+
+    These are the **only** states that external consumers (desktop status
+    boards, APIs, documentation) should reference.  Internal receding/rollback
+    logic uses :class:`ContinuumPhase` and must not be surfaced publicly.
+    """
+
+    SILENT = "silent"
+    """Native multimodal ingress and sensing.  Default / safe-fallback state.
+
+    The system is always alive in silent; it is receiving inputs (audio,
+    visual, touch, text) from its native modalities and building ambient
+    context.  Low footprint, no outward action.
+    """
+
+    LIMINAL = "liminal"
+    """Intent forming, structure undecided.  The bridging state.
+
+    The transition zone between single-device closed-loop execution and
+    cross-device expanded execution.  The system may still run entirely
+    local *or* begin routing tasks to remote nodes — the decision occurs
+    here.
+    """
+
+    MANIFEST = "manifest"
+    """Structure formed, action in progress or ready.
+
+    All execution paths (local UIA, system-API, cross-device) operate
+    inside this state.  Results flow back through receding (internal)
+    before the system returns to silent.
+    """
+
+
 class ContinuumPhase(str, Enum):
-    """The four mutually-exclusive phases of the state continuum.
+    """Internal four-phase lifecycle of the state continuum.
 
     Transitions must follow the allowed graph defined in
     docs/PHASE_TRANSITION_TABLE.md.  Hard-jumps (e.g. formless → manifest)
     are forbidden except in emergency/degraded mode.
+
+    .. note::
+        External APIs and documentation MUST use :class:`TriStatePhase`.
+        ``receding`` is an internal return mechanism and must not be
+        presented as a public primary state.
     """
 
     FORMLESS = "formless"
-    """Silent sensing, minimal presence.  Default / safe-fallback state."""
+    """Silent sensing, minimal presence.  Default / safe-fallback state.
+
+    Maps to :attr:`TriStatePhase.SILENT` in public projections.
+    """
 
     LIMINAL = "liminal"
-    """Intent injected, structure undetermined, window for intervention open."""
+    """Intent injected, structure undetermined, window for intervention open.
+
+    Maps to :attr:`TriStatePhase.LIMINAL` in public projections.
+    """
 
     MANIFEST = "manifest"
-    """Structure formed, action ready or in progress."""
+    """Structure formed, action ready or in progress.
+
+    Maps to :attr:`TriStatePhase.MANIFEST` in public projections.
+    """
 
     RECEDING = "receding"
-    """Expression dissolving, returning to silence."""
+    """**Internal only.**  Expression dissolving, returning to silence.
+
+    This is a rollback/return mechanism inside the continuum engine.
+    It is NOT a public primary state and must not appear in external
+    status projections, API responses, or documentation.
+    Maps to :attr:`TriStatePhase.SILENT` when projected publicly.
+    """
+
+
+def continuum_to_tri_state(phase: ContinuumPhase) -> TriStatePhase:
+    """Map an internal :class:`ContinuumPhase` to its public :class:`TriStatePhase`.
+
+    ``receding`` collapses to ``silent`` because, externally, the system
+    is dissolving back towards its resting state — it is functionally
+    indistinguishable from a gradual return to silent from the outside.
+    """
+    _MAP = {
+        ContinuumPhase.FORMLESS: TriStatePhase.SILENT,
+        ContinuumPhase.LIMINAL: TriStatePhase.LIMINAL,
+        ContinuumPhase.MANIFEST: TriStatePhase.MANIFEST,
+        ContinuumPhase.RECEDING: TriStatePhase.SILENT,
+    }
+    return _MAP[phase]
 
 
 class ActionLevel(str, Enum):
@@ -413,6 +497,21 @@ class ContinuumState(BaseModel):
     )
 
     model_config = {"from_attributes": True}
+
+    # ------------------------------------------------------------------
+    # Public tri-state projection
+    # ------------------------------------------------------------------
+
+    @property
+    def tri_state_phase(self) -> TriStatePhase:
+        """Return the public-facing tri-state representation of the current phase.
+
+        External consumers (desktop status boards, API responses, docs) MUST
+        use this property instead of reading ``phase`` directly.  The internal
+        ``receding`` phase is collapsed to ``silent`` here so it is never
+        exposed publicly.
+        """
+        return continuum_to_tri_state(self.phase)
 
     # ------------------------------------------------------------------
     # Convenience factories
