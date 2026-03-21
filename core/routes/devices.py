@@ -16,6 +16,8 @@ Routes:
   POST   /api/v1/devices/discover-active       - 触发主动设备发现
   GET    /api/v1/devices/{device_id}/telemetry  - 设备遥测数据
   POST   /api/v1/devices/transfer              - 跨设备文件传输
+  GET    /api/v1/devices/runtime-hosts         - PR-30: 列出所有设备的 Local Runtime Host 摘要
+  GET    /api/v1/devices/{device_id}/runtime-host - PR-30: 获取单个设备的 Local Runtime Host 合约
 """
 
 import asyncio
@@ -244,6 +246,67 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     continue
             devices.append({**info, "online": is_online})
         return JSONResponse({"devices": devices, "total": len(devices)})
+
+    # ─────── PR-30: Local Runtime Host summaries (must be before {device_id}) ─────────
+
+    @router.get("/api/v1/devices/runtime-hosts")
+    async def list_runtime_hosts():
+        """PR-30: Return Local Runtime Host summaries for all known devices.
+
+        This read-only endpoint normalises each known device into the
+        :class:`~contracts.local_runtime_host.LocalRuntimeHost` contract and
+        returns a lightweight summary list.  Existing endpoints are not
+        modified; this is purely additive.
+        """
+        from contracts.local_runtime_host import summarize_local_runtime_host
+        from contracts.registered_runtime_device import (
+            from_udm_device,
+            build_registered_runtime_device,
+        )
+        from contracts.local_runtime_host import from_registered_runtime_device
+
+        results = []
+        seen: set = set()
+
+        # Prefer UDM SSOT devices
+        try:
+            udm = get_unified_device_manager()
+            udm_devices = udm.list_devices() if hasattr(udm, "list_devices") else []
+            for udm_dev in (udm_devices or []):
+                try:
+                    did = str(getattr(udm_dev, "device_id", "") or "")
+                    if did and did not in seen:
+                        rrd = from_udm_device(udm_dev)
+                        host = from_registered_runtime_device(rrd)
+                        results.append(summarize_local_runtime_host(host))
+                        seen.add(did)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Supplement with registered_devices cache for any not yet included
+        for did, raw in registered_devices.items():
+            if did in seen:
+                continue
+            try:
+                rrd = build_registered_runtime_device(
+                    device_id=did,
+                    device_name=str(raw.get("device_name", "")),
+                    platform=str(raw.get("device_type", "unknown")),
+                    device_type=str(raw.get("device_type", "")),
+                    capabilities=list(raw.get("capabilities", [])),
+                    runtime_enabled=bool(raw.get("runtime_enabled", False)),
+                    supports_local_autonomy=bool(raw.get("supports_local_autonomy", False)),
+                    status=str(raw.get("status", "offline")),
+                )
+                host = from_registered_runtime_device(rrd)
+                results.append(summarize_local_runtime_host(host))
+                seen.add(did)
+            except Exception:
+                pass
+
+        return JSONResponse({"runtime_hosts": results, "count": len(results)})
 
     @router.get("/api/v1/devices/{device_id}")
     async def get_device(device_id: str):
@@ -613,5 +676,61 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "file": req.file_path,
             "message": "传输请求已发送" if sent else "源设备离线",
         })
+
+    @router.get("/api/v1/devices/{device_id}/runtime-host")
+    async def get_device_runtime_host(device_id: str):
+        """PR-30: Return the Local Runtime Host contract for a single device.
+
+        This read-only endpoint normalises the device into the
+        :class:`~contracts.local_runtime_host.LocalRuntimeHost` contract and
+        returns it as JSON.  Existing device endpoints are not modified; this
+        is purely additive.
+        """
+        from contracts.local_runtime_host import from_registered_runtime_device, LocalRuntimeHost
+        from contracts.registered_runtime_device import (
+            from_udm_device,
+            from_device_registry_record,
+            build_registered_runtime_device,
+        )
+
+        rrd = None
+
+        # Prefer UDM SSOT
+        try:
+            udm_dev = get_unified_device_manager().get_device(device_id)
+            if udm_dev is not None:
+                rrd = from_udm_device(udm_dev)
+        except Exception:
+            pass
+
+        # Fall back to legacy device registry
+        if rrd is None:
+            try:
+                from core.device_registry import device_registry as _dr
+                legacy_dev = _dr.get(device_id)
+                if legacy_dev is not None:
+                    rrd = from_device_registry_record(legacy_dev)
+            except Exception:
+                pass
+
+        # Final fall-back: build minimal contract from registered_devices cache
+        if rrd is None and device_id in registered_devices:
+            raw = registered_devices[device_id]
+            rrd = build_registered_runtime_device(
+                device_id=device_id,
+                device_name=str(raw.get("device_name", "")),
+                platform=str(raw.get("device_type", "unknown")),
+                device_type=str(raw.get("device_type", "")),
+                capabilities=list(raw.get("capabilities", [])),
+                runtime_enabled=bool(raw.get("runtime_enabled", False)),
+                supports_local_autonomy=bool(raw.get("supports_local_autonomy", False)),
+                status=str(raw.get("status", "offline")),
+            )
+
+        if rrd is None:
+            raise HTTPException(status_code=404, detail="设备未找到")
+
+        host: LocalRuntimeHost = from_registered_runtime_device(rrd)
+        return JSONResponse(host.to_dict())
 
     return router
