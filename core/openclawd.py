@@ -863,6 +863,10 @@ class OpenClawd:
             _blocked_result["fallback_trace"] = self._build_fallback_trace(
                 _intent_profile, _readiness, _blocked_result
             )
+            # PR-25: Emit a canonical execution trace envelope for the blocked lifecycle.
+            _blocked_result["execution_trace"] = self._build_execution_trace(
+                _intent_profile, _readiness, _blocked_result
+            )
             return _blocked_result
 
         try:
@@ -877,6 +881,10 @@ class OpenClawd:
                 }
                 # PR-24: Trace the executor-unavailable fallback.
                 _no_exec_result["fallback_trace"] = self._build_fallback_trace(
+                    _intent_profile, _readiness, _no_exec_result
+                )
+                # PR-25: Emit a canonical execution trace envelope.
+                _no_exec_result["execution_trace"] = self._build_execution_trace(
                     _intent_profile, _readiness, _no_exec_result
                 )
                 return _no_exec_result
@@ -911,6 +919,10 @@ class OpenClawd:
             _exec_dict["fallback_trace"] = self._build_fallback_trace(
                 _intent_profile, _readiness, _exec_dict
             )
+            # PR-25: Emit a canonical execution trace envelope.
+            _exec_dict["execution_trace"] = self._build_execution_trace(
+                _intent_profile, _readiness, _exec_dict
+            )
             return _exec_dict
         except Exception as _ee:
             logger.debug("_run_execution failed (swallowed): %s", _ee)
@@ -923,6 +935,10 @@ class OpenClawd:
             }
             # PR-24: Trace the internal-error fallback.
             _err_result["fallback_trace"] = self._build_fallback_trace(
+                _intent_profile, _readiness, _err_result
+            )
+            # PR-25: Emit a canonical execution trace envelope.
+            _err_result["execution_trace"] = self._build_execution_trace(
                 _intent_profile, _readiness, _err_result
             )
             return _err_result
@@ -1043,6 +1059,51 @@ class OpenClawd:
             return summarize_fallback_trace(_trace)
         except Exception as _exc:
             logger.debug("_build_fallback_trace failed (swallowed): %s", _exc)
+            return None
+
+    def _build_execution_trace(
+        self,
+        intent_profile: Any,
+        readiness_result: Any,
+        execution_result: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Build a compact :class:`~contracts.execution_trace.ExecutionTraceEnvelope` (PR-25).
+
+        Produces a compact execution trace envelope covering all lifecycle stages
+        that have completed in this execution run.  Errors are fully isolated —
+        ``None`` is returned when the module is unavailable or an unexpected
+        exception occurs so that the existing response flow is never interrupted.
+
+        Args:
+            intent_profile: The :class:`~core.execution.intent_profile.ExecutionIntentProfile`
+                built by :meth:`_build_intent_profile`.
+            readiness_result: The :class:`~core.execution.readiness_gate.ReadinessResult`
+                returned by :meth:`_check_readiness`, or ``None``.
+            execution_result: The serialised execution result dict (before the
+                ``"execution_trace"`` key is inserted), or ``None``.
+
+        Returns:
+            A compact execution trace envelope dict, or ``None`` on failure.
+        """
+        try:
+            from contracts.execution_trace import build_trace_envelope  # noqa: PLC0415
+
+            # Extract the fallback_trace object from execution_result if present;
+            # it may be a dict (compact summary) — pass as-is to the builder
+            # which handles duck-typed objects gracefully.
+            _ft = None
+            if execution_result and isinstance(execution_result, dict):
+                _ft = execution_result.get("fallback_trace")
+
+            _envelope = build_trace_envelope(
+                intent_profile=intent_profile,
+                readiness_result=readiness_result,
+                fallback_trace=_ft,
+                execution_result=execution_result,
+            )
+            return _envelope.compact_summary()
+        except Exception as _exc:
+            logger.debug("_build_execution_trace failed (swallowed): %s", _exc)
             return None
 
     @staticmethod

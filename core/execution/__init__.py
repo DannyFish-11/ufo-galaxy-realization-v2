@@ -20,6 +20,19 @@ from core.execution.readiness_gate import (
     reset_readiness_gate,
 )
 
+# PR-25: Execution Trace Contract
+from contracts.execution_trace import (
+    ExecutionTraceEnvelope,
+    ExecutionTraceEvent,
+    ExecutionTraceStage,
+    ExecutionTraceStatus,
+    build_trace_envelope,
+    from_execution_intent,
+    from_execution_result,
+    from_fallback_trace,
+    from_readiness_result,
+)
+
 __all__ = [
     "DecisionExecutor",
     "ExecutionResult",
@@ -34,4 +47,14 @@ __all__ = [
     "ExecutionReadinessGate",
     "evaluate_readiness",
     "reset_readiness_gate",
+    # PR-25: Execution Trace Contract
+    "ExecutionTraceEnvelope",
+    "ExecutionTraceEvent",
+    "ExecutionTraceStage",
+    "ExecutionTraceStatus",
+    "build_trace_envelope",
+    "from_execution_intent",
+    "from_execution_result",
+    "from_fallback_trace",
+    "from_readiness_result",
 ]
