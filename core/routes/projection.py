@@ -435,6 +435,81 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_device_formation()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/agent-dispatch
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/agent-dispatch")
+    async def get_agent_dispatch_projection() -> JSONResponse:
+        """Return the current agent-dispatch governance summary for the active runtime state.
+
+        This endpoint is **read-only** and **additive** (PR-18).  It does not
+        modify any existing projection, agent bridge, command router, or
+        orchestration module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"agent_dispatch"`` key populated by the PR-18 governance schema, and
+        a flat ``"ownership_hints"`` quick-check dict.
+
+        The ``"agent_dispatch"`` block makes agent ownership and handoff
+        governance **explicit and inspectable** and answers:
+          - Which agent role initiated the current dispatch?
+          - Which role currently holds execution responsibility?
+          - Who owns the final outcome?
+          - Is a recovery agent active?
+          - Has the handoff depth limit been exceeded?
+          - Is the governing handoff edge valid per the responsibility graph?
+
+        Response schema (additions over /device-formation)
+        ---------------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "device_formation": { ... },
+              "agent_dispatch": {
+                "schema_version": 1,
+                "dispatch_role": "unassigned",
+                "target_role": "unassigned",
+                "handoff_valid": false,
+                "ownership": {
+                  "dispatch_owner": "unassigned",
+                  "current_owner": "unassigned",
+                  "final_outcome_owner": null,
+                  "handoff_count": 0,
+                  "is_recovery_active": false,
+                  "is_complete": false,
+                  "max_handoff_depth": 5,
+                  "depth_exceeded": false,
+                  "recovery_permitted": true
+                },
+                "trace_id": null,
+                "task_id": null,
+                "bridge_source": null,
+                "dispatch_success": false,
+                "failure_reason": "",
+                "policy_reason": "..."
+              },
+              "ownership_hints": {
+                "dispatch_owner": "unassigned",
+                "current_owner": "unassigned",
+                "is_recovery_active": false,
+                "is_complete": false,
+                "depth_exceeded": false,
+                "handoff_count": 0,
+                "has_final_owner": false,
+                "recovery_permitted": true
+              }
+            }
+
+        This endpoint is consumed by any downstream governance / reliability
+        work that needs explicit agent ownership context.
+        """
+        payload = _assemble_projection_with_agent_dispatch()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -871,5 +946,92 @@ def _assemble_projection_with_device_formation() -> Dict[str, Any]:
             "has_merge_owner": False,
             "barrier_posture": "wait_primary",
             "runtime_domain_intent": "local",
+        }
+        return base
+
+
+def _assemble_projection_with_agent_dispatch() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the PR-18 agent-dispatch governance summary.
+
+    Builds the device-formation projection (which includes all previous layers),
+    then derives and attaches the agent-dispatch governance summary and ownership
+    hints.  Always returns a valid dict with ``"agent_dispatch"`` and
+    ``"ownership_hints"`` keys even when the package is unavailable.
+    """
+    base = _assemble_projection_with_device_formation()
+
+    try:
+        from core.agent_governance import (
+            IDLE_DISPATCH_SUMMARY,
+            attach_dispatch_summary_to_projection,
+            get_ownership_hints,
+            resolve_dispatch_summary,
+        )
+
+        # Seed from formation/runtime context available in the base projection
+        runtime_domain = base.get("runtime_domain", "local")
+        device_formation = base.get("device_formation", {})
+        is_multi_device = (
+            device_formation.get("is_multi_device", False)
+            if isinstance(device_formation, dict)
+            else False
+        )
+
+        # Choose dispatch role hint based on available context
+        dispatch_role_str = "local_assistant" if not is_multi_device else "planner"
+        target_role_str = (
+            "remote_specialist" if is_multi_device else "executor"
+        )
+
+        summary = resolve_dispatch_summary(
+            dispatch_role_str=dispatch_role_str,
+            target_role_str=target_role_str,
+            dispatch_success=False,  # idle — no live dispatch in projection
+        )
+        result = attach_dispatch_summary_to_projection(base, summary)
+        result["ownership_hints"] = get_ownership_hints(summary.ownership)
+        return result
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Agent-dispatch governance assembly failed, attaching idle placeholder: %s", exc
+        )
+        base["agent_dispatch"] = {
+            "schema_version": 1,
+            "dispatch_role": "unassigned",
+            "target_role": "unassigned",
+            "handoff_valid": False,
+            "ownership": {
+                "schema_version": 1,
+                "dispatch_owner": "unassigned",
+                "current_owner": "unassigned",
+                "final_outcome_owner": None,
+                "handoff_count": 0,
+                "is_recovery_active": False,
+                "is_complete": False,
+                "max_handoff_depth": 5,
+                "depth_exceeded": False,
+                "recovery_permitted": True,
+                "trace_id": None,
+                "task_id": None,
+                "last_handoff_reason": "idle",
+                "policy_reason": "idle default",
+            },
+            "trace_id": None,
+            "task_id": None,
+            "bridge_source": None,
+            "dispatch_success": False,
+            "failure_reason": "",
+            "policy_reason": "idle default",
+        }
+        base["ownership_hints"] = {
+            "dispatch_owner": "unassigned",
+            "current_owner": "unassigned",
+            "is_recovery_active": False,
+            "is_complete": False,
+            "depth_exceeded": False,
+            "handoff_count": 0,
+            "has_final_owner": False,
+            "recovery_permitted": True,
         }
         return base
