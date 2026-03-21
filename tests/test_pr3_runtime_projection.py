@@ -363,6 +363,8 @@ class TestSerialisationStability:
             "active_device_ids",
             "execution_stage",
             "current_task_summary",
+            "execution_intent_summary",
+            "governance",
             "timestamp",
         }
         assert expected_keys == set(d.keys())
