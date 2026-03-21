@@ -171,6 +171,21 @@ from contracts.registered_runtime_device import (  # noqa: E402
     from_device_registry_record,
 )
 
+# PR-30: Local Runtime Host Contract (re-exported from contracts package)
+from contracts.local_runtime_host import (  # noqa: E402
+    LocalRuntimeHost,
+    LocalRuntimeHostStatus,
+    LocalRuntimeHostCapabilities,
+    LocalRuntimeSessionSupport,
+    LocalRuntimeHandoffSupport,
+    LocalRuntimeExecutionSupport,
+    LocalRuntimeExecutionMode,
+    from_registered_runtime_device,
+    from_runtime_bridge_config,
+    build_local_runtime_host,
+    summarize_local_runtime_host,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -290,4 +305,16 @@ __all__ = [
     "from_router_device",
     "from_android_registration",
     "from_device_registry_record",
+    # PR-30: Local Runtime Host Contract
+    "LocalRuntimeHost",
+    "LocalRuntimeHostStatus",
+    "LocalRuntimeHostCapabilities",
+    "LocalRuntimeSessionSupport",
+    "LocalRuntimeHandoffSupport",
+    "LocalRuntimeExecutionSupport",
+    "LocalRuntimeExecutionMode",
+    "from_registered_runtime_device",
+    "from_runtime_bridge_config",
+    "build_local_runtime_host",
+    "summarize_local_runtime_host",
 ]

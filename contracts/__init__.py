@@ -1,7 +1,8 @@
 """contracts — Shared contract types for Galaxy execution lifecycle.
 
-Exports the canonical execution trace contract introduced in PR-25 and the
-Registered Runtime Device contract introduced in PR-29.
+Exports the canonical execution trace contract introduced in PR-25, the
+Registered Runtime Device contract introduced in PR-29, and the Local Runtime
+Host contract introduced in PR-30.
 """
 
 from contracts.execution_trace import (
@@ -35,6 +36,21 @@ from contracts.registered_runtime_device import (
     from_device_registry_record,
 )
 
+# PR-30: Local Runtime Host Contract
+from contracts.local_runtime_host import (
+    LocalRuntimeHost,
+    LocalRuntimeHostStatus,
+    LocalRuntimeHostCapabilities,
+    LocalRuntimeSessionSupport,
+    LocalRuntimeHandoffSupport,
+    LocalRuntimeExecutionSupport,
+    LocalRuntimeExecutionMode,
+    from_registered_runtime_device,
+    from_runtime_bridge_config,
+    build_local_runtime_host,
+    summarize_local_runtime_host,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -62,4 +78,16 @@ __all__ = [
     "from_router_device",
     "from_android_registration",
     "from_device_registry_record",
+    # PR-30: Local Runtime Host Contract
+    "LocalRuntimeHost",
+    "LocalRuntimeHostStatus",
+    "LocalRuntimeHostCapabilities",
+    "LocalRuntimeSessionSupport",
+    "LocalRuntimeHandoffSupport",
+    "LocalRuntimeExecutionSupport",
+    "LocalRuntimeExecutionMode",
+    "from_registered_runtime_device",
+    "from_runtime_bridge_config",
+    "build_local_runtime_host",
+    "summarize_local_runtime_host",
 ]
