@@ -101,6 +101,9 @@ def build_runtime_projection(
     execution_summary: Optional[ExecutionSummary] = None,
     timestamp: Optional[float] = None,
     intent_profile: "Optional[Any]" = None,
+    readiness_result: "Optional[Any]" = None,
+    fallback_trace: "Optional[Any]" = None,
+    execution_trace_envelope: "Optional[Any]" = None,
 ) -> RuntimeProjection:
     """Assemble a :class:`RuntimeProjection` from core runtime state.
 
@@ -132,6 +135,21 @@ def build_runtime_projection(
             (PR-22).  When provided, its compact summary is included in the
             ``execution_intent_summary`` field of the projection for
             governance/debug consumers.  Additive; does not affect other fields.
+        readiness_result:
+            Optional :class:`~core.execution.readiness_gate.ReadinessResult`
+            (PR-23).  When provided together with other governance inputs, used
+            to populate the ``governance`` field of the projection.
+            Additive; does not affect base projection fields.
+        fallback_trace:
+            Optional :class:`~core.execution.fallback_trace.FallbackDecisionTrace`
+            (PR-24).  When provided together with other governance inputs, used
+            to populate the ``governance`` field of the projection.
+            Additive; does not affect base projection fields.
+        execution_trace_envelope:
+            Optional :class:`~contracts.execution_trace.ExecutionTraceEnvelope`
+            (PR-25).  When provided together with other governance inputs, used
+            to populate the ``governance`` field of the projection.
+            Additive; does not affect base projection fields.
 
     Returns:
         A fully populated (or minimally populated) :class:`RuntimeProjection`.
@@ -189,6 +207,27 @@ def build_runtime_projection(
                 _exc,
             )
 
+    # --- Governance summary (PR-26) ----------------------------------------
+    governance: Optional[Dict] = None
+    _governance_inputs = (intent_profile, readiness_result, fallback_trace, execution_trace_envelope)
+    if any(x is not None for x in _governance_inputs):
+        try:
+            from .assembly_governance import assemble_projection_governance
+            gov_summary = assemble_projection_governance(
+                intent_profile=intent_profile,
+                readiness_result=readiness_result,
+                fallback_trace=fallback_trace,
+                execution_trace_envelope=execution_trace_envelope,
+                state_continuum=continuum_state,
+                timestamp=ts,
+            )
+            governance = gov_summary.to_dict()
+        except Exception as _gov_exc:
+            logger.warning(
+                "build_runtime_projection: governance assembly failed: %s",
+                _gov_exc,
+            )
+
     projection = RuntimeProjection(
         tri_state_phase=tri_state_phase,
         runtime_domain=runtime_domain,
@@ -204,14 +243,16 @@ def build_runtime_projection(
         execution_stage=execution_stage,
         current_task_summary=current_task_summary,
         execution_intent_summary=execution_intent_summary,
+        governance=governance,
         timestamp=ts,
     )
 
     logger.debug(
-        "build_runtime_projection: %r  route=%s  devices=%s  intent=%s",
+        "build_runtime_projection: %r  route=%s  devices=%s  intent=%s  governance=%s",
         projection,
         route_plan is not None,
         len(active_device_ids),
         intent_profile is not None,
+        governance is not None,
     )
     return projection

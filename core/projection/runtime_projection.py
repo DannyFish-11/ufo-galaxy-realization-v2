@@ -165,6 +165,18 @@ class RuntimeProjection(BaseModel):
             "Read-only surface for governance/debug consumers."
         ),
     )
+    governance: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Governance-enriched projection summary (PR-26). "
+            "Contains projection-safe summaries of execution intent (PR-22), "
+            "readiness/policy posture (PR-23), fallback decision trace (PR-24), "
+            "and execution lifecycle trace (PR-25). "
+            "Populated by build_runtime_projection when governance inputs are provided. "
+            "None when no governance inputs were available. "
+            "Read-only surface; does not affect base projection behaviour."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when this projection was assembled.",
@@ -199,6 +211,7 @@ class RuntimeProjection(BaseModel):
             "execution_stage": self.execution_stage,
             "current_task_summary": self.current_task_summary,
             "execution_intent_summary": self.execution_intent_summary,
+            "governance": self.governance,
             "timestamp": self.timestamp,
         }
 

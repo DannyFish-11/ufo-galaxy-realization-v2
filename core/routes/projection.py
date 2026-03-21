@@ -595,6 +595,40 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_routing_explanation()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/governance
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/governance")
+    async def get_governance_projection() -> JSONResponse:
+        """Return the current governance-enriched projection summary (PR-26).
+
+        This endpoint is **read-only** and **additive** (PR-26).  It does not
+        modify any existing projection, execution, readiness, fallback, or
+        trace module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"governance"`` key populated by the PR-26 governance assembly layer,
+        and a flat ``"governance_hints"`` quick-check dict.
+
+        The ``"governance"`` block makes execution governance state
+        **explicit and inspectable** and answers:
+          - What execution intent is active (action_level, mode, target)?
+          - Is the system ready to execute (readiness status, policy band)?
+          - Was a fallback decision made (outcome, fallback_path)?
+          - What is the execution lifecycle trace (stages, final_status)?
+          - What tri-state phase and runtime domain was active at assembly time?
+          - Is governance data available at all (governance_available)?
+
+        This endpoint is the primary read-only integration point for the
+        PR-26 projection assembly governance layer.  Downstream governance
+        tooling, status boards, and debugging utilities should consume this
+        endpoint to inspect the current governance posture in projection form.
+        """
+        payload = _assemble_projection_with_governance()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -1186,5 +1220,76 @@ def _assemble_projection_with_routing_explanation() -> Dict[str, Any]:
             "rejected_count": 0,
             "basis_count": 0,
             "owner_agent": None,
+        }
+        return base
+
+
+def _assemble_projection_with_governance() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with PR-26 governance assembly data.
+
+    Builds the standard projection first, then assembles and attaches the
+    governance summary derived from any available governance inputs
+    (intent profile, readiness result, fallback trace, execution trace envelope).
+
+    Always returns a valid dict with ``"governance"`` and
+    ``"governance_hints"`` keys even when governance inputs are unavailable
+    (in which case ``"governance"`` will reflect a minimal unavailable state).
+    """
+    base = _assemble_projection()
+
+    try:
+        from core.projection.assembly_governance import assemble_projection_governance
+
+        continuum_state = _get_continuum_state()
+
+        gov_summary = assemble_projection_governance(
+            intent_profile=None,
+            readiness_result=None,
+            fallback_trace=None,
+            execution_trace_envelope=None,
+            state_continuum=continuum_state,
+        )
+        base["governance"] = gov_summary.to_dict()
+        base["governance_hints"] = {
+            "governance_available": gov_summary.governance_available,
+            "action_level": gov_summary.execution.action_level,
+            "intent_mode": gov_summary.execution.intent_mode,
+            "ready": gov_summary.policy.ready,
+            "policy_status": gov_summary.policy.status,
+            "blocked": gov_summary.policy.blocked,
+            "degraded": gov_summary.policy.degraded,
+            "fallback_outcome": gov_summary.fallback.outcome,
+            "trace_final_status": gov_summary.execution_trace.final_status,
+            "tri_state_phase": gov_summary.tri_state_phase,
+            "runtime_domain": gov_summary.runtime_domain,
+        }
+        return base
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Governance projection assembly failed, attaching minimal placeholder: %s", exc
+        )
+        base["governance"] = {
+            "governance_available": False,
+            "execution": {"available": False, "action_level": "observe", "intent_mode": "advisory"},
+            "policy": {"available": False, "ready": False, "status": "blocked", "blocked": True},
+            "fallback": {"available": False, "outcome": "noop"},
+            "execution_trace": {"available": False, "final_status": "pending", "stage_count": 0, "stages": []},
+            "tri_state_phase": None,
+            "runtime_domain": None,
+            "assembled_at": time.time(),
+        }
+        base["governance_hints"] = {
+            "governance_available": False,
+            "action_level": "observe",
+            "intent_mode": "advisory",
+            "ready": False,
+            "policy_status": "blocked",
+            "blocked": True,
+            "degraded": False,
+            "fallback_outcome": "noop",
+            "trace_final_status": "pending",
+            "tri_state_phase": None,
+            "runtime_domain": None,
         }
         return base
