@@ -187,6 +187,13 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception:
         pass
 
+    # PR-16: Cross-Plane Contract Map — read-only contract introspection endpoints
+    try:
+        from core.routes import contracts as contracts_routes
+        router.include_router(contracts_routes.create_router())
+    except Exception:
+        pass
+
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream
     # -----------------------------------------------------------------------
