@@ -177,6 +177,19 @@ class RuntimeProjection(BaseModel):
             "Read-only surface; does not affect base projection behaviour."
         ),
     )
+    runtime_governance_snapshot: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Unified runtime governance snapshot (PR-27). "
+            "Assembles the complete runtime posture — tri-state phase, runtime domain, "
+            "execution intent (PR-22), readiness/policy posture (PR-23), fallback trace "
+            "(PR-24), execution lifecycle trace (PR-25), and projection governance (PR-26) "
+            "— into one canonical, serialisable object. "
+            "Populated when a RuntimeGovernanceSnapshot is available. "
+            "None when no snapshot was assembled. "
+            "Read-only surface; does not affect base projection behaviour."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when this projection was assembled.",
@@ -212,6 +225,7 @@ class RuntimeProjection(BaseModel):
             "current_task_summary": self.current_task_summary,
             "execution_intent_summary": self.execution_intent_summary,
             "governance": self.governance,
+            "runtime_governance_snapshot": self.runtime_governance_snapshot,
             "timestamp": self.timestamp,
         }
 

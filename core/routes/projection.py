@@ -629,6 +629,48 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_governance()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/runtime-governance
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/runtime-governance")
+    async def get_runtime_governance_snapshot() -> JSONResponse:
+        """Return the unified runtime governance snapshot (PR-27).
+
+        This endpoint is **read-only** and **additive** (PR-27).  It does not
+        modify any existing projection, execution, readiness, fallback, trace,
+        or projection governance module.
+
+        The response contains the unified
+        :class:`~core.runtime_governance.snapshot.RuntimeGovernanceSnapshot`
+        as a serialised JSON payload.  The snapshot assembles the complete
+        current runtime posture — including tri-state phase, runtime domain,
+        execution intent (PR-22), readiness/policy posture (PR-23), fallback
+        trace (PR-24), execution lifecycle trace (PR-25), and projection
+        governance data (PR-26) — into one canonical, stable object.
+
+        This is the canonical read-only surface for the runtime governance
+        snapshot and the primary integration point for downstream surfaces
+        (status boards, mesh/session work, device handoff) that need a
+        single unified governance view.
+
+        The ``"snapshot"`` block answers:
+          - What tri-state phase is the system currently in?
+          - What runtime domain is active or intended?
+          - What governance posture applies across intent/readiness/fallback/trace?
+          - What execution lifecycle summary is currently available?
+          - What projection-governance summary is currently available?
+          - Is governance data available at all (governance_available)?
+          - What is the top-level posture (execute / observe / blocked / degraded)?
+
+        Response schema
+        ---------------
+        See :class:`~core.runtime_governance.snapshot.RuntimeGovernanceSnapshot`
+        for the full field reference.
+        """
+        payload = _assemble_runtime_governance_snapshot_payload()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -1293,3 +1335,90 @@ def _assemble_projection_with_governance() -> Dict[str, Any]:
             "runtime_domain": None,
         }
         return base
+
+
+def _assemble_runtime_governance_snapshot_payload() -> Dict[str, Any]:
+    """Assemble and return the runtime governance snapshot payload.
+
+    Builds the projection governance summary (PR-26) and then assembles the
+    unified runtime governance snapshot (PR-27) from all available runtime
+    inputs.  Always returns a valid serialisable dict; individual component
+    failures result in graceful defaults rather than errors.
+    """
+    try:
+        from core.runtime_governance.snapshot import assemble_runtime_governance_snapshot
+
+        # Get the projection governance summary (PR-26) first, it is the
+        # richest governance source available at projection time.
+        proj_gov = None
+        try:
+            from core.projection.assembly_governance import assemble_projection_governance
+
+            continuum_state = _get_continuum_state()
+            proj_gov = assemble_projection_governance(
+                intent_profile=None,
+                readiness_result=None,
+                fallback_trace=None,
+                execution_trace_envelope=None,
+                state_continuum=continuum_state,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Runtime governance snapshot: projection governance unavailable: %s", exc
+            )
+
+        # Resolve tri_state_phase / runtime_domain from live continuum state
+        tri_state_phase: Optional[str] = None
+        runtime_domain: Optional[str] = None
+        try:
+            cs = _get_continuum_state()
+            if cs is not None:
+                if isinstance(cs, dict):
+                    tri_state_phase = cs.get("tri_state_phase")
+                    runtime_domain = cs.get("runtime_domain")
+                else:
+                    phase = getattr(cs, "tri_state_phase", None)
+                    domain = getattr(cs, "runtime_domain", None)
+                    if phase is not None:
+                        tri_state_phase = (
+                            phase.value if hasattr(phase, "value") else str(phase)
+                        )
+                    if domain is not None:
+                        runtime_domain = (
+                            domain.value if hasattr(domain, "value") else str(domain)
+                        )
+        except Exception as exc:
+            logger.warning(
+                "Runtime governance snapshot: failed to resolve phase/domain: %s", exc
+            )
+
+        snapshot = assemble_runtime_governance_snapshot(
+            projection_governance=proj_gov,
+            tri_state_phase=tri_state_phase,
+            runtime_domain=runtime_domain,
+        )
+        return snapshot.to_dict()
+
+    except Exception as exc:
+        logger.warning(
+            "Runtime governance snapshot assembly failed, returning minimal payload: %s", exc
+        )
+        import uuid
+
+        return {
+            "snapshot_id": str(uuid.uuid4()),
+            "trace_id": None,
+            "runtime_session_id": None,
+            "tri_state_phase": None,
+            "runtime_domain": None,
+            "governance_available": False,
+            "intent_summary": {"available": False, "action_level": "observe", "intent_mode": "advisory"},
+            "readiness_summary": {"available": False, "ready": False, "status": "blocked", "blocked": True},
+            "fallback_summary": {"available": False, "final_status": "pending", "stage_count": 0, "stages": []},
+            "execution_trace_summary": {"available": False, "final_status": "pending", "stage_count": 0, "stages": []},
+            "projection_governance_summary": {"available": False, "governance_available": False},
+            "posture": "unknown",
+            "blocked": False,
+            "degraded": False,
+            "timestamp": time.time(),
+        }
