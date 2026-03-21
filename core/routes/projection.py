@@ -186,6 +186,67 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     # GET /api/v1/projection/cross_device_routing
     # ------------------------------------------------------------------
 
+    @router.get("/api/v1/execution/merge-summary")
+    async def get_merge_summary() -> JSONResponse:
+        """Return a read-only distributed execution merge summary.
+
+        This endpoint is **read-only** and **additive** (PR-14).  It does not
+        modify any existing projection, continuum, orchestration, or device
+        module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"merge_summary"`` key populated by the PR-14 distributed merge and
+        recovery schema.
+
+        When no live merge context is available, the endpoint returns the
+        pre-built :data:`~core.distributed_execution.EMPTY_MERGE_SUMMARY`
+        alongside a recovery recommendation of ``no_recovery_needed``.
+
+        Response schema (additions over /cross_device_routing)
+        -------------------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "merge_summary": {
+                "merge_status": "success",
+                "total_count": 0,
+                "successful_count": 0,
+                "failed_count": 0,
+                "timed_out_count": 0,
+                "skipped_count": 0,
+                "success_rate": 0.0,
+                "is_successful": false,
+                "is_terminal_failure": true,
+                "merged_payloads": [],
+                "errors": [],
+                "warnings": [],
+                "recovery_recommendation": null,
+                "task_id": "",
+                "trace_id": "",
+                "runtime_session_id": "",
+                "merged_at": 0.0
+              },
+              "merge_hints": {
+                "merge_status": "success",
+                "is_successful": true,
+                "is_terminal_failure": false,
+                "has_errors": false,
+                "has_warnings": false,
+                "success_rate": 1.0,
+                "has_recovery_recommendation": false,
+                "recovery_posture": null,
+                "total_count": 0,
+                "task_id": "",
+                "trace_id": ""
+              }
+            }
+        """
+        payload = _assemble_projection_with_merge_summary()
+        return JSONResponse(content=payload)
+
     @router.get("/api/v1/projection/cross_device_routing")
     async def get_cross_device_routing_projection() -> JSONResponse:
         """Return the current cross-device routing summary derived from live signals.
@@ -507,4 +568,48 @@ def _assemble_projection_with_cross_device_routing() -> Dict[str, Any]:
             base["cross_device_routing"] = IDLE_ASSIGNMENT_SUMMARY.to_dict()
         except Exception:
             base["cross_device_routing"] = {"posture": "undecided", "is_cross_device": False}
+        return base
+
+
+def _assemble_projection_with_merge_summary() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the distributed merge summary.
+
+    Builds the standard projection (with cross-device routing), then attaches
+    the PR-14 merge summary and hints.  Always returns a valid dict with a
+    ``"merge_summary"`` key even when the package is unavailable.
+    """
+    base = _assemble_projection_with_cross_device_routing()
+
+    try:
+        from core.distributed_execution import (
+            EMPTY_MERGE_SUMMARY,
+            attach_merge_summary_to_projection,
+            get_merge_hints,
+        )
+
+        # Use the empty summary as a safe idle default — no live merge
+        # context is available at projection-query time.  Future code that
+        # does perform a live merge should store the summary in a registry
+        # and retrieve it here.
+        summary = EMPTY_MERGE_SUMMARY
+        result = attach_merge_summary_to_projection(base, summary)
+        result["merge_hints"] = get_merge_hints(summary)
+        return result
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Merge-summary assembly failed, attaching empty placeholder: %s", exc
+        )
+        base["merge_summary"] = {
+            "merge_status": "failed",
+            "total_count": 0,
+            "successful_count": 0,
+            "failed_count": 0,
+            "timed_out_count": 0,
+        }
+        base["merge_hints"] = {
+            "merge_status": "failed",
+            "is_successful": False,
+            "is_terminal_failure": True,
+        }
         return base
