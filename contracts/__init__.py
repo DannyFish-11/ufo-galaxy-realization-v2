@@ -4,8 +4,9 @@ Exports the canonical execution trace contract introduced in PR-25, the
 Registered Runtime Device contract introduced in PR-29, the Local Runtime
 Host contract introduced in PR-30, the Handoff Envelope v2 contract
 introduced in PR-31, the Mesh Membership contract introduced in PR-32, the
-Mesh Session contract introduced in PR-33, and the Local Takeover Result
-contract introduced in PR-34.
+Mesh Session contract introduced in PR-33, the Local Takeover Result
+contract introduced in PR-34, and the Source Dispatch contracts introduced
+in PR-35.
 """
 
 from contracts.execution_trace import (
@@ -107,6 +108,24 @@ from contracts.local_takeover_result import (
     failure_result as takeover_failure_result,
 )
 
+# PR-35: Source Dispatch Contracts
+from contracts.source_dispatch import (
+    SourceDispatchMode,
+    SourceDispatchDecision,
+    SourceDispatchTarget,
+    SourceDispatchPlan,
+    SourceDispatchResult,
+    SourceDispatchSummary,
+    build_source_dispatch_decision,
+    build_source_dispatch_plan as _build_source_dispatch_plan,
+    build_source_dispatch_result,
+    build_source_dispatch_summary,
+    failure_dispatch_result,
+)
+
+# Re-export with canonical name (the orchestrator module provides the full builder)
+build_source_dispatch_plan = _build_source_dispatch_plan
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -187,4 +206,16 @@ __all__ = [
     "build_local_takeover_result",
     "takeover_result_from_execution_output",
     "takeover_failure_result",
+    # PR-35: Source Dispatch Contracts
+    "SourceDispatchMode",
+    "SourceDispatchDecision",
+    "SourceDispatchTarget",
+    "SourceDispatchPlan",
+    "SourceDispatchResult",
+    "SourceDispatchSummary",
+    "build_source_dispatch_decision",
+    "build_source_dispatch_plan",
+    "build_source_dispatch_result",
+    "build_source_dispatch_summary",
+    "failure_dispatch_result",
 ]

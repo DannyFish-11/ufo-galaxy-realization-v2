@@ -239,6 +239,21 @@ from contracts.local_takeover_result import (  # noqa: E402
     failure_result as takeover_failure_result,
 )
 
+# PR-35: Source Dispatch Contracts (re-exported from contracts package)
+from contracts.source_dispatch import (  # noqa: E402
+    SourceDispatchMode,
+    SourceDispatchDecision,
+    SourceDispatchTarget,
+    SourceDispatchPlan,
+    SourceDispatchResult,
+    SourceDispatchSummary,
+    build_source_dispatch_decision,
+    build_source_dispatch_plan as source_dispatch_build_plan,
+    build_source_dispatch_result,
+    build_source_dispatch_summary,
+    failure_dispatch_result,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -411,4 +426,16 @@ __all__ = [
     "build_local_takeover_result",
     "takeover_result_from_execution_output",
     "takeover_failure_result",
+    # PR-35: Source Dispatch Contracts
+    "SourceDispatchMode",
+    "SourceDispatchDecision",
+    "SourceDispatchTarget",
+    "SourceDispatchPlan",
+    "SourceDispatchResult",
+    "SourceDispatchSummary",
+    "build_source_dispatch_decision",
+    "source_dispatch_build_plan",
+    "build_source_dispatch_result",
+    "build_source_dispatch_summary",
+    "failure_dispatch_result",
 ]
