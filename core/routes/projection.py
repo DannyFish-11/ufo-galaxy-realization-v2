@@ -671,6 +671,58 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_runtime_governance_snapshot_payload()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/policy-alignment
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/policy-alignment")
+    async def get_policy_alignment() -> JSONResponse:
+        """Return the Execution Policy Alignment Surface (PR-28).
+
+        This endpoint is **read-only** and **additive** (PR-28).  It does not
+        modify any existing projection, execution, readiness, fallback, trace,
+        governance, or dispatch module.
+
+        The response contains the canonical
+        :class:`~core.policy.alignment_surface.ExecutionPolicyAlignmentSummary`
+        as a serialised JSON payload.  The summary answers, in one narrow
+        read-only structure:
+
+          - Are runtime policy, readiness policy, fallback posture,
+            dispatch/handoff posture, and projection governance in agreement?
+          - If they are not aligned, where is the mismatch?
+          - Is the current posture local-preferred, local-then-expand,
+            remote-required, blocked, degraded, or confirmation-gated?
+          - What policy hints should downstream status surfaces, debugging
+            tools, and later mesh/session work consume?
+
+        This is the "policy explanation" layer that sits above existing
+        governance summaries and answers *why* the system chose a particular
+        route/posture.
+
+        Response schema
+        ---------------
+        See :class:`~core.policy.alignment_surface.ExecutionPolicyAlignmentSummary`
+        for the full field reference.
+
+        Top-level keys:
+          - ``alignment_id``           — unique ID for this assessment
+          - ``aligned``                — True when all dimensions agree
+          - ``blocked``                — True when any dimension signals a block
+          - ``degraded``               — True when operating in degraded mode
+          - ``confirmation_required``  — True when confirmation is required
+          - ``policy_posture``         — resolved posture string
+          - ``mismatches``             — list of detected mismatches
+          - ``alignment_hints``        — quick-access boolean/string hints
+          - ``runtime_policy_summary`` — per-dimension runtime policy view
+          - ``readiness_policy_summary`` — per-dimension readiness policy view
+          - ``fallback_policy_summary``  — per-dimension fallback posture view
+          - ``dispatch_policy_summary``  — per-dimension dispatch/handoff view
+          - ``projection_policy_summary`` — per-dimension projection governance view
+        """
+        payload = _assemble_policy_alignment_payload()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -1420,5 +1472,120 @@ def _assemble_runtime_governance_snapshot_payload() -> Dict[str, Any]:
             "posture": "unknown",
             "blocked": False,
             "degraded": False,
+            "timestamp": time.time(),
+        }
+
+
+def _assemble_policy_alignment_payload() -> Dict[str, Any]:
+    """Assemble and return the execution policy alignment surface payload (PR-28).
+
+    Builds the projection governance summary (PR-26), the runtime governance
+    snapshot (PR-27), and then assembles the execution policy alignment surface
+    (PR-28) from all available runtime inputs.  Always returns a valid
+    serialisable dict; individual component failures result in graceful defaults
+    rather than errors.
+    """
+    try:
+        from core.policy.alignment_surface import build_execution_policy_alignment_surface
+
+        # Get projection governance (PR-26)
+        proj_gov = None
+        try:
+            from core.projection.assembly_governance import assemble_projection_governance
+
+            continuum_state = _get_continuum_state()
+            proj_gov = assemble_projection_governance(
+                intent_profile=None,
+                readiness_result=None,
+                fallback_trace=None,
+                execution_trace_envelope=None,
+                state_continuum=continuum_state,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Policy alignment: projection governance unavailable: %s", exc
+            )
+
+        # Get runtime governance snapshot (PR-27)
+        runtime_snapshot = None
+        try:
+            from core.runtime_governance.snapshot import assemble_runtime_governance_snapshot
+
+            runtime_snapshot = assemble_runtime_governance_snapshot(
+                projection_governance=proj_gov,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Policy alignment: runtime governance snapshot unavailable: %s", exc
+            )
+
+        # Resolve tri_state_phase / runtime_domain from live continuum state
+        tri_state_phase: Optional[str] = None
+        runtime_domain: Optional[str] = None
+        try:
+            cs = _get_continuum_state()
+            if cs is not None:
+                if isinstance(cs, dict):
+                    tri_state_phase = cs.get("tri_state_phase")
+                    runtime_domain = cs.get("runtime_domain")
+                else:
+                    phase = getattr(cs, "tri_state_phase", None)
+                    domain = getattr(cs, "runtime_domain", None)
+                    if phase is not None:
+                        tri_state_phase = (
+                            phase.value if hasattr(phase, "value") else str(phase)
+                        )
+                    if domain is not None:
+                        runtime_domain = (
+                            domain.value if hasattr(domain, "value") else str(domain)
+                        )
+        except Exception as exc:
+            logger.warning(
+                "Policy alignment: failed to resolve phase/domain: %s", exc
+            )
+
+        alignment = build_execution_policy_alignment_surface(
+            runtime_governance_snapshot=runtime_snapshot,
+            projection_governance=proj_gov,
+            tri_state_phase=tri_state_phase,
+            runtime_domain=runtime_domain,
+        )
+        return alignment.to_dict()
+
+    except Exception as exc:
+        logger.warning(
+            "Policy alignment assembly failed, returning minimal payload: %s", exc
+        )
+        import uuid
+
+        return {
+            "alignment_id": str(uuid.uuid4()),
+            "trace_id": None,
+            "runtime_session_id": None,
+            "tri_state_phase": None,
+            "runtime_domain": None,
+            "aligned": False,
+            "blocked": False,
+            "degraded": True,
+            "confirmation_required": False,
+            "policy_posture": "unknown",
+            "runtime_policy_summary": {"dimension": "runtime_policy", "available": False},
+            "readiness_policy_summary": {"dimension": "readiness_policy", "available": False},
+            "fallback_policy_summary": {"dimension": "fallback_policy", "available": False},
+            "dispatch_policy_summary": {"dimension": "dispatch_policy", "available": False},
+            "projection_policy_summary": {"dimension": "projection_policy", "available": False},
+            "mismatches": [],
+            "alignment_hints": {
+                "can_execute_locally": False,
+                "can_expand_cross_device": False,
+                "is_confirmation_gated": False,
+                "is_blocked": False,
+                "is_degraded": True,
+                "preferred_domain": None,
+                "effective_action_level": "observe",
+                "alignment_confidence": 0.0,
+                "policy_posture": "unknown",
+                "hint_source": "empty",
+            },
             "timestamp": time.time(),
         }
