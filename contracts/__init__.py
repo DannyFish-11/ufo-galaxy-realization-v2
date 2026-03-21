@@ -5,8 +5,8 @@ Registered Runtime Device contract introduced in PR-29, the Local Runtime
 Host contract introduced in PR-30, the Handoff Envelope v2 contract
 introduced in PR-31, the Mesh Membership contract introduced in PR-32, the
 Mesh Session contract introduced in PR-33, the Local Takeover Result
-contract introduced in PR-34, and the Source Dispatch contracts introduced
-in PR-35.
+contract introduced in PR-34, the Source Dispatch contracts introduced
+in PR-35, and the Cross-Runtime Result Merge contracts introduced in PR-36.
 """
 
 from contracts.execution_trace import (
@@ -126,6 +126,24 @@ from contracts.source_dispatch import (
 # Re-export with canonical name (the orchestrator module provides the full builder)
 build_source_dispatch_plan = _build_source_dispatch_plan
 
+# PR-36: Cross-Runtime Result Merge Contract
+from contracts.cross_runtime_result_merge import (
+    RuntimeResultRole,
+    RuntimeResultStatus,
+    ResultMergePolicy,
+    RuntimeResultProvenance,
+    RuntimeResultUnit,
+    ResultMergeInput,
+    MergedRuntimeResult,
+    ResultMergeSummary,
+    from_local_takeover_result as merge_unit_from_takeover_result,
+    from_source_dispatch_result as merge_unit_from_dispatch_result,
+    from_execution_output as merge_unit_from_execution_output,
+    build_merged_runtime_result,
+    merge_runtime_results,
+    build_result_merge_summary,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -218,4 +236,19 @@ __all__ = [
     "build_source_dispatch_result",
     "build_source_dispatch_summary",
     "failure_dispatch_result",
+    # PR-36: Cross-Runtime Result Merge Contract
+    "RuntimeResultRole",
+    "RuntimeResultStatus",
+    "ResultMergePolicy",
+    "RuntimeResultProvenance",
+    "RuntimeResultUnit",
+    "ResultMergeInput",
+    "MergedRuntimeResult",
+    "ResultMergeSummary",
+    "merge_unit_from_takeover_result",
+    "merge_unit_from_dispatch_result",
+    "merge_unit_from_execution_output",
+    "build_merged_runtime_result",
+    "merge_runtime_results",
+    "build_result_merge_summary",
 ]
