@@ -152,6 +152,25 @@ from .release_gate import (
     reset_release_gate,
 )
 
+# PR-29: Registered Runtime Device Contract (re-exported from contracts package)
+from contracts.registered_runtime_device import (  # noqa: E402
+    RegisteredRuntimeDevice,
+    RuntimeConnectionSummary,
+    RuntimeCapabilityProfile,
+    RuntimeAutonomySummary,
+    RuntimeSessionPresence,
+    RuntimeParticipationHints,
+    RuntimeDevicePlatform,
+    RuntimeDeviceFormFactor,
+    RuntimeDeviceStatus,
+    RuntimeConnectionState,
+    build_registered_runtime_device,
+    from_udm_device,
+    from_router_device,
+    from_android_registration,
+    from_device_registry_record,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -255,4 +274,20 @@ __all__ = [
     "RolloutBlockedError",
     "get_release_gate",
     "reset_release_gate",
+    # PR-29: Registered Runtime Device Contract
+    "RegisteredRuntimeDevice",
+    "RuntimeConnectionSummary",
+    "RuntimeCapabilityProfile",
+    "RuntimeAutonomySummary",
+    "RuntimeSessionPresence",
+    "RuntimeParticipationHints",
+    "RuntimeDevicePlatform",
+    "RuntimeDeviceFormFactor",
+    "RuntimeDeviceStatus",
+    "RuntimeConnectionState",
+    "build_registered_runtime_device",
+    "from_udm_device",
+    "from_router_device",
+    "from_android_registration",
+    "from_device_registry_record",
 ]
