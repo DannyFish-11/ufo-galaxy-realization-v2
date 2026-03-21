@@ -1,8 +1,9 @@
 """contracts — Shared contract types for Galaxy execution lifecycle.
 
 Exports the canonical execution trace contract introduced in PR-25, the
-Registered Runtime Device contract introduced in PR-29, and the Local Runtime
-Host contract introduced in PR-30.
+Registered Runtime Device contract introduced in PR-29, the Local Runtime
+Host contract introduced in PR-30, and the Handoff Envelope v2 contract
+introduced in PR-31.
 """
 
 from contracts.execution_trace import (
@@ -51,6 +52,22 @@ from contracts.local_runtime_host import (
     summarize_local_runtime_host,
 )
 
+# PR-31: Handoff Envelope v2 Contract
+from contracts.handoff_envelope_v2 import (
+    HandoffEnvelopeV2,
+    HandoffSourceSummary,
+    HandoffTargetSummary,
+    HandoffAgentSpec,
+    HandoffTaskSpec,
+    HandoffSessionContext,
+    LocalTakeoverPolicy,
+    HandoffReturnContract,
+    from_legacy_handoff_contract,
+    from_bridge_inputs,
+    to_legacy_bridge_payload,
+    build_handoff_envelope_v2,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -90,4 +107,17 @@ __all__ = [
     "from_runtime_bridge_config",
     "build_local_runtime_host",
     "summarize_local_runtime_host",
+    # PR-31: Handoff Envelope v2 Contract
+    "HandoffEnvelopeV2",
+    "HandoffSourceSummary",
+    "HandoffTargetSummary",
+    "HandoffAgentSpec",
+    "HandoffTaskSpec",
+    "HandoffSessionContext",
+    "LocalTakeoverPolicy",
+    "HandoffReturnContract",
+    "from_legacy_handoff_contract",
+    "from_bridge_inputs",
+    "to_legacy_bridge_payload",
+    "build_handoff_envelope_v2",
 ]

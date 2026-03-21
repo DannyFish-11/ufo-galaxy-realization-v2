@@ -186,6 +186,22 @@ from contracts.local_runtime_host import (  # noqa: E402
     summarize_local_runtime_host,
 )
 
+# PR-31: Handoff Envelope v2 Contract (re-exported from contracts package)
+from contracts.handoff_envelope_v2 import (  # noqa: E402
+    HandoffEnvelopeV2,
+    HandoffSourceSummary,
+    HandoffTargetSummary,
+    HandoffAgentSpec,
+    HandoffTaskSpec,
+    HandoffSessionContext,
+    LocalTakeoverPolicy,
+    HandoffReturnContract,
+    from_legacy_handoff_contract,
+    from_bridge_inputs,
+    to_legacy_bridge_payload,
+    build_handoff_envelope_v2,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -317,4 +333,17 @@ __all__ = [
     "from_runtime_bridge_config",
     "build_local_runtime_host",
     "summarize_local_runtime_host",
+    # PR-31: Handoff Envelope v2 Contract
+    "HandoffEnvelopeV2",
+    "HandoffSourceSummary",
+    "HandoffTargetSummary",
+    "HandoffAgentSpec",
+    "HandoffTaskSpec",
+    "HandoffSessionContext",
+    "LocalTakeoverPolicy",
+    "HandoffReturnContract",
+    "from_legacy_handoff_contract",
+    "from_bridge_inputs",
+    "to_legacy_bridge_payload",
+    "build_handoff_envelope_v2",
 ]
