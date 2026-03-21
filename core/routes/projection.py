@@ -919,6 +919,95 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 }
         return JSONResponse(content=result_dict)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/runtime/source-dispatch-summary  (PR-35)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/runtime/source-dispatch-summary")
+    async def get_source_dispatch_summary() -> JSONResponse:
+        """Return a read-only source dispatch orchestration summary.
+
+        This endpoint is the canonical **source-side dispatch projection**
+        introduced in PR-35.  It exposes a
+        :class:`~contracts.source_dispatch.SourceDispatchSummary` by:
+
+        1. Fetching available governance/policy/mesh context signals.
+        2. Invoking :func:`~core.runtime.source_dispatch_orchestrator.build_source_dispatch_plan`
+           to evaluate the current dispatch posture without executing.
+        3. Returning a compact :class:`~contracts.source_dispatch.SourceDispatchSummary`.
+
+        The endpoint is **read-only** (GET) and never triggers execution.
+        It degrades gracefully when context is unavailable.
+
+        Example response::
+
+            {
+              "summary_id": "...",
+              "dispatch_id": "...",
+              "trace_id": null,
+              "mode": "local",
+              "success": false,
+              "decision_reason": "default_local",
+              "target_device_id": null,
+              "error_count": 0,
+              "has_execution_trace": false,
+              "has_takeover_result": false,
+              "has_mesh_session": false,
+              "timestamp": 1700000000.0
+            }
+        """
+        try:
+            from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
+            from contracts.source_dispatch import build_source_dispatch_summary
+
+            plan = build_source_dispatch_plan()
+            summary = build_source_dispatch_summary(
+                dispatch_id=plan.dispatch_id,
+                trace_id=plan.trace_id,
+                task_id=plan.task_id,
+                session_id=plan.session_id,
+                mode=plan.mode,
+                success=plan.ready,
+                decision_reason=(
+                    plan.readiness_notes[0] if plan.readiness_notes else None
+                ),
+                target_device_id=(
+                    plan.selected_target.target_device_id
+                    if plan.selected_target
+                    else None
+                ),
+                has_mesh_session=plan.mesh_session is not None,
+            )
+            return JSONResponse(content=summary.to_dict())
+        except Exception as exc:
+            logger.warning(
+                "get_source_dispatch_summary: failed to build summary: %s", exc
+            )
+            original_exc = exc
+            try:
+                from contracts.source_dispatch import SourceDispatchSummary, SourceDispatchMode
+
+                fallback = SourceDispatchSummary(
+                    mode=SourceDispatchMode.unknown,
+                    success=False,
+                    decision_reason=f"summary_error:{original_exc}",
+                )
+                return JSONResponse(content=fallback.to_dict())
+            except Exception as fallback_exc:
+                import uuid as _uuid
+                import time as _time
+
+                return JSONResponse(
+                    content={
+                        "summary_id": str(_uuid.uuid4()),
+                        "mode": "unknown",
+                        "success": False,
+                        "decision_reason": f"summary_error:{original_exc}",
+                        "fallback_error": str(fallback_exc),
+                        "timestamp": _time.time(),
+                    }
+                )
+
     return router
 
 
