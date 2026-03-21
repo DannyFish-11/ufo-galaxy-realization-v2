@@ -229,6 +229,16 @@ from contracts.mesh_session import (  # noqa: E402
     build_mesh_session,
 )
 
+# PR-34: Local Takeover Result Contract (re-exported from contracts package)
+from contracts.local_takeover_result import (  # noqa: E402
+    LocalTakeoverResult,
+    LocalTakeoverStatus,
+    LocalTakeoverSessionContext,
+    build_local_takeover_result,
+    from_execution_output as takeover_result_from_execution_output,
+    failure_result as takeover_failure_result,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -394,4 +404,11 @@ __all__ = [
     "mesh_session_from_routing",
     "from_constellation_decomposition",
     "build_mesh_session",
+    # PR-34: Local Takeover Result Contract
+    "LocalTakeoverResult",
+    "LocalTakeoverStatus",
+    "LocalTakeoverSessionContext",
+    "build_local_takeover_result",
+    "takeover_result_from_execution_output",
+    "takeover_failure_result",
 ]

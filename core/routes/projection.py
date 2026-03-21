@@ -33,7 +33,7 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.Routes.Projection")
@@ -836,6 +836,88 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "inner_error": str(inner_exc),
                 }
         return JSONResponse(content=payload)
+
+    # ------------------------------------------------------------------
+    # POST /api/v1/runtime/takeover  (PR-34)
+    # ------------------------------------------------------------------
+
+    @router.post("/api/v1/runtime/takeover")
+    async def runtime_local_takeover(request: Request) -> JSONResponse:
+        """Accept a handoff envelope and execute the local takeover path.
+
+        This endpoint is the canonical **target-side local takeover entry
+        point** introduced in PR-34.  It:
+
+        1. Reads the incoming JSON body as a handoff envelope (or legacy
+           payload dict).
+        2. Normalises it to a
+           :class:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2`.
+        3. Runs the target-side takeover path via
+           :func:`~core.runtime.target_takeover.execute_local_takeover`.
+        4. Returns a serialised
+           :class:`~contracts.local_takeover_result.LocalTakeoverResult`.
+
+        The endpoint degrades gracefully: if the body cannot be parsed or the
+        execution path is unavailable, a minimal failure result is returned
+        with ``success: false`` and a ``reason`` field.
+
+        Example request body (Handoff Envelope v2)::
+
+            {
+              "trace_id": "trace_abc",
+              "task_id": "task_001",
+              "session_id": "sess_xyz",
+              "task_spec": {
+                "tool_name": "screenshot",
+                "args": {}
+              }
+            }
+
+        Example response::
+
+            {
+              "result_id": "...",
+              "trace_id": "trace_abc",
+              "success": true,
+              "status": "succeeded",
+              "result": { "action_taken": "...", ... },
+              "execution_trace": { ... },
+              ...
+            }
+        """
+        payload: Any = None
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            logger.warning("runtime_local_takeover: failed to parse body: %s", exc)
+
+        try:
+            from core.runtime.target_takeover import execute_local_takeover
+            result = execute_local_takeover(
+                payload,
+                capture_governance=True,
+                capture_policy_alignment=False,
+            )
+            result_dict = result.to_dict() if hasattr(result, "to_dict") else {}
+        except Exception as exc:
+            logger.warning(
+                "runtime_local_takeover: execute_local_takeover raised: %s", exc
+            )
+            try:
+                from contracts.local_takeover_result import failure_result, LocalTakeoverStatus
+                result = failure_result(
+                    reason=f"internal_error:{exc}",
+                    status=LocalTakeoverStatus.failed,
+                )
+                result_dict = result.to_dict()
+            except Exception as inner_exc:
+                result_dict = {
+                    "success": False,
+                    "status": "failed",
+                    "reason": f"internal_error:{exc}",
+                    "inner_error": str(inner_exc),
+                }
+        return JSONResponse(content=result_dict)
 
     return router
 
