@@ -356,6 +356,85 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_task_semantics()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/device-formation
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/device-formation")
+    async def get_device_formation_projection() -> JSONResponse:
+        """Return the current device-formation summary for the active runtime state.
+
+        This endpoint is **read-only** and **additive** (PR-17).  It does not
+        modify any existing projection, device manager, device router, or
+        orchestration module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"device_formation"`` key populated by the PR-17 formation schema, and
+        a flat ``"formation_hints"`` quick-check dict.
+
+        The ``"device_formation"`` block makes multi-device participation
+        **explicit and inspectable** and answers:
+          - Which devices are in the current execution formation?
+          - Which device is the source/origin?
+          - Which device is the primary executor?
+          - Which devices are support / observer / relay / fallback members?
+          - Which device owns merge responsibility?
+          - What barrier/completion posture is intended?
+          - Is a multi-device formation required by policy?
+
+        Response schema (additions over /task_semantics)
+        -------------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "task_semantics": { ... },
+              "device_formation": {
+                "schema_version": 1,
+                "formation_id": "...",
+                "task_id": null,
+                "trace_id": null,
+                "is_multi_device": false,
+                "member_count": 0,
+                "source_device_id": null,
+                "primary_execution_device_id": null,
+                "merge_owner_device_id": null,
+                "barrier_posture": "wait_primary",
+                "multi_device_required": false,
+                "merge_confirmation_required": false,
+                "fallback_available": false,
+                "formation_reason": "no active formation",
+                "runtime_domain_intent": "local",
+                "all_member_device_ids": [],
+                "fallback_device_ids": [],
+                "support_device_ids": [],
+                "observer_device_ids": [],
+                "relay_device_ids": [],
+                "policy_reason": "..."
+              },
+              "formation_hints": {
+                "is_multi_device": false,
+                "member_count": 0,
+                "fallback_available": false,
+                "multi_device_required": false,
+                "merge_confirmation_required": false,
+                "has_primary": false,
+                "has_source": false,
+                "has_merge_owner": false,
+                "barrier_posture": "wait_primary",
+                "runtime_domain_intent": "local"
+              }
+            }
+
+        This endpoint is consumed by the DeviceFormationSurface in Status
+        Board V2 and any downstream governance / reliability work that needs
+        explicit formation context.
+        """
+        payload = _assemble_projection_with_device_formation()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -717,5 +796,80 @@ def _assemble_projection_with_task_semantics() -> Dict[str, Any]:
             "total_steps": 0,
             "has_side_effectful_steps": False,
             "has_cross_device_steps": False,
+        }
+        return base
+
+
+def _assemble_projection_with_device_formation() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the PR-17 device-formation summary.
+
+    Builds the standard projection (with task semantics), then derives and
+    attaches the device-formation summary and hints.  Always returns a valid
+    dict with ``"device_formation"`` and ``"formation_hints"`` keys even when
+    the package is unavailable.
+    """
+    base = _assemble_projection_with_task_semantics()
+
+    try:
+        from core.device_formation import (
+            IDLE_FORMATION_SUMMARY,
+            attach_formation_to_projection,
+            get_formation_hints,
+            resolve_formation_summary,
+        )
+
+        domain_str = base.get("runtime_domain")
+
+        # Seed from cross-device routing summary if present
+        cross_device_routing = base.get("cross_device_routing", {})
+        routing_summary = cross_device_routing if isinstance(cross_device_routing, dict) else {}
+
+        summary = resolve_formation_summary(
+            runtime_domain=domain_str,
+            cross_device_routing_summary=routing_summary,
+            execution_policy=base.get("execution_policy"),
+        )
+        result = attach_formation_to_projection(base, summary)
+        result["formation_hints"] = get_formation_hints(summary)
+        return result
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Device-formation assembly failed, attaching idle placeholder: %s", exc
+        )
+        base["device_formation"] = {
+            "schema_version": 1,
+            "formation_id": "empty",
+            "task_id": None,
+            "trace_id": None,
+            "is_multi_device": False,
+            "member_count": 0,
+            "source_device_id": None,
+            "primary_execution_device_id": None,
+            "merge_owner_device_id": None,
+            "barrier_posture": "wait_primary",
+            "multi_device_required": False,
+            "merge_confirmation_required": False,
+            "fallback_available": False,
+            "formation_reason": "no active formation",
+            "runtime_domain_intent": "local",
+            "all_member_device_ids": [],
+            "fallback_device_ids": [],
+            "support_device_ids": [],
+            "observer_device_ids": [],
+            "relay_device_ids": [],
+            "policy_reason": "idle default",
+        }
+        base["formation_hints"] = {
+            "is_multi_device": False,
+            "member_count": 0,
+            "fallback_available": False,
+            "multi_device_required": False,
+            "merge_confirmation_required": False,
+            "has_primary": False,
+            "has_source": False,
+            "has_merge_owner": False,
+            "barrier_posture": "wait_primary",
+            "runtime_domain_intent": "local",
         }
         return base
