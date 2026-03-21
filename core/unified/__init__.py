@@ -315,6 +315,27 @@ from contracts.multi_device_runtime_projection import (  # noqa: E402
     project_merged_results,
 )
 
+# PR-39: Runtime Recovery and Reconciliation Contract
+from contracts.runtime_recovery_reconciliation import (  # noqa: E402
+    RecoveryIncidentType,
+    RecoveryStatus,
+    RecoveryActionType,
+    RecoveryParticipantState,
+    RecoveryActionRecommendation,
+    RecoveryBarrierState,
+    RuntimeRecoveryIncident,
+    RuntimeReconciliationState,
+    RecoverySummary,
+    build_runtime_recovery_incident,
+    build_runtime_reconciliation_state,
+    build_recovery_summary,
+    from_source_dispatch_result as recovery_from_dispatch_result,
+    from_target_takeover_result as recovery_from_takeover_result,
+    from_mesh_session_coordinator as recovery_from_coordinator,
+    from_merged_runtime_result as recovery_from_merged_result,
+    from_multi_device_projection as recovery_from_projection,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -551,4 +572,22 @@ __all__ = [
     "project_takeovers",
     "project_coordinator_state",
     "project_merged_results",
+    # PR-39: Runtime Recovery and Reconciliation Contract
+    "RecoveryIncidentType",
+    "RecoveryStatus",
+    "RecoveryActionType",
+    "RecoveryParticipantState",
+    "RecoveryActionRecommendation",
+    "RecoveryBarrierState",
+    "RuntimeRecoveryIncident",
+    "RuntimeReconciliationState",
+    "RecoverySummary",
+    "build_runtime_recovery_incident",
+    "build_runtime_reconciliation_state",
+    "build_recovery_summary",
+    "recovery_from_dispatch_result",
+    "recovery_from_takeover_result",
+    "recovery_from_coordinator",
+    "recovery_from_merged_result",
+    "recovery_from_projection",
 ]

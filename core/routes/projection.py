@@ -1329,9 +1329,98 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                         "merged_results": [],
                         "governance_snapshot": None,
                         "policy_alignment": None,
+                        "runtime_recovery": None,
                         "metadata": {},
                     }
                 )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/runtime/recovery
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/runtime/recovery")
+    async def get_runtime_recovery_posture() -> JSONResponse:
+        """Return the current runtime recovery and reconciliation posture.
+
+        This endpoint is the canonical **read-only** advisory surface for
+        recovery/reconciliation state introduced in PR-39.  It derives a
+        :class:`~contracts.runtime_recovery_reconciliation.RuntimeReconciliationState`
+        from the unified multi-device runtime projection and returns it as JSON.
+
+        Example response::
+
+            {
+              "reconciliation_id": "rrec_...",
+              "status": "resolved",
+              "incident_count": 0,
+              "participant_count": 0,
+              "replay_required": false,
+              "resume_allowed": false,
+              "merge_confirmation_required": false,
+              "has_barrier": false,
+              "reason": "no incidents",
+              ...
+            }
+
+        Returns
+        -------
+        JSONResponse
+            A compact recovery summary dict.  Always returns 200; individual
+            sub-component failures are logged and produce minimal safe defaults.
+        """
+        try:
+            from contracts.runtime_recovery_reconciliation import (
+                from_multi_device_projection,
+                build_recovery_summary,
+                RecoveryStatus,
+            )
+
+            # Attempt to get the projection dict from the multi-device projection
+            projection_dict: Dict[str, Any] = {}
+            try:
+                from contracts.multi_device_runtime_projection import (
+                    build_multi_device_runtime_projection,
+                )
+                projection_obj = build_multi_device_runtime_projection()
+                projection_dict = projection_obj.to_dict()
+            except Exception as exc:
+                logger.debug("get_runtime_recovery_posture: projection unavailable: %s", exc)
+
+            reconciliation = from_multi_device_projection(projection_dict)
+            summary = build_recovery_summary(
+                incidents=list(reconciliation.incidents),
+                reconciliation=reconciliation,
+            )
+            return JSONResponse(content=summary.to_dict())
+
+        except Exception as exc:
+            logger.warning(
+                "get_runtime_recovery_posture: failed to assemble recovery posture: %s",
+                exc,
+            )
+            import uuid as _uuid2
+            import time as _time2
+
+            return JSONResponse(
+                content={
+                    "summary_id": f"rrsum_{_uuid2.uuid4().hex[:10]}",
+                    "generated_at": _time2.time(),
+                    "overall_status": "pending",
+                    "incident_count": 0,
+                    "resolved_incident_count": 0,
+                    "pending_incident_count": 0,
+                    "needs_intervention_count": 0,
+                    "replay_required": False,
+                    "resume_allowed": False,
+                    "merge_confirmation_required": False,
+                    "has_barrier": False,
+                    "recommended_action_types": [],
+                    "most_recent_incident_type": None,
+                    "most_recent_recovery_id": None,
+                    "reason": "recovery posture unavailable",
+                    "metadata": {},
+                }
+            )
 
     return router
 
