@@ -363,6 +363,14 @@ class AgentBridge:
         # ── 5. Cache and return ────────────────────────────────────────────
         # PR-2: cache by dedup_key (task_id when envelope-sourced, trace_id otherwise).
         self._cache_result(dedup_key, result)
+        # PR-31: attach compact Handoff Envelope v2 summary additively (does not
+        # affect any existing result field; safe to drop if import fails).
+        try:
+            from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+            hev2 = from_legacy_handoff_contract(contract)
+            result.setdefault("handoff_envelope_v2", hev2.to_compact_summary())
+        except Exception:  # noqa: BLE001
+            pass
         return result
 
     async def handoff_from_envelope(
@@ -411,6 +419,84 @@ class AgentBridge:
     def get_metrics(self) -> Dict[str, Any]:
         """Return a snapshot of the current bridge metrics."""
         return self.metrics.snapshot()
+
+    def build_envelope_v2(
+        self,
+        contract: HandoffContract,
+        *,
+        source_device_id: Optional[str] = None,
+        target_device_id: Optional[str] = None,
+        source_runtime_id: Optional[str] = None,
+        target_runtime_id: Optional[str] = None,
+        handoff_policy: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """PR-31: Build a Handoff Envelope v2 from a legacy :class:`HandoffContract`.
+
+        This is the bridge-level helper for callers that want to emit a full
+        v2 envelope without performing a runtime handoff.  Returns a
+        :class:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2` when the
+        contracts package is importable, or ``None`` if not available.
+
+        Parameters
+        ----------
+        contract:
+            The populated legacy bridge contract.
+        source_device_id:
+            Optional source device identifier to embed in the v2 envelope.
+        target_device_id:
+            Optional target device identifier to embed in the v2 envelope.
+        source_runtime_id:
+            Optional source runtime instance identifier.
+        target_runtime_id:
+            Optional target runtime instance identifier.
+        handoff_policy:
+            Serialised governance policy dict.
+        metadata:
+            Arbitrary extra metadata.
+
+        Returns
+        -------
+        HandoffEnvelopeV2 | None
+        """
+        try:
+            from contracts.handoff_envelope_v2 import from_legacy_handoff_contract, HandoffEnvelopeV2
+            envelope: HandoffEnvelopeV2 = from_legacy_handoff_contract(contract)
+            if source_device_id:
+                envelope = envelope.model_copy(
+                    update={
+                        "source_device_id": source_device_id,
+                        "source": envelope.source.model_copy(update={"device_id": source_device_id}),
+                    }
+                )
+            if target_device_id:
+                envelope = envelope.model_copy(
+                    update={
+                        "target_device_id": target_device_id,
+                        "target": envelope.target.model_copy(update={"device_id": target_device_id}),
+                    }
+                )
+            if source_runtime_id:
+                envelope = envelope.model_copy(
+                    update={
+                        "source_runtime_id": source_runtime_id,
+                        "source": envelope.source.model_copy(update={"runtime_id": source_runtime_id}),
+                    }
+                )
+            if target_runtime_id:
+                envelope = envelope.model_copy(
+                    update={
+                        "target_runtime_id": target_runtime_id,
+                        "target": envelope.target.model_copy(update={"runtime_id": target_runtime_id}),
+                    }
+                )
+            if handoff_policy:
+                envelope = envelope.model_copy(update={"handoff_policy": handoff_policy})
+            if metadata:
+                envelope = envelope.model_copy(update={"metadata": metadata})
+            return envelope
+        except Exception:  # noqa: BLE001
+            return None
 
     # ------------------------------------------------------------------
     # Internal helpers
