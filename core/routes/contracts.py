@@ -120,4 +120,53 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=503,
             )
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/contracts/reliability
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/contracts/reliability")
+    async def get_reliability_contracts() -> JSONResponse:
+        """Return the reliability-contract registry — delivery semantics.
+
+        This endpoint is **read-only**.  It returns a stable JSON payload
+        describing the reliability contract (delivery mode, ack posture,
+        dedup key, retry policy, timeout owner, fallback owner) for each
+        registered runtime path.
+
+        Response schema
+        ---------------
+        ::
+
+            {
+              "paths": {
+                "<path_key>": {
+                  "path_key": "<path_key>",
+                  "description": "<string>",
+                  "delivery_mode": "<best_effort|at_least_once|...>",
+                  "ack_policy": { "stage": "...", ... },
+                  "dedup_key": { "fields": [...], ... },
+                  "retry_policy": { "max_attempts": <int>, ... },
+                  "timeout_owner": "<transport|router|runtime|...>",
+                  "fallback_owner": "<local_fallback|coordinator|...>",
+                  "source_module": "<dotted.python.module | null>",
+                  "notes": "<string | null>",
+                  "schema_version": 1
+                },
+                ...
+              },
+              "total_paths": <int>,
+              "schema_version": 1
+            }
+        """
+        try:
+            from core.reliability_contract import get_reliability_registry_snapshot
+            payload = get_reliability_registry_snapshot()
+            return JSONResponse(content=payload, status_code=200)
+        except Exception as exc:  # pragma: no cover
+            logger.error("reliability_contracts endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": "reliability contract registry unavailable", "detail": str(exc)},
+                status_code=503,
+            )
+
     return router

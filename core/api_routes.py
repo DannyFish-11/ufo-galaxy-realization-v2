@@ -188,6 +188,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         pass
 
     # PR-16: Cross-Plane Contract Map — read-only contract introspection endpoints
+    # PR-19: Reliability Contract — GET /api/v1/contracts/reliability is also
+    #        served by this router (delivery semantics for existing runtime paths).
     try:
         from core.routes import contracts as contracts_routes
         router.include_router(contracts_routes.create_router())
