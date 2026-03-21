@@ -3,7 +3,9 @@
 Exports the canonical execution trace contract introduced in PR-25, the
 Registered Runtime Device contract introduced in PR-29, the Local Runtime
 Host contract introduced in PR-30, the Handoff Envelope v2 contract
-introduced in PR-31, and the Mesh Membership contract introduced in PR-32.
+introduced in PR-31, the Mesh Membership contract introduced in PR-32, the
+Mesh Session contract introduced in PR-33, and the Local Takeover Result
+contract introduced in PR-34.
 """
 
 from contracts.execution_trace import (
@@ -95,6 +97,16 @@ from contracts.mesh_session import (
     build_mesh_session,
 )
 
+# PR-34: Local Takeover Result Contract
+from contracts.local_takeover_result import (
+    LocalTakeoverResult,
+    LocalTakeoverStatus,
+    LocalTakeoverSessionContext,
+    build_local_takeover_result,
+    from_execution_output as takeover_result_from_execution_output,
+    failure_result as takeover_failure_result,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -168,4 +180,11 @@ __all__ = [
     "mesh_session_from_routing",
     "from_constellation_decomposition",
     "build_mesh_session",
+    # PR-34: Local Takeover Result Contract
+    "LocalTakeoverResult",
+    "LocalTakeoverStatus",
+    "LocalTakeoverSessionContext",
+    "build_local_takeover_result",
+    "takeover_result_from_execution_output",
+    "takeover_failure_result",
 ]
