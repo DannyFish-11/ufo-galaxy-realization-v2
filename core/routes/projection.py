@@ -1179,6 +1179,160 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     }
                 )
 
+    @router.get("/api/v1/projection/runtime/multi-device")
+    async def get_multi_device_runtime_projection() -> JSONResponse:
+        """Return the unified multi-device runtime projection.
+
+        This endpoint is the canonical **unified multi-device runtime projection**
+        introduced in PR-38.  It assembles a
+        :class:`~contracts.multi_device_runtime_projection.MultiDeviceRuntimeProjection`
+        that aggregates state across all device, host, mesh, session, dispatch,
+        handoff, coordination, and result contracts (PR-29–PR-37) into a single
+        read-only projection.
+
+        The endpoint is **read-only** (GET), never modifies state, and degrades
+        gracefully when individual sub-components are unavailable.
+
+        Example response::
+
+            {
+              "projection_id": "mdrt_proj_abc123def456",
+              "generated_at": 1700000000.0,
+              "runtime_devices": [...],
+              "runtime_hosts": [...],
+              "mesh_memberships": [...],
+              "mesh_sessions": [...],
+              "source_dispatches": [],
+              "handoff_summaries": [],
+              "takeover_summaries": [],
+              "coordinator_summaries": [...],
+              "merged_results": [],
+              "governance_snapshot": null,
+              "policy_alignment": null,
+              "metadata": {}
+            }
+        """
+        try:
+            from contracts.multi_device_runtime_projection import (
+                build_multi_device_runtime_projection,
+            )
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
+
+            registry = get_body_mesh_registry()
+
+            # --- runtime devices (PR-29) ---
+            runtime_devices: list = []
+            try:
+                from contracts.registered_runtime_device import build_registered_runtime_device
+                from core.unified.device_manager import UnifiedDeviceManager
+
+                udm = UnifiedDeviceManager.get_instance()
+                if udm is not None:
+                    for dev in (udm.get_all_devices() or []):
+                        try:
+                            from contracts.registered_runtime_device import from_udm_device
+                            runtime_devices.append(from_udm_device(dev).to_dict())
+                        except Exception:
+                            pass
+            except Exception as exc:
+                logger.debug("multi-device projection: devices unavailable: %s", exc)
+
+            # --- runtime hosts (PR-30) ---
+            runtime_hosts: list = []
+            try:
+                from contracts.local_runtime_host import from_registered_runtime_device as host_from_device
+
+                for dev_dict in runtime_devices:
+                    try:
+                        runtime_hosts.append(host_from_device(dev_dict).to_dict())
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.debug("multi-device projection: hosts unavailable: %s", exc)
+
+            # --- mesh memberships (PR-32) ---
+            mesh_memberships: list = []
+            try:
+                memberships = registry.get_mesh_memberships()
+                for m in (memberships or []):
+                    try:
+                        d = m.to_dict() if hasattr(m, "to_dict") else dict(m)
+                        mesh_memberships.append(d)
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.debug("multi-device projection: memberships unavailable: %s", exc)
+
+            # --- mesh sessions (PR-33) ---
+            mesh_sessions: list = []
+            try:
+                session = registry.get_mesh_session(mesh_id="default_mesh")
+                if session is not None:
+                    mesh_sessions.append(
+                        session.to_dict() if hasattr(session, "to_dict") else dict(session)
+                    )
+            except Exception as exc:
+                logger.debug("multi-device projection: mesh session unavailable: %s", exc)
+
+            # --- coordinator summaries (PR-37) ---
+            coordinator_summaries: list = []
+            try:
+                coordinator = registry.get_mesh_session_coordinator(mesh_id="default_mesh")
+                if coordinator is not None:
+                    from contracts.mesh_session_coordinator import build_coordinator_summary
+                    summary = build_coordinator_summary(coordinator=coordinator)
+                    coordinator_summaries.append(summary.to_dict())
+            except Exception as exc:
+                logger.debug("multi-device projection: coordinator unavailable: %s", exc)
+
+            projection = build_multi_device_runtime_projection(
+                runtime_devices=runtime_devices,
+                runtime_hosts=runtime_hosts,
+                mesh_memberships=mesh_memberships,
+                mesh_sessions=mesh_sessions,
+                coordinator_summaries=coordinator_summaries,
+            )
+            return JSONResponse(content=projection.to_dict())
+
+        except Exception as exc:
+            logger.warning(
+                "get_multi_device_runtime_projection: failed to assemble projection: %s",
+                exc,
+            )
+            try:
+                from contracts.multi_device_runtime_projection import (
+                    MultiDeviceRuntimeProjection,
+                )
+
+                fallback = MultiDeviceRuntimeProjection()
+                return JSONResponse(content=fallback.to_dict())
+            except Exception as fallback_exc:
+                import uuid as _uuid
+                import time as _time
+
+                logger.warning(
+                    "get_multi_device_runtime_projection: fallback construction failed: %s",
+                    fallback_exc,
+                )
+                return JSONResponse(
+                    content={
+                        "projection_id": f"mdrt_proj_{_uuid.uuid4().hex[:12]}",
+                        "generated_at": _time.time(),
+                        "runtime_devices": [],
+                        "runtime_hosts": [],
+                        "mesh_memberships": [],
+                        "mesh_sessions": [],
+                        "source_dispatches": [],
+                        "handoff_summaries": [],
+                        "takeover_summaries": [],
+                        "coordinator_summaries": [],
+                        "merged_results": [],
+                        "governance_snapshot": None,
+                        "policy_alignment": None,
+                        "metadata": {},
+                    }
+                )
+
     return router
 
 
