@@ -840,6 +840,26 @@ class OpenClawd:
             entry_mode=entry_mode,
         )
 
+        # PR-23: Consult the Execution Readiness Gate before action dispatch.
+        # Blocked / observe-only results surface a structured skipped_reason.
+        # Errors in the gate are fully isolated and never break response flow.
+        _readiness = self._check_readiness(_intent_profile, state_continuum)
+        if _readiness is not None and not _readiness.ready:
+            logger.debug(
+                "_run_execution: readiness gate blocked — status=%s blocked_by=%s reason=%r intent_id=%s",
+                _readiness.status,
+                _readiness.blocked_by,
+                _readiness.reason,
+                getattr(_intent_profile, "intent_id", "unknown"),
+            )
+            return {
+                "action_taken": "none",
+                "success": False,
+                "skipped_reason": f"readiness_gate:{_readiness.status}:{_readiness.blocked_by}",
+                "execution_intent": _intent_profile.compact_summary(),
+                "readiness": _readiness.governance_summary(),
+            }
+
         try:
             executor = self._get_decision_executor()
             if executor is None:
@@ -848,6 +868,7 @@ class OpenClawd:
                     "success": False,
                     "skipped_reason": "executor_unavailable",
                     "execution_intent": _intent_profile.compact_summary(),
+                    "readiness": _readiness.governance_summary() if _readiness else None,
                 }
             # Extract force_local_execution override from state_continuum metadata
             # (allows per-request override when entry_mode=cross_device).
@@ -874,6 +895,7 @@ class OpenClawd:
                 "skipped_reason": result.skipped_reason,
                 "metadata": result.metadata,
                 "execution_intent": _intent_profile.compact_summary(),
+                "readiness": _readiness.governance_summary() if _readiness else None,
             }
         except Exception as _ee:
             logger.debug("_run_execution failed (swallowed): %s", _ee)
@@ -882,6 +904,7 @@ class OpenClawd:
                 "success": False,
                 "skipped_reason": f"internal_error: {_ee}",
                 "execution_intent": _intent_profile.compact_summary(),
+                "readiness": _readiness.governance_summary() if _readiness else None,
             }
 
     def _build_intent_profile(
@@ -932,6 +955,35 @@ class OpenClawd:
                         }
 
                 return _Stub()
+
+    def _check_readiness(
+        self,
+        intent_profile: Any,
+        state_continuum: Optional[Dict[str, Any]],
+    ) -> Optional[Any]:
+        """Consult the Execution Readiness Gate (PR-23).
+
+        Gracefully returns ``None`` when the gate module is unavailable so that
+        the existing execution flow is never interrupted.
+
+        Args:
+            intent_profile: The :class:`~core.execution.intent_profile.ExecutionIntentProfile`
+                built by :meth:`_build_intent_profile`.
+            state_continuum: Serialised ContinuumState dict, or ``None``.
+
+        Returns:
+            A :class:`~core.execution.readiness_gate.ReadinessResult`, or
+            ``None`` when the gate is unavailable.
+        """
+        try:
+            from core.execution.readiness_gate import evaluate_readiness  # noqa: PLC0415
+            return evaluate_readiness(
+                intent_profile,
+                state_continuum=state_continuum,
+            )
+        except Exception as _exc:
+            logger.debug("_check_readiness failed (swallowed): %s", _exc)
+            return None
 
     @staticmethod
     def _determine_execution_path(
