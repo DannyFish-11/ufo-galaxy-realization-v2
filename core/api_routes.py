@@ -196,6 +196,15 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception:
         pass
 
+    # PR-20: Capability Runtime State — read-only capability runtime summaries.
+    #        GET /api/v1/capabilities/runtime
+    #        GET /api/v1/capabilities/runtime/{capability_name}
+    try:
+        from core.routes import capabilities_runtime as cap_runtime_routes
+        router.include_router(cap_runtime_routes.create_router())
+    except Exception:
+        pass
+
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream
     # -----------------------------------------------------------------------
