@@ -190,6 +190,19 @@ class RuntimeProjection(BaseModel):
             "Read-only surface; does not affect base projection behaviour."
         ),
     )
+    policy_alignment: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Execution Policy Alignment Surface (PR-28). "
+            "Answers whether runtime policy, readiness policy, fallback posture, "
+            "dispatch/handoff posture, and projection governance are in agreement. "
+            "Includes detected mismatches, resolved policy posture, and quick-access "
+            "alignment hints for downstream status surfaces and debugging tools. "
+            "Populated when alignment assessment is available. "
+            "None when no alignment was assembled. "
+            "Read-only surface; does not affect base projection behaviour."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when this projection was assembled.",
@@ -226,6 +239,7 @@ class RuntimeProjection(BaseModel):
             "execution_intent_summary": self.execution_intent_summary,
             "governance": self.governance,
             "runtime_governance_snapshot": self.runtime_governance_snapshot,
+            "policy_alignment": self.policy_alignment,
             "timestamp": self.timestamp,
         }
 
