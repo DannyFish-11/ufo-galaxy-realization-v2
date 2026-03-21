@@ -126,6 +126,62 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_return()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/execution_policy
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/execution_policy")
+    async def get_execution_policy_projection() -> JSONResponse:
+        """Return the current execution-policy summary derived from live signals.
+
+        This endpoint is **read-only** and **additive** — it does not modify
+        any existing projection, continuum, or orchestration module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"execution_policy"`` key populated by the PR-11 policy schema.
+
+        The ``"execution_policy"`` block answers:
+          - What policy band applies (``observe_only`` / ``assistive`` /
+            ``bounded_execute`` / ``full_execute``)?
+          - What risk/action/fallback budgets are available?
+          - Which executor levels are permitted?
+          - Whether cross-device expansion is allowed?
+          - Whether confirmation is required?
+
+        The ``"hints"`` sub-key provides quick boolean checks for downstream
+        consumers (manifest stage, liminal controllers, status board).
+
+        This endpoint does **not** enforce the policy — enforcement is
+        deferred to a follow-up PR.
+
+        Response schema (additions over /return)
+        -----------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "return_intelligence": { ... },
+              "execution_policy": {
+                "policy_band": "bounded_execute",
+                "risk_budget": 0.5,
+                "action_budget": 5,
+                "fallback_budget": 2,
+                "allowed_executor_levels": ["system_api", "uia", "orchestrator"],
+                "cross_device_allowed": false,
+                "requires_confirmation": true,
+                "reason": "...",
+                "can_execute": true,
+                "can_expand_cross_device": false,
+                "should_require_confirmation": true,
+                "max_executor_level": "orchestrator"
+              }
+            }
+        """
+        payload = _assemble_projection_with_execution_policy()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -300,4 +356,51 @@ def _assemble_projection_with_return() -> Dict[str, Any]:
             "affects_manifest": False,
             "affects_liminal": False,
         }
+        return base
+
+
+def _assemble_projection_with_execution_policy() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the execution-policy summary.
+
+    Builds the standard projection (with return intelligence), then derives
+    and attaches the PR-11 execution policy.  Always returns a valid dict with
+    an ``"execution_policy"`` key even when the policy layer is unavailable.
+    """
+    base = _assemble_projection_with_return()
+
+    try:
+        from core.execution_policy import (
+            resolve_policy,
+            attach_policy_to_projection,
+            DEFAULT_CONSERVATIVE_POLICY,
+        )
+
+        phase_str = base.get("tri_state_phase")
+        domain_str = base.get("runtime_domain")
+        retreat = base.get("retreat_tendency")
+        collapse = base.get("collapse_tendency")
+        return_intel = base.get("return_intelligence")
+
+        # Optionally pull authority role from the running continuum context
+        authority_role = None
+        try:
+            from core.orchestration_authority import AuthorityRole
+            authority_role = AuthorityRole.AUTHORITATIVE_ENTRYPOINT
+        except Exception:
+            pass
+
+        policy = resolve_policy(
+            phase=phase_str,
+            domain=domain_str,
+            authority_role=authority_role,
+            return_summary=return_intel,
+            retreat_tendency=float(retreat) if retreat is not None else None,
+            collapse_tendency=float(collapse) if collapse is not None else None,
+        )
+        return attach_policy_to_projection(base, policy)
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Execution-policy assembly failed, attaching conservative default: %s", exc)
+        from core.execution_policy.policy_summary import _fallback_summary
+        base["execution_policy"] = _fallback_summary()
         return base
