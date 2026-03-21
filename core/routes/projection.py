@@ -510,6 +510,91 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_agent_dispatch()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/routing-explanation
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/routing-explanation")
+    async def get_routing_explanation_projection() -> JSONResponse:
+        """Return the current routing explanation summary for the active runtime state.
+
+        This endpoint is **read-only** and **additive** (PR-21).  It does not
+        modify any existing projection, router, execution policy, or device
+        module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"routing_explanation"`` key populated by the PR-21 routing
+        explanation schema, and a flat ``"explanation_hints"`` quick-check
+        dict.
+
+        The ``"routing_explanation"`` block makes the routing decision basis
+        **explicit and inspectable** and answers:
+          - Which device/route was selected as the primary target?
+          - What decision factors drove the choice (policy, health, capability,
+            latency, availability, authority role, fallback)?
+          - How confident is the system in this routing decision?
+          - Which candidates were rejected and why?
+          - Is a fallback plan available?
+          - Which agent role owns this routing decision?
+          - What execution-policy band constrained the route options?
+
+        Response schema (additions over /agent-dispatch)
+        -------------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "agent_dispatch": { ... },
+              "routing_explanation": {
+                "schema_version": 1,
+                "route_target": null,
+                "decision_basis_list": [],
+                "confidence": {
+                  "score": 0.0,
+                  "band": "undetermined",
+                  "basis_count": 0,
+                  "accepted_factor_count": 0,
+                  "rejected_factor_count": 0,
+                  "contributing_factors": [],
+                  "reason": "no basis entries — undetermined confidence"
+                },
+                "rejected_alternatives": [],
+                "fallback_plan": null,
+                "owner_agent": null,
+                "owner_component": "routing_explanation",
+                "policy_posture": "undecided",
+                "policy_band": null,
+                "policy_reason": "no routing decision recorded",
+                "is_cross_device": false,
+                "has_fallback": false,
+                "task_id": null,
+                "trace_id": null
+              },
+              "explanation_hints": {
+                "route_target": null,
+                "policy_posture": "undecided",
+                "policy_band": null,
+                "confidence_score": 0.0,
+                "confidence_band": "undetermined",
+                "is_cross_device": false,
+                "has_fallback": false,
+                "has_rejected_alternatives": false,
+                "rejected_count": 0,
+                "basis_count": 0,
+                "owner_agent": null
+              }
+            }
+
+        This endpoint is the primary read-only integration point for the
+        PR-21 routing explanation layer.  Downstream governance tooling,
+        status boards, and debugging utilities should consume this endpoint
+        to inspect why the current routing decision was made.
+        """
+        payload = _assemble_projection_with_routing_explanation()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -1033,5 +1118,73 @@ def _assemble_projection_with_agent_dispatch() -> Dict[str, Any]:
             "handoff_count": 0,
             "has_final_owner": False,
             "recovery_permitted": True,
+        }
+        return base
+
+
+def _assemble_projection_with_routing_explanation() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the PR-21 routing explanation summary.
+
+    Builds the agent-dispatch projection (which includes all previous layers),
+    then derives and attaches the routing explanation summary and hints.
+    Always returns a valid dict with ``"routing_explanation"`` and
+    ``"explanation_hints"`` keys even when the package is unavailable.
+    """
+    base = _assemble_projection_with_agent_dispatch()
+
+    try:
+        from core.routing_explanation import (
+            IDLE_EXPLANATION_SUMMARY,
+            attach_explanation_to_projection,
+            get_explanation_hints,
+            resolve_explanation_from_projection,
+        )
+
+        summary = resolve_explanation_from_projection(base)
+        result = attach_explanation_to_projection(base, summary)
+        result["explanation_hints"] = get_explanation_hints(summary)
+        return result
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Routing-explanation assembly failed, attaching idle placeholder: %s", exc
+        )
+        base["routing_explanation"] = {
+            "schema_version": 1,
+            "route_target": None,
+            "decision_basis_list": [],
+            "confidence": {
+                "score": 0.0,
+                "band": "undetermined",
+                "basis_count": 0,
+                "accepted_factor_count": 0,
+                "rejected_factor_count": 0,
+                "contributing_factors": [],
+                "reason": "routing explanation unavailable",
+            },
+            "rejected_alternatives": [],
+            "fallback_plan": None,
+            "owner_agent": None,
+            "owner_component": "routing_explanation",
+            "policy_posture": "undecided",
+            "policy_band": None,
+            "policy_reason": "no routing decision recorded",
+            "is_cross_device": False,
+            "has_fallback": False,
+            "task_id": None,
+            "trace_id": None,
+        }
+        base["explanation_hints"] = {
+            "route_target": None,
+            "policy_posture": "undecided",
+            "policy_band": None,
+            "confidence_score": 0.0,
+            "confidence_band": "undetermined",
+            "is_cross_device": False,
+            "has_fallback": False,
+            "has_rejected_alternatives": False,
+            "rejected_count": 0,
+            "basis_count": 0,
+            "owner_agent": None,
         }
         return base
