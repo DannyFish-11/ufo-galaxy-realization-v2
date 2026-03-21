@@ -275,6 +275,59 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         raise HTTPException(status_code=404, detail="设备未找到")
 
+    @router.get("/api/v1/devices/{device_id}/runtime-contract")
+    async def get_device_runtime_contract(device_id: str):
+        """PR-29: Return the canonical Registered Runtime Device contract.
+
+        This read-only endpoint normalises the device into the
+        :class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice`
+        contract and returns it as JSON.  Existing device endpoints are not
+        modified; this is purely additive.
+        """
+        from contracts.registered_runtime_device import (
+            from_udm_device,
+            from_device_registry_record,
+            RegisteredRuntimeDevice,
+        )
+
+        # Prefer UDM SSOT
+        try:
+            udm_dev = get_unified_device_manager().get_device(device_id)
+            if udm_dev is not None:
+                contract: RegisteredRuntimeDevice = from_udm_device(udm_dev)
+                return JSONResponse(contract.to_dict())
+        except Exception:
+            pass
+
+        # Fall back to legacy device registry
+        try:
+            from core.device_registry import device_registry as _dr
+            legacy_dev = _dr.get(device_id)
+            if legacy_dev is not None:
+                contract = from_device_registry_record(legacy_dev)
+                return JSONResponse(contract.to_dict())
+        except Exception:
+            pass
+
+        # Final fall-back: build minimal contract from registered_devices cache
+        if device_id in registered_devices:
+            raw = registered_devices[device_id]
+            from contracts.registered_runtime_device import build_registered_runtime_device
+            contract = build_registered_runtime_device(
+                device_id=device_id,
+                device_name=str(raw.get("device_name", "")),
+                platform=str(raw.get("device_type", "unknown")),
+                device_type=str(raw.get("device_type", "")),
+                capabilities=list(raw.get("capabilities", [])),
+                status=str(raw.get("status", "offline")),
+                metadata={k: v for k, v in raw.items() if k not in (
+                    "device_id", "device_name", "device_type", "capabilities", "status"
+                )},
+            )
+            return JSONResponse(contract.to_dict())
+
+        raise HTTPException(status_code=404, detail="设备未找到")
+
     @router.post("/api/v1/devices/{device_id}/heartbeat")
     async def device_heartbeat(device_id: str):
         """设备心跳接口（REST 方式）
