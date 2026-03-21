@@ -182,6 +182,61 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_execution_policy()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/cross_device_routing
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/cross_device_routing")
+    async def get_cross_device_routing_projection() -> JSONResponse:
+        """Return the current cross-device routing summary derived from live signals.
+
+        This endpoint is **read-only** and **additive** (PR-13).  It does not
+        modify any existing projection, continuum, orchestration, or device
+        module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"cross_device_routing"`` key populated by the PR-13 cross-device
+        role and routing policy schema.
+
+        The ``"cross_device_routing"`` block answers:
+          - What routing posture is intended (``local_preferred`` /
+            ``local_then_expand`` / ``remote_required`` / ``split_execution``
+            / ``mirrored_observation``)?
+          - Which device originated the request?
+          - Which device is the primary executor?
+          - Which devices are support / observer / relay / fallback?
+          - Is cross-device expansion permitted by execution policy?
+          - Is confirmation required before expansion?
+
+        Response schema (additions over /execution_policy)
+        ---------------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "execution_policy": { ... },
+              "cross_device_routing": {
+                "posture": "local_preferred",
+                "source_device_id": null,
+                "primary_execution_device_id": null,
+                "support_device_ids": [],
+                "observer_device_ids": [],
+                "relay_device_ids": [],
+                "fallback_device_ids": [],
+                "all_assignments": [],
+                "runtime_domain_intent": "local",
+                "expansion_allowed_by_execution_policy": false,
+                "confirmation_required_before_expansion": true,
+                "is_cross_device": false,
+                "policy_reason": "..."
+              }
+            }
+        """
+        payload = _assemble_projection_with_cross_device_routing()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -403,4 +458,53 @@ def _assemble_projection_with_execution_policy() -> Dict[str, Any]:
         logger.warning("Execution-policy assembly failed, attaching conservative default: %s", exc)
         from core.execution_policy.policy_summary import _fallback_summary
         base["execution_policy"] = _fallback_summary()
+        return base
+
+
+def _assemble_projection_with_cross_device_routing() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the cross-device routing summary.
+
+    Builds the standard projection (with execution policy), then derives and
+    attaches the PR-13 cross-device routing summary.  Always returns a valid
+    dict with a ``"cross_device_routing"`` key even when the package is
+    unavailable.
+    """
+    base = _assemble_projection_with_execution_policy()
+
+    try:
+        from core.cross_device_policy import (
+            resolve_routing_summary,
+            attach_cross_device_to_projection,
+            IDLE_ASSIGNMENT_SUMMARY,
+        )
+
+        domain_str = base.get("runtime_domain")
+
+        # Extract execution policy object if available
+        execution_policy = base.get("execution_policy")
+
+        # Optionally pull authority role
+        authority_role = None
+        try:
+            from core.orchestration_authority import AuthorityRole
+            authority_role = AuthorityRole.AUTHORITATIVE_ENTRYPOINT
+        except Exception:
+            pass
+
+        summary = resolve_routing_summary(
+            runtime_domain=domain_str,
+            execution_policy=execution_policy,
+            authority_role=authority_role,
+        )
+        return attach_cross_device_to_projection(base, summary)
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Cross-device routing assembly failed, attaching idle summary: %s", exc
+        )
+        try:
+            from core.cross_device_policy import IDLE_ASSIGNMENT_SUMMARY
+            base["cross_device_routing"] = IDLE_ASSIGNMENT_SUMMARY.to_dict()
+        except Exception:
+            base["cross_device_routing"] = {"posture": "undecided", "is_cross_device": False}
         return base
