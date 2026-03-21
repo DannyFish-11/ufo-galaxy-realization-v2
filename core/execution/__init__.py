@@ -11,6 +11,14 @@ from core.execution.intent_profile import (
     IntentMode,
     build_execution_intent_profile,
 )
+from core.execution.readiness_gate import (
+    ReadinessStatus,
+    ReadinessResult,
+    BlockedBy,
+    ExecutionReadinessGate,
+    evaluate_readiness,
+    reset_readiness_gate,
+)
 
 __all__ = [
     "DecisionExecutor",
@@ -19,4 +27,11 @@ __all__ = [
     "ExecutionIntentProfile",
     "IntentMode",
     "build_execution_intent_profile",
+    # PR-23: Execution Readiness Gate
+    "ReadinessStatus",
+    "ReadinessResult",
+    "BlockedBy",
+    "ExecutionReadinessGate",
+    "evaluate_readiness",
+    "reset_readiness_gate",
 ]
