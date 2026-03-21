@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -157,6 +157,14 @@ class RuntimeProjection(BaseModel):
         default=None,
         description="Short summary of the task currently in progress.",
     )
+    execution_intent_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Compact summary of the current ExecutionIntentProfile (PR-22). "
+            "Populated by build_runtime_projection when an intent profile is available. "
+            "Read-only surface for governance/debug consumers."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when this projection was assembled.",
@@ -190,6 +198,7 @@ class RuntimeProjection(BaseModel):
             "active_device_ids": list(self.active_device_ids),
             "execution_stage": self.execution_stage,
             "current_task_summary": self.current_task_summary,
+            "execution_intent_summary": self.execution_intent_summary,
             "timestamp": self.timestamp,
         }
 

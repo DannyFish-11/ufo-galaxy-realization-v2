@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from core.continuum.types import ContinuumState, RuntimeDomain
 
@@ -100,6 +100,7 @@ def build_runtime_projection(
     route_plan: "Optional[TopologyRoutePlan]" = None,
     execution_summary: Optional[ExecutionSummary] = None,
     timestamp: Optional[float] = None,
+    intent_profile: "Optional[Any]" = None,
 ) -> RuntimeProjection:
     """Assemble a :class:`RuntimeProjection` from core runtime state.
 
@@ -126,6 +127,11 @@ def build_runtime_projection(
         timestamp:
             Optional explicit Unix epoch timestamp for this projection.
             Defaults to :func:`time.time` at call time.
+        intent_profile:
+            Optional :class:`~core.execution.intent_profile.ExecutionIntentProfile`
+            (PR-22).  When provided, its compact summary is included in the
+            ``execution_intent_summary`` field of the projection for
+            governance/debug consumers.  Additive; does not affect other fields.
 
     Returns:
         A fully populated (or minimally populated) :class:`RuntimeProjection`.
@@ -170,6 +176,19 @@ def build_runtime_projection(
         execution_stage = execution_summary.execution_stage
         current_task_summary = execution_summary.current_task_summary
 
+    # --- Execution intent summary (PR-22) ----------------------------------
+    execution_intent_summary: Optional[Dict] = None
+    if intent_profile is not None:
+        try:
+            execution_intent_summary = intent_profile.compact_summary()
+        except Exception as _exc:
+            logger.warning(
+                "build_runtime_projection: intent_profile.compact_summary() failed "
+                "(intent_profile type=%s): %s",
+                type(intent_profile).__name__,
+                _exc,
+            )
+
     projection = RuntimeProjection(
         tri_state_phase=tri_state_phase,
         runtime_domain=runtime_domain,
@@ -184,13 +203,15 @@ def build_runtime_projection(
         active_device_ids=active_device_ids,
         execution_stage=execution_stage,
         current_task_summary=current_task_summary,
+        execution_intent_summary=execution_intent_summary,
         timestamp=ts,
     )
 
     logger.debug(
-        "build_runtime_projection: %r  route=%s  devices=%s",
+        "build_runtime_projection: %r  route=%s  devices=%s  intent=%s",
         projection,
         route_plan is not None,
         len(active_device_ids),
+        intent_profile is not None,
     )
     return projection
