@@ -298,6 +298,64 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_projection_with_cross_device_routing()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/task_semantics
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/task_semantics")
+    async def get_task_semantics_projection() -> JSONResponse:
+        """Return semantic step-kind hints derived from the current runtime state.
+
+        This endpoint is **read-only** and **additive** (PR-15).  It does not
+        modify any existing projection, continuum, orchestration, or device
+        module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus a nested
+        ``"task_semantics"`` key populated by the PR-15 task-semantics schema
+        and a flat ``"semantic_hints"`` quick-check dict.
+
+        The ``"task_semantics"`` block describes the semantic step classification
+        for the current idle/active task state and answers:
+          - How many steps are classified and of what kind?
+          - Does the task contain side-effectful steps?
+          - Does the task contain cross-device steps?
+          - Which steps are visible in manifest/projection surfaces?
+          - Which steps emit observability highlights?
+
+        Response schema (additions over /cross_device_routing)
+        -------------------------------------------------------
+        .. code-block:: json
+
+            {
+              "tri_state_phase": "...",
+              ...,
+              "cross_device_routing": { ... },
+              "task_semantics": {
+                "task_id": "",
+                "trace_id": "",
+                "classified_steps": [],
+                "total_steps": 0,
+                "has_side_effectful_steps": false,
+                "has_cross_device_steps": false,
+                "has_confirmation_required_steps": false,
+                "has_rollback_steps": false,
+                "primary_visible_steps": [],
+                "observability_highlight_steps": [],
+                "unresolved_count": 0,
+                "is_fully_resolved": true
+              },
+              "semantic_hints": {
+                "total_steps": 0,
+                "has_side_effectful_steps": false,
+                "has_cross_device_steps": false,
+                ...
+              }
+            }
+        """
+        payload = _assemble_projection_with_task_semantics()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -611,5 +669,53 @@ def _assemble_projection_with_merge_summary() -> Dict[str, Any]:
             "merge_status": "failed",
             "is_successful": False,
             "is_terminal_failure": True,
+        }
+        return base
+
+
+def _assemble_projection_with_task_semantics() -> Dict[str, Any]:
+    """Assemble a projection dict enriched with the PR-15 task semantic summary.
+
+    Builds the standard projection (with merge summary), then attaches
+    the task-semantics summary and hints.  Always returns a valid dict with
+    ``"task_semantics"`` and ``"semantic_hints"`` keys even when the package
+    is unavailable.
+    """
+    base = _assemble_projection_with_merge_summary()
+
+    try:
+        from core.task_semantics import (
+            EMPTY_SEMANTIC_SUMMARY,
+            attach_semantic_summary_to_projection,
+            get_semantic_hints,
+        )
+
+        # Use the empty summary as the idle default — no active task context
+        # is available at projection-query time.  Future code that maintains
+        # a live task context registry should retrieve the appropriate summary
+        # here.
+        summary = EMPTY_SEMANTIC_SUMMARY
+        result = attach_semantic_summary_to_projection(base, summary)
+        result["semantic_hints"] = get_semantic_hints(summary)
+        return result
+
+    except Exception as exc:  # pragma: no cover
+        logger.warning(
+            "Task-semantics assembly failed, attaching empty placeholder: %s", exc
+        )
+        base["task_semantics"] = {
+            "task_id": "",
+            "trace_id": "",
+            "classified_steps": [],
+            "total_steps": 0,
+            "has_side_effectful_steps": False,
+            "has_cross_device_steps": False,
+            "unresolved_count": 0,
+            "is_fully_resolved": True,
+        }
+        base["semantic_hints"] = {
+            "total_steps": 0,
+            "has_side_effectful_steps": False,
+            "has_cross_device_steps": False,
         }
         return base
