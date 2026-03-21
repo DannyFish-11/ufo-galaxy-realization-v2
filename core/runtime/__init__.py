@@ -3,8 +3,9 @@
 Galaxy runtime sub-package.
 
 Exports the target-side local takeover path introduced in PR-34, the
-source-side dispatch orchestrator introduced in PR-35, and the cross-runtime
-result merge helpers introduced in PR-36.
+source-side dispatch orchestrator introduced in PR-35, the cross-runtime
+result merge helpers introduced in PR-36, and the mesh session coordinator
+helpers introduced in PR-37.
 """
 
 from core.runtime.target_takeover import (
@@ -41,6 +42,16 @@ from contracts.cross_runtime_result_merge import (
     build_result_merge_summary,
 )
 
+
+# PR-37: Mesh Session Coordinator (mesh package)
+# Imported here for convenience so consumers can reach the coordinator
+# from either core.runtime or core.mesh.
+from core.mesh.mesh_session_coordinator import (  # noqa: E402
+    MeshSessionCoordinator,
+    coordinate_mesh_session,
+    get_coordinator_summary,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -68,4 +79,8 @@ __all__ = [
     "build_merged_runtime_result",
     "merge_runtime_results",
     "build_result_merge_summary",
+    # PR-37: Mesh Session Coordinator
+    "MeshSessionCoordinator",
+    "coordinate_mesh_session",
+    "get_coordinator_summary",
 ]

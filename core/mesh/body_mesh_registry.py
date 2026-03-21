@@ -515,6 +515,52 @@ class BodyMeshRegistry:
         except Exception:
             return None
 
+    # ------------------------------------------------------------------
+    # Mesh Session Coordinator integration (PR-37)
+    # ------------------------------------------------------------------
+
+    def get_mesh_session_coordinator(
+        self,
+        mesh_id: str = "default_mesh",
+        session_id: Optional[str] = None,
+    ) -> Any:
+        """Return a :class:`~contracts.mesh_session_coordinator.MeshSessionCoordinatorState`
+        built from the current registry state.
+
+        This is a convenience method that first builds a
+        :class:`~contracts.mesh_session.MeshSession` from the registry and
+        then uses :func:`~contracts.mesh_session_coordinator.from_mesh_session`
+        to construct the coordinator state.
+
+        Parameters
+        ----------
+        mesh_id:
+            Identifier to use for the mesh/body context.
+        session_id:
+            When supplied, only entries associated with this session are
+            included.
+
+        Returns
+        -------
+        MeshSessionCoordinatorState
+            Populated coordinator state.  Returns a minimal stub when the
+            contracts package is unavailable or no entries match.
+        """
+        try:
+            from contracts.mesh_session_coordinator import from_mesh_session
+        except ImportError:
+            return None
+
+        mesh_session = self.get_mesh_session(mesh_id=mesh_id, session_id=session_id)
+        try:
+            return from_mesh_session(mesh_session)
+        except Exception:
+            try:
+                from contracts.mesh_session_coordinator import MeshSessionCoordinatorState
+                return MeshSessionCoordinatorState(session_id=session_id, mesh_id=mesh_id)
+            except Exception:
+                return None
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton

@@ -6,7 +6,8 @@ Host contract introduced in PR-30, the Handoff Envelope v2 contract
 introduced in PR-31, the Mesh Membership contract introduced in PR-32, the
 Mesh Session contract introduced in PR-33, the Local Takeover Result
 contract introduced in PR-34, the Source Dispatch contracts introduced
-in PR-35, and the Cross-Runtime Result Merge contracts introduced in PR-36.
+in PR-35, the Cross-Runtime Result Merge contracts introduced in PR-36,
+and the Mesh Session Coordinator contracts introduced in PR-37.
 """
 
 from contracts.execution_trace import (
@@ -144,6 +145,27 @@ from contracts.cross_runtime_result_merge import (
     build_result_merge_summary,
 )
 
+# PR-37: Mesh Session Coordinator Contract
+from contracts.mesh_session_coordinator import (
+    MeshCoordinatorStatus,
+    MeshParticipantStatus,
+    MeshAssignmentStatus,
+    MeshBarrierStatus,
+    MeshCoordinationEventKind,
+    MeshParticipantCoordinationState,
+    MeshAssignmentState,
+    MeshBarrierState,
+    MeshCoordinationEvent,
+    MeshSessionCoordinatorState,
+    MeshSessionCoordinatorSummary,
+    build_mesh_session_coordinator,
+    from_mesh_session as coordinator_from_mesh_session,
+    update_coordinator_with_dispatch_result,
+    update_coordinator_with_takeover_result,
+    update_coordinator_with_merged_result,
+    build_coordinator_summary,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -251,4 +273,22 @@ __all__ = [
     "build_merged_runtime_result",
     "merge_runtime_results",
     "build_result_merge_summary",
+    # PR-37: Mesh Session Coordinator Contract
+    "MeshCoordinatorStatus",
+    "MeshParticipantStatus",
+    "MeshAssignmentStatus",
+    "MeshBarrierStatus",
+    "MeshCoordinationEventKind",
+    "MeshParticipantCoordinationState",
+    "MeshAssignmentState",
+    "MeshBarrierState",
+    "MeshCoordinationEvent",
+    "MeshSessionCoordinatorState",
+    "MeshSessionCoordinatorSummary",
+    "build_mesh_session_coordinator",
+    "coordinator_from_mesh_session",
+    "update_coordinator_with_dispatch_result",
+    "update_coordinator_with_takeover_result",
+    "update_coordinator_with_merged_result",
+    "build_coordinator_summary",
 ]

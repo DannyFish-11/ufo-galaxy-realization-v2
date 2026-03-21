@@ -272,6 +272,27 @@ from contracts.cross_runtime_result_merge import (  # noqa: E402
     build_result_merge_summary,
 )
 
+# PR-37: Mesh Session Coordinator Contract
+from contracts.mesh_session_coordinator import (  # noqa: E402
+    MeshCoordinatorStatus,
+    MeshParticipantStatus,
+    MeshAssignmentStatus,
+    MeshBarrierStatus,
+    MeshCoordinationEventKind,
+    MeshParticipantCoordinationState,
+    MeshAssignmentState,
+    MeshBarrierState,
+    MeshCoordinationEvent,
+    MeshSessionCoordinatorState,
+    MeshSessionCoordinatorSummary,
+    build_mesh_session_coordinator,
+    from_mesh_session as coordinator_from_mesh_session,
+    update_coordinator_with_dispatch_result,
+    update_coordinator_with_takeover_result,
+    update_coordinator_with_merged_result,
+    build_coordinator_summary,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -471,4 +492,22 @@ __all__ = [
     "build_merged_runtime_result",
     "merge_runtime_results",
     "build_result_merge_summary",
+    # PR-37: Mesh Session Coordinator Contract
+    "MeshCoordinatorStatus",
+    "MeshParticipantStatus",
+    "MeshAssignmentStatus",
+    "MeshBarrierStatus",
+    "MeshCoordinationEventKind",
+    "MeshParticipantCoordinationState",
+    "MeshAssignmentState",
+    "MeshBarrierState",
+    "MeshCoordinationEvent",
+    "MeshSessionCoordinatorState",
+    "MeshSessionCoordinatorSummary",
+    "build_mesh_session_coordinator",
+    "coordinator_from_mesh_session",
+    "update_coordinator_with_dispatch_result",
+    "update_coordinator_with_takeover_result",
+    "update_coordinator_with_merged_result",
+    "build_coordinator_summary",
 ]
