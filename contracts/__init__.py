@@ -2,8 +2,8 @@
 
 Exports the canonical execution trace contract introduced in PR-25, the
 Registered Runtime Device contract introduced in PR-29, the Local Runtime
-Host contract introduced in PR-30, and the Handoff Envelope v2 contract
-introduced in PR-31.
+Host contract introduced in PR-30, the Handoff Envelope v2 contract
+introduced in PR-31, and the Mesh Membership contract introduced in PR-32.
 """
 
 from contracts.execution_trace import (
@@ -68,6 +68,19 @@ from contracts.handoff_envelope_v2 import (
     build_handoff_envelope_v2,
 )
 
+# PR-32: Mesh Membership Contract
+from contracts.mesh_membership import (
+    MeshMembership,
+    MeshMemberRole,
+    MeshAuthorityScope,
+    MeshRoutingIntent,
+    MeshParticipationHints,
+    from_body_mesh_entry,
+    from_device_formation_summary,
+    from_cross_device_routing_summary,
+    build_mesh_membership,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -120,4 +133,14 @@ __all__ = [
     "from_bridge_inputs",
     "to_legacy_bridge_payload",
     "build_handoff_envelope_v2",
+    # PR-32: Mesh Membership Contract
+    "MeshMembership",
+    "MeshMemberRole",
+    "MeshAuthorityScope",
+    "MeshRoutingIntent",
+    "MeshParticipationHints",
+    "from_body_mesh_entry",
+    "from_device_formation_summary",
+    "from_cross_device_routing_summary",
+    "build_mesh_membership",
 ]
