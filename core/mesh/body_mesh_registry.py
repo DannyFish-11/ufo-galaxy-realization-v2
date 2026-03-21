@@ -423,6 +423,98 @@ class BodyMeshRegistry:
 
         return memberships
 
+    # ------------------------------------------------------------------
+    # Mesh Session integration (PR-33)
+    # ------------------------------------------------------------------
+
+    def get_mesh_session(
+        self,
+        mesh_id: str = "default_mesh",
+        session_id: Optional[str] = None,
+    ) -> Any:
+        """Return a :class:`~contracts.mesh_session.MeshSession` contract
+        built from the current registry state.
+
+        This is a convenience method that normalises the registered
+        :class:`BodyEntry` objects into a canonical mesh session.  The
+        highest-scoring entry is treated as the primary device; the
+        lowest-scoring (if different) is treated as the source.
+
+        Parameters
+        ----------
+        mesh_id:
+            Identifier to use for the mesh/body context.
+        session_id:
+            When supplied, only entries associated with this session are
+            included and the session ID is embedded in the returned contract.
+
+        Returns
+        -------
+        MeshSession
+            Populated contract.  Returns a minimal stub when the contracts
+            package is unavailable or no entries match.
+        """
+        try:
+            from contracts.mesh_session import build_mesh_session, MeshSessionParticipant
+        except ImportError:
+            return None
+
+        with self._lock:
+            entries = list(self._entries.values())
+
+        if session_id is not None:
+            entries = [e for e in entries if e.session_id == session_id]
+
+        if not entries:
+            try:
+                return build_mesh_session(
+                    mesh_id=mesh_id,
+                    session_id=session_id,
+                )
+            except Exception:
+                return None
+
+        # Identify primary (highest body_score) and source (lowest)
+        primary_entry = max(entries, key=lambda e: e.body_score)
+        source_entry = min(entries, key=lambda e: e.body_score)
+        primary_device_id = primary_entry.device_id
+        source_device_id = source_entry.device_id
+
+        # Build lightweight participant list from entries
+        participants = []
+        for entry in entries:
+            roles = []
+            if entry.device_id == primary_device_id:
+                roles.append("primary")
+            if entry.device_id == source_device_id and entry.device_id != primary_device_id:
+                roles.append("source")
+            elif entry.device_id == source_device_id:
+                roles.append("source")
+            if not roles:
+                roles = ["support"]
+            participants.append(
+                MeshSessionParticipant(
+                    device_id=entry.device_id,
+                    roles=roles,
+                    online=True,
+                    health_score=min(1.0, entry.body_score / 5.0),
+                    metadata=dict(entry.metadata or {}),
+                )
+            )
+
+        try:
+            return build_mesh_session(
+                source_device_id=source_device_id,
+                primary_device_id=primary_device_id,
+                session_id=session_id,
+                mesh_id=mesh_id,
+                participants=participants,
+                multi_device_required=len(entries) > 1,
+                metadata={"adapter_source": "BodyMeshRegistry.get_mesh_session"},
+            )
+        except Exception:
+            return None
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
