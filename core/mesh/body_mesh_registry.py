@@ -358,6 +358,71 @@ class BodyMeshRegistry:
             "entries": [e.to_dict() for e in entries],
         }
 
+    # ------------------------------------------------------------------
+    # Mesh Membership integration (PR-32)
+    # ------------------------------------------------------------------
+
+    def get_mesh_memberships(
+        self,
+        mesh_id: str = "default_mesh",
+        session_id: Optional[str] = None,
+    ) -> List[Any]:
+        """Return a list of :class:`~contracts.mesh_membership.MeshMembership`
+        objects for all entries currently registered in this registry.
+
+        Each :class:`BodyEntry` is normalised into a canonical
+        :class:`~contracts.mesh_membership.MeshMembership` contract via
+        :func:`~contracts.mesh_membership.from_body_mesh_entry`.
+
+        The primary device (highest ``body_score`` among entries that share
+        the optional *session_id*) is identified first so that each resulting
+        membership record carries the correct ``primary_device_id``.
+
+        Parameters
+        ----------
+        mesh_id:
+            Identifier to use for the mesh/body context.  Callers should
+            supply the active session or formation ID when available.
+        session_id:
+            When supplied, only entries associated with this session are
+            returned.
+
+        Returns
+        -------
+        list of MeshMembership
+            One membership record per registered device.  Returns an empty
+            list when the contracts package is unavailable or no entries
+            match the filter.
+        """
+        try:
+            from contracts.mesh_membership import from_body_mesh_entry
+        except ImportError:
+            return []
+
+        with self._lock:
+            entries = list(self._entries.values())
+
+        if session_id is not None:
+            entries = [e for e in entries if e.session_id == session_id]
+
+        if not entries:
+            return []
+
+        # Identify the primary device by body_score
+        primary_entry = max(entries, key=lambda e: e.body_score)
+        primary_device_id = primary_entry.device_id
+
+        memberships = []
+        for entry in entries:
+            membership = from_body_mesh_entry(
+                entry,
+                mesh_id=mesh_id,
+                primary_device_id=primary_device_id,
+            )
+            memberships.append(membership)
+
+        return memberships
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton

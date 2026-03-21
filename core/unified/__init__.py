@@ -202,6 +202,19 @@ from contracts.handoff_envelope_v2 import (  # noqa: E402
     build_handoff_envelope_v2,
 )
 
+# PR-32: Mesh Membership Contract (re-exported from contracts package)
+from contracts.mesh_membership import (  # noqa: E402
+    MeshMembership,
+    MeshMemberRole,
+    MeshAuthorityScope,
+    MeshRoutingIntent,
+    MeshParticipationHints,
+    from_body_mesh_entry,
+    from_device_formation_summary,
+    from_cross_device_routing_summary,
+    build_mesh_membership,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -346,4 +359,14 @@ __all__ = [
     "from_bridge_inputs",
     "to_legacy_bridge_payload",
     "build_handoff_envelope_v2",
+    # PR-32: Mesh Membership Contract
+    "MeshMembership",
+    "MeshMemberRole",
+    "MeshAuthorityScope",
+    "MeshRoutingIntent",
+    "MeshParticipationHints",
+    "from_body_mesh_entry",
+    "from_device_formation_summary",
+    "from_cross_device_routing_summary",
+    "build_mesh_membership",
 ]

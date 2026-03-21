@@ -723,6 +723,64 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_policy_alignment_payload()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/mesh/memberships  (PR-32)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/mesh/memberships")
+    async def get_mesh_memberships() -> JSONResponse:
+        """Return canonical Mesh Membership contracts for all registered devices.
+
+        This endpoint is **read-only** and **additive** (PR-32).  It does not
+        modify any existing registry, projection, or orchestration module.
+
+        The response contains a ``"memberships"`` list where each entry is a
+        fully serialised :class:`~contracts.mesh_membership.MeshMembership`
+        contract derived from the current
+        :class:`~core.mesh.body_mesh_registry.BodyMeshRegistry` state.
+
+        This is the canonical answer to:
+
+            *"How does each registered device participate in the mesh/body,
+            and what is its formal role and authority?"*
+
+        Example response::
+
+            {
+              "mesh_id": "default_mesh",
+              "total": 2,
+              "memberships": [
+                {
+                  "membership_id": "...",
+                  "mesh_id": "default_mesh",
+                  "member_device_id": "phone_001",
+                  "roles": ["primary", "source"],
+                  "authority_scope": "mesh_authority",
+                  "routing_intent": "undecided",
+                  ...
+                },
+                ...
+              ]
+            }
+        """
+        try:
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
+            registry = get_body_mesh_registry()
+            memberships = registry.get_mesh_memberships(mesh_id="default_mesh")
+            payload = {
+                "mesh_id": "default_mesh",
+                "total": len(memberships),
+                "memberships": [m.to_dict() for m in memberships],
+            }
+        except Exception as exc:
+            payload = {
+                "mesh_id": "default_mesh",
+                "total": 0,
+                "memberships": [],
+                "error": str(exc),
+            }
+        return JSONResponse(content=payload)
+
     return router
 
 
