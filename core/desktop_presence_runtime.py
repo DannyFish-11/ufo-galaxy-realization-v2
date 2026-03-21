@@ -272,6 +272,19 @@ class DesktopPresenceRuntime:
         rsession.advance(TriState.LIMINAL)
         self._log_request_start(rsession, message, session_id, device_id)
 
+        # PR-12: Lightweight policy observation (non-blocking guardrail hint)
+        # Resolves the current execution policy from tri-state/cognitive signals
+        # and attaches it to the result for observability.  Never blocks the
+        # request path.
+        _policy_hint: Optional[Dict[str, Any]] = None
+        try:
+            from core.execution_policy import resolve_policy, get_policy_hints
+            _policy_hint = get_policy_hints(
+                resolve_policy(phase=rsession.tristate.value)
+            )
+        except Exception as _ph_err:
+            logger.debug("policy hint resolution failed (non-fatal): %s", _ph_err)
+
         try:
             # LIMINAL → MANIFEST: active execution
             rsession.advance(TriState.MANIFEST)
@@ -337,6 +350,9 @@ class DesktopPresenceRuntime:
         # Block-3: attach the continuous cognitive state snapshot (additive, optional).
         if _cognitive_snap is not None:
             result["cognitive_state"] = _cognitive_snap
+        # PR-12: attach policy hint (additive, non-blocking).
+        if _policy_hint is not None:
+            result["policy_hint"] = _policy_hint
         return result
 
     # ------------------------------------------------------------------

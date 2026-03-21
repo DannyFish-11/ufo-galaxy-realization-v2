@@ -154,6 +154,7 @@ async def run_multi_device_via_task_graph(
     runtime_session_id: str = "",
     context: Optional[Dict[str, Any]] = None,
     continue_on_failure: bool = True,
+    policy: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Execute *subtasks* across multiple devices **always** via TaskGraph.
 
@@ -174,10 +175,16 @@ async def run_multi_device_via_task_graph(
         context:             Additional execution context.
         continue_on_failure: If ``True`` (default), independent branches keep
                              running when a node fails.
+        policy:              Optional :class:`~core.execution_policy.ExecutionPolicy`
+                             (PR-12).  When supplied and
+                             ``cross_device_allowed=False``, the function
+                             returns a ``cross_device_not_allowed`` result
+                             immediately without dispatching to the TaskGraph.
 
     Returns:
         Dict with keys ``success``, ``done``, ``failed``, ``skipped``,
         ``elapsed_ms``, ``graph_id``, ``trace_id``, ``node_statuses``.
+        When blocked by policy, ``policy_outcome`` carries the stable code.
     """
     if not subtasks:
         return {
@@ -193,6 +200,47 @@ async def run_multi_device_via_task_graph(
 
     trace_id = trace_id or f"trace_{_uuid_mod.uuid4().hex[:12]}"
     runtime_session_id = runtime_session_id or f"session_{_uuid_mod.uuid4().hex[:12]}"
+
+    # ── PR-12: Cross-device policy enforcement ────────────────────────────────
+    if policy is not None:
+        try:
+            from core.execution_policy.policy_enforcement import enforce_cross_device
+            cross_device_decision = enforce_cross_device(
+                policy,
+                context={"trace_id": trace_id, "subtask_count": len(subtasks)},
+            )
+            if not cross_device_decision.is_allowed:
+                logger.info(
+                    "PR-2 run_multi_device_via_task_graph: blocked by policy | "
+                    "outcome=%s reason=%s | trace_id=%s",
+                    cross_device_decision.outcome.value,
+                    cross_device_decision.reason,
+                    trace_id,
+                )
+                return {
+                    "success": False,
+                    "done": 0,
+                    "failed": 0,
+                    "skipped": len(subtasks),
+                    "elapsed_ms": 0.0,
+                    "graph_id": "",
+                    "trace_id": trace_id,
+                    "node_statuses": {},
+                    "policy_outcome": cross_device_decision.outcome.value,
+                    "policy_band": (
+                        policy.policy_band.value
+                        if hasattr(policy, "policy_band")
+                        else None
+                    ),
+                    "policy_reason": cross_device_decision.reason,
+                    "error": cross_device_decision.hint,
+                }
+        except Exception as _policy_exc:
+            # Never block the execution path because of a policy check error
+            logger.debug(
+                "run_multi_device_via_task_graph: policy check error (non-fatal): %s",
+                _policy_exc,
+            )
 
     # Log canonical envelope creation for observability
     try:
