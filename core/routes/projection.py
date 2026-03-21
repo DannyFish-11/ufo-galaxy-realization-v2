@@ -781,6 +781,62 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/mesh/session  (PR-33)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/mesh/session")
+    async def get_mesh_session() -> JSONResponse:
+        """Return a canonical Mesh Session contract for the current registry state.
+
+        This endpoint is **read-only** and **additive** (PR-33).  It does not
+        modify any existing registry, projection, or orchestration module.
+
+        The response contains a fully serialised :class:`~contracts.mesh_session.MeshSession`
+        contract derived from the current
+        :class:`~core.mesh.body_mesh_registry.BodyMeshRegistry` state.
+
+        This is the canonical answer to:
+
+            *"When multiple devices cooperate on one task flow, what is the
+            canonical session object that represents that cooperation?"*
+
+        Example response::
+
+            {
+              "session_id": "msess_...",
+              "status": "pending",
+              "source_device_id": "phone_001",
+              "primary_device_id": "tablet_002",
+              "participants": [...],
+              "subtask_assignments": [],
+              "multi_device_required": true,
+              ...
+            }
+        """
+        try:
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
+            registry = get_body_mesh_registry()
+            session = registry.get_mesh_session(mesh_id="default_mesh")
+            if session is None:
+                from contracts.mesh_session import build_mesh_session
+                session = build_mesh_session(mesh_id="default_mesh")
+            payload = session.to_dict()
+        except Exception as exc:
+            try:
+                from contracts.mesh_session import build_mesh_session, MeshSessionStatus
+                session = build_mesh_session(mesh_id="default_mesh")
+                payload = session.to_dict()
+                payload["error"] = str(exc)
+            except Exception as inner_exc:
+                payload = {
+                    "session_id": "",
+                    "status": "unknown",
+                    "error": str(exc),
+                    "inner_error": str(inner_exc),
+                }
+        return JSONResponse(content=payload)
+
     return router
 
 

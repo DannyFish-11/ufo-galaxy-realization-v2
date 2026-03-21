@@ -81,6 +81,20 @@ from contracts.mesh_membership import (
     build_mesh_membership,
 )
 
+# PR-33: Mesh Session Contract
+from contracts.mesh_session import (
+    MeshSession,
+    MeshSessionParticipant,
+    MeshSubtaskAssignment,
+    MeshMergePolicy,
+    MeshBarrierPosture,
+    MeshSessionStatus,
+    from_device_formation_summary as mesh_session_from_formation,
+    from_cross_device_routing_summary as mesh_session_from_routing,
+    from_constellation_decomposition,
+    build_mesh_session,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -143,4 +157,15 @@ __all__ = [
     "from_device_formation_summary",
     "from_cross_device_routing_summary",
     "build_mesh_membership",
+    # PR-33: Mesh Session Contract
+    "MeshSession",
+    "MeshSessionParticipant",
+    "MeshSubtaskAssignment",
+    "MeshMergePolicy",
+    "MeshBarrierPosture",
+    "MeshSessionStatus",
+    "mesh_session_from_formation",
+    "mesh_session_from_routing",
+    "from_constellation_decomposition",
+    "build_mesh_session",
 ]
