@@ -852,24 +852,34 @@ class OpenClawd:
                 _readiness.reason,
                 getattr(_intent_profile, "intent_id", "unknown"),
             )
-            return {
+            _blocked_result: Dict[str, Any] = {
                 "action_taken": "none",
                 "success": False,
                 "skipped_reason": f"readiness_gate:{_readiness.status}:{_readiness.blocked_by}",
                 "execution_intent": _intent_profile.compact_summary(),
                 "readiness": _readiness.governance_summary(),
             }
+            # PR-24: Emit a fallback decision trace for the blocked path.
+            _blocked_result["fallback_trace"] = self._build_fallback_trace(
+                _intent_profile, _readiness, _blocked_result
+            )
+            return _blocked_result
 
         try:
             executor = self._get_decision_executor()
             if executor is None:
-                return {
+                _no_exec_result: Dict[str, Any] = {
                     "action_taken": "none",
                     "success": False,
                     "skipped_reason": "executor_unavailable",
                     "execution_intent": _intent_profile.compact_summary(),
                     "readiness": _readiness.governance_summary() if _readiness else None,
                 }
+                # PR-24: Trace the executor-unavailable fallback.
+                _no_exec_result["fallback_trace"] = self._build_fallback_trace(
+                    _intent_profile, _readiness, _no_exec_result
+                )
+                return _no_exec_result
             # Extract force_local_execution override from state_continuum metadata
             # (allows per-request override when entry_mode=cross_device).
             _force: bool = False
@@ -888,7 +898,7 @@ class OpenClawd:
                     result.action_taken, result.target, result.success,
                     _intent_profile.intent_id,
                 )
-            return {
+            _exec_dict: Dict[str, Any] = {
                 "action_taken": result.action_taken,
                 "target": result.target,
                 "success": result.success,
@@ -897,15 +907,25 @@ class OpenClawd:
                 "execution_intent": _intent_profile.compact_summary(),
                 "readiness": _readiness.governance_summary() if _readiness else None,
             }
+            # PR-24: Emit a fallback decision trace for every execution result.
+            _exec_dict["fallback_trace"] = self._build_fallback_trace(
+                _intent_profile, _readiness, _exec_dict
+            )
+            return _exec_dict
         except Exception as _ee:
             logger.debug("_run_execution failed (swallowed): %s", _ee)
-            return {
+            _err_result: Dict[str, Any] = {
                 "action_taken": "error",
                 "success": False,
                 "skipped_reason": f"internal_error: {_ee}",
                 "execution_intent": _intent_profile.compact_summary(),
                 "readiness": _readiness.governance_summary() if _readiness else None,
             }
+            # PR-24: Trace the internal-error fallback.
+            _err_result["fallback_trace"] = self._build_fallback_trace(
+                _intent_profile, _readiness, _err_result
+            )
+            return _err_result
 
     def _build_intent_profile(
         self,
@@ -983,6 +1003,46 @@ class OpenClawd:
             )
         except Exception as _exc:
             logger.debug("_check_readiness failed (swallowed): %s", _exc)
+            return None
+
+    def _build_fallback_trace(
+        self,
+        intent_profile: Any,
+        readiness_result: Any,
+        execution_result: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Build a :class:`~core.execution.fallback_trace.FallbackDecisionTrace` (PR-24).
+
+        Produces a compact fallback decision trace record from the intent
+        profile, readiness gate result, and execution result.  Errors are
+        fully isolated — ``None`` is returned when the module is unavailable
+        or an unexpected exception occurs so that the existing response flow
+        is never interrupted.
+
+        Args:
+            intent_profile: The :class:`~core.execution.intent_profile.ExecutionIntentProfile`
+                built by :meth:`_build_intent_profile`.
+            readiness_result: The :class:`~core.execution.readiness_gate.ReadinessResult`
+                returned by :meth:`_check_readiness`, or ``None``.
+            execution_result: The serialised execution result dict (before the
+                ``"fallback_trace"`` key is inserted), or ``None``.
+
+        Returns:
+            A compact fallback trace dict, or ``None`` on failure.
+        """
+        try:
+            from core.execution.fallback_trace import (  # noqa: PLC0415
+                build_fallback_trace,
+                summarize_fallback_trace,
+            )
+            _trace = build_fallback_trace(
+                intent_profile=intent_profile,
+                readiness_result=readiness_result,
+                execution_result=execution_result,
+            )
+            return summarize_fallback_trace(_trace)
+        except Exception as _exc:
+            logger.debug("_build_fallback_trace failed (swallowed): %s", _exc)
             return None
 
     @staticmethod
