@@ -293,6 +293,28 @@ from contracts.mesh_session_coordinator import (  # noqa: E402
     build_coordinator_summary,
 )
 
+# PR-38: Unified Multi-Device Runtime Projection
+from contracts.multi_device_runtime_projection import (  # noqa: E402
+    MultiDeviceRuntimeProjection,
+    RuntimeProjectionDeviceEntry,
+    RuntimeProjectionHostEntry,
+    RuntimeProjectionMeshSessionEntry,
+    RuntimeProjectionDispatchEntry,
+    RuntimeProjectionHandoffEntry,
+    RuntimeProjectionTakeoverEntry,
+    RuntimeProjectionCoordinatorEntry,
+    RuntimeProjectionResultEntry,
+    build_multi_device_runtime_projection,
+    project_runtime_devices,
+    project_runtime_hosts,
+    project_mesh_sessions,
+    project_source_dispatches,
+    project_handoffs,
+    project_takeovers,
+    project_coordinator_state,
+    project_merged_results,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -510,4 +532,23 @@ __all__ = [
     "update_coordinator_with_takeover_result",
     "update_coordinator_with_merged_result",
     "build_coordinator_summary",
+    # PR-38: Unified Multi-Device Runtime Projection
+    "MultiDeviceRuntimeProjection",
+    "RuntimeProjectionDeviceEntry",
+    "RuntimeProjectionHostEntry",
+    "RuntimeProjectionMeshSessionEntry",
+    "RuntimeProjectionDispatchEntry",
+    "RuntimeProjectionHandoffEntry",
+    "RuntimeProjectionTakeoverEntry",
+    "RuntimeProjectionCoordinatorEntry",
+    "RuntimeProjectionResultEntry",
+    "build_multi_device_runtime_projection",
+    "project_runtime_devices",
+    "project_runtime_hosts",
+    "project_mesh_sessions",
+    "project_source_dispatches",
+    "project_handoffs",
+    "project_takeovers",
+    "project_coordinator_state",
+    "project_merged_results",
 ]

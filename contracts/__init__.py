@@ -7,7 +7,8 @@ introduced in PR-31, the Mesh Membership contract introduced in PR-32, the
 Mesh Session contract introduced in PR-33, the Local Takeover Result
 contract introduced in PR-34, the Source Dispatch contracts introduced
 in PR-35, the Cross-Runtime Result Merge contracts introduced in PR-36,
-and the Mesh Session Coordinator contracts introduced in PR-37.
+the Mesh Session Coordinator contracts introduced in PR-37, and the
+Unified Multi-Device Runtime Projection introduced in PR-38.
 """
 
 from contracts.execution_trace import (
@@ -166,6 +167,28 @@ from contracts.mesh_session_coordinator import (
     build_coordinator_summary,
 )
 
+# PR-38: Unified Multi-Device Runtime Projection
+from contracts.multi_device_runtime_projection import (
+    MultiDeviceRuntimeProjection,
+    RuntimeProjectionDeviceEntry,
+    RuntimeProjectionHostEntry,
+    RuntimeProjectionMeshSessionEntry,
+    RuntimeProjectionDispatchEntry,
+    RuntimeProjectionHandoffEntry,
+    RuntimeProjectionTakeoverEntry,
+    RuntimeProjectionCoordinatorEntry,
+    RuntimeProjectionResultEntry,
+    build_multi_device_runtime_projection,
+    project_runtime_devices,
+    project_runtime_hosts,
+    project_mesh_sessions,
+    project_source_dispatches,
+    project_handoffs,
+    project_takeovers,
+    project_coordinator_state,
+    project_merged_results,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -291,4 +314,23 @@ __all__ = [
     "update_coordinator_with_takeover_result",
     "update_coordinator_with_merged_result",
     "build_coordinator_summary",
+    # PR-38: Unified Multi-Device Runtime Projection
+    "MultiDeviceRuntimeProjection",
+    "RuntimeProjectionDeviceEntry",
+    "RuntimeProjectionHostEntry",
+    "RuntimeProjectionMeshSessionEntry",
+    "RuntimeProjectionDispatchEntry",
+    "RuntimeProjectionHandoffEntry",
+    "RuntimeProjectionTakeoverEntry",
+    "RuntimeProjectionCoordinatorEntry",
+    "RuntimeProjectionResultEntry",
+    "build_multi_device_runtime_projection",
+    "project_runtime_devices",
+    "project_runtime_hosts",
+    "project_mesh_sessions",
+    "project_source_dispatches",
+    "project_handoffs",
+    "project_takeovers",
+    "project_coordinator_state",
+    "project_merged_results",
 ]
