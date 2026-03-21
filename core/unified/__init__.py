@@ -254,6 +254,24 @@ from contracts.source_dispatch import (  # noqa: E402
     failure_dispatch_result,
 )
 
+# PR-36: Cross-Runtime Result Merge Contract (re-exported from contracts package)
+from contracts.cross_runtime_result_merge import (  # noqa: E402
+    RuntimeResultRole,
+    RuntimeResultStatus,
+    ResultMergePolicy,
+    RuntimeResultProvenance,
+    RuntimeResultUnit,
+    ResultMergeInput,
+    MergedRuntimeResult,
+    ResultMergeSummary,
+    from_local_takeover_result as merge_unit_from_takeover_result,
+    from_source_dispatch_result as merge_unit_from_dispatch_result,
+    from_execution_output as merge_unit_from_execution_output,
+    build_merged_runtime_result,
+    merge_runtime_results,
+    build_result_merge_summary,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -438,4 +456,19 @@ __all__ = [
     "build_source_dispatch_result",
     "build_source_dispatch_summary",
     "failure_dispatch_result",
+    # PR-36: Cross-Runtime Result Merge Contract
+    "RuntimeResultRole",
+    "RuntimeResultStatus",
+    "ResultMergePolicy",
+    "RuntimeResultProvenance",
+    "RuntimeResultUnit",
+    "ResultMergeInput",
+    "MergedRuntimeResult",
+    "ResultMergeSummary",
+    "merge_unit_from_takeover_result",
+    "merge_unit_from_dispatch_result",
+    "merge_unit_from_execution_output",
+    "build_merged_runtime_result",
+    "merge_runtime_results",
+    "build_result_merge_summary",
 ]

@@ -1008,6 +1008,92 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     }
                 )
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/runtime/result-merge-summary  (PR-36)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/runtime/result-merge-summary")
+    async def get_result_merge_summary() -> JSONResponse:
+        """Return a read-only cross-runtime result merge summary.
+
+        This endpoint is the canonical **cross-runtime merge projection**
+        introduced in PR-36.  It exposes a
+        :class:`~contracts.cross_runtime_result_merge.ResultMergeSummary`
+        representing the current merge posture.  No execution is triggered.
+
+        The endpoint is **read-only** (GET) and degrades gracefully when
+        context is unavailable.
+
+        Example response::
+
+            {
+              "summary_id": "...",
+              "merge_id": "...",
+              "trace_id": null,
+              "merge_policy": "primary_wins",
+              "success": false,
+              "partial": false,
+              "fallback_applied": false,
+              "unit_count": 0,
+              "succeeded_unit_count": 0,
+              "failed_unit_count": 0,
+              "conflict_count": 0,
+              "error_count": 0,
+              "has_merged_output": false,
+              "merge_reason": "no_active_merge",
+              "timestamp": 1700000000.0
+            }
+        """
+        try:
+            from contracts.cross_runtime_result_merge import (
+                build_result_merge_summary,
+                ResultMergePolicy,
+            )
+
+            summary = build_result_merge_summary(
+                merge_policy=ResultMergePolicy.primary_wins,
+                success=False,
+                partial=False,
+                fallback_applied=False,
+                unit_count=0,
+                succeeded_unit_count=0,
+                failed_unit_count=0,
+                conflict_count=0,
+                error_count=0,
+                has_merged_output=False,
+                merge_reason="no_active_merge",
+            )
+            return JSONResponse(content=summary.to_dict())
+        except Exception as exc:
+            logger.warning(
+                "get_result_merge_summary: failed to build summary: %s", exc
+            )
+            try:
+                from contracts.cross_runtime_result_merge import ResultMergeSummary, ResultMergePolicy
+
+                fallback = ResultMergeSummary(
+                    merge_policy=ResultMergePolicy.unknown,
+                    success=False,
+                    merge_reason="summary_unavailable",
+                )
+                return JSONResponse(content=fallback.to_dict())
+            except Exception as fallback_exc:
+                import uuid as _uuid
+                import time as _time
+
+                logger.warning(
+                    "get_result_merge_summary: fallback construction failed: %s", fallback_exc
+                )
+                return JSONResponse(
+                    content={
+                        "summary_id": str(_uuid.uuid4()),
+                        "merge_policy": "unknown",
+                        "success": False,
+                        "merge_reason": "summary_unavailable",
+                        "timestamp": _time.time(),
+                    }
+                )
+
     return router
 
 
