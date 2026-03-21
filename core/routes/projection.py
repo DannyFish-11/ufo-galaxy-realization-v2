@@ -1094,6 +1094,91 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     }
                 )
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/mesh/coordinator-summary  (PR-37)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/mesh/coordinator-summary")
+    async def get_mesh_coordinator_summary() -> JSONResponse:
+        """Return a read-only mesh session coordinator summary.
+
+        This endpoint is the canonical **mesh session coordinator projection**
+        introduced in PR-37.  It exposes a
+        :class:`~contracts.mesh_session_coordinator.MeshSessionCoordinatorSummary`
+        representing the current coordination posture.  No execution is
+        triggered.
+
+        The summary is derived from the live
+        :class:`~core.mesh.body_mesh_registry.BodyMeshRegistry` state.
+        The endpoint is **read-only** (GET) and degrades gracefully when
+        context is unavailable.
+
+        Example response::
+
+            {
+              "summary_id": "...",
+              "coordinator_id": "...",
+              "session_id": null,
+              "mesh_id": "default_mesh",
+              "trace_id": null,
+              "status": "pending",
+              "participant_count": 0,
+              "assignment_count": 0,
+              "pending_count": 0,
+              "completed_count": 0,
+              "failed_count": 0,
+              "barrier_status": "unknown",
+              "merge_owner_device_id": null,
+              "has_result_merge_summary": false,
+              "timestamp": 1700000000.0
+            }
+        """
+        try:
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
+            from contracts.mesh_session_coordinator import build_coordinator_summary
+
+            registry = get_body_mesh_registry()
+            coordinator = registry.get_mesh_session_coordinator(mesh_id="default_mesh")
+            if coordinator is not None:
+                summary = build_coordinator_summary(coordinator=coordinator)
+            else:
+                summary = build_coordinator_summary(
+                    mesh_id="default_mesh",
+                )
+            return JSONResponse(content=summary.to_dict())
+        except Exception as exc:
+            logger.warning(
+                "get_mesh_coordinator_summary: failed to build summary: %s", exc
+            )
+            try:
+                from contracts.mesh_session_coordinator import (
+                    MeshSessionCoordinatorSummary,
+                    MeshCoordinatorStatus,
+                )
+                import time as _time
+
+                fallback = MeshSessionCoordinatorSummary(
+                    status=MeshCoordinatorStatus.unknown,
+                    mesh_id="default_mesh",
+                )
+                return JSONResponse(content=fallback.to_dict())
+            except Exception as fallback_exc:
+                import uuid as _uuid
+                import time as _time
+
+                logger.warning(
+                    "get_mesh_coordinator_summary: fallback construction failed: %s",
+                    fallback_exc,
+                )
+                return JSONResponse(
+                    content={
+                        "summary_id": str(_uuid.uuid4()),
+                        "status": "unknown",
+                        "mesh_id": "default_mesh",
+                        "timestamp": _time.time(),
+                    }
+                )
+
     return router
 
 
