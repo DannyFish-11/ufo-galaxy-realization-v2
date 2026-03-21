@@ -828,8 +828,18 @@ class OpenClawd:
         Returns:
             Serialisable dict representation of the
             :class:`~core.execution.decision_executor.ExecutionResult`
-            (always returned, never raises).
+            (always returned, never raises).  Includes an additive
+            ``"execution_intent"`` key carrying a compact
+            :class:`~core.execution.intent_profile.ExecutionIntentProfile`
+            summary (PR-22).
         """
+        # PR-22: Build the canonical execution intent profile before dispatching.
+        # This is additive — downstream code is not required to consume it.
+        _intent_profile = self._build_intent_profile(
+            state_continuum,
+            entry_mode=entry_mode,
+        )
+
         try:
             executor = self._get_decision_executor()
             if executor is None:
@@ -837,6 +847,7 @@ class OpenClawd:
                     "action_taken": "none",
                     "success": False,
                     "skipped_reason": "executor_unavailable",
+                    "execution_intent": _intent_profile.compact_summary(),
                 }
             # Extract force_local_execution override from state_continuum metadata
             # (allows per-request override when entry_mode=cross_device).
@@ -852,8 +863,9 @@ class OpenClawd:
             )
             if result.action_taken not in ("noop", "none"):
                 logger.debug(
-                    "_run_execution: action=%s target=%r success=%s",
+                    "_run_execution: action=%s target=%r success=%s intent_id=%s",
                     result.action_taken, result.target, result.success,
+                    _intent_profile.intent_id,
                 )
             return {
                 "action_taken": result.action_taken,
@@ -861,6 +873,7 @@ class OpenClawd:
                 "success": result.success,
                 "skipped_reason": result.skipped_reason,
                 "metadata": result.metadata,
+                "execution_intent": _intent_profile.compact_summary(),
             }
         except Exception as _ee:
             logger.debug("_run_execution failed (swallowed): %s", _ee)
@@ -868,7 +881,57 @@ class OpenClawd:
                 "action_taken": "error",
                 "success": False,
                 "skipped_reason": f"internal_error: {_ee}",
+                "execution_intent": _intent_profile.compact_summary(),
             }
+
+    def _build_intent_profile(
+        self,
+        state_continuum: Optional[Dict[str, Any]],
+        entry_mode: Optional[str] = None,
+    ):
+        """Build an :class:`~core.execution.intent_profile.ExecutionIntentProfile` (PR-22).
+
+        Gracefully returns a minimal safe profile on any error.
+        """
+        try:
+            from core.execution.intent_profile import build_execution_intent_profile  # noqa: PLC0415
+            _session_id: Optional[str] = None
+            if state_continuum and isinstance(state_continuum, dict):
+                _meta = state_continuum.get("metadata") or {}
+                if isinstance(_meta, dict):
+                    _session_id = _meta.get("runtime_session_id") or None
+            return build_execution_intent_profile(
+                state_continuum,
+                runtime_session_id=_session_id,
+                source="openclawd",
+                entry_mode=entry_mode,
+            )
+        except Exception as _exc:
+            logger.debug("_build_intent_profile failed (swallowed): %s", _exc)
+            try:
+                from core.execution.intent_profile import ExecutionIntentProfile  # noqa: PLC0415
+                return ExecutionIntentProfile(source="openclawd")
+            except Exception:
+                # Absolute last resort — return a minimal stub that matches the
+                # compact_summary() contract from ExecutionIntentProfile.
+                class _Stub:  # noqa: SIM115
+                    intent_id = "unknown"
+
+                    def compact_summary(self) -> Dict[str, Any]:  # noqa: ANN201
+                        return {
+                            "intent_id": "unknown",
+                            "source": "openclawd",
+                            "action_level": "observe",
+                            "intent_mode": "advisory",
+                            "target_type": None,
+                            "target_ref": None,
+                            "device_scope": None,
+                            "runtime_domain": None,
+                            "confidence": 0.0,
+                            "degrade_reason": "intent_profile_unavailable",
+                        }
+
+                return _Stub()
 
     @staticmethod
     def _determine_execution_path(
