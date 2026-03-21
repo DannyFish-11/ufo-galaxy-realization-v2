@@ -560,6 +560,7 @@ class TaskGraph:
         context: Optional[Dict[str, Any]] = None,
         *,
         continue_on_failure: bool = True,
+        policy: Optional[Any] = None,
     ) -> GraphExecutionResult:
         """Execute the DAG.
 
@@ -575,6 +576,22 @@ class TaskGraph:
                                 dependent nodes to be skipped; independent
                                 branches continue.  When ``False``, the graph
                                 stops after the first failed node.
+            policy:             Optional :class:`~core.execution_policy.ExecutionPolicy`.
+                                When supplied (PR-12):
+
+                                - If ``policy_band`` is ``observe_only`` the
+                                  entire graph is blocked and a failed result is
+                                  returned immediately.
+                                - Nodes with a non-empty ``device_id`` are
+                                  treated as cross-device; if the policy has
+                                  ``cross_device_allowed=False`` those nodes are
+                                  skipped and a ``cross_device_not_allowed``
+                                  marker is attached to the result.
+                                - Policy decision details are logged for
+                                  observability.
+
+                                When ``None`` no enforcement is applied
+                                (backward compatible).
 
         Returns:
             :class:`GraphExecutionResult` with a full status summary.
@@ -593,6 +610,12 @@ class TaskGraph:
             result.success = True
             result.elapsed_ms = (time.monotonic() - t0) * 1000
             return result
+
+        # ── PR-12: Policy enforcement (additive, non-breaking) ─────────────────
+        if policy is not None:
+            _policy_block_result = self._apply_policy_to_graph(policy, result, t0)
+            if _policy_block_result is not None:
+                return _policy_block_result
 
         # --- Build adjacency and compute execution order ---
         try:
@@ -732,6 +755,114 @@ class TaskGraph:
             self.trace_id,
         )
         return result
+
+    # ------------------------------------------------------------------
+    # PR-12: Policy enforcement helpers
+    # ------------------------------------------------------------------
+
+    def _apply_policy_to_graph(
+        self,
+        policy: Any,
+        result: "GraphExecutionResult",
+        t0: float,
+    ) -> "Optional[GraphExecutionResult]":
+        """Apply execution policy guardrails to the graph before execution.
+
+        Returns a completed :class:`GraphExecutionResult` when execution must
+        be blocked entirely, or ``None`` if execution may proceed.
+
+        Side effects when not blocking:
+        - Cross-device nodes are skipped when ``cross_device_allowed=False``.
+        - A policy decision is logged for every meaningful outcome.
+        """
+        try:
+            from core.execution_policy.policy_guardrails import (
+                check_side_effectful_execution,
+                check_cross_device_expansion,
+            )
+            from core.execution_policy.policy_enforcement import emit_policy_decision
+
+            # ── 1. Observe-only band blocks all side-effectful execution ──────
+            side_effect_decision = check_side_effectful_execution(
+                policy, is_side_effectful=True
+            )
+            emit_policy_decision(
+                side_effect_decision,
+                context={"graph_id": self.graph_id, "trace_id": self.trace_id},
+            )
+            if side_effect_decision.is_blocked:
+                logger.info(
+                    "TaskGraph '%s' | policy_blocked | band=%s | %s | trace_id=%s",
+                    self.graph_id,
+                    policy.policy_band.value if hasattr(policy, "policy_band") else "?",
+                    side_effect_decision.reason,
+                    self.trace_id,
+                )
+                result.success = False
+                result.error = side_effect_decision.reason
+                result.elapsed_ms = (time.monotonic() - t0) * 1000
+                # Mark all nodes as skipped
+                for node in self._nodes.values():
+                    node.status = NodeStatus.SKIPPED
+                    node.error = "blocked_by_policy"
+                    result.node_statuses[node.node_id] = NodeStatus.SKIPPED.value
+                    result.node_errors[node.node_id] = node.error
+                result.skipped_nodes = len(self._nodes)
+                return result
+
+            # ── 2. Confirmation required — block the graph (hold) ─────────────
+            if side_effect_decision.needs_confirmation:
+                logger.info(
+                    "TaskGraph '%s' | confirmation_required | trace_id=%s",
+                    self.graph_id,
+                    self.trace_id,
+                )
+                result.success = False
+                result.error = "confirmation_required: " + side_effect_decision.reason
+                result.elapsed_ms = (time.monotonic() - t0) * 1000
+                for node in self._nodes.values():
+                    node.status = NodeStatus.SKIPPED
+                    node.error = "confirmation_required"
+                    result.node_statuses[node.node_id] = NodeStatus.SKIPPED.value
+                    result.node_errors[node.node_id] = node.error
+                result.skipped_nodes = len(self._nodes)
+                return result
+
+            # ── 3. Cross-device check — skip non-local nodes if disallowed ────
+            cross_device_decision = check_cross_device_expansion(policy)
+            if not cross_device_decision.is_allowed:
+                cross_device_nodes = [
+                    n for n in self._nodes.values() if n.device_id and n.device_id != "local"
+                ]
+                if cross_device_nodes:
+                    emit_policy_decision(
+                        cross_device_decision,
+                        context={
+                            "graph_id": self.graph_id,
+                            "trace_id": self.trace_id,
+                            "cross_device_node_count": len(cross_device_nodes),
+                        },
+                    )
+                    logger.info(
+                        "TaskGraph '%s' | cross_device_not_allowed | "
+                        "skipping %d cross-device nodes | trace_id=%s",
+                        self.graph_id,
+                        len(cross_device_nodes),
+                        self.trace_id,
+                    )
+                    for node in cross_device_nodes:
+                        node.status = NodeStatus.SKIPPED
+                        node.error = "cross_device_not_allowed"
+            return None  # execution may proceed (possibly with some nodes pre-skipped)
+
+        except Exception as exc:
+            # Never block execution because of a guardrail error
+            logger.debug(
+                "TaskGraph '%s' policy guardrails error (non-fatal): %s",
+                self.graph_id,
+                exc,
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Ready-queue helper (for external polling / incremental execution)

@@ -76,14 +76,55 @@ RETURN_PRESSURE_RESTRICT
 
 What this package does NOT do
 ------------------------------
-- It does **not** enforce the policy in any execution path.
-- It does **not** replace or modify ``WindowsExecutionArbiter``, ``TaskGraph``,
-  ``ConstellationRuntime``, or any other existing module.
-- Enforcement belongs in a follow-up PR.
+- It does **not** replace or modify the runtime/orchestrator logic in
+  ``WindowsExecutionArbiter``, ``TaskGraph``, ``ConstellationRuntime``, etc.
+- Enforcement is additive: existing paths call the helpers optionally and
+  fall back to their own behaviour when no policy is supplied.
+
+Enforcement (PR-12)
+-------------------
+PolicyOutcome
+    Enum of stable outcome codes: ``allowed``, ``blocked_by_policy``,
+    ``confirmation_required``, ``cross_device_not_allowed``,
+    ``executor_level_capped``, ``downgraded``.
+
+PolicyDecision
+    Immutable result of a policy check.  Fields: ``outcome``, ``policy``,
+    ``reason``, ``hint``, ``blocked_levels``, ``downgraded_to``.
+    Properties: ``is_allowed``, ``is_blocked``, ``needs_confirmation``.
+    Method: ``to_dict()``.
+
+enforce_execution_intent(policy, *, is_side_effectful, requires_cross_device, …)
+    Composite enforcement check — applies all relevant guardrails in order.
+
+enforce_cross_device(policy) → PolicyDecision
+    Cross-device-only check.
+
+enforce_executor_levels(policy, candidate_levels) → dict
+    Filter candidate levels and emit an observability entry.
+
+emit_policy_decision(decision) → None
+    Emit a structured observability log for a decision.
+
+check_side_effectful_execution(policy, *, is_side_effectful) → PolicyDecision
+    Block when band is observe_only/assistive.
+
+check_confirmation_required(policy) → PolicyDecision
+    Surface requires_confirmation as a structured result.
+
+check_cross_device_expansion(policy) → PolicyDecision
+    Deny when cross_device_allowed is False.
+
+check_executor_level(policy, requested_level) → PolicyDecision
+    Cap executor level to policy's allowed list.
+
+filter_executor_levels(policy, candidate_levels) → (permitted, blocked)
+    Partition a level list into permitted / blocked subsets.
 
 See Also
 --------
-docs/EXECUTION_POLICY_SCHEMA.md — full design document.
+docs/EXECUTION_POLICY_SCHEMA.md — policy schema design document.
+docs/EXECUTION_POLICY_ENFORCEMENT.md — enforcement design document (PR-12).
 """
 
 from __future__ import annotations
@@ -107,6 +148,20 @@ from .policy_summary import (
     attach_policy_to_projection,
     build_policy_for_projection,
 )
+from .policy_decision import PolicyOutcome, PolicyDecision
+from .policy_guardrails import (
+    check_side_effectful_execution,
+    check_confirmation_required,
+    check_cross_device_expansion,
+    check_executor_level,
+    filter_executor_levels,
+)
+from .policy_enforcement import (
+    enforce_execution_intent,
+    enforce_cross_device,
+    enforce_executor_levels,
+    emit_policy_decision,
+)
 
 __all__ = [
     # Band enum and helpers
@@ -127,4 +182,18 @@ __all__ = [
     "get_policy_hints",
     "attach_policy_to_projection",
     "build_policy_for_projection",
+    # PR-12 Enforcement — decision types
+    "PolicyOutcome",
+    "PolicyDecision",
+    # PR-12 Enforcement — guardrail helpers
+    "check_side_effectful_execution",
+    "check_confirmation_required",
+    "check_cross_device_expansion",
+    "check_executor_level",
+    "filter_executor_levels",
+    # PR-12 Enforcement — orchestration helpers
+    "enforce_execution_intent",
+    "enforce_cross_device",
+    "enforce_executor_levels",
+    "emit_policy_decision",
 ]

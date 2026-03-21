@@ -60,6 +60,24 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 logger = logging.getLogger("Galaxy.WindowsArbiter")
 
 # ---------------------------------------------------------------------------
+# Policy enforcement import (additive — never imported at module level to
+# keep the arbiter independent of the execution_policy package when the
+# package is not installed / available)
+# ---------------------------------------------------------------------------
+
+
+def _get_policy_enforcement():
+    """Lazy-import policy enforcement helpers.  Returns None on ImportError."""
+    try:
+        from core.execution_policy.policy_enforcement import (
+            enforce_execution_intent,
+            enforce_executor_levels,
+        )
+        return enforce_execution_intent, enforce_executor_levels
+    except Exception:
+        return None, None
+
+# ---------------------------------------------------------------------------
 # Public enumerations
 # ---------------------------------------------------------------------------
 
@@ -78,6 +96,8 @@ class WinExecStatus(str, Enum):
     FAILED = "failed"
     SKIPPED = "skipped"   # executor not configured / not applicable
     TIMEOUT = "timeout"
+    BLOCKED_BY_POLICY = "blocked_by_policy"          # PR-12: policy enforcement
+    CONFIRMATION_REQUIRED = "confirmation_required"  # PR-12: policy enforcement
 
 
 # ---------------------------------------------------------------------------
@@ -119,9 +139,13 @@ class WinExecResult:
     result: Dict[str, Any] = field(default_factory=dict)
     attempts: List[Dict[str, Any]] = field(default_factory=list)
     total_latency_ms: float = 0.0
+    # PR-12: policy enforcement fields (optional, present when policy is active)
+    policy_outcome: Optional[str] = None
+    policy_band: Optional[str] = None
+    policy_reason: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "request_id": self.request_id,
             "success": self.success,
             "final_level": self.final_level.value,
@@ -131,6 +155,13 @@ class WinExecResult:
             "attempts": self.attempts,
             "total_latency_ms": round(self.total_latency_ms, 2),
         }
+        if self.policy_outcome is not None:
+            d["policy_outcome"] = self.policy_outcome
+        if self.policy_band is not None:
+            d["policy_band"] = self.policy_band
+        if self.policy_reason is not None:
+            d["policy_reason"] = self.policy_reason
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +385,7 @@ class WindowsExecutionArbiter:
         instruction: str = "",
         force_level: Optional[WinExecLevel] = None,
         context: Optional[Dict[str, Any]] = None,
+        policy: Optional[Any] = None,
     ) -> WinExecResult:
         """Execute a Windows action through the strict fallback chain.
 
@@ -371,11 +403,27 @@ class WindowsExecutionArbiter:
             Skip the fallback chain and use only the specified level.
         context:
             Optional ambient context (e.g. current app, window title).
+        policy:
+            Optional :class:`~core.execution_policy.ExecutionPolicy`.
+            When supplied, the arbiter enforces policy constraints before
+            beginning the fallback chain:
+
+            - If ``policy_band`` is ``observe_only`` or ``assistive`` the
+              request is blocked and a ``blocked_by_policy`` result is
+              returned immediately.
+            - If ``requires_confirmation`` is ``True`` a
+              ``confirmation_required`` result is returned immediately.
+            - Executor levels not in ``allowed_executor_levels`` are removed
+              from the fallback chain.
+
+            When ``None`` no enforcement is applied (backward compatible).
 
         Returns
         -------
         WinExecResult
             Contains the final outcome, all attempt records, and timing.
+            When blocked by policy, ``success=False`` and ``policy_outcome``
+            carries the stable outcome code.
         """
         params = params or {}
         context = context or {}
@@ -384,6 +432,21 @@ class WindowsExecutionArbiter:
         self._stats["total"] += 1
 
         action_summary = _build_action_summary(action, params, device_id)
+
+        # ── PR-12: Policy enforcement (additive, non-breaking) ────────────────
+        if policy is not None:
+            policy_result = self._apply_policy_guardrails(
+                policy=policy,
+                action=action,
+                device_id=device_id,
+                action_summary=action_summary,
+                request_id=request_id,
+                start=start,
+            )
+            if policy_result is not None:
+                # Policy blocked or requires confirmation — return early.
+                self._record(policy_result)
+                return policy_result
 
         if force_level is not None:
             levels: List[WinExecLevel] = [force_level]
@@ -394,6 +457,33 @@ class WindowsExecutionArbiter:
                 WinExecLevel.GUI,
                 WinExecLevel.VLM,
             ]
+
+        # ── PR-12: Filter executor levels by policy ───────────────────────────
+        if policy is not None and force_level is None:
+            levels = self._filter_levels_by_policy(policy, levels, action_summary, device_id)
+            if not levels:
+                # All levels were filtered out — no permitted executors.
+                win_result = WinExecResult(
+                    request_id=request_id,
+                    success=False,
+                    final_level=WinExecLevel.SYSTEM_API,
+                    device_id=device_id,
+                    action_summary=action_summary,
+                    result={"error": "all executor levels blocked by policy"},
+                    attempts=[],
+                    total_latency_ms=(time.time() - start) * 1000,
+                    policy_outcome="executor_level_capped",
+                    policy_band=policy.policy_band.value if hasattr(policy, "policy_band") else None,
+                    policy_reason="all candidate levels removed by policy allowed_executor_levels",
+                )
+                logger.info(
+                    "windows_arbiter | executor_level_capped | all levels blocked | "
+                    "action=%s device=%s",
+                    action_summary,
+                    device_id,
+                )
+                self._record(win_result)
+                return win_result
 
         attempts: List[WinExecAttempt] = []
         last_failure_reason = ""
@@ -535,6 +625,99 @@ class WindowsExecutionArbiter:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _apply_policy_guardrails(
+        self,
+        policy: Any,
+        action: str,
+        device_id: str,
+        action_summary: str,
+        request_id: str,
+        start: float,
+    ) -> Optional["WinExecResult"]:
+        """Apply PR-12 policy guardrails before the fallback chain.
+
+        Returns a :class:`WinExecResult` if execution should be blocked or
+        held for confirmation, or ``None`` if execution may proceed.
+        """
+        try:
+            enforce_fn, _ = _get_policy_enforcement()
+            if enforce_fn is None:
+                return None
+
+            decision = enforce_fn(
+                policy,
+                is_side_effectful=True,
+                context={"action": action, "device_id": device_id},
+            )
+
+            if decision.is_allowed:
+                return None
+
+            # Blocked or confirmation required
+            outcome_val = decision.outcome.value
+            policy_band_val = (
+                policy.policy_band.value if hasattr(policy, "policy_band") else None
+            )
+
+            logger.info(
+                "windows_arbiter | policy_%s | %s | device=%s | reason=%s",
+                outcome_val,
+                action_summary,
+                device_id,
+                decision.reason,
+            )
+
+            return WinExecResult(
+                request_id=request_id,
+                success=False,
+                final_level=WinExecLevel.SYSTEM_API,
+                device_id=device_id,
+                action_summary=action_summary,
+                result={"error": outcome_val, "detail": decision.reason},
+                attempts=[],
+                total_latency_ms=(time.time() - start) * 1000,
+                policy_outcome=outcome_val,
+                policy_band=policy_band_val,
+                policy_reason=decision.reason,
+            )
+        except Exception as exc:
+            logger.debug(
+                "windows_arbiter: policy guardrail check failed (non-fatal): %s", exc
+            )
+            return None
+
+    def _filter_levels_by_policy(
+        self,
+        policy: Any,
+        levels: List[WinExecLevel],
+        action_summary: str,
+        device_id: str,
+    ) -> List[WinExecLevel]:
+        """Remove executor levels that are not permitted by *policy*.
+
+        Returns the filtered list; if nothing changes the original list is
+        returned as-is.  Never raises.
+        """
+        try:
+            _, enforce_levels_fn = _get_policy_enforcement()
+            if enforce_levels_fn is None:
+                return levels
+
+            level_strings = [lv.value for lv in levels]
+            result = enforce_levels_fn(
+                policy,
+                level_strings,
+                context={"action_summary": action_summary, "device_id": device_id},
+            )
+            permitted_strings = result.get("permitted_levels", level_strings)
+            permitted_set = set(permitted_strings)
+            return [lv for lv in levels if lv.value in permitted_set]
+        except Exception as exc:
+            logger.debug(
+                "windows_arbiter: level filter failed (non-fatal, using all levels): %s", exc
+            )
+            return levels
 
     async def _try_level(
         self,
