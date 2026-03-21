@@ -679,8 +679,8 @@ def _derive_posture(
         # Cross-device routing
         cross_device_signals = [d.cross_device_allowed for d in available if d.cross_device_allowed is not None]
         if cross_device_signals:
-            all_cross = all(cross_device_signals)
-            any_cross = any(cross_device_signals)
+            all_cross = all(s is True for s in cross_device_signals)
+            any_cross = any(s is True for s in cross_device_signals)
             domain = _safe_str(runtime_domain)
             if all_cross or domain == "cross_device":
                 return POSTURE_REMOTE_REQUIRED
@@ -720,9 +720,9 @@ def _build_hints(
         is_degraded = posture == POSTURE_DEGRADED or any(d.degraded for d in available)
         is_confirmation_gated = any(d.confirmation_required for d in available)
 
-        # Cross-device: only allowed when all available dimensions agree
+        # Cross-device: only allowed when all available dimensions explicitly allow it
         cross_signals = [d.cross_device_allowed for d in available if d.cross_device_allowed is not None]
-        can_expand_cross_device = bool(cross_signals) and all(cross_signals)
+        can_expand_cross_device = bool(cross_signals) and all(s is True for s in cross_signals)
 
         can_execute_locally = (
             not is_blocked
