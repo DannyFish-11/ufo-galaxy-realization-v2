@@ -491,6 +491,7 @@ def lifecycle_summary(
     *,
     plan_id: Optional[str] = None,
     step_id: Optional[str] = None,
+    failure_domain: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return a compact, JSON-safe lifecycle summary dict.
 
@@ -504,17 +505,22 @@ def lifecycle_summary(
         Optional plan identifier to include in the summary.
     step_id:
         Optional step identifier to include in the summary.
+    failure_domain:
+        PR-13: Optional canonical failure domain string
+        (e.g. ``"timeout_failure"``) when the lifecycle ended in a failed
+        or degraded state.  ``None`` for non-failure states.
 
     Returns
     -------
     dict
         Keys: ``lifecycle_state``, ``is_terminal``, ``transition_count``,
         ``last_reason``, ``plan_id``, ``step_id``,
+        ``failure_domain`` (PR-13, optional),
         ``lifecycle_trail`` (list of transition dicts).
     """
     trail = trail or []
     last_reason = trail[-1].reason if trail else ""
-    return {
+    summary: Dict[str, Any] = {
         "lifecycle_state": state.value,
         "is_terminal": is_terminal(state),
         "transition_count": len(trail),
@@ -523,6 +529,9 @@ def lifecycle_summary(
         "step_id": step_id,
         "lifecycle_trail": [t.to_dict() for t in trail],
     }
+    if failure_domain is not None:
+        summary["failure_domain"] = failure_domain
+    return summary
 
 
 # ---------------------------------------------------------------------------

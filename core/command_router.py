@@ -878,6 +878,16 @@ class CommandRouter:
         except Exception as _lc12_exc:
             logger.debug("PR-12 lifecycle stamp skipped: %s", _lc12_exc)
 
+        # PR-13: stamp failure domain on failed results (additive, non-breaking).
+        if not result.get("success"):
+            try:
+                from core.failure_domains import classify_from_error_code as _cfe
+                _fd_cls = _cfe(result.get("error_code"))
+                result.setdefault("failure_domain", _fd_cls.domain.value)
+                result.setdefault("failure_is_retryable", _fd_cls.is_retryable)
+            except Exception as _fd_exc:
+                logger.debug("PR-13 failure_domain stamp skipped: %s", _fd_exc)
+
         return result
 
     async def route_command(

@@ -609,7 +609,8 @@ class SwarmCoordinator:
                 session_id=manifest.session_id,
                 payload={"manifest_id": manifest.manifest_id},
             )
-            return {"success": False, "error": "no_target_device", "agent_id": manifest.agent_id}
+            return {"success": False, "error": "no_target_device", "agent_id": manifest.agent_id,
+                    "failure_domain": "remote_device_unavailable"}
 
         # Emit AGENT_DISPATCHED
         dispatch_event_id = ledger.append(
@@ -642,7 +643,8 @@ class SwarmCoordinator:
                 session_id=manifest.session_id,
                 parent_ids=[dispatch_event_id],
             )
-            return {"success": False, "error": "command_router_unavailable"}
+            return {"success": False, "error": "command_router_unavailable",
+                    "failure_domain": "substrate_dispatch_failure"}
 
         try:
             t_dispatch = time.monotonic()
@@ -722,7 +724,8 @@ class SwarmCoordinator:
                 parent_ids=[dispatch_event_id],
                 payload={"error": str(exc), "manifest_id": manifest.manifest_id},
             )
-            return {"success": False, "error": str(exc), "agent_id": manifest.agent_id}
+            return {"success": False, "error": str(exc), "agent_id": manifest.agent_id,
+                    "failure_domain": "gateway_transport_failure"}
 
     @staticmethod
     def _synthesize(member_results: List[Any]) -> str:

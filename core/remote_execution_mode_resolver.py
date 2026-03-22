@@ -80,6 +80,12 @@ class ModeResolutionResult(BaseModel):
         The device identifier from the profile, if present.
     notes:
         Optional human-readable explanation of the resolution decision.
+    failure_domain:
+        PR-13: When the resolution required a fallback due to a capability
+        mismatch or unsupported mode, this field carries the canonical
+        :class:`~core.failure_domains.FailureDomain` value string that
+        describes why the fallback was necessary.  ``None`` for non-fallback
+        resolutions.
     """
 
     mode: str = Field(
@@ -99,6 +105,13 @@ class ModeResolutionResult(BaseModel):
     notes: Optional[str] = Field(
         default=None,
         description="Optional human-readable explanation.",
+    )
+    failure_domain: Optional[str] = Field(
+        default=None,
+        description=(
+            "PR-13: Canonical failure domain when a fallback was required. "
+            "None for non-fallback resolutions."
+        ),
     )
 
     model_config = {"use_enum_values": True}
@@ -196,6 +209,7 @@ class RemoteExecutionModeResolver:
             # Validate that the profile (if present) supports this mode
             if profile is not None and not profile.supports_mode(_mode):
                 # Profile doesn't support the required mode → fallback
+                # PR-13: classify as remote_capability_mismatch
                 logger.warning(
                     "RemoteExecutionModeResolver: required_mode=%s not supported by "
                     "device=%s (profile_class=%s); falling back to %s",
@@ -209,6 +223,7 @@ class RemoteExecutionModeResolver:
                     resolution_source="fallback",
                     profile_class=profile_class,
                     device_id=device_id,
+                    failure_domain="remote_capability_mismatch",
                     notes=(
                         f"Required mode '{_mode}' not supported by device "
                         f"(profile_class={profile_class}); using fallback."
@@ -253,6 +268,7 @@ class RemoteExecutionModeResolver:
                 resolution_source="fallback",
                 profile_class=None,
                 device_id=None,
+                failure_domain="remote_device_unavailable",
                 notes="No device profile available; using conservative fallback.",
             )
 
@@ -313,6 +329,7 @@ class RemoteExecutionModeResolver:
             resolution_source="fallback",
             profile_class=profile_class,
             device_id=device_id,
+            failure_domain="remote_capability_mismatch",
             notes=(
                 "Profile has no supported modes and no preferred mode; "
                 "using conservative fallback."
