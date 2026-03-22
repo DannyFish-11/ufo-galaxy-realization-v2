@@ -1422,6 +1422,65 @@ class OpenClawd:
             logger.debug("_summarise_execution_plan failed (swallowed): %s", _sum_err)
             return None
 
+    def _build_unified_control_plan(
+        self,
+        *,
+        runtime_session_id: Optional[str] = None,
+        trace_id: str = "",
+        canonical_perception: Optional[Dict[str, Any]] = None,
+        continuum_state: Optional[Dict[str, Any]] = None,
+        chosen_model: Optional[str] = None,
+        chosen_provider: Optional[str] = None,
+        execution_path: str = "local",
+        delegation_point: Optional[str] = None,
+        remote_execution_mode: Optional[str] = None,
+        target_device_ids: Optional[List[str]] = None,
+        orchestration_active: bool = False,
+        fallback_level: str = "none",
+        fallback_reason: Optional[str] = None,
+        lifecycle_target: Optional[str] = None,
+        execution_plan_summary: Optional[Dict[str, Any]] = None,
+        diagnostics_summary: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-19: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
+
+        OpenClawd is the **unified control core** — this method assembles the
+        single canonical control artifact that captures perception truth, model
+        supply truth, the chosen model and execution decisions, fallback intent,
+        lifecycle target, diagnostics, and authority chain for this request.
+
+        The plan is additive and non-breaking: callers that do not read the
+        ``unified_control_plan`` key in response metadata are unaffected.
+
+        Returns:
+            ``to_dict()`` output of the plan, or ``None`` on failure.
+        """
+        try:
+            from core.schemas.unified_control_plan import build_unified_control_plan as _build_ucp
+
+            _plan = _build_ucp(
+                runtime_session_id=runtime_session_id,
+                trace_id=trace_id,
+                canonical_perception=canonical_perception,
+                continuum_state=continuum_state,
+                chosen_model=chosen_model,
+                chosen_provider=chosen_provider,
+                execution_path=execution_path,
+                delegation_point=delegation_point,
+                remote_execution_mode=remote_execution_mode,
+                target_device_ids=target_device_ids or [],
+                orchestration_active=orchestration_active,
+                fallback_level=fallback_level,
+                fallback_reason=fallback_reason,
+                lifecycle_target=lifecycle_target,
+                execution_plan_summary=execution_plan_summary,
+                diagnostics_summary=diagnostics_summary,
+            )
+            return _plan.to_dict()
+        except Exception as _ucp_err:
+            logger.debug("_build_unified_control_plan failed (swallowed): %s", _ucp_err)
+            return None
+
     @staticmethod
     def _determine_execution_path(
         entry_mode: str,
@@ -1861,6 +1920,19 @@ class OpenClawd:
                     )
                     # PR-12: advance plan lifecycle to terminal state
                     self._finalise_plan_lifecycle(_plan_k, success=kernel_result.success)
+                    # PR-19: build canonical unified control plan (additive, non-breaking)
+                    _ucp_k = self._build_unified_control_plan(
+                        runtime_session_id=runtime_session_id,
+                        trace_id=trace_id,
+                        canonical_perception=_canonical_perception,
+                        continuum_state=_continuum_state_dict,
+                        chosen_model=kernel_result.model if kernel_result else None,
+                        chosen_provider=provider_info.get("provider") if provider_info else None,
+                        execution_path=_exec_path_k,
+                        delegation_point="local",
+                        lifecycle_target=_plan_k.lifecycle_state if _plan_k else None,
+                        execution_plan_summary=self._summarise_execution_plan(_plan_k),
+                    )
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -1913,6 +1985,8 @@ class OpenClawd:
                             "multimodal_context": _mm_context_dict,
                             # PR-16: canonical perception state (primary perception contract)
                             "canonical_perception_state": _canonical_perception,
+                            # PR-19: canonical unified control plan
+                            "unified_control_plan": _ucp_k,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2104,6 +2178,20 @@ class OpenClawd:
             )
             # PR-12: advance plan lifecycle to terminal state
             self._finalise_plan_lifecycle(_plan2, success=bool(result.get("success", True)))
+            # PR-19: build canonical unified control plan (additive, non-breaking)
+            _ucp2 = self._build_unified_control_plan(
+                runtime_session_id=runtime_session_id,
+                trace_id=trace_id,
+                canonical_perception=_canonical_perception,
+                continuum_state=_continuum_state_dict2,
+                chosen_model=provider_info.get("model") if provider_info else None,
+                chosen_provider=provider_info.get("provider") if provider_info else None,
+                execution_path=_exec_path2,
+                delegation_point=_delegation_point2,
+                remote_execution_mode=_remote_mode2,
+                lifecycle_target=_plan2.lifecycle_state if _plan2 else None,
+                execution_plan_summary=self._summarise_execution_plan(_plan2),
+            )
 
             return {
                 "success": result.get("success", True),
@@ -2143,6 +2231,8 @@ class OpenClawd:
                     "multimodal_context": _mm_context_dict,
                     # PR-16: canonical perception state (primary perception contract)
                     "canonical_perception_state": _canonical_perception,
+                    # PR-19: canonical unified control plan
+                    "unified_control_plan": _ucp2,
                 },
                 # PR-10: architecture diagnostics layer identifier (additive)
                 "arch_layer_id": "subject_core",
