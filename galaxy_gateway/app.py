@@ -1000,7 +1000,16 @@ async def webrtc_signaling_proxy(websocket: WebSocket, device_id: str):
 
 
 # ============================================================================
-# Phase 3: 智能聊天端点 — OpenClawd 统一入口
+# Phase 3: 智能聊天端点 — Adapter Surface (NOT a subject entrypoint)
+#
+# Authority model (PR-1):
+#   galaxy_gateway is an internal cross-device substrate and transport layer.
+#   It is NOT a primary subject entrypoint and does NOT own subject authority.
+#
+# All chat requests route through the canonical authority chain:
+#   gateway /api/v1/chat (adapter)
+#     → DesktopPresenceRuntime.handle_request(source="chat")   ← runtime shell
+#       → OpenClawd.process()                                  ← subject core
 # ============================================================================
 
 class ChatRequest(BaseModel):
@@ -1023,17 +1032,26 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/v1/chat")
 async def chat_endpoint(request: ChatRequest, auth: dict = Depends(_require_auth)):
-    """智能对话端点 — 严格委托给 OpenClawd 统一智能入口
+    """Adapter surface — delegates to DesktopPresenceRuntime (runtime shell).
 
-    所有对话请求经由 OpenClawd.process() 路由，确保 CapabilityRegistry
-    和 Agent 调度逻辑的一致性。响应包含向后兼容字段 (reply, response,
-    intent)，供老版本客户端使用。响应中的 parallel_result 由并行闭环
-    ParallelGroupTracker 填充（当可用时）。
+    This endpoint is an **adapter surface** in the galaxy_gateway internal
+    substrate.  It does NOT own subject-core authority.  All requests are
+    forwarded to ``DesktopPresenceRuntime.handle_request(source="chat")``,
+    which drives the tri-state lifecycle (SILENT → LIMINAL → MANIFEST → SILENT)
+    and delegates subject cognition to ``OpenClawd``.
+
+    Authority chain (PR-1):
+        gateway /api/v1/chat (adapter)
+            → DesktopPresenceRuntime.handle_request(source="chat")
+                → OpenClawd.process()  ← subject core
+
+    The ``source`` parameter is an **observability tag only** — it does not
+    confer subject-core authority to this gateway surface.  All sources enter
+    the same runtime shell lifecycle.
+
+    Response includes backward-compatible fields (reply, response, intent)
+    plus ``runtime_session_id`` for end-to-end correlation.
     """
-    if not openclawd_instance:
-        logger.warning("OpenClawd 未初始化，chat 端点不可用")
-        raise HTTPException(status_code=503, detail="AI service not available")
-
     # ── PR-5 EntryMode: resolve execution mode (with target_device support) ──
     _entry_mode = "local"
     try:
@@ -1046,23 +1064,33 @@ async def chat_endpoint(request: ChatRequest, auth: dict = Depends(_require_auth
     except Exception as _em_exc:
         logger.debug("resolve_entry_mode failed (non-fatal): %s", _em_exc)
 
+    # ── PR-1: Route through DesktopPresenceRuntime (canonical shell entry) ──
+    # DesktopPresenceRuntime is the runtime shell and lifecycle owner.
+    # OpenClawd is reached from the shell, not directly from this surface.
     try:
-        result = await openclawd_instance.process(
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+        runtime = get_desktop_presence_runtime()
+        # Normalise context: DesktopPresenceRuntime expects Optional[List[Dict]].
+        # The gateway ChatRequest carries context as Optional[dict]; wrap it so
+        # the runtime receives a well-typed value without losing information.
+        _context = [request.context] if isinstance(request.context, dict) and request.context else None
+        result = await runtime.handle_request(
             message=request.message,
-            session_id=request.session_id or "gateway_default",
+            source="chat",
             device_id=request.device_id,
-            context=request.context or {},
+            session_id=request.session_id or "gateway_default",
+            context=_context,
             multimodal_context=request.multimodal_context,
             entry_mode=_entry_mode,
         )
-        # 确保向后兼容字段存在（reply 是 response 的别名，供旧版客户端使用）
+        # Ensure backward-compatible alias (reply = response) for legacy clients
         if isinstance(result, dict) and "reply" not in result:
             result = {**result, "reply": result.get("response", "")}
-        # 附加 parallel_result（仅当可用且未重复时）
+        # Attach parallel_result when available
         result = _merge_parallel_result(result)
         return result
     except Exception as e:
-        logger.error("OpenClawd 处理失败: %s", e, exc_info=True)
+        logger.error("DesktopPresenceRuntime chat processing failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat processing error: {e}")
 
 
