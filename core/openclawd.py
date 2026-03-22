@@ -1591,13 +1591,30 @@ class OpenClawd:
         lifecycle_target: Optional[str] = None,
         execution_plan_summary: Optional[Dict[str, Any]] = None,
         diagnostics_summary: Optional[Dict[str, Any]] = None,
+        # PR-21 — enriched execution decision
+        execution_reason: Optional[str] = None,
+        fallback_intent: Optional[str] = None,
+        is_execution_downgrade: bool = False,
+        preferred_execution_path: Optional[str] = None,
+        # PR-21 — fallback governance record
+        fallback_kinds: Optional[List[str]] = None,
+        model_fallback_reason: Optional[str] = None,
+        multimodal_downgrade_reason: Optional[str] = None,
+        agent_to_command_reason: Optional[str] = None,
+        remote_to_local_reason: Optional[str] = None,
+        orchestration_downgrade_reason: Optional[str] = None,
+        blocked_reason: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """PR-19: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
+        """PR-19 / PR-21: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
 
         OpenClawd is the **unified control core** — this method assembles the
         single canonical control artifact that captures perception truth, model
         supply truth, the chosen model and execution decisions, fallback intent,
         lifecycle target, diagnostics, and authority chain for this request.
+
+        PR-21 enriches the plan with :class:`UnifiedExecutionDecision` (explicit
+        execution rationale and downgrade tracking) and :class:`FallbackDecisionRecord`
+        (canonical fallback/downgrade governance record).
 
         The plan is additive and non-breaking: callers that do not read the
         ``unified_control_plan`` key in response metadata are unaffected.
@@ -1626,6 +1643,18 @@ class OpenClawd:
                 lifecycle_target=lifecycle_target,
                 execution_plan_summary=execution_plan_summary,
                 diagnostics_summary=diagnostics_summary,
+                # PR-21
+                execution_reason=execution_reason,
+                fallback_intent=fallback_intent,
+                is_execution_downgrade=is_execution_downgrade,
+                preferred_execution_path=preferred_execution_path,
+                fallback_kinds=fallback_kinds,
+                model_fallback_reason=model_fallback_reason,
+                multimodal_downgrade_reason=multimodal_downgrade_reason,
+                agent_to_command_reason=agent_to_command_reason,
+                remote_to_local_reason=remote_to_local_reason,
+                orchestration_downgrade_reason=orchestration_downgrade_reason,
+                blocked_reason=blocked_reason,
             )
             return _plan.to_dict()
         except Exception as _ucp_err:

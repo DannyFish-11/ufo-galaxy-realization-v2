@@ -78,6 +78,22 @@ Usage::
         diagnostics_summary=diag_dict,
     )
     response["metadata"]["unified_control_plan"] = plan.to_dict()
+
+PR-21 — Unified Execution Decision, Remote Mode Policy, and Fallback Governance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Adds :class:`UnifiedExecutionDecision` and :class:`FallbackDecisionRecord` as
+canonical control-core-owned representations of execution direction and
+fallback/downgrade governance.  These complement :class:`ChosenExecutionDecision`
+(preserved for backward compatibility) with enriched rationale and explicit
+downgrade tracking.
+
+* :class:`ExecutionPath` — stable enum for local/cross_device/hybrid/none.
+* :class:`FallbackKind` — enum covering all recognised downgrade/fallback types.
+* :class:`UnifiedExecutionDecision` — canonical execution direction record owned
+  by OpenClawd; includes execution rationale and fallback intent fields.
+* :class:`FallbackDecisionRecord` — canonical governance record capturing every
+  downgrade decision in a single serialisable structure.
 """
 
 from __future__ import annotations
@@ -167,6 +183,60 @@ class FallbackLevel(str, Enum):
     NO_OP = "no_op"
     #: Unknown fallback state.
     UNKNOWN = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# ExecutionPath enum  (PR-21)
+# ---------------------------------------------------------------------------
+
+
+class ExecutionPath(str, Enum):
+    """Canonical execution path resolved by OpenClawd.
+
+    Stable wire-format strings suitable for serialisation and comparison.
+    """
+
+    #: Execution confined to the local Windows host device.
+    LOCAL = "local"
+    #: Execution expanded to a single remote device via the cross-device substrate.
+    CROSS_DEVICE = "cross_device"
+    #: Both local and cross-device delegation ran for this request.
+    HYBRID = "hybrid"
+    #: No execution — observe/advisory/no-op path taken.
+    NONE = "none"
+
+
+# ---------------------------------------------------------------------------
+# FallbackKind enum  (PR-21)
+# ---------------------------------------------------------------------------
+
+
+class FallbackKind(str, Enum):
+    """Enumeration of recognised downgrade/fallback event types.
+
+    Each value identifies the *category* of a single fallback decision that
+    OpenClawd recorded in a :class:`FallbackDecisionRecord`.  Multiple
+    ``FallbackKind`` entries may be present in one record when a chain of
+    downgrades occurred (e.g. model fallback followed by remote→local).
+
+    Values are stable lowercase strings safe for serialisation and comparison.
+    """
+
+    #: A secondary/fallback model or provider was used because the preferred
+    #: model was unavailable or produced a capability mismatch.
+    MODEL_CAPABILITY_FALLBACK = "model_capability_fallback"
+    #: Native multimodal API was unavailable; fell back to text/summary input.
+    NATIVE_MULTIMODAL_TO_TEXT = "native_multimodal_to_text"
+    #: ``agent_runtime`` remote mode was unavailable; fell back to ``command_only``.
+    AGENT_RUNTIME_TO_COMMAND_ONLY = "agent_runtime_to_command_only"
+    #: Remote execution was unavailable; fell back to local execution.
+    REMOTE_TO_LOCAL = "remote_to_local"
+    #: Multi-device orchestration plan was simplified or omitted.
+    ORCHESTRATION_DOWNGRADE = "orchestration_downgrade"
+    #: Execution was blocked; only observe/advisory/no-op result allowed.
+    BLOCKED_NO_OP = "blocked_no_op"
+    #: Unclassified fallback — details in the human-readable reason field.
+    OTHER = "other"
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +349,220 @@ class ChosenExecutionDecision:
             remote_execution_mode=d.get("remote_execution_mode"),
             target_device_ids=list(d.get("target_device_ids") or []),
             orchestration_active=bool(d.get("orchestration_active", False)),
+        )
+
+
+# ---------------------------------------------------------------------------
+# UnifiedExecutionDecision  (PR-21)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class UnifiedExecutionDecision:
+    """Canonical execution direction record owned by OpenClawd.
+
+    PR-21 — Unified Execution Decision, Remote Mode Policy, and Fallback
+    Governance.
+
+    This is the **authoritative** representation of *how* OpenClawd decided to
+    execute a request.  It extends :class:`ChosenExecutionDecision` (which is
+    preserved for backward compatibility) with explicit rationale and fallback
+    intent fields so that downstream consumers and diagnostics tools never need
+    to infer the decision from scattered metadata.
+
+    **OpenClawd is the sole producer of this record.**  Execution and substrate
+    layers (``CommandRouter``, ``SwarmCoordinator``) consume it; they do not
+    produce it.
+
+    Attributes
+    ----------
+    execution_path:
+        Resolved execution branch.  One of the :class:`ExecutionPath` values
+        as a string: ``"local"``, ``"cross_device"``, ``"hybrid"``, or
+        ``"none"``.
+    delegation_point:
+        Label of the delegation boundary activated.  Typical values:
+        ``"local"``, ``"single_remote"``, ``"multi_device_orchestration"``.
+        ``None`` for no-op/advisory paths.
+    remote_execution_mode:
+        For cross-device and hybrid paths: ``"agent_runtime"`` or
+        ``"command_only"``.  ``None`` for local paths.
+    target_device_ids:
+        Target device identifiers for cross-device / hybrid paths.
+    orchestration_active:
+        ``True`` when multi-device orchestration (``SwarmCoordinator``) was
+        invoked as an upper coordination layer.
+    execution_reason:
+        Human-readable rationale explaining *why* this execution path was
+        selected (e.g. ``"device_id specified → single_remote delegation"``).
+    fallback_intent:
+        Human-readable description of any downgrade from the preferred path
+        (e.g. ``"agent_runtime unavailable → command_only"``).  ``None`` when
+        no fallback occurred.
+    is_downgrade:
+        ``True`` when this execution decision represents a downgrade from a
+        richer preferred path.
+    preferred_path:
+        The execution path that would have been taken without any downgrade.
+        ``None`` when no downgrade occurred (``is_downgrade=False``).
+    """
+
+    execution_path: str = ExecutionPath.LOCAL.value
+    delegation_point: Optional[str] = None
+    remote_execution_mode: Optional[str] = None
+    target_device_ids: List[str] = field(default_factory=list)
+    orchestration_active: bool = False
+    execution_reason: Optional[str] = None
+    fallback_intent: Optional[str] = None
+    is_downgrade: bool = False
+    preferred_path: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-safe dict representation."""
+        return {
+            "execution_path": self.execution_path,
+            "delegation_point": self.delegation_point,
+            "remote_execution_mode": self.remote_execution_mode,
+            "target_device_ids": list(self.target_device_ids),
+            "orchestration_active": self.orchestration_active,
+            "execution_reason": self.execution_reason,
+            "fallback_intent": self.fallback_intent,
+            "is_downgrade": self.is_downgrade,
+            "preferred_path": self.preferred_path,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "UnifiedExecutionDecision":
+        """Reconstruct from a serialised dict; unknown keys degrade gracefully."""
+        return cls(
+            execution_path=_safe_execution_path(d.get("execution_path")),
+            delegation_point=d.get("delegation_point"),
+            remote_execution_mode=d.get("remote_execution_mode"),
+            target_device_ids=list(d.get("target_device_ids") or []),
+            orchestration_active=bool(d.get("orchestration_active", False)),
+            execution_reason=d.get("execution_reason"),
+            fallback_intent=d.get("fallback_intent"),
+            is_downgrade=bool(d.get("is_downgrade", False)),
+            preferred_path=d.get("preferred_path"),
+        )
+
+
+# ---------------------------------------------------------------------------
+# FallbackDecisionRecord  (PR-21)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FallbackDecisionRecord:
+    """Canonical fallback / downgrade governance record owned by OpenClawd.
+
+    PR-21 — Unified Execution Decision, Remote Mode Policy, and Fallback
+    Governance.
+
+    Captures every downgrade decision that occurred during a single control
+    loop iteration.  OpenClawd is the **final policy authority**: it produces
+    this record *before* handing off to execution/substrate layers, so that
+    downstream consumers always have a single authoritative explanation of
+    what was downgraded and why.
+
+    A request with no downgrades produces a record whose ``fallback_kinds``
+    list is empty and ``has_fallback`` is ``False``.
+
+    Attributes
+    ----------
+    has_fallback:
+        ``True`` when *any* downgrade occurred for this request.
+    fallback_kinds:
+        Ordered list of :class:`FallbackKind` values (as strings) representing
+        the sequence of downgrade events.  Empty when no fallback occurred.
+    model_fallback_reason:
+        Human-readable reason for a model/capability fallback, when
+        :attr:`FallbackKind.MODEL_CAPABILITY_FALLBACK` is present.
+    multimodal_downgrade_reason:
+        Human-readable reason for a native-multimodal→text downgrade, when
+        :attr:`FallbackKind.NATIVE_MULTIMODAL_TO_TEXT` is present.
+    agent_to_command_reason:
+        Human-readable reason for an ``agent_runtime``→``command_only``
+        downgrade, when :attr:`FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY`
+        is present.
+    remote_to_local_reason:
+        Human-readable reason for a remote→local fallback, when
+        :attr:`FallbackKind.REMOTE_TO_LOCAL` is present.
+    orchestration_downgrade_reason:
+        Human-readable reason for an orchestration plan simplification, when
+        :attr:`FallbackKind.ORCHESTRATION_DOWNGRADE` is present.
+    blocked_reason:
+        Human-readable reason why execution was blocked (observe-only /
+        no-op), when :attr:`FallbackKind.BLOCKED_NO_OP` is present.
+    human_readable_summary:
+        Single human-readable sentence summarising all fallbacks in this
+        record.  Auto-derived if not supplied explicitly.
+    machine_readable_codes:
+        Machine-readable list of string codes for programmatic consumption.
+        Defaults to the contents of :attr:`fallback_kinds`.
+    """
+
+    has_fallback: bool = False
+    fallback_kinds: List[str] = field(default_factory=list)
+
+    model_fallback_reason: Optional[str] = None
+    multimodal_downgrade_reason: Optional[str] = None
+    agent_to_command_reason: Optional[str] = None
+    remote_to_local_reason: Optional[str] = None
+    orchestration_downgrade_reason: Optional[str] = None
+    blocked_reason: Optional[str] = None
+
+    human_readable_summary: Optional[str] = None
+    machine_readable_codes: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Derive has_fallback from fallback_kinds OR any populated reason field.
+        _has_reasons = any([
+            self.model_fallback_reason,
+            self.multimodal_downgrade_reason,
+            self.agent_to_command_reason,
+            self.remote_to_local_reason,
+            self.orchestration_downgrade_reason,
+            self.blocked_reason,
+        ])
+        if (self.fallback_kinds or _has_reasons) and not self.has_fallback:
+            self.has_fallback = True
+        # Populate machine_readable_codes from fallback_kinds when absent.
+        if not self.machine_readable_codes and self.fallback_kinds:
+            self.machine_readable_codes = list(self.fallback_kinds)
+        # Auto-derive summary.
+        if not self.human_readable_summary and self.fallback_kinds:
+            self.human_readable_summary = "Fallback(s): " + ", ".join(self.fallback_kinds)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-safe dict representation."""
+        return {
+            "has_fallback": self.has_fallback,
+            "fallback_kinds": list(self.fallback_kinds),
+            "model_fallback_reason": self.model_fallback_reason,
+            "multimodal_downgrade_reason": self.multimodal_downgrade_reason,
+            "agent_to_command_reason": self.agent_to_command_reason,
+            "remote_to_local_reason": self.remote_to_local_reason,
+            "orchestration_downgrade_reason": self.orchestration_downgrade_reason,
+            "blocked_reason": self.blocked_reason,
+            "human_readable_summary": self.human_readable_summary,
+            "machine_readable_codes": list(self.machine_readable_codes),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "FallbackDecisionRecord":
+        """Reconstruct from a serialised dict; unknown keys degrade gracefully."""
+        return cls(
+            has_fallback=bool(d.get("has_fallback", False)),
+            fallback_kinds=list(d.get("fallback_kinds") or []),
+            model_fallback_reason=d.get("model_fallback_reason"),
+            multimodal_downgrade_reason=d.get("multimodal_downgrade_reason"),
+            agent_to_command_reason=d.get("agent_to_command_reason"),
+            remote_to_local_reason=d.get("remote_to_local_reason"),
+            orchestration_downgrade_reason=d.get("orchestration_downgrade_reason"),
+            blocked_reason=d.get("blocked_reason"),
+            human_readable_summary=d.get("human_readable_summary"),
+            machine_readable_codes=list(d.get("machine_readable_codes") or []),
         )
 
 
@@ -467,11 +751,19 @@ class UnifiedControlPlan:
     chosen_model_decision:
         The canonical model selection decision.
     chosen_execution_decision:
-        The canonical execution path decision.
+        The canonical execution path decision (backward-compatible record).
+    unified_execution_decision:
+        PR-21 enriched execution direction record including rationale,
+        fallback intent, and downgrade tracking.  ``None`` for text-only
+        requests processed without PR-21 integration.
     fallback_level:
         The fallback level applied (``FallbackLevel.NONE`` for primary path).
     fallback_reason:
         Human-readable explanation of why fallback was applied.
+    fallback_decision_record:
+        PR-21 canonical fallback/downgrade governance record.  Explicit
+        record of every downgrade that occurred during this control loop
+        iteration.  ``None`` when no fallback decision was produced.
     lifecycle_target:
         The lifecycle state this plan is targeting (e.g. ``"succeeded"``,
         ``"failed"``, ``"degraded"``).
@@ -499,9 +791,11 @@ class UnifiedControlPlan:
 
     chosen_model_decision: ChosenModelDecision = field(default_factory=ChosenModelDecision)
     chosen_execution_decision: ChosenExecutionDecision = field(default_factory=ChosenExecutionDecision)
+    unified_execution_decision: Optional[UnifiedExecutionDecision] = None
 
     fallback_level: str = FallbackLevel.NONE.value
     fallback_reason: Optional[str] = None
+    fallback_decision_record: Optional[FallbackDecisionRecord] = None
 
     lifecycle_target: Optional[str] = None
     execution_plan_summary: Optional[Dict[str, Any]] = None
@@ -527,8 +821,18 @@ class UnifiedControlPlan:
             "canonical_model_supply_summary": self.canonical_model_supply_summary,
             "chosen_model_decision": self.chosen_model_decision.to_dict(),
             "chosen_execution_decision": self.chosen_execution_decision.to_dict(),
+            "unified_execution_decision": (
+                self.unified_execution_decision.to_dict()
+                if self.unified_execution_decision is not None
+                else None
+            ),
             "fallback_level": self.fallback_level,
             "fallback_reason": self.fallback_reason,
+            "fallback_decision_record": (
+                self.fallback_decision_record.to_dict()
+                if self.fallback_decision_record is not None
+                else None
+            ),
             "lifecycle_target": self.lifecycle_target,
             "execution_plan_summary": self.execution_plan_summary,
             "diagnostics_summary": self.diagnostics_summary,
@@ -544,6 +848,8 @@ class UnifiedControlPlan:
         """
         cmd_raw = d.get("chosen_model_decision")
         ced_raw = d.get("chosen_execution_decision")
+        ued_raw = d.get("unified_execution_decision")
+        fdr_raw = d.get("fallback_decision_record")
         ac_raw = d.get("authority_chain")
         sp_raw = d.get("shell_projection_hints")
 
@@ -562,8 +868,14 @@ class UnifiedControlPlan:
             chosen_execution_decision=(
                 ChosenExecutionDecision.from_dict(ced_raw) if isinstance(ced_raw, dict) else ChosenExecutionDecision()
             ),
+            unified_execution_decision=(
+                UnifiedExecutionDecision.from_dict(ued_raw) if isinstance(ued_raw, dict) else None
+            ),
             fallback_level=_safe_fallback(d.get("fallback_level")),
             fallback_reason=d.get("fallback_reason"),
+            fallback_decision_record=(
+                FallbackDecisionRecord.from_dict(fdr_raw) if isinstance(fdr_raw, dict) else None
+            ),
             lifecycle_target=d.get("lifecycle_target"),
             execution_plan_summary=d.get("execution_plan_summary"),
             diagnostics_summary=d.get("diagnostics_summary"),
@@ -595,6 +907,14 @@ def _safe_fallback(value: Any) -> str:
         return FallbackLevel(value).value
     except (ValueError, TypeError):
         return FallbackLevel.UNKNOWN.value
+
+
+def _safe_execution_path(value: Any) -> str:
+    """Return a valid :class:`ExecutionPath` value, degrading to LOCAL."""
+    try:
+        return ExecutionPath(value).value
+    except (ValueError, TypeError):
+        return ExecutionPath.LOCAL.value
 
 
 def _derive_posture(continuum_state: Optional[Dict[str, Any]]) -> str:
@@ -710,6 +1030,19 @@ def build_unified_control_plan(
     lifecycle_target: Optional[str] = None,
     execution_plan_summary: Optional[Dict[str, Any]] = None,
     diagnostics_summary: Optional[Dict[str, Any]] = None,
+    # PR-21 — enriched execution decision parameters
+    execution_reason: Optional[str] = None,
+    fallback_intent: Optional[str] = None,
+    is_execution_downgrade: bool = False,
+    preferred_execution_path: Optional[str] = None,
+    # PR-21 — fallback governance record parameters
+    fallback_kinds: Optional[List[str]] = None,
+    model_fallback_reason: Optional[str] = None,
+    multimodal_downgrade_reason: Optional[str] = None,
+    agent_to_command_reason: Optional[str] = None,
+    remote_to_local_reason: Optional[str] = None,
+    orchestration_downgrade_reason: Optional[str] = None,
+    blocked_reason: Optional[str] = None,
 ) -> UnifiedControlPlan:
     """Build a :class:`UnifiedControlPlan` from the inputs available to OpenClawd.
 
@@ -763,6 +1096,29 @@ def build_unified_control_plan(
         Compact summary of the associated ExecutionPlan.
     diagnostics_summary:
         Architecture diagnostics snapshot dict.
+    execution_reason:
+        PR-21: Human-readable rationale for the chosen execution path.
+    fallback_intent:
+        PR-21: Description of execution downgrade from preferred path.
+    is_execution_downgrade:
+        PR-21: ``True`` when this execution is a downgrade from a richer path.
+    preferred_execution_path:
+        PR-21: The path that would have been taken without the downgrade.
+    fallback_kinds:
+        PR-21: Ordered list of :class:`FallbackKind` values for the governance
+        record.
+    model_fallback_reason:
+        PR-21: Reason for a model/capability fallback.
+    multimodal_downgrade_reason:
+        PR-21: Reason for a native-multimodal→text downgrade.
+    agent_to_command_reason:
+        PR-21: Reason for an ``agent_runtime``→``command_only`` downgrade.
+    remote_to_local_reason:
+        PR-21: Reason for a remote→local fallback.
+    orchestration_downgrade_reason:
+        PR-21: Reason for an orchestration plan simplification.
+    blocked_reason:
+        PR-21: Reason why execution was blocked (observe-only / no-op).
 
     Returns
     -------
@@ -782,13 +1138,49 @@ def build_unified_control_plan(
         fallback_chain=list(fallback_chain or []),
     )
 
+    safe_path = execution_path or "local"
     exec_decision = ChosenExecutionDecision(
-        execution_path=execution_path or "local",
+        execution_path=safe_path,
         delegation_point=delegation_point,
         remote_execution_mode=remote_execution_mode,
         target_device_ids=list(target_device_ids or []),
         orchestration_active=orchestration_active,
     )
+
+    # PR-21 — build UnifiedExecutionDecision (enriched, authoritative record)
+    unified_exec_decision = UnifiedExecutionDecision(
+        execution_path=_safe_execution_path(safe_path),
+        delegation_point=delegation_point,
+        remote_execution_mode=remote_execution_mode,
+        target_device_ids=list(target_device_ids or []),
+        orchestration_active=orchestration_active,
+        execution_reason=execution_reason,
+        fallback_intent=fallback_intent,
+        is_downgrade=is_execution_downgrade,
+        preferred_path=preferred_execution_path,
+    )
+
+    # PR-21 — build FallbackDecisionRecord (governance record)
+    _fk = list(fallback_kinds or [])
+    if _fk or any([
+        model_fallback_reason,
+        multimodal_downgrade_reason,
+        agent_to_command_reason,
+        remote_to_local_reason,
+        orchestration_downgrade_reason,
+        blocked_reason,
+    ]):
+        fdr = FallbackDecisionRecord(
+            fallback_kinds=_fk,
+            model_fallback_reason=model_fallback_reason,
+            multimodal_downgrade_reason=multimodal_downgrade_reason,
+            agent_to_command_reason=agent_to_command_reason,
+            remote_to_local_reason=remote_to_local_reason,
+            orchestration_downgrade_reason=orchestration_downgrade_reason,
+            blocked_reason=blocked_reason,
+        )
+    else:
+        fdr = None
 
     safe_fallback = _safe_fallback(fallback_level)
 
@@ -810,8 +1202,10 @@ def build_unified_control_plan(
         canonical_model_supply_summary=supply_summary,
         chosen_model_decision=model_decision,
         chosen_execution_decision=exec_decision,
+        unified_execution_decision=unified_exec_decision,
         fallback_level=safe_fallback,
         fallback_reason=fallback_reason,
+        fallback_decision_record=fdr,
         lifecycle_target=lifecycle_target,
         execution_plan_summary=execution_plan_summary,
         diagnostics_summary=diagnostics_summary,
@@ -839,7 +1233,12 @@ def unified_control_plan_summary(plan: Optional["UnifiedControlPlan"]) -> Option
     * ``chosen_provider`` — selected provider ID
     * ``is_native_multimodal`` — native multimodal flag
     * ``execution_path`` — execution path
+    * ``remote_execution_mode`` — remote execution mode (PR-21)
+    * ``execution_reason`` — rationale for the chosen execution path (PR-21)
+    * ``is_execution_downgrade`` — whether execution is a downgrade (PR-21)
     * ``fallback_level`` — fallback level
+    * ``has_fallback`` — whether any fallback/downgrade occurred (PR-21)
+    * ``fallback_kinds`` — ordered list of fallback kind codes (PR-21)
     * ``lifecycle_target`` — lifecycle target
     * ``authority_role`` — always ``"subject_decision_authority"``
     * ``has_perception`` — whether perception state was present
@@ -847,6 +1246,8 @@ def unified_control_plan_summary(plan: Optional["UnifiedControlPlan"]) -> Option
     """
     if plan is None:
         return None
+    ued = plan.unified_execution_decision
+    fdr = plan.fallback_decision_record
     return {
         "plan_id": plan.plan_id,
         "decision_posture": plan.decision_posture,
@@ -854,7 +1255,12 @@ def unified_control_plan_summary(plan: Optional["UnifiedControlPlan"]) -> Option
         "chosen_provider": plan.chosen_model_decision.provider_id,
         "is_native_multimodal": plan.chosen_model_decision.is_native_multimodal,
         "execution_path": plan.chosen_execution_decision.execution_path,
+        "remote_execution_mode": ued.remote_execution_mode if ued is not None else None,
+        "execution_reason": ued.execution_reason if ued is not None else None,
+        "is_execution_downgrade": ued.is_downgrade if ued is not None else False,
         "fallback_level": plan.fallback_level,
+        "has_fallback": fdr.has_fallback if fdr is not None else False,
+        "fallback_kinds": fdr.fallback_kinds if fdr is not None else [],
         "lifecycle_target": plan.lifecycle_target,
         "authority_role": plan.authority_chain.decision_authority,
         "has_perception": plan.canonical_perception_summary is not None,
