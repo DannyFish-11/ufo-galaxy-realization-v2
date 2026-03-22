@@ -398,10 +398,27 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
 
-    ``OpenClawd`` is the inner cognitive and execution nucleus of the unified
-    subject.  It is NOT a parallel entrypoint; it operates entirely *inside*
-    the liminal phase of :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`'s
+    ``OpenClawd`` is the **subject core** / **decision core** — the inner
+    cognitive and execution nucleus of the unified subject.  It is NOT a
+    parallel entrypoint; it operates entirely *inside* the liminal phase of
+    :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`'s
     tri-state lifecycle.
+
+    **Architectural role**
+
+    .. code-block:: text
+
+        DesktopPresenceRuntime  ← runtime shell / outer authority
+            └─ OpenClawd        ← subject core / decision core  (this class)
+                  └─ AgentKernel  ← embedded cognition/planning sub-layer
+                       ├─ _delegate_local_manifestation()   ← local execution
+                       ├─ _delegate_single_remote()         ← single device delegation
+                       └─ _delegate_multi_device_orchestration()  ← multi-device
+
+    OpenClawd interprets request intent / state / execution branch and
+    **delegates** manifestation/execution.  It is NOT the transport substrate
+    itself, NOT a surface authority, and NOT the multi-device orchestration
+    layer.  Those concerns live below and above it, respectively.
 
     **Four-stage process flow** (inside LIMINAL):
 
@@ -412,12 +429,25 @@ class OpenClawd:
        gate.  Produces ``state_continuum`` dict.
     3. **Branch** — ``_determine_execution_path()`` resolves the liminal
        branch: ``local`` | ``cross_device`` | ``hybrid`` | ``none``.
-    4. **Manifest** — ``DecisionExecutor`` (local Windows/System API) and/or
-       ``CommandRouter`` (cross-device gateway expansion) execute the action.
+    4. **Manifest** — delegate to the appropriate execution point:
+
+       - **Local manifestation** (:meth:`_delegate_local_manifestation`) —
+         ``DecisionExecutor`` + local ``AgentKernel``.  Execution stays on
+         this Windows device (System API, local tools).
+       - **Single remote delegation** (:meth:`_delegate_single_remote`) —
+         ``CommandRouter`` dispatches to one named remote device via the
+         cross-device substrate (gateway / WebSocket).
+       - **Multi-device orchestration delegation**
+         (:meth:`_delegate_multi_device_orchestration`) — parallel subtask
+         fan-out across multiple autonomous devices.  This sits *above* the
+         substrate but is still initiated by OpenClawd as decision core.
+       - **No-op / none** — subject responds without acting (observe / hint
+         action level; ``execution_path = "none"``).
 
     Every response carries ``execution_path``, ``state_continuum``,
-    ``runtime_domain``, and the originating ``runtime_session_id`` so that
-    the runtime shell can correlate all stages in its structured logs.
+    ``runtime_domain``, ``delegation_point``, and the originating
+    ``runtime_session_id`` so that the runtime shell can correlate all stages
+    in its structured logs.
 
     串联模块:
     - ai_intent.py       -> 意图解析
@@ -1192,19 +1222,29 @@ class OpenClawd:
     ) -> str:
         """Resolve the liminal execution branch taken by this request.
 
-        The execution path describes *where* the subject manifested:
+        This is OpenClawd's **decision core** output — it names which
+        delegation point was activated for this request:
 
-        - ``"local"``        — execution confined to this Windows device via
+        - ``"local"``        — **local manifestation** delegation was taken:
+                               execution confined to this Windows device via
                                System API (``DecisionExecutor``,
-                               ``WindowsExecutionArbiter``).  This is the
-                               subject's local manifestation loop.
-        - ``"cross_device"`` — execution expanded to remote devices via the
-                               gateway.  This is a **liminal domain expansion**
-                               (cross-device routing is part of the subject's
-                               liminal phase, not a parallel system).
-        - ``"hybrid"``       — both local and cross-device loops ran.
-        - ``"none"``         — no manifestation; subject responded without
-                               acting (observe / hint action level).
+                               ``WindowsExecutionArbiter``).
+        - ``"cross_device"`` — **single remote delegation** was taken:
+                               execution expanded to a remote device via the
+                               cross-device substrate (CommandRouter →
+                               gateway).  This is a liminal domain expansion,
+                               not a parallel system.
+        - ``"hybrid"``       — both local and single-remote delegation ran
+                               concurrently.
+        - ``"none"``         — **no-op path**: subject responded without
+                               acting (observe / hint action level, or no
+                               suitable delegation target).
+
+        Note: the ``"cross_device"`` label covers both single-remote
+        delegation (*one* target device) and multi-device orchestration
+        delegation (*many* devices via ``_dispatch_parallel_goal``).
+        The ``delegation_point`` key in response metadata provides the
+        finer-grained label when needed.
 
         The value is echoed in ``response.metadata.execution_path`` and
         ``response.metadata.runtime_domain`` so the runtime shell can log
@@ -1616,6 +1656,9 @@ class OpenClawd:
                             "handler": "agent_kernel",
                             "entry_mode": _entry_mode,
                             "execution_path": _exec_path_k,
+                            # PR-3: delegation_point names which boundary was used.
+                            # AgentKernel is embedded in OpenClawd → always local.
+                            "delegation_point": "local",
                             **provider_info,
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
@@ -1945,6 +1988,120 @@ class OpenClawd:
                 result["response"] = result.get("result") or f"无法向设备 {device_id} 发送命令 '{command}'"
         return result
 
+    # ========================================================================
+    # PR-3: Explicit Delegation Boundary Helpers
+    # =========================================================================
+    # OpenClawd is the subject core / decision core.  These helpers name the
+    # three execution delegation points it can activate.  They are thin wrappers
+    # that make the boundary explicit in code and callable from tests.
+    #
+    # Delegation hierarchy (inside OpenClawd):
+    #   _delegate_local_manifestation()         — stays on this device
+    #   _delegate_single_remote()               — one named remote device
+    #   _delegate_multi_device_orchestration()  — fan-out to many devices
+    # =========================================================================
+
+    async def _delegate_local_manifestation(
+        self,
+        message: str,
+        intent=None,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> dict:
+        """Delegation point: **local manifestation**.
+
+        Executes the intent on this host via the embedded ``AgentKernel``
+        and local System API tools.  This is the subject's direct expression
+        on the local Windows device; no cross-device substrate is involved.
+
+        Called by :meth:`_dispatch_agent` when the effective target is the
+        local device (or no target is specified).
+
+        Returns
+        -------
+        dict
+            Standard handler response with ``delegation_point="local"`` in
+            ``metadata``.
+        """
+        result = await self.handle_agent_task(
+            message, intent,
+            device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+        )
+        result.setdefault("metadata", {})
+        result["metadata"]["delegation_point"] = "local"
+        return result
+
+    async def _delegate_single_remote(
+        self,
+        message: str,
+        intent=None,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> dict:
+        """Delegation point: **single remote device delegation**.
+
+        Forwards the intent to one named remote device via the cross-device
+        substrate (``CommandRouter`` → gateway / WebSocket).  OpenClawd
+        remains the decision core; it delegates *execution* to the remote
+        device, it does not become the transport substrate itself.
+
+        Called by :meth:`_dispatch_agent` when ``effective_target`` is a
+        non-local device ID.
+
+        Returns
+        -------
+        dict
+            Standard handler response with ``delegation_point="single_remote"``
+            in ``metadata``.
+        """
+        result = await self._dispatch_remote_agent(
+            message=message,
+            intent=intent,
+            device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+        )
+        result.setdefault("metadata", {})
+        result["metadata"]["delegation_point"] = "single_remote"
+        return result
+
+    async def _delegate_multi_device_orchestration(
+        self,
+        message: str,
+        intent=None,
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> dict:
+        """Delegation point: **multi-device orchestration delegation**.
+
+        Fans out the intent across multiple autonomous devices via
+        :meth:`_dispatch_parallel_goal`.  This sits above the cross-device
+        substrate but is still initiated by OpenClawd as the decision core.
+        OpenClawd is NOT the multi-device orchestration substrate itself; it
+        merely delegates to it.
+
+        Returns
+        -------
+        dict
+            Standard handler response with
+            ``delegation_point="multi_device_orchestration"`` in ``metadata``.
+        """
+        result = await self._dispatch_parallel_goal(
+            message=message,
+            intent=intent,
+            device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+        )
+        result.setdefault("metadata", {})
+        result["metadata"]["delegation_point"] = "multi_device_orchestration"
+        return result
+
     async def _dispatch_agent(
         self,
         message: str,
@@ -1953,21 +2110,32 @@ class OpenClawd:
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
     ) -> dict:
-        """Agent 任务分派（PR155: 支持远程设备分发；PR154: trace 贯穿）
+        """Agent 任务分派 — routes to the correct delegation boundary.
 
-        当 ``intent.target_device`` 或环境指定的设备 ID 表明任务应在远程设备上
-        执行时，优先走 :meth:`_dispatch_remote_agent`；否则保持本地执行。
+        PR-3: This method is the **decision core** branch selector for
+        agent tasks.  It resolves which of the three delegation boundaries
+        to activate:
+
+        - **local manifestation** (:meth:`_delegate_local_manifestation`) —
+          no remote target, or target is the local device.
+        - **single remote delegation** (:meth:`_delegate_single_remote`) —
+          a non-local ``device_id`` / ``intent.target_device`` is specified.
+
+        Multi-device orchestration delegation is handled separately via
+        :meth:`_dispatch_parallel_goal` (intent ``parallel_goal``).
+
+        PR155: 支持远程设备分发；PR154: trace 贯穿。
         """
-        # PR155: 检测远程分发条件
+        # Resolve effective execution target
         target_device = None
         if intent is not None:
             target_device = getattr(intent, "target_device", None)
-        # 也接受外部通过 device_id 传入的远端设备
+        # Also accept an externally provided remote device_id
         effective_target = target_device or device_id
 
-        # 仅当明确指定了非本地设备时走远程路径
+        # Route to single-remote delegation when a non-local device is named
         if effective_target and not _is_local_device(effective_target):
-            return await self._dispatch_remote_agent(
+            return await self._delegate_single_remote(
                 message=message,
                 intent=intent,
                 device_id=effective_target,
@@ -1975,9 +2143,11 @@ class OpenClawd:
                 trace_id=trace_id,
             )
 
-        return await self.handle_agent_task(
-            message, intent,
-            device_id=device_id,
+        # Default: local manifestation delegation
+        return await self._delegate_local_manifestation(
+            message=message,
+            intent=intent,
+            device_id=effective_target,
             session_id=session_id,
             trace_id=trace_id,
         )
