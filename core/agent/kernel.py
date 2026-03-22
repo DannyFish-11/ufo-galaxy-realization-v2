@@ -1,10 +1,19 @@
 """
 core/agent/kernel.py
 ======================
-统一智能体内核 — 对话/执行一体化入口
+AgentKernel — OpenClawd 的内嵌认知/规划层
+
+架构位置：
+  DesktopPresenceRuntime   ← 运行时外壳 / 最外层主权
+    └─ OpenClawd           ← 主体决策核心 / subject core
+         └─ AgentKernel    ← 内嵌认知/规划层（本模块）
+
+AgentKernel **不是**独立的顶级主权，**不是**传输/运行时基底，
+**不是**多设备编排主体。它只为 OpenClawd 提供认知与规划支持，
+并将结构化的认知产物（KernelResponse）返回给 OpenClawd 解释和执行。
 
 完整流程：
-  1. 接收自然语言请求
+  1. 接收自然语言请求（由 OpenClawd 调用，非外部直接入口）
   2. 注入 USER / AGENTS 策略（通用）
   3. 调用 IntentRouter 判定 chat_only / task_execute / hybrid
   4. 若需执行（task_execute 或 hybrid 执行阶段）：
@@ -12,12 +21,15 @@ core/agent/kernel.py
        → 调用 ExecutionPlanner → AgentFactory / Team / Swarm
   5. 若纯聊天（chat_only）：
        → 直接走 LLM 对话，不加载 SOUL
-  6. 统一返回 KernelResponse（Pydantic）
+  6. 统一返回 KernelResponse（Pydantic 认知产物）
+       → OpenClawd 负责解释 KernelResponse 并决定后续行动
 
 关键约束：
   - SOUL.md 仅在 task_execute / hybrid 执行阶段由本模块注入
   - 纯聊天路径完全不接触 SOUL
   - 任何异常均有超时/降级处理，不中断服务
+  - AgentKernel 不主动调用 OpenClawd（避免循环依赖与角色模糊）
+  - KernelResponse 是认知/规划产物，由 OpenClawd 拥有解释权
 """
 
 from __future__ import annotations
@@ -48,7 +60,16 @@ logger = logging.getLogger("Galaxy.Agent.Kernel")
 
 
 class KernelResponse(BaseModel):
-    """统一内核响应（所有出口统一使用此格式）。"""
+    """OpenClawd 内嵌 AgentKernel 的认知/规划产物。
+
+    KernelResponse 是认知层的输出契约：它携带 AgentKernel 完成认知与规划后
+    产生的结构化结果，供 OpenClawd（且只有 OpenClawd）解释并决定后续执行/委托。
+
+    字段分为三类：
+      - 规划/认知输出：mode, intent, agent_steps, tool_calls, task_result
+      - 委托建议：delegation_hint（OpenClawd 自行决定是否采纳）
+      - 元数据：model, session_id, error, latency_ms
+    """
 
     success: bool = True
     mode: str = IntentMode.CHAT_ONLY
@@ -69,6 +90,14 @@ class KernelResponse(BaseModel):
     intent: IntentResult = Field(default_factory=IntentResult)
     """意图路由结果"""
 
+    delegation_hint: Optional[str] = None
+    """委托建议（认知产物字段）。
+
+    AgentKernel 可在此字段提示 OpenClawd 适合的委托路径，
+    例如 "local"、"single_remote"、"multi_device"。
+    OpenClawd 拥有最终委托决策权，此字段仅作建议参考。
+    """
+
     model: str = ""
     """使用的 LLM 模型名称"""
 
@@ -86,6 +115,7 @@ class KernelResponse(BaseModel):
             "agent_steps": [s.model_dump() for s in self.agent_steps],
             "tool_calls": [t.model_dump() for t in self.tool_calls],
             "task_result": self.task_result,
+            "delegation_hint": self.delegation_hint,
             "intent": self.intent.raw_intent,
             "confidence": self.intent.confidence,
             "model": self.model,
@@ -101,7 +131,25 @@ class KernelResponse(BaseModel):
 
 
 class AgentKernel:
-    """统一智能体内核（进程级单例）。"""
+    """OpenClawd 的内嵌认知/规划内核。
+
+    架构角色：
+      AgentKernel 是 OpenClawd 的内部组件，负责认知推理和规划。它不是独立的
+      顶级主权实体，不拥有传输通道，也不主导多设备编排。所有的 AgentKernel
+      实例均由 OpenClawd 通过 _get_kernel() 创建和持有。
+
+    职责边界：
+      - 执行意图路由（chat_only / task_execute / hybrid）
+      - 在执行路径注入 SOUL 策略并调用 ExecutionPlanner
+      - 返回结构化的 KernelResponse（认知/规划产物）
+      - 不直接调用 OpenClawd（避免循环依赖，保持单向依赖关系）
+      - 不拥有传输、设备注册或跨设备调度主权
+
+    OpenClawd 持有 AgentKernel 实例（_kernel 属性），负责：
+      - AgentKernel 的生命周期管理
+      - 解释 KernelResponse（认知产物）
+      - 根据 delegation_hint 和 execution_path 决定后续动作
+    """
 
     _instance: Optional["AgentKernel"] = None
 
@@ -290,24 +338,13 @@ class AgentKernel:
         context: List[Dict[str, str]],
         user_policy: str,
     ) -> KernelResponse:
-        """纯聊天处理路径——完全不加载 SOUL。"""
-        # 优先委托 OpenClawd（已有完整聊天逻辑）
-        try:
-            from core.openclawd import get_openclawd
-            clawd = get_openclawd()
-            result = await clawd.handle_chat(message, session_id)
-            return KernelResponse(
-                success=result.get("success", True),
-                mode=IntentMode.CHAT_ONLY,
-                reply=result.get("response", ""),
-                model=result.get("metadata", {}).get("model", ""),
-            )
-        except ImportError:
-            pass
-        except Exception as exc:
-            logger.warning("OpenClawd 聊天失败，降级到直接 LLM 调用: %s", exc)
+        """纯聊天处理路径——完全不加载 SOUL。
 
-        # 降级：直接调用 LLM Router
+        设计约束：
+          此方法不回调 OpenClawd，以保持单向依赖关系（OpenClawd → AgentKernel）。
+          聊天响应通过 LLM Router 直接生成，OpenClawd 持有最终解释权。
+        """
+        # 直接调用 LLM Router 处理聊天（保持单向依赖，不回调 OpenClawd）
         return await self._fallback_chat(message, session_id, context, user_policy)
 
     async def _fallback_chat(
@@ -432,7 +469,12 @@ _kernel: Optional[AgentKernel] = None
 
 
 def get_kernel() -> AgentKernel:
-    """返回全局 AgentKernel 单例。"""
+    """返回全局 AgentKernel 单例。
+
+    注意：AgentKernel 是 OpenClawd 的内嵌认知层。
+    外部代码应通过 OpenClawd（openclawd._get_kernel()）访问，
+    而非直接调用本函数，以维护正确的架构边界。
+    """
     global _kernel
     if _kernel is None:
         _kernel = AgentKernel()
@@ -446,7 +488,11 @@ async def handle_message(
     context: Optional[List[Dict[str, str]]] = None,
     timeout: float = 90.0,
 ) -> KernelResponse:
-    """模块级快捷函数：直接调用全局内核处理消息。"""
+    """模块级快捷函数：直接调用全局内核处理消息。
+
+    注意：正常流程应由 OpenClawd 调用内嵌 AgentKernel；
+    此函数主要供内部测试和诊断使用。
+    """
     return await get_kernel().handle_message(
         message=message,
         session_id=session_id,
