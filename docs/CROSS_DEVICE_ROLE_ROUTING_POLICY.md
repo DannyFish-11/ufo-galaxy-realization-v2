@@ -1,5 +1,17 @@
 # Cross-Device Role & Routing Policy
 
+> **Unified-Subject Architecture**: Cross-device routing is **not** a parallel
+> system alongside the subject.  It is the subject's **liminal execution expanding
+> beyond the local Windows host** — the cross-device arm of OpenClawd's execution
+> branching.
+>
+> When `OpenClawd._determine_execution_path()` resolves to `"cross_device"` or
+> `"hybrid"`, the `CommandRouter` (cross-device expansion arm) uses this policy
+> layer to determine how to route to remote devices.  The `galaxy_gateway` is the
+> internal transport substrate, not a primary entrypoint.
+>
+> See [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](UNIFIED_SUBJECT_ARCHITECTURE.md) §5.
+
 **PR-13 (V4) — Cross-Device Role & Routing Policy**
 
 This document describes the formal cross-device role and routing policy layer

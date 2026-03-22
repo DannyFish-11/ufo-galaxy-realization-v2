@@ -1,5 +1,13 @@
 # Galaxy UI与L4主循环集成报告
 
+> **统一主体架构说明**: `windows_client/`、`android_client/` 等 UI 客户端是
+> **桌面"衣服"呈现层**（desktop clothing），不是主体入口。
+>
+> UI 状态 (`DORMANT/ISLAND/SIDESHEET/FULLAGENT`) 描述**桌面衣服的展开模式**，
+> 不代表主体三态生命周期 (`silent/liminal/manifest`)，也不是 Continuum 姿态。
+>
+> 详见 [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](docs/UNIFIED_SUBJECT_ARCHITECTURE.md) §3。
+
 ## 概述
 
 本报告详细描述了Galaxy系统的UI与L4主循环的完整集成实现。通过4个关键集成点的实现，打通了用户输入到系统执行的完整链路。

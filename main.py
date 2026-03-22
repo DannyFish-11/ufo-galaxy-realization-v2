@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """
-Galaxy-Nexus 星枢 — 主启动入口
-================================
+Galaxy-Nexus 星枢 — Bootstrap Launcher (Adapter/Launcher Role)
+===============================================================
+
+**Unified-Subject Architecture — Bootstrap Script Only**
+---------------------------------------------------------
+This file is a **bootstrap launcher** — it is NOT a primary subject entrypoint
+and does NOT have subject-core authority.  The subject lifecycle is driven by
+:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` (the outer
+shell) wrapping :class:`~core.openclawd.OpenClawd` (the subject core).
+
+This script's sole role: bootstrap the process, then yield to
+``unified_launcher.py`` which initialises the runtime shell.
 
 所有启动逻辑统一由 unified_launcher.py 处理。
 本文件仅作为入口委托，不包含业务逻辑。

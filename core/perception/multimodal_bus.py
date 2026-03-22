@@ -1,9 +1,28 @@
 """
-Galaxy — Multimodal Perception Bus (PR 1)
-==========================================
+core/perception/multimodal_bus.py — Request-Bound Multimodal Fusion (Subject Core Layer)
 
-:class:`MultimodalBus` is the **unified entry point** for all multimodal
-inputs arriving at the Galaxy runtime.  It:
+**Unified-Subject Architecture — Subject Core (OpenClawd) Layer**
+------------------------------------------------------------------
+``MultimodalBus`` handles *request-bound* multimodal payload fusion inside
+the subject core (:class:`~core.openclawd.OpenClawd`).  It is distinct from
+the *continuous host perception* pipeline owned by the runtime shell.
+
+**Two multimodal input paths — do not confuse**::
+
+    CONTINUOUS HOST PERCEPTION (runtime shell — MultimodalIngressBus)
+        DesktopPresenceRuntime._try_start_ingest_bus()
+        → MultimodalIngressBus tick loop → PerceptionFrame stream
+        → Ambient sensory awareness of the Windows host device
+        → Runs independently of individual requests
+
+    REQUEST-BOUND FUSION (subject core — this module)
+        OpenClawd.process(multimodal_context=payload)
+        → MultimodalBus.ingest(message, multimodal_context)
+        → ContextFuser → fusion_summary appended to the LLM prompt
+        → Per-request; lifetime scoped to a single process() call
+
+:class:`MultimodalBus` is called from within ``OpenClawd.process()`` during
+the **Ingest** stage (Stage 1 of the four-stage liminal flow).  It:
 
 1. Accepts a natural-language ``message``, an optional
    :class:`~core.schemas.multimodal.MultiModalContext` bundle, and optional

@@ -1,9 +1,27 @@
 # Multimodal Ingress Foundation
 
+> **Unified-Subject Architecture**: This module is owned by the **runtime shell**
+> (`DesktopPresenceRuntime`) and provides *continuous host perception* — the ambient
+> sensory layer of the subject on a Windows device.
+>
+> **Two multimodal paths — do not conflate**:
+>
+> | Path | Owner | Module | Lifetime | Purpose |
+> |---|---|---|---|---|
+> | **Continuous host perception** | Runtime shell | `core/multimodal/` (this doc) | Background loop | Ambient Windows environment awareness |
+> | **Request-bound fusion** | Subject core (OpenClawd) | `core/perception/multimodal_bus.py` | Per-request | Caller-attached images/audio for a single request |
+>
+> See [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](UNIFIED_SUBJECT_ARCHITECTURE.md) §4.
+
 `core/multimodal/` provides the low-level multimodal perception pipeline for
 Galaxy.  It ingests microphone audio and WebRTC camera video, extracts
 lightweight state features, and merges everything into a single
 **PerceptionFrame** stream that downstream reasoning layers consume.
+
+The `DesktopPresenceRuntime` shell starts this pipeline via
+`_try_start_ingest_bus()` during initialisation.  The `PerceptionFrame`
+stream represents the subject's *continuous sensory awareness* of the
+Windows host device — independent of any individual request.
 
 ---
 

@@ -1,4 +1,37 @@
 """
+system_integration/hardware_trigger.py — Desktop Clothing Hardware Wake Layer
+===============================================================================
+
+**Unified-Subject Architecture — Desktop Clothing (Shell Presentation Layer)**
+-------------------------------------------------------------------------------
+This module is part of the **desktop clothing** of the unified subject — the
+Windows desktop presentation shell that wraps the subject for display on a PC.
+
+``SystemState`` (``DORMANT`` / ``ISLAND`` / ``SIDESHEET`` / ``FULLAGENT``)
+describes the **UI shell expansion modes** — how the desktop clothing is
+rendered on screen.  These are NOT the subject's tri-state lifecycle and are
+NOT the continuum posture.
+
+**Three distinct state systems — do not conflate**::
+
+    1. Tri-state lifecycle (DesktopPresenceRuntime)
+       silent / liminal / manifest
+       → Subject's existential state
+
+    2. Continuum posture (OpenClawd / ContinuumOrchestrator)
+       tri_state_phase + runtime_domain
+       → Internal state protocol inside the subject core
+
+    3. UI shell expansion modes (this module — desktop clothing)
+       DORMANT / ISLAND / SIDESHEET / FULLAGENT
+       → How the Windows desktop clothing is rendered
+       → Presentation layer only; does NOT drive subject lifecycle
+
+Hardware triggers in this module cause **UI shell state transitions** (clothing
+expanding or collapsing).  They may also wake the subject (calling into
+``DesktopPresenceRuntime``), but the authority over the tri-state lifecycle
+always belongs to the runtime shell, not to this clothing layer.
+
 Hardware Trigger Manager for Galaxy
 System Integration Layer - Hardware Wake & State Switching
 
@@ -56,11 +89,30 @@ class TriggerPriority(Enum):
     LOW = 3         # Background triggers
 
 class SystemState(Enum):
-    """System states for Galaxy"""
-    DORMANT = "dormant"         # System sleeping, minimal resources
-    ISLAND = "island"           # Compact UI mode (dynamic island)
-    SIDESHEET = "sidesheet"     # Side panel mode
-    FULLAGENT = "fullagent"     # Full agent interface
+    """Desktop clothing UI shell expansion modes.
+
+    These states describe **how the Windows desktop clothing is rendered**
+    — the visual expansion mode of the desktop presentation shell.
+
+    **IMPORTANT**: These are NOT the subject's tri-state lifecycle
+    (``silent`` / ``liminal`` / ``manifest``) and NOT the continuum posture
+    (``tri_state_phase`` + ``runtime_domain``).  They are purely a
+    presentation/clothing layer concern that is independent of the subject's
+    lifecycle phase.  Any of these UI modes can coexist with any tri-state phase.
+
+    - ``DORMANT``   — clothing hidden / collapsed (independent of tri-state).
+    - ``ISLAND``    — compact clothing mode (dynamic island style; independent of tri-state).
+    - ``SIDESHEET`` — side panel clothing expansion (independent of tri-state).
+    - ``FULLAGENT`` — full clothing expansion (independent of tri-state).
+
+    Transitions between these modes are triggered by hardware events or
+    subject lifecycle hooks.  The mode informs rendering only — it does not
+    drive the tri-state lifecycle.
+    """
+    DORMANT = "dormant"         # Clothing hidden / collapsed
+    ISLAND = "island"           # Compact clothing mode (dynamic island)
+    SIDESHEET = "sidesheet"     # Side panel clothing expansion
+    FULLAGENT = "fullagent"     # Full clothing expansion
 
 class PlatformType(Enum):
     """Platform detection"""

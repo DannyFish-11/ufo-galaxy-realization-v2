@@ -1,4 +1,36 @@
 """
+core/command_router.py — Cross-Device Liminal Domain Expansion Router
+=======================================================================
+
+**Unified-Subject Architecture — Cross-Device Execution Loop**
+---------------------------------------------------------------
+``CommandRouter`` is the subject's **cross-device liminal domain expansion**
+layer.  When ``OpenClawd._determine_execution_path()`` resolves the liminal
+branch to ``"cross_device"`` or ``"hybrid"``, this module is invoked to route
+commands to remote devices via the galaxy gateway.
+
+Cross-device routing is **not** a parallel system alongside the subject — it
+is the subject's liminal execution expanding beyond the local Windows host.
+The liminal phase inside ``OpenClawd`` decides whether to branch locally,
+cross-device, or both (hybrid).
+
+In the unified subject flow::
+
+    DesktopPresenceRuntime (shell)
+        └─ LIMINAL: OpenClawd (core)
+              └─ Stage 3: Branch → execution_path = "cross_device" | "hybrid"
+              └─ Stage 4: Manifest
+                    └─ DecisionExecutor (local Windows loop, for local/hybrid)
+                    └─ CommandRouter (this module) ← CROSS-DEVICE expansion loop
+                         Routes to remote devices via galaxy_gateway
+                         (gateway is internal substrate, not a primary entrypoint)
+
+**Relationship to the gateway**
+
+The ``galaxy_gateway`` is the *internal cross-device execution substrate* of
+the subject — it is the plumbing for cross-device routing, not a primary
+subject entrypoint.  This router is the internal client of that substrate.
+
 Galaxy - 命令路由引擎
 ==========================
 

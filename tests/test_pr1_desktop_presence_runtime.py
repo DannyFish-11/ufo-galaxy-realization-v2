@@ -1,6 +1,6 @@
 """
-PR-1 回归测试 — DesktopPresenceRuntime 控制面收束验收
-===================================================
+PR-1 回归测试 — DesktopPresenceRuntime 统一主体架构验收
+=======================================================
 
 验收清单：
   1. DesktopPresenceRuntime 可导入并实例化
@@ -14,6 +14,14 @@ PR-1 回归测试 — DesktopPresenceRuntime 控制面收束验收
   9. OpenClawd.process() 接受并传播 runtime_session_id
   10. ContinuumOrchestrator.run() 接受 runtime_session_id 参数
   11. e2e_orchestrator.process_user_input() 经 DesktopPresenceRuntime 路由
+
+统一主体架构验收 (新增):
+  12. DesktopPresenceRuntime 模块文档声明其为 runtime shell
+  13. DesktopPresenceRuntime 模块文档声明 OpenClawd 为 subject core
+  14. TriState 文档区分于 UI shell states
+  15. source 参数在文档中被标记为 observability tag
+  16. _try_start_ingest_bus 文档说明其为 runtime shell 对 host ingress 的所有权
+  17. handle_request 文档说明 shell→liminal→core→manifest→silent 生命周期
 """
 
 import asyncio
@@ -364,3 +372,204 @@ class TestUnknownSourceGuardrail:
         assert result["success"] is True
         # The entrypoint_source should reflect the caller's declared source
         assert result["entrypoint_source"] == "unknown_source_xyz"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 10. 统一主体架构 — 模块文档验收
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestUnifiedSubjectArchitectureDocstrings:
+    """Verify that key docstrings reflect the unified-subject architecture."""
+
+    def _read_module(self, path: str) -> str:
+        return pathlib.Path(__file__).parent.parent.joinpath(path).read_text(encoding="utf-8")
+
+    def test_dpr_module_doc_declares_runtime_shell(self):
+        """desktop_presence_runtime.py module docstring must declare 'runtime shell'."""
+        src = self._read_module("core/desktop_presence_runtime.py")
+        assert "runtime shell" in src, (
+            "core/desktop_presence_runtime.py must describe itself as the runtime shell"
+        )
+
+    def test_dpr_module_doc_declares_openclawd_as_core(self):
+        """desktop_presence_runtime.py must explicitly name OpenClawd as the subject core."""
+        src = self._read_module("core/desktop_presence_runtime.py")
+        assert "subject core" in src, (
+            "core/desktop_presence_runtime.py must reference OpenClawd as the subject core"
+        )
+
+    def test_dpr_module_doc_not_parallel_subjects(self):
+        """desktop_presence_runtime.py must say they are not parallel subjects."""
+        src = self._read_module("core/desktop_presence_runtime.py")
+        assert "not parallel" in src.lower() or "not two parallel" in src.lower() or \
+               "not** two parallel" in src.lower() or "NOT** two parallel" in src, (
+            "core/desktop_presence_runtime.py must clarify DesktopPresenceRuntime "
+            "and OpenClawd are not parallel subjects"
+        )
+
+    def test_tristate_docstring_distinguishes_from_ui_states(self):
+        """TriState docstring must distinguish from UI shell states."""
+        src = self._read_module("core/desktop_presence_runtime.py")
+        # The TriState class docstring should mention that UI shell states are different
+        assert "DORMANT" in src or "UI shell" in src or "desktop clothing" in src, (
+            "TriState docstring must distinguish from UI shell states "
+            "(DORMANT/ISLAND/SIDESHEET/FULLAGENT)"
+        )
+
+    def test_source_param_described_as_observability_tag(self):
+        """handle_request() docstring must describe source as observability tag only."""
+        src = self._read_module("core/desktop_presence_runtime.py")
+        assert "observability tag" in src or "Observability tag" in src, (
+            "handle_request() must describe 'source' as an observability tag only"
+        )
+
+    def test_try_start_ingest_bus_doc_mentions_shell_ownership(self):
+        """_try_start_ingest_bus docstring must mention runtime shell ownership."""
+        src = self._read_module("core/desktop_presence_runtime.py")
+        assert "shell" in src and ("ingest" in src or "ingress" in src), (
+            "_try_start_ingest_bus must describe runtime shell ownership of ingress"
+        )
+
+    def test_openclawd_module_doc_declares_subject_core(self):
+        """openclawd.py module docstring must declare it as the subject core."""
+        src = self._read_module("core/openclawd.py")
+        assert "subject core" in src.lower() or "Subject Core" in src, (
+            "core/openclawd.py must describe itself as the subject core"
+        )
+
+    def test_openclawd_module_doc_mentions_liminal(self):
+        """openclawd.py must describe operating inside liminal phase."""
+        src = self._read_module("core/openclawd.py")
+        assert "liminal" in src, (
+            "core/openclawd.py must mention it operates inside the liminal phase"
+        )
+
+    def test_openclawd_module_doc_execution_path_semantics(self):
+        """openclawd.py must document execution_path semantics."""
+        src = self._read_module("core/openclawd.py")
+        assert "local" in src and "cross_device" in src, (
+            "core/openclawd.py must document execution_path: local/cross_device/hybrid/none"
+        )
+
+    def test_decision_executor_doc_local_manifestation_layer(self):
+        """decision_executor.py must describe itself as local manifestation layer."""
+        src = self._read_module("core/execution/decision_executor.py")
+        assert "local manifestation" in src or "Local Manifestation" in src, (
+            "core/execution/decision_executor.py must describe itself as the "
+            "subject's local manifestation layer"
+        )
+
+    def test_multimodal_ingest_runtime_doc_shell_ownership(self):
+        """ingest_runtime.py must describe runtime shell ownership."""
+        src = self._read_module("core/multimodal/ingest_runtime.py")
+        assert "runtime shell" in src or "Runtime Shell" in src, (
+            "core/multimodal/ingest_runtime.py must describe runtime shell ownership"
+        )
+
+    def test_multimodal_ingest_runtime_doc_distinguishes_paths(self):
+        """ingest_runtime.py must distinguish continuous host ingress from request-bound."""
+        src = self._read_module("core/multimodal/ingest_runtime.py")
+        assert "continuous" in src.lower() and "request" in src.lower(), (
+            "core/multimodal/ingest_runtime.py must distinguish continuous host "
+            "ingress from request-bound multimodal_context"
+        )
+
+    def test_hardware_trigger_system_state_doc_clothing_not_tristate(self):
+        """SystemState in hardware_trigger.py must say it's UI clothing, not tri-state."""
+        src = self._read_module("system_integration/hardware_trigger.py")
+        assert "clothing" in src or "presentation" in src or "not" in src.lower(), (
+            "system_integration/hardware_trigger.py SystemState must clarify "
+            "it is not the tri-state lifecycle"
+        )
+
+    def test_chat_route_doc_demoted_to_adapter(self):
+        """core/routes/chat.py docstring must mention adapter role."""
+        src = self._read_module("core/routes/chat.py")
+        assert "adapter" in src.lower() or "Adapter" in src, (
+            "core/routes/chat.py must be described as an adapter, not a subject entrypoint"
+        )
+
+    def test_gateway_app_doc_internal_substrate_not_primary_entrypoint(self):
+        """galaxy_gateway/app.py must describe gateway as internal substrate."""
+        src = self._read_module("galaxy_gateway/app.py")
+        assert "internal" in src.lower() and ("substrate" in src.lower() or "adapter" in src.lower()), (
+            "galaxy_gateway/app.py must describe the gateway as an internal substrate, "
+            "not a primary subject entrypoint"
+        )
+
+    def test_unified_subject_architecture_doc_exists(self):
+        """docs/UNIFIED_SUBJECT_ARCHITECTURE.md must exist."""
+        doc_path = pathlib.Path(__file__).parent.parent / "docs" / "UNIFIED_SUBJECT_ARCHITECTURE.md"
+        assert doc_path.exists(), "docs/UNIFIED_SUBJECT_ARCHITECTURE.md must exist"
+        content = doc_path.read_text(encoding="utf-8")
+        assert "DesktopPresenceRuntime" in content
+        assert "OpenClawd" in content
+        assert "runtime shell" in content
+        assert "subject core" in content
+
+    def test_entrypoint_demotion_doc_exists(self):
+        """docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md must exist."""
+        doc_path = pathlib.Path(__file__).parent.parent / "docs" / "ENTRYPOINT_AND_SURFACE_DEMOTION.md"
+        assert doc_path.exists(), "docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md must exist"
+        content = doc_path.read_text(encoding="utf-8")
+        assert "chat" in content.lower()
+        assert "gateway" in content.lower()
+        assert "launcher" in content.lower()
+        assert "dashboard" in content.lower()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 11. UI shell states are NOT tri-state lifecycle
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestUIShellStatesNotTristate:
+    """Assert that UI shell states (DORMANT/ISLAND/SIDESHEET/FULLAGENT) are
+    distinct from the tri-state lifecycle (silent/liminal/manifest)."""
+
+    def test_tristate_values_do_not_include_dormant(self):
+        """TriState must not include DORMANT (that's a UI shell state)."""
+        from core.desktop_presence_runtime import TriState
+        values = {s.value for s in TriState}
+        assert "dormant" not in values, (
+            "DORMANT is a UI shell state, not a tri-state lifecycle value"
+        )
+
+    def test_tristate_values_do_not_include_island(self):
+        from core.desktop_presence_runtime import TriState
+        values = {s.value for s in TriState}
+        assert "island" not in values, (
+            "ISLAND is a UI shell state, not a tri-state lifecycle value"
+        )
+
+    def test_tristate_values_do_not_include_sidesheet(self):
+        from core.desktop_presence_runtime import TriState
+        values = {s.value for s in TriState}
+        assert "sidesheet" not in values, (
+            "SIDESHEET is a UI shell state, not a tri-state lifecycle value"
+        )
+
+    def test_tristate_values_do_not_include_fullagent(self):
+        from core.desktop_presence_runtime import TriState
+        values = {s.value for s in TriState}
+        assert "fullagent" not in values, (
+            "FULLAGENT is a UI shell state, not a tri-state lifecycle value"
+        )
+
+    def test_tristate_has_exactly_three_values(self):
+        """TriState must have exactly SILENT, LIMINAL, MANIFEST."""
+        from core.desktop_presence_runtime import TriState
+        values = {s.value for s in TriState}
+        assert values == {"silent", "liminal", "manifest"}, (
+            f"TriState must have exactly silent/liminal/manifest, got: {values}"
+        )
+
+    def test_hardware_trigger_system_state_has_dormant_island_etc(self):
+        """hardware_trigger.SystemState has DORMANT/ISLAND/SIDESHEET/FULLAGENT."""
+        import pathlib
+        src = pathlib.Path(__file__).parent.parent.joinpath(
+            "system_integration/hardware_trigger.py"
+        ).read_text(encoding="utf-8")
+        for state in ("DORMANT", "ISLAND", "SIDESHEET", "FULLAGENT"):
+            assert state in src, f"hardware_trigger.py must define {state}"

@@ -1,4 +1,38 @@
 """
+system_integration/state_machine_ui_integration.py — Desktop Clothing State Machine
+======================================================================================
+
+**Unified-Subject Architecture — Desktop Clothing (Shell Presentation Layer)**
+-------------------------------------------------------------------------------
+This module implements the state machine for the **Windows desktop clothing**
+of the unified subject.  The clothing is the presentation/UI shell that wraps
+the subject for display on a Windows PC.
+
+``SystemState`` here (``SLEEPING`` / ``WAKING`` / ``ISLAND`` / ``SIDESHEET`` /
+``FULLSCREEN`` / ``EXECUTING`` / ``ERROR``) describes the **UI shell state** —
+how the desktop clothing is configured at runtime.  These states are a
+presentation-layer concern and are NOT the subject's tri-state lifecycle.
+
+**Three distinct state systems — do not conflate**::
+
+    1. Tri-state lifecycle (DesktopPresenceRuntime)
+       silent / liminal / manifest
+       → Subject's existential state — canonical high-level lifecycle
+
+    2. Continuum posture (OpenClawd / ContinuumOrchestrator)
+       tri_state_phase + runtime_domain
+       → Internal state protocol inside OpenClawd (subject core)
+
+    3. UI shell / clothing states (this module)
+       SLEEPING / WAKING / ISLAND / SIDESHEET / FULLSCREEN / EXECUTING / ERROR
+       → Presentation layer; how the desktop clothing renders
+       → Does NOT drive or represent the tri-state lifecycle
+
+Hardware trigger → UI state transitions are managed here.  This module may
+call into :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` to
+wake the subject, but the tri-state lifecycle authority belongs to the runtime
+shell, not to this clothing layer.
+
 Galaxy 状态机与UI集成模块
 实现硬件触发 → UI 和 UI状态 → 硬件触发 的双向集成
 """
@@ -19,14 +53,20 @@ from integration.event_bus import (
 
 
 class SystemState(Enum):
-    """系统状态枚举"""
-    SLEEPING = "sleeping"           # 休眠状态
-    WAKING = "waking"               # 唤醒中
-    ISLAND = "island"               # 灵动岛状态
-    SIDESHEET = "sidesheet"         # 侧边栏状态
-    FULLSCREEN = "fullscreen"       # 全屏状态
-    EXECUTING = "executing"         # 执行中
-    ERROR = "error"                 # 错误状态
+    """Desktop clothing UI shell states (presentation layer only).
+
+    These states describe how the Windows desktop clothing is configured at
+    runtime.  They are NOT the subject's tri-state lifecycle states.
+
+    See module docstring for the full state-system distinction.
+    """
+    SLEEPING = "sleeping"           # Clothing in sleep/collapsed state
+    WAKING = "waking"               # Clothing transitioning to active
+    ISLAND = "island"               # Compact clothing mode (island style)
+    SIDESHEET = "sidesheet"         # Side panel clothing expansion
+    FULLSCREEN = "fullscreen"       # Full-screen clothing expansion
+    EXECUTING = "executing"         # Clothing showing active execution
+    ERROR = "error"                 # Clothing showing error state
 
 
 class TriggerType(Enum):

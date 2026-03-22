@@ -2,6 +2,35 @@
 
 本目录包含Galaxy系统的P0级优先节点实现。
 
+## 🧠 统一主体架构 (Unified Subject Architecture)
+
+> **核心原则**: `DesktopPresenceRuntime` 和 `OpenClawd` **不是**两个并列主体，而是**同一个主体的两层**。
+
+```
+UFO Galaxy 主体 = DesktopPresenceRuntime (外壳) + OpenClawd (内核)
+
+DesktopPresenceRuntime  ← Windows 桌面运行时壳 / "衣服"
+    ├─ 持有三态生命周期: silent → liminal → manifest → silent
+    ├─ 持有 runtime_session_id (全链路关联 ID)
+    ├─ 持有原生多模态输入 (MultimodalIngressBus → PerceptionFrame)
+    └─ 在 LIMINAL 内调用 OpenClawd
+
+OpenClawd  ← 主体认知/执行核心
+    ├─ 阶段 1: Ingest (多模态上下文融合)
+    ├─ 阶段 2: Continuum/认知 (ContinuumOrchestrator)
+    ├─ 阶段 3: Branch (local / cross_device / hybrid / none)
+    └─ 阶段 4: Manifest (DecisionExecutor / CommandRouter)
+```
+
+**三套状态系统（不可混淆）**:
+1. 三态生命周期 `silent/liminal/manifest` → `DesktopPresenceRuntime` (主体状态)
+2. Continuum 姿态 `tri_state_phase + runtime_domain` → `OpenClawd` 内部协议
+3. UI 壳展开模式 `DORMANT/ISLAND/SIDESHEET/FULLAGENT` → `system_integration/` (桌面"衣服"呈现)
+
+详见: [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)
+
+---
+
 ## 🎯 系统架构 (Round 2 - R-4)
 
 ### 能力注册与发现系统 (OpenClaw 风格)

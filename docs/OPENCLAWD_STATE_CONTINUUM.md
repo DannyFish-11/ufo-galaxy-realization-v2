@@ -1,14 +1,29 @@
 # OpenClawd State Continuum — Protocol Overview
 
-> **This is a state protocol, not a UI protocol.**
-> All fields describe system *presence* and *intent* as a continuous signal.
+> **This is an internal state protocol, not a UI protocol and not the subject lifecycle.**
+> All fields describe the subject core's *presence* and *intent* as a continuous signal.
 > Rendering layers (visual, audio, haptic) are optional consumers.
+
+> **Unified-Subject Architecture Note**: The continuum posture (`tri_state_phase` +
+> `runtime_domain`) is the **internal state protocol of the subject core (OpenClawd)**.
+> It is distinct from:
+> - The **tri-state subject lifecycle** (`silent` / `liminal` / `manifest`) owned by
+>   `DesktopPresenceRuntime` (the outer shell).  The shell drives the high-level
+>   subject lifecycle; the continuum is a fine-grained internal signal inside it.
+> - The **UI shell expansion modes** (`DORMANT` / `ISLAND` / `SIDESHEET` / `FULLAGENT`)
+>   in `system_integration/` — desktop clothing rendering modes only.
+>
+> See [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](UNIFIED_SUBJECT_ARCHITECTURE.md).
 
 ---
 
 ## 1. Purpose
 
 The State Continuum upgrades OpenClawd from a discrete request/response assistant into a **continuously-present state entity**.  The system moves through a tri-state public model; transitions are smooth, governed by hysteresis and dwell constraints, and fully reversible.
+
+This continuum operates **inside the liminal phase** of `DesktopPresenceRuntime`'s
+outer tri-state lifecycle.  While the shell transitions ``SILENT → LIMINAL → MANIFEST``,
+the continuum provides finer-grained signal resolution within the core.
 
 ---
 

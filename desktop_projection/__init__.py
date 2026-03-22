@@ -1,6 +1,22 @@
 """
-desktop_projection
-==================
+desktop_projection — Desktop Clothing Presentation Layer
+=========================================================
+
+**Unified-Subject Architecture — Desktop Clothing (Presentation Layer)**
+------------------------------------------------------------------------
+``desktop_projection`` is the **Windows desktop clothing presentation layer**
+of the unified subject.  It translates subject lifecycle signals into desktop
+visual transitions — the "clothing" that the subject wears on a Windows PC.
+
+This package does NOT contain subject-core logic.  It is a *presentation*
+concern that renders the subject's state as spatial animations and stage
+transitions on the Windows desktop.
+
+The clothing responds to the subject lifecycle but does NOT drive it:
+- ``DesktopPresenceRuntime`` (shell) drives the tri-state lifecycle.
+- ``OpenClawd`` (core) performs cognition and execution.
+- This package *displays* the resulting state as desktop presence.
+
 Liminal Projection Engine — PR-5 / Manifest Stage Surface — PR-6.
 
 Maps a :class:`~core.projection.RuntimeProjection` into a spatial

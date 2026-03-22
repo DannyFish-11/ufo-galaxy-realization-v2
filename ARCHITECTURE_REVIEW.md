@@ -1,8 +1,31 @@
 # UFO Galaxy Realization v2 - 系统架构审查报告
 
-**审查日期**: 2026-03-08
-**审查范围**: 全系统架构，重点关注跨设备编排与模块系统性整合
+**审查日期**: 2026-03-08  
+**更新日期**: 2026-03-22 (统一主体架构澄清)  
+**审查范围**: 全系统架构，重点关注跨设备编排与模块系统性整合  
 **测试结果**: 490 项测试收集，445 通过 / 28 失败 / 16 跳过 / 1 错误
+
+---
+
+## ⚠️ 统一主体架构澄清 (2026-03-22 更新)
+
+> **关键原则**: `DesktopPresenceRuntime` 和 `OpenClawd` **不是**两个并列主体。
+> 它们是**同一个主体的两层**。
+
+```
+UFO Galaxy 主体
+├─ DesktopPresenceRuntime  ← 外层运行时壳 / Windows 桌面"衣服"
+└─ OpenClawd               ← 内层认知/执行核心
+```
+
+详见: [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)  
+入口降级说明: [`docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md`](docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md)
+
+**三套状态系统（不可混淆）**:
+
+1. **三态生命周期** (`silent` / `liminal` / `manifest`) — `DesktopPresenceRuntime` 持有，主体存在状态
+2. **Continuum 姿态** (`tri_state_phase` + `runtime_domain`) — `OpenClawd` 内部状态协议
+3. **UI 壳展开模式** (`DORMANT` / `ISLAND` / `SIDESHEET` / `FULLAGENT`) — 桌面"衣服"呈现模式，在 `system_integration/` 中
 
 ---
 

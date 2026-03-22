@@ -1,4 +1,18 @@
 """
+galaxy_gateway/device_router.py — Internal Cross-Device Routing Layer
+=======================================================================
+
+**Unified-Subject Architecture — Internal Cross-Device Substrate**
+------------------------------------------------------------------
+``DeviceRouter`` is an internal component of the cross-device execution
+substrate.  It is NOT a primary subject entrypoint; it receives routed
+commands from :class:`~core.command_router.CommandRouter` (the subject
+core's cross-device expansion arm) and manages active WebSocket connections
+to registered devices.
+
+In the unified subject architecture, device routing is part of the
+**liminal cross-device execution loop**, not a parallel system.
+
 Device Router - 设备路由和任务分发模块
 
 负责将用户命令路由到正确的设备执行，支持多设备协同任务。

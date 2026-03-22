@@ -1,4 +1,29 @@
-"""Unified multimodal ingress bus.
+"""core/multimodal/ingress_bus.py — Continuous Host Perception Bus (Runtime Shell Layer)
+
+**Unified-Subject Architecture — Runtime Shell Ownership**
+------------------------------------------------------------
+``MultimodalIngressBus`` is owned by the runtime shell
+(:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`).  It provides
+*continuous host perception* for the Windows desktop environment: audio, video,
+and system signals are merged into a ``PerceptionFrame`` stream.
+
+This is the **continuous sensory layer** of the subject — the shell's ongoing
+ambient awareness of the host device.  It is independent of any individual
+request and runs as a background loop.
+
+Do NOT confuse with ``core/perception/multimodal_bus.py`` (``MultimodalBus``),
+which handles *request-bound* multimodal payload fusion inside ``OpenClawd``:
+
+.. code-block:: text
+
+    Runtime shell (DesktopPresenceRuntime)
+        └─ MultimodalIngressBus (this module)
+              └─ Continuous: audio + video + system → PerceptionFrame
+              └─ Available to OpenClawd as ambient context
+
+    Subject core (OpenClawd)
+        └─ MultimodalBus.ingest(multimodal_context=request_payload)
+              └─ Per-request: fuse caller-attached images/audio → fusion_summary
 
 Merges audio, video, and system signals into a single PerceptionFrame
 stream for downstream consumption.  Missing modalities are tolerated:
