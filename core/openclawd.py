@@ -1250,6 +1250,59 @@ class OpenClawd:
             logger.debug("_build_execution_trace failed (swallowed): %s", _exc)
             return None
 
+    def _build_canonical_perception_state(
+        self,
+        *,
+        runtime_session_id: Optional[str] = None,
+        trace_id: str = "",
+        multimodal_context: Optional[Any] = None,
+        fused_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-16: Build a serializable :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState` dict.
+
+        Assembles the canonical perception truth from two sources:
+
+        1. **Continuous host perception** — the latest
+           :class:`~core.multimodal.perception_frame.PerceptionFrame` from the
+           runtime shell's ``MultimodalIngressBus`` singleton (if available).
+        2. **Request-bound multimodal context** — the fused output from
+           ``MultimodalBus.ingest()`` plus the raw ``multimodal_context`` bundle.
+
+        The runtime shell owns and provides the continuous perception snapshot;
+        OpenClawd consumes both sources here as its primary perception contract.
+
+        Returns:
+            ``to_dict()`` output of the canonical state, or ``None`` when the
+            builder itself raises an unrecoverable exception (should not occur
+            in practice).
+        """
+        try:
+            from core.perception.canonical_perception_state import build_canonical_perception_state as _build_cps
+
+            # Try to obtain a live PerceptionFrame from the running singleton
+            # ingress bus (owned by the runtime shell).  Gracefully falls back
+            # to None when the bus is disabled or unavailable.
+            _frame = None
+            try:
+                from core.multimodal.ingest_runtime import get_ingest_bus as _get_ib
+                _running_bus = _get_ib()
+                if _running_bus is not None:
+                    _frame = _running_bus.build_frame()
+            except Exception:
+                pass  # continuous perception unavailable; degrade gracefully
+
+            _cps = _build_cps(
+                runtime_session_id=runtime_session_id,
+                trace_id=trace_id,
+                fused_context=fused_context,
+                multimodal_context=multimodal_context,
+                continuous_frame=_frame,
+            )
+            return _cps.to_dict()
+        except Exception as _cps_err:
+            logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
+            return None
+
     def _build_execution_plan(
         self,
         *,
@@ -1578,6 +1631,18 @@ class OpenClawd:
                 except Exception:  # model_dump may raise AttributeError / ValidationError
                     pass
 
+        # ── PR-16: Canonical Perception State ─────────────────────────────────
+        # Build the unified canonical perception truth that OpenClawd uses as
+        # its primary perception input contract.  Combines continuous host
+        # perception (runtime shell) and request-bound multimodal context.
+        # Always succeeds — text-only requests receive a valid state.
+        _canonical_perception: Optional[Dict[str, Any]] = self._build_canonical_perception_state(
+            runtime_session_id=runtime_session_id,
+            trace_id=trace_id,
+            multimodal_context=multimodal_context,
+            fused_context=_mm_context_dict,
+        )
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -1846,6 +1911,8 @@ class OpenClawd:
                             "tool_calls": api_dict["tool_calls"],
                             "task_result": api_dict["task_result"],
                             "multimodal_context": _mm_context_dict,
+                            # PR-16: canonical perception state (primary perception contract)
+                            "canonical_perception_state": _canonical_perception,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2074,6 +2141,8 @@ class OpenClawd:
                     **provider_info,
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,
+                    # PR-16: canonical perception state (primary perception contract)
+                    "canonical_perception_state": _canonical_perception,
                 },
                 # PR-10: architecture diagnostics layer identifier (additive)
                 "arch_layer_id": "subject_core",

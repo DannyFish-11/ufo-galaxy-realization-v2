@@ -689,6 +689,34 @@ class DesktopPresenceRuntime:
                 "DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err
             )
 
+    def snapshot_continuous_perception(self) -> Optional[Dict[str, Any]]:
+        """PR-16: Return the latest continuous host perception snapshot.
+
+        This is a **runtime shell responsibility** — the shell owns the
+        ``MultimodalIngressBus`` and provides continuous host perception
+        snapshots to the rest of the system.
+
+        Returns the serialized :class:`~core.multimodal.perception_frame.PerceptionFrame`
+        from the running singleton ingress bus, or ``None`` when the bus is
+        disabled or unavailable (text-only / no-ingress deployments).
+
+        The returned dict is safe to log and use for diagnostics.  No base64
+        payloads are included.  This method never raises.
+        """
+        try:
+            from core.multimodal.ingest_runtime import get_ingest_bus as _get_ib
+            _bus = _get_ib()
+            if _bus is not None:
+                frame = _bus.build_frame()
+                return frame.to_dict()
+            return None
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.snapshot_continuous_perception failed (non-fatal): %s",
+                _err,
+            )
+            return None
+
     def _log_request_start(
         self,
         rsession: RuntimeSession,
