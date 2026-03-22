@@ -1,6 +1,8 @@
 @echo off
 chcp 65001 >nul
-title Galaxy - L4 Autonomous Intelligence System
+title Galaxy - Bootstrap Launcher (Adapter/Launcher Role)
+:: Bootstrap Launcher Only - not a subject entrypoint.
+:: Subject lifecycle: DesktopPresenceRuntime (shell) + OpenClawd (core).
 
 :: ── ANSI / VT100 support detection ──────────────────────────────────────
 :: Try to enable Virtual Terminal Processing on Windows 10 1511+

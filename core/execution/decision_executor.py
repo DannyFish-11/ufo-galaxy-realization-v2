@@ -1,5 +1,32 @@
-"""core.execution.decision_executor — Windows Execution Layer
-=============================================================
+"""core.execution.decision_executor — Subject's Local Manifestation Layer
+=========================================================================
+
+**Unified-Subject Architecture — Local Execution Loop**
+---------------------------------------------------------
+``DecisionExecutor`` is the subject's **local manifestation layer** on
+Windows.  It is invoked when ``OpenClawd._determine_execution_path()``
+resolves the liminal branch to ``"local"`` or ``"hybrid"``.
+
+In the unified subject flow::
+
+    DesktopPresenceRuntime (shell)
+        └─ LIMINAL: OpenClawd (core)
+              └─ Stage 3: Branch → execution_path = "local" | "hybrid"
+              └─ Stage 4: Manifest
+                    └─ DecisionExecutor (this module) ← LOCAL execution loop
+                         Consumes state_continuum → OS-level action
+                    └─ CommandRouter (cross-device loop, for hybrid/cross_device)
+
+The local execution loop is the subject's direct expression on the Windows
+host via the System API.  It is not a general-purpose task runner; it is
+specifically the **local manifestation** of liminal intent resolution.
+
+**Liminal branching — three paths**
+
+- ``"local"``        → only this module runs.
+- ``"cross_device"`` → only ``CommandRouter`` / gateway expansion runs.
+- ``"hybrid"``       → both this module AND the cross-device loop run.
+- ``"none"``         → no manifestation; subject responds without acting.
 
 Consumes a ``state_continuum`` dict (as produced by
 :meth:`~core.openclawd.OpenClawd._run_continuum`) and dispatches OS-level

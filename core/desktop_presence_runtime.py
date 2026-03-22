@@ -1,33 +1,72 @@
 """
-core.desktop_presence_runtime — Unified Control-Plane Runtime
+core.desktop_presence_runtime — Windows Desktop Runtime Shell
 =============================================================
 
-This module provides the single control-plane runtime for the Galaxy system.
-All high-level request entrypoints (chat, OpenClawd, E2E) are routed through
-:class:`DesktopPresenceRuntime`, which owns the canonical **tri-state
-progression**:
+**Unified-Subject Architecture**
+---------------------------------
+``DesktopPresenceRuntime`` and ``OpenClawd`` are **not** two parallel subjects.
+They are two layers of the *same* subject:
+
+- ``DesktopPresenceRuntime`` — the **runtime shell** (the "clothing" / outer
+  presence layer).  It is the Windows desktop presentation shell that wraps
+  and hosts the subject on a Windows PC.  Think of it as the garment the
+  subject wears when running on a desktop: it owns the session, drives the
+  canonical tri-state lifecycle, owns native multimodal ingress, and exposes
+  the subject as a desktop presence.
+- ``OpenClawd``             — the **subject core** (cognition + execution
+  nucleus).  It operates entirely *inside* the liminal phase; the runtime
+  shell never bypasses it.
+
+Together they form one subject::
+
+    DesktopPresenceRuntime (outer shell / Windows clothing)
+        └─ owns: session, tri-state lifecycle, native multimodal ingress
+        └─ invokes OpenClawd inside liminal
+              └─ OpenClawd: ingest → continuum → branch → manifest
+                    ├─ local execution loop (Windows / System API)
+                    └─ cross-device execution loop (gateway expansion)
+
+**Canonical Tri-State Lifecycle** (carried by this shell)
+----------------------------------------------------------
+::
 
     silent  →  liminal  →  manifest  →  silent
 
-Responsibilities
-----------------
-- Accept requests from chat / OpenClawd / E2E entrypoints via :meth:`handle_request`.
-- Emit a single ``runtime_session_id`` that is propagated through the entire
-  request lifecycle and is present in every downstream log entry.
-- Drive tri-state transitions and enforce that no entrypoint can skip the
-  progression.
-- Provide observability hooks (log entries) at each state transition and at
-  the start/end of every handled request.
-- Delegate actual LLM / agent / pipeline work to existing modules
-  (OpenClawd, ConstellationRuntime, EndToEndPipeline) so that external
-  behavior is preserved.
+- ``SILENT``   — subject at rest; native multimodal ingress continues.
+- ``LIMINAL``  — request received; OpenClawd cognition/execution in progress.
+- ``MANIFEST`` — subject actively producing output / controlling devices.
+  Returns to ``SILENT`` after execution.
 
-Tri-state mapping
------------------
-- ``SILENT``   — system is idle / background monitoring; no active request.
-- ``LIMINAL``  — request received; intent evaluation and routing in progress.
-- ``MANIFEST`` — active execution: LLM call, tool dispatch, device commands.
-  After execution completes the session transitions back to ``SILENT``.
+This is the *subject lifecycle*.  It is distinct from:
+- The continuum posture (``tri_state_phase`` + ``runtime_domain``) — an
+  internal state-protocol detail owned by OpenClawd.
+- The UI shell states (``DORMANT`` / ``ISLAND`` / ``SIDESHEET`` /
+  ``FULLAGENT``) — desktop clothing expansion modes that live in
+  ``system_integration/`` and describe *how the shell is rendered*, not
+  *what the subject is doing*.
+
+**Responsibilities of this shell**
+-----------------------------------
+- Own the ``runtime_session_id`` that is the stable correlation ID for the
+  entire request lifecycle across all downstream modules.
+- Drive tri-state transitions; no adapter/launcher can skip the progression.
+- Own native multimodal ingress (``MultimodalIngressBus``) — continuous
+  host perception via ``PerceptionFrame``.  This is *distinct* from
+  ``multimodal_context`` (request-bound payload fusion handled by
+  ``MultimodalBus.ingest`` inside OpenClawd).
+- Invoke ``OpenClawd.process()`` inside liminal with the
+  ``runtime_session_id`` so the core can propagate it into every stage.
+- Record observability hooks (log entries) at each state transition.
+- Degrade gracefully: all non-essential modules (ingest bus, policy hints,
+  cognitive field engine) are loaded lazily and fail silently.
+
+**What this shell is NOT**
+---------------------------
+- Not a parallel subject alongside OpenClawd.
+- Not a primary entrypoint in the sense of business logic — it is the *outer
+  presence layer* that adapter surfaces (chat route, gateway, launcher scripts)
+  call into.  Those adapter surfaces are themselves demoted from subject-core
+  authority; they are launchers / protocol adapters only.
 
 Usage::
 
@@ -36,11 +75,11 @@ Usage::
     runtime = get_desktop_presence_runtime()
     result = await runtime.handle_request(
         message="打开微信",
-        source="chat",
+        source="chat",       # observability tag only; does not change routing
         device_id="pc_01",
         session_id=None,
     )
-    # result["runtime_session_id"] is propagated all the way through.
+    # result["runtime_session_id"] is propagated through every downstream layer.
 """
 
 from __future__ import annotations
@@ -60,11 +99,23 @@ logger = logging.getLogger("Galaxy.Runtime")
 
 
 class TriState(str, Enum):
-    """Canonical tri-state progression for the Galaxy system.
+    """Canonical subject lifecycle tri-state, carried by :class:`DesktopPresenceRuntime`.
 
-    - ``SILENT``   — idle; no active high-level request.
-    - ``LIMINAL``  — request received; evaluation / routing in progress.
-    - ``MANIFEST`` — active execution; producing output or controlling devices.
+    This is the **subject lifecycle** — describing the subject's existential
+    state as a whole — not a UI state and not the internal continuum posture.
+
+    - ``SILENT``   — subject at rest; native multimodal host ingress continues
+                     in the background; no active cognition request.
+    - ``LIMINAL``  — subject in transition; OpenClawd cognition and execution
+                     branching are in progress inside this phase.
+    - ``MANIFEST`` — subject actively expressing: producing output, controlling
+                     devices, or expanding into a cross-device loop.
+                     Transitions back to ``SILENT`` upon completion.
+
+    Do **not** confuse with:
+    - ``tri_state_phase`` in the OpenClawd continuum (internal state protocol).
+    - ``DORMANT`` / ``ISLAND`` / ``SIDESHEET`` / ``FULLAGENT`` (desktop UI
+      shell expansion modes; these describe the *clothing*, not the lifecycle).
     """
 
     SILENT = "silent"
@@ -78,20 +129,29 @@ class TriState(str, Enum):
 
 
 class RuntimeSession:
-    """Holds the lifecycle state of a single top-level request.
+    """Holds the lifecycle state of a single top-level request within the runtime shell.
 
     Each call to :meth:`DesktopPresenceRuntime.handle_request` creates one
     ``RuntimeSession``.  The session is ephemeral and is discarded once the
     request completes.
+
+    The ``runtime_session_id`` is the **canonical correlation ID** for the
+    entire request lifecycle — it is propagated into OpenClawd, the continuum
+    orchestrator, the decision executor, the audit ledger, and every log entry
+    so that the full subject cycle for one request can be reconstructed from
+    logs.
 
     Attributes:
         runtime_session_id: Unique identifier for this runtime session.  Used
             as the stable correlation ID across all downstream log entries.
         trace_id: Alias for ``runtime_session_id``; kept for compatibility with
             existing trace propagation patterns.
-        source: Entrypoint that originated the request.  One of ``"chat"``,
-            ``"e2e"``, or ``"openclawd"``.
-        tristate: Current tri-state phase of this session.
+        source: Observability tag indicating which adapter surface originated
+            the request.  One of ``"chat"``, ``"e2e"``, or ``"openclawd"``.
+            This is a **tag only** — it does not change routing logic; all
+            adapter surfaces are demoted from subject-core authority and funnelled
+            through this shell identically.
+        tristate: Current tri-state phase of this session (subject lifecycle).
         created_at: Unix timestamp when the session was created.
         transitions: Ordered list of ``(TriState, timestamp)`` tuples recording
             every state transition.
@@ -157,33 +217,72 @@ class RuntimeSession:
 
 
 class DesktopPresenceRuntime:
-    """Single control-plane runtime — routes all high-level requests through
-    the unified tri-state lifecycle.
+    """Windows Desktop Runtime Shell — the outer presence layer of the unified subject.
 
-    This class is the **sole authoritative entrypoint** for all high-level
-    requests in the Galaxy system.  It enforces tri-state progression
-    (silent → liminal → manifest → silent) for every request regardless of
-    which UI or integration surface originated it.
+    **Role in the unified subject**
+
+    ``DesktopPresenceRuntime`` is the **outer shell** (the "clothing") that
+    presents the subject on a Windows desktop.  It wraps ``OpenClawd`` (the
+    subject core) and is NOT a parallel subject.  Together they form one
+    coherent entity:
+
+    .. code-block:: text
+
+        DesktopPresenceRuntime   ← outer shell / Windows clothing
+            └─ TriState lifecycle owner (silent → liminal → manifest)
+            └─ native multimodal ingress owner (MultimodalIngressBus)
+            └─ runtime_session_id generator & propagator
+            └─ invokes OpenClawd during the LIMINAL phase
+                  └─ OpenClawd (subject core): ingest → continuum → branch
+                        ├─ local execution loop (Windows / System API)
+                        └─ cross-device execution loop (gateway)
+
+    **Canonical Lifecycle**
+
+    This class is the *sole* driver of the tri-state subject lifecycle::
+
+        SILENT → LIMINAL → MANIFEST → SILENT
+
+    Every adapter surface (chat route, gateway, launcher script) must call
+    :meth:`handle_request` to enter this lifecycle.  No adapter surface has
+    subject-core authority; they are protocol adapters / launchers only.
+
+    **Three distinct state systems — do not conflate**
+
+    1. **Tri-state lifecycle** (this class) — ``silent`` / ``liminal`` /
+       ``manifest``.  The subject's existential state.
+    2. **Continuum posture** (``OpenClawd`` / ``ContinuumOrchestrator``) —
+       ``tri_state_phase`` + ``runtime_domain``.  Internal state protocol
+       inside the core.
+    3. **UI shell states** (``system_integration/``) — ``DORMANT`` /
+       ``ISLAND`` / ``SIDESHEET`` / ``FULLAGENT``.  Desktop clothing
+       expansion modes that describe *how the shell is rendered*.
+
+    **Native multimodal ingress vs request-bound multimodal context**
+
+    - ``MultimodalIngressBus`` (started by :meth:`_try_start_ingest_bus` in
+      ``__init__``) — *continuous host perception*: audio / video / system
+      signals fed into ``PerceptionFrame`` objects.  Owned by this shell.
+    - ``multimodal_context`` parameter on :meth:`handle_request` — *request-
+      bound* multimodal payload; fused inside ``OpenClawd`` via
+      ``MultimodalBus.ingest``.  A per-request attachment, not a stream.
 
     Instantiation is inexpensive; all heavy modules are loaded lazily.
     Use :func:`get_desktop_presence_runtime` to obtain the singleton.
-
-    Notes
-    -----
-    Thread-safety: :meth:`handle_request` is an ``async`` coroutine and is
-    safe to call concurrently.  The session dict uses plain Python dict
-    operations; add an ``asyncio.Lock`` if strict ordering is required.
     """
 
     def __init__(self) -> None:
         # Active sessions keyed by runtime_session_id.
         # Sessions are removed upon completion to avoid unbounded growth.
         self._active_sessions: Dict[str, RuntimeSession] = {}
-        logger.info("DesktopPresenceRuntime initialised")
+        logger.info("DesktopPresenceRuntime initialised (Windows desktop runtime shell)")
 
-        # PR-3: Optionally autostart MultimodalIngressBus when
-        # enable_multimodal_ingest is True in config.  Failures are silent so
-        # that text-only deployments are completely unaffected.
+        # Shell responsibility: own and start the native multimodal ingress bus.
+        # This provides *continuous host perception* (PerceptionFrame via
+        # MultimodalIngressBus) — distinct from request-bound multimodal_context.
+        # Degrades silently when enable_multimodal_ingest=false or audio/video
+        # dependencies are absent; text-only deployments are unaffected.
+        # See _try_start_ingest_bus() for the full startup logic.
         self._try_start_ingest_bus()
 
     # ------------------------------------------------------------------
@@ -205,37 +304,49 @@ class DesktopPresenceRuntime:
         entry_mode: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Handle a top-level request through the unified tri-state lifecycle.
+        """Drive the full subject lifecycle for one top-level request.
 
-        This is the **single** method that all entrypoints (chat route,
-        OpenClawd, E2E orchestrator) must call.  It:
+        This is the **single** method that all adapter surfaces (chat route,
+        OpenClawd direct callers, E2E orchestrator) must call.  Adapter
+        surfaces have no subject-core authority; they are launchers / protocol
+        adapters that hand off to this shell.
 
-        1. Creates a :class:`RuntimeSession` with a unique ``runtime_session_id``.
-        2. Advances the session through ``SILENT → LIMINAL → MANIFEST``.
-        3. Delegates execution to the appropriate internal handler based on
-           *source*.
-        4. Advances back to ``SILENT`` after execution.
-        5. Returns the handler result, augmented with ``runtime_session_id`` and
-           ``tristate`` observability fields.
+        **Shell → Liminal → Core → Manifest → Silent**
+
+        1. Creates a :class:`RuntimeSession` with a unique ``runtime_session_id``
+           that will be propagated through OpenClawd, the continuum orchestrator,
+           the decision executor, the audit ledger, and every log entry.
+        2. ``SILENT → LIMINAL``: request received; subject enters the liminal
+           phase.  OpenClawd cognition begins here.
+        3. ``LIMINAL → MANIFEST``: OpenClawd has produced an intent and
+           execution path; the subject enters manifest.
+        4. Delegates execution to the appropriate internal handler; ``OpenClawd``
+           is invoked for all ``source`` values (``"chat"``, ``"openclawd"``,
+           ``"e2e"`` uses the E2E path which may also call OpenClawd internally).
+        5. ``MANIFEST → SILENT``: execution complete; subject returns to rest.
+        6. Returns the result augmented with ``runtime_session_id``, ``tristate``,
+           and ``entrypoint_source`` observability fields.
 
         Args:
             message: Natural-language request text.
-            source: Originating entrypoint; one of ``"chat"``, ``"e2e"``,
-                ``"openclawd"``.  Used for observability tagging only —
-                does not change the routing logic.
+            source: **Observability tag only** — indicates which adapter surface
+                originated the request (``"chat"``, ``"e2e"``, ``"openclawd"``).
+                This does NOT confer subject-core authority to the caller; all
+                sources enter the same shell → liminal → manifest → silent path.
             device_id: Optional source-device identifier.
             session_id: Optional external session identifier.  When ``None``
                 a new session ID is derived from ``runtime_session_id``.
             user_id: User identifier for cross-device session correlation.
             context: Conversation history list.
             required_capabilities: Scheduler capability hints.
-            multimodal_context: Multi-modal payload bundle (PR-1).
+            multimodal_context: Request-bound multi-modal payload bundle.
+                Fused inside OpenClawd via ``MultimodalBus.ingest``.  Distinct
+                from the continuous ``MultimodalIngressBus`` host perception stream.
             use_constellation: When *True* (default) prefer
                 ConstellationRuntime for ``source="e2e"`` requests.
             entry_mode: Pre-resolved execution mode (``"local"`` |
-                ``"cross_device"`` | ``"hybrid"``).  When provided it is
-                forwarded to OpenClawd without modification so the correct
-                mode is reflected in response metadata.
+                ``"cross_device"`` | ``"hybrid"``).  Forwarded to OpenClawd
+                without modification so the correct liminal branch is taken.
             **kwargs: Additional keyword arguments forwarded to the underlying
                 handler.
 
@@ -244,11 +355,11 @@ class DesktopPresenceRuntime:
 
                 {
                     "success": bool,
-                    "response": str,   # or "reply" for e2e paths
-                    "runtime_session_id": str,
+                    "response": str,
+                    "runtime_session_id": str,  # correlation ID for all logs
                     "trace_id": str,
-                    "tristate": str,   # final phase ("silent")
-                    "entrypoint_source": str,
+                    "tristate": str,            # final phase ("silent")
+                    "entrypoint_source": str,   # observability tag
                 }
         """
         rsession = self._create_session(source)
@@ -268,7 +379,7 @@ class DesktopPresenceRuntime:
         except Exception as _cfe_err:
             logger.debug("cognitive_field_engine.notify_request failed (non-fatal): %s", _cfe_err)
 
-        # SILENT → LIMINAL: request received, starting evaluation
+        # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
         self._log_request_start(rsession, message, session_id, device_id)
 
@@ -286,7 +397,7 @@ class DesktopPresenceRuntime:
             logger.debug("policy hint resolution failed (non-fatal): %s", _ph_err)
 
         try:
-            # LIMINAL → MANIFEST: active execution
+            # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
             rsession.advance(TriState.MANIFEST)
 
             result = await self._dispatch(
@@ -318,7 +429,7 @@ class DesktopPresenceRuntime:
                 "error": str(exc),
             }
         finally:
-            # MANIFEST → SILENT: execution complete (even on error)
+            # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
@@ -380,15 +491,19 @@ class DesktopPresenceRuntime:
         entry_mode: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Route to the correct underlying handler based on *source*.
+        """Route to the correct underlying handler.
 
         All handlers receive ``runtime_session_id`` so they can propagate it
-        to sub-systems (continuum orchestrator, audit ledger, task logger).
+        into the OpenClawd core, continuum orchestrator, audit ledger, and
+        task logger.
 
-        Guardrail: every code path must go through this method.  If a new
-        source is added, it must be explicitly listed here; unknown sources
-        are routed to the OpenClawd handler with a warning log so that
-        requests are never silently dropped.
+        The ``source`` parameter is an observability tag only.  It does not
+        confer subject-core authority.  All adapter surfaces (chat, e2e, direct
+        openclawd callers) are funnelled through this shell equivalently; none
+        can bypass the tri-state lifecycle.
+
+        Unknown sources fall back to OpenClawd with a warning so requests are
+        never silently dropped.
         """
         if source in ("chat", "openclawd"):
             return await self._handle_via_openclawd(
@@ -447,7 +562,12 @@ class DesktopPresenceRuntime:
         multimodal_context: Optional[Any],
         entry_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Delegate to OpenClawd.process() with runtime_session_id propagation."""
+        """Invoke the subject core (OpenClawd) inside the liminal phase.
+
+        This is the primary shell→core handoff.  The ``runtime_session_id``
+        is forwarded so OpenClawd can propagate it into every stage:
+        ingest → continuum → branch (local / cross-device) → manifest.
+        """
         from core.openclawd import get_openclawd
 
         clawd = get_openclawd()
@@ -530,10 +650,19 @@ class DesktopPresenceRuntime:
     # ------------------------------------------------------------------
 
     def _try_start_ingest_bus(self) -> None:
-        """Optionally start MultimodalIngressBus based on config flags.
+        """Start the native multimodal host perception bus (shell ownership).
 
-        PR-3: Called from ``__init__``.  Gracefully degrades when the flag is
-        disabled or when audio/video deps are absent.
+        The ``MultimodalIngressBus`` provides *continuous host perception* —
+        a ``PerceptionFrame`` stream of audio / video / system signals from
+        the Windows desktop environment.  This is a runtime-shell
+        responsibility: the shell owns the local sensory layer of the subject.
+
+        This is distinct from ``multimodal_context``, which is a per-request
+        payload bundle fused inside OpenClawd via ``MultimodalBus.ingest``.
+
+        Gracefully degrades: when ``enable_multimodal_ingest`` is ``False``
+        (default) or when audio/video dependencies are absent, no exception
+        is raised and no pipeline is started.
         """
         try:
             from core.multimodal.ingest_runtime import start_ingest_bus

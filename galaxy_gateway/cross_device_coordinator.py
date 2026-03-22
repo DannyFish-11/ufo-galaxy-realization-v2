@@ -1,4 +1,17 @@
 """
+galaxy_gateway/cross_device_coordinator.py — Internal Cross-Device Task Coordinator
+======================================================================================
+
+**Unified-Subject Architecture — Internal Cross-Device Substrate**
+------------------------------------------------------------------
+``CrossDeviceCoordinator`` is an internal coordinator within the gateway's
+cross-device execution substrate.  It is NOT a primary subject entrypoint.
+
+Cross-device coordination is part of the subject's liminal cross-device
+execution loop: ``OpenClawd`` decides to expand cross-device, routes via
+:class:`~core.command_router.CommandRouter`, which uses this coordinator as
+internal plumbing to orchestrate multi-device tasks.
+
 Cross-Device Coordinator - 跨设备协同协调器
 
 实现多设备协同任务的编排和执行

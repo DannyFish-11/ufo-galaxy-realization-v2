@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Galaxy - 统一启动器
-======================
+Galaxy - 统一启动器 (Bootstrap Launcher — Adapter/Launcher Role)
+==================================================================
+
+**Unified-Subject Architecture — Bootstrap Launcher Only**
+-----------------------------------------------------------
+This script is a **bootstrap launcher**.  It initialises the process
+environment, starts supporting services, and brings up the HTTP server.
+It does NOT have subject-core authority.
+
+The subject lifecycle is owned by:
+- :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` — the
+  outer Windows desktop runtime shell (tri-state lifecycle owner).
+- :class:`~core.openclawd.OpenClawd` — the inner subject core.
+
+This launcher's role: process bootstrap → service initialisation →
+HTTP server startup → yield to the runtime shell for request handling.
 
 融合性整合所有模块的统一入口：
 1. 核心服务层（Device Agent、设备状态）

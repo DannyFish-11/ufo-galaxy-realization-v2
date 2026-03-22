@@ -4,6 +4,25 @@
 
 ---
 
+## ⚠️ 统一主体架构说明 (2026-03-22)
+
+> **核心原则**: `DesktopPresenceRuntime` 和 `OpenClawd` 是**同一个主体的两层**，不是两个并列主体。
+
+**主体 = DesktopPresenceRuntime (外壳) + OpenClawd (内核)**
+
+- `DesktopPresenceRuntime`: Windows 桌面运行时壳，持有三态生命周期、原生多模态输入、`runtime_session_id`
+- `OpenClawd`: 主体认知/执行核心，在 LIMINAL 内运行，负责认知推演、执行分支、本地/跨设备循环
+
+以下服务为**适配层/启动器，不是主体入口**:
+- `core/routes/chat.py` — HTTP 适配器
+- `galaxy_gateway/` — 内部跨设备执行基底（非主入口）
+- `main.py`、`unified_launcher.py`、启动脚本 — 纯启动器
+- `dashboard/`、`windows_client/`、`android_client/` — 呈现/监控层，不在主体架构主链中
+
+详见: [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)
+
+---
+
 ## 目录
 
 - [系统愿景](#系统愿景)

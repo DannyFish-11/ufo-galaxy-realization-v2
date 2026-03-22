@@ -1,5 +1,12 @@
 # Galaxy UI-L4 集成方案
 
+> **统一主体架构说明**: `windows_client/`、`android_client/` 等 UI 客户端是**桌面"衣服"
+> 呈现层**，不是主体入口。系统状态机 (`system_integration/`) 中的 UI 状态
+> (`DORMANT/ISLAND/SIDESHEET/FULLAGENT`) 是**桌面衣服展开模式**，不是三态生命周期。
+>
+> 主体生命周期 (`silent → liminal → manifest`) 由 `DesktopPresenceRuntime` 持有。
+> 详见 [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)。
+
 ## 项目概述
 
 本项目实现了Galaxy系统的UI与L4主循环的完整集成，打通了用户输入到系统执行的完整链路。

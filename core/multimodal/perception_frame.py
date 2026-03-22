@@ -1,4 +1,28 @@
-"""PerceptionFrame: unified multimodal state snapshot.
+"""core/multimodal/perception_frame.py — Continuous Host Perception Snapshot
+
+**Unified-Subject Architecture — Runtime Shell Layer**
+------------------------------------------------------
+``PerceptionFrame`` is the output unit of the *continuous host perception*
+pipeline owned by :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`
+(the Windows desktop runtime shell).
+
+Each frame is a timestamped snapshot of the ambient Windows environment:
+audio, video, and system signals.  Frames are produced by
+:class:`~core.multimodal.ingress_bus.MultimodalIngressBus` and represent
+the subject's ongoing sensory awareness of the host device — independent of
+any individual request.
+
+This is distinct from ``multimodal_context`` (per-request payload fusion):
+
+.. code-block:: text
+
+    PerceptionFrame  ← continuous host perception (runtime shell)
+        Audio / Video / System signals merged per tick interval
+        Represents ambient Windows environment awareness
+
+    multimodal_context ← request-bound payload (OpenClawd / MultimodalBus)
+        Caller-attached images / audio clips for a single request
+        Fused via MultimodalBus.ingest → fusion_summary for the prompt
 
 Merges audio, video, and system signals into a single object consumed by
 downstream reasoning layers.  Missing modalities are tolerated: quality

@@ -1,5 +1,12 @@
 #!/bin/bash
 #
+# Galaxy - Bootstrap Launcher Script (Adapter/Launcher Role)
+# ===========================================================
+#
+# This script is a BOOTSTRAP LAUNCHER only — not a subject entrypoint.
+# The subject lifecycle is owned by DesktopPresenceRuntime (shell) +
+# OpenClawd (core).  This script starts the process environment.
+#
 # Galaxy - 统一启动脚本 v2.0
 # ================================
 # 

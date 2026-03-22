@@ -1,11 +1,34 @@
-"""core/multimodal/ingest_runtime.py — Singleton MultimodalIngressBus runtime.
+"""core/multimodal/ingest_runtime.py — Runtime Shell: Native Multimodal Host Perception Bus
 
-PR-3: Wires the multimodal ingestion pipeline into the OpenClawd main flow.
+**Unified-Subject Architecture — Runtime Shell Ownership**
+------------------------------------------------------------
+This module is owned by :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`
+(the outer Windows desktop runtime shell).  The runtime shell is responsible for
+*continuous host perception* — sensing the ambient Windows environment (audio,
+video, system signals) and making that context available to the subject core
+(``OpenClawd``) when processing requests.
 
-This module owns the **singleton** :class:`~core.multimodal.ingress_bus.MultimodalIngressBus`
-that is optionally started on system boot when the ``enable_multimodal_ingest``
-config flag is ``True``.  Audio and video pipelines are wired in only when the
-corresponding optional dependencies are present (``sounddevice``, ``cv2``).
+This is the **continuous host ingress path** — distinct from the
+*request-bound* ``multimodal_context`` payload that callers attach to
+individual requests and that is fused inside ``OpenClawd`` via
+``MultimodalBus.ingest``.
+
+Distinction summary::
+
+    CONTINUOUS HOST PERCEPTION (this module — shell ownership)
+        MultimodalIngressBus → PerceptionFrame stream
+        → Ambient sensory context of the Windows environment
+        → Available across all requests; independent of any single request
+
+    REQUEST-BOUND MULTIMODAL CONTEXT (core/perception/multimodal_bus.py)
+        MultimodalBus.ingest(multimodal_context=...) → fusion_summary
+        → Per-request image/audio payloads attached by the caller
+        → Fused inside OpenClawd for a single request cycle
+
+The singleton :class:`~core.multimodal.ingress_bus.MultimodalIngressBus`
+is optionally started on system boot when ``enable_multimodal_ingest``
+config flag is ``True``.  Audio and video pipelines are wired in only when
+the corresponding optional dependencies are present (``sounddevice``, ``cv2``).
 
 Public API
 ----------

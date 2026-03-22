@@ -1,4 +1,24 @@
 """
+core/routes/chat.py — Chat Adapter Route (Adapter Surface — NOT a Subject Entrypoint)
+======================================================================================
+
+**Unified-Subject Architecture — Adapter Surface**
+---------------------------------------------------
+This module is a **protocol adapter** that translates HTTP POST requests to
+``/api/v1/chat`` into calls to
+:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`.  It does NOT
+have subject-core authority; it is demoted to an adapter/launcher role.
+
+The actual subject lifecycle (tri-state: silent → liminal → manifest → silent)
+is driven by the runtime shell.  This route merely packages the HTTP request
+and calls ``runtime.handle_request()``.
+
+    HTTP POST /api/v1/chat
+        → ChatRoute (this adapter)
+            → DesktopPresenceRuntime.handle_request(source="chat")
+                → TriState: SILENT → LIMINAL → OpenClawd → MANIFEST → SILENT
+                    → response with runtime_session_id
+
 Galaxy - Chat Routes
 ==========================
 

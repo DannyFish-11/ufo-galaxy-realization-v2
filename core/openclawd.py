@@ -1,23 +1,80 @@
 """
-Galaxy-Nexus 星枢核心智能体 — OpenClawd
-=========================================
+core.openclawd — Subject Core: Cognition, Execution Branching, and Manifestation
+==================================================================================
 
-统一智能交互入口，串联已有模块实现完整的意图解析 -> 模型选择 -> 执行 -> 响应流水线:
+**Unified-Subject Architecture**
+---------------------------------
+``OpenClawd`` is the **subject core** — the cognition and execution nucleus of
+the unified subject.  It is NOT a parallel subject alongside
+``DesktopPresenceRuntime``.  The two form one coherent entity:
 
-模块串联:
-  - ai_intent.py        -> 意图解析 (IntentParser / ConversationMemory)
-  - multi_llm_router.py -> 模型选择 (MultiLLMRouter / TaskType)
-  - agent_factory.py    -> Agent 创建/复用 (AgentFactory / TaskAgent)
-  - agent_team.py       -> 团队协作 (TeamManager / TeamStrategy)
-  - device_orchestrator  -> 设备操控
-  - mcp_loader.py       -> MCP 协议工具调用
-  - skill_loader.py     -> Skill 技能调用
+- ``DesktopPresenceRuntime`` — the outer runtime shell (Windows desktop
+  clothing).  Owns the canonical tri-state lifecycle, native multimodal
+  ingress, and the ``runtime_session_id``.
+- ``OpenClawd`` (this module) — the inner cognition/execution core.  Operates
+  entirely **inside the liminal phase** of the shell's tri-state lifecycle.
+
+.. code-block:: text
+
+    DesktopPresenceRuntime (shell)
+        └─ invokes OpenClawd.process() during LIMINAL phase
+              └─ OpenClawd (subject core)
+                    Stage 1: Ingest
+                      ├─ PerceptionFrame (continuous host ingress from shell)
+                      └─ multimodal_context (request-bound fusion via MultimodalBus)
+                    Stage 2: Continuum / Liminal Cognition
+                      └─ ContinuumOrchestrator — intent → state_continuum
+                    Stage 3: Execution Branch (_determine_execution_path)
+                      ├─ local       → Windows / System API manifestation
+                      ├─ cross_device → gateway / remote expansion
+                      ├─ hybrid      → both loops simultaneously
+                      └─ none        → no manifestation (respond only)
+                    Stage 4: Manifest
+                      └─ DecisionExecutor (local) / CommandRouter (cross-device)
+
+**Two distinct multimodal input paths**
+----------------------------------------
+1. **Continuous host perception** — ``PerceptionFrame`` objects produced by
+   ``MultimodalIngressBus`` (owned by the runtime shell).  These represent
+   the ambient sensory context of the Windows environment: audio, video,
+   system signals.  Made available to ``process()`` via the shell when
+   relevant.
+2. **Request-bound multimodal context** — ``multimodal_context`` kwarg on
+   :meth:`process`.  A per-request payload bundle (images, audio clips, etc.)
+   attached by the caller.  Fused inside this module via
+   ``MultimodalBus.ingest`` to produce a ``fusion_summary`` appended to the
+   prompt.
+
+**Execution path semantics** (``execution_path`` in response metadata)
+------------------------------------------------------------------------
+- ``"local"``        — execution confined to this Windows device via System API
+                       (``DecisionExecutor``, ``WindowsExecutionArbiter``, etc.)
+- ``"cross_device"`` — execution expands to remote devices via the gateway;
+                       this is a **liminal domain expansion**, not a parallel
+                       system.
+- ``"hybrid"``       — both local and cross-device loops run concurrently.
+- ``"none"``         — no manifestation; subject responds without acting.
+
+The ``runtime_domain`` field in ``state_continuum`` carries the same
+information as an internal continuum posture detail; ``execution_path``
+surfaces it in the response so the runtime shell can log it against
+``runtime_session_id``.
+
+**State systems summary** (do not conflate)
+--------------------------------------------
+- Tri-state lifecycle (``silent`` / ``liminal`` / ``manifest``) → owned by
+  ``DesktopPresenceRuntime`` shell.
+- Continuum posture (``tri_state_phase`` + ``runtime_domain``) → owned by
+  ``ContinuumOrchestrator`` inside this module.
+- UI shell states (``DORMANT`` / ``ISLAND`` / ``SIDESHEET`` / ``FULLAGENT``)
+  → ``system_integration/``; desktop clothing modes; completely separate.
 
 设计原则:
-  1. 单例模式 — 全局唯一入口
+  1. 单例模式 — 全局唯一主体核心
   2. 懒加载 — 所有模块按需导入，避免循环依赖
   3. 容错降级 — 任何模块不可用时自动降级
-  4. 统一响应 — 所有方法返回标准 dict 格式
+  4. 统一响应 — 所有方法返回标准 dict 格式，携带 state_continuum /
+                execution_path / runtime_domain / runtime_session_id
 """
 
 import asyncio as _asyncio_module
@@ -339,9 +396,30 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
 
 
 class OpenClawd:
-    """Galaxy-Nexus 星枢核心智能体 — 统一智能交互入口
+    """Subject Core — Cognition, Execution Branching, and Manifestation
 
-    串联已有模块实现完整的意图解析 -> 模型选择 -> 执行 -> 响应流水线:
+    ``OpenClawd`` is the inner cognitive and execution nucleus of the unified
+    subject.  It is NOT a parallel entrypoint; it operates entirely *inside*
+    the liminal phase of :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`'s
+    tri-state lifecycle.
+
+    **Four-stage process flow** (inside LIMINAL):
+
+    1. **Ingest** — fuse request-bound ``multimodal_context`` via
+       ``MultimodalBus.ingest``; attach ``runtime_session_id`` as trace ID.
+    2. **Liminal / Continuum** — ``ContinuumOrchestrator.run()`` evaluates
+       intent, posture (``tri_state_phase`` + ``runtime_domain``), and decision
+       gate.  Produces ``state_continuum`` dict.
+    3. **Branch** — ``_determine_execution_path()`` resolves the liminal
+       branch: ``local`` | ``cross_device`` | ``hybrid`` | ``none``.
+    4. **Manifest** — ``DecisionExecutor`` (local Windows/System API) and/or
+       ``CommandRouter`` (cross-device gateway expansion) execute the action.
+
+    Every response carries ``execution_path``, ``state_continuum``,
+    ``runtime_domain``, and the originating ``runtime_session_id`` so that
+    the runtime shell can correlate all stages in its structured logs.
+
+    串联模块:
     - ai_intent.py       -> 意图解析
     - multi_llm_router.py -> 模型选择
     - agent_factory.py   -> Agent 创建/复用
@@ -1112,12 +1190,31 @@ class OpenClawd:
         execution_result: Dict[str, Any],
         cross_device_dispatched: bool = False,
     ) -> str:
-        """Derive the ``execution_path`` value from gate decisions (PR-4).
+        """Resolve the liminal execution branch taken by this request.
+
+        The execution path describes *where* the subject manifested:
+
+        - ``"local"``        — execution confined to this Windows device via
+                               System API (``DecisionExecutor``,
+                               ``WindowsExecutionArbiter``).  This is the
+                               subject's local manifestation loop.
+        - ``"cross_device"`` — execution expanded to remote devices via the
+                               gateway.  This is a **liminal domain expansion**
+                               (cross-device routing is part of the subject's
+                               liminal phase, not a parallel system).
+        - ``"hybrid"``       — both local and cross-device loops ran.
+        - ``"none"``         — no manifestation; subject responded without
+                               acting (observe / hint action level).
+
+        The value is echoed in ``response.metadata.execution_path`` and
+        ``response.metadata.runtime_domain`` so the runtime shell can log
+        it against ``runtime_session_id`` for observability.
 
         Parameters
         ----------
         entry_mode:
-            Normalised mode string (``"local"`` | ``"cross_device"`` | ``"hybrid"``).
+            Normalised mode string (``"local"`` | ``"cross_device"`` |
+            ``"hybrid"``).
         execution_result:
             Serialised dict returned by :meth:`_run_execution`.
         cross_device_dispatched:
@@ -1157,39 +1254,63 @@ class OpenClawd:
         runtime_session_id: Optional[str] = None,
         entry_mode: Optional[str] = None,
     ) -> dict:
-        """主入口 — PR86 架构：OpenClawd 是唯一入口，内嵌 AgentKernel
+        """Subject core entry point — invoked by DesktopPresenceRuntime during the LIMINAL phase.
 
-        架构约束（PR86）：
-        - OpenClawd 是 /api/v1/chat 的唯一处理器
-        - AgentKernel 由本方法内部调用（Kernel 不再对外作为主入口）
-        - SOUL 注入规则：chat_only 不注 SOUL；task_execute/hybrid 强制注入
-        - 多模型路由由本实例持有的 _router 统一管理
-        - 每次请求携带 request_id (trace ID)
+        This method implements the four-stage subject core flow:
+
+        1. **Ingest** — attach ``runtime_session_id`` as trace ID; fuse any
+           request-bound ``multimodal_context`` via ``MultimodalBus.ingest``.
+        2. **Liminal / Continuum** — ``ContinuumOrchestrator.run()`` evaluates
+           intent, ``tri_state_phase``, ``runtime_domain``, and produces the
+           ``state_continuum`` dict.
+        3. **Branch** — ``_determine_execution_path()`` resolves which liminal
+           execution loop to activate.
+        4. **Manifest** — ``DecisionExecutor`` (local) and/or ``CommandRouter``
+           (cross-device) execute the action; results are merged.
+
+        This method is the **subject core** entry point.  It should always be
+        invoked through :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`
+        (which provides the ``runtime_session_id`` and drives the outer tri-state
+        lifecycle).  Direct callers that bypass the runtime shell lose session
+        correlation and tri-state observability.
 
         Args:
             message: 用户输入的自然语言消息
             device_id: 设备 ID (可选，用于设备操控场景)
             session_id: 会话 ID (可选，用于上下文管理)
             context: 对话历史上下文（可选）
-            required_capabilities: Phase 2 scheduler hint — list of device capabilities required
-            multimodal_context: Multi-modal context bundle (PR 1).  When present,
-                ``multimodal_context.images`` carries base64-encoded image payloads
-                that are forwarded to the model router.  Text-only requests leave
-                this as ``None`` and existing behaviour is fully preserved.
-            runtime_session_id: Optional identifier from
+            required_capabilities: Phase 2 scheduler hint — list of device
+                capabilities required.
+            multimodal_context: Request-bound multi-modal payload bundle.
+                Fused here via ``MultimodalBus.ingest``.  Distinct from the
+                continuous ``PerceptionFrame`` stream owned by the runtime shell.
+            runtime_session_id: Correlation ID propagated from
                 :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`.
-                When provided, it is used as ``trace_id`` so that all log
-                entries within this request can be correlated back to the
-                originating runtime session.
-            entry_mode: Execution mode stamped at the ingress layer
-                (``"local"`` | ``"cross_device"`` | ``"hybrid"``).  When
-                ``None`` or absent the mode defaults to ``"local"`` and
-                behaviour is fully backward-compatible.  The resolved value
-                is echoed in ``response.metadata.entry_mode`` so downstream
-                systems can observe which mode was chosen.
+                Used as ``trace_id`` so all log entries within this request
+                can be correlated back to the originating runtime session.
+                Also echoed in ``response.metadata.runtime_session_id``.
+            entry_mode: Execution mode from the shell
+                (``"local"`` | ``"cross_device"`` | ``"hybrid"``).  Determines
+                which liminal execution branch is activated.  Defaults to
+                ``"local"`` for backward compatibility.
 
         Returns:
-            统一响应 dict: {success, response, intent, metadata}
+            统一响应 dict::
+
+                {
+                    "success": bool,
+                    "response": str,
+                    "intent": str,
+                    "metadata": {
+                        "session_id": str,
+                        "mode": str,
+                        "execution_path": str,     # local/cross_device/hybrid/none
+                        "runtime_domain": str,     # from state_continuum
+                        "state_continuum": dict,   # full continuum posture
+                        "runtime_session_id": str, # echoed from shell
+                        ...
+                    },
+                }
         """
         self._ensure_initialized()
         self._request_count += 1

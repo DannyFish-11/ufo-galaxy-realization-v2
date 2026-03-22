@@ -1,6 +1,18 @@
 # DECISION_EXECUTION_POLICY.md
 
-## Decision Execution Policy — Windows Execution Layer
+## Decision Execution Policy — Subject's Local Manifestation Layer
+
+> **Unified-Subject Architecture**: `DecisionExecutor` is the subject's
+> **local manifestation loop** — the local execution arm of the liminal
+> execution branch inside `OpenClawd`.
+>
+> When `OpenClawd._determine_execution_path()` resolves to `"local"` or
+> `"hybrid"`, this layer executes Windows / System API actions.
+>
+> This is distinct from the cross-device loop (`CommandRouter` → `galaxy_gateway`)
+> which handles `"cross_device"` or `"hybrid"` branches.
+>
+> See [`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](UNIFIED_SUBJECT_ARCHITECTURE.md) §5.
 
 The **Decision Execution Layer** (`core/execution/decision_executor.py`)
 bridges the [Decision Gate](DECISION_GATE_SPEC.md) output to real OS-level

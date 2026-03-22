@@ -1,22 +1,41 @@
 """
-Galaxy Gateway - 协议适配层（WS → HTTP）
-============================================
+galaxy_gateway/app.py — Internal Cross-Device Execution Substrate (WebSocket Adapter)
+=======================================================================================
 
-本模块是 Galaxy 系统的 **WebSocket 协议适配器**，不是主 API 源。
+**Unified-Subject Architecture — Internal Gateway (NOT a primary entrypoint)**
+-------------------------------------------------------------------------------
+``galaxy_gateway`` is the *internal cross-device execution substrate* of the
+unified subject.  It is the transport/protocol layer that enables the subject's
+liminal cross-device execution loop to reach remote devices.
 
-职责：
-  1. WebSocket 端点：设备连接、Android bridge、WebRTC signaling
-  2. 设备生命周期管理（注册/心跳/断线）通过 WebSocket 协议
-  3. 会话漫游 REST 端点（gateway 特有的 session roaming 逻辑）
-  4. 健康检查端点（gateway 自身状态）
+This module is a **WebSocket protocol adapter** — it is NOT a primary subject
+entrypoint and does NOT have subject-core authority.  The subject's authority
+flows through :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`
+→ :class:`~core.openclawd.OpenClawd` → :mod:`~core.command_router`.
 
-**REST API 权威定义** 位于 core/api_routes.py。
-本模块中的 REST 端点（/api/devices、/api/tasks、/api/commands 等）
-仅为 gateway 独立运行时的便利接口。在统一部署模式下，
-unified_launcher.py 挂载 core/api_routes.py 作为唯一 API 入口。
+In the unified subject architecture::
 
-如需新增通用 API 端点，请在 core/routes/ 子模块中添加，
-而不是在此文件中添加。
+    Subject (DesktopPresenceRuntime + OpenClawd)
+        └─ cross-device liminal branch → CommandRouter
+              └─ CommandRouter calls galaxy_gateway (internal substrate)
+                    └─ galaxy_gateway → WebSocket → remote devices
+
+The gateway does NOT initiate subject lifecycle; it receives routed commands
+from the subject core and forwards them to device endpoints.
+
+**This module's responsibilities (WebSocket protocol adapter)**
+
+1. WebSocket endpoints: device connection, Android bridge, WebRTC signaling.
+2. Device lifecycle management (register / heartbeat / disconnect) via WebSocket.
+3. Session roaming REST endpoints (gateway-specific session roaming logic).
+4. Health check endpoints (gateway self-status).
+
+**REST API authority** lives in ``core/api_routes.py``.  REST endpoints in
+this file are convenience interfaces for standalone gateway deployments only.
+In unified deployment mode, ``unified_launcher.py`` mounts ``core/api_routes.py``
+as the canonical API surface.
+
+Add new general API endpoints in ``core/routes/`` — not here.
 """
 
 import asyncio
