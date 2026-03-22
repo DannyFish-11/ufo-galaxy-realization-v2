@@ -1908,6 +1908,8 @@ class OpenClawd:
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,
                 },
+                # PR-10: architecture diagnostics layer identifier (additive)
+                "arch_layer_id": "subject_core",
             }
 
         except Exception as e:
