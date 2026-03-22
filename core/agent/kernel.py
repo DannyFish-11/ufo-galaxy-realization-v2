@@ -126,6 +126,8 @@ class KernelResponse(BaseModel):
             "error": self.error,
             "latency_ms": self.latency_ms,
             "authority_role": self.authority_role,
+            # PR-10: architecture diagnostics layer identifier (additive)
+            "arch_layer_id": "cognition_layer",
         }
 
 

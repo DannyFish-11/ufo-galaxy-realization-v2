@@ -471,6 +471,8 @@ class DesktopPresenceRuntime:
             "canonical_class": "DesktopPresenceRuntime",
             "pr_introduced": "PR-1",
         })
+        # PR-10: stamp architecture diagnostics layer identifier (additive).
+        result.setdefault("arch_layer_id", "runtime_shell")
         return result
 
     # ------------------------------------------------------------------

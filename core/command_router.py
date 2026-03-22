@@ -860,6 +860,8 @@ class CommandRouter:
 
         # PR-9: stamp execution substrate authority role (additive, non-breaking).
         result.setdefault("execution_substrate_role", "execution_substrate")
+        # PR-10: stamp architecture diagnostics layer identifier (additive).
+        result.setdefault("arch_layer_id", "execution_substrate")
 
         return result
 
