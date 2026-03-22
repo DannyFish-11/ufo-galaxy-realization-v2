@@ -1422,6 +1422,95 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 }
             )
 
+    @router.get("/api/v1/projection/runtime/session-snapshot")
+    async def get_runtime_session_snapshot() -> JSONResponse:
+        """Return a durable runtime session snapshot summary.
+
+        This endpoint is the canonical **read-only** surface for the
+        Durable Runtime Session Snapshot Contract introduced in PR-40.
+        It derives a :class:`~contracts.runtime_session_snapshot.RuntimeSessionSnapshot`
+        from the unified multi-device runtime projection (PR-38) and returns a
+        compact summary as JSON.
+
+        Example response::
+
+            {
+              "summary_id": "rsnsum_...",
+              "snapshot_id": "rsnap_...",
+              "session_id": "",
+              "status": "unknown",
+              "runtime_device_count": 0,
+              "has_dispatch_state": false,
+              "has_recovery_state": false,
+              ...
+            }
+
+        Returns
+        -------
+        JSONResponse
+            A compact session snapshot summary dict.  Always returns 200;
+            individual sub-component failures are logged and produce safe defaults.
+        """
+        try:
+            from contracts.runtime_session_snapshot import (
+                from_multi_device_runtime_projection,
+                build_runtime_session_snapshot_summary,
+            )
+
+            # Attempt to get the multi-device projection
+            projection_dict: Dict[str, Any] = {}
+            try:
+                from contracts.multi_device_runtime_projection import (
+                    build_multi_device_runtime_projection,
+                )
+                projection_obj = build_multi_device_runtime_projection()
+                projection_dict = projection_obj.to_dict()
+            except Exception as exc:
+                logger.debug(
+                    "get_runtime_session_snapshot: projection unavailable: %s", exc
+                )
+
+            snapshot = from_multi_device_runtime_projection(projection_dict)
+            summary = build_runtime_session_snapshot_summary(snapshot)
+            return JSONResponse(content=summary.to_dict())
+
+        except Exception as exc:
+            logger.warning(
+                "get_runtime_session_snapshot: failed to assemble snapshot: %s",
+                exc,
+            )
+            import uuid as _uuid_fallback
+            import time as _time_fallback
+
+            return JSONResponse(
+                content={
+                    "summary_id": f"rsnsum_{_uuid_fallback.uuid4().hex[:10]}",
+                    "snapshot_id": None,
+                    "session_id": "",
+                    "trace_id": None,
+                    "task_id": None,
+                    "mesh_session_id": None,
+                    "source_device_id": None,
+                    "primary_device_id": None,
+                    "status": "unknown",
+                    "runtime_device_count": 0,
+                    "runtime_host_count": 0,
+                    "mesh_membership_count": 0,
+                    "takeover_count": 0,
+                    "has_dispatch_state": False,
+                    "has_coordinator_state": False,
+                    "has_merged_result": False,
+                    "has_recovery_state": False,
+                    "has_mesh_session": False,
+                    "has_governance_snapshot": False,
+                    "has_policy_alignment": False,
+                    "created_at": None,
+                    "updated_at": None,
+                    "generated_at": _time_fallback.time(),
+                    "metadata": {"error": "session snapshot unavailable"},
+                }
+            )
+
     return router
 
 

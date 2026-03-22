@@ -7,8 +7,10 @@ introduced in PR-31, the Mesh Membership contract introduced in PR-32, the
 Mesh Session contract introduced in PR-33, the Local Takeover Result
 contract introduced in PR-34, the Source Dispatch contracts introduced
 in PR-35, the Cross-Runtime Result Merge contracts introduced in PR-36,
-the Mesh Session Coordinator contracts introduced in PR-37, and the
-Unified Multi-Device Runtime Projection introduced in PR-38.
+the Mesh Session Coordinator contracts introduced in PR-37, the
+Unified Multi-Device Runtime Projection introduced in PR-38, the
+Runtime Recovery and Reconciliation Contract introduced in PR-39, and
+the Durable Runtime Session Snapshot Contract introduced in PR-40.
 """
 
 from contracts.execution_trace import (
@@ -210,6 +212,27 @@ from contracts.runtime_recovery_reconciliation import (
     from_multi_device_projection as recovery_from_projection,
 )
 
+# PR-40: Durable Runtime Session Snapshot Contract
+from contracts.runtime_session_snapshot import (
+    RuntimeSessionSnapshotStatus,
+    RuntimeSessionSnapshotIdentity,
+    RuntimeSessionSnapshotDispatchState,
+    RuntimeSessionSnapshotTakeoverState,
+    RuntimeSessionSnapshotCoordinatorState,
+    RuntimeSessionSnapshotResultState,
+    RuntimeSessionSnapshotRecoveryState,
+    RuntimeSessionSnapshot,
+    RuntimeSessionSnapshotSummary,
+    build_runtime_session_snapshot,
+    build_runtime_session_snapshot_summary,
+    from_mesh_session as session_snapshot_from_mesh_session,
+    from_source_dispatch_result as session_snapshot_from_dispatch,
+    from_target_takeover_result as session_snapshot_from_takeover,
+    from_result_merge as session_snapshot_from_merge,
+    from_recovery_state as session_snapshot_from_recovery,
+    from_multi_device_runtime_projection as session_snapshot_from_projection,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -372,4 +395,22 @@ __all__ = [
     "recovery_from_coordinator",
     "recovery_from_merged_result",
     "recovery_from_projection",
+    # PR-40: Durable Runtime Session Snapshot Contract
+    "RuntimeSessionSnapshotStatus",
+    "RuntimeSessionSnapshotIdentity",
+    "RuntimeSessionSnapshotDispatchState",
+    "RuntimeSessionSnapshotTakeoverState",
+    "RuntimeSessionSnapshotCoordinatorState",
+    "RuntimeSessionSnapshotResultState",
+    "RuntimeSessionSnapshotRecoveryState",
+    "RuntimeSessionSnapshot",
+    "RuntimeSessionSnapshotSummary",
+    "build_runtime_session_snapshot",
+    "build_runtime_session_snapshot_summary",
+    "session_snapshot_from_mesh_session",
+    "session_snapshot_from_dispatch",
+    "session_snapshot_from_takeover",
+    "session_snapshot_from_merge",
+    "session_snapshot_from_recovery",
+    "session_snapshot_from_projection",
 ]

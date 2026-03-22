@@ -336,6 +336,27 @@ from contracts.runtime_recovery_reconciliation import (  # noqa: E402
     from_multi_device_projection as recovery_from_projection,
 )
 
+# PR-40: Durable Runtime Session Snapshot Contract
+from contracts.runtime_session_snapshot import (  # noqa: E402
+    RuntimeSessionSnapshotStatus,
+    RuntimeSessionSnapshotIdentity,
+    RuntimeSessionSnapshotDispatchState,
+    RuntimeSessionSnapshotTakeoverState,
+    RuntimeSessionSnapshotCoordinatorState,
+    RuntimeSessionSnapshotResultState,
+    RuntimeSessionSnapshotRecoveryState,
+    RuntimeSessionSnapshot,
+    RuntimeSessionSnapshotSummary,
+    build_runtime_session_snapshot,
+    build_runtime_session_snapshot_summary,
+    from_mesh_session as session_snapshot_from_mesh_session,
+    from_source_dispatch_result as session_snapshot_from_dispatch,
+    from_target_takeover_result as session_snapshot_from_takeover,
+    from_result_merge as session_snapshot_from_merge,
+    from_recovery_state as session_snapshot_from_recovery,
+    from_multi_device_runtime_projection as session_snapshot_from_projection,
+)
+
 __all__ = [
     # exceptions
     "GalaxyError",
@@ -590,4 +611,22 @@ __all__ = [
     "recovery_from_coordinator",
     "recovery_from_merged_result",
     "recovery_from_projection",
+    # PR-40: Durable Runtime Session Snapshot Contract
+    "RuntimeSessionSnapshotStatus",
+    "RuntimeSessionSnapshotIdentity",
+    "RuntimeSessionSnapshotDispatchState",
+    "RuntimeSessionSnapshotTakeoverState",
+    "RuntimeSessionSnapshotCoordinatorState",
+    "RuntimeSessionSnapshotResultState",
+    "RuntimeSessionSnapshotRecoveryState",
+    "RuntimeSessionSnapshot",
+    "RuntimeSessionSnapshotSummary",
+    "build_runtime_session_snapshot",
+    "build_runtime_session_snapshot_summary",
+    "session_snapshot_from_mesh_session",
+    "session_snapshot_from_dispatch",
+    "session_snapshot_from_takeover",
+    "session_snapshot_from_merge",
+    "session_snapshot_from_recovery",
+    "session_snapshot_from_projection",
 ]
