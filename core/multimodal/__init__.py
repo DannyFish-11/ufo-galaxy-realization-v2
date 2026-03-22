@@ -1,18 +1,19 @@
 """Multimodal ingress foundation for Galaxy.
 
 Modules:
-  signal_quality         — SignalQuality / QualityFlag metadata
-  vad                    — Lightweight energy-based Voice Activity Detection
-  audio_features         — AudioState feature extraction
-  audio_ingest           — Low-level microphone capture pipeline
-  audio_capture_service  — High-level audio capture service with events
-  video_features         — VideoState feature extraction
-  webrtc_session         — WebRTC camera session (aiortc wrapper)
-  webrtc_session_manager — WebRTC session manager with reconnect + events
-  video_ingest           — Camera ingest pipeline
-  perception_frame       — PerceptionFrame unified snapshot
-  ingress_bus            — MultimodalIngressBus merging all signals
-  multimodal_events      — Typed runtime events for audio/WebRTC pipelines
+  signal_quality              — SignalQuality / QualityFlag metadata
+  vad                         — Lightweight energy-based Voice Activity Detection
+  audio_features              — AudioState feature extraction
+  audio_ingest                — Low-level microphone capture pipeline
+  audio_capture_service       — High-level audio capture service with events
+  video_features              — VideoState feature extraction
+  webrtc_session              — WebRTC camera session (aiortc wrapper)
+  webrtc_session_manager      — WebRTC session manager with reconnect + events
+  video_ingest                — Camera ingest pipeline
+  perception_frame            — PerceptionFrame unified snapshot
+  ingress_bus                 — MultimodalIngressBus merging all signals
+  multimodal_events           — Typed runtime events for audio/WebRTC pipelines
+  perception_source_registry  — Runtime-shell-owned source registry (PR-17)
 """
 
 from .signal_quality import SignalQuality, QualityFlag
@@ -34,6 +35,13 @@ from .multimodal_events import (
 )
 from .audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from .webrtc_session_manager import WebRTCSessionManager, WebRTCManagerConfig
+from .perception_source_registry import (
+    PerceptionSourceType,
+    SourceModality,
+    SourceHealthStatus,
+    PerceptionSourceRecord,
+    PerceptionSourceRegistry,
+)
 
 __all__ = [
     # Core quality / frame types
@@ -60,4 +68,10 @@ __all__ = [
     "AudioCaptureConfig",
     "WebRTCSessionManager",
     "WebRTCManagerConfig",
+    # Perception source registry (PR-17)
+    "PerceptionSourceType",
+    "SourceModality",
+    "SourceHealthStatus",
+    "PerceptionSourceRecord",
+    "PerceptionSourceRegistry",
 ]
