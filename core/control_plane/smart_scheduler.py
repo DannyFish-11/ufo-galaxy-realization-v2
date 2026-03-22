@@ -165,6 +165,19 @@ class DeviceScoreInput(BaseModel):
             "Defaults to 100 (fully healthy) when health tracking is unavailable."
         ),
     )
+    # PR-6: optional pre-computed execution profile for mode-aware scheduling.
+    # When present this allows the scoring engine (and callers) to reason about
+    # whether the device supports agent_runtime vs command_only without
+    # re-deriving the profile inside the engine itself.
+    execution_profile: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Optional DeviceExecutionProfile for this device. "
+            "When set, callers can use it to filter or prefer devices by execution mode "
+            "without modifying the scoring formula."
+        ),
+        exclude=True,  # excluded from serialisation to keep the wire format stable
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extra attributes for logging / debugging.",

@@ -197,6 +197,8 @@ class SwarmCoordinator:
             )
 
             # Assign device
+            # PR-6: use execution profile + RemoteExecutionModeResolver when available
+            # to prefer devices that support the required execution mode.
             if device_candidates:
                 scoring_engine = self._get_scoring_engine()
                 best = scoring_engine.select_best_device(
@@ -205,12 +207,47 @@ class SwarmCoordinator:
                 )
                 if best:
                     manifest.target_device_id = best.device_id
-                    logger.info(
-                        "SwarmCoordinator: member=%s assigned device=%s score=%.3f",
-                        member.agent_name if hasattr(member, "agent_name") else member.agent_id,
-                        best.device_id,
-                        best.total,
-                    )
+
+                    # Resolve and log the execution mode for the selected device.
+                    try:
+                        from core.device_execution_profile import build_profile_from_device_info
+                        from core.remote_execution_mode_resolver import resolve_mode
+
+                        # Prefer the pre-attached execution_profile when available.
+                        _candidate_input = next(
+                            (c for c in device_candidates if c.device_id == best.device_id),
+                            None,
+                        )
+                        _exec_profile = (
+                            getattr(_candidate_input, "execution_profile", None)
+                            or build_profile_from_device_info(
+                                {"capabilities": list(getattr(_candidate_input, "capabilities", []))},
+                                device_id=best.device_id,
+                            )
+                        )
+                        _mode_result = resolve_mode(profile=_exec_profile, task_intent="agent_execute")
+                        logger.info(
+                            "SwarmCoordinator: member=%s assigned device=%s score=%.3f mode=%s (source=%s)",
+                            member.agent_name if hasattr(member, "agent_name") else member.agent_id,
+                            best.device_id,
+                            best.total,
+                            _mode_result.mode,
+                            _mode_result.resolution_source,
+                        )
+                        # Store resolved mode in manifest metadata for downstream use.
+                        if hasattr(manifest, "metadata") and isinstance(manifest.metadata, dict):
+                            manifest.metadata["resolved_execution_mode"] = _mode_result.mode
+                            manifest.metadata["execution_mode_source"] = _mode_result.resolution_source
+                    except Exception as _pr6_err:
+                        logger.debug(
+                            "SwarmCoordinator: PR-6 mode resolution non-fatal: %s", _pr6_err
+                        )
+                        logger.info(
+                            "SwarmCoordinator: member=%s assigned device=%s score=%.3f",
+                            member.agent_name if hasattr(member, "agent_name") else member.agent_id,
+                            best.device_id,
+                            best.total,
+                        )
                 else:
                     logger.warning(
                         "SwarmCoordinator: no eligible device for member=%s",

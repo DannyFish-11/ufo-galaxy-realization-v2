@@ -655,6 +655,7 @@ class OpenClawd:
     def _select_device_via_scheduler(
         self,
         required_capabilities: Optional[List[str]] = None,
+        required_mode: Optional[str] = None,
     ) -> Optional[str]:
         """Use the smart scheduler to pick the best available device.
 
@@ -667,12 +668,19 @@ class OpenClawd:
         ----------
         required_capabilities:
             List of capability strings the selected device must support.
+        required_mode:
+            Optional :class:`~core.schemas.remote_execution.RemoteExecutionMode`
+            value string (e.g. ``"agent_runtime"``).  When supplied, only
+            devices whose execution profile supports the requested mode are
+            considered as candidates.  Devices with an unknown profile are
+            always included (conservative / backward-compatible behaviour).
         """
         try:
             from core.control_plane._globals import get_scoring_engine, get_audit_ledger
             from core.control_plane.smart_scheduler import DeviceScoreInput, DeviceStatus as SchedDeviceStatus
             from core.control_plane.audit_ledger import EventType, Severity
             from core.routes._shared import connection_manager
+            from core.device_execution_profile import build_profile_from_device_info
 
             all_devices = connection_manager.get_all_devices()
             if not all_devices:
@@ -691,6 +699,25 @@ class OpenClawd:
                     ]
                 else:
                     cap_names = []
+
+                # PR-6: filter by required execution mode when specified.
+                # Devices with unknown profile are always admitted (backward-compatible).
+                if required_mode:
+                    try:
+                        _profile = build_profile_from_device_info(info, device_id=did)
+                        if (
+                            _profile.profile_class != "unknown"
+                            and not _profile.supports_mode(required_mode)
+                        ):
+                            logger.debug(
+                                "_select_device_via_scheduler: skipping device=%s "
+                                "(profile_class=%s does not support mode=%s)",
+                                did, _profile.profile_class, required_mode,
+                            )
+                            continue
+                    except Exception:
+                        pass  # non-fatal: admit the device
+
                 candidates.append(
                     DeviceScoreInput(
                         device_id=did,
@@ -2218,9 +2245,57 @@ class OpenClawd:
         )
 
         # PR-2: construct TaskEnvelope immediately at entry for unified internal routing.
+        # PR-6: resolve execution mode via DeviceExecutionProfile + RemoteExecutionModeResolver
+        # instead of hardcoding agent_runtime so thin/unknown devices fall back gracefully.
+        _remote_mode_str: str = "agent_runtime"  # default; overridden by resolver below
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
             from core.schemas.remote_execution import RemoteExecutionMode as _REM
+
+            # PR-6: build execution profile and resolve mode; defaults to agent_runtime
+            # for rich devices and command_only for thin/unknown (conservative fallback).
+            # This block is entirely non-fatal: any failure leaves _resolved_rem as
+            # agent_runtime (preserving the original behaviour).
+            _resolved_rem = _REM.agent_runtime
+            _mode_resolution_source = "default"
+            _profile_class_label = None
+            try:
+                from core.device_execution_profile import build_profile_from_device_info
+                from core.remote_execution_mode_resolver import resolve_mode as _resolve_mode
+
+                _device_info: dict = {}
+                try:
+                    from core.routes._shared import connection_manager as _cm
+                    _all_devices = _cm.get_all_devices()
+                    _device_info = _all_devices.get(device_id, {}) if device_id else {}
+                except Exception:
+                    pass
+                _exec_profile = build_profile_from_device_info(_device_info, device_id=device_id)
+                _mode_result = _resolve_mode(
+                    profile=_exec_profile,
+                    task_intent="agent_execute",
+                    dispatch_context={
+                        "agent_template": agent_template,
+                        "session_id": session_id or "",
+                    },
+                )
+                _resolved_rem = _REM(_mode_result.mode)
+                _remote_mode_str = _mode_result.mode
+                _mode_resolution_source = _mode_result.resolution_source
+                _profile_class_label = _mode_result.profile_class
+                logger.debug(
+                    "OpenClawd._dispatch_remote_agent mode resolved: mode=%s source=%s device_id=%s",
+                    _mode_result.mode,
+                    _mode_result.resolution_source,
+                    device_id,
+                )
+            except Exception as _pr6_err:
+                logger.debug(
+                    "_dispatch_remote_agent: PR-6 mode resolution non-fatal: %s — "
+                    "defaulting to agent_runtime",
+                    _pr6_err,
+                )
+
             _remote_envelope = _TaskEnvelope(
                 task_id=task_id,
                 trace_id=trace_id,
@@ -2232,11 +2307,13 @@ class OpenClawd:
                     "agent_template": agent_template,
                     "session_id": session_id or "",
                 },
-                remote_execution_mode=_REM.agent_runtime,
+                remote_execution_mode=_resolved_rem,
                 metadata={
                     "agent_id": agent_id,
                     "device_id": device_id or "",
                     "session_id": session_id or "",
+                    "execution_mode_source": _mode_resolution_source,
+                    "profile_class": _profile_class_label,
                 },
             )
             logger.debug(
@@ -2359,7 +2436,8 @@ class OpenClawd:
                 "device_id": device_id or "",
                 "session_id": session_id or "",
                 "remote_dispatch": True,
-                "remote_execution_mode": "agent_runtime",
+                # PR-6: use resolved mode (agent_runtime for rich, command_only for thin/unknown)
+                "remote_execution_mode": _remote_mode_str,
                 "latency_ms": cr_result.get("latency_ms", 0.0),
                 "error_code": remote_error_code,
             },
