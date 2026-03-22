@@ -110,7 +110,20 @@ __all__ = [
     "build_execution_plan",
     "plan_summary",
     "plan_from_orchestration_decisions",
+    "_stamp_plan_lifecycle",
 ]
+
+# PR-12: Import lifecycle types (fail-soft — avoids circular-import risk).
+try:
+    from core.schemas.execution_lifecycle import (
+        ExecutionLifecycleState as _ELS,
+        LifecycleTransition as _LT,
+    )
+    _LIFECYCLE_OK = True
+except Exception:
+    _ELS = None  # type: ignore[assignment,misc]
+    _LT = None   # type: ignore[assignment,misc]
+    _LIFECYCLE_OK = False
 
 
 # ---------------------------------------------------------------------------
@@ -218,10 +231,13 @@ class ExecutionStep:
     depends_on: List[str] = field(default_factory=list)
     orchestration_plan_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # PR-12: per-step lifecycle state and transition trail.
+    lifecycle_state: Optional[str] = None
+    lifecycle_trail: List[Any] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise to a JSON-safe dict."""
-        return {
+        d: Dict[str, Any] = {
             "step_id": self.step_id,
             "step_type": self.step_type.value,
             "target_devices": list(self.target_devices),
@@ -232,7 +248,14 @@ class ExecutionStep:
             "depends_on": list(self.depends_on),
             "orchestration_plan_id": self.orchestration_plan_id,
             "metadata": dict(self.metadata),
+            # PR-12: lifecycle
+            "lifecycle_state": self.lifecycle_state,
+            "lifecycle_trail": [
+                t.to_dict() if hasattr(t, "to_dict") else t
+                for t in (self.lifecycle_trail or [])
+            ],
         }
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +304,9 @@ class ExecutionPlan:
     steps: List[ExecutionStep] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # PR-12: plan-level lifecycle state and transition trail.
+    lifecycle_state: Optional[str] = None
+    lifecycle_trail: List[Any] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Convenience properties
@@ -329,6 +355,12 @@ class ExecutionPlan:
             "steps": [s.to_dict() for s in self.steps],
             "created_at": self.created_at,
             "metadata": dict(self.metadata),
+            # PR-12: lifecycle
+            "lifecycle_state": self.lifecycle_state,
+            "lifecycle_trail": [
+                t.to_dict() if hasattr(t, "to_dict") else t
+                for t in (self.lifecycle_trail or [])
+            ],
         }
 
 
@@ -375,6 +407,37 @@ def _resolve_step_type(
     if delegation_point == "multi_device_orchestration":
         return ExecutionStepType.ORCHESTRATION
     return ExecutionStepType.OBSERVE
+
+
+def _stamp_plan_lifecycle(plan: "ExecutionPlan") -> None:
+    """PR-12: Stamp the initial lifecycle state on a newly-built plan.
+
+    Sets ``plan.lifecycle_state = "planned"`` and records a creation
+    transition.  Each step gets ``lifecycle_state = "created"`` with its
+    own entry transition.  Fail-soft: if the lifecycle module is not
+    available the function is a no-op.
+    """
+    if not _LIFECYCLE_OK or _ELS is None or _LT is None:
+        return
+    try:
+        plan_transition = _LT.make(
+            to_state=_ELS.PLANNED,
+            from_state=_ELS.CREATED,
+            reason="execution_plan_built",
+        )
+        plan.lifecycle_state = _ELS.PLANNED.value
+        plan.lifecycle_trail = [plan_transition]
+
+        for step in plan.steps:
+            step_transition = _LT.make(
+                to_state=_ELS.CREATED,
+                from_state=None,
+                reason="step_initialised",
+            )
+            step.lifecycle_state = _ELS.CREATED.value
+            step.lifecycle_trail = [step_transition]
+    except Exception:
+        pass  # lifecycle stamping is always additive / non-breaking
 
 
 def build_execution_plan(
@@ -471,7 +534,7 @@ def build_execution_plan(
     if extra_steps:
         steps.extend(extra_steps)
 
-    return ExecutionPlan(
+    plan = ExecutionPlan(
         trace_id=trace_id,
         session_id=session_id,
         execution_path=execution_path,
@@ -479,6 +542,11 @@ def build_execution_plan(
         steps=steps,
         metadata=dict(plan_metadata or {}),
     )
+
+    # PR-12: stamp the initial lifecycle state on the plan and all steps.
+    _stamp_plan_lifecycle(plan)
+
+    return plan
 
 
 # ---------------------------------------------------------------------------
@@ -530,13 +598,15 @@ def plan_from_orchestration_decisions(
             orchestration_plan_id=orchestration_plan_id or None,
             metadata={"task": task},
         )
-        return ExecutionPlan(
+        plan = ExecutionPlan(
             trace_id=trace_id,
             session_id=session_id,
             execution_path="cross_device",
             delegation_point="multi_device_orchestration",
             steps=[fan_out],
         )
+        _stamp_plan_lifecycle(plan)
+        return plan
 
     steps: List[ExecutionStep] = []
     for dec in decisions:
@@ -559,13 +629,15 @@ def plan_from_orchestration_decisions(
         )
         steps.append(step)
 
-    return ExecutionPlan(
+    plan = ExecutionPlan(
         trace_id=trace_id,
         session_id=session_id,
         execution_path="cross_device",
         delegation_point="multi_device_orchestration",
         steps=steps,
     )
+    _stamp_plan_lifecycle(plan)
+    return plan
 
 
 # ---------------------------------------------------------------------------
@@ -604,6 +676,7 @@ def plan_summary(plan: Optional[ExecutionPlan]) -> Dict[str, Any]:
             "is_observe": True,
             "trace_id": "",
             "session_id": "",
+            "lifecycle_state": None,
         }
     return {
         "plan_id": plan.plan_id,
@@ -617,4 +690,6 @@ def plan_summary(plan: Optional[ExecutionPlan]) -> Dict[str, Any]:
         "is_observe": plan.is_observe,
         "trace_id": plan.trace_id,
         "session_id": plan.session_id,
+        # PR-12: include lifecycle state in summary
+        "lifecycle_state": plan.lifecycle_state,
     }

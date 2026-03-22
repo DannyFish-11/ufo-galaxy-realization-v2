@@ -344,6 +344,7 @@ class NATSBus:
         trace_id: str = "",
         runtime_session_id: str = "",
         remote_execution_mode: str = "",
+        lifecycle_state: str = "",
     ) -> dict:
         """Ensure *data* carries trace_id, runtime_session_id, and remote_execution_mode.
 
@@ -355,6 +356,10 @@ class NATSBus:
         PR-7: ``remote_execution_mode`` is propagated alongside trace fields so
         that both ``command_only`` and ``agent_runtime`` dispatches carry the
         same substrate metadata through the NATS transport layer.
+
+        PR-12: ``lifecycle_state`` is propagated so that NATS consumers can
+        observe canonical execution lifecycle state without inspecting payload
+        shapes.
         """
         import uuid as _uuid_lib
         out = dict(data)
@@ -364,6 +369,9 @@ class NATSBus:
             out["runtime_session_id"] = runtime_session_id or f"session_{_uuid_lib.uuid4().hex[:12]}"
         if remote_execution_mode and not out.get("remote_execution_mode"):
             out["remote_execution_mode"] = remote_execution_mode
+        # PR-12: propagate lifecycle state through transport layer
+        if lifecycle_state and not out.get("lifecycle_state"):
+            out["lifecycle_state"] = lifecycle_state
         return out
 
     async def publish_task_event(
@@ -374,6 +382,7 @@ class NATSBus:
         trace_id: str = "",
         runtime_session_id: str = "",
         remote_execution_mode: str = "",
+        lifecycle_state: str = "",
     ) -> dict:
         """Publish to the canonical ``galaxy.task.*`` namespace with trace propagation.
 
@@ -386,11 +395,18 @@ class NATSBus:
                 or ``"command_only"``).  When provided, the value is propagated
                 alongside trace fields so that NATS consumers can route or
                 observe by mode without inspecting payload shapes.
+            lifecycle_state: PR-12 canonical lifecycle state label.  When
+                provided, the value is propagated so that NATS consumers can
+                observe execution lifecycle state without inspecting payload
+                shapes.
         """
         payload = self._ensure_trace_fields(
             data, trace_id, runtime_session_id, remote_execution_mode
         )
         payload["_nats_schema"] = "UnifiedTaskEvent"
+        # PR-12: propagate lifecycle_state through transport layer (additive).
+        if lifecycle_state and not payload.get("lifecycle_state"):
+            payload["lifecycle_state"] = lifecycle_state
         return await self._publish(f"galaxy.task.{topic_suffix}", payload)
 
     async def publish_device_event(

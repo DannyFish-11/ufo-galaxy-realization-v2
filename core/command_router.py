@@ -863,6 +863,21 @@ class CommandRouter:
         # PR-10: stamp architecture diagnostics layer identifier (additive).
         result.setdefault("arch_layer_id", "execution_substrate")
 
+        # PR-12: stamp canonical lifecycle state on substrate result (additive).
+        try:
+            from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS
+            _lc_state = (
+                _ELS.SUCCEEDED.value if result.get("success")
+                else _ELS.FAILED.value
+            )
+            result.setdefault("lifecycle_state", _lc_state)
+            # Remote dispatch: record that we went through waiting_remote
+            _is_remote = envelope.remote_execution_mode is not None
+            if _is_remote:
+                result.setdefault("lifecycle_via_waiting_remote", True)
+        except Exception as _lc12_exc:
+            logger.debug("PR-12 lifecycle stamp skipped: %s", _lc12_exc)
+
         return result
 
     async def route_command(
