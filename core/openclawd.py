@@ -1250,6 +1250,66 @@ class OpenClawd:
             logger.debug("_build_execution_trace failed (swallowed): %s", _exc)
             return None
 
+    def _build_execution_plan(
+        self,
+        *,
+        execution_path: str,
+        delegation_point: Optional[str] = None,
+        trace_id: str = "",
+        session_id: str = "",
+        device_id: Optional[str] = None,
+        remote_execution_mode: Optional[str] = None,
+        required_capabilities: Optional[List[str]] = None,
+        orchestration_plan_id: Optional[str] = None,
+        timeout_ms: Optional[int] = None,
+    ):
+        """PR-11: Build a canonical :class:`~core.schemas.execution_plan.ExecutionPlan`.
+
+        Called by :meth:`process` after
+        :meth:`_determine_execution_path` has resolved the execution branch
+        but before any delegation method is called.  The plan is an additive
+        record of execution intent — existing callers that do not inspect the
+        ``execution_plan`` key in the response are unaffected.
+
+        Returns the constructed :class:`~core.schemas.execution_plan.ExecutionPlan`
+        or ``None`` when the schema module is unavailable (to maintain
+        graceful degradation in restricted environments).
+        """
+        try:
+            from core.schemas.execution_plan import build_execution_plan as _bep
+            return _bep(
+                execution_path=execution_path,
+                delegation_point=delegation_point,
+                trace_id=trace_id,
+                session_id=session_id or "",
+                device_id=device_id,
+                remote_execution_mode=remote_execution_mode,
+                required_capabilities=required_capabilities,
+                orchestration_plan_id=orchestration_plan_id,
+                timeout_ms=timeout_ms,
+            )
+        except Exception as _plan_err:
+            logger.debug("_build_execution_plan failed (swallowed): %s", _plan_err)
+            return None
+
+    @staticmethod
+    def _summarise_execution_plan(plan) -> Optional[Dict[str, Any]]:
+        """PR-11: Return a compact summary dict for *plan*, or ``None`` on failure.
+
+        Uses :func:`~core.schemas.execution_plan.plan_summary` to produce a
+        small, JSON-safe summary dict for embedding in response metadata and
+        :class:`~core.unified_response.UnifiedChatResponse`.
+        Swallows all errors so it never interrupts request processing.
+        """
+        if plan is None:
+            return None
+        try:
+            from core.schemas.execution_plan import plan_summary as _ps
+            return _ps(plan)
+        except Exception as _sum_err:
+            logger.debug("_summarise_execution_plan failed (swallowed): %s", _sum_err)
+            return None
+
     @staticmethod
     def _determine_execution_path(
         entry_mode: str,
@@ -1667,6 +1727,14 @@ class OpenClawd:
                     )
                     if _exec_path_k == "none":
                         _exec_result_k.setdefault("skipped_reason", "no_execution")
+                    # PR-11: build canonical execution plan (additive, non-breaking)
+                    _plan_k = self._build_execution_plan(
+                        execution_path=_exec_path_k,
+                        delegation_point="local",
+                        trace_id=trace_id,
+                        session_id=session_id,
+                        device_id=device_id,
+                    )
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -1676,6 +1744,8 @@ class OpenClawd:
                         "runtime_session_id": runtime_session_id or trace_id,
                         "execution_path": _exec_path_k,
                         "execution_result": _exec_result_k,
+                        # PR-11: canonical execution plan (may be None if schema unavailable)
+                        "execution_plan": _plan_k.to_dict() if _plan_k else None,
                         "interaction": _interaction_dict,
                         "persona_state": _persona_state_dict,
                         "interaction_envelope": _interaction_envelope_dict,
@@ -1706,6 +1776,8 @@ class OpenClawd:
                             # kernel suggest a delegation path; OpenClawd decides
                             # whether to adopt it.
                             "kernel_delegation_hint": kernel_result.delegation_hint,
+                            # PR-11: compact execution plan summary for diagnostics
+                            "execution_plan_summary": self._summarise_execution_plan(_plan_k),
                             **provider_info,
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
@@ -1876,6 +1948,17 @@ class OpenClawd:
                     "device_ids": [device_id] if device_id else [],
                     "status": "dispatched" if result.get("success") else "failed",
                 }
+            # PR-11: build canonical execution plan (additive, non-breaking)
+            _delegation_point2 = result.get("metadata", {}).get("delegation_point")
+            _remote_mode2 = result.get("metadata", {}).get("remote_execution_mode")
+            _plan2 = self._build_execution_plan(
+                execution_path=_exec_path2,
+                delegation_point=_delegation_point2,
+                trace_id=trace_id,
+                session_id=session_id,
+                device_id=device_id,
+                remote_execution_mode=_remote_mode2,
+            )
 
             return {
                 "success": result.get("success", True),
@@ -1885,6 +1968,8 @@ class OpenClawd:
                 "runtime_session_id": runtime_session_id or trace_id,
                 "execution_path": _exec_path2,
                 "execution_result": _exec_result2,
+                # PR-11: canonical execution plan (may be None if schema unavailable)
+                "execution_plan": _plan2.to_dict() if _plan2 else None,
                 "interaction": _interaction_dict,
                 "persona_state": _persona_state_dict,
                 "interaction_envelope": _interaction_envelope_dict2,
@@ -1904,6 +1989,8 @@ class OpenClawd:
                     "execution_path": _exec_path2,
                     # PR-9: subject decision authority annotation (additive)
                     "authority_role": "subject_decision_authority",
+                    # PR-11: compact execution plan summary for diagnostics
+                    "execution_plan_summary": self._summarise_execution_plan(_plan2),
                     **provider_info,
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,
