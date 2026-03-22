@@ -455,6 +455,14 @@ class MultiDeviceRuntimeProjection(BaseModel):
             "contract is unavailable."
         ),
     )
+    # PR-40 (optional)
+    runtime_session_snapshot: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional durable runtime session snapshot summary (PR-40).  "
+            "None when no session snapshot has been attached to this projection."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Serialisation helpers
@@ -885,6 +893,7 @@ def build_multi_device_runtime_projection(
     governance_snapshot: Optional[Any] = None,
     policy_alignment: Optional[Any] = None,
     runtime_recovery: Optional[Any] = None,
+    runtime_session_snapshot: Optional[Any] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> MultiDeviceRuntimeProjection:
     """Build a :class:`MultiDeviceRuntimeProjection` from the current contract inputs.
@@ -971,6 +980,13 @@ def build_multi_device_runtime_projection(
         except Exception:
             pass
 
+    snapshot_dict: Optional[Dict[str, Any]] = None
+    if runtime_session_snapshot is not None:
+        try:
+            snapshot_dict = _safe_dict(runtime_session_snapshot) or None
+        except Exception:
+            pass
+
     return MultiDeviceRuntimeProjection(
         runtime_devices=project_runtime_devices(runtime_devices),
         runtime_hosts=project_runtime_hosts(runtime_hosts),
@@ -984,5 +1000,6 @@ def build_multi_device_runtime_projection(
         governance_snapshot=gov_dict,
         policy_alignment=pol_dict,
         runtime_recovery=recovery_dict,
+        runtime_session_snapshot=snapshot_dict,
         metadata=metadata or {},
     )
