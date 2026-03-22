@@ -486,6 +486,16 @@ class DesktopPresenceRuntime:
             "entry_source": source,
             "trace_id": result.get("trace_id") or result.get("runtime_session_id"),
         })
+        # PR-22: assemble the desktop status projection and attach as an
+        # additive, non-breaking field.  The shell combines the control-core's
+        # unified_control_plan with its own source registry snapshot.
+        _dsp = self.build_desktop_status_projection(
+            result=result,
+            tristate=rsession.tristate.value,
+            runtime_session_id=rsession.runtime_session_id,
+        )
+        if _dsp is not None:
+            result["desktop_status_projection"] = _dsp
         return result
 
     # ------------------------------------------------------------------
@@ -752,6 +762,73 @@ class DesktopPresenceRuntime:
                 _err,
             )
             return {"snapshot_at": time.time(), "error": str(_err), "sources": []}
+
+    def build_desktop_status_projection(
+        self,
+        result: Optional[Dict[str, Any]] = None,
+        tristate: Optional[str] = None,
+        runtime_session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-22: Build a canonical desktop status projection dict for shell-facing status board rendering.
+
+        The runtime shell combines:
+        - The unified control plan produced by OpenClawd (extracted from *result*
+          metadata), which carries perception, model, execution, fallback, and
+          lifecycle state owned by the control core.
+        - The shell-owned source registry snapshot, which tracks available
+          multimodal sources (microphone, camera, WebRTC, etc.).
+
+        The returned dict is additive, JSON-serialisable, and safe for logging,
+        status-board rendering, and diagnostics.  Never raises — returns
+        ``None`` on any internal failure.
+
+        Parameters
+        ----------
+        result:
+            The result dict from the most recent OpenClawd.process() call.
+            The ``metadata.unified_control_plan`` key is extracted when present.
+        tristate:
+            Current subject tri-state value (``"silent"`` / ``"liminal"`` /
+            ``"manifest"``).  Pass the value from the RuntimeSession.
+        runtime_session_id:
+            Correlation ID for the active runtime session.
+
+        Returns
+        -------
+        dict or None
+            Serialisable desktop status projection dict, or ``None`` on failure.
+        """
+        try:
+            from contracts.desktop_status_projection import (
+                build_desktop_status_projection as _build_dsp,
+                desktop_status_projection_summary as _dsp_summary,
+            )
+
+            # Extract unified control plan from result metadata.
+            unified_control_plan: Optional[Dict[str, Any]] = None
+            if isinstance(result, dict):
+                _meta = result.get("metadata") or {}
+                if isinstance(_meta, dict):
+                    unified_control_plan = _meta.get("unified_control_plan")
+                # Also accept a top-level key for convenience.
+                if unified_control_plan is None:
+                    unified_control_plan = result.get("unified_control_plan")
+
+            source_registry_snapshot = self.snapshot_source_registry()
+
+            projection = _build_dsp(
+                unified_control_plan=unified_control_plan,
+                source_registry_snapshot=source_registry_snapshot,
+                tristate=tristate,
+                runtime_session_id=runtime_session_id,
+            )
+            return projection.to_dict()
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.build_desktop_status_projection failed (non-fatal): %s",
+                _err,
+            )
+            return None
 
     def _log_request_start(
         self,

@@ -9,8 +9,9 @@ contract introduced in PR-34, the Source Dispatch contracts introduced
 in PR-35, the Cross-Runtime Result Merge contracts introduced in PR-36,
 the Mesh Session Coordinator contracts introduced in PR-37, the
 Unified Multi-Device Runtime Projection introduced in PR-38, the
-Runtime Recovery and Reconciliation Contract introduced in PR-39, and
-the Durable Runtime Session Snapshot Contract introduced in PR-40.
+Runtime Recovery and Reconciliation Contract introduced in PR-39, the
+Durable Runtime Session Snapshot Contract introduced in PR-40, and
+the Desktop Status Projection introduced in PR-22.
 """
 
 from contracts.execution_trace import (
@@ -233,6 +234,21 @@ from contracts.runtime_session_snapshot import (
     from_multi_device_runtime_projection as session_snapshot_from_projection,
 )
 
+# PR-22: Desktop Status Projection Contract
+from contracts.desktop_status_projection import (
+    ProjectionHealthSeverity,
+    LifecycleStage,
+    ExecutionPathKind,
+    PerceptionProjection,
+    ModelRoutingProjection,
+    ExecutionProjection,
+    LifecycleProjection,
+    ExplainabilityProjection,
+    DesktopStatusProjection,
+    build_desktop_status_projection,
+    desktop_status_projection_summary,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -413,4 +429,16 @@ __all__ = [
     "session_snapshot_from_merge",
     "session_snapshot_from_recovery",
     "session_snapshot_from_projection",
+    # PR-22: Desktop Status Projection
+    "ProjectionHealthSeverity",
+    "LifecycleStage",
+    "ExecutionPathKind",
+    "PerceptionProjection",
+    "ModelRoutingProjection",
+    "ExecutionProjection",
+    "LifecycleProjection",
+    "ExplainabilityProjection",
+    "DesktopStatusProjection",
+    "build_desktop_status_projection",
+    "desktop_status_projection_summary",
 ]
