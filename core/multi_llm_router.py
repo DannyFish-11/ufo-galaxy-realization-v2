@@ -1193,6 +1193,105 @@ class MultiLLMRouter:
             reason="无可用提供商，请在 Dashboard 配置 API Key",
         )
 
+    def route_multimodal_first(
+        self,
+        active_modalities: Optional[List[str]] = None,
+        task_type: TaskType = TaskType.GENERAL,
+        complexity_score: float = 0.5,
+    ) -> RoutingDecision:
+        """Native-multimodal-first routing policy (PR-20).
+
+        Implements a three-tier routing hierarchy for requests that carry
+        multimodal perception input:
+
+        1. **Native multimodal** — provider with ``multimodal=True`` and
+           ``status != DOWN``.  Returns immediately on first match.
+        2. **Partial / text-capable** — any available provider even if it
+           lacks native multimodal support.  Uses ``task_type`` routing.
+           The caller is responsible for feeding derived ``fusion_summary``
+           text as the model input (see :attr:`OpenClawd._fusion_suffix`).
+        3. **Advisory / no-op** — returned when no provider is reachable at all.
+
+        The ``RoutingDecision.reason`` field encodes the tier selected and
+        which modalities drove the choice, making the decision auditable via
+        the :class:`~core.schemas.unified_control_plan.UnifiedControlPlan`.
+
+        Parameters
+        ----------
+        active_modalities:
+            List of modality strings present in the current perception state
+            (e.g. ``["image", "audio"]``).  ``None`` or empty list indicates
+            a text-only request.
+        task_type:
+            Task type hint for tie-breaking among multimodal providers.
+        complexity_score:
+            Complexity score ``[0.0, 1.0]`` used by model-tier selection.
+
+        Returns
+        -------
+        RoutingDecision
+            Always returns a decision; ``provider="none"`` signals advisory/no-op.
+        """
+        modalities = active_modalities or []
+
+        # ── Tier 1: native multimodal-capable providers ──────────────────────
+        mm_candidates: List[RoutingDecision] = []
+        for name, prov in self.providers.items():
+            if prov.status == ProviderStatus.DOWN:
+                continue
+            if not prov.multimodal:
+                continue
+            model = self.select_model_by_complexity(name, task_type, complexity_score)
+            modality_str = "+".join(modalities) if modalities else "generic"
+            mm_candidates.append(
+                RoutingDecision(
+                    provider=name,
+                    model=model,
+                    reason=(
+                        f"native_multimodal_first: tier=1 provider={name} "
+                        f"modalities=[{modality_str}] complexity={complexity_score:.2f}"
+                    ),
+                    alternatives=[],
+                )
+            )
+
+        if mm_candidates:
+            # Prefer providers that appear early in the task routing preference order.
+            preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
+            preferred_index: Dict[str, int] = {
+                name: idx for idx, name in enumerate(preferred_order)
+            }
+            ordered = sorted(
+                mm_candidates,
+                key=lambda d: preferred_index.get(d.provider, len(preferred_order)),
+            )
+            best = ordered[0]
+            best.alternatives = [f"{d.provider}:{d.model}" for d in ordered[1:]]
+            return best
+
+        # ── Tier 2: no native multimodal provider available ──────────────────
+        # Route to any available provider using standard task routing.
+        # The caller is responsible for using fusion_summary as the model input.
+        tier2 = self.route(task_type=task_type, complexity_score=complexity_score)
+        if tier2.provider != "none":
+            modality_str = "+".join(modalities) if modalities else "none"
+            tier2.reason = (
+                f"native_multimodal_first: tier=2 native_unavailable "
+                f"modalities=[{modality_str}] fallback_provider={tier2.provider} "
+                f"degraded_to=text_capable"
+            )
+            return tier2
+
+        # ── Tier 3: advisory / no-op ──────────────────────────────────────────
+        return RoutingDecision(
+            provider="none",
+            model="none",
+            reason=(
+                "native_multimodal_first: tier=3 advisory "
+                "no_providers_available degraded_to=no_op"
+            ),
+        )
+
     def route_with_cost_policy(
         self,
         task_type: TaskType,

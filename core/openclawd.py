@@ -1422,6 +1422,155 @@ class OpenClawd:
             logger.debug("_summarise_execution_plan failed (swallowed): %s", _sum_err)
             return None
 
+    def _select_multimodal_route(
+        self,
+        canonical_perception: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """PR-20: Determine the native-multimodal-first routing decision.
+
+        OpenClawd is the **routing authority**.  This method inspects
+        ``canonical_perception`` (built by :meth:`_build_canonical_perception_state`)
+        and decides which tier of the native-multimodal-first hierarchy to use:
+
+        1. **native_multimodal** — perception warrants native MM *and* a
+           native MM provider is available.  ``is_native_multimodal=True``.
+        2. **partial_multimodal** — native MM warranted but native provider
+           unavailable; route to any text-capable provider (caller feeds
+           derived ``fusion_summary`` as input).
+        3. **advisory** — no provider reachable at all; safe no-op.
+
+        Text-only requests (``requires_native_multimodal=False``) return
+        ``route_type="text_only"`` immediately without consulting the router.
+
+        The returned dict is embedded in :attr:`metadata` under the key
+        ``"multimodal_route_decision"`` so that later PRs can project it to
+        the diagnostics / status board.
+
+        Parameters
+        ----------
+        canonical_perception:
+            Serialised :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState`
+            dict as produced by :meth:`_build_canonical_perception_state`.
+            May be ``None`` for text-only requests.
+
+        Returns
+        -------
+        dict
+            Keys:
+
+            ``route_type``
+                One of ``"native_multimodal"``, ``"partial_multimodal"``,
+                ``"advisory"``, ``"text_only"``.
+            ``is_native_multimodal``
+                ``True`` when tier-1 native multimodal was selected.
+            ``provider``
+                Selected provider name, or ``"none"``.
+            ``model``
+                Selected model name, or ``"none"``.
+            ``route_reason``
+                Human-readable rationale for the selected tier.
+            ``fallback_reason``
+                Non-empty when a downgrade from tier-1 occurred.
+            ``active_modalities``
+                Modality list read from the perception state.
+        """
+        # ── Read perception signals ──────────────────────────────────────────
+        requires_native_mm: bool = False
+        active_modalities: List[str] = []
+        if canonical_perception:
+            requires_native_mm = bool(
+                canonical_perception.get("requires_native_multimodal", False)
+            )
+            active_modalities = list(
+                canonical_perception.get("active_modalities") or []
+            )
+
+        # ── Text-only short-circuit ──────────────────────────────────────────
+        if not requires_native_mm:
+            return {
+                "route_type": "text_only",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": "perception_state=text_only no_multimodal_input_detected",
+                "fallback_reason": "",
+                "active_modalities": active_modalities,
+            }
+
+        # ── Multimodal routing hierarchy ─────────────────────────────────────
+        router = self._get_router()
+        if router is None:
+            return {
+                "route_type": "advisory",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": "router_unavailable degraded_to=advisory",
+                "fallback_reason": "router_unavailable",
+                "active_modalities": active_modalities,
+            }
+
+        try:
+            from core.multi_llm_router import TaskType as _TaskType
+
+            decision = router.route_multimodal_first(
+                active_modalities=active_modalities,
+                task_type=_TaskType.GENERAL,
+                complexity_score=0.5,
+            )
+        except Exception as _rt_err:
+            logger.debug("route_multimodal_first failed: %s", _rt_err)
+            return {
+                "route_type": "advisory",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": f"routing_error={_rt_err} degraded_to=advisory",
+                "fallback_reason": str(_rt_err),
+                "active_modalities": active_modalities,
+            }
+
+        # Determine the tier from the decision reason prefix
+        reason = decision.reason or ""
+        if decision.provider == "none":
+            return {
+                "route_type": "advisory",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": reason,
+                "fallback_reason": "no_providers_available",
+                "active_modalities": active_modalities,
+            }
+
+        is_tier1 = "tier=1" in reason
+        if is_tier1:
+            return {
+                "route_type": "native_multimodal",
+                "is_native_multimodal": True,
+                "provider": decision.provider,
+                "model": decision.model,
+                "route_reason": reason,
+                "fallback_reason": "",
+                "active_modalities": active_modalities,
+            }
+
+        # Tier 2 — native multimodal unavailable; degrade to text-capable provider
+        modality_str = "+".join(active_modalities) if active_modalities else "unknown"
+        return {
+            "route_type": "partial_multimodal",
+            "is_native_multimodal": False,
+            "provider": decision.provider,
+            "model": decision.model,
+            "route_reason": reason,
+            "fallback_reason": (
+                f"native_multimodal_provider_unavailable "
+                f"modalities=[{modality_str}] "
+                f"degraded_to=text_capable_provider"
+            ),
+            "active_modalities": active_modalities,
+        }
+
     def _build_unified_control_plan(
         self,
         *,
@@ -1431,6 +1580,7 @@ class OpenClawd:
         continuum_state: Optional[Dict[str, Any]] = None,
         chosen_model: Optional[str] = None,
         chosen_provider: Optional[str] = None,
+        is_native_multimodal: bool = False,
         execution_path: str = "local",
         delegation_point: Optional[str] = None,
         remote_execution_mode: Optional[str] = None,
@@ -1465,6 +1615,7 @@ class OpenClawd:
                 continuum_state=continuum_state,
                 chosen_model=chosen_model,
                 chosen_provider=chosen_provider,
+                is_native_multimodal=is_native_multimodal,
                 execution_path=execution_path,
                 delegation_point=delegation_point,
                 remote_execution_mode=remote_execution_mode,
@@ -1702,6 +1853,16 @@ class OpenClawd:
             fused_context=_mm_context_dict,
         )
 
+        # ── PR-20: Native Multimodal-First Routing Decision ───────────────────
+        # OpenClawd is the routing authority.  Determine the preferred route
+        # tier (native_multimodal → partial_multimodal → advisory) based on
+        # the canonical perception state.  This decision is recorded in every
+        # response for diagnostics and future projection.
+        _multimodal_route: Dict[str, Any] = self._select_multimodal_route(
+            canonical_perception=_canonical_perception,
+        )
+        _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -1928,6 +2089,7 @@ class OpenClawd:
                         continuum_state=_continuum_state_dict,
                         chosen_model=kernel_result.model if kernel_result else None,
                         chosen_provider=provider_info.get("provider") if provider_info else None,
+                        is_native_multimodal=_is_native_multimodal,
                         execution_path=_exec_path_k,
                         delegation_point="local",
                         lifecycle_target=_plan_k.lifecycle_state if _plan_k else None,
@@ -1987,6 +2149,8 @@ class OpenClawd:
                             "canonical_perception_state": _canonical_perception,
                             # PR-19: canonical unified control plan
                             "unified_control_plan": _ucp_k,
+                            # PR-20: native multimodal-first routing decision
+                            "multimodal_route_decision": _multimodal_route,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2186,6 +2350,7 @@ class OpenClawd:
                 continuum_state=_continuum_state_dict2,
                 chosen_model=provider_info.get("model") if provider_info else None,
                 chosen_provider=provider_info.get("provider") if provider_info else None,
+                is_native_multimodal=_is_native_multimodal,
                 execution_path=_exec_path2,
                 delegation_point=_delegation_point2,
                 remote_execution_mode=_remote_mode2,
@@ -2233,6 +2398,8 @@ class OpenClawd:
                     "canonical_perception_state": _canonical_perception,
                     # PR-19: canonical unified control plan
                     "unified_control_plan": _ucp2,
+                    # PR-20: native multimodal-first routing decision
+                    "multimodal_route_decision": _multimodal_route,
                 },
                 # PR-10: architecture diagnostics layer identifier (additive)
                 "arch_layer_id": "subject_core",
