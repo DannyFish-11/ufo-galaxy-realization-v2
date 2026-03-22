@@ -4,20 +4,66 @@
 Galaxy Control Plane — SwarmCoordinator
 =========================================
 
+PR-8: Multi-Device Orchestration Layer
+---------------------------------------
+:class:`SwarmCoordinator` is the **multi-device orchestration layer** — a
+higher-level coordination/planning component that operates *above* the unified
+cross-device execution substrate.
+
+Architectural position
+~~~~~~~~~~~~~~~~~~~~~~
+::
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  OpenClawd (decision core)                                  │
+    │    └─ _delegate_multi_device_orchestration()                │
+    │         │                                                   │
+    │         ▼  (orchestration layer — selects & coordinates)   │
+    │  SwarmCoordinator  ◄── this module                         │
+    │    1. build_orchestration_plan() — device assignment        │
+    │       decisions produced BEFORE any dispatch               │
+    │    2. _dispatch_one() — delegates each manifest to          │
+    │       ──────────────────────────────────────────────────── │
+    │       CommandRouter.dispatch_agent_remote()                 │
+    │         │  (substrate — transport/execution)               │
+    │         └─ route_envelope()  ← single substrate root       │
+    └─────────────────────────────────────────────────────────────┘
+
+Key responsibilities of the orchestration layer (this module)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* **Select** target devices for each agent/member (using
+  :class:`~core.control_plane.smart_scheduler.DeviceScoringEngine`).
+* **Record** device-assignment decisions as first-class
+  :class:`~core.orchestration.multi_device_plan.OrchestrationPlan` objects
+  *before* any dispatch call reaches the substrate.
+* **Coordinate** parallel dispatch of multiple members concurrently.
+* **Aggregate** raw substrate results into a synthesised
+  :class:`~core.agent_team.TeamResult`.
+
+What the orchestration layer is NOT
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* It does **not** handle transport routing or bus-level substrate logic.
+* It does **not** implement the ``route_envelope`` protocol.
+* It is **not** the same thing as the substrate; it merely *delegates to* the
+  substrate (:class:`~core.command_router.CommandRouter`) once its planning
+  decisions are made.
+
 Implements **Control Plane Phase 3**: distributed Agent Swarm / Team dispatch.
 
 The :class:`SwarmCoordinator` bridges the logical :class:`~core.agent_team.AgentTeam`
 execution model with the physical device layer exposed by
 :class:`~core.command_router.CommandRouter`.  For each team member it:
 
-1. Serialises the member's execution context into a :class:`SwarmAgentManifest`.
-2. Uses :class:`~core.control_plane.smart_scheduler.DeviceScoringEngine` to
+1. Builds an :class:`~core.orchestration.multi_device_plan.OrchestrationPlan`
+   capturing device-assignment decisions (orchestration layer).
+2. Serialises each member's execution context into a :class:`SwarmAgentManifest`.
+3. Uses :class:`~core.control_plane.smart_scheduler.DeviceScoringEngine` to
    select the most suitable target device when one is not already specified.
-3. Dispatches the manifest via ``CommandRouter.dispatch_agent_remote`` so the
-   existing ``agent_execute`` gateway protocol is reused end-to-end.
-4. Emits structured audit events (``AGENT_DISPATCHED``, ``AGENT_EXECUTED``,
+4. Dispatches the manifest via ``CommandRouter.dispatch_agent_remote`` so the
+   existing ``agent_execute`` gateway protocol is reused end-to-end (substrate).
+5. Emits structured audit events (``AGENT_DISPATCHED``, ``AGENT_EXECUTED``,
    ``AGENT_RESULT_RECEIVED``) into the global :class:`~core.control_plane.audit_ledger.AuditLedger`.
-5. Aggregates per-member results into a :class:`~core.agent_team.TeamResult`.
+6. Aggregates per-member results into a :class:`~core.agent_team.TeamResult`.
 
 Usage
 -----
@@ -138,6 +184,16 @@ class SwarmCoordinator:
     ):
         """Dispatch all team members as remote ``agent_execute`` commands.
 
+        PR-8: This method represents the orchestration layer's primary
+        coordination entry point.  It:
+
+        1. **Plans** — builds an
+           :class:`~core.orchestration.multi_device_plan.OrchestrationPlan`
+           (device-assignment decisions) *before* any substrate dispatch.
+        2. **Delegates** — passes each manifest to the substrate
+           (:meth:`_dispatch_one` → ``CommandRouter.dispatch_agent_remote``).
+        3. **Aggregates** — collects raw substrate results and synthesises them.
+
         Each member is serialised into a :class:`SwarmAgentManifest`.  If
         *device_candidates* is provided the :class:`DeviceScoringEngine`
         selects the best device for each member; otherwise
@@ -173,13 +229,20 @@ class SwarmCoordinator:
         """
         from core.control_plane.swarm_manifest import SwarmAgentManifest
         from core.agent_team import MemberResult, TeamResult
+        from core.orchestration.multi_device_plan import (
+            OrchestrationDecision,
+            build_orchestration_plan,
+        )
 
         effective_timeout = timeout if timeout is not None else self.default_timeout
         root_task_id = task_id or f"swarm_{uuid.uuid4().hex[:12]}"
         root_trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
 
-        # Build manifests
+        # ── ORCHESTRATION LAYER: Build manifests and orchestration plan ──────
+        # All device-assignment decisions are made here (orchestration) BEFORE
+        # any dispatch call reaches the substrate (CommandRouter).
         manifests: List[SwarmAgentManifest] = []
+        orch_decisions: List[OrchestrationDecision] = []
         for idx, member in enumerate(members):
             member_task_id = f"{root_task_id}_{getattr(member, 'agent_id', str(idx))}"
             prompt = system_prompt_template or ""
@@ -199,6 +262,10 @@ class SwarmCoordinator:
             # Assign device
             # PR-6: use execution profile + RemoteExecutionModeResolver when available
             # to prefer devices that support the required execution mode.
+            resolved_mode: Optional[str] = None
+            device_score: float = 0.0
+            assignment_source: str = ""
+            assigned_device_id: Optional[str] = None
             if device_candidates:
                 scoring_engine = self._get_scoring_engine()
                 best = scoring_engine.select_best_device(
@@ -206,7 +273,10 @@ class SwarmCoordinator:
                     manifest.required_capabilities or None,
                 )
                 if best:
-                    manifest.target_device_id = best.device_id
+                    assigned_device_id = best.device_id
+                    manifest.target_device_id = assigned_device_id
+                    device_score = best.total
+                    assignment_source = "scoring_engine"
 
                     # Resolve and log the execution mode for the selected device.
                     try:
@@ -226,8 +296,9 @@ class SwarmCoordinator:
                             )
                         )
                         _mode_result = resolve_mode(profile=_exec_profile, task_intent="agent_execute")
+                        resolved_mode = _mode_result.mode
                         logger.info(
-                            "SwarmCoordinator: member=%s assigned device=%s score=%.3f mode=%s (source=%s)",
+                            "SwarmCoordinator[orch]: member=%s assigned device=%s score=%.3f mode=%s (source=%s)",
                             member.agent_name if hasattr(member, "agent_name") else member.agent_id,
                             best.device_id,
                             best.total,
@@ -243,25 +314,52 @@ class SwarmCoordinator:
                             "SwarmCoordinator: PR-6 mode resolution non-fatal: %s", _pr6_err
                         )
                         logger.info(
-                            "SwarmCoordinator: member=%s assigned device=%s score=%.3f",
+                            "SwarmCoordinator[orch]: member=%s assigned device=%s score=%.3f",
                             member.agent_name if hasattr(member, "agent_name") else member.agent_id,
                             best.device_id,
                             best.total,
                         )
                 else:
                     logger.warning(
-                        "SwarmCoordinator: no eligible device for member=%s",
+                        "SwarmCoordinator[orch]: no eligible device for member=%s",
                         getattr(member, "agent_name", member.agent_id),
                     )
 
+            # Record orchestration decision (before substrate dispatch)
+            orch_decisions.append(OrchestrationDecision(
+                agent_id=getattr(member, "agent_id", str(idx)),
+                agent_name=getattr(member, "agent_name", ""),
+                target_device_id=assigned_device_id,
+                score=device_score,
+                resolved_execution_mode=resolved_mode,
+                assignment_source=assignment_source,
+                manifest_id=getattr(manifest, "manifest_id", ""),
+            ))
             manifests.append(manifest)
 
-        # Dispatch all members concurrently
+        # Build the orchestration plan — captures all planning decisions
+        # as a first-class object BEFORE the substrate is invoked.
+        orch_plan = build_orchestration_plan(
+            task=task,
+            decisions=orch_decisions,
+            session_id=session_id,
+            trace_id=root_trace_id,
+            task_id=root_task_id,
+        )
+        logger.debug(
+            "SwarmCoordinator[orch]: plan built %s",
+            orch_plan.to_summary_dict(),
+        )
+
+        # ── SUBSTRATE DELEGATION: Dispatch all members concurrently ──────────
+        # From this point we hand control to the substrate (CommandRouter).
+        # The orchestration layer does not perform any routing itself.
         t0 = time.monotonic()
         dispatch_coros = [self._dispatch_one(manifest) for manifest in manifests]
         raw_results = await asyncio.gather(*dispatch_coros, return_exceptions=True)
 
-        # Aggregate
+        # ── ORCHESTRATION LAYER: Aggregate results ───────────────────────────
+        total_ms = (time.monotonic() - t0) * 1000
         member_results: List[MemberResult] = []
         for member, result in zip(members, raw_results):
             if isinstance(result, Exception):
@@ -280,7 +378,6 @@ class SwarmCoordinator:
                     error=result.get("error") if not result.get("success", True) else None,
                 ))
 
-        total_ms = (time.monotonic() - t0) * 1000
         synthesized = self._synthesize(member_results)
 
         return TeamResult(
@@ -294,24 +391,135 @@ class SwarmCoordinator:
         )
 
     # ------------------------------------------------------------------
+    # Orchestration plan helper (PR-8)
+    # ------------------------------------------------------------------
+
+    def build_orchestration_plan(
+        self,
+        members: List[Any],
+        task: str,
+        device_candidates: Optional[List[Any]] = None,
+        *,
+        session_id: str = "",
+        trace_id: str = "",
+        task_id: str = "",
+        required_capabilities: Optional[List[str]] = None,
+    ):
+        """Build an :class:`~core.orchestration.multi_device_plan.OrchestrationPlan`
+        for a set of team members *without* dispatching to the substrate.
+
+        This is a **planning-only** operation: it produces the set of
+        device-assignment decisions that the orchestration layer would make,
+        as a first-class :class:`~core.orchestration.multi_device_plan.OrchestrationPlan`
+        object.
+
+        Callers can inspect the plan before committing to substrate dispatch,
+        which makes the orchestration-above-substrate boundary observable and
+        testable.
+
+        Parameters
+        ----------
+        members:
+            List of ``core.agent_team.TeamMember`` instances.
+        task:
+            Task description.
+        device_candidates:
+            Candidate devices for scoring.
+        session_id / trace_id / task_id:
+            Correlation identifiers.
+        required_capabilities:
+            Capability filter for device selection.
+
+        Returns
+        -------
+        core.orchestration.multi_device_plan.OrchestrationPlan
+        """
+        from core.orchestration.multi_device_plan import OrchestrationDecision, build_orchestration_plan
+
+        root_task_id = task_id or f"swarm_{uuid.uuid4().hex[:12]}"
+        root_trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
+
+        decisions: List[OrchestrationDecision] = []
+        for idx, member in enumerate(members):
+            agent_id = getattr(member, "agent_id", str(idx))
+            agent_name = getattr(member, "agent_name", "")
+            target_device_id = None
+            device_score = 0.0
+            resolved_mode = None
+            assignment_source = ""
+
+            if device_candidates:
+                scoring_engine = self._get_scoring_engine()
+                best = scoring_engine.select_best_device(
+                    device_candidates,
+                    list(required_capabilities) if required_capabilities else None,
+                )
+                if best:
+                    target_device_id = best.device_id
+                    device_score = best.total
+                    assignment_source = "scoring_engine"
+                    # Try to resolve execution mode (non-fatal)
+                    try:
+                        from core.device_execution_profile import build_profile_from_device_info
+                        from core.remote_execution_mode_resolver import resolve_mode
+                        _candidate_input = next(
+                            (c for c in device_candidates if c.device_id == best.device_id),
+                            None,
+                        )
+                        _exec_profile = (
+                            getattr(_candidate_input, "execution_profile", None)
+                            or build_profile_from_device_info(
+                                {"capabilities": list(getattr(_candidate_input, "capabilities", []))},
+                                device_id=best.device_id,
+                            )
+                        )
+                        _mode_result = resolve_mode(profile=_exec_profile, task_intent="agent_execute")
+                        resolved_mode = _mode_result.mode
+                    except Exception:
+                        pass
+
+            decisions.append(OrchestrationDecision(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                target_device_id=target_device_id,
+                score=device_score,
+                resolved_execution_mode=resolved_mode,
+                assignment_source=assignment_source,
+            ))
+
+        return build_orchestration_plan(
+            task=task,
+            decisions=decisions,
+            session_id=session_id,
+            trace_id=root_trace_id,
+            task_id=root_task_id,
+        )
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     async def _dispatch_one(self, manifest) -> Dict[str, Any]:
-        """Dispatch a single :class:`SwarmAgentManifest` via CommandRouter.
+        """Delegate a single :class:`SwarmAgentManifest` to the substrate.
 
-        Emits ``AGENT_DISPATCHED`` before dispatch and either
+        PR-8: This is the **substrate delegation boundary** within the
+        orchestration layer.  The orchestration layer (SwarmCoordinator) has
+        already made its planning decisions (device assignment, mode resolution)
+        before calling this method.  From here, control passes to the substrate:
+        ``CommandRouter.dispatch_agent_remote`` → ``route_envelope``.
+
+        Emits ``AGENT_DISPATCHED`` before substrate delegation and either
         ``AGENT_RESULT_RECEIVED`` on success or ``TASK_FAILED`` on error.
 
         Parameters
         ----------
         manifest:
-            The :class:`SwarmAgentManifest` to dispatch.
+            The :class:`SwarmAgentManifest` to dispatch to the substrate.
 
         Returns
         -------
         dict
-            The raw result dict from ``dispatch_agent_remote``.
+            The raw result dict from the substrate (``dispatch_agent_remote``).
         """
         from core.control_plane.audit_ledger import EventType, Severity
 

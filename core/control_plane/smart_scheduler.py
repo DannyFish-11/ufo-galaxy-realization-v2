@@ -4,6 +4,24 @@
 Galaxy Control Plane — Smart Scheduler
 ========================================
 
+PR-8: Orchestration Decision-Support Tool
+------------------------------------------
+:class:`DeviceScoringEngine` is an **orchestration decision-support** component.
+It operates within the orchestration layer (not the substrate) and is called by
+:class:`~core.swarm_coordinator.SwarmCoordinator` during the planning phase —
+*before* any substrate dispatch occurs.
+
+Architectural role
+~~~~~~~~~~~~~~~~~~
+* **Orchestration layer** (SwarmCoordinator, DeviceScoringEngine) — answers
+  the question: *"which device should handle this agent/task, and why?"*
+* **Substrate layer** (CommandRouter, route_envelope) — answers the question:
+  *"how do I transport this command/envelope to the selected device?"*
+
+``DeviceScoringEngine`` never calls into the substrate.  It only produces
+:class:`DeviceScore` objects that the orchestration layer uses to make
+device-assignment decisions.
+
 Provides a deterministic, heuristic-based device scoring and selection
 engine used by the Control Plane to route tasks to the most suitable
 device or agent executor.

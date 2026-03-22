@@ -2126,11 +2126,24 @@ class OpenClawd:
     ) -> dict:
         """Delegation point: **multi-device orchestration delegation**.
 
-        Fans out the intent across multiple autonomous devices via
-        :meth:`_dispatch_parallel_goal`.  This sits above the cross-device
-        substrate but is still initiated by OpenClawd as the decision core.
-        OpenClawd is NOT the multi-device orchestration substrate itself; it
-        merely delegates to it.
+        PR-8: This method is the hand-off from the OpenClawd decision core to
+        the **multi-device orchestration layer**.
+
+        Architectural contract
+        ~~~~~~~~~~~~~~~~~~~~~~
+        * OpenClawd (decision core) decides that multi-device orchestration is
+          needed and calls this method.
+        * This method delegates to :meth:`_dispatch_parallel_goal`, which in
+          turn invokes the orchestration layer
+          (:class:`~core.swarm_coordinator.SwarmCoordinator`).
+        * The orchestration layer makes device-selection / coordination
+          decisions (above the substrate).
+        * The substrate (:class:`~core.command_router.CommandRouter`) handles
+          transport/execution after the orchestration layer has selected targets.
+
+        OpenClawd is NOT the multi-device orchestration layer itself; it is the
+        subject decision core that *delegates* to the orchestration layer.
+        The orchestration layer is NOT the substrate; it coordinates *above* it.
 
         Returns
         -------
