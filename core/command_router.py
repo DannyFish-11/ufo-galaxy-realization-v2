@@ -888,6 +888,17 @@ class CommandRouter:
             except Exception as _fd_exc:
                 logger.debug("PR-13 failure_domain stamp skipped: %s", _fd_exc)
 
+        # PR-14: stamp additive introspection hints on substrate result.
+        result.setdefault("introspection_snapshot", {
+            "authority_role": "execution_substrate",
+            "execution_substrate_role": result.get("execution_substrate_role", "execution_substrate"),
+            "execution_mode": result.get("remote_execution_mode"),
+            "lifecycle_state": result.get("lifecycle_state"),
+            "failure_domain": result.get("failure_domain"),
+            "failure_is_retryable": result.get("failure_is_retryable"),
+            "success": result.get("success"),
+        })
+
         return result
 
     async def route_command(
