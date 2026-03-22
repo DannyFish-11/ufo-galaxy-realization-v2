@@ -22,6 +22,11 @@ PR-5 additions (capability closure):
   - lifecycle_status  : task.lifecycle state machine (created→running→done/failed)
   - permission_level  : required caller privilege level (0=open … 3=critical)
   - required_capabilities : list of device/agent capabilities required to run
+
+PR-5 RemoteExecutionMode addition:
+  - remote_execution_mode : explicit remote execution style over the cross-device
+                            substrate ('agent_runtime' or 'command_only'); None
+                            for local tasks.  Optional — backward-compatible.
 """
 
 from __future__ import annotations
@@ -31,6 +36,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+from core.schemas.remote_execution import RemoteExecutionMode
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +157,19 @@ class TaskEnvelope(BaseModel):
         description=(
             "Arbitrary key-value pairs: mode, notify_ws, relay hints, "
             "tenant, user_id, …"
+        ),
+    )
+
+    # ── Remote execution style (PR-5) ────────────────────────────────────────
+    remote_execution_mode: Optional[RemoteExecutionMode] = Field(
+        default=None,
+        description=(
+            "Remote execution style over the cross-device substrate. "
+            "'agent_runtime' for richer targets that execute agent tasks; "
+            "'command_only' for thinner targets that accept structured commands. "
+            "None for local tasks or when the mode is not yet determined. "
+            "Optional — callers that do not set this field continue to work "
+            "unchanged. (PR-5)"
         ),
     )
 
