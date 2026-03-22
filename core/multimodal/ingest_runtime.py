@@ -159,6 +159,12 @@ def start_ingest_bus(
         video_available=video_available,
     )
 
+    # ── Register sources in the shell-owned PerceptionSourceRegistry ──────
+    _register_ingest_sources(
+        audio_available=audio_available,
+        video_available=video_available,
+    )
+
     logger.info(
         "MultimodalIngressBus started — audio=%s video=%s runtime_session_id=%s",
         audio_available,
@@ -235,3 +241,80 @@ def _emit_ingest_active(
         )
     except Exception as _seb_err:
         logger.debug("StateEventBus emit failed (non-fatal): %s", _seb_err)
+
+
+def _register_ingest_sources(
+    *,
+    audio_available: bool,
+    video_available: bool,
+) -> None:
+    """PR-17: Register microphone and local camera sources in the shell registry.
+
+    Called from :func:`start_ingest_bus` after the bus starts so that the
+    ``PerceptionSourceRegistry`` owned by ``DesktopPresenceRuntime`` reflects
+    the sources that are actually wired into the ingress pipeline.
+
+    Degrades silently: if the runtime singleton or the registry are unavailable
+    (e.g. during unit tests that do not instantiate the runtime shell) this
+    helper is a no-op.
+    """
+    try:
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+        runtime = get_desktop_presence_runtime()
+        registry = runtime.source_registry
+
+        from core.multimodal.perception_source_registry import (
+            PerceptionSourceType,
+            SourceModality,
+            SourceHealthStatus,
+        )
+
+        # -- Microphone source --------------------------------------------
+        mic_id = registry.register(
+            source_type=PerceptionSourceType.MICROPHONE,
+            modality=SourceModality.AUDIO,
+            source_id="builtin:microphone",
+            display_name="System Microphone",
+            transport="local",
+            priority=10,
+            health=(
+                SourceHealthStatus.HEALTHY
+                if audio_available
+                else SourceHealthStatus.UNAVAILABLE
+            ),
+        )
+        if audio_available:
+            registry.mark_active(mic_id)
+            registry.set_primary_audio(mic_id)
+        else:
+            registry.mark_unavailable(mic_id, "sounddevice library unavailable or no microphone hardware")
+
+        # -- Local webcam / camera source ---------------------------------
+        cam_id = registry.register(
+            source_type=PerceptionSourceType.WEBCAM,
+            modality=SourceModality.VIDEO,
+            source_id="builtin:webcam",
+            display_name="Local Webcam",
+            transport="local",
+            priority=10,
+            health=(
+                SourceHealthStatus.HEALTHY
+                if video_available
+                else SourceHealthStatus.UNAVAILABLE
+            ),
+        )
+        if video_available:
+            registry.mark_active(cam_id)
+            registry.set_primary_video(cam_id)
+        else:
+            registry.mark_unavailable(cam_id, "aiortc or OpenCV (cv2) unavailable, or no camera hardware detected")
+
+        logger.debug(
+            "_register_ingest_sources: microphone=%s webcam=%s",
+            "active" if audio_available else "unavailable",
+            "active" if video_available else "unavailable",
+        )
+    except Exception as _err:
+        logger.debug(
+            "_register_ingest_sources: skipped (non-fatal): %s", _err
+        )

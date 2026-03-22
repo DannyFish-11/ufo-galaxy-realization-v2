@@ -277,6 +277,13 @@ class DesktopPresenceRuntime:
         self._active_sessions: Dict[str, RuntimeSession] = {}
         logger.info("DesktopPresenceRuntime initialised (Windows desktop runtime shell)")
 
+        # PR-17: Shell responsibility — own and initialise the perception source
+        # registry.  The registry tracks all multimodal sources (microphone,
+        # local camera, WebRTC sessions, external streams) and governs primary
+        # source selection, health, and diagnostics.
+        from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+        self._source_registry: PerceptionSourceRegistry = PerceptionSourceRegistry()
+
         # Shell responsibility: own and start the native multimodal ingress bus.
         # This provides *continuous host perception* (PerceptionFrame via
         # MultimodalIngressBus) — distinct from request-bound multimodal_context.
@@ -716,6 +723,35 @@ class DesktopPresenceRuntime:
                 _err,
             )
             return None
+
+    @property
+    def source_registry(self):
+        """PR-17: Return the shell-owned :class:`~core.multimodal.perception_source_registry.PerceptionSourceRegistry`.
+
+        The registry tracks all multimodal perception sources (microphone,
+        local camera, WebRTC sessions, external/remote streams) and governs
+        primary source selection, health, and diagnostics.
+
+        This is a **runtime shell responsibility** — the registry is initialised
+        in ``__init__`` and must not be moved into OpenClawd.
+        """
+        return self._source_registry
+
+    def snapshot_source_registry(self) -> Dict[str, Any]:
+        """PR-17: Return a diagnostics-safe, JSON-serialisable snapshot of the source registry.
+
+        The snapshot includes all registered source records with their health,
+        quality, latency, and primary-selection status.  Safe to log and export
+        for diagnostics and future status-board projection.  Never raises.
+        """
+        try:
+            return self._source_registry.snapshot()
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.snapshot_source_registry failed (non-fatal): %s",
+                _err,
+            )
+            return {"snapshot_at": time.time(), "error": str(_err), "sources": []}
 
     def _log_request_start(
         self,
