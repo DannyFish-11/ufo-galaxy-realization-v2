@@ -1293,6 +1293,65 @@ class OpenClawd:
             return None
 
     @staticmethod
+    def _finalise_plan_lifecycle(plan, *, success: bool) -> None:
+        """PR-12: Advance plan + step lifecycle to a terminal state after execution.
+
+        Stamps ``succeeded`` or ``failed`` on the plan and all its steps
+        based on the ``success`` flag.  Fail-soft — never interrupts the
+        request path.
+
+        Parameters
+        ----------
+        plan:
+            The :class:`~core.schemas.execution_plan.ExecutionPlan` to
+            update, or ``None`` (no-op).
+        success:
+            ``True`` if execution completed successfully; ``False``
+            otherwise.
+        """
+        if plan is None:
+            return
+        try:
+            from core.schemas.execution_lifecycle import (
+                ExecutionLifecycleState as _ELS,
+                LifecycleTransition as _LT,
+                advance_lifecycle,
+            )
+            terminal = advance_lifecycle(
+                _ELS(plan.lifecycle_state) if plan.lifecycle_state else _ELS.PLANNED,
+                success=success,
+            )
+            plan_t = _LT.make(
+                to_state=terminal,
+                from_state=_ELS(plan.lifecycle_state) if plan.lifecycle_state else _ELS.PLANNED,
+                reason="execution_completed" if success else "execution_failed",
+            )
+            plan.lifecycle_state = terminal.value
+            if isinstance(plan.lifecycle_trail, list):
+                plan.lifecycle_trail.append(plan_t)
+            else:
+                plan.lifecycle_trail = [plan_t]
+
+            # Advance each step as well
+            for step in (plan.steps or []):
+                step_terminal = advance_lifecycle(
+                    _ELS(step.lifecycle_state) if step.lifecycle_state else _ELS.CREATED,
+                    success=success,
+                )
+                step_t = _LT.make(
+                    to_state=step_terminal,
+                    from_state=_ELS(step.lifecycle_state) if step.lifecycle_state else _ELS.CREATED,
+                    reason="step_completed" if success else "step_failed",
+                )
+                step.lifecycle_state = step_terminal.value
+                if isinstance(step.lifecycle_trail, list):
+                    step.lifecycle_trail.append(step_t)
+                else:
+                    step.lifecycle_trail = [step_t]
+        except Exception as _lc_err:
+            logger.debug("_finalise_plan_lifecycle failed (swallowed): %s", _lc_err)
+
+    @staticmethod
     def _summarise_execution_plan(plan) -> Optional[Dict[str, Any]]:
         """PR-11: Return a compact summary dict for *plan*, or ``None`` on failure.
 
@@ -1735,6 +1794,8 @@ class OpenClawd:
                         session_id=session_id,
                         device_id=device_id,
                     )
+                    # PR-12: advance plan lifecycle to terminal state
+                    self._finalise_plan_lifecycle(_plan_k, success=kernel_result.success)
                     return {
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
@@ -1778,6 +1839,8 @@ class OpenClawd:
                             "kernel_delegation_hint": kernel_result.delegation_hint,
                             # PR-11: compact execution plan summary for diagnostics
                             "execution_plan_summary": self._summarise_execution_plan(_plan_k),
+                            # PR-12: plan-level lifecycle state for observability
+                            "execution_lifecycle_state": _plan_k.lifecycle_state if _plan_k else None,
                             **provider_info,
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
@@ -1959,6 +2022,8 @@ class OpenClawd:
                 device_id=device_id,
                 remote_execution_mode=_remote_mode2,
             )
+            # PR-12: advance plan lifecycle to terminal state
+            self._finalise_plan_lifecycle(_plan2, success=bool(result.get("success", True)))
 
             return {
                 "success": result.get("success", True),
@@ -1991,6 +2056,8 @@ class OpenClawd:
                     "authority_role": "subject_decision_authority",
                     # PR-11: compact execution plan summary for diagnostics
                     "execution_plan_summary": self._summarise_execution_plan(_plan2),
+                    # PR-12: plan-level lifecycle state for observability
+                    "execution_lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
                     **provider_info,
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,
