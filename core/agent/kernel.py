@@ -104,6 +104,9 @@ class KernelResponse(BaseModel):
     session_id: str = ""
     error: str = ""
     latency_ms: float = 0.0
+    # PR-9: cognition/planning layer authority annotation (additive, non-breaking).
+    # AgentKernel is the embedded cognition/planning sub-layer of OpenClawd.
+    authority_role: str = "cognition_planning_layer"
 
     def to_api_dict(self) -> Dict[str, Any]:
         """转换为 API 响应兼容的 dict（兼容现有 UnifiedChatResponse）。"""
@@ -122,6 +125,7 @@ class KernelResponse(BaseModel):
             "session_id": self.session_id,
             "error": self.error,
             "latency_ms": self.latency_ms,
+            "authority_role": self.authority_role,
         }
 
 
