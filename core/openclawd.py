@@ -2307,13 +2307,18 @@ class OpenClawd:
                     "agent_template": agent_template,
                     "session_id": session_id or "",
                 },
-                remote_execution_mode=_resolved_rem,
+                # PR-7: always stamp agent_runtime for the agent dispatch path.
+                # The PR-6 resolver result is recorded in metadata for
+                # observability but does not override the substrate mode here —
+                # _dispatch_remote_agent is specifically the agent execution path.
+                remote_execution_mode=_REM.agent_runtime,
                 metadata={
                     "agent_id": agent_id,
                     "device_id": device_id or "",
                     "session_id": session_id or "",
                     "execution_mode_source": _mode_resolution_source,
                     "profile_class": _profile_class_label,
+                    "resolver_mode": _remote_mode_str,
                 },
             )
             logger.debug(
@@ -2436,8 +2441,12 @@ class OpenClawd:
                 "device_id": device_id or "",
                 "session_id": session_id or "",
                 "remote_dispatch": True,
-                # PR-6: use resolved mode (agent_runtime for rich, command_only for thin/unknown)
-                "remote_execution_mode": _remote_mode_str,
+                # PR-7: take mode from the substrate result (cr_result carries the
+                # mode that was stamped in the TaskEnvelope by dispatch_agent_remote
+                # via route_envelope).  Fall back to agent_runtime because this code
+                # path is always an agent dispatch — the PR-6 conservative resolver
+                # default of command_only is not appropriate here.
+                "remote_execution_mode": cr_result.get("remote_execution_mode") or "agent_runtime",
                 "latency_ms": cr_result.get("latency_ms", 0.0),
                 "error_code": remote_error_code,
             },
