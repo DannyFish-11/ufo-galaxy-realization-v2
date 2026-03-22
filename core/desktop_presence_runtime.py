@@ -473,6 +473,12 @@ class DesktopPresenceRuntime:
         })
         # PR-10: stamp architecture diagnostics layer identifier (additive).
         result.setdefault("arch_layer_id", "runtime_shell")
+        # PR-14: stamp additive introspection hints on runtime-shell result.
+        result.setdefault("introspection_snapshot", {
+            "authority_role": "runtime_shell_authority",
+            "entry_source": source,
+            "trace_id": result.get("trace_id") or result.get("runtime_session_id"),
+        })
         return result
 
     # ------------------------------------------------------------------

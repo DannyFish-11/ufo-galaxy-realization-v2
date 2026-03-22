@@ -1847,6 +1847,19 @@ class OpenClawd:
                             "task_result": api_dict["task_result"],
                             "multimodal_context": _mm_context_dict,
                         },
+                        # PR-14: additive introspection hints (non-breaking)
+                        "arch_layer_id": "subject_core",
+                        "introspection_snapshot": {
+                            "authority_role": "subject_decision_authority",
+                            "delegation_point": "local",
+                            "execution_mode": None,
+                            "execution_path": _exec_path_k,
+                            "lifecycle_state": _plan_k.lifecycle_state if _plan_k else None,
+                            "execution_plan_summary": self._summarise_execution_plan(_plan_k),
+                            "device_id": device_id,
+                            "trace_id": trace_id,
+                            "success": kernel_result.success,
+                        },
                     }
                 except Exception as e:
                     logger.warning("AgentKernel 处理异常，降级到 OpenClawd 直接处理: %s", e)
@@ -2064,6 +2077,19 @@ class OpenClawd:
                 },
                 # PR-10: architecture diagnostics layer identifier (additive)
                 "arch_layer_id": "subject_core",
+                # PR-14: additive introspection hints (non-breaking; callers ignoring
+                # this field are unaffected).
+                "introspection_snapshot": {
+                    "authority_role": "subject_decision_authority",
+                    "delegation_point": _delegation_point2,
+                    "execution_mode": _remote_mode2,
+                    "execution_path": _exec_path2,
+                    "lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
+                    "execution_plan_summary": self._summarise_execution_plan(_plan2),
+                    "device_id": device_id,
+                    "trace_id": trace_id,
+                    "success": bool(result.get("success", True)),
+                },
             }
 
         except Exception as e:
