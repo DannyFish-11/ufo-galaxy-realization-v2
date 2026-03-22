@@ -338,13 +338,23 @@ class NATSBus:
 
     # ── PR-2: Canonical trace-propagating publish methods ───────────────────
 
-    def _ensure_trace_fields(self, data: dict, trace_id: str = "", runtime_session_id: str = "") -> dict:
-        """Ensure *data* carries trace_id and runtime_session_id for NATS messages.
+    def _ensure_trace_fields(
+        self,
+        data: dict,
+        trace_id: str = "",
+        runtime_session_id: str = "",
+        remote_execution_mode: str = "",
+    ) -> dict:
+        """Ensure *data* carries trace_id, runtime_session_id, and remote_execution_mode.
 
         This method is the NATS-layer equivalent of
         :func:`~galaxy_gateway.protocol.compat.inject_trace_metadata`
         and enforces the PR-2 unified envelope contract on every published
         message.
+
+        PR-7: ``remote_execution_mode`` is propagated alongside trace fields so
+        that both ``command_only`` and ``agent_runtime`` dispatches carry the
+        same substrate metadata through the NATS transport layer.
         """
         import uuid as _uuid_lib
         out = dict(data)
@@ -352,6 +362,8 @@ class NATSBus:
             out["trace_id"] = trace_id or f"trace_{_uuid_lib.uuid4().hex[:12]}"
         if not out.get("runtime_session_id"):
             out["runtime_session_id"] = runtime_session_id or f"session_{_uuid_lib.uuid4().hex[:12]}"
+        if remote_execution_mode and not out.get("remote_execution_mode"):
+            out["remote_execution_mode"] = remote_execution_mode
         return out
 
     async def publish_task_event(
@@ -361,6 +373,7 @@ class NATSBus:
         *,
         trace_id: str = "",
         runtime_session_id: str = "",
+        remote_execution_mode: str = "",
     ) -> dict:
         """Publish to the canonical ``galaxy.task.*`` namespace with trace propagation.
 
@@ -369,8 +382,14 @@ class NATSBus:
             data:          Message payload dict (will be augmented with trace fields).
             trace_id:      Distributed trace identifier.
             runtime_session_id: Session scope identifier.
+            remote_execution_mode: PR-7 substrate mode label (``"agent_runtime"``
+                or ``"command_only"``).  When provided, the value is propagated
+                alongside trace fields so that NATS consumers can route or
+                observe by mode without inspecting payload shapes.
         """
-        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id)
+        payload = self._ensure_trace_fields(
+            data, trace_id, runtime_session_id, remote_execution_mode
+        )
         payload["_nats_schema"] = "UnifiedTaskEvent"
         return await self._publish(f"galaxy.task.{topic_suffix}", payload)
 

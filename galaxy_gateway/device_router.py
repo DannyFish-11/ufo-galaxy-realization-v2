@@ -745,6 +745,10 @@ class DeviceRouter:
 
         PR-2：内部优先使用 TaskEnvelope + route_envelope 统一链路；
         仅当 CommandRouter 不可用时才降级到 WebSocket 直发。
+
+        PR-7: ``remote_execution_mode`` is propagated from the task dict into
+        the TaskEnvelope so that both ``command_only`` and ``agent_runtime``
+        dispatches traverse the same substrate path with the mode label intact.
         """
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
@@ -758,6 +762,15 @@ class DeviceRouter:
                 if cmd_router._executor is not None:
                     _tool = self._extract_tool_name(task)
                     _args = task.get("payload", {}).get("params") or task.get("payload", {})
+                    # PR-7: carry remote_execution_mode through the substrate envelope
+                    _rem_mode_str = task.get("remote_execution_mode", "")
+                    _rem_mode = None
+                    if _rem_mode_str:
+                        try:
+                            from core.schemas.remote_execution import RemoteExecutionMode as _REM
+                            _rem_mode = _REM(_rem_mode_str)
+                        except Exception:
+                            pass
                     _task_envelope = _TaskEnvelope(
                         task_id=task.get("task_id") or str(uuid.uuid4()),
                         trace_id=task.get("trace_id"),
@@ -765,6 +778,7 @@ class DeviceRouter:
                         targets=[device.device_id],
                         tool_name=_tool,
                         args=_args if isinstance(_args, dict) else {},
+                        remote_execution_mode=_rem_mode,
                         metadata={
                             "command": task.get("command", ""),
                             "device_router": "true",
@@ -772,11 +786,12 @@ class DeviceRouter:
                     )
                     logger.debug(
                         "DeviceRouter.dispatch_task envelope | task_id=%s trace_id=%s "
-                        "tool=%s device=%s",
+                        "tool=%s device=%s mode=%s",
                         _task_envelope.task_id,
                         _task_envelope.trace_id,
                         _task_envelope.tool_name,
                         device.device_id,
+                        _rem_mode_str or "unset",
                     )
                     cr_result = await cmd_router.route_envelope(_task_envelope)
                     return {
@@ -785,6 +800,7 @@ class DeviceRouter:
                         "error": cr_result.get("error_message"),
                         "task_id": cr_result.get("task_id"),
                         "trace_id": cr_result.get("trace_id"),
+                        "remote_execution_mode": cr_result.get("remote_execution_mode", _rem_mode_str),
                     }
             except Exception as route_err:
                 logger.debug(f"route_envelope 路由失败，回退 WebSocket: {route_err}")

@@ -464,7 +464,7 @@ class TestCommandRouterDispatchAgent:
         mock_udm_module.get_unified_device_manager.return_value = mock_udm
 
         async def run():
-            with patch.object(cr, "route_command", AsyncMock(return_value=fake_route_result)):
+            with patch.object(cr, "route_envelope", AsyncMock(return_value=fake_route_result)):
                 with patch("core.device_policy.requires_agent_deploy", return_value=False):
                     with patch.dict(
                         sys.modules,
@@ -510,7 +510,7 @@ class TestCommandRouterDispatchAgent:
         mock_shared_module.connection_manager = mock_cm
 
         async def run():
-            with patch.object(cr, "route_command", AsyncMock(return_value=fake_route_result)):
+            with patch.object(cr, "route_envelope", AsyncMock(return_value=fake_route_result)):
                 with patch("core.device_policy.requires_agent_deploy", return_value=True):
                     with patch.dict(
                         sys.modules,

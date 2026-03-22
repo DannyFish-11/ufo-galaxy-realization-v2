@@ -169,11 +169,20 @@ class GatewayNATSAdapter:
                 task_type = _envelope.tool_name
                 payload = _envelope.args
                 route_mode = _envelope.metadata.get("route_mode", "direct")
+                # PR-7: extract remote_execution_mode from the substrate envelope
+                # so that both command_only and agent_runtime dispatches carry the
+                # same substrate metadata through the gateway transport layer.
+                remote_execution_mode = (
+                    _envelope.remote_execution_mode.value
+                    if _envelope.remote_execution_mode is not None
+                    else _envelope.metadata.get("remote_execution_mode", "")
+                )
                 _envelope_parsed = True
                 logger.debug(
-                    "GatewayNATSAdapter: parsed TaskEnvelope task_id=%s trace_id=%s",
+                    "GatewayNATSAdapter: parsed TaskEnvelope task_id=%s trace_id=%s mode=%s",
                     task_id,
                     trace_id,
+                    remote_execution_mode or "unset",
                 )
             except Exception as _parse_err:
                 logger.warning(
@@ -189,6 +198,7 @@ class GatewayNATSAdapter:
                 task_type = data.get("task_type", "command")
                 payload = data.get("payload") or {}
                 route_mode = data.get("route_mode", "direct")
+                remote_execution_mode = data.get("remote_execution_mode", "")
         else:
             # ── Legacy TaskDispatch — extract fields and convert to envelope ─
             task_id = data.get("task_id") or str(uuid.uuid4())
@@ -201,6 +211,7 @@ class GatewayNATSAdapter:
                 or f"trace_{uuid.uuid4().hex[:12]}"
             )
             route_mode = data.get("route_mode", "direct")
+            remote_execution_mode = data.get("remote_execution_mode", "")
 
             # PR-3: Convert legacy TaskDispatch → TaskEnvelope so that internal
             # routing always sees a unified envelope; replace task_id/trace_id
@@ -228,22 +239,30 @@ class GatewayNATSAdapter:
                 )
 
         logger.info(
-            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s trace_id=%s",
+            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s "
+            "trace_id=%s mode=%s",
             task_id,
             target_device,
             task_type,
             trace_id,
+            remote_execution_mode or "unset",
         )
         self._stats["dispatched"] += 1
 
         for attempt in range(self._max_retries + 1):
             try:
                 result = await asyncio.wait_for(
-                    self._forward_to_device(task_id, target_device, task_type, payload),
+                    self._forward_to_device(
+                        task_id, target_device, task_type, payload,
+                        remote_execution_mode=remote_execution_mode,
+                    ),
                     timeout=self._task_timeout,
                 )
                 # Publish success result back to NATS
-                await self._publish_result(task_id, result, success=True, trace_id=trace_id)
+                await self._publish_result(
+                    task_id, result, success=True, trace_id=trace_id,
+                    remote_execution_mode=remote_execution_mode,
+                )
                 self._stats["succeeded"] += 1
                 await _publish_event(
                     "gateway_success",
@@ -336,8 +355,15 @@ class GatewayNATSAdapter:
         target_device: str,
         task_type: str,
         payload: dict,
+        *,
+        remote_execution_mode: str = "",
     ) -> dict:
-        """Forward a task to the target device via WebSocket or HTTP fallback."""
+        """Forward a task to the target device via WebSocket or HTTP fallback.
+
+        PR-7: ``remote_execution_mode`` is forwarded alongside the task so
+        that both ``command_only`` and ``agent_runtime`` dispatches carry the
+        substrate mode label to the device layer.
+        """
         # 1. Try DeviceRouter if available
         try:
             from galaxy_gateway.device_router import device_router
@@ -350,6 +376,8 @@ class GatewayNATSAdapter:
                         "task_type": task_type,
                         "payload": payload,
                     }
+                    if remote_execution_mode:
+                        task["remote_execution_mode"] = remote_execution_mode
                     result = await device_router.dispatch_task(task, device)
                     return result
         except Exception as exc:
@@ -360,15 +388,16 @@ class GatewayNATSAdapter:
             fut: asyncio.Future = asyncio.get_event_loop().create_future()
             self._pending[task_id] = fut
             try:
-                message = json.dumps(
-                    {
-                        "type": "task_assign",
-                        "task_id": task_id,
-                        "task_type": task_type,
-                        "device_id": target_device,
-                        "payload": payload,
-                    }
-                )
+                ws_message: dict = {
+                    "type": "task_assign",
+                    "task_id": task_id,
+                    "task_type": task_type,
+                    "device_id": target_device,
+                    "payload": payload,
+                }
+                if remote_execution_mode:
+                    ws_message["remote_execution_mode"] = remote_execution_mode
+                message = json.dumps(ws_message)
                 await self._websocket_manager.send_to_device(target_device, message)
                 result = await asyncio.wait_for(fut, timeout=self._task_timeout)
                 return result
@@ -384,7 +413,12 @@ class GatewayNATSAdapter:
         return {"success": False, "error": f"no_route_to_device:{target_device}"}
 
     async def _publish_result(
-        self, task_id: str, result: dict, success: bool, trace_id: str = ""
+        self,
+        task_id: str,
+        result: dict,
+        success: bool,
+        trace_id: str = "",
+        remote_execution_mode: str = "",
     ) -> None:
         """Publish task result back to NATS.
 
@@ -393,6 +427,10 @@ class GatewayNATSAdapter:
         and a ``_nats_schema: "TaskEnvelope"`` discriminator with
         ``metadata.success``, ``metadata.result``, and ``metadata.error`` so
         that new consumers can parse it as a TaskEnvelope result.
+
+        PR-7: ``remote_execution_mode`` is included in the result metadata so
+        that NATS consumers can identify the substrate mode without inspecting
+        payload shapes.
         """
         try:
             from core.nats_bus import nats_bus
@@ -401,6 +439,15 @@ class GatewayNATSAdapter:
 
             status_val = TaskStatus.SUCCESS.value if success else TaskStatus.FAILED.value
             ts = int(datetime.now(timezone.utc).timestamp())
+
+            result_metadata: dict = {
+                "success": success,
+                "status": status_val,
+                "result": result if success else None,
+                "error": result.get("error") if not success else None,
+            }
+            if remote_execution_mode:
+                result_metadata["remote_execution_mode"] = remote_execution_mode
 
             unified = {
                 # ── Legacy TaskResult fields (backward compat) ──────────────
@@ -411,12 +458,7 @@ class GatewayNATSAdapter:
                 # ── TaskEnvelope discriminator (PR-3) ───────────────────────
                 "_nats_schema": "TaskEnvelope",
                 "trace_id": trace_id or "",
-                "metadata": {
-                    "success": success,
-                    "status": status_val,
-                    "result": result if success else None,
-                    "error": result.get("error") if not success else None,
-                },
+                "metadata": result_metadata,
             }
             await nats_bus._publish(f"galaxy.tasks.result.{task_id}", unified)
         except Exception as exc:

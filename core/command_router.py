@@ -31,6 +31,23 @@ The ``galaxy_gateway`` is the *internal cross-device execution substrate* of
 the subject — it is the plumbing for cross-device routing, not a primary
 subject entrypoint.  This router is the internal client of that substrate.
 
+**PR-7: Unified Cross-Device Substrate (single substrate root)**
+
+Both remote execution styles — ``command_only`` and ``agent_runtime`` — share
+the same substrate root: :meth:`CommandRouter.route_envelope`.  They differ
+only in *what* is carried in the :class:`~core.schemas.task_envelope.TaskEnvelope`
+and how downstream handlers interpret it:
+
+* ``command_only``  — structured command/task dispatch
+  (:meth:`OpenClawd.send_gateway_command` → :meth:`route_envelope`)
+* ``agent_runtime`` — agent deploy+execute dispatch
+  (:meth:`dispatch_agent_remote` / :meth:`_deploy_agent_then_execute`
+  → :meth:`route_envelope`)
+
+All paths stamp :class:`~core.schemas.remote_execution.RemoteExecutionMode`
+in the envelope *before* entering :meth:`route_envelope` so that mode
+metadata is observable end-to-end without inspecting payload shapes.
+
 Galaxy - 命令路由引擎
 ==========================
 
@@ -1552,15 +1569,30 @@ class CommandRouter:
             "context": context or {},
         }
 
-        cr_result = await self.route_command(
-            device_id=device_id,
-            command="agent_execute",
-            payload=payload,
-            command_id=task_id,
+        # PR-7: route via route_envelope (unified substrate root) with
+        # remote_execution_mode=agent_runtime stamped in the envelope so that
+        # mode metadata is observable end-to-end without inspecting payload.
+        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+        from core.schemas.remote_execution import RemoteExecutionMode as _REM
+
+        _agent_envelope = _TaskEnvelope(
             task_id=task_id,
+            trace_id=trace_id or f"trace_{uuid.uuid4().hex[:12]}",
+            source="command_router._deploy_agent_then_execute",
+            targets=[device_id] if device_id else [],
+            tool_name="agent_execute",
+            args=payload,
             timeout=timeout,
-            trace_id=trace_id,
+            remote_execution_mode=_REM.agent_runtime,
+            metadata={
+                "command_id": task_id,
+                "request_id": task_id,
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "substrate_path": "agent_runtime",
+            },
         )
+        cr_result = await self.route_envelope(_agent_envelope)
 
         cr_result.setdefault("agent_id", agent_id)
         cr_result.setdefault("session_id", session_id)
@@ -1689,17 +1721,34 @@ class CommandRouter:
             "context": context or {},
         }
 
-        cr_result = await self.route_command(
-            device_id=device_id,
-            command="agent_execute",
-            payload=payload,
-            command_id=task_id,
-            task_id=task_id,
-            timeout=timeout,
-            trace_id=trace_id,
-        )
+        # PR-7: route via route_envelope (unified substrate root) with
+        # remote_execution_mode=agent_runtime stamped in the envelope so that
+        # both command_only and agent_runtime modes traverse the same substrate
+        # entry point.  route_command (compat shim) is intentionally bypassed
+        # here to avoid the envelope being built without an explicit mode.
+        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+        from core.schemas.remote_execution import RemoteExecutionMode as _REM
 
-        # Augment the standard route_command response with agent correlation fields
+        _agent_envelope = _TaskEnvelope(
+            task_id=task_id,
+            trace_id=trace_id or f"trace_{uuid.uuid4().hex[:12]}",
+            source="command_router.dispatch_agent_remote",
+            targets=[device_id] if device_id else [],
+            tool_name="agent_execute",
+            args=payload,
+            timeout=timeout,
+            remote_execution_mode=_REM.agent_runtime,
+            metadata={
+                "command_id": task_id,
+                "request_id": task_id,
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "substrate_path": "agent_runtime",
+            },
+        )
+        cr_result = await self.route_envelope(_agent_envelope)
+
+        # Augment with agent correlation fields for callers that need them.
         cr_result.setdefault("agent_id", agent_id)
         cr_result.setdefault("session_id", session_id)
         cr_result.setdefault("trace_id", trace_id)
