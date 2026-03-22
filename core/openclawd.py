@@ -1902,6 +1902,8 @@ class OpenClawd:
                     "handler": handler_name,
                     "entry_mode": _entry_mode,
                     "execution_path": _exec_path2,
+                    # PR-9: subject decision authority annotation (additive)
+                    "authority_role": "subject_decision_authority",
                     **provider_info,
                     **(result.get("metadata", {})),
                     "multimodal_context": _mm_context_dict,

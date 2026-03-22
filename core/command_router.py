@@ -858,6 +858,9 @@ class CommandRouter:
         if envelope.remote_execution_mode is not None:
             result["remote_execution_mode"] = envelope.remote_execution_mode.value
 
+        # PR-9: stamp execution substrate authority role (additive, non-breaking).
+        result.setdefault("execution_substrate_role", "execution_substrate")
+
         return result
 
     async def route_command(

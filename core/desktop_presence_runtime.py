@@ -464,6 +464,13 @@ class DesktopPresenceRuntime:
         # PR-12: attach policy hint (additive, non-blocking).
         if _policy_hint is not None:
             result["policy_hint"] = _policy_hint
+        # PR-9: stamp runtime shell authority metadata (additive, non-breaking).
+        result.setdefault("authority_metadata", {
+            "layer_role": "runtime_shell_authority",
+            "canonical_module": "core.desktop_presence_runtime",
+            "canonical_class": "DesktopPresenceRuntime",
+            "pr_introduced": "PR-1",
+        })
         return result
 
     # ------------------------------------------------------------------
