@@ -65,6 +65,18 @@ from .model_weight_field import ModelWeightField, apply_weight_fields, compute_w
 from .routing_policy import PolicyConfig
 from .topology_router import TopologyRoutePlan, TopologyRouter
 
+# --- Canonical model supply state (PR-18) ---
+from .canonical_model_supply_state import (
+    CanonicalModelSupplyState,
+    NativeMultimodalCapability,
+    NativeMultimodalCapabilityRegistry,
+    ProviderHealthStatus,
+    ProviderLocalityClass,
+    ProviderSupplyRecord,
+    build_canonical_model_supply_state,
+    build_canonical_model_supply_state_from_router,
+)
+
 __all__ = [
     # Bridge
     "ConfigBridge",
@@ -101,4 +113,13 @@ __all__ = [
     "apply_weight_fields",
     "compute_weight_field",
     "node_from_entry",
+    # Canonical model supply state (PR-18)
+    "CanonicalModelSupplyState",
+    "NativeMultimodalCapability",
+    "NativeMultimodalCapabilityRegistry",
+    "ProviderHealthStatus",
+    "ProviderLocalityClass",
+    "ProviderSupplyRecord",
+    "build_canonical_model_supply_state",
+    "build_canonical_model_supply_state_from_router",
 ]
