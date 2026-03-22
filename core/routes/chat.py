@@ -1,29 +1,51 @@
 """
-core/routes/chat.py — Chat Adapter Route (Adapter Surface — NOT a Subject Entrypoint)
-======================================================================================
+core/routes/chat.py — /api/v1/chat Compatibility Adapter Surface
+=================================================================
 
-**Unified-Subject Architecture — Adapter Surface**
----------------------------------------------------
-This module is a **protocol adapter** that translates HTTP POST requests to
-``/api/v1/chat`` into calls to
-:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`.  It does NOT
-have subject-core authority; it is demoted to an adapter/launcher role.
+**Role: Compatibility Adapter Surface — NOT a Subject-Core Authority**
+-----------------------------------------------------------------------
+This module is a **compatibility adapter surface**.  Its sole responsibility
+is to translate HTTP POST requests at ``/api/v1/chat`` into calls to the
+authoritative runtime shell
+(:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`) and package
+the result as a :class:`~core.unified_response.UnifiedChatResponse`.
 
-The actual subject lifecycle (tri-state: silent → liminal → manifest → silent)
-is driven by the runtime shell.  This route merely packages the HTTP request
-and calls ``runtime.handle_request()``.
+Architectural constraints (PR-1 + PR-2):
+  - ``/api/v1/chat`` is demoted to a *compatibility adapter surface*.
+    It is **not** the system's architectural centre.
+  - :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` is the
+    **runtime shell** that owns the tri-state subject lifecycle.
+  - :class:`~core.openclawd.OpenClawd` is the **subject core**.
+  - This route has **no subject-core authority**.  It must not be treated as
+    the primary execution decision-maker.
+  - AgentKernel is an internal cognition sub-kernel of OpenClawd; it is
+    **never called directly from this adapter**.
+
+Authority chain (PR-1 established, PR-2 makes explicit in responses):
 
     HTTP POST /api/v1/chat
-        → ChatRoute (this adapter)
+        → core/routes/chat.py  ← you are here (compat adapter — no authority)
             → DesktopPresenceRuntime.handle_request(source="chat")
                 → TriState: SILENT → LIMINAL → OpenClawd → MANIFEST → SILENT
-                    → response with runtime_session_id
+                    → response with runtime_session_id, execution_authority
+
+Backward compatibility guarantee (PR-2):
+  All existing fields in the response (success, response, intent, confidence,
+  mode, suggestions, data, error, session_id, model, timestamp) are preserved
+  unchanged.  New metadata fields (entry_surface, entry_source,
+  execution_authority, surface_role) are **additive only**; existing clients
+  can ignore them safely.
+
+Do NOT:
+  - Implement subject-core logic in this file.
+  - Add LLM model selection logic here; that belongs in OpenClawd/AgentKernel.
+  - Treat this file as the canonical entrypoint for architectural design.
 
 Galaxy - Chat Routes
 ==========================
 
 Routes:
-  POST /api/v1/chat  - 统一对话接口 (意图分流: ReAct Agent / 纯聊天)
+  POST /api/v1/chat  - 兼容性适配器表面 (delegates to DesktopPresenceRuntime)
 """
 
 import logging
@@ -87,17 +109,28 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
         """
-        统一对话接口 — DesktopPresenceRuntime → OpenClawd 唯一入口。
+        /api/v1/chat — Compatibility Adapter Surface (PR-2)
 
-        架构约束（PR86 + PR-1 Runtime + PR-1 Block-1）：
-        - /api/v1/chat 先经 EntrypointRouter 打 entry_path=canonical 标记
-        - 再通过 DesktopPresenceRuntime 路由到 OpenClawd.process()
-        - DesktopPresenceRuntime 驱动三态推进（silent→liminal→manifest→silent）
-        - AgentKernel 由 OpenClawd 内部调用，不在此处直接使用
-        - 所有 UI (Dashboard / Windows / Android) 统一调用此端点
-        - SOUL 注入规则由 OpenClawd 内部统一控制
+        ROLE: This handler is a **compatibility adapter surface**.
+        It does NOT own subject-core authority.  It delegates all
+        execution to DesktopPresenceRuntime (runtime shell) → OpenClawd
+        (subject core).
 
-        所有 UI (Dashboard / Windows / Android) 统一调用此端点。
+        Architecture chain (PR-1 + PR-2):
+          1. EntrypointRouter stamps entry_path=canonical (PR-1 Block-1).
+          2. resolve_entry_mode selects local / cross_device entry mode.
+          3. DesktopPresenceRuntime.handle_request() drives the tri-state
+             lifecycle (SILENT → LIMINAL → MANIFEST → SILENT).
+          4. OpenClawd.process() performs subject-core execution; its
+             internal AgentKernel handles cognition / planning.
+          5. This adapter packages the result as UnifiedChatResponse,
+             adding non-breaking surface metadata (PR-2).
+
+        Backward-compat guarantee (PR-2):
+          All pre-existing response fields are preserved unchanged.
+          New fields (entry_surface, entry_source, execution_authority,
+          surface_role) are additive and safe for old clients to ignore.
+
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
         import time as _time
@@ -172,6 +205,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 session_id=metadata.get("session_id", req.session_id or ""),
                 data=metadata,
                 error=result.get("error", ""),
+                # ── PR-2: surface metadata — additive, non-breaking ──────────
+                # Exposes the true execution chain so callers understand that
+                # /api/v1/chat is a compat adapter surface, not a subject core.
+                runtime_session_id=result.get("runtime_session_id") or trace_id or None,
+                entry_surface="chat_adapter",
+                entry_source="http_post",
+                execution_authority="DesktopPresenceRuntime/OpenClawd",
+                surface_role="compat_adapter",
             )
             resp_dict = resp.to_json_response()
             resp_dict["reply"] = result.get("response", "")
