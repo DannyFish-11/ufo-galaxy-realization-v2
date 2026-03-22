@@ -745,7 +745,16 @@ class OpenClawd:
         return self._router
 
     def _get_kernel(self):
-        """获取内嵌的 AgentKernel（懒加载，由 OpenClawd 独占管理）"""
+        """获取 OpenClawd 创建并持有的内嵌 AgentKernel（懒加载）。
+
+        OpenClawd 是 AgentKernel 的唯一持有者和生命周期管理者。
+        AgentKernel 作为认知/规划层嵌入在 OpenClawd 内部，不对外暴露为独立主权。
+
+        职责说明：
+          - 创建并持有 AgentKernel 实例（_kernel 属性）
+          - 将 OpenClawd 管理的 LLM Router 注入到 Kernel
+          - 返回 KernelResponse（认知产物），由 OpenClawd 解释后决定执行/委托动作
+        """
         if self._kernel is None:
             try:
                 from core.agent.kernel import AgentKernel
@@ -1509,7 +1518,9 @@ class OpenClawd:
             except Exception:
                 pass
 
-            # Step 1: 尝试通过内嵌 AgentKernel 处理（chat_only / task_execute / hybrid）
+            # Step 1: 通过内嵌 AgentKernel 进行认知/规划（OpenClawd 持有并调用 Kernel）
+            # AgentKernel 作为认知层返回 KernelResponse（认知产物），
+            # OpenClawd 负责解释该产物并决定后续执行/委托策略。
             kernel = self._get_kernel()
             if kernel is not None:
                 try:
@@ -1659,6 +1670,15 @@ class OpenClawd:
                             # PR-3: delegation_point names which boundary was used.
                             # AgentKernel is embedded in OpenClawd → always local.
                             "delegation_point": "local",
+                            # PR-4: kernel_cognition_role makes the architectural
+                            # boundary explicit — AgentKernel is the embedded
+                            # cognition/planning layer; OpenClawd is the decision
+                            # authority that interprets the KernelResponse artifact.
+                            "kernel_cognition_role": "embedded_cognition_layer",
+                            # PR-4: delegation_hint from KernelResponse lets the
+                            # kernel suggest a delegation path; OpenClawd decides
+                            # whether to adopt it.
+                            "kernel_delegation_hint": kernel_result.delegation_hint,
                             **provider_info,
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
