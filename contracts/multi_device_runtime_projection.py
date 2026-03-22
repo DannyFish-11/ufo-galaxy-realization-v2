@@ -446,6 +446,15 @@ class MultiDeviceRuntimeProjection(BaseModel):
         default_factory=dict,
         description="Arbitrary key-value metadata for extensibility.",
     )
+    # PR-39 (optional)
+    runtime_recovery: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional compact recovery/reconciliation summary (PR-39).  "
+            "None when no recovery incidents are detected or the recovery "
+            "contract is unavailable."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Serialisation helpers
@@ -875,6 +884,7 @@ def build_multi_device_runtime_projection(
     merged_results: Optional[List[Any]] = None,
     governance_snapshot: Optional[Any] = None,
     policy_alignment: Optional[Any] = None,
+    runtime_recovery: Optional[Any] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> MultiDeviceRuntimeProjection:
     """Build a :class:`MultiDeviceRuntimeProjection` from the current contract inputs.
@@ -954,6 +964,13 @@ def build_multi_device_runtime_projection(
         except Exception:
             pass
 
+    recovery_dict: Optional[Dict[str, Any]] = None
+    if runtime_recovery is not None:
+        try:
+            recovery_dict = _safe_dict(runtime_recovery) or None
+        except Exception:
+            pass
+
     return MultiDeviceRuntimeProjection(
         runtime_devices=project_runtime_devices(runtime_devices),
         runtime_hosts=project_runtime_hosts(runtime_hosts),
@@ -966,5 +983,6 @@ def build_multi_device_runtime_projection(
         merged_results=project_merged_results(merged_results),
         governance_snapshot=gov_dict,
         policy_alignment=pol_dict,
+        runtime_recovery=recovery_dict,
         metadata=metadata or {},
     )
