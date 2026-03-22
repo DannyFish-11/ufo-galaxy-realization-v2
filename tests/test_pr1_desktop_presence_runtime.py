@@ -22,6 +22,12 @@ PR-1 回归测试 — DesktopPresenceRuntime 统一主体架构验收
   15. source 参数在文档中被标记为 observability tag
   16. _try_start_ingest_bus 文档说明其为 runtime shell 对 host ingress 的所有权
   17. handle_request 文档说明 shell→liminal→core→manifest→silent 生命周期
+
+PR-1 入口主权收束 (gateway 修复):
+  18. galaxy_gateway/app.py chat endpoint 经 DesktopPresenceRuntime 路由
+  19. galaxy_gateway/app.py chat endpoint 不直接调用 openclawd_instance.process()
+  20. galaxy_gateway/app.py 声明 gateway 为 internal substrate，非主体入口
+  21. source="chat" 在 gateway chat endpoint 被明确作为 observability tag 传递
 """
 
 import asyncio
@@ -573,3 +579,135 @@ class TestUIShellStatesNotTristate:
         ).read_text(encoding="utf-8")
         for state in ("DORMANT", "ISLAND", "SIDESHEET", "FULLAGENT"):
             assert state in src, f"hardware_trigger.py must define {state}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 12. gateway/app.py — authority chain guardrails (PR-1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestGatewayAuthorityChain:
+    """galaxy_gateway/app.py chat endpoint must route through DesktopPresenceRuntime.
+
+    Acceptance criteria (PR-1):
+    - The gateway /api/v1/chat endpoint calls DesktopPresenceRuntime.handle_request()
+    - It does NOT call openclawd_instance.process() directly in chat_endpoint
+    - source="chat" is passed as an observability tag, not an authority grant
+    - The gateway is described as an internal substrate, not a primary entrypoint
+    """
+
+    def _read_gateway(self) -> str:
+        return pathlib.Path(__file__).parent.parent.joinpath(
+            "galaxy_gateway/app.py"
+        ).read_text(encoding="utf-8")
+
+    def test_gateway_chat_endpoint_uses_desktop_presence_runtime(self):
+        """chat_endpoint in galaxy_gateway/app.py must call get_desktop_presence_runtime()."""
+        src = self._read_gateway()
+        assert "get_desktop_presence_runtime" in src, (
+            "galaxy_gateway/app.py chat_endpoint must call get_desktop_presence_runtime() "
+            "to route through the runtime shell"
+        )
+
+    def test_gateway_chat_endpoint_calls_handle_request(self):
+        """chat_endpoint must call runtime.handle_request(), not openclawd directly."""
+        src = self._read_gateway()
+        assert "runtime.handle_request" in src, (
+            "galaxy_gateway/app.py chat_endpoint must call runtime.handle_request() "
+            "as the canonical shell entry"
+        )
+
+    def test_gateway_chat_endpoint_does_not_bypass_runtime_shell(self):
+        """chat_endpoint must NOT call openclawd_instance.process() inside chat_endpoint.
+
+        The gateway surface must not act as an alternative subject-core authority
+        by calling openclawd_instance.process() directly.  All subject cognition
+        must flow through DesktopPresenceRuntime first.
+        """
+        src = self._read_gateway()
+        # Find the chat_endpoint function body and check it does not call
+        # openclawd_instance.process() directly — that would bypass the runtime shell.
+        chat_ep_start = src.find("async def chat_endpoint(")
+        assert chat_ep_start != -1, "chat_endpoint function not found"
+        # Use multiple boundary candidates; take the earliest valid one
+        candidates = [
+            src.find("\n\ndef _merge_parallel_result", chat_ep_start),
+            src.find("\n\ndef _merge_parallel", chat_ep_start),
+            src.find("\n@app.", chat_ep_start + 50),
+            src.find("\nasync def ", chat_ep_start + 50),
+        ]
+        valid = [c for c in candidates if c > chat_ep_start]
+        next_def = min(valid) if valid else -1
+        func_body = src[chat_ep_start:next_def] if next_def != -1 else src[chat_ep_start:]
+        assert "openclawd_instance.process(" not in func_body, (
+            "galaxy_gateway/app.py chat_endpoint must not call openclawd_instance.process() "
+            "directly — all requests must flow through DesktopPresenceRuntime.handle_request()"
+        )
+
+    def test_gateway_chat_endpoint_passes_source_chat(self):
+        """chat_endpoint must pass source='chat' to handle_request as an observability tag."""
+        src = self._read_gateway()
+        assert 'source="chat"' in src or "source='chat'" in src, (
+            "galaxy_gateway/app.py chat_endpoint must pass source='chat' to "
+            "runtime.handle_request() as an observability tag"
+        )
+
+    def test_gateway_app_declares_internal_substrate(self):
+        """galaxy_gateway/app.py must describe gateway as internal substrate."""
+        src = self._read_gateway()
+        assert "internal" in src.lower(), (
+            "galaxy_gateway/app.py must describe itself as an internal substrate"
+        )
+        assert "NOT" in src or "not a primary" in src.lower() or "not a subject" in src.lower(), (
+            "galaxy_gateway/app.py must clarify it is NOT a primary subject entrypoint"
+        )
+
+    def test_gateway_chat_doc_includes_authority_chain(self):
+        """chat_endpoint docstring must document the authority chain."""
+        src = self._read_gateway()
+        # The docstring should mention the routing chain
+        assert "DesktopPresenceRuntime" in src, (
+            "galaxy_gateway/app.py must mention DesktopPresenceRuntime in the "
+            "chat endpoint docstring to document the authority chain"
+        )
+        assert "handle_request" in src, (
+            "galaxy_gateway/app.py must mention handle_request in the chat endpoint"
+        )
+
+    def test_gateway_chat_endpoint_authority_chain_static(self):
+        """Static analysis: chat_endpoint code must reflect the authority chain.
+
+        Verifies that within the chat_endpoint function body:
+        1. ``get_desktop_presence_runtime`` is called to obtain the runtime shell
+        2. ``runtime.handle_request`` is invoked as the canonical entry
+        3. ``openclawd_instance.process(`` does NOT appear (would bypass the shell)
+        """
+        src = self._read_gateway()
+
+        # Find chat_endpoint function body
+        chat_ep_start = src.find("async def chat_endpoint(")
+        assert chat_ep_start != -1, "chat_endpoint not found in galaxy_gateway/app.py"
+
+        # Find end of function body using multiple boundary candidates; take the
+        # earliest one that appears after the function definition.
+        candidates = [
+            src.find("\n\ndef _merge_parallel_result", chat_ep_start),
+            src.find("\n\ndef _merge_parallel", chat_ep_start),
+            src.find("\n@app.", chat_ep_start + 50),
+            src.find("\nasync def ", chat_ep_start + 50),
+        ]
+        valid = [c for c in candidates if c > chat_ep_start]
+        next_boundary = min(valid) if valid else -1
+        func_body = src[chat_ep_start:next_boundary] if next_boundary != -1 else src[chat_ep_start:]
+
+        assert "get_desktop_presence_runtime" in func_body, (
+            "chat_endpoint body must call get_desktop_presence_runtime()"
+        )
+        assert "runtime.handle_request" in func_body, (
+            "chat_endpoint body must call runtime.handle_request()"
+        )
+        assert "openclawd_instance.process(" not in func_body, (
+            "chat_endpoint must NOT call openclawd_instance.process() directly — "
+            "this bypasses DesktopPresenceRuntime and violates the authority chain"
+        )
+
