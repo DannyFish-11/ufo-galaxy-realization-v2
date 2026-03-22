@@ -1,0 +1,1140 @@
+"""contracts/desktop_status_projection.py
+==========================================
+Desktop Status Projection Contract — PR-22.
+
+This module defines the **canonical shell-facing desktop status projection**:
+a single, fully serialisable contract that the runtime shell uses as the
+primary contract for desktop status board rendering.
+
+It answers the operator-facing question:
+
+    *"What is the system currently doing, and why?"*
+
+Architecture
+------------
+This projection is **produced by the control core** (OpenClawd via
+:class:`~core.schemas.unified_control_plan.UnifiedControlPlan`) and
+**consumed by the runtime shell** (:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`).
+The shell combines control-core outputs with shell-owned facts (source
+registry state, lifecycle phase) through the stable projection contract
+rather than ad hoc UI logic.
+
+.. code-block:: text
+
+    RUNTIME SHELL (DesktopPresenceRuntime)
+      ├── shell-owned facts: source_registry snapshot, tristate lifecycle
+      └── build_desktop_status_projection(unified_control_plan, source_registry)
+                │                         ↑
+                │               OPENCLAWD (control core)
+                │               produces: UnifiedControlPlan
+                ▼
+          DesktopStatusProjection   ← canonical projection contract
+            ├── PerceptionProjection      (ingress / modalities)
+            ├── ModelRoutingProjection    (provider / model / route)
+            ├── ExecutionProjection       (path / remote-mode / devices)
+            ├── LifecycleProjection       (stage / health)
+            └── ExplainabilityProjection  (fallback / degradation / diagnostics)
+
+Design principles
+-----------------
+- **Projection, not re-inference** — the shell consumes a canonical projection
+  contract rather than rebuilding state from scattered metadata.
+- **Explainability first** — helps an operator understand not just *what* is
+  happening but *why*.
+- **Graceful degradation** — missing sources, unavailable providers, or
+  degraded execution still produce a coherent projection with appropriate
+  health/severity signals.
+- **Serialisable and testable** — snapshots are suitable for diagnostics,
+  regression tests, and later UI evolution.
+- **Shell/core boundary preserved** — OpenClawd provides projection-ready
+  structured state; the shell owns desktop UI rendering.
+- **Additive only** — does not modify any existing module.
+
+Contract chain consumed
+-----------------------
+- **PR-19** (:class:`~core.schemas.unified_control_plan.UnifiedControlPlan`)
+- **PR-16** (:class:`~core.perception.canonical_perception_state.CanonicalPerceptionState`)
+- **PR-17** (:class:`~core.multimodal.perception_source_registry.PerceptionSourceRegistry`)
+- **PR-18** (:class:`~core.model_topology.canonical_model_supply_state.CanonicalModelSupplyState`)
+- **PR-20** — native multimodal routing fields
+- **PR-21** (:class:`~core.schemas.unified_control_plan.UnifiedExecutionDecision`,
+  :class:`~core.schemas.unified_control_plan.FallbackDecisionRecord`)
+
+Usage::
+
+    from contracts.desktop_status_projection import (
+        DesktopStatusProjection,
+        build_desktop_status_projection,
+        desktop_status_projection_summary,
+    )
+
+    # From a unified control plan dict (produced by OpenClawd) and an
+    # optional source registry snapshot (owned by the runtime shell):
+    projection = build_desktop_status_projection(
+        unified_control_plan=plan_dict,
+        source_registry_snapshot=registry_snapshot,
+        tristate=tristate_value,
+        runtime_session_id=session_id,
+    )
+    print(projection.to_json(indent=2))
+    summary = desktop_status_projection_summary(projection)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+import uuid
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+_logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Enumerations
+# ---------------------------------------------------------------------------
+
+
+class ProjectionHealthSeverity(str, Enum):
+    """Overall health / alert severity of a projection block.
+
+    ok
+        All components are operating normally.
+    advisory
+        Minor advisory conditions; system is functional but a note exists.
+    degraded
+        One or more components are degraded; fallback path may be active.
+    critical
+        A critical condition has been detected; major capability unavailable.
+    unknown
+        Health cannot be determined from available context.
+    """
+
+    ok = "ok"
+    advisory = "advisory"
+    degraded = "degraded"
+    critical = "critical"
+    unknown = "unknown"
+
+
+class LifecycleStage(str, Enum):
+    """High-level lifecycle stage of the unified control loop.
+
+    ingest
+        System is ingesting/receiving the request.
+    perceive
+        Perception / canonicalisation of sensory inputs is in progress.
+    route
+        Model and execution routing decisions are being resolved.
+    plan
+        Execution plan is being constructed.
+    delegate
+        Execution has been delegated (local / cross-device / orchestration).
+    run
+        Active execution is in progress.
+    succeed
+        The lifecycle completed successfully.
+    fail
+        The lifecycle ended in failure.
+    degrade
+        A degradation or fallback occurred; system continued in reduced mode.
+    idle
+        System is idle / awaiting the next request (tristate: silent).
+    unknown
+        Stage cannot be determined.
+    """
+
+    ingest = "ingest"
+    perceive = "perceive"
+    route = "route"
+    plan = "plan"
+    delegate = "delegate"
+    run = "run"
+    succeed = "succeed"
+    fail = "fail"
+    degrade = "degrade"
+    idle = "idle"
+    unknown = "unknown"
+
+
+class ExecutionPathKind(str, Enum):
+    """Canonical execution path for a control-loop cycle.
+
+    local
+        Execution confined to the local device.
+    cross_device
+        Execution delegated to a single remote device.
+    hybrid
+        Local and remote execution combined (multi-device orchestration).
+    none
+        No execution path was taken (no-op / blocked).
+    """
+
+    local = "local"
+    cross_device = "cross_device"
+    hybrid = "hybrid"
+    none = "none"
+
+
+# ---------------------------------------------------------------------------
+# Sub-contracts
+# ---------------------------------------------------------------------------
+
+
+class PerceptionProjection(BaseModel):
+    """Perception / ingress state for the desktop status projection.
+
+    Captures the current state of sensory input available to the system:
+    whether continuous perception is active, which modalities are present,
+    what the primary audio/video sources are, and the overall source health.
+
+    All fields are optional so that a text-only projection is always valid.
+
+    Fields
+    ------
+    continuous_perception_active
+        Whether the native multimodal ingress bus is currently running.
+    request_multimodal_present
+        Whether the current or last request carried a multimodal payload.
+    active_modalities
+        List of modality labels currently active (e.g. ``["audio", "video"]``).
+    primary_audio_source_id
+        ID of the currently selected primary audio source.
+    primary_audio_source_type
+        Type label of the primary audio source (e.g. ``"microphone"``).
+    primary_video_source_id
+        ID of the currently selected primary video source.
+    primary_video_source_type
+        Type label of the primary video source (e.g. ``"webcam"``, ``"webrtc"``).
+    source_health_summary
+        Overall health summary string for the source registry.
+    source_count
+        Total number of registered perception sources.
+    active_source_count
+        Number of sources currently marked active.
+    health_severity
+        Aggregated health severity derived from source states.
+    """
+
+    continuous_perception_active: bool = Field(
+        default=False,
+        description="Whether the native multimodal ingress bus is running.",
+    )
+    request_multimodal_present: bool = Field(
+        default=False,
+        description="Whether the current/last request carried a multimodal payload.",
+    )
+    active_modalities: List[str] = Field(
+        default_factory=list,
+        description="Modality labels currently active (e.g. ['audio', 'video']).",
+    )
+    primary_audio_source_id: Optional[str] = Field(
+        default=None,
+        description="ID of the currently selected primary audio source.",
+    )
+    primary_audio_source_type: Optional[str] = Field(
+        default=None,
+        description="Type label of the primary audio source.",
+    )
+    primary_video_source_id: Optional[str] = Field(
+        default=None,
+        description="ID of the currently selected primary video source.",
+    )
+    primary_video_source_type: Optional[str] = Field(
+        default=None,
+        description="Type label of the primary video source.",
+    )
+    source_health_summary: Optional[str] = Field(
+        default=None,
+        description="Overall health summary string for the source registry.",
+    )
+    source_count: int = Field(
+        default=0,
+        description="Total number of registered perception sources.",
+    )
+    active_source_count: int = Field(
+        default=0,
+        description="Number of sources currently marked active.",
+    )
+    health_severity: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Aggregated health severity derived from source states.",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
+
+
+class ModelRoutingProjection(BaseModel):
+    """Model / routing state for the desktop status projection.
+
+    Captures the currently selected provider, model, native multimodal
+    status, and route rationale — enabling operators to understand which
+    model is active and why.
+
+    Fields
+    ------
+    selected_provider
+        Canonical provider identifier (e.g. ``"openai"``, ``"anthropic"``).
+    selected_model
+        Canonical model identifier (e.g. ``"gpt-4o"``, ``"claude-3-5-sonnet"``).
+    is_native_multimodal
+        Whether the selected route is a native multimodal path.
+    support_model_hints
+        Auxiliary / support model hints from the control plan.
+    route_reason
+        Human-readable explanation of the current routing decision.
+    route_summary
+        Compact structured routing summary for display purposes.
+    provider_available
+        Whether the selected provider is currently available.
+    health_severity
+        Health severity for the model/routing block.
+    """
+
+    selected_provider: Optional[str] = Field(
+        default=None,
+        description="Canonical provider identifier for the selected route.",
+    )
+    selected_model: Optional[str] = Field(
+        default=None,
+        description="Canonical model identifier for the selected route.",
+    )
+    is_native_multimodal: bool = Field(
+        default=False,
+        description="Whether the selected route uses native multimodal APIs.",
+    )
+    support_model_hints: List[str] = Field(
+        default_factory=list,
+        description="Auxiliary/support model IDs hinted by the control plan.",
+    )
+    route_reason: Optional[str] = Field(
+        default=None,
+        description="Human-readable explanation of the current routing decision.",
+    )
+    route_summary: Optional[str] = Field(
+        default=None,
+        description="Compact structured routing summary for display.",
+    )
+    provider_available: bool = Field(
+        default=True,
+        description="Whether the selected provider is currently available.",
+    )
+    health_severity: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Health severity for the model/routing block.",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
+
+
+class ExecutionProjection(BaseModel):
+    """Execution path and remote-mode state for the desktop status projection.
+
+    Captures the current execution path, remote execution mode where
+    applicable, target devices, and orchestration status — giving operators
+    a clear view of *where* the system is executing.
+
+    Fields
+    ------
+    execution_path
+        Canonical execution path taken (local / cross_device / hybrid / none).
+    remote_execution_mode
+        Remote execution mode when execution_path is cross_device or hybrid:
+        ``"command_only"`` or ``"agent_runtime"``.
+    target_device_ids
+        IDs of devices targeted for execution.
+    orchestration_active
+        Whether multi-device orchestration is active for this request.
+    delegation_point
+        Delegation boundary label from the control plan.
+    execution_reason
+        Human-readable rationale for the chosen execution path.
+    health_severity
+        Health severity for the execution block.
+    """
+
+    execution_path: ExecutionPathKind = Field(
+        default=ExecutionPathKind.none,
+        description="Canonical execution path taken.",
+    )
+    remote_execution_mode: Optional[str] = Field(
+        default=None,
+        description="Remote execution mode (command_only / agent_runtime).",
+    )
+    target_device_ids: List[str] = Field(
+        default_factory=list,
+        description="IDs of devices targeted for execution.",
+    )
+    orchestration_active: bool = Field(
+        default=False,
+        description="Whether multi-device orchestration is active.",
+    )
+    delegation_point: Optional[str] = Field(
+        default=None,
+        description="Delegation boundary label from the control plan.",
+    )
+    execution_reason: Optional[str] = Field(
+        default=None,
+        description="Rationale for the chosen execution path.",
+    )
+    health_severity: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Health severity for the execution block.",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
+
+
+class LifecycleProjection(BaseModel):
+    """Lifecycle stage and health for the desktop status projection.
+
+    Captures where the system is in its current lifecycle and its overall
+    health status, providing operators with a clear, single-glance summary.
+
+    Fields
+    ------
+    stage
+        High-level lifecycle stage (ingest / perceive / route / plan /
+        delegate / run / succeed / fail / degrade / idle).
+    tristate
+        Subject tri-state value from the runtime shell
+        (``"silent"`` / ``"liminal"`` / ``"manifest"``).
+    lifecycle_target
+        Intended lifecycle target string from the control plan
+        (e.g. ``"succeeded"``, ``"failed"``, ``"degraded"``).
+    health_severity
+        Overall health severity for the lifecycle block.
+    decision_authority
+        Canonical decision authority role from the control plan.
+    """
+
+    stage: LifecycleStage = Field(
+        default=LifecycleStage.unknown,
+        description="High-level lifecycle stage of the control loop.",
+    )
+    tristate: Optional[str] = Field(
+        default=None,
+        description="Subject tri-state from the runtime shell (silent/liminal/manifest).",
+    )
+    lifecycle_target: Optional[str] = Field(
+        default=None,
+        description="Intended lifecycle target from the control plan.",
+    )
+    health_severity: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Overall health severity for the lifecycle block.",
+    )
+    decision_authority: Optional[str] = Field(
+        default=None,
+        description="Canonical decision authority role from the control plan.",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
+
+
+class ExplainabilityProjection(BaseModel):
+    """Fallback, degradation, and diagnostics state for the desktop status projection.
+
+    Provides operators with an explanation of *why* the system is behaving
+    as it is — surfacing fallback reasons, degradation details, and a
+    diagnostics summary in a coherent, human-readable form.
+
+    Fields
+    ------
+    has_fallback
+        Whether any fallback or downgrade occurred in this cycle.
+    fallback_kinds
+        List of fallback kind labels (e.g. ``["native_multimodal_to_text"]``).
+    fallback_reasons
+        Human-readable reasons for each fallback/downgrade.
+    degradation_summary
+        Compact summary of all degradation events in this cycle.
+    diagnostics_summary
+        Diagnostics snapshot dict from the control plan.
+    authority_chain_clear
+        Whether the authority chain in the control plan is unambiguous.
+    source_warnings
+        Warnings about source/provider/capability availability.
+    health_severity
+        Health severity for the explainability block.
+    """
+
+    has_fallback: bool = Field(
+        default=False,
+        description="Whether any fallback or downgrade occurred.",
+    )
+    fallback_kinds: List[str] = Field(
+        default_factory=list,
+        description="List of fallback kind labels.",
+    )
+    fallback_reasons: List[str] = Field(
+        default_factory=list,
+        description="Human-readable reasons for each fallback/downgrade.",
+    )
+    degradation_summary: Optional[str] = Field(
+        default=None,
+        description="Compact summary of all degradation events.",
+    )
+    diagnostics_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Diagnostics snapshot dict from the control plan.",
+    )
+    authority_chain_clear: bool = Field(
+        default=True,
+        description="Whether the authority chain in the control plan is unambiguous.",
+    )
+    source_warnings: List[str] = Field(
+        default_factory=list,
+        description="Warnings about source/provider/capability availability.",
+    )
+    health_severity: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.ok,
+        description="Health severity for the explainability block.",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
+
+
+# ---------------------------------------------------------------------------
+# Top-level DesktopStatusProjection
+# ---------------------------------------------------------------------------
+
+
+class DesktopStatusProjection(BaseModel):
+    """Canonical shell-facing desktop status projection — PR-22.
+
+    A single, fully serialisable contract that the runtime shell uses as the
+    primary contract for desktop status board rendering.
+
+    This is the **top-level projection object** that aggregates all major
+    control-loop dimensions into one coherent, operator-facing view:
+
+    - **perception** — what the system is currently sensing
+    - **model_routing** — which model/provider is selected and why
+    - **execution** — which execution path is active and where
+    - **lifecycle** — where in the lifecycle the system is
+    - **explainability** — fallback/degradation reasons and diagnostics
+
+    Produced by :func:`build_desktop_status_projection` from a
+    :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict
+    (control-core output) combined with shell-owned source registry state.
+
+    Fields
+    ------
+    projection_id
+        Unique identifier for this projection instance.
+    runtime_session_id
+        Correlation ID linking this projection to the active runtime session.
+    projected_at
+        Unix epoch seconds when this projection was assembled.
+    perception
+        Perception / ingress state block.
+    model_routing
+        Model / routing state block.
+    execution
+        Execution path and remote-mode state block.
+    lifecycle
+        Lifecycle stage and health block.
+    explainability
+        Fallback, degradation, and diagnostics block.
+    overall_health
+        Rolled-up overall health severity across all blocks.
+    schema_version
+        Schema version for forward-compatibility tracking.
+    """
+
+    projection_id: str = Field(
+        default_factory=lambda: f"dsp_{uuid.uuid4().hex[:12]}",
+        description="Unique identifier for this projection instance.",
+    )
+    runtime_session_id: Optional[str] = Field(
+        default=None,
+        description="Correlation ID linking this projection to the active runtime session.",
+    )
+    projected_at: float = Field(
+        default_factory=time.time,
+        description="Unix epoch seconds when this projection was assembled.",
+    )
+    perception: PerceptionProjection = Field(
+        default_factory=PerceptionProjection,
+        description="Perception / ingress state block.",
+    )
+    model_routing: ModelRoutingProjection = Field(
+        default_factory=ModelRoutingProjection,
+        description="Model / routing state block.",
+    )
+    execution: ExecutionProjection = Field(
+        default_factory=ExecutionProjection,
+        description="Execution path and remote-mode state block.",
+    )
+    lifecycle: LifecycleProjection = Field(
+        default_factory=LifecycleProjection,
+        description="Lifecycle stage and health block.",
+    )
+    explainability: ExplainabilityProjection = Field(
+        default_factory=ExplainabilityProjection,
+        description="Fallback, degradation, and diagnostics block.",
+    )
+    overall_health: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Rolled-up overall health severity across all blocks.",
+    )
+    schema_version: str = Field(
+        default="1.0",
+        description="Schema version for forward-compatibility tracking.",
+    )
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serialisable dict representation."""
+        return json.loads(self.model_dump_json())
+
+    def to_json(self, **kwargs: Any) -> str:
+        """Return a JSON string representation."""
+        return json.dumps(self.to_dict(), **kwargs)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DesktopStatusProjection":
+        """Construct from a dict (round-trip from to_dict)."""
+        try:
+            return cls.model_validate(data)
+        except Exception as err:
+            _logger.warning("DesktopStatusProjection.from_dict failed: %s", err)
+            return cls()
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_str(value: object, default: Optional[str] = None) -> Optional[str]:
+    """Return a string from *value* or *default*."""
+    if value is None:
+        return default
+    s = str(value).strip()
+    return s if s else default
+
+
+def _safe_bool(value: object, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return bool(value)
+    if isinstance(value, str):
+        return value.lower() in ("true", "1", "yes")
+    return default
+
+
+def _safe_list(value: object) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _safe_dict(value: object) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _severity_from_str(value: Optional[str]) -> ProjectionHealthSeverity:
+    if not value:
+        return ProjectionHealthSeverity.unknown
+    try:
+        return ProjectionHealthSeverity(value.lower())
+    except ValueError:
+        return ProjectionHealthSeverity.unknown
+
+
+def _rolled_up_severity(severities: List[ProjectionHealthSeverity]) -> ProjectionHealthSeverity:
+    """Return the worst severity from a list."""
+    _order = [
+        ProjectionHealthSeverity.critical,
+        ProjectionHealthSeverity.degraded,
+        ProjectionHealthSeverity.advisory,
+        ProjectionHealthSeverity.ok,
+        ProjectionHealthSeverity.unknown,
+    ]
+    for sev in _order:
+        if sev in severities:
+            return sev
+    return ProjectionHealthSeverity.unknown
+
+
+def _lifecycle_stage_from_plan(ucp: Dict[str, Any], tristate: Optional[str]) -> LifecycleStage:
+    """Derive a LifecycleStage from the unified control plan and tri-state."""
+    lifecycle_target = _safe_str(ucp.get("lifecycle_target"))
+    fallback_level = _safe_str(ucp.get("fallback_level"), "none")
+    _ced = ucp.get("chosen_execution_decision")
+    exec_path = _safe_str(_ced.get("execution_path") if isinstance(_ced, dict) else None, "")
+    has_fallback = False
+    fdr = ucp.get("fallback_decision_record")
+    if isinstance(fdr, dict):
+        has_fallback = _safe_bool(fdr.get("has_fallback"), False)
+    if not has_fallback and fallback_level and fallback_level not in ("none", ""):
+        has_fallback = True
+
+    if tristate == "silent":
+        if lifecycle_target in ("succeeded", "success"):
+            return LifecycleStage.succeed
+        if lifecycle_target in ("failed", "failure", "error"):
+            return LifecycleStage.fail
+        if has_fallback:
+            return LifecycleStage.degrade
+        return LifecycleStage.idle
+
+    if tristate == "liminal":
+        if lifecycle_target in ("routing", "route"):
+            return LifecycleStage.route
+        if lifecycle_target in ("planning", "plan"):
+            return LifecycleStage.plan
+        return LifecycleStage.perceive
+
+    if tristate == "manifest":
+        if exec_path and exec_path not in ("none", ""):
+            return LifecycleStage.run
+        return LifecycleStage.delegate
+
+    if lifecycle_target in ("succeeded", "success"):
+        return LifecycleStage.succeed
+    if lifecycle_target in ("failed", "failure", "error"):
+        return LifecycleStage.fail
+    if has_fallback:
+        return LifecycleStage.degrade
+    return LifecycleStage.unknown
+
+
+# ---------------------------------------------------------------------------
+# Sub-contract builders
+# ---------------------------------------------------------------------------
+
+
+def _build_perception_projection(
+    ucp: Dict[str, Any],
+    source_registry_snapshot: Optional[Dict[str, Any]],
+) -> PerceptionProjection:
+    """Build the perception sub-projection from control plan and source registry."""
+    # Extract canonical perception state from the unified control plan.
+    cp = _safe_dict(ucp.get("canonical_perception"))
+    active_modalities: List[str] = _safe_list(cp.get("active_modalities"))
+    request_multimodal_present: bool = _safe_bool(cp.get("has_multimodal_input") or cp.get("requires_native_multimodal"))
+
+    # If the UCP carries a multimodal_route block, use it as additional signal.
+    mm_route = _safe_dict(ucp.get("multimodal_route"))
+    if mm_route and not active_modalities:
+        active_modalities = _safe_list(mm_route.get("active_modalities"))
+
+    # Determine continuous perception from source registry.
+    continuous_perception_active: bool = False
+    primary_audio_id: Optional[str] = None
+    primary_audio_type: Optional[str] = None
+    primary_video_id: Optional[str] = None
+    primary_video_type: Optional[str] = None
+    source_count: int = 0
+    active_source_count: int = 0
+    source_health_summary: Optional[str] = None
+    source_health_sev = ProjectionHealthSeverity.unknown
+
+    if isinstance(source_registry_snapshot, dict):
+        sources: List[Dict[str, Any]] = _safe_list(source_registry_snapshot.get("sources"))
+        source_count = len(sources)
+        active_sources = [s for s in sources if _safe_bool(s.get("is_active"))]
+        active_source_count = len(active_sources)
+        continuous_perception_active = active_source_count > 0
+
+        # Find primary audio and video sources.
+        for src in sources:
+            if _safe_bool(src.get("is_primary_audio")) and primary_audio_id is None:
+                primary_audio_id = _safe_str(src.get("source_id"))
+                primary_audio_type = _safe_str(src.get("source_type"))
+            if _safe_bool(src.get("is_primary_video")) and primary_video_id is None:
+                primary_video_id = _safe_str(src.get("source_id"))
+                primary_video_type = _safe_str(src.get("source_type"))
+
+        # Derive health from sources.
+        health_values = [_safe_str(s.get("health_status"), "unknown") for s in sources]
+        if any(h == "unavailable" for h in health_values):
+            source_health_sev = ProjectionHealthSeverity.degraded
+            source_health_summary = "One or more sources unavailable"
+        elif any(h == "degraded" for h in health_values):
+            source_health_sev = ProjectionHealthSeverity.advisory
+            source_health_summary = "One or more sources degraded"
+        elif all(h == "healthy" for h in health_values) and health_values:
+            source_health_sev = ProjectionHealthSeverity.ok
+            source_health_summary = "All sources healthy"
+        elif not health_values:
+            source_health_sev = ProjectionHealthSeverity.ok
+            source_health_summary = "No sources registered"
+        else:
+            source_health_sev = ProjectionHealthSeverity.unknown
+            source_health_summary = "Source health unknown"
+
+    # Active modalities from source registry if not already populated.
+    if not active_modalities and isinstance(source_registry_snapshot, dict):
+        sources_list: List[Dict[str, Any]] = _safe_list(source_registry_snapshot.get("sources"))
+        mods: List[str] = []
+        for src in sources_list:
+            if _safe_bool(src.get("is_active")):
+                modality = _safe_str(src.get("modality"))
+                if modality and modality not in mods:
+                    mods.append(modality)
+        active_modalities = mods
+
+    return PerceptionProjection(
+        continuous_perception_active=continuous_perception_active,
+        request_multimodal_present=request_multimodal_present,
+        active_modalities=active_modalities,
+        primary_audio_source_id=primary_audio_id,
+        primary_audio_source_type=primary_audio_type,
+        primary_video_source_id=primary_video_id,
+        primary_video_source_type=primary_video_type,
+        source_health_summary=source_health_summary,
+        source_count=source_count,
+        active_source_count=active_source_count,
+        health_severity=source_health_sev,
+    )
+
+
+def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjection:
+    """Build the model/routing sub-projection from the unified control plan."""
+    chosen_model = _safe_str(ucp.get("chosen_model"))
+    chosen_provider = _safe_str(ucp.get("chosen_provider"))
+    is_native_mm = _safe_bool(ucp.get("is_native_multimodal"))
+
+    # Support model hints — from support_model_ids in the plan.
+    support_model_hints: List[str] = _safe_list(ucp.get("support_model_ids"))
+
+    route_reason = _safe_str(ucp.get("route_reason"))
+    route_summary: Optional[str] = None
+
+    # Try to get a richer route reason from the multimodal_route block (PR-20).
+    mm_route = _safe_dict(ucp.get("multimodal_route"))
+    if mm_route:
+        if not route_reason:
+            route_reason = _safe_str(mm_route.get("route_reason"))
+        if not is_native_mm:
+            is_native_mm = _safe_bool(mm_route.get("is_native_multimodal"))
+        if not chosen_model:
+            chosen_model = _safe_str(mm_route.get("selected_model"))
+        if not chosen_provider:
+            chosen_provider = _safe_str(mm_route.get("selected_provider"))
+
+    # Build a compact route summary for display.
+    if chosen_provider and chosen_model:
+        mm_flag = " [native-MM]" if is_native_mm else ""
+        route_summary = f"{chosen_provider}/{chosen_model}{mm_flag}"
+
+    # Determine provider availability from model supply state if embedded.
+    provider_available = True
+    model_supply = _safe_dict(ucp.get("canonical_model_supply"))
+    if model_supply:
+        provider_records = _safe_list(model_supply.get("providers"))
+        if provider_records and chosen_provider:
+            for rec in provider_records:
+                if _safe_str(rec.get("provider_id")) == chosen_provider:
+                    health = _safe_str(rec.get("health_status"), "healthy")
+                    if health in ("unavailable", "error"):
+                        provider_available = False
+                    break
+
+    # Health severity for routing block.
+    if not chosen_model and not chosen_provider:
+        sev = ProjectionHealthSeverity.unknown
+    elif not provider_available:
+        sev = ProjectionHealthSeverity.critical
+    else:
+        sev = ProjectionHealthSeverity.ok
+
+    return ModelRoutingProjection(
+        selected_provider=chosen_provider,
+        selected_model=chosen_model,
+        is_native_multimodal=is_native_mm,
+        support_model_hints=support_model_hints,
+        route_reason=route_reason,
+        route_summary=route_summary,
+        provider_available=provider_available,
+        health_severity=sev,
+    )
+
+
+def _build_execution_projection(ucp: Dict[str, Any]) -> ExecutionProjection:
+    """Build the execution sub-projection from the unified control plan."""
+    # Primary source: UnifiedExecutionDecision (PR-21).
+    ued = _safe_dict(ucp.get("unified_execution_decision"))
+    exec_path_str: str = _safe_str(ued.get("execution_path") if ued else None, "")
+    remote_mode: Optional[str] = _safe_str(ued.get("remote_execution_mode") if ued else None)
+    target_device_ids: List[str] = _safe_list(ued.get("target_device_ids") if ued else [])
+    orchestration_active: bool = _safe_bool(ued.get("orchestration_active") if ued else False)
+    exec_reason: Optional[str] = _safe_str(ued.get("execution_reason") if ued else None)
+    delegation_point: Optional[str] = _safe_str(ued.get("delegation_point") if ued else None)
+
+    # Fallback: try the legacy ChosenExecutionDecision block.
+    if not exec_path_str:
+        ced = _safe_dict(ucp.get("chosen_execution_decision"))
+        exec_path_str = _safe_str(ced.get("execution_path") if ced else None, "none")
+        if not remote_mode:
+            remote_mode = _safe_str(ced.get("remote_execution_mode") if ced else None)
+        if not target_device_ids:
+            target_device_ids = _safe_list(ced.get("target_device_ids") if ced else [])
+        if not orchestration_active:
+            orchestration_active = _safe_bool(ced.get("orchestration_active") if ced else False)
+        if not delegation_point:
+            delegation_point = _safe_str(ced.get("delegation_point") if ced else None)
+
+    # Normalise execution path to enum.
+    try:
+        exec_path = ExecutionPathKind(exec_path_str)
+    except ValueError:
+        exec_path = ExecutionPathKind.none
+
+    # Health severity.
+    fdr = _safe_dict(ucp.get("fallback_decision_record"))
+    has_exec_fallback = _safe_bool(fdr.get("has_fallback") if fdr else False)
+    if has_exec_fallback:
+        sev = ProjectionHealthSeverity.degraded
+    elif exec_path == ExecutionPathKind.none:
+        sev = ProjectionHealthSeverity.advisory
+    else:
+        sev = ProjectionHealthSeverity.ok
+
+    return ExecutionProjection(
+        execution_path=exec_path,
+        remote_execution_mode=remote_mode,
+        target_device_ids=target_device_ids,
+        orchestration_active=orchestration_active,
+        delegation_point=delegation_point,
+        execution_reason=exec_reason,
+        health_severity=sev,
+    )
+
+
+def _build_lifecycle_projection(
+    ucp: Dict[str, Any],
+    tristate: Optional[str],
+) -> LifecycleProjection:
+    """Build the lifecycle sub-projection from the unified control plan and tri-state."""
+    lifecycle_target = _safe_str(ucp.get("lifecycle_target"))
+    decision_authority = _safe_str(ucp.get("decision_authority"))
+    stage = _lifecycle_stage_from_plan(ucp, tristate)
+
+    # Health severity from lifecycle stage.
+    if stage == LifecycleStage.fail:
+        sev = ProjectionHealthSeverity.critical
+    elif stage == LifecycleStage.degrade:
+        sev = ProjectionHealthSeverity.degraded
+    elif stage in (LifecycleStage.succeed, LifecycleStage.idle, LifecycleStage.run):
+        sev = ProjectionHealthSeverity.ok
+    else:
+        sev = ProjectionHealthSeverity.advisory
+
+    return LifecycleProjection(
+        stage=stage,
+        tristate=tristate,
+        lifecycle_target=lifecycle_target,
+        health_severity=sev,
+        decision_authority=decision_authority,
+    )
+
+
+def _build_explainability_projection(ucp: Dict[str, Any]) -> ExplainabilityProjection:
+    """Build the explainability sub-projection from the unified control plan."""
+    fdr = _safe_dict(ucp.get("fallback_decision_record"))
+    has_fallback = _safe_bool(fdr.get("has_fallback") if fdr else False)
+    fallback_kinds: List[str] = _safe_list(fdr.get("fallback_kinds") if fdr else [])
+
+    # Collect human-readable fallback reasons from the record.
+    fallback_reasons: List[str] = []
+    if fdr:
+        _reason_fields = [
+            "model_fallback_reason",
+            "agent_to_command_reason",
+            "remote_to_local_reason",
+            "multimodal_downgrade_reason",
+            "orchestration_downgrade_reason",
+            "blocked_reason",
+        ]
+        for rf in _reason_fields:
+            r = _safe_str(fdr.get(rf))
+            if r:
+                fallback_reasons.append(r)
+
+    # Also include the top-level fallback_reason from the plan.
+    top_fallback_reason = _safe_str(ucp.get("fallback_reason"))
+    if top_fallback_reason and top_fallback_reason not in fallback_reasons:
+        fallback_reasons.append(top_fallback_reason)
+        has_fallback = True
+
+    # Degradation summary.
+    degradation_summary: Optional[str] = None
+    if fallback_kinds or fallback_reasons:
+        parts = []
+        if fallback_kinds:
+            parts.append("kinds: " + ", ".join(fallback_kinds))
+        if fallback_reasons:
+            parts.append("reasons: " + "; ".join(fallback_reasons))
+        degradation_summary = " | ".join(parts)
+
+    # Diagnostics summary dict.
+    diag_summary = _safe_dict(ucp.get("diagnostics_summary")) or None
+
+    # Authority chain clarity.
+    auth = _safe_str(ucp.get("decision_authority"))
+    authority_chain_clear = auth == "subject_decision_authority"
+
+    # Source warnings from model supply state.
+    source_warnings: List[str] = []
+    model_supply = _safe_dict(ucp.get("canonical_model_supply"))
+    if model_supply:
+        for rec in _safe_list(model_supply.get("providers")):
+            health = _safe_str(rec.get("health_status"), "healthy")
+            pid = _safe_str(rec.get("provider_id"), "unknown")
+            if health in ("unavailable", "error"):
+                source_warnings.append(f"Provider {pid!r} is {health}")
+            elif health == "degraded":
+                source_warnings.append(f"Provider {pid!r} is degraded")
+
+    # Health severity for explainability block.
+    if fallback_kinds or has_fallback:
+        sev = ProjectionHealthSeverity.degraded
+    elif source_warnings:
+        sev = ProjectionHealthSeverity.advisory
+    else:
+        sev = ProjectionHealthSeverity.ok
+
+    return ExplainabilityProjection(
+        has_fallback=has_fallback,
+        fallback_kinds=fallback_kinds,
+        fallback_reasons=fallback_reasons,
+        degradation_summary=degradation_summary,
+        diagnostics_summary=diag_summary,
+        authority_chain_clear=authority_chain_clear,
+        source_warnings=source_warnings,
+        health_severity=sev,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Primary builders
+# ---------------------------------------------------------------------------
+
+
+def build_desktop_status_projection(
+    *,
+    unified_control_plan: Optional[Dict[str, Any]] = None,
+    source_registry_snapshot: Optional[Dict[str, Any]] = None,
+    tristate: Optional[str] = None,
+    runtime_session_id: Optional[str] = None,
+) -> DesktopStatusProjection:
+    """Build a canonical :class:`DesktopStatusProjection` for shell-facing status board rendering.
+
+    This is the primary builder consumed by the runtime shell
+    (:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime`).
+
+    The shell combines control-core outputs (:class:`~core.schemas.unified_control_plan.UnifiedControlPlan`
+    produced by OpenClawd) with shell-owned state (source registry snapshot,
+    tri-state lifecycle) through this stable projection contract.
+
+    All parameters are optional — a valid projection is always produced even
+    when sources or the control plan are unavailable.
+
+    Parameters
+    ----------
+    unified_control_plan:
+        Serialised :class:`~core.schemas.unified_control_plan.UnifiedControlPlan`
+        dict (from ``plan.to_dict()``).  ``None`` produces a minimal, valid
+        projection with graceful defaults.
+    source_registry_snapshot:
+        Snapshot dict from
+        :meth:`~core.desktop_presence_runtime.DesktopPresenceRuntime.snapshot_source_registry`.
+        ``None`` means no source registry information is available.
+    tristate:
+        Current subject tri-state value from the runtime shell
+        (``"silent"`` / ``"liminal"`` / ``"manifest"``).  ``None`` treated as
+        unknown.
+    runtime_session_id:
+        Correlation ID for the active runtime session.
+
+    Returns
+    -------
+    DesktopStatusProjection
+        A fully populated, serialisable desktop status projection.  Never
+        raises; degrades gracefully on any internal error.
+    """
+    try:
+        ucp: Dict[str, Any] = unified_control_plan or {}
+
+        perception = _build_perception_projection(ucp, source_registry_snapshot)
+        model_routing = _build_model_routing_projection(ucp)
+        execution = _build_execution_projection(ucp)
+        lifecycle = _build_lifecycle_projection(ucp, tristate)
+        explainability = _build_explainability_projection(ucp)
+
+        # Roll up overall health from all blocks.
+        overall_health = _rolled_up_severity([
+            perception.health_severity,
+            model_routing.health_severity,
+            execution.health_severity,
+            lifecycle.health_severity,
+            explainability.health_severity,
+        ])
+
+        return DesktopStatusProjection(
+            runtime_session_id=runtime_session_id,
+            perception=perception,
+            model_routing=model_routing,
+            execution=execution,
+            lifecycle=lifecycle,
+            explainability=explainability,
+            overall_health=overall_health,
+        )
+    except Exception as _err:
+        _logger.warning("build_desktop_status_projection failed, returning minimal: %s", _err)
+        return DesktopStatusProjection(
+            runtime_session_id=runtime_session_id,
+            overall_health=ProjectionHealthSeverity.unknown,
+        )
+
+
+def desktop_status_projection_summary(
+    projection: Optional["DesktopStatusProjection"],
+) -> Optional[Dict[str, Any]]:
+    """Return a compact, serialisable summary dict for the given projection.
+
+    Suitable for embedding in response metadata or API payloads.
+
+    Returns ``None`` when *projection* is ``None``.
+    """
+    if projection is None:
+        return None
+    return {
+        "projection_id": projection.projection_id,
+        "runtime_session_id": projection.runtime_session_id,
+        "projected_at": projection.projected_at,
+        "overall_health": projection.overall_health.value,
+        "lifecycle_stage": projection.lifecycle.stage.value,
+        "tristate": projection.lifecycle.tristate,
+        "selected_provider": projection.model_routing.selected_provider,
+        "selected_model": projection.model_routing.selected_model,
+        "is_native_multimodal": projection.model_routing.is_native_multimodal,
+        "execution_path": projection.execution.execution_path.value,
+        "remote_execution_mode": projection.execution.remote_execution_mode,
+        "orchestration_active": projection.execution.orchestration_active,
+        "continuous_perception_active": projection.perception.continuous_perception_active,
+        "active_modalities": projection.perception.active_modalities,
+        "has_fallback": projection.explainability.has_fallback,
+        "fallback_kinds": projection.explainability.fallback_kinds,
+        "degradation_summary": projection.explainability.degradation_summary,
+    }
