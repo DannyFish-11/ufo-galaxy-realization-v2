@@ -818,6 +818,10 @@ class CommandRouter:
         except Exception as _lc_exc:
             logger.debug("Lifecycle terminal transition skipped: %s", _lc_exc)
 
+        # ── PR-5 RemoteExecutionMode: propagate through result ───────────────
+        if envelope.remote_execution_mode is not None:
+            result["remote_execution_mode"] = envelope.remote_execution_mode.value
+
         return result
 
     async def route_command(
@@ -1562,6 +1566,7 @@ class CommandRouter:
         cr_result.setdefault("session_id", session_id)
         cr_result.setdefault("trace_id", trace_id)
         cr_result.setdefault("task_id", task_id)
+        cr_result.setdefault("remote_execution_mode", "agent_runtime")
 
         logger.info(
             "CommandRouter._deploy_agent_then_execute done | "
@@ -1699,6 +1704,7 @@ class CommandRouter:
         cr_result.setdefault("session_id", session_id)
         cr_result.setdefault("trace_id", trace_id)
         cr_result.setdefault("task_id", task_id)
+        cr_result.setdefault("remote_execution_mode", "agent_runtime")
 
         logger.info(
             "CommandRouter.dispatch_agent_remote done | trace_id=%s task_id=%s "

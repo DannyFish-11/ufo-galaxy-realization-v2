@@ -2220,6 +2220,7 @@ class OpenClawd:
         # PR-2: construct TaskEnvelope immediately at entry for unified internal routing.
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+            from core.schemas.remote_execution import RemoteExecutionMode as _REM
             _remote_envelope = _TaskEnvelope(
                 task_id=task_id,
                 trace_id=trace_id,
@@ -2231,6 +2232,7 @@ class OpenClawd:
                     "agent_template": agent_template,
                     "session_id": session_id or "",
                 },
+                remote_execution_mode=_REM.agent_runtime,
                 metadata={
                     "agent_id": agent_id,
                     "device_id": device_id or "",
@@ -2357,6 +2359,7 @@ class OpenClawd:
                 "device_id": device_id or "",
                 "session_id": session_id or "",
                 "remote_dispatch": True,
+                "remote_execution_mode": "agent_runtime",
                 "latency_ms": cr_result.get("latency_ms", 0.0),
                 "error_code": remote_error_code,
             },
@@ -4533,6 +4536,7 @@ class OpenClawd:
         try:
             from core.command_router import get_command_router
             from core.schemas.task_envelope import TaskEnvelope
+            from core.schemas.remote_execution import RemoteExecutionMode
 
             cr = get_command_router()
             # 构造 TaskEnvelope，携带 session_id 和 command_id 进入统一链路
@@ -4543,6 +4547,7 @@ class OpenClawd:
                 targets=[device_id],
                 tool_name=command,
                 args=payload or {},
+                remote_execution_mode=RemoteExecutionMode.command_only,
                 metadata={
                     "command_id": command_id,
                     "session_id": session_id,
