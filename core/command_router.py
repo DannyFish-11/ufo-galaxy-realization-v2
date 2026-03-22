@@ -48,6 +48,25 @@ All paths stamp :class:`~core.schemas.remote_execution.RemoteExecutionMode`
 in the envelope *before* entering :meth:`route_envelope` so that mode
 metadata is observable end-to-end without inspecting payload shapes.
 
+**PR-8: Orchestration layer vs. substrate boundary**
+
+``CommandRouter`` is the **execution substrate**, not the orchestration layer.
+
+* **Orchestration layer** (:class:`~core.swarm_coordinator.SwarmCoordinator`,
+  :class:`~core.control_plane.smart_scheduler.DeviceScoringEngine`) — decides
+  *which* devices to use and *how to coordinate* multiple targets.  It
+  expresses intent/selection/coordination decisions.  It does NOT perform
+  transport routing.
+
+* **Substrate layer** (this module, :meth:`route_envelope`) — handles
+  *how* commands travel to remote devices: ACL enforcement, lifecycle
+  management, NATS/WebSocket dispatch, timeout/retry.  It does NOT make
+  device-selection or coordination decisions.
+
+The orchestration layer calls :meth:`dispatch_agent_remote` or
+:meth:`route_envelope` only *after* planning decisions are complete.  The
+substrate then handles the transport/execution concerns exclusively.
+
 Galaxy - 命令路由引擎
 ==========================
 
