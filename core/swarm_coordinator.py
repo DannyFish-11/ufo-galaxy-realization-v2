@@ -495,9 +495,76 @@ class SwarmCoordinator:
             task_id=root_task_id,
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    def build_execution_plan_for_orchestration(
+        self,
+        members: List[Any],
+        task: str,
+        device_candidates: Optional[List[Any]] = None,
+        *,
+        session_id: str = "",
+        trace_id: str = "",
+        task_id: str = "",
+        required_capabilities: Optional[List[str]] = None,
+    ):
+        """PR-11: Build a canonical :class:`~core.schemas.execution_plan.ExecutionPlan`
+        for a multi-device orchestration intent.
+
+        This is a **planning-only** wrapper that:
+
+        1. Calls :meth:`build_orchestration_plan` to get the per-member
+           device-assignment decisions.
+        2. Converts those decisions into a first-class
+           :class:`~core.schemas.execution_plan.ExecutionPlan` using
+           :func:`~core.schemas.execution_plan.plan_from_orchestration_decisions`.
+
+        The returned plan makes the orchestration intent inspectable before
+        any substrate dispatch occurs.  Existing dispatch paths are unaffected.
+
+        Parameters
+        ----------
+        members / task / device_candidates / session_id / trace_id / task_id /
+        required_capabilities:
+            Same as :meth:`build_orchestration_plan`.
+
+        Returns
+        -------
+        core.schemas.execution_plan.ExecutionPlan or None
+            ``None`` when the execution plan schema is unavailable.
+        """
+        try:
+            from core.schemas.execution_plan import plan_from_orchestration_decisions
+
+            orch_plan = self.build_orchestration_plan(
+                members=members,
+                task=task,
+                device_candidates=device_candidates,
+                session_id=session_id,
+                trace_id=trace_id,
+                task_id=task_id,
+                required_capabilities=required_capabilities,
+            )
+            decisions_raw = [
+                {
+                    "agent_id": d.agent_id,
+                    "target_device_id": d.target_device_id,
+                    "resolved_execution_mode": d.resolved_execution_mode,
+                }
+                for d in orch_plan.decisions
+            ]
+            return plan_from_orchestration_decisions(
+                decisions=decisions_raw,
+                task=task,
+                trace_id=trace_id or orch_plan.trace_id,
+                session_id=session_id or orch_plan.session_id,
+                orchestration_plan_id=orch_plan.plan_id,
+            )
+        except Exception as _e:
+            logger.debug(
+                "SwarmCoordinator.build_execution_plan_for_orchestration failed: %s", _e
+            )
+            return None
+
+
 
     async def _dispatch_one(self, manifest) -> Dict[str, Any]:
         """Delegate a single :class:`SwarmAgentManifest` to the substrate.

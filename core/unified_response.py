@@ -11,6 +11,11 @@ Galaxy - 统一 API 响应格式
   UnifiedChatResponse 中的可选元数据字段 (runtime_session_id, entry_surface,
   entry_source, execution_authority, surface_role) 向调用方披露这一真实的
   执行路径，同时对现有客户端保持完全向后兼容。
+
+PR-11 新增:
+  - execution_plan_summary: 执行计划摘要 (可选, 默认 None, 不影响旧客户端)
+    由 OpenClawd 在执行决策后生成，包含 plan_id、execution_path、step_count
+    等字段，用于可观测性、诊断和后续生命周期追踪。
 """
 
 from datetime import datetime
@@ -44,6 +49,11 @@ class UnifiedChatResponse(BaseModel):
       - entry_source         : 原始请求来源协议 (e.g. "http_post")
       - execution_authority  : 持有执行主权的运行时 (e.g. "DesktopPresenceRuntime/OpenClawd")
       - surface_role         : 本表面在架构中的角色 (e.g. "compat_adapter")
+
+    PR-11 新增可选字段 (均为 Optional, 默认 None, 不影响旧客户端):
+      - execution_plan_summary: 执行计划摘要 dict，由 OpenClawd 在
+                                执行决策后生成。用于可观测性、诊断和后续
+                                生命周期追踪。旧客户端可安全忽略。
     """
     # ── 核心字段（向后兼容，永远序列化） ──────────────────────────────────
     success: bool = True
@@ -67,6 +77,13 @@ class UnifiedChatResponse(BaseModel):
     entry_source: Optional[str] = None         # 请求来源协议 ("http_post")
     execution_authority: Optional[str] = None  # 执行主权持有者 ("DesktopPresenceRuntime/OpenClawd")
     surface_role: Optional[str] = None         # 本表面架构角色 ("compat_adapter")
+
+    # ── PR-11 执行计划摘要（可选，非破坏性，旧客户端可安全忽略） ────────────
+    # 由 OpenClawd 在执行决策后生成，字段结构与 plan_summary() 返回值一致。
+    # 包含: plan_id, execution_path, delegation_point, step_count,
+    #       primary_step_type, is_local_only, is_remote, is_orchestration,
+    #       is_observe, trace_id, session_id.
+    execution_plan_summary: Optional[Dict[str, Any]] = None
 
     def to_json_response(self):
         """转换为 FastAPI JSONResponse 兼容的 dict"""
