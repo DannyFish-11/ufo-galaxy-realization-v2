@@ -5,6 +5,7 @@ core.architecture_diagnostics — Architecture Diagnostics and Validation
 ========================================================================
 
 PR-10 — Architecture Diagnostics and Validation Layer
+PR-10 (Consolidation) — Added projection and canonical/legacy label checks.
 
 Provides a lightweight, additive diagnostics and validation layer that
 inspects and validates the intended architectural structure established
@@ -17,6 +18,8 @@ The module answers questions like:
 - Is ``OpenClawd`` above ``AgentKernel``?
 - Is the execution substrate distinct from the orchestration layer?
 - Are remote-execution mode and authority metadata mutually coherent?
+- Is projection metadata coherent with the outward-truth policy?
+- Are canonical and legacy labels mutually exclusive across all layers?
 
 Design goals
 ------------
@@ -588,6 +591,116 @@ class ArchitectureDiagnostics:
     # Build report
     # ------------------------------------------------------------------
 
+    def check_projection_metadata_coherent(self) -> None:
+        """Projection metadata must be coherent with the outward-truth policy.
+
+        PR-010 consolidation check: the snapshot may carry a
+        ``"projection"`` key whose value is a metadata dict describing the
+        outward-facing projection surface.  If present, it must not carry a
+        legacy role label and should not declare ``is_outward_truth=False``.
+        """
+        check = "PROJECTION_METADATA_COHERENT"
+        self._checks_run.append(check)
+        proj = self._snapshot.get("projection")
+        if proj is None:
+            self._info(check, "No projection key in snapshot — check skipped.")
+            return
+
+        if not isinstance(proj, dict):
+            self._warn(check, "projection snapshot is not a dict — check skipped.")
+            return
+
+        _LEGACY_LABELS = {
+            "legacy_ui",
+            "legacy_shell",
+            "legacy_compatibility",
+            "compatibility_fallback",
+            "deprecated",
+            "LEGACY_UI",
+            "LEGACY_SHELL",
+            "LEGACY_COMPATIBILITY",
+            "DEPRECATED",
+        }
+        role = proj.get("role") or proj.get("surface_role", "")
+        is_outward_truth = proj.get("is_outward_truth", None)
+
+        if is_outward_truth is False:
+            self._error(
+                check,
+                "Projection snapshot explicitly declares is_outward_truth=False, "
+                "which violates the projection-only outward-truth policy.",
+                {"is_outward_truth": False},
+            )
+        elif role and role in _LEGACY_LABELS:
+            self._error(
+                check,
+                f"Projection snapshot carries legacy role label '{role}'. "
+                "Projection surfaces must not be labeled as legacy.",
+                {"role": role},
+            )
+        else:
+            self._info(
+                check,
+                "Projection metadata is coherent with the outward-truth policy.",
+                {"role": role, "is_outward_truth": is_outward_truth},
+            )
+
+    def check_canonical_legacy_labels_consistent(self) -> None:
+        """No snapshot layer should carry contradictory canonical and legacy labels.
+
+        PR-010 consolidation check: iterates over all top-level layers in the
+        snapshot and flags any that carry both a canonical-authority label and
+        a legacy-boundary label simultaneously.
+        """
+        check = "CANONICAL_LEGACY_LABELS_CONSISTENT"
+        self._checks_run.append(check)
+
+        _CANONICAL_LABELS = {
+            "runtime_shell_authority",
+            "subject_decision_authority",
+            "cognition_planning_layer",
+            "execution_substrate",
+            "orchestration_coordinator",
+            "projection_driven",
+        }
+        _LEGACY_LABELS = {
+            "legacy_ui",
+            "legacy_shell",
+            "legacy_compatibility",
+            "compatibility_fallback",
+            "deprecated",
+            "LEGACY_UI",
+            "LEGACY_SHELL",
+            "LEGACY_COMPATIBILITY",
+            "DEPRECATED",
+        }
+
+        violations: List[str] = []
+        for layer_key, layer_data in self._snapshot.items():
+            if not isinstance(layer_data, dict):
+                continue
+            role = self._get_role(layer_data)
+            if role is None:
+                continue
+            is_canonical = role in _CANONICAL_LABELS
+            is_legacy = role in _LEGACY_LABELS
+            if is_canonical and is_legacy:
+                violations.append(
+                    f"layer '{layer_key}' has role '{role}' which is both canonical and legacy"
+                )
+
+        if violations:
+            self._error(
+                check,
+                "Some snapshot layers carry contradictory canonical+legacy labels.",
+                {"violations": violations},
+            )
+        else:
+            self._info(
+                check,
+                "All snapshot layers have consistent canonical-vs-legacy labeling.",
+            )
+
     def run_all_checks(self) -> "ArchitectureDiagnostics":
         """Run all built-in invariant checks and return ``self``."""
         self.check_entry_surface_not_authority()
@@ -598,6 +711,8 @@ class ArchitectureDiagnostics:
         self.check_substrate_distinct_from_orchestration()
         self.check_remote_execution_coherence()
         self.check_authority_chain_complete()
+        self.check_projection_metadata_coherent()
+        self.check_canonical_legacy_labels_consistent()
         return self
 
     def build_report(self) -> DiagnosticsReport:

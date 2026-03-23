@@ -374,7 +374,7 @@ class ArchitectureCompletionScorecard:
     blocking_count: int = 0
     total_dimensions: int = 0
     scorecard_version: str = "1.0"
-    generated_by_pr: str = "PR-9"
+    generated_by_pr: str = "PR-10"
 
     def __post_init__(self) -> None:
         self._recompute_summary()
@@ -524,16 +524,16 @@ def build_dimension_scorecard(
 
 
 # ---------------------------------------------------------------------------
-# Built-in scorecard reflecting PR-1 through PR-9 history
+# Built-in scorecard reflecting PR-1 through PR-10 history
 # ---------------------------------------------------------------------------
 
 
 def _build_default_dimensions() -> List[DimensionScorecard]:
-    """Build the default dimension scores reflecting the PR-1 through PR-9
+    """Build the default dimension scores reflecting the PR-1 through PR-10
     architecture history.
 
-    This is the baseline scorecard shipped with PR-9.  Future PRs should
-    update the relevant dimension(s) by calling
+    This is the baseline scorecard updated by PR-10 consolidation.  Future PRs
+    should update the relevant dimension(s) by calling
     :func:`build_architecture_completion_scorecard` with an overrides dict.
     """
     dims: List[DimensionScorecard] = []
@@ -758,7 +758,10 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "DiagnosticsReport). PR-28 added ArchitectureTruthGuards. "
                 "PR-34 added DecisionTimeline for explainability. "
                 "PR-41 added RoutingObservability. PR-9 adds this "
-                "ArchitectureCompletionScorecard. The system can now explain "
+                "ArchitectureCompletionScorecard. PR-10 (consolidation) added "
+                "ArchitectureInvariants central constants and cross-cutting checks "
+                "(projection outward-truth, canonical/legacy label consistency, "
+                "addon contract metadata uniformity). The system can now explain "
                 "authority state, legacy zones, canonical paths, routing decisions, "
                 "and completion status in structured JSON."
             ),
@@ -766,11 +769,12 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "core.architecture_diagnostics",
                 "core.architecture_truth_guards",
                 "core.architecture_completion",
+                "core.architecture_invariants",
                 "core.architecture_status_report",
                 "core.decision_timeline",
                 "core.routing_observability",
             ],
-            pr_last_updated="PR-9",
+            pr_last_updated="PR-10",
         )
     )
 
@@ -778,7 +782,7 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
     dims.append(
         build_dimension_scorecard(
             CompletionDimension.TEST_COVERAGE_ARCHITECTURE_INVARIANTS,
-            MaturityLevel.CANONICALIZED,
+            MaturityLevel.COMPLETE,
             canonical_path_established=True,
             legacy_ambiguity_remains=False,
             rationale=(
@@ -786,8 +790,10 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "test_pr10_architecture_diagnostics, test_pr42_architecture_truth_guards, "
                 "test_pr47_canonical_cross_device_chain, test_pr48_ui_surface_demotions. "
                 "PR-9 adds test_pr49_architecture_completion_scorecard. "
-                "Coverage exists for authority chain, boundary invariants, "
-                "canonical chain, UI surface demotion, and completion scorecard."
+                "PR-10 (consolidation) adds test_pr50_architecture_consolidation which "
+                "covers cross-cutting invariants: authority label consistency, "
+                "canonical/legacy marker uniformity, scorecard/diagnostic alignment, "
+                "and projection outward-truth consistency."
             ),
             evidence_modules=[
                 "tests.test_pr10_architecture_diagnostics",
@@ -795,8 +801,9 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "tests.test_pr47_canonical_cross_device_chain",
                 "tests.test_pr48_ui_surface_demotions",
                 "tests.test_pr49_architecture_completion_scorecard",
+                "tests.test_pr50_architecture_consolidation",
             ],
-            pr_last_updated="PR-9",
+            pr_last_updated="PR-10",
         )
     )
 
@@ -807,7 +814,7 @@ def build_architecture_completion_scorecard(
     overrides: Optional[Dict[CompletionDimension, DimensionScorecard]] = None,
     *,
     scorecard_version: str = "1.0",
-    generated_by_pr: str = "PR-9",
+    generated_by_pr: str = "PR-10",
 ) -> ArchitectureCompletionScorecard:
     """Build a full :class:`ArchitectureCompletionScorecard`.
 
@@ -871,7 +878,7 @@ def get_architecture_completion_scorecard(
     Returns
     -------
     ArchitectureCompletionScorecard
-        The current canonical scorecard reflecting PR-1 through PR-9.
+        The current canonical scorecard reflecting PR-1 through PR-10.
     """
     global _CACHED_SCORECARD
     if _CACHED_SCORECARD is None or force_rebuild:
