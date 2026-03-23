@@ -126,6 +126,10 @@ from .routing_resolver import (
     resolve_routing_summary,
 )
 
+# PR-6: Re-export participation semantics so callers can import them from
+# the cross_device_policy package directly.
+from core.device_selection import DeviceParticipationStatus
+
 __all__ = [
     # Device role
     "DeviceRole",
@@ -146,4 +150,6 @@ __all__ = [
     # Resolver
     "resolve_routing",
     "resolve_routing_summary",
+    # PR-6: participation semantics
+    "DeviceParticipationStatus",
 ]
