@@ -2857,6 +2857,23 @@ class OpenClawd:
                     )
                     # PR-12: advance plan lifecycle to terminal state
                     self._finalise_plan_lifecycle(_plan_k, success=kernel_result.success)
+                    # PR-006: log delegation_hint advisory treatment so it is
+                    # observable in logs without affecting execution logic.
+                    # OpenClawd is the final decision authority; the hint is
+                    # never automatically promoted to a binding directive.
+                    if kernel_result.delegation_hint is not None:
+                        logger.info(
+                            "OpenClawd delegation_hint advisory | trace_id=%s "
+                            "hint=%r decision=advisory_noted (OpenClawd retains authority)",
+                            trace_id,
+                            kernel_result.delegation_hint,
+                        )
+                    else:
+                        logger.debug(
+                            "OpenClawd delegation_hint advisory | trace_id=%s "
+                            "hint=None decision=advisory_none",
+                            trace_id,
+                        )
                     # PR-19: build canonical unified control plan (additive, non-breaking)
                     _ucp_k = self._build_unified_control_plan(
                         runtime_session_id=runtime_session_id,
@@ -2916,6 +2933,25 @@ class OpenClawd:
                             # kernel suggest a delegation path; OpenClawd decides
                             # whether to adopt it.
                             "kernel_delegation_hint": kernel_result.delegation_hint,
+                            # PR-006: delegation_hint_decision records how OpenClawd
+                            # treated the kernel's advisory hint.  The hint is NEVER
+                            # automatically promoted to a binding directive; OpenClawd
+                            # always retains final decision authority.
+                            # "advisory_noted" — hint was present and logged (advisory only).
+                            # "advisory_none"  — no hint was provided by the kernel.
+                            "delegation_hint_decision": (
+                                "advisory_noted"
+                                if kernel_result.delegation_hint is not None
+                                else "advisory_none"
+                            ),
+                            # PR-006: soul_injection_phase from KernelResponse confirms
+                            # which execution phase (if any) loaded SOUL policy.
+                            # None means chat_only path; SOUL was never touched.
+                            "soul_injection_phase": kernel_result.soul_injection_phase,
+                            # PR-006: routing_authority from KernelResponse confirms
+                            # that any routing suggestion from AgentKernel is advisory;
+                            # final multi-model routing authority belongs to OpenClawd.
+                            "kernel_routing_authority": kernel_result.routing_authority,
                             # PR-11: compact execution plan summary for diagnostics
                             "execution_plan_summary": self._summarise_execution_plan(_plan_k),
                             # PR-12: plan-level lifecycle state for observability

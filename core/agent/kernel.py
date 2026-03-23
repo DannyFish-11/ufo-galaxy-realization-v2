@@ -65,10 +65,21 @@ class KernelResponse(BaseModel):
     KernelResponse 是认知层的输出契约：它携带 AgentKernel 完成认知与规划后
     产生的结构化结果，供 OpenClawd（且只有 OpenClawd）解释并决定后续执行/委托。
 
-    字段分为三类：
+    字段分为四类：
       - 规划/认知输出：mode, intent, agent_steps, tool_calls, task_result
-      - 委托建议：delegation_hint（OpenClawd 自行决定是否采纳）
-      - 元数据：model, session_id, error, latency_ms
+      - 委托建议：delegation_hint（OpenClawd 自行决定是否采纳，advisory only）
+      - SOUL 注入审计：soul_injection_phase（仅在 task_execute/hybrid 时非 None）
+      - 权威边界元数据：authority_role, routing_authority, arch_layer_id
+      - 通用元数据：model, session_id, error, latency_ms
+
+    PR-006 contract clarifications:
+      - ``delegation_hint`` is strictly advisory: OpenClawd is the sole decision
+        authority and may ignore or override this field.
+      - ``soul_injection_phase`` is None for chat_only paths; set to the intent
+        mode string ("task_execute" or "hybrid") when SOUL was injected.
+      - ``routing_authority`` is always "advisory_to_openclawd" to make explicit
+        that any routing suggestion from AgentKernel is advisory only — OpenClawd
+        (or its routing module) owns final multi-model routing authority.
     """
 
     success: bool = True
@@ -91,11 +102,32 @@ class KernelResponse(BaseModel):
     """意图路由结果"""
 
     delegation_hint: Optional[str] = None
-    """委托建议（认知产物字段）。
+    """委托建议（认知产物字段，advisory only）。
 
     AgentKernel 可在此字段提示 OpenClawd 适合的委托路径，
     例如 "local"、"single_remote"、"multi_device"。
-    OpenClawd 拥有最终委托决策权，此字段仅作建议参考。
+    OpenClawd 拥有最终委托决策权，此字段仅作建议参考，OpenClawd 可自行决定忽略。
+
+    PR-006: This field is strictly advisory. OpenClawd logs whether it accepts
+    or ignores this hint (see metadata.delegation_hint_decision).
+    """
+
+    soul_injection_phase: Optional[str] = None
+    """SOUL 策略注入阶段审计字段（PR-006）。
+
+    - None：纯聊天路径（chat_only），未注入 SOUL。
+    - "task_execute"：已在 task_execute 执行阶段注入 SOUL。
+    - "hybrid"：已在 hybrid 执行阶段注入 SOUL。
+
+    此字段明确记录 SOUL 策略的注入边界，使调用方可以验证纯聊天路径从未接触 SOUL。
+    """
+
+    routing_authority: str = "advisory_to_openclawd"
+    """多模型路由权威注解（PR-006）。
+
+    AgentKernel 不拥有最终路由决策权。任何路由建议均为 advisory，
+    最终路由决策权由 OpenClawd（及其路由模块）持有。
+    此字段固定为 "advisory_to_openclawd" 以明确该边界。
     """
 
     model: str = ""
@@ -119,6 +151,10 @@ class KernelResponse(BaseModel):
             "tool_calls": [t.model_dump() for t in self.tool_calls],
             "task_result": self.task_result,
             "delegation_hint": self.delegation_hint,
+            # PR-006: SOUL injection boundary audit field
+            "soul_injection_phase": self.soul_injection_phase,
+            # PR-006: routing authority is advisory only — OpenClawd owns final routing
+            "routing_authority": self.routing_authority,
             "intent": self.intent.raw_intent,
             "confidence": self.intent.confidence,
             "model": self.model,
@@ -155,6 +191,15 @@ class AgentKernel:
       - AgentKernel 的生命周期管理
       - 解释 KernelResponse（认知产物）
       - 根据 delegation_hint 和 execution_path 决定后续动作
+
+    PR-006 执行契约（明确且可强制执行）:
+      1. OpenClawd 是最终主体决策权威；AgentKernel 仅为认知/规划层。
+      2. delegation_hint 严格为建议性质（advisory only）；
+         OpenClawd 记录是否采纳该建议，并拥有完全的否决权。
+      3. SOUL 策略仅在 task_execute 或 hybrid 执行阶段注入；
+         纯聊天路径（chat_only）绝不加载 SOUL。
+      4. 多模型路由权威属于 OpenClawd（或其路由模块）；
+         AgentKernel 的任何路由建议均为 advisory（见 KernelResponse.routing_authority）。
     """
 
     _instance: Optional["AgentKernel"] = None
@@ -294,6 +339,9 @@ class AgentKernel:
         assert intent.mode in (IntentMode.TASK_EXECUTE, IntentMode.HYBRID), (
             f"SOUL 只能在 task_execute/hybrid 模式加载，当前 mode={intent.mode}"
         )
+        # PR-006: record the phase at which SOUL is injected so KernelResponse
+        # carries an auditable soul_injection_phase field (None for chat_only).
+        soul_injection_phase = intent.mode
         logger.debug("SOUL 注入: 执行路径 mode=%s", intent.mode)
         soul_policy = _safe_load(get_soul, "SOUL")
 
@@ -326,6 +374,8 @@ class AgentKernel:
             session_id=session_id,
             error=exec_result.error,
             latency_ms=(time.monotonic() - t0) * 1000,
+            # PR-006: record which execution phase injected SOUL
+            soul_injection_phase=soul_injection_phase,
         )
 
         # ── 步骤 4: 记录会话 ──

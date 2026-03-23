@@ -63,7 +63,16 @@ class PolicyLoader:
         
         ⚠️  此方法 **仅应** 由 kernel 在 intent = task_execute 或 hybrid
             的执行阶段调用，纯聊天路径禁止调用。
+
+        PR-006: SOUL policy is scoped exclusively to task_execute and hybrid
+        execution phases.  Callers outside those phases should use get_agents()
+        or get_user() instead.  A debug-level log is emitted here so that
+        unexpected calls to get_soul() are visible in traces.
         """
+        logger.debug(
+            "PolicyLoader.get_soul() called — SOUL policy is scoped to "
+            "task_execute/hybrid execution phases only (PR-006)"
+        )
         return self._load("SOUL")
 
     def get_agents(self) -> str:
