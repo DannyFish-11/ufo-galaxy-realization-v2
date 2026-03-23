@@ -1,21 +1,42 @@
 """
-galaxy_gateway/device_router.py — Internal Cross-Device Routing Layer
-=======================================================================
+galaxy_gateway/device_router.py — Runtime Session / Routing Adapter
+=====================================================================
 
-**Unified-Subject Architecture — Internal Cross-Device Substrate**
-------------------------------------------------------------------
-``DeviceRouter`` is an internal component of the cross-device execution
-substrate.  It is NOT a primary subject entrypoint; it receives routed
-commands from :class:`~core.command_router.CommandRouter` (the subject
-core's cross-device expansion arm) and manages active WebSocket connections
-to registered devices.
+**Unified-Subject Architecture — Runtime Session Adapter over Canonical State**
+--------------------------------------------------------------------------------
+``DeviceRouter`` is the **runtime session and routing substrate** for the
+cross-device execution layer.  It is NOT a canonical device registry and must
+not be treated as an alternate source of truth for device identity or state.
 
-In the unified subject architecture, device routing is part of the
-**liminal cross-device execution loop**, not a parallel system.
+Authority model (PR-3)
+----------------------
+- **Canonical write SSOT**: :class:`~core.unified.device_manager.UnifiedDeviceManager`
+  (UDM) — the only authoritative registry for device identity and mutable state.
+- **Canonical read contract**: :class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice`
+  — the stable projection of a runtime-capable device.
+- **This module**: runtime session adapter — manages active WebSocket/transport
+  connections, routes live tasks, and **patches canonical runtime state in UDM**
+  for every connection lifecycle event (connect / disconnect).
 
-Device Router - 设备路由和任务分发模块
+Local state policy
+------------------
+``DeviceRouter`` maintains a local ``self.devices`` table exclusively as an
+**operational cache** for:
 
-负责将用户命令路由到正确的设备执行，支持多设备协同任务。
+- active WebSocket / transport session handles needed for live task dispatch
+- per-connection transport metadata (reconnect counters, etc.)
+- routing feasibility checks against live connections
+
+This local cache **must not** be treated as the device truth source.  All
+connection lifecycle events (connect, disconnect) write canonical runtime state
+through UDM via :meth:`_sync_connection_state_to_udm` before updating the
+local cache.
+
+Read paths
+----------
+Router code that needs to present device state should prefer UDM canonical
+state via :meth:`get_canonical_device` and use router-local session data only
+for runtime/transport enrichment via :meth:`get_enriched_device_view`.
 
 数据流说明
 ----------
@@ -33,7 +54,7 @@ Device Router - 设备路由和任务分发模块
 - REST      : ``/api/v1/devices/*``
 
 Author: Manus AI
-Version: 2.0
+Version: 2.0 (PR-3: runtime session adapter normalisation)
 Date: 2026-03-07
 """
 
@@ -177,9 +198,34 @@ class Device:
 
 
 class DeviceRouter:
-    """设备路由器"""
-    
+    """Runtime session adapter and cross-device routing substrate.
+
+    **Role (PR-3)**
+    ---------------
+    ``DeviceRouter`` is a **runtime session adapter** over canonical device
+    state maintained by :class:`~core.unified.device_manager.UnifiedDeviceManager`
+    (UDM).  It is NOT a peer device truth source.
+
+    Responsibilities
+    ~~~~~~~~~~~~~~~~
+    1. Manage active WebSocket / transport session handles for live task
+       dispatch — the ``self.devices`` table is an **operational cache only**.
+    2. Patch canonical runtime state in UDM for every connection lifecycle
+       event via :meth:`_sync_connection_state_to_udm`.
+    3. Route tasks to live connected devices using local session handles.
+    4. Produce enriched device views by layering router-local session info
+       on top of canonical UDM state via :meth:`get_enriched_device_view`.
+
+    What it must NOT do
+    ~~~~~~~~~~~~~~~~~~~
+    - Act as the final authority for device identity or persistent state.
+    - Allow loss of local session state to imply device deregistration.
+    - Bypass UDM for canonical lifecycle writes.
+    """
+
     def __init__(self):
+        # Operational session cache — active WebSocket handles and transport metadata.
+        # This is NOT the canonical device registry; it mirrors only live connections.
         self.devices: Dict[str, Device] = {}
         self.task_queue: Dict[str, Dict] = {}
         self.task_results: Dict[str, Dict] = {}
@@ -187,12 +233,233 @@ class DeviceRouter:
         # Idempotency: seen task-result IDs.
         self._seen_task_result_ids: set = set()
     
+    # ------------------------------------------------------------------
+    # PR-3: Runtime lifecycle helpers — canonical state sync into UDM
+    # ------------------------------------------------------------------
+
+    def _build_runtime_presence_patch(
+        self,
+        connected: bool,
+        transport: str = "websocket",
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Build a UDM ``upsert_device_state`` patch representing current
+        runtime connection presence.
+
+        This patch contains only the runtime-presence fields that the router
+        is authorised to write (connection state, online/offline status, and
+        last_seen).  It does NOT overwrite identity, capabilities, or any
+        field outside the router's authority.
+
+        Args:
+            connected: ``True`` if the device has an active transport session;
+                       ``False`` when the session has ended.
+            transport: Transport mechanism label (default ``"websocket"``).
+            session_id: Optional session identifier for the current connection.
+
+        Returns:
+            Dict ready for ``udm.upsert_device_state(device_id, patch, source)``.
+        """
+        status = "online" if connected else "offline"
+        patch: Dict[str, Any] = {
+            "status": status,
+            "runtime_connection": {
+                "connected": connected,
+                "transport": transport,
+                "last_seen": _time.time(),
+            },
+        }
+        if session_id:
+            patch["runtime_connection"]["session_id"] = session_id
+        return patch
+
+    def _sync_connection_state_to_udm(
+        self,
+        device_id: str,
+        connected: bool,
+        transport: str = "websocket",
+        session_id: Optional[str] = None,
+    ) -> bool:
+        """Patch canonical runtime connection state into UDM.
+
+        This is the central lifecycle write path that must be called for every
+        connect and disconnect event so that canonical device state reflects
+        the router's runtime observations.
+
+        The patch writes only runtime-presence fields; it does NOT delete the
+        device from UDM.  Loss of the router-local session entry must never
+        erase the canonical device registration.
+
+        Args:
+            device_id: Device being updated.
+            connected: ``True`` for connect events; ``False`` for disconnect.
+            transport: Transport label (default ``"websocket"``).
+            session_id: Optional active session identifier.
+
+        Returns:
+            ``True`` if the UDM patch succeeded; ``False`` otherwise (warning
+            already logged — caller should still proceed with local cleanup).
+        """
+        udm = _get_udm()
+        if udm is None:
+            logger.debug(
+                "_sync_connection_state_to_udm: UDM unavailable for %s connected=%s",
+                device_id, connected,
+            )
+            return False
+        try:
+            patch = self._build_runtime_presence_patch(
+                connected=connected, transport=transport, session_id=session_id
+            )
+            udm.upsert_device_state(device_id, patch, source="device_router")
+            logger.debug(
+                "_sync_connection_state_to_udm: patched UDM for %s connected=%s",
+                device_id, connected,
+            )
+            return True
+        except Exception as _e:
+            logger.warning(
+                "_sync_connection_state_to_udm: UDM patch failed for %s connected=%s — %s",
+                device_id, connected, _e,
+            )
+            return False
+
+    # ------------------------------------------------------------------
+    # PR-3: Explicit connection lifecycle methods
+    # ------------------------------------------------------------------
+
+    def on_device_connected(
+        self,
+        device_id: str,
+        websocket: Any = None,
+        transport: str = "websocket",
+        session_id: Optional[str] = None,
+    ) -> None:
+        """Record that a device transport session has been established.
+
+        Patches canonical runtime state in UDM (online / connected) and
+        updates the router-local session cache with the live transport handle.
+
+        This is the preferred hook for connection-establishment events.
+        Callers who go through :meth:`register_device` do not need to call
+        this separately — ``register_device`` invokes it internally.
+        """
+        self._sync_connection_state_to_udm(
+            device_id, connected=True, transport=transport, session_id=session_id
+        )
+        if device_id in self.devices and websocket is not None:
+            self.devices[device_id].websocket = websocket
+
+    def on_device_disconnected(
+        self,
+        device_id: str,
+        transport: str = "websocket",
+    ) -> None:
+        """Record that a device transport session has ended.
+
+        Patches canonical runtime state in UDM (offline / disconnected)
+        WITHOUT deleting the canonical device registration, then removes
+        the device from the router-local session cache.
+
+        This preserves the invariant that loss of router-local session state
+        must not erase canonical device registration.
+        """
+        self._sync_connection_state_to_udm(
+            device_id, connected=False, transport=transport
+        )
+        # Remove from local operational cache (session handle gone)
+        self.devices.pop(device_id, None)
+
+    # ------------------------------------------------------------------
+    # PR-3: Canonical read helpers
+    # ------------------------------------------------------------------
+
+    def get_canonical_device(self, device_id: str) -> Optional[Any]:
+        """Fetch the canonical device record from UDM.
+
+        Prefer this over ``self.devices.get(device_id)`` when you need
+        identity / registration data rather than live session handles.
+
+        Returns:
+            A :class:`~core.unified.models.UnifiedDevice` instance if found,
+            or ``None`` when UDM is unavailable or the device is not registered.
+        """
+        udm = _get_udm()
+        if udm is None:
+            return None
+        try:
+            return udm.get_device(device_id)
+        except Exception as _e:
+            logger.debug("get_canonical_device: UDM read failed for %s — %s", device_id, _e)
+            return None
+
+    def get_enriched_device_view(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """Return a merged view of canonical UDM state enriched with router-local
+        runtime session metadata.
+
+        The canonical UDM record is the base; router-local data (WebSocket
+        connection state, session_id, last_seen from local observation) is
+        layered on top.  The result is suitable for status APIs and observability
+        surfaces but must NOT be used as a writable state source.
+
+        Returns:
+            A plain dict with merged fields, or ``None`` if neither UDM nor
+            local session cache has an entry for ``device_id``.
+        """
+        udm_device = self.get_canonical_device(device_id)
+        local_device = self.devices.get(device_id)
+
+        if udm_device is None and local_device is None:
+            return None
+
+        # Start with canonical UDM fields
+        if udm_device is not None:
+            view: Dict[str, Any] = {
+                "device_id": udm_device.device_id,
+                "device_name": getattr(udm_device, "device_name", ""),
+                "device_type": (
+                    udm_device.device_type.value
+                    if hasattr(udm_device.device_type, "value")
+                    else str(udm_device.device_type)
+                ),
+                "status": (
+                    udm_device.status.value
+                    if hasattr(udm_device.status, "value")
+                    else str(udm_device.status)
+                ),
+                "capabilities": list(getattr(udm_device, "capabilities", []) or []),
+                "source": "udm",
+            }
+        else:
+            # Fallback: local session cache only
+            view = local_device.to_dict()  # type: ignore[union-attr]
+            view["source"] = "router_local"
+
+        # Layer router-local runtime session enrichment on top
+        if local_device is not None:
+            view["router_session"] = {
+                "has_active_websocket": local_device.websocket is not None,
+                "local_status": local_device.status,
+                "last_seen": local_device.last_seen.isoformat()
+                if hasattr(local_device.last_seen, "isoformat")
+                else str(local_device.last_seen),
+            }
+
+        return view
+
     def register_device(self, device_id: str, device_type: str,
                        capabilities: List[str], websocket=None,
                        metadata: Optional[Dict[str, Any]] = None) -> bool:
-        """注册设备（写入 UDM SSOT，本地 self.devices 仅用于 WebSocket 连接管理）"""
+        """Register a device and establish its runtime session in the router.
+
+        Write order (PR-3):
+        1. UDM SSOT write (canonical identity registration).
+        2. Canonical runtime presence patch via ``_sync_connection_state_to_udm``
+           (marks device as online / connected in canonical state).
+        3. Local operational cache update (WebSocket session handle).
+        """
         try:
-            # ── SSOT: write to UDM first ──────────────────────────────────
+            # ── SSOT: write to UDM first (identity registration) ──────────
             udm = _get_udm()
             if udm is not None:
                 try:
@@ -210,6 +477,10 @@ class DeviceRouter:
                         device_id, _udm_err,
                     )
 
+            # ── PR-3: patch canonical runtime presence into UDM ───────────
+            self._sync_connection_state_to_udm(device_id, connected=True)
+
+            # ── Operational cache: store WebSocket session handle ─────────
             device = Device(device_id, device_type, capabilities, metadata=metadata)
             device.websocket = websocket
             self.devices[device_id] = device
@@ -235,21 +506,22 @@ class DeviceRouter:
             return False
     
     def unregister_device(self, device_id: str) -> bool:
-        """注销设备（写入 UDM SSOT，同时清理本地连接表和 GatewayCapabilityRegistry）"""
+        """Remove the device's runtime session from the router.
+
+        PR-3 authority model:
+        - Patches canonical runtime state in UDM (offline / disconnected)
+          via ``_sync_connection_state_to_udm``.  The canonical device
+          registration is **preserved** in UDM — this call must never erase
+          device identity from the canonical registry.
+        - Removes the device from the local operational session cache.
+        - Purges per-device entries from GatewayCapabilityRegistry.
+        """
         try:
-            # ── SSOT: write to UDM first ──────────────────────────────────
-            udm = _get_udm()
-            if udm is not None:
-                try:
-                    udm.unregister_device(device_id)
-                    logger.debug(
-                        "DeviceRouter.unregister_device: UDM write succeeded for %s", device_id
-                    )
-                except Exception as _udm_err:
-                    logger.warning(
-                        "DeviceRouter.unregister_device: UDM write failed for %s — %s",
-                        device_id, _udm_err,
-                    )
+            # ── PR-3: patch canonical runtime presence (offline) into UDM ──
+            # Do NOT call udm.unregister_device(); that would erase the canonical
+            # device registration.  Loss of router-local session state must not
+            # imply device deregistration.
+            self._sync_connection_state_to_udm(device_id, connected=False)
 
             if device_id in self.devices:
                 del self.devices[device_id]
