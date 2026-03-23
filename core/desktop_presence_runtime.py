@@ -818,6 +818,74 @@ class DesktopPresenceRuntime:
             )
             return {"snapshot_at": time.time(), "error": str(_err)}
 
+    def permission_safety_summary(
+        self,
+        *,
+        result: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """PR-32: Return a shell-facing permission/trust/safety summary.
+
+        Derives an :class:`~core.multimodal.permission_safety_state.OperatorSafetySummary`
+        from the canonical :class:`~core.multimodal.permission_safety_state.PermissionSafetySnapshot`
+        last committed to the singleton by OpenClawd.  If the singleton
+        carries no snapshot yet, falls back to building a fresh one from the
+        shell-owned source registry.
+
+        This method is the runtime shell's primary entry point for presenting
+        permission and trust state to operators.  It always derives from
+        canonical state and never acts as an independent truth source.
+
+        Parameters
+        ----------
+        result:
+            Optional OpenClawd response dict.  When provided, the embedded
+            ``permission_safety_state`` is preferred over the singleton.
+        trace_id:
+            Optional correlation trace ID.
+
+        Returns
+        -------
+        dict
+            Serialisable :class:`~core.multimodal.permission_safety_state.OperatorSafetySummary`
+            dict.  Never raises.
+        """
+        try:
+            from core.multimodal.permission_safety_state import (  # noqa: PLC0415
+                build_operator_safety_summary,
+                build_permission_safety_snapshot,
+                get_permission_safety_state,
+                PermissionSafetySnapshot,
+            )
+
+            # Prefer snapshot embedded in the OpenClawd response
+            snap_dict: Optional[Dict[str, Any]] = None
+            if isinstance(result, dict):
+                snap_dict = result.get("metadata", {}).get("permission_safety_state")
+
+            snap: Optional[PermissionSafetySnapshot] = None
+            if isinstance(snap_dict, dict):
+                snap = PermissionSafetySnapshot.from_dict(snap_dict)
+            else:
+                # Fall back to singleton committed by OpenClawd
+                snap = get_permission_safety_state().latest_snapshot
+
+            if snap is None:
+                # Final fallback: build from the shell-owned registry
+                snap = build_permission_safety_snapshot(
+                    source_registry_snapshot=self.snapshot_source_registry(),
+                    trace_id=trace_id,
+                )
+
+            summary = build_operator_safety_summary(snap)
+            return summary.to_dict()
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.permission_safety_summary failed (non-fatal): %s",
+                _err,
+            )
+            return {"operator_message": "trust=unknown", "error": str(_err)}
+
     def build_desktop_status_projection(
         self,
         result: Optional[Dict[str, Any]] = None,
