@@ -1303,6 +1303,102 @@ class OpenClawd:
             logger.debug("_build_degraded_operation_envelope failed (swallowed): %s", _exc)
             return None
 
+    def _apply_latency_budget(
+        self,
+        *,
+        multimodal_context: Any,
+        canonical_perception: Optional[Dict[str, Any]],
+        multimodal_route: Optional[Dict[str, Any]],
+        trace_id: str = "",
+        runtime_session_id: str = "",
+    ) -> Optional[Dict[str, Any]]:
+        """PR-30: Apply control-loop latency budgets and return a serialisable summary.
+
+        Evaluates ingest cadence, control-plan recompute, projection refresh,
+        provider-selection latency, and text-only fast-path eligibility for the
+        current control-loop iteration.  The returned dict is embedded in
+        response metadata for structured latency accounting without coupling to
+        a specific dashboard implementation.
+
+        Errors are fully isolated — ``None`` is returned on any failure so that
+        the existing response flow is never interrupted.
+
+        Args:
+            multimodal_context:
+                Raw multimodal context payload supplied to :meth:`process`.
+            canonical_perception:
+                Canonical perception state dict (PR-16).
+            multimodal_route:
+                Routing decision dict returned by :meth:`_select_multimodal_route`.
+            trace_id:
+                Trace identifier for the current request.
+            runtime_session_id:
+                Runtime session identifier for the current request.
+
+        Returns:
+            Serialised :class:`~core.control_loop_latency_budget.LatencyBudgetSummary`
+            dict, or ``None`` on error.
+        """
+        try:
+            from core.control_loop_latency_budget import (
+                assess_text_only_fast_path as _assess_fp,
+                build_latency_budget_summary as _build_summary,
+                get_control_loop_latency_budget as _get_budget,
+                IngestCadencePolicy as _ICP,
+                RecomputePolicy as _RCP,
+                ProjectionRefreshPolicy as _PRP,
+            )
+
+            _budget = _get_budget()
+
+            # ── Text-only fast path assessment ────────────────────────────────
+            _fp = _assess_fp(
+                multimodal_context=multimodal_context,
+                canonical_perception=canonical_perception,
+            )
+
+            # ── Ingest cadence decision ───────────────────────────────────────
+            _ingest_policy: _ICP = _budget.decide_ingest_cadence(
+                has_multimodal_context=_fp.has_multimodal_context,
+                is_text_only=_fp.is_text_only,
+            )
+
+            # ── Control-plan recompute decision ───────────────────────────────
+            _recompute_policy: _RCP = _budget.decide_recompute()
+
+            # ── Projection refresh decision ───────────────────────────────────
+            # Use route_type as a lightweight fingerprint for suppression.
+            _fp_hint = (multimodal_route or {}).get("route_type") if multimodal_route else None
+            _projection_policy: _PRP = _budget.decide_projection_refresh(
+                state_fingerprint=_fp_hint,
+            )
+
+            # ── Provider selection latency recording ──────────────────────────
+            _route_type = (multimodal_route or {}).get("route_type", "unknown") if multimodal_route else "unknown"
+            _provider_budget = _budget.record_provider_selection(
+                measured_ms=0.0,  # measured at call site; 0.0 is safe default
+                route_type=str(_route_type),
+                fast_path_applied=_fp.is_text_only,
+            )
+
+            # ── Compose summary ───────────────────────────────────────────────
+            _summary = _build_summary(
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+                ingest_cadence_policy=_ingest_policy,
+                recompute_policy=_recompute_policy,
+                projection_refresh_policy=_projection_policy,
+                provider_selection_budget=_provider_budget,
+                text_only_fast_path=_fp,
+                ingest_window_stats=_budget.snapshot_ingest_stats(),
+                recompute_window_stats=_budget.snapshot_recompute_stats(),
+                projection_window_stats=_budget.snapshot_projection_stats(),
+            )
+            return _summary.to_dict()
+        except Exception as _exc:
+            logger.debug("_apply_latency_budget failed (swallowed): %s", _exc)
+            return None
+
     def _build_execution_trace(
         self,
         intent_profile: Any,
@@ -2162,6 +2258,21 @@ class OpenClawd:
             )
         )
 
+        # ── PR-30: Control-Loop Latency Budget ────────────────────────────────
+        # Apply explicit latency-budget awareness: ingest cadence, control-plan
+        # recompute throttling, projection refresh budgeting, provider-selection
+        # latency, and text-only fast-path detection.  The resulting summary is
+        # embedded in response metadata for structured latency accounting.
+        # OpenClawd retains full authority over all decisions; this block only
+        # shapes cadence and recomputation, never correctness.
+        _latency_budget_summary: Optional[Dict[str, Any]] = self._apply_latency_budget(
+            multimodal_context=multimodal_context,
+            canonical_perception=_canonical_perception,
+            multimodal_route=_multimodal_route,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id or "",
+        )
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -2472,6 +2583,9 @@ class OpenClawd:
                             # PR-29: canonical degraded-operation envelope (provider
                             # failover chain, fallback policy ladder, severity).
                             "degraded_operation_envelope": _degraded_operation_envelope,
+                            # PR-30: control-loop latency budget summary (ingest cadence,
+                            # recompute throttling, projection refresh, fast-path).
+                            "latency_budget_summary": _latency_budget_summary,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2742,6 +2856,9 @@ class OpenClawd:
                     "routing_decision_event": _routing_decision_event,
                     # PR-29: canonical degraded-operation envelope.
                     "degraded_operation_envelope": _degraded_operation_envelope,
+                    # PR-30: control-loop latency budget summary (ingest cadence,
+                    # recompute throttling, projection refresh, fast-path).
+                    "latency_budget_summary": _latency_budget_summary,
                 },
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
                 # this field are unaffected).
