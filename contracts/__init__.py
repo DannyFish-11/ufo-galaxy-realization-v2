@@ -26,7 +26,9 @@ from contracts.execution_trace import (
     from_readiness_result,
 )
 
-# PR-29: Unified Registered Runtime Device Contract
+# PR-29 / PR-5: Unified Registered Runtime Device Contract
+# RegisteredRuntimeDevice is the sole canonical external single-device
+# read contract.  All major device sources provide a stable adapter into it.
 from contracts.registered_runtime_device import (
     RegisteredRuntimeDevice,
     RuntimeConnectionSummary,
@@ -43,6 +45,7 @@ from contracts.registered_runtime_device import (
     from_router_device,
     from_android_registration,
     from_device_registry_record,
+    from_device_agent_manager_record,
 )
 
 # PR-30: Local Runtime Host Contract
@@ -260,7 +263,7 @@ __all__ = [
     "from_execution_result",
     "from_fallback_trace",
     "from_readiness_result",
-    # PR-29: Registered Runtime Device Contract
+    # PR-29 / PR-5: Registered Runtime Device Contract
     "RegisteredRuntimeDevice",
     "RuntimeConnectionSummary",
     "RuntimeCapabilityProfile",
@@ -276,6 +279,7 @@ __all__ = [
     "from_router_device",
     "from_android_registration",
     "from_device_registry_record",
+    "from_device_agent_manager_record",
     # PR-30: Local Runtime Host Contract
     "LocalRuntimeHost",
     "LocalRuntimeHostStatus",
