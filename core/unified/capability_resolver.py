@@ -3,10 +3,21 @@
 """
 core/unified/capability_resolver.py
 =====================================
-PR-2 (Block-2) — Unified Capability Resolver
+PR-002 — Canonical Capability Resolver (Promoted to Canonical Consumer Interface)
 
-Resolves capability names / queries against the registered contract pool,
-applying schema validation before any capability enters the scheduling path.
+**Canonical role**: ``CapabilityResolver`` is the *preferred read path* for all
+capability consumers — in particular ``OpenClawd`` and any other subsystem that
+needs to build tool schemas or discover available capabilities.
+
+Architecture contract
+---------------------
+- **Writers / loaders** (``mcp_loader``, ``skill_loader``, ``NodeFabricRegistry``,
+  device-registration paths) populate :class:`~core.agent.capability_registry.CapabilityRegistry`.
+- **Consumers** (``OpenClawd._collect_tools()``, route handlers, downstream
+  projections) ask **this resolver** for validated, normalised
+  :class:`~core.unified.capability_contract.CapabilityContract` objects.
+- Consumers **must not** hand-roll registry traversal when the resolver suffices.
+  Direct registry access is reserved for writers/loaders and diagnostic tooling.
 
 The resolver acts as a gatekeeper: no capability that fails
 :func:`~core.unified.capability_contract.validate_capability_contract`
@@ -24,11 +35,22 @@ Design
 
 Usage::
 
-    from core.unified.capability_resolver import CapabilityResolver, get_capability_resolver
+    from core.unified.capability_resolver import get_capability_resolver
+    from core.unified.capability_contract import CapabilitySource
 
     resolver = get_capability_resolver()
-    contract = resolver.resolve("take_screenshot")   # returns CapabilityContract or None
-    contracts = resolver.resolve_all()               # list[CapabilityContract] (valid only)
+
+    # Resolve a single capability by name
+    contract = resolver.resolve("take_screenshot")   # CapabilityContract or None
+
+    # Resolve all valid contracts
+    contracts = resolver.resolve_all()               # list[CapabilityContract]
+
+    # Preferred entry point for OpenClawd tool collection
+    schemas = resolver.collect_tool_schemas(
+        sources=[CapabilitySource.MCP, CapabilitySource.SKILL]
+    )                                                # list[dict] (OpenAI format)
+
     resolver.invalidate_cache()                      # force re-read on next resolve
 """
 
@@ -37,7 +59,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from .capability_contract import (
     CapabilityContract,
@@ -233,6 +255,39 @@ class CapabilityResolver:
             c for c in self.resolve_all()
             if q in c.name.lower() or q in c.description.lower()
         ]
+
+    def collect_tool_schemas(
+        self,
+        sources: Optional[Sequence[CapabilitySource]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return OpenAI function-calling schemas for all valid resolved contracts.
+
+        This is the **canonical tool-schema collection entry point** for
+        ``OpenClawd._collect_tools()`` and any other capability consumer that
+        needs to build LLM tool lists.  Only contracts that pass
+        :func:`~core.unified.capability_contract.validate_capability_contract`
+        are included.
+
+        Parameters
+        ----------
+        sources : optional sequence of CapabilitySource
+            If provided, only contracts whose ``source`` matches one of the
+            given values are returned.  If ``None`` (default), contracts from
+            all sources are included.
+
+        Returns
+        -------
+        list[dict]
+            OpenAI function-calling format schemas:
+            ``[{"type": "function", "function": {"name": ..., ...}}, ...]``.
+        """
+        if sources is not None:
+            contracts: List[CapabilityContract] = []
+            for src in sources:
+                contracts.extend(self.resolve_all(source=src))
+        else:
+            contracts = self.resolve_all()
+        return [c.to_tool_schema() for c in contracts]
 
     def validation_errors(self) -> List[Dict[str, Any]]:
         """Return the list of contract validation errors from the last cache build."""

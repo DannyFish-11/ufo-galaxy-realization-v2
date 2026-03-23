@@ -3,19 +3,24 @@
 """
 core/unified/capability_contract.py
 ======================================
-PR-2 (Block-2) — Unified Capability Contract
+PR-002 — Canonical Capability Contract Schema (Promoted to Authoritative Schema)
 
-Defines the canonical schema for all capabilities registered in the Galaxy
-system, regardless of their origin (MCP tool, Skill, Device, Node).
+**Canonical role**: ``CapabilityContract`` is the *required normalised
+descriptor model* for every capability in the Galaxy system.  All capability
+sources (``mcp_loader``, ``skill_loader``, device-registration paths, node
+fabric registry) **must** produce a valid :class:`CapabilityContract` before a
+capability can be registered in
+:class:`~core.agent.capability_registry.CapabilityRegistry`.
 
-The contract enforces:
-- Required fields (name, description, source, version)
-- Parameters schema (must be a valid JSON Schema object)
-- Metadata consistency
-
-All capability sources (mcp_loader, skill_loader, device_registry, node
-registry) MUST produce a :class:`CapabilityContract` before the capability
-can be registered in the :class:`~core.agent.capability_registry.CapabilityRegistry`.
+Architecture contract
+---------------------
+- ``CapabilityContract`` = the single schema expectation across all capability
+  sources (MCP, Skill, Device/Gateway, Node).
+- :func:`validate_capability_contract` is the enforcement gate — it must be
+  called at registration time.
+- :class:`~core.unified.capability_resolver.CapabilityResolver` re-validates
+  all contracts before returning them to consumers, ensuring that only
+  well-formed entries reach ``OpenClawd`` or other scheduling paths.
 
 Usage::
 
@@ -37,7 +42,7 @@ Usage::
             },
         },
     )
-    validate_capability_contract(contract)   # raises on schema errors
+    validate_capability_contract(contract)   # raises CapabilityContractError on schema errors
 """
 
 from __future__ import annotations
