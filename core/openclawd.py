@@ -1503,8 +1503,9 @@ class OpenClawd:
     def _select_multimodal_route(
         self,
         canonical_perception: Optional[Dict[str, Any]],
+        source_registry_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """PR-20: Determine the native-multimodal-first routing decision.
+        """PR-20 / PR-27: Determine the native-multimodal-first routing decision.
 
         OpenClawd is the **routing authority**.  This method inspects
         ``canonical_perception`` (built by :meth:`_build_canonical_perception_state`)
@@ -1520,6 +1521,12 @@ class OpenClawd:
         Text-only requests (``requires_native_multimodal=False``) return
         ``route_type="text_only"`` immediately without consulting the router.
 
+        PR-27 augments this method with an explicit modality confidence and
+        routing eligibility assessment.  When the confidence/readiness layer
+        determines that the multimodal signal is too weak or degraded, the
+        route degrades gracefully rather than blindly using the best-available
+        native MM provider.
+
         The returned dict is embedded in :attr:`metadata` under the key
         ``"multimodal_route_decision"`` so that later PRs can project it to
         the diagnostics / status board.
@@ -1530,6 +1537,11 @@ class OpenClawd:
             Serialised :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState`
             dict as produced by :meth:`_build_canonical_perception_state`.
             May be ``None`` for text-only requests.
+        source_registry_snapshot:
+            Optional serialised snapshot from the runtime shell's
+            :class:`~core.multimodal.perception_source_registry.PerceptionSourceRegistry`.
+            When provided, source health and quality facts calibrate the
+            modality confidence assessment (PR-27).
 
         Returns
         -------
@@ -1551,7 +1563,37 @@ class OpenClawd:
                 Non-empty when a downgrade from tier-1 occurred.
             ``active_modalities``
                 Modality list read from the perception state.
+            ``perception_routing_readiness``
+                Serialised :class:`~core.multimodal.modality_confidence_policy.PerceptionRoutingReadiness`
+                dict (PR-27).  Always present; never raises.
         """
+        # ── PR-27: Build modality confidence / routing readiness ─────────────
+        _readiness: Optional[Dict[str, Any]] = None
+        try:
+            from core.multimodal.modality_confidence_policy import (
+                build_perception_routing_readiness as _build_readiness,
+            )
+            _readiness_obj = _build_readiness(
+                canonical_perception=canonical_perception,
+                source_registry_snapshot=source_registry_snapshot,
+            )
+            _readiness = _readiness_obj.to_dict()
+            _eligibility_eligible: bool = (
+                _readiness_obj.eligibility.is_native_multimodal_eligible
+            )
+            _eligibility_summary: str = (
+                _readiness_obj.eligibility.eligibility_summary
+            )
+            _eligibility_reason: str = (
+                _readiness_obj.eligibility.primary_reason.value
+            )
+        except Exception as _pr27_err:
+            logger.debug("build_perception_routing_readiness failed (swallowed): %s", _pr27_err)
+            _readiness = None
+            _eligibility_eligible = True  # Fail open: don't block routing if policy fails
+            _eligibility_summary = "readiness_assessment_unavailable"
+            _eligibility_reason = "unknown"
+
         # ── Read perception signals ──────────────────────────────────────────
         requires_native_mm: bool = False
         active_modalities: List[str] = []
@@ -1565,7 +1607,7 @@ class OpenClawd:
 
         # ── Text-only short-circuit ──────────────────────────────────────────
         if not requires_native_mm:
-            return {
+            result = {
                 "route_type": "text_only",
                 "is_native_multimodal": False,
                 "provider": "none",
@@ -1574,11 +1616,34 @@ class OpenClawd:
                 "fallback_reason": "",
                 "active_modalities": active_modalities,
             }
+            if _readiness is not None:
+                result["perception_routing_readiness"] = _readiness
+            return result
+
+        # ── PR-27: Eligibility gate — degrade if confidence is too low ───────
+        if not _eligibility_eligible and _readiness is not None:
+            result = {
+                "route_type": "text_only",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": (
+                    f"modality_confidence_ineligible "
+                    f"reason={_eligibility_reason} "
+                    f"summary={_eligibility_summary}"
+                ),
+                "fallback_reason": (
+                    f"confidence_below_threshold reason={_eligibility_reason}"
+                ),
+                "active_modalities": active_modalities,
+                "perception_routing_readiness": _readiness,
+            }
+            return result
 
         # ── Multimodal routing hierarchy ─────────────────────────────────────
         router = self._get_router()
         if router is None:
-            return {
+            result = {
                 "route_type": "advisory",
                 "is_native_multimodal": False,
                 "provider": "none",
@@ -1587,6 +1652,9 @@ class OpenClawd:
                 "fallback_reason": "router_unavailable",
                 "active_modalities": active_modalities,
             }
+            if _readiness is not None:
+                result["perception_routing_readiness"] = _readiness
+            return result
 
         try:
             from core.multi_llm_router import TaskType as _TaskType
@@ -1598,7 +1666,7 @@ class OpenClawd:
             )
         except Exception as _rt_err:
             logger.debug("route_multimodal_first failed: %s", _rt_err)
-            return {
+            result = {
                 "route_type": "advisory",
                 "is_native_multimodal": False,
                 "provider": "none",
@@ -1607,11 +1675,14 @@ class OpenClawd:
                 "fallback_reason": str(_rt_err),
                 "active_modalities": active_modalities,
             }
+            if _readiness is not None:
+                result["perception_routing_readiness"] = _readiness
+            return result
 
         # Determine the tier from the decision reason prefix
         reason = decision.reason or ""
         if decision.provider == "none":
-            return {
+            result = {
                 "route_type": "advisory",
                 "is_native_multimodal": False,
                 "provider": "none",
@@ -1620,10 +1691,13 @@ class OpenClawd:
                 "fallback_reason": "no_providers_available",
                 "active_modalities": active_modalities,
             }
+            if _readiness is not None:
+                result["perception_routing_readiness"] = _readiness
+            return result
 
         is_tier1 = "tier=1" in reason
         if is_tier1:
-            return {
+            result = {
                 "route_type": "native_multimodal",
                 "is_native_multimodal": True,
                 "provider": decision.provider,
@@ -1632,10 +1706,13 @@ class OpenClawd:
                 "fallback_reason": "",
                 "active_modalities": active_modalities,
             }
+            if _readiness is not None:
+                result["perception_routing_readiness"] = _readiness
+            return result
 
         # Tier 2 — native multimodal unavailable; degrade to text-capable provider
         modality_str = "+".join(active_modalities) if active_modalities else "unknown"
-        return {
+        result = {
             "route_type": "partial_multimodal",
             "is_native_multimodal": False,
             "provider": decision.provider,
@@ -1648,6 +1725,10 @@ class OpenClawd:
             ),
             "active_modalities": active_modalities,
         }
+        if _readiness is not None:
+            result["perception_routing_readiness"] = _readiness
+        return result
+
 
     def _build_unified_control_plan(
         self,
