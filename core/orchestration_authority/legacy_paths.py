@@ -222,10 +222,41 @@ _register(
     ),
 )
 
-
-# ---------------------------------------------------------------------------
-# Lookup helpers
-# ---------------------------------------------------------------------------
+# PR-36: Register additional paths that are explicitly retired to secondary
+# status as part of the production-baseline promotion.  These paths may still
+# exist in the codebase for backward compatibility, but are formally demoted.
+_register(
+    LegacyPathEntry(
+        module_path="response.metadata.multimodal_context",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Use response.metadata.canonical_perception_state (PR-16) as the "
+            "authoritative perception source.  multimodal_context is the raw "
+            "fused MultimodalBus.ingest() output retained for backward "
+            "compatibility only.  Do not add new consumers of this key."
+        ),
+        pr_guardrail_added="PR-36",
+        notes=(
+            "Raw fused multimodal context — deprecated perception path. "
+            "Formally demoted to LEGACY_SECONDARY in PR-36 production-baseline promotion."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="response.metadata.multimodal_route_decision",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Use response.metadata.unified_control_plan['multimodal_route_decision'] "
+            "as the canonical routing decision.  The top-level "
+            "multimodal_route_decision key is retained only for backward "
+            "compatibility and must not be used in new code."
+        ),
+        pr_guardrail_added="PR-36",
+        notes=(
+            "Top-level routing decision dict — deprecated compat shim. "
+            "Formally demoted to LEGACY_SECONDARY in PR-36 production-baseline promotion."
+        ),
+    ),
+)
 
 
 def is_legacy_path(module_path: str) -> bool:
