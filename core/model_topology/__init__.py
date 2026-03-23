@@ -77,6 +77,17 @@ from .canonical_model_supply_state import (
     build_canonical_model_supply_state_from_router,
 )
 
+# --- Model selection policy engine (PR-25) ---
+from .model_selection_policy import (
+    ModelSelectionDecision,
+    ModelSelectionPolicy,
+    ModelSelectionPolicyEngine,
+    SelectionDimension,
+    SelectionReason,
+    SelectionReasonCode,
+    build_model_selection_policy_from_perception,
+)
+
 __all__ = [
     # Bridge
     "ConfigBridge",
@@ -122,4 +133,12 @@ __all__ = [
     "ProviderSupplyRecord",
     "build_canonical_model_supply_state",
     "build_canonical_model_supply_state_from_router",
+    # Model selection policy engine (PR-25)
+    "ModelSelectionDecision",
+    "ModelSelectionPolicy",
+    "ModelSelectionPolicyEngine",
+    "SelectionDimension",
+    "SelectionReason",
+    "SelectionReasonCode",
+    "build_model_selection_policy_from_perception",
 ]
