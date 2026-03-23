@@ -2,6 +2,19 @@
 windows_client/status_board.py — Minimal Read-Only Desktop Status Board
 =========================================================================
 
+.. deprecated:: PR-8  LEGACY STATUS BOARD
+   This module is a **legacy status board** superseded by
+   ``windows_client/status_board_v2/`` (PR-8).
+
+   **Why it is legacy:** It polls ``/api/v1/continuum/state`` which is an
+   ad-hoc non-projection endpoint.  The canonical replacement,
+   ``status_board_v2/``, consumes the official projection contract from::
+
+       GET /api/v1/projection/runtime
+       contract: contracts.desktop_status_projection.DesktopStatusProjection
+
+   Do not extend this module.  Extend ``status_board_v2/`` instead.
+
 Displays the current OpenClawd state continuum at a glance:
 
   - ``tri_state_phase``  (silent / liminal / manifest)

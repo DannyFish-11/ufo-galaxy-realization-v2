@@ -391,6 +391,92 @@ _register(
     ),
 )
 
+# PR-8: Formally demote legacy UI surfaces that risk implying architectural
+# authority or parallel state ownership.  The canonical outward-facing status
+# model is the projection-driven windows_client.status_board_v2 which reads
+# from GET /api/v1/projection/runtime (RuntimeProjection /
+# DesktopStatusProjection contract).  dashboard/ and windows_client/ (excluding
+# status_board_v2) are hereby classified as legacy compatibility surfaces.
+_register(
+    LegacyPathEntry(
+        module_path="dashboard.backend.main",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "dashboard/backend/main.py is a LEGACY UI SURFACE (PR-8).  "
+            "The /api/v1/* routes defined here are historical; the authoritative "
+            "REST API is core/api_routes.py and the core/routes/* sub-modules.  "
+            "For outward-facing system status, consumers must read from "
+            "GET /api/v1/projection/runtime (RuntimeProjection / "
+            "DesktopStatusProjection contract) rather than dashboard-owned "
+            "endpoints.  dashboard/ may remain as a static-file server and "
+            "management convenience panel, but it must not define system "
+            "structure or maintain a parallel authoritative state."
+        ),
+        pr_guardrail_added="PR-8",
+        notes=(
+            "dashboard/ — LEGACY UI SURFACE.  "
+            "Demoted in PR-8: not the architectural source of truth for system "
+            "state.  Do not add new status-authority endpoints here."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="dashboard",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "dashboard/ package is a LEGACY UI SURFACE (PR-8).  "
+            "See dashboard.backend.main entry for migration guidance."
+        ),
+        pr_guardrail_added="PR-8",
+        notes="dashboard/ — LEGACY UI SURFACE.  Demoted in PR-8.",
+    ),
+    LegacyPathEntry(
+        module_path="windows_client.main",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "windows_client/main.py is a HOST-SPECIFIC LEGACY SHELL (PR-8).  "
+            "It must not define the primary desktop interaction philosophy or "
+            "act as the outward-facing status authority.  "
+            "New desktop status consumers must use the projection-driven "
+            "windows_client.status_board_v2 which reads from "
+            "GET /api/v1/projection/runtime."
+        ),
+        pr_guardrail_added="PR-8",
+        notes=(
+            "windows_client/ — HOST-SPECIFIC LEGACY SHELL.  "
+            "Demoted in PR-8: projection is the single outward truth for "
+            "status presentation."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="windows_client.status_board",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "windows_client/status_board.py is a LEGACY STATUS BOARD (PR-8).  "
+            "It polls /api/v1/continuum/state which is an ad-hoc non-projection "
+            "endpoint.  The canonical replacement is windows_client.status_board_v2 "
+            "which consumes the RuntimeProjection contract from "
+            "GET /api/v1/projection/runtime.  "
+            "Do not extend this module; extend status_board_v2/ instead."
+        ),
+        pr_guardrail_added="PR-8",
+        notes=(
+            "windows_client/status_board.py — LEGACY STATUS BOARD (deprecated).  "
+            "Superseded by status_board_v2/ in PR-8.  "
+            "Uses ad-hoc /api/v1/continuum/state endpoint instead of projection."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="windows_client",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "windows_client/ package is a HOST-SPECIFIC LEGACY SHELL (PR-8).  "
+            "See windows_client.main entry for migration guidance."
+        ),
+        pr_guardrail_added="PR-8",
+        notes="windows_client/ — HOST-SPECIFIC LEGACY SHELL.  Demoted in PR-8.",
+    ),
+)
+
 #: Frozenset of node module prefixes that are LEGACY_ORCHESTRATOR_NODE class.
 #: Contributors: when registering any node whose module path starts with one of
 #: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.

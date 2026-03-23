@@ -1,6 +1,18 @@
 # Galaxy Dashboard
 
-可视化管理界面 - 监控、管理和控制整个 Galaxy 系统
+> **⚠️ LEGACY UI SURFACE (PR-8)**
+> `dashboard/` is a **legacy UI surface**.  It is retained for
+> compatibility (static-file service, management convenience panel) but is
+> **not** the architectural source of truth for system state.
+>
+> - Canonical REST API: `core/api_routes.py`, `core/routes/`
+> - Canonical status truth: `GET /api/v1/projection/runtime` (RuntimeProjection / DesktopStatusProjection)
+> - Canonical status board: `windows_client/status_board_v2/`
+>
+> Do not add new status-authority endpoints here.  See `core/ui_surface_authority.py`
+> for the canonical UI surface authority registry.
+
+可视化管理界面 - 监控、管理和控制整个 Galaxy 系统 (legacy compatibility surface)
 
 ## 功能特性
 
