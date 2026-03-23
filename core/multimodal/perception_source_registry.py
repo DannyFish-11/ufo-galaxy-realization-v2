@@ -385,6 +385,38 @@ class PerceptionSourceRegistry:
         if reason and reason not in record.degradation_reasons:
             record.degradation_reasons.append(reason)
 
+    def mark_recovered(self, source_id: str) -> None:
+        """Mark a previously-degraded source as healthy and active again.
+
+        This is the recovery counterpart to :meth:`mark_degraded`.  It:
+
+        - Sets ``health`` to :attr:`SourceHealthStatus.HEALTHY`
+        - Sets ``is_active`` to ``True``
+        - Clears ``degradation_reasons``
+        - Updates ``last_seen_at`` to the current wall-clock time
+
+        No-op when *source_id* is unknown or the source is already HEALTHY.
+        UNAVAILABLE sources are *not* recovered by this method — they require
+        explicit external action (re-registration or hardware remediation).
+        """
+        record = self._sources.get(source_id)
+        if record is None:
+            return
+        if record.health == SourceHealthStatus.UNAVAILABLE:
+            logger.debug(
+                "PerceptionSourceRegistry.mark_recovered: source_id=%s is UNAVAILABLE"
+                " — skipping auto-recovery",
+                source_id,
+            )
+            return
+        record.health = SourceHealthStatus.HEALTHY
+        record.is_active = True
+        record.last_seen_at = time.time()
+        record.degradation_reasons.clear()
+        logger.debug(
+            "PerceptionSourceRegistry: source_id=%s recovered to HEALTHY", source_id
+        )
+
     def touch(self, source_id: str) -> None:
         """Update the ``last_seen_at`` timestamp for a source."""
         record = self._sources.get(source_id)

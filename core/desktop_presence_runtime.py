@@ -763,6 +763,61 @@ class DesktopPresenceRuntime:
             )
             return {"snapshot_at": time.time(), "error": str(_err), "sources": []}
 
+    def run_source_recovery_cycle(self) -> Dict[str, Any]:
+        """PR-31: Run a source recovery cycle on the shell-owned source registry.
+
+        Delegates to :class:`~core.multimodal.source_recovery_policy.SourceRecoveryPolicy`
+        to evict stale sources and re-elect primary audio/video sources when the
+        current primaries have failed or degraded.
+
+        The cycle respects flap-smoothing hysteresis: transient degradations within
+        a short window do not cause chaotic primary switching.
+
+        Returns a summary dict with cycle results (``evicted``, ``audio_reelected``,
+        ``video_reelected``, ``flap_smoothed_ids``).  Never raises.
+        """
+        try:
+            from core.multimodal.source_recovery_policy import get_source_recovery_policy
+
+            policy = get_source_recovery_policy()
+            return policy.run_recovery_cycle(self._source_registry)
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.run_source_recovery_cycle failed (non-fatal): %s",
+                _err,
+            )
+            return {
+                "evicted": [],
+                "audio_reelected": False,
+                "video_reelected": False,
+                "flap_smoothed_ids": [],
+                "error": str(_err),
+            }
+
+    def source_recovery_snapshot(self) -> Dict[str, Any]:
+        """PR-31: Return a diagnostics-safe snapshot of the source recovery policy state.
+
+        The snapshot includes recent recovery/re-election events, current primary
+        source IDs, and per-category source counts (recoverable, unrecoverable,
+        stale, flapping).
+
+        Safe to log and export for diagnostics and shell-facing status projection.
+        Never raises.
+        """
+        try:
+            from core.multimodal.source_recovery_policy import (
+                build_source_recovery_snapshot,
+            )
+
+            snap = build_source_recovery_snapshot(self._source_registry)
+            return snap.to_dict()
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.source_recovery_snapshot failed (non-fatal): %s",
+                _err,
+            )
+            return {"snapshot_at": time.time(), "error": str(_err)}
+
     def build_desktop_status_projection(
         self,
         result: Optional[Dict[str, Any]] = None,
