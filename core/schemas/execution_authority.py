@@ -5,11 +5,19 @@ core.schemas.execution_authority — Canonical Execution Authority Schema
 ========================================================================
 
 PR-9 — Execution Authority Contract
+PR-006 — Tighten OpenClawd–AgentKernel execution contract
 
 Defines the canonical data types for representing the **execution authority
 contract** across the Galaxy runtime stack.  Every layer in the main execution
 path declares its role using the :class:`ExecutionLayerRole` enum so that the
 authority chain is explicit, inspectable, and hard to regress.
+
+PR-006 tightens the contract between OpenClawd and AgentKernel:
+- ``SUBJECT_DECISION_AUTHORITY`` (OpenClawd) owns final multi-model routing.
+- ``COGNITION_PLANNING_LAYER`` (AgentKernel) returns advisory ``KernelResponse``
+  artifacts; ``delegation_hint`` and routing suggestions are never binding.
+- SOUL/AGENTS policy injection is constrained to task_execute/hybrid phases.
+- ``delegation_hint_decision`` metadata tracks whether hints were noted or absent.
 
 Architecture (outer → inner)::
 
@@ -114,6 +122,11 @@ class ExecutionLayerRole(str, Enum):
     #: Embedded cognition/planning sub-layer — called by the subject core to
     #: route intent and plan execution steps.  Not an independent entrypoint.
     #: Canonical component: ``AgentKernel`` (``core.agent.kernel``).
+    #:
+    #: PR-006 contract: AgentKernel returns ``KernelResponse`` (advisory artifact).
+    #: ``KernelResponse.delegation_hint`` and ``routing_authority`` are advisory
+    #: only — OpenClawd retains all final decision authority.
+    #: ``KernelResponse.soul_injection_phase`` is None for chat_only paths.
     COGNITION_PLANNING_LAYER = "cognition_planning_layer"
 
     #: Execution substrate — the transport and routing layer that carries
