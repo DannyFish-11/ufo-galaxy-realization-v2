@@ -1247,6 +1247,62 @@ class OpenClawd:
             logger.debug("_emit_routing_decision_event failed (swallowed): %s", _exc)
             return None
 
+    def _build_degraded_operation_envelope(
+        self,
+        route_dict: Dict[str, Any],
+        *,
+        supply_snapshot: Optional[Dict[str, Any]] = None,
+        prior_envelope: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-29: Build a canonical :class:`~core.degraded_operation_envelope.DegradedOperationEnvelope`.
+
+        Converts the routing decision dict produced by
+        :meth:`_select_multimodal_route` into a normalised, serialisable
+        degraded-operation envelope that captures the current degradation level,
+        provider failover chain, fallback policy ladder, and operator-facing
+        severity.
+
+        This is the primary integration point for PR-29 — the envelope is
+        embedded in every response so that downstream projection and diagnostics
+        layers can consume it without inventing their own degradation semantics.
+
+        Parameters
+        ----------
+        route_dict:
+            The dict returned by :meth:`_select_multimodal_route`.
+        supply_snapshot:
+            Optional canonical model supply state dict for deriving skipped
+            provider steps in the failover chain.
+        prior_envelope:
+            Optional prior envelope dict for tracking level transitions across
+            the control loop.
+        trace_id:
+            Correlation trace ID for the request.
+
+        Returns
+        -------
+        dict or None
+            Serialisable :class:`~core.degraded_operation_envelope.DegradedOperationEnvelope`
+            dict, or ``None`` on failure.
+        """
+        try:
+            from core.degraded_operation_envelope import (  # noqa: PLC0415
+                build_degraded_operation_envelope,
+                envelope_summary,
+            )
+
+            env = build_degraded_operation_envelope(
+                route_dict=route_dict,
+                supply_snapshot=supply_snapshot,
+                prior_envelope=prior_envelope,
+                trace_id=trace_id,
+            )
+            return env.to_dict()
+        except Exception as _exc:
+            logger.debug("_build_degraded_operation_envelope failed (swallowed): %s", _exc)
+            return None
+
     def _build_execution_trace(
         self,
         intent_profile: Any,
@@ -2092,6 +2148,20 @@ class OpenClawd:
             runtime_session_id=runtime_session_id,
         )
 
+        # ── PR-29: Degraded Operation Envelope ───────────────────────────────
+        # Build the canonical degraded-operation envelope from the routing
+        # decision.  This normalises provider failover and multimodal
+        # degradation into an explicit, serialisable artifact so that
+        # projection and diagnostics layers consume it without inventing their
+        # own degradation semantics.
+        _degraded_operation_envelope: Optional[Dict[str, Any]] = (
+            self._build_degraded_operation_envelope(
+                route_dict=_multimodal_route,
+                supply_snapshot=_canonical_model_supply,
+                trace_id=trace_id,
+            )
+        )
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -2399,6 +2469,9 @@ class OpenClawd:
                             # PR-41: structured routing observability event derived
                             # from the canonical routing decision (not inferred).
                             "routing_decision_event": _routing_decision_event,
+                            # PR-29: canonical degraded-operation envelope (provider
+                            # failover chain, fallback policy ladder, severity).
+                            "degraded_operation_envelope": _degraded_operation_envelope,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2667,9 +2740,9 @@ class OpenClawd:
                     # PR-41: structured routing observability event derived
                     # from the canonical routing decision (not inferred).
                     "routing_decision_event": _routing_decision_event,
+                    # PR-29: canonical degraded-operation envelope.
+                    "degraded_operation_envelope": _degraded_operation_envelope,
                 },
-                # PR-10: architecture diagnostics layer identifier (additive)
-                "arch_layer_id": "subject_core",
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
                 # this field are unaffected).
                 "introspection_snapshot": {
