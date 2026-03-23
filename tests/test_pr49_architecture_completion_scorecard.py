@@ -61,7 +61,7 @@ Validates:
   47. ArchitectureCompletionScorecard.summary_lines() returns non-empty list.
   48. ArchitectureCompletionScorecard.summary_lines() contains scorecard_version.
   49. build_architecture_completion_scorecard() returns a scorecard with 10 dims.
-  50. build_architecture_completion_scorecard() generated_by_pr defaults to "PR-9".
+  50. build_architecture_completion_scorecard() generated_by_pr defaults to "PR-10".
   51. build_architecture_completion_scorecard() accepts custom generated_by_pr.
   52. build_architecture_completion_scorecard() accepts dimension overrides.
   53. build_architecture_completion_scorecard() override replaces target dim.
@@ -526,7 +526,7 @@ class TestBuildAndGetScorecard:
     def test_50_generated_by_pr_defaults_to_pr9(self):
         m = _import_module()
         sc = m.build_architecture_completion_scorecard()
-        assert sc.generated_by_pr == "PR-9"
+        assert sc.generated_by_pr == "PR-10"
 
     def test_51_accepts_custom_generated_by_pr(self):
         m = _import_module()
@@ -678,7 +678,7 @@ class TestDefaultDimensionLevels:
     def test_68_test_coverage_invariants_is_canonicalized(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.TEST_COVERAGE_ARCHITECTURE_INVARIANTS)
-        assert rec.maturity_level == m.MaturityLevel.CANONICALIZED
+        assert rec.maturity_level == m.MaturityLevel.COMPLETE
 
 
 # ===========================================================================
@@ -837,4 +837,4 @@ class TestSerialization:
         m.reset_architecture_completion_scorecard()
         sc = m.get_architecture_completion_scorecard()
         d = sc.to_dict()
-        assert d["generated_by_pr"] == "PR-9"
+        assert d["generated_by_pr"] == "PR-10"
