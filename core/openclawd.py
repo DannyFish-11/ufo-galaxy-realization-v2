@@ -1569,6 +1569,94 @@ class OpenClawd:
             logger.debug("_apply_operator_overrides failed (swallowed): %s", _exc)
             return None
 
+    def _build_decision_timeline_snapshot(
+        self,
+        *,
+        route_dict: Optional[Dict[str, Any]] = None,
+        degraded_operation_envelope: Optional[Dict[str, Any]] = None,
+        permission_safety_state: Optional[Dict[str, Any]] = None,
+        operator_override_state: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+        runtime_session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-34: Build a canonical :class:`~core.decision_timeline.ExplainabilitySnapshot`.
+
+        Records decision events derived from the canonical control-loop
+        artifacts produced in this iteration (routing, fallback, operator
+        overrides, trust/safety gating) into the process-wide
+        :class:`~core.decision_timeline.DecisionTimeline` singleton, then
+        captures and returns an :class:`~core.decision_timeline.ExplainabilitySnapshot`
+        dict.
+
+        All explanations originate from canonical decisions made earlier in
+        this method — nothing is reconstructed from logs or ad-hoc text.
+
+        Parameters
+        ----------
+        route_dict:
+            The routing-decision dict from :meth:`_select_multimodal_route`
+            (potentially mutated in-place by :meth:`_apply_operator_overrides`).
+        degraded_operation_envelope:
+            Serialised :class:`~core.degraded_operation_envelope.DegradedOperationEnvelope`
+            from :meth:`_build_degraded_operation_envelope`.
+        permission_safety_state:
+            Serialised :class:`~core.multimodal.permission_safety_state.PermissionSafetySnapshot`
+            from :meth:`_build_permission_safety_state`.
+        operator_override_state:
+            Serialised :class:`~core.operator_override.OperatorOverrideSnapshot`
+            from :meth:`_apply_operator_overrides`.
+        trace_id:
+            Correlation trace ID for this control-loop iteration.
+        runtime_session_id:
+            Runtime / OpenClawd session identifier.
+
+        Returns
+        -------
+        dict or None
+            Serialisable :class:`~core.decision_timeline.ExplainabilitySnapshot`
+            dict, or ``None`` on failure.
+        """
+        try:
+            from core.decision_timeline import (  # noqa: PLC0415
+                record_route_selection_event,
+                record_operator_override_event,
+                record_trust_safety_gating_event,
+                build_explainability_snapshot,
+            )
+
+            # ── Route / fallback decision ──────────────────────────────────
+            if isinstance(route_dict, dict):
+                record_route_selection_event(
+                    route_dict=route_dict,
+                    trace_id=trace_id,
+                    runtime_session_id=runtime_session_id,
+                )
+
+            # ── Operator override influence ────────────────────────────────
+            if isinstance(operator_override_state, dict):
+                record_operator_override_event(
+                    override_snapshot_dict=operator_override_state,
+                    trace_id=trace_id,
+                    runtime_session_id=runtime_session_id,
+                )
+
+            # ── Trust / safety gating influence ───────────────────────────
+            if isinstance(permission_safety_state, dict):
+                record_trust_safety_gating_event(
+                    permission_safety_dict=permission_safety_state,
+                    trace_id=trace_id,
+                    runtime_session_id=runtime_session_id,
+                )
+
+            snap = build_explainability_snapshot(
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+            )
+            return snap.to_dict()
+        except Exception as _exc:
+            logger.debug("_build_decision_timeline_snapshot failed (swallowed): %s", _exc)
+            return None
+
     def _build_execution_trace(
         self,
         intent_profile: Any,
@@ -2486,6 +2574,22 @@ class OpenClawd:
         # Re-read is_native_multimodal after potential override mutation
         _is_native_multimodal = _multimodal_route.get("is_native_multimodal", False)
 
+        # ── PR-34: Decision Timeline and Explainability Traces ────────────────
+        # Record canonical decision events from the routing, override, and
+        # safety state produced above into the process-wide timeline singleton,
+        # then capture an ExplainabilitySnapshot for this iteration.  All
+        # explanations derive from canonical artifacts — not from log text.
+        _decision_timeline_snapshot: Optional[Dict[str, Any]] = (
+            self._build_decision_timeline_snapshot(
+                route_dict=_multimodal_route,
+                degraded_operation_envelope=_degraded_operation_envelope,
+                permission_safety_state=_permission_safety_state,
+                operator_override_state=_operator_override_state,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id or "",
+            )
+        )
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -2805,6 +2909,10 @@ class OpenClawd:
                             # PR-33: canonical operator override snapshot
                             # (active source/model/execution-policy overrides).
                             "operator_override_state": _operator_override_state,
+                            # PR-34: canonical decision timeline / explainability snapshot
+                            # (route selection, fallback transitions, operator override
+                            # influence, trust/safety gating — all correlated and replayable).
+                            "decision_timeline_snapshot": _decision_timeline_snapshot,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -3084,6 +3192,10 @@ class OpenClawd:
                     # PR-33: canonical operator override snapshot
                     # (active source/model/execution-policy overrides).
                     "operator_override_state": _operator_override_state,
+                    # PR-34: canonical decision timeline / explainability snapshot
+                    # (route selection, fallback transitions, operator override
+                    # influence, trust/safety gating — all correlated and replayable).
+                    "decision_timeline_snapshot": _decision_timeline_snapshot,
                 },
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
                 # this field are unaffected).
