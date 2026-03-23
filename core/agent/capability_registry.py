@@ -1,19 +1,47 @@
 """
 core/agent/capability_registry.py
 ====================================
-统一能力注册表
+PR-002 — Canonical In-Process Capability Catalog (SSOT)
 
-汇聚系统中所有可供 Agent 调用的"弹药"：
-  - MCP 工具  (core.mcp_loader)
-  - Skill 技能 (core.skill_loader)
-  - Gateway 设备能力 (core.capability_manager + device_registry)
+**Canonical role**: ``CapabilityRegistry`` is the *authoritative in-process
+inventory* of all capabilities available to the Galaxy system.  Every
+capability — regardless of origin — must be registered here before it can
+be consumed by ``OpenClawd`` or any other subsystem.
 
-公共 API：
+Architecture contract
+---------------------
+- **Writers / loaders** push entries in:
+    - MCP tools   → ``mcp_loader`` calls ``inject_mcp_tool()`` after loading a server
+    - Skills       → ``skill_loader`` calls ``inject_skill()`` after loading a skill
+    - Node caps    → ``NodeFabricRegistry`` calls ``inject_item()`` after node sync
+    - Gateway caps → registered via ``_load_gateway()`` / ``inject_item()``
+- **Consumers** (``OpenClawd``, projections, diagnostics) read through
+  :class:`~core.unified.capability_resolver.CapabilityResolver`, which applies
+  :class:`~core.unified.capability_contract.CapabilityContract` validation
+  before returning entries.  Consumers **must not** bypass the resolver to
+  hand-roll registry traversal.
+- All entries are validated against
+  :class:`~core.unified.capability_contract.CapabilityContract` at
+  registration time.  Entries that fail validation are rejected and logged.
+
+Public API
+----------
     CapabilityRegistry.get_instance() -> CapabilityRegistry
-    CapabilityRegistry.refresh()      — 重新加载所有能力
+    CapabilityRegistry.refresh()      — reload all capabilities from sources
     CapabilityRegistry.list_tools()   -> List[CapabilityItem]
     CapabilityRegistry.find(query)    -> List[CapabilityItem]
     CapabilityRegistry.get(name)      -> Optional[CapabilityItem]
+    CapabilityRegistry.inject_mcp_tool(...)   — writer entry point (MCP)
+    CapabilityRegistry.inject_skill(...)      — writer entry point (Skill)
+    CapabilityRegistry.inject_item(item)      — writer entry point (Node/Gateway)
+    CapabilityRegistry.eject(name)            — removal entry point
+    get_capability_registry()         -> CapabilityRegistry  (module-level helper)
+
+Preferred consumer interface
+-----------------------------
+Use :func:`~core.unified.capability_resolver.get_capability_resolver` and
+:meth:`~core.unified.capability_resolver.CapabilityResolver.collect_tool_schemas`
+instead of accessing this registry directly from consumer code.
 """
 
 from __future__ import annotations

@@ -4382,31 +4382,69 @@ class OpenClawd:
           - skill__<skill_id>               → Skill 技能
           - node__<node_id>__<action>       → Node 节点操作
 
-        执行链路：MCP/Skill 工具优先从能力总线 (CapabilityRegistry) 取，
-        确保加载后立即可用且经过 schema 校验；Node 工具沿用直接加载路径。
+        执行链路（按优先级排序）:
+          1. CapabilityResolver (canonical read path, contract-validated) — PREFERRED
+          2. CapabilityRegistry direct read (compatibility fallback when resolver cache is empty)
+          3. Direct scan: mcp_loader / skill_loader (legacy compatibility fallback only)
+
+        MCP/Skill 工具优先通过 CapabilityResolver 取，这是规范的消费者接口；
+        Resolver 在返回前对所有 CapabilityContract 做 schema 校验，确保只有合法条目
+        进入 LLM 工具列表。仅当 Resolver 和 Registry 均无结果时才回退直接加载路径。
+        Node 工具沿用直接加载路径（节点工具尚未完全纳入能力总线）。
         """
         tools: List[Dict] = []
 
-        # ── 能力总线: CapabilityRegistry (MCP + Skill SSOT) ──
-        # 优先从能力总线取 MCP/Skill 工具；若总线为空则回退直接加载路径
-        _bus_loaded = False
+        # ── 主路径: CapabilityResolver (canonical consumer interface, contract-validated) ──
+        # CapabilityResolver is the preferred read path per the canonical capability catalog
+        # architecture.  It validates all CapabilityContract entries before returning them,
+        # ensuring only schema-valid capabilities reach the LLM tool list.
+        _catalog_loaded = False
         try:
-            from core.agent.capability_registry import CapabilityRegistry
-            reg = CapabilityRegistry.get_instance()
-            bus_tools = [
-                item.to_tool_schema()
-                for item in reg.list_tools()
-                if item.source in ("mcp", "skill")
-            ]
-            if bus_tools:
-                tools.extend(bus_tools)
-                _bus_loaded = True
-                logger.debug("_collect_tools: 从能力总线获取 %d 个 MCP/Skill 工具", len(bus_tools))
+            from core.unified.capability_resolver import get_capability_resolver
+            from core.unified.capability_contract import CapabilitySource
+            resolver = get_capability_resolver()
+            catalog_tools = resolver.collect_tool_schemas(
+                sources=[CapabilitySource.MCP, CapabilitySource.SKILL]
+            )
+            if catalog_tools:
+                tools.extend(catalog_tools)
+                _catalog_loaded = True
+                logger.debug(
+                    "_collect_tools: CapabilityResolver (canonical) returned %d MCP/Skill tools",
+                    len(catalog_tools),
+                )
         except Exception as e:
-            logger.debug("能力总线不可用，回退直接加载: %s", e)
+            logger.debug("CapabilityResolver unavailable, falling back to CapabilityRegistry: %s", e)
 
-        if not _bus_loaded:
-            # ── 回退层 1: MCP 服务器工具 (直接加载) ──
+        if not _catalog_loaded:
+            # ── 兼容回退: CapabilityRegistry 直接读取 ──
+            # COMPATIBILITY FALLBACK — used when the resolver cache is empty but the
+            # registry already has items (e.g. first call before cache warm-up).
+            # Prefer the resolver path above for all normal operation.
+            try:
+                from core.agent.capability_registry import CapabilityRegistry
+                reg = CapabilityRegistry.get_instance()
+                bus_tools = [
+                    item.to_tool_schema()
+                    for item in reg.list_tools()
+                    if item.source in ("mcp", "skill")
+                ]
+                if bus_tools:
+                    tools.extend(bus_tools)
+                    _catalog_loaded = True
+                    logger.debug(
+                        "_collect_tools: CapabilityRegistry direct read returned %d MCP/Skill tools",
+                        len(bus_tools),
+                    )
+            except Exception as e:
+                logger.debug("CapabilityRegistry unavailable, falling back to direct scan: %s", e)
+
+        if not _catalog_loaded:
+            # ── LEGACY COMPATIBILITY FALLBACK: MCP direct scan ──
+            # DERIVED-ONLY — not the intended long-term primary path.
+            # Used only when both CapabilityResolver and CapabilityRegistry are
+            # unavailable or empty.  New MCP servers should register via
+            # mcp_loader → CapabilityRegistry → CapabilityResolver instead.
             try:
                 from core.mcp_loader import mcp_loader
 
@@ -4434,7 +4472,11 @@ class OpenClawd:
             except Exception as e:
                 logger.debug(f"收集 MCP 工具失败: {e}")
 
-            # ── 回退层 2: Skill 技能 (直接加载) ──
+            # ── LEGACY COMPATIBILITY FALLBACK: Skill direct scan ──
+            # DERIVED-ONLY — not the intended long-term primary path.
+            # Used only when both CapabilityResolver and CapabilityRegistry are
+            # unavailable or empty.  New Skills should register via
+            # skill_loader → CapabilityRegistry → CapabilityResolver instead.
             try:
                 from core.skill_loader import skill_loader
 
