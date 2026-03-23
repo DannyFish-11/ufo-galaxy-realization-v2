@@ -208,14 +208,18 @@ class TestReRegistrationPreservesIdentity:
 
         await bridge._handle_device_register(ws, msg)
         udm = UnifiedDeviceManager()
-        first_registered_at = udm.get_device("rereg_ts_01").registered_at
+        dev_first = udm.get_device("rereg_ts_01")
+        assert dev_first is not None, "Device must exist in UDM after first registration"
+        first_registered_at = dev_first.registered_at
 
         # Short sleep to ensure timestamps differ if re-created.
         import asyncio
         await asyncio.sleep(0.05)
 
         await bridge._handle_device_register(ws, msg)
-        second_registered_at = udm.get_device("rereg_ts_01").registered_at
+        dev_second = udm.get_device("rereg_ts_01")
+        assert dev_second is not None, "Device must still exist in UDM after re-registration"
+        second_registered_at = dev_second.registered_at
 
         assert first_registered_at == second_registered_at, (
             "registered_at must not change on re-registration"
@@ -245,7 +249,9 @@ class TestHeartbeatUpdatesUDM:
         await bridge._handle_device_register(ws, _make_registration_message("hb_01"))
 
         udm = UnifiedDeviceManager()
-        before = udm.get_device("hb_01").last_heartbeat
+        dev_before = udm.get_device("hb_01")
+        assert dev_before is not None, "Device must exist in UDM after registration"
+        before = dev_before.last_heartbeat
 
         import asyncio
         await asyncio.sleep(0.05)
@@ -257,7 +263,9 @@ class TestHeartbeatUpdatesUDM:
         }
         await bridge._handle_heartbeat(ws, hb_msg)
 
-        after = udm.get_device("hb_01").last_heartbeat
+        dev_after = udm.get_device("hb_01")
+        assert dev_after is not None, "Device must still exist in UDM after heartbeat"
+        after = dev_after.last_heartbeat
         assert after is not None
         # after must be >= before (or None if not set yet)
         if before is not None:
