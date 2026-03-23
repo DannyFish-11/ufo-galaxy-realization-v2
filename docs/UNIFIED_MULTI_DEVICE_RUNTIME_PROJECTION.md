@@ -2,6 +2,15 @@
 
 > **PR-38** — Read-only top-level projection of the multi-device runtime state.
 
+> **V1 Authority Baseline:** `MultiDeviceRuntimeProjection` is the **canonical
+> top-level multi-device read projection** for the Galaxy / OpenClawd system.
+> It aggregates per-device `RegisteredRuntimeDevice` entries (the canonical
+> single-device read contract) along with session, handoff, dispatch,
+> coordination, and result state into a single coherent snapshot.  It sits
+> **above** `RegisteredRuntimeDevice`, not beside it.  See
+> `docs/architecture/unified_device_registration_runtime_participation_v1.md`
+> for the normative V1 architecture spec.
+
 ## Overview
 
 The **Unified Multi-Device Runtime Projection** is the canonical read-only
@@ -12,9 +21,10 @@ snapshot that answers:
 
 It provides a single, stable, serialisable object that aggregates all
 multi-device runtime state surfaces introduced in PR-29 through PR-37.
-Downstream consumers — observability, debugging, and dashboard work — should
-read this projection instead of assembling cross-runtime state by piecing
-together multiple route payloads or contract modules.
+Downstream consumers — observability, operator tooling, governance, routing,
+and scheduling — should read this projection instead of assembling
+cross-runtime state by piecing together multiple route payloads or contract
+modules.
 
 ---
 
@@ -248,7 +258,7 @@ relevant lower-level contract module directly.
 ## What this PR explicitly does NOT do
 
 - **No write / command route redesign** — this module is purely read-only.
-- **No UI / dashboard implementation** — no widget, page, or view references.
+- **No runtime code refactors** — purely additive.
 - **No persistence / streaming redesign** — snapshot only; no event sourcing.
 - **No advanced recovery engine** — outside scope.
 - **No broad execution-core rewrite** — purely additive.
@@ -268,5 +278,6 @@ relevant lower-level contract module directly.
 4. **Stable field names** — downstream consumers can rely on all field names.
 5. **Read-only semantics** — the projection is a snapshot; it does not mutate
    state.
-6. **No UI semantics** — all contracts are purely for runtime / projection /
-   observability use.
+6. **UI-agnostic** — all contracts are defined for runtime, projection, and
+   observability use.  Any future UI or dashboard is a downstream consumer of
+   this projection; it does not drive the projection's design.

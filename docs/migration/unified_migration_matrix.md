@@ -104,8 +104,61 @@ It covers all ingress/egress entry points, state mutation paths, and capability 
 
 - `docs/architecture/unified_system_contract.md` — Master ingress/state/event rules
 - `docs/architecture/module_ownership_map.md` — Module owners and legacy mapping
+- `docs/architecture/unified_device_registration_runtime_participation_v1.md` — V1 device registration authority spec
 - `core/unified/entrypoint_router.py` — Canonical first-hop router
 - `core/legacy_adapters/` — All legacy-to-canonical adapters
 - `scripts/audit_udm_write_paths.py` — UDM SSOT write path auditor
 - `scripts/audit_unified_paths.py` — Canonical ingress/egress path auditor (PR7)
 - `tests/conformance/` — Conformance test suite
+
+---
+
+## 10. Device Registration Authority Matrix (PR-1)
+
+> This section reflects the V1 authority model established in
+> `docs/architecture/unified_device_registration_runtime_participation_v1.md`.
+> It is the normative reference for all follow-up device-related PRs.
+
+### 10.1 Canonical Write Authority
+
+| Module | Classification | Write role |
+|--------|---------------|------------|
+| `core/unified/device_manager.py` (`UnifiedDeviceManager`) | **Canonical** | Only canonical write SSOT for device registration and mutable state |
+
+All other modules must write device state through `UnifiedDeviceManager`. Direct mutation of device state outside UDM is prohibited.
+
+### 10.2 Canonical Read Contracts
+
+| Module | Classification | Read role |
+|--------|---------------|-----------|
+| `contracts/registered_runtime_device.py` (`RegisteredRuntimeDevice`) | **Canonical** | Only canonical single-device read contract |
+| `contracts/multi_device_runtime_projection.py` (`MultiDeviceRuntimeProjection`) | **Canonical** | Only canonical top-level multi-device read projection; sits above `RegisteredRuntimeDevice` |
+
+### 10.3 Registration Path Classification
+
+| Path | Module | Classification |
+|------|--------|---------------|
+| HTTP REST registration | `core/routes/devices.py` | Canonical external registration entrypoint |
+| Android WebSocket registration | `galaxy_gateway/android_bridge.py` | Adapted — transport registration adapter |
+| Agent lifecycle registration | `core/device_agent_manager.py` | Adapted — agent lifecycle registration adapter |
+| Runtime connection registration | `galaxy_gateway/device_router.py` | Runtime-only — runtime connection and routing layer |
+| Legacy registry registration | `core/device_registry.py` | Legacy-compatible — indexing/persistence adapter |
+
+### 10.4 Orchestration and Coordination Classification
+
+| Module | Classification | Role |
+|--------|---------------|------|
+| `galaxy_gateway/cross_device_coordinator.py` | Orchestration-only | Cross-device dispatch and eligibility routing; reads canonical contracts |
+| `core/swarm_coordinator.py` | Orchestration-only | Multi-agent orchestration; reads canonical contracts |
+| `nodes/Node_71_MultiDeviceCoordination/` | Future normalization target | Multi-device coordination; targeted for progressive alignment to canonical contracts |
+
+### 10.5 Migration Classification Legend (Device Domain)
+
+| Classification | Meaning |
+|---------------|---------|
+| **Canonical** | The single source of truth or canonical contract; do not bypass |
+| **Adapted** | Has a registered adapter that delegates to the canonical module; supported |
+| **Legacy-compatible** | Retained for backward compatibility; must not shadow canonical state |
+| **Runtime-only** | Tracks live runtime connections only; does not hold canonical device identity |
+| **Orchestration-only** | Reads canonical contracts; does not hold canonical device state |
+| **Future normalization target** | Targeted for progressive alignment to canonical contracts in a follow-up PR |

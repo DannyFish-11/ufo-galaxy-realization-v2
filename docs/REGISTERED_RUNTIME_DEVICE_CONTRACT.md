@@ -2,6 +2,15 @@
 
 **PR-29** — introduced in the `contracts/registered_runtime_device.py` module.
 
+> **V1 Authority Baseline:** `RegisteredRuntimeDevice` is the **canonical
+> single-device read contract** for the Galaxy / OpenClawd system.  It is the
+> only authoritative stable read projection for a single device.  It sits
+> below `MultiDeviceRuntimeProjection` (the top-level multi-device aggregation)
+> and above the internal models of `UnifiedDeviceManager`, `DeviceRouter`,
+> `DeviceRegistry`, and `AndroidBridge`.  See
+> `docs/architecture/unified_device_registration_runtime_participation_v1.md`
+> for the normative V1 architecture spec.
+
 ---
 
 ## What is a Registered Runtime Device?
@@ -261,7 +270,7 @@ Example response:
 - No **Mesh Session contract** (PR-33).
 - No device registration flow rewrite — existing paths unchanged.
 - No full `Node_71` rewrite.
-- No UI/dashboard redesign.
+- No runtime code refactors — this contract is purely additive.
 - No command/write semantics added or changed.
 
 ---
@@ -269,18 +278,26 @@ Example response:
 ## Architectural position
 
 ```
-PR-25  Execution Trace Contract
-PR-26  Projection Assembly Governance
-PR-27  Runtime Governance Snapshot
-PR-28  Execution Policy Alignment Surface
+UnifiedDeviceManager (write SSOT)
+  └── all registration paths converge here
 ──────────────────────────────────────────
-PR-29  Registered Runtime Device Contract   ← this PR
+PR-29  RegisteredRuntimeDevice             ← canonical single-device read contract
 ──────────────────────────────────────────
-PR-30  Local Runtime Host Contract          (next)
-PR-31  Unified Handoff Envelope v2
-PR-32  Mesh Membership Contract
-PR-33  Mesh Session Contract
+PR-38  MultiDeviceRuntimeProjection        ← canonical top-level multi-device
+         (aggregates RegisteredRuntimeDevice     read projection; sits above
+          entries across all devices)            RegisteredRuntimeDevice
 ```
+
+`RegisteredRuntimeDevice` is the per-device unit of the canonical read model.
+`MultiDeviceRuntimeProjection` is the aggregated view across all devices.
+Any consumer that needs the full multi-device view should read
+`MultiDeviceRuntimeProjection`; any consumer that needs the state of a single
+device should read `RegisteredRuntimeDevice`.
+
+This contract is UI-agnostic.  Any future observability surface, operator
+tooling, governance layer, or routing / scheduling component should consume
+`RegisteredRuntimeDevice` or `MultiDeviceRuntimeProjection` directly.  No UI
+or dashboard component is required for this contract to be useful.
 
 PR-29 gives the repository a single stable, serialisable "device identity at
 the runtime-contract level" that future PRs can depend on.
