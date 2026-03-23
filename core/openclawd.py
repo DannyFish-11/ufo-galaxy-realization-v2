@@ -1467,6 +1467,108 @@ class OpenClawd:
             logger.debug("_build_permission_safety_state failed (swallowed): %s", _exc)
             return None
 
+    def _apply_operator_overrides(
+        self,
+        *,
+        multimodal_route: Optional[Dict[str, Any]],
+        cross_device_allowed: bool = True,
+        remote_mode: Optional[str] = None,
+        current_audio_source_id: Optional[str] = None,
+        current_video_source_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        runtime_session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-33: Apply canonical operator overrides and return a serialisable snapshot.
+
+        Reads the active :class:`~core.operator_override.OperatorOverrideSet`
+        from the process-wide singleton and applies any active overrides to the
+        supplied routing and execution-policy inputs.  The resulting
+        :class:`~core.operator_override.OperatorOverrideSnapshot` is embedded in
+        response metadata so that projection, diagnostics, and explainability
+        layers can surface override-influenced decisions.
+
+        Overrides are **inputs** to canonical control decisions.  This method
+        does not bypass any other policy authority; it shapes the inputs that the
+        control core then finalises.
+
+        Parameters
+        ----------
+        multimodal_route:
+            The dict returned by :meth:`_select_multimodal_route`, modified
+            in-place if an override applies.
+        cross_device_allowed:
+            Canonical cross-device expansion flag from the execution policy.
+        remote_mode:
+            Canonical remote-execution mode string.
+        current_audio_source_id:
+            Current primary audio source ID (from shell-owned registry).
+        current_video_source_id:
+            Current primary video source ID (from shell-owned registry).
+        trace_id:
+            Correlation trace ID.
+        runtime_session_id:
+            Runtime session identifier.
+
+        Returns
+        -------
+        dict or None
+            Serialisable :class:`~core.operator_override.OperatorOverrideSnapshot`
+            dict enriched with applied override details, or ``None`` on failure.
+        """
+        try:
+            from core.operator_override import (  # noqa: PLC0415
+                get_operator_override_state,
+                apply_route_override,
+                apply_execution_policy_override,
+                apply_source_override,
+                build_override_summary,
+                OperatorOverrideSnapshot,
+            )
+
+            state = get_operator_override_state()
+            override_set = state.active_override_set
+
+            # ── Route override ──────────────────────────────────────────────
+            if multimodal_route is not None and override_set is not None:
+                overridden_route = apply_route_override(multimodal_route, override_set)
+                # Mutate the dict in-place: the caller holds a reference to this
+                # dict and re-reads it after this method returns (e.g. to refresh
+                # _is_native_multimodal).  Replacing all keys preserves the reference
+                # while applying all override changes atomically.
+                multimodal_route.clear()
+                multimodal_route.update(overridden_route)
+
+            # ── Execution policy override ────────────────────────────────────
+            _exec_override = apply_execution_policy_override(
+                cross_device_allowed=cross_device_allowed,
+                remote_mode=remote_mode,
+                override_set=override_set,
+            )
+
+            # ── Source selection override ────────────────────────────────────
+            _src_override = apply_source_override(
+                current_audio_source_id=current_audio_source_id,
+                current_video_source_id=current_video_source_id,
+                override_set=override_set,
+            )
+
+            # ── Build snapshot ───────────────────────────────────────────────
+            snap = state.snapshot(
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+            )
+            snap_dict = snap.to_dict()
+
+            # Enrich snapshot dict with per-domain application results
+            snap_dict["execution_policy_override"] = _exec_override
+            snap_dict["source_override"] = _src_override
+            snap_dict["summary"] = build_override_summary(snap)
+
+            return snap_dict
+        except Exception as _exc:
+            logger.debug("_apply_operator_overrides failed (swallowed): %s", _exc)
+            return None
+
     def _build_execution_trace(
         self,
         intent_profile: Any,
@@ -2364,6 +2466,26 @@ class OpenClawd:
             )
         )
 
+        # ── PR-33: Operator Override Panel ────────────────────────────────────
+        # Apply canonical operator overrides for source, model, and execution
+        # policy.  This reads the active OperatorOverrideSet from the singleton
+        # (committed by the runtime shell) and applies it to the multimodal route,
+        # execution policy, and source selection inputs.  The resulting snapshot
+        # is embedded in response metadata so projection and diagnostics layers
+        # can surface operator-influenced decisions.
+        # Note: _multimodal_route may be mutated in-place by this call when a
+        # multimodal_mode override is active.  Downstream consumers should read
+        # the route dict *after* this call to observe override effects.
+        _operator_override_state: Optional[Dict[str, Any]] = (
+            self._apply_operator_overrides(
+                multimodal_route=_multimodal_route,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id or "",
+            )
+        )
+        # Re-read is_native_multimodal after potential override mutation
+        _is_native_multimodal = _multimodal_route.get("is_native_multimodal", False)
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -2680,6 +2802,9 @@ class OpenClawd:
                             # PR-32: canonical permission/trust/safety snapshot
                             # (permission visibility, trust labels, safety gating).
                             "permission_safety_state": _permission_safety_state,
+                            # PR-33: canonical operator override snapshot
+                            # (active source/model/execution-policy overrides).
+                            "operator_override_state": _operator_override_state,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2956,6 +3081,9 @@ class OpenClawd:
                     # PR-32: canonical permission/trust/safety snapshot
                     # (permission visibility, trust labels, safety gating).
                     "permission_safety_state": _permission_safety_state,
+                    # PR-33: canonical operator override snapshot
+                    # (active source/model/execution-policy overrides).
+                    "operator_override_state": _operator_override_state,
                 },
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
                 # this field are unaffected).

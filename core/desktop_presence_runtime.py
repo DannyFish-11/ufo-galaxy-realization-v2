@@ -886,6 +886,156 @@ class DesktopPresenceRuntime:
             )
             return {"operator_message": "trust=unknown", "error": str(_err)}
 
+    # ── PR-33: Operator Override Panel ───────────────────────────────────────
+
+    def set_operator_override(
+        self,
+        override_set: "Any",  # OperatorOverrideSet (avoid hard import at module level)
+        *,
+        applied_by: Optional[str] = None,
+        context_trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """PR-33: Commit an :class:`~core.operator_override.OperatorOverrideSet` as the active override.
+
+        This is the **shell-owned entry point** for operator-initiated override
+        requests.  The override is committed to the process-wide singleton; it
+        will be evaluated by OpenClawd on the next control-loop iteration.
+
+        Parameters
+        ----------
+        override_set:
+            The :class:`~core.operator_override.OperatorOverrideSet` to commit.
+        applied_by:
+            Optional identifier of the operator (for audit trail).
+        context_trace_id:
+            Optional correlation trace ID.
+
+        Returns
+        -------
+        dict
+            Summary dict with ``"override_id"``, ``"applied_domains"``,
+            ``"override_reason"``, and ``"status"`` keys.  Never raises.
+        """
+        try:
+            from core.operator_override import (  # noqa: PLC0415
+                get_operator_override_state,
+                build_override_summary,
+            )
+
+            state = get_operator_override_state()
+            state.commit(
+                override_set,
+                applied_by=applied_by,
+                context_trace_id=context_trace_id,
+            )
+            snap = state.snapshot()
+            summary = build_override_summary(snap)
+            return {
+                "status": "committed",
+                "override_id": override_set.override_id,
+                **summary,
+            }
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.set_operator_override failed (non-fatal): %s",
+                _err,
+            )
+            return {"status": "error", "error": str(_err)}
+
+    def clear_operator_override(
+        self,
+        *,
+        applied_by: Optional[str] = None,
+        context_trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """PR-33: Clear the active operator override, returning to automation default.
+
+        This is the **shell-owned entry point** for clearing a previously
+        committed override.  After this call, OpenClawd's control-loop will
+        resume canonical automation for all overridden domains.
+
+        Returns
+        -------
+        dict
+            ``{"status": "cleared"}`` on success.  Never raises.
+        """
+        try:
+            from core.operator_override import get_operator_override_state  # noqa: PLC0415
+
+            state = get_operator_override_state()
+            state.clear(applied_by=applied_by, context_trace_id=context_trace_id)
+            return {"status": "cleared"}
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.clear_operator_override failed (non-fatal): %s",
+                _err,
+            )
+            return {"status": "error", "error": str(_err)}
+
+    def operator_override_summary(
+        self,
+        *,
+        result: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """PR-33: Return a shell-facing summary of the active operator override state.
+
+        Derives a human-readable summary from the canonical
+        :class:`~core.operator_override.OperatorOverrideSnapshot`.  When *result*
+        is provided (an OpenClawd response dict), the embedded
+        ``"operator_override_state"`` snapshot is preferred; otherwise the
+        process-wide singleton is queried directly.
+
+        This method is the runtime shell's primary entry point for presenting
+        override state to operators, dashboards, and diagnostics.  It derives
+        from canonical state and never acts as an independent truth source.
+
+        Parameters
+        ----------
+        result:
+            Optional OpenClawd response dict.  When provided, the embedded
+            ``operator_override_state`` snapshot is preferred.
+        trace_id:
+            Optional correlation trace ID.
+
+        Returns
+        -------
+        dict
+            Serialisable summary dict with ``"has_active_override"``,
+            ``"applied_domains"``, ``"override_reason"``, and
+            ``"operator_message"`` keys.  Never raises.
+        """
+        try:
+            from core.operator_override import (  # noqa: PLC0415
+                get_operator_override_state,
+                build_override_summary,
+                OperatorOverrideSnapshot,
+            )
+
+            snap_dict: Optional[Dict[str, Any]] = None
+            if isinstance(result, dict):
+                snap_dict = result.get("metadata", {}).get("operator_override_state")
+
+            snap: Optional[OperatorOverrideSnapshot] = None
+            if isinstance(snap_dict, dict):
+                snap = OperatorOverrideSnapshot.from_dict(snap_dict)
+            else:
+                snap = get_operator_override_state().snapshot(trace_id=trace_id)
+
+            return build_override_summary(snap)
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.operator_override_summary failed (non-fatal): %s",
+                _err,
+            )
+            return {
+                "has_active_override": False,
+                "applied_domains": [],
+                "override_reason": "",
+                "operator_message": "override=unknown",
+                "error": str(_err),
+            }
+
     def build_desktop_status_projection(
         self,
         result: Optional[Dict[str, Any]] = None,
