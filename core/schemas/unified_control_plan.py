@@ -715,6 +715,7 @@ class UnifiedControlPlan:
     * the decision posture (autonomous, human-in-loop, advisory, degraded)
     * the chosen model decision
     * the chosen execution decision
+    * the native multimodal routing decision (PR-24: embedded, authoritative)
     * the fallback level and intent
     * the lifecycle target / lifecycle state progression hints
     * a diagnostics summary
@@ -756,6 +757,13 @@ class UnifiedControlPlan:
         PR-21 enriched execution direction record including rationale,
         fallback intent, and downgrade tracking.  ``None`` for text-only
         requests processed without PR-21 integration.
+    multimodal_route_decision:
+        PR-24: Canonical native multimodal routing decision produced by
+        OpenClawd._select_multimodal_route().  Embeds the route tier
+        (``route_type``), ``is_native_multimodal`` flag, ``route_reason``,
+        and optional ``fallback_reason`` so that callers never need to read
+        the deprecated top-level ``multimodal_route_decision`` metadata key.
+        ``None`` for text-only requests.
     fallback_level:
         The fallback level applied (``FallbackLevel.NONE`` for primary path).
     fallback_reason:
@@ -792,6 +800,9 @@ class UnifiedControlPlan:
     chosen_model_decision: ChosenModelDecision = field(default_factory=ChosenModelDecision)
     chosen_execution_decision: ChosenExecutionDecision = field(default_factory=ChosenExecutionDecision)
     unified_execution_decision: Optional[UnifiedExecutionDecision] = None
+    # PR-24: canonical multimodal routing decision embedded in the plan so
+    # consumers do not need to read the deprecated top-level metadata key.
+    multimodal_route_decision: Optional[Dict[str, Any]] = None
 
     fallback_level: str = FallbackLevel.NONE.value
     fallback_reason: Optional[str] = None
@@ -826,6 +837,8 @@ class UnifiedControlPlan:
                 if self.unified_execution_decision is not None
                 else None
             ),
+            # PR-24: canonical routing decision embedded in the plan
+            "multimodal_route_decision": self.multimodal_route_decision,
             "fallback_level": self.fallback_level,
             "fallback_reason": self.fallback_reason,
             "fallback_decision_record": (
@@ -871,6 +884,7 @@ class UnifiedControlPlan:
             unified_execution_decision=(
                 UnifiedExecutionDecision.from_dict(ued_raw) if isinstance(ued_raw, dict) else None
             ),
+            multimodal_route_decision=d.get("multimodal_route_decision"),
             fallback_level=_safe_fallback(d.get("fallback_level")),
             fallback_reason=d.get("fallback_reason"),
             fallback_decision_record=(
@@ -1043,6 +1057,8 @@ def build_unified_control_plan(
     remote_to_local_reason: Optional[str] = None,
     orchestration_downgrade_reason: Optional[str] = None,
     blocked_reason: Optional[str] = None,
+    # PR-24 — canonical multimodal routing decision to embed in the plan
+    multimodal_route_decision: Optional[Dict[str, Any]] = None,
 ) -> UnifiedControlPlan:
     """Build a :class:`UnifiedControlPlan` from the inputs available to OpenClawd.
 
@@ -1119,6 +1135,11 @@ def build_unified_control_plan(
         PR-21: Reason for an orchestration plan simplification.
     blocked_reason:
         PR-21: Reason why execution was blocked (observe-only / no-op).
+    multimodal_route_decision:
+        PR-24: Native multimodal routing decision dict produced by
+        ``OpenClawd._select_multimodal_route()``.  Embedded directly into
+        the plan so that consumers do not need to read the deprecated
+        top-level ``multimodal_route_decision`` metadata key.
 
     Returns
     -------
@@ -1203,6 +1224,7 @@ def build_unified_control_plan(
         chosen_model_decision=model_decision,
         chosen_execution_decision=exec_decision,
         unified_execution_decision=unified_exec_decision,
+        multimodal_route_decision=multimodal_route_decision,
         fallback_level=safe_fallback,
         fallback_reason=fallback_reason,
         fallback_decision_record=fdr,
@@ -1265,4 +1287,10 @@ def unified_control_plan_summary(plan: Optional["UnifiedControlPlan"]) -> Option
         "authority_role": plan.authority_chain.decision_authority,
         "has_perception": plan.canonical_perception_summary is not None,
         "has_model_supply": plan.canonical_model_supply_summary is not None,
+        # PR-24: include routing tier from embedded decision
+        "multimodal_route_type": (
+            plan.multimodal_route_decision.get("route_type")
+            if plan.multimodal_route_decision is not None
+            else None
+        ),
     }
