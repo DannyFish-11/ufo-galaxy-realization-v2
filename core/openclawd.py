@@ -1303,6 +1303,42 @@ class OpenClawd:
             logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
             return None
 
+    def _build_canonical_model_supply_state(self) -> Optional[Dict[str, Any]]:
+        """PR-24: Build a serialisable canonical model supply state dict.
+
+        Wires the canonical model supply truth (PR-18) into the unified
+        control-loop state so the :class:`~core.schemas.unified_control_plan.UnifiedControlPlan`
+        captures model supply alongside perception truth.  This closes the gap
+        where :class:`~core.model_topology.canonical_model_supply_state.CanonicalModelSupplyState`
+        was introduced by PR-18 but not yet forwarded into the control plan.
+
+        Called once per :meth:`process` invocation, before
+        :meth:`_build_unified_control_plan`, so the result can be passed to
+        both the kernel and direct execution return paths.
+
+        Returns:
+            ``to_dict()`` output of
+            :class:`~core.model_topology.canonical_model_supply_state.CanonicalModelSupplyState`,
+            or ``None`` when the router or supply builder is unavailable
+            (graceful degradation — text-only / restricted deployments are
+            unaffected).
+        """
+        try:
+            from core.model_topology.canonical_model_supply_state import (
+                build_canonical_model_supply_state_from_router as _build_cmss,
+            )
+
+            _router = self._get_router()
+            if _router is None:
+                return None
+            _cmss = _build_cmss(_router)
+            return _cmss.to_dict()
+        except Exception as _cmss_err:
+            logger.debug(
+                "_build_canonical_model_supply_state failed (swallowed): %s", _cmss_err
+            )
+            return None
+
     def _build_execution_plan(
         self,
         *,
@@ -1577,6 +1613,10 @@ class OpenClawd:
         runtime_session_id: Optional[str] = None,
         trace_id: str = "",
         canonical_perception: Optional[Dict[str, Any]] = None,
+        # PR-24: canonical model supply truth (PR-18) now forwarded into
+        # the control plan so the unified artifact captures both perception
+        # and model supply as authoritative inputs.
+        canonical_model_supply: Optional[Dict[str, Any]] = None,
         continuum_state: Optional[Dict[str, Any]] = None,
         chosen_model: Optional[str] = None,
         chosen_provider: Optional[str] = None,
@@ -1605,7 +1645,7 @@ class OpenClawd:
         orchestration_downgrade_reason: Optional[str] = None,
         blocked_reason: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """PR-19 / PR-21: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
+        """PR-19 / PR-21 / PR-24: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
 
         OpenClawd is the **unified control core** — this method assembles the
         single canonical control artifact that captures perception truth, model
@@ -1615,6 +1655,12 @@ class OpenClawd:
         PR-21 enriches the plan with :class:`UnifiedExecutionDecision` (explicit
         execution rationale and downgrade tracking) and :class:`FallbackDecisionRecord`
         (canonical fallback/downgrade governance record).
+
+        PR-24 wires ``canonical_model_supply`` (PR-18
+        :class:`~core.model_topology.canonical_model_supply_state.CanonicalModelSupplyState`)
+        into the plan so the unified artifact is the single authoritative source
+        for both perception and model-supply truth, eliminating the gap where
+        model supply was built separately but not forwarded into the control plan.
 
         The plan is additive and non-breaking: callers that do not read the
         ``unified_control_plan`` key in response metadata are unaffected.
@@ -1629,6 +1675,9 @@ class OpenClawd:
                 runtime_session_id=runtime_session_id,
                 trace_id=trace_id,
                 canonical_perception=canonical_perception,
+                # PR-24: canonical model supply is now the authoritative supply
+                # input to the control plan rather than being omitted.
+                canonical_model_supply=canonical_model_supply,
                 continuum_state=continuum_state,
                 chosen_model=chosen_model,
                 chosen_provider=chosen_provider,
@@ -1882,6 +1931,15 @@ class OpenClawd:
             fused_context=_mm_context_dict,
         )
 
+        # ── PR-24: Canonical Model Supply State ───────────────────────────────
+        # Build the canonical model supply truth (PR-18) once per request and
+        # forward it into the unified control plan so the plan becomes the
+        # single authoritative source for both perception and model supply.
+        # Previously, CanonicalModelSupplyState was built by PR-18 but not
+        # wired into the control plan — this closes that gap.
+        # Gracefully returns None when the router is unavailable.
+        _canonical_model_supply: Optional[Dict[str, Any]] = self._build_canonical_model_supply_state()
+
         # ── PR-20: Native Multimodal-First Routing Decision ───────────────────
         # OpenClawd is the routing authority.  Determine the preferred route
         # tier (native_multimodal → partial_multimodal → advisory) based on
@@ -2115,6 +2173,8 @@ class OpenClawd:
                         runtime_session_id=runtime_session_id,
                         trace_id=trace_id,
                         canonical_perception=_canonical_perception,
+                        # PR-24: wire canonical model supply into the unified control plan
+                        canonical_model_supply=_canonical_model_supply,
                         continuum_state=_continuum_state_dict,
                         chosen_model=kernel_result.model if kernel_result else None,
                         chosen_provider=provider_info.get("provider") if provider_info else None,
@@ -2173,9 +2233,18 @@ class OpenClawd:
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
                             "task_result": api_dict["task_result"],
+                            # PR-24: backward-compat field — raw fused multimodal context
+                            # from MultimodalBus.ingest().  New consumers should prefer
+                            # ``canonical_perception_state`` (PR-16) as the authoritative
+                            # perception source.  This field is retained for callers that
+                            # depend on the fused bus output directly.
                             "multimodal_context": _mm_context_dict,
                             # PR-16: canonical perception state (primary perception contract)
                             "canonical_perception_state": _canonical_perception,
+                            # PR-24: canonical model supply state (primary model supply
+                            # contract, PR-18) — now forwarded from the unified control
+                            # plan so the response carries the full canonical state chain.
+                            "canonical_model_supply_state": _canonical_model_supply,
                             # PR-19: canonical unified control plan
                             "unified_control_plan": _ucp_k,
                             # PR-20: native multimodal-first routing decision
@@ -2376,6 +2445,8 @@ class OpenClawd:
                 runtime_session_id=runtime_session_id,
                 trace_id=trace_id,
                 canonical_perception=_canonical_perception,
+                # PR-24: wire canonical model supply into the unified control plan
+                canonical_model_supply=_canonical_model_supply,
                 continuum_state=_continuum_state_dict2,
                 chosen_model=provider_info.get("model") if provider_info else None,
                 chosen_provider=provider_info.get("provider") if provider_info else None,
@@ -2422,9 +2493,18 @@ class OpenClawd:
                     "execution_lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
                     **provider_info,
                     **(result.get("metadata", {})),
+                    # PR-24: backward-compat field — raw fused multimodal context
+                    # from MultimodalBus.ingest().  New consumers should prefer
+                    # ``canonical_perception_state`` (PR-16) as the authoritative
+                    # perception source.  This field is retained for callers that
+                    # depend on the fused bus output directly.
                     "multimodal_context": _mm_context_dict,
                     # PR-16: canonical perception state (primary perception contract)
                     "canonical_perception_state": _canonical_perception,
+                    # PR-24: canonical model supply state (primary model supply
+                    # contract, PR-18) — now forwarded from the unified control
+                    # plan so the response carries the full canonical state chain.
+                    "canonical_model_supply_state": _canonical_model_supply,
                     # PR-19: canonical unified control plan
                     "unified_control_plan": _ucp2,
                     # PR-20: native multimodal-first routing decision
