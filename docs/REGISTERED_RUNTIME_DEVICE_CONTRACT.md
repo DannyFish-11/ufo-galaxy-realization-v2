@@ -1,9 +1,15 @@
 # Registered Runtime Device Contract
 
-**PR-29** — introduced in the `contracts/registered_runtime_device.py` module.
+**PR-29** (introduced) · **PR-5** (standardized as sole canonical contract)
 
-> **V1 Authority Baseline:** `RegisteredRuntimeDevice` is the **canonical
-> single-device read contract** for the Galaxy / OpenClawd system.  It is the
+**Introduced** in `contracts/registered_runtime_device.py` (PR-29).
+**Standardized as the sole canonical external single-device read contract** in PR-5.
+
+> **PR-5 Canonical Authority:** `RegisteredRuntimeDevice` is the **sole
+> canonical external single-device read contract** for the Galaxy / OpenClawd
+> system.  No parallel single-device external schema may be created.  All major
+> device sources — UDM, DeviceRouter, AndroidBridge, DeviceRegistry,
+> DeviceAgentManager — provide a stable adapter into this contract.  It is the
 > only authoritative stable read projection for a single device.  It sits
 > below `MultiDeviceRuntimeProjection` (the top-level multi-device aggregation)
 > and above the internal models of `UnifiedDeviceManager`, `DeviceRouter`,
@@ -111,7 +117,10 @@ All fields are optional except `device_id`.
 
 ## Adapter / builder functions
 
-Four typed adapters normalise the most important existing device shapes:
+Five typed adapters normalise all major existing device shapes, and a generic
+builder covers ad-hoc construction.  All adapters catch exceptions internally
+and degrade to a minimal valid contract so that partial or missing data never
+causes a hard failure.
 
 ### `from_udm_device(device)`
 Builds from a `core.unified.models.UnifiedDevice` (UDM SSOT).
@@ -159,6 +168,27 @@ from contracts.registered_runtime_device import from_device_registry_record
 reg_dev = device_registry.get("phone_001")
 contract = from_device_registry_record(reg_dev)
 ```
+
+### `from_device_agent_manager_record(device)`
+Builds from a `core.device_agent_manager.DeviceInfo` dataclass.  Covers the
+agent-backed device source — devices registered through `DeviceAgentManager`.
+
+```python
+from contracts.registered_runtime_device import from_device_agent_manager_record
+
+device_info = device_agent_manager.get_device_info("phone_001")
+contract = from_device_agent_manager_record(device_info)
+```
+
+The adapter maps:
+- `DeviceInfo.device_id` → `device_id`
+- `DeviceInfo.device_name` → `device_name`
+- `DeviceInfo.device_type` (enum or string) → `platform` / `device_type`
+- `DeviceInfo.status` (enum or string) → `status` / `online`
+- `DeviceInfo.capabilities` (list of `DeviceCapability` enums) → `capabilities`
+- `DeviceInfo.last_heartbeat` (datetime) → `last_seen` (Unix timestamp)
+- `DeviceInfo.metadata` → `metadata`
+- `DeviceInfo.registered_at` (datetime) → `metadata["registered_at"]` (ISO string)
 
 ### `build_registered_runtime_device(**kwargs)`
 Generic builder — use when you have individual field values rather than an
@@ -299,8 +329,9 @@ tooling, governance layer, or routing / scheduling component should consume
 `RegisteredRuntimeDevice` or `MultiDeviceRuntimeProjection` directly.  No UI
 or dashboard component is required for this contract to be useful.
 
-PR-29 gives the repository a single stable, serialisable "device identity at
-the runtime-contract level" that future PRs can depend on.
+PR-29 introduces the contract; PR-5 standardizes it as the sole canonical
+external single-device read contract, completes all source projections, and
+prohibits parallel single-device external schemas.
 
 ---
 
@@ -324,6 +355,7 @@ from contracts.registered_runtime_device import (
     from_router_device,
     from_android_registration,
     from_device_registry_record,
+    from_device_agent_manager_record,
 )
 
 # Via contracts package root
@@ -331,6 +363,7 @@ from contracts import (
     RegisteredRuntimeDevice,
     build_registered_runtime_device,
     from_udm_device,
+    from_device_agent_manager_record,
     # …
 )
 
@@ -339,6 +372,7 @@ from core.unified import (
     RegisteredRuntimeDevice,
     build_registered_runtime_device,
     from_udm_device,
+    from_device_agent_manager_record,
     # …
 )
 ```

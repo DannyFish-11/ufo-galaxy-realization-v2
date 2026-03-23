@@ -152,7 +152,8 @@ from .release_gate import (
     reset_release_gate,
 )
 
-# PR-29: Registered Runtime Device Contract (re-exported from contracts package)
+# PR-29 / PR-5: Registered Runtime Device Contract (re-exported from contracts package)
+# RegisteredRuntimeDevice is the sole canonical external single-device read contract.
 from contracts.registered_runtime_device import (  # noqa: E402
     RegisteredRuntimeDevice,
     RuntimeConnectionSummary,
@@ -169,6 +170,7 @@ from contracts.registered_runtime_device import (  # noqa: E402
     from_router_device,
     from_android_registration,
     from_device_registry_record,
+    from_device_agent_manager_record,
 )
 
 # PR-30: Local Runtime Host Contract (re-exported from contracts package)
@@ -476,6 +478,7 @@ __all__ = [
     "from_router_device",
     "from_android_registration",
     "from_device_registry_record",
+    "from_device_agent_manager_record",
     # PR-30: Local Runtime Host Contract
     "LocalRuntimeHost",
     "LocalRuntimeHostStatus",

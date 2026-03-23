@@ -1,23 +1,54 @@
 """contracts/registered_runtime_device.py
 ==========================================
-Registered Runtime Device Contract — PR-29.
+Registered Runtime Device Contract — PR-5 (canonical) / PR-29 (introduced).
 
-This module defines the **canonical Registered Runtime Device contract**: a
-single, serialisable schema that answers the question:
+**Canonical position (PR-5):**
+``RegisteredRuntimeDevice`` is the **sole canonical external single-device
+read contract** for the Galaxy / OpenClawd system.  Every consumer that needs
+the state of a single device — whether for APIs, orchestration, governance, or
+future UI surfaces — must project into or read from this contract.
 
-    *"What is a runtime-capable device in the Galaxy/OpenClawd system?"*
+No parallel single-device external schema should be created.  The authority
+chain is:
 
-It unifies the currently fragmented device concepts spread across:
-- ``core/device_registry.py`` (DeviceModel)
-- ``core/unified/device_manager.py`` (UnifiedDevice)
-- ``galaxy_gateway/device_router.py`` (Device gateway wrapper)
-- ``galaxy_gateway/android_bridge.py`` (AndroidDevice)
-- ``core/device_agent_manager.py`` (DeviceInfo)
-- ``core/mesh/body_mesh_registry.py`` (BodyEntry / DeviceRole hints)
+    UnifiedDeviceManager (write SSOT)
+      └── all registration paths converge here
+    ──────────────────────────────────────────
+    RegisteredRuntimeDevice              ← sole canonical single-device read
+      (this module)                         contract  (PR-5 / PR-29)
+    ──────────────────────────────────────────
+    MultiDeviceRuntimeProjection         ← canonical top-level multi-device
+      (contracts/multi_device_runtime_projection.py)  read projection
+
+Source projections
+------------------
+All major device sources provide a stable adapter into this contract:
+
+- :func:`from_udm_device` — from ``core.unified.models.UnifiedDevice`` (UDM SSOT)
+- :func:`from_router_device` — from ``galaxy_gateway.device_router.Device``
+- :func:`from_android_registration` — from ``galaxy_gateway.android_bridge`` payloads
+- :func:`from_device_registry_record` — from ``core.schemas.device.DeviceModel``
+- :func:`from_device_agent_manager_record` — from ``core.device_agent_manager.DeviceInfo``
+- :func:`build_registered_runtime_device` — generic keyword-argument builder
+
+Information domains
+-------------------
+The contract covers the six canonical single-device information domains:
+
+1. **identity** — ``device_id``, ``device_name``, ``owner_id``
+2. **registration** — ``platform``, ``form_factor``, ``device_type``
+3. **runtime presence** — ``status``, ``online``, ``last_seen``,
+   ``connection`` (:class:`RuntimeConnectionSummary`)
+4. **capability** — ``capabilities`` (:class:`RuntimeCapabilityProfile`)
+5. **participation** — ``participation_hints``
+   (:class:`RuntimeParticipationHints`),
+   ``session_presence`` (:class:`RuntimeSessionPresence`)
+6. **topology / runtime hints** — ``autonomy`` (:class:`RuntimeAutonomySummary`)
 
 Design principles
 -----------------
-- **Additive only** — does not modify any existing module.
+- **Sole canonical external view** — downstream consumers must not build
+  parallel single-device schemas.
 - **Fully serialisable** — :meth:`RegisteredRuntimeDevice.to_dict` and
   :meth:`RegisteredRuntimeDevice.to_json` produce stable, round-trippable JSON.
 - **Graceful defaults** — all fields beyond the minimal required set are
@@ -40,12 +71,16 @@ Usage::
         from_router_device,
         from_android_registration,
         from_device_registry_record,
+        from_device_agent_manager_record,
         build_registered_runtime_device,
     )
 
     # Build from a UnifiedDevice (UDM SSOT)
     contract = from_udm_device(unified_device)
     payload   = contract.to_dict()
+
+    # Build from a DeviceAgentManager DeviceInfo record
+    contract = from_device_agent_manager_record(device_info)
 
     # Build from a raw registration dict
     contract = build_registered_runtime_device(
@@ -351,14 +386,23 @@ class RuntimeParticipationHints(BaseModel):
 
 
 class RegisteredRuntimeDevice(BaseModel):
-    """Canonical identity and state carrier for a runtime-capable device.
+    """Sole canonical external single-device read contract (PR-5).
 
     This is the single authoritative answer to:
     *"What is a runtime-capable device in the Galaxy/OpenClawd system?"*
 
-    All device-surface views (device registry, gateway router, Android bridge,
-    UDM, device agent manager) should normalise into this contract before
-    being handed to runtime, projection, or governance layers.
+    All device-surface views — device registry, gateway router, Android bridge,
+    UDM, device agent manager — must normalise into this contract before being
+    consumed by runtime, projection, governance, or API layers.  No parallel
+    single-device external schema should be created outside this module.
+
+    The contract covers six canonical information domains:
+    1. **identity** — ``device_id``, ``device_name``, ``owner_id``
+    2. **registration** — ``platform``, ``form_factor``, ``device_type``
+    3. **runtime presence** — ``status``, ``online``, ``last_seen``, ``connection``
+    4. **capability** — ``capabilities``
+    5. **participation** — ``participation_hints``, ``session_presence``
+    6. **topology / runtime hints** — ``autonomy``
 
     Required fields
     ---------------
@@ -746,6 +790,110 @@ def from_device_registry_record(device: Any) -> RegisteredRuntimeDevice:
         return RegisteredRuntimeDevice(
             device_id=str(getattr(device, "device_id", "") or f"dev_{uuid.uuid4().hex[:8]}"),
         )
+
+
+def from_device_agent_manager_record(device: Any) -> RegisteredRuntimeDevice:
+    """Build a :class:`RegisteredRuntimeDevice` from a
+    ``core.device_agent_manager.DeviceInfo`` record.
+
+    This adapter covers the agent-backed device source so that
+    ``DeviceAgentManager``-originated device state can be projected into the
+    canonical single-device read contract without coupling to the internal
+    dataclass.
+
+    Parameters
+    ----------
+    device:
+        A ``core.device_agent_manager.DeviceInfo`` instance (or any object
+        with the same field shape: ``device_id``, ``device_type``,
+        ``device_name``, ``status``, ``capabilities``, ``metadata``,
+        ``last_heartbeat``, ``registered_at``).
+
+    Returns
+    -------
+    RegisteredRuntimeDevice
+        The normalised canonical contract.  Fields that cannot be mapped are
+        left at their defaults.
+    """
+    try:
+        device_id: str = str(getattr(device, "device_id", "") or "")
+        if not device_id:
+            device_id = f"dev_{uuid.uuid4().hex[:8]}"
+
+        # device_type — DeviceType enum or plain string
+        raw_type_obj = getattr(device, "device_type", None)
+        if raw_type_obj is None:
+            raw_type = ""
+        elif hasattr(raw_type_obj, "value"):
+            raw_type = str(raw_type_obj.value)
+        else:
+            raw_type = str(raw_type_obj)
+
+        platform = RuntimeDevicePlatform.from_string(raw_type)
+
+        # status — DeviceStatus enum or plain string
+        raw_status_obj = getattr(device, "status", None)
+        if raw_status_obj is None:
+            raw_status = "offline"
+        elif hasattr(raw_status_obj, "value"):
+            raw_status = str(raw_status_obj.value)
+        else:
+            raw_status = str(raw_status_obj)
+        status = RuntimeDeviceStatus.from_string(raw_status)
+        online = status in (RuntimeDeviceStatus.ONLINE, RuntimeDeviceStatus.BUSY)
+
+        # capabilities — List[DeviceCapability] enums or plain strings
+        caps_raw = getattr(device, "capabilities", []) or []
+        caps_str: List[str] = []
+        for c in caps_raw:
+            if isinstance(c, str):
+                caps_str.append(c)
+            elif hasattr(c, "value"):
+                caps_str.append(str(c.value))
+            elif hasattr(c, "name"):
+                caps_str.append(str(c.name))
+
+        # last_heartbeat — datetime or float
+        lh = getattr(device, "last_heartbeat", None)
+        last_seen: Optional[float] = None
+        if lh is not None:
+            try:
+                last_seen = lh.timestamp() if hasattr(lh, "timestamp") else float(lh)
+            except Exception:
+                pass
+
+        meta: Dict[str, Any] = dict(getattr(device, "metadata", {}) or {})
+
+        # Carry registered_at in metadata if present (it is agent-manager-specific)
+        registered_at = getattr(device, "registered_at", None)
+        if registered_at is not None and "registered_at" not in meta:
+            try:
+                meta["registered_at"] = (
+                    registered_at.isoformat()
+                    if hasattr(registered_at, "isoformat")
+                    else str(registered_at)
+                )
+            except Exception:
+                pass
+
+        return RegisteredRuntimeDevice(
+            device_id=device_id,
+            device_name=str(getattr(device, "device_name", "") or ""),
+            platform=platform,
+            device_type=raw_type,
+            status=status,
+            online=online,
+            last_seen=last_seen,
+            capabilities=RuntimeCapabilityProfile(capabilities=caps_str),
+            autonomy=RuntimeAutonomySummary(runtime_enabled=online),
+            metadata=meta,
+        )
+    except Exception:
+        try:
+            fallback_id = str(device.device_id) or f"dev_{uuid.uuid4().hex[:8]}"
+        except Exception:
+            fallback_id = f"dev_{uuid.uuid4().hex[:8]}"
+        return RegisteredRuntimeDevice(device_id=fallback_id)
 
 
 def build_registered_runtime_device(
