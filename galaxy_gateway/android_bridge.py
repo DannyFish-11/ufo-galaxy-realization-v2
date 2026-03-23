@@ -449,12 +449,24 @@ class MessageBuilder:
 
 class AndroidBridge:
     """
-    Android 桥接服务
-    
-    负责管理所有安卓设备的连接、任务分发和结果收集
+    Android 桥接服务 — transport registration + runtime presence adapter。
+
+    负责管理所有安卓设备的连接、任务分发和结果收集。
+
+    架构角色 (PR-2)
+    ---------------
+    AndroidBridge 是 **transport/session adapter**，不是独立的设备事实源。
+
+    - 设备注册 / 心跳 / 断联 / 重连的 **canonical 状态写入** 经由
+      ``UnifiedDeviceManager`` (UDM) 完成，UDM 是唯一的写入 SSOT。
+    - ``self._devices`` 仅保留为 **transport/session operational cache**，
+      用于维护 WebSocket 连接句柄与轻量级连接态，不再充当主设备注册表。
+    - 所有外部代码若需要权威设备状态，应查询 UDM，而非直接读取 ``_devices``。
     """
     
     def __init__(self):
+        # transport/session operational cache — NOT the canonical device registry.
+        # Use UnifiedDeviceManager (UDM) as the authoritative device state store.
         self._devices: Dict[str, AndroidDevice] = {}
         self._pending_responses: Dict[str, asyncio.Future] = {}
         self._message_handlers: Dict[MessageType, Callable] = {}
@@ -464,6 +476,142 @@ class AndroidBridge:
         self._register_default_handlers()
         
         logger.info("AndroidBridge initialized")
+
+    # =========================================================================
+    # UDM canonical write/patch helpers (PR-2)
+    # =========================================================================
+
+    def _write_registration_to_udm(self, device_id: str, message: Dict[str, Any]) -> None:
+        """Write canonical device identity/state to UnifiedDeviceManager on registration.
+
+        This is the authoritative canonical write path for Android device
+        registration.  The local ``_devices`` transport cache is updated
+        *after* this call succeeds.
+
+        Args:
+            device_id: The device identifier extracted from the registration message.
+            message:   The normalised AIP v3 registration payload.
+        """
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            from core.unified.models import UnifiedDevice, UnifiedDeviceType
+
+            udm = UnifiedDeviceManager()
+
+            # Normalise capabilities bitmask → string list
+            raw_caps = message.get("capabilities", 0)
+            if isinstance(raw_caps, int):
+                caps_list = DeviceCapability.to_list(raw_caps)
+            elif isinstance(raw_caps, (list, tuple)):
+                caps_list = [str(c) for c in raw_caps]
+            else:
+                caps_list = []
+
+            # Determine device_type
+            raw_device_type = str(message.get("device_type", "android_phone")).lower()
+            try:
+                utype = UnifiedDeviceType(raw_device_type)
+            except ValueError:
+                utype = UnifiedDeviceType.ANDROID
+
+            metadata = {
+                "model": message.get("model", ""),
+                "os_version": message.get("os_version", ""),
+                "sdk_version": message.get("sdk_version"),
+                "screen_width": message.get("screen_width"),
+                "screen_height": message.get("screen_height"),
+                "platform": message.get("platform", "android"),
+                "app_version": message.get("app_version", ""),
+            }
+            # Drop None values to keep metadata clean
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+
+            device = UnifiedDevice(
+                device_id=device_id,
+                device_name=str(message.get("name") or "Android Device"),
+                device_type=utype,
+                capabilities=caps_list,
+                metadata=metadata,
+                source="android_bridge",
+            )
+            udm.register_device(device)
+            logger.info(
+                "android_bridge: wrote registration to UDM (SSOT): device_id=%s",
+                device_id,
+                extra={"event": "android_bridge_udm_register", "device_id": device_id},
+            )
+        except Exception as exc:
+            logger.warning(
+                "android_bridge: UDM registration write failed (non-fatal): device_id=%s error=%s",
+                device_id, exc,
+            )
+
+    def _patch_runtime_state_to_udm(
+        self,
+        device_id: str,
+        patch: Dict[str, Any],
+        source: str = "android_bridge",
+    ) -> None:
+        """Patch canonical runtime state in UnifiedDeviceManager.
+
+        Args:
+            device_id: Target device identifier.
+            patch:     Partial state fields to update (see UDM ``upsert_device_state`` docs).
+            source:    Source label for audit trail.
+        """
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            result = udm.upsert_device_state(device_id, patch, source=source)
+            if result is None:
+                logger.debug(
+                    "android_bridge: _patch_runtime_state_to_udm: device not in UDM yet, skipping: %s",
+                    device_id,
+                )
+        except Exception as exc:
+            logger.warning(
+                "android_bridge: UDM state patch failed (non-fatal): device_id=%s error=%s",
+                device_id, exc,
+            )
+
+    def _patch_heartbeat_to_udm(self, device_id: str) -> None:
+        """Record heartbeat in UDM canonical state (updates last_heartbeat + keeps ONLINE).
+
+        Args:
+            device_id: Device that sent the heartbeat.
+        """
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            UnifiedDeviceManager().heartbeat(device_id)
+        except Exception as exc:
+            logger.debug(
+                "android_bridge: UDM heartbeat patch failed (non-fatal): device_id=%s error=%s",
+                device_id, exc,
+            )
+
+    def _patch_disconnect_to_udm(self, device_id: str) -> None:
+        """Mark device as DISCONNECTED in UDM without removing canonical identity.
+
+        Args:
+            device_id: Device that disconnected.
+        """
+        self._patch_runtime_state_to_udm(
+            device_id,
+            {"status": "disconnected"},
+            source="android_bridge_disconnect",
+        )
+
+    def _patch_reconnect_to_udm(self, device_id: str) -> None:
+        """Mark device as ONLINE in UDM on reconnect (no duplicate identity created).
+
+        Args:
+            device_id: Device that reconnected.
+        """
+        self._patch_runtime_state_to_udm(
+            device_id,
+            {"status": "online"},
+            source="android_bridge_reconnect",
+        )
     
     def _register_default_handlers(self):
         """注册默认消息处理器"""
@@ -612,10 +760,19 @@ class AndroidBridge:
             return None
     
     async def _handle_device_register(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理设备注册，失败时向网关日志输出结构化错误"""
+        """处理设备注册，失败时向网关日志输出结构化错误。
+
+        Registration flow (PR-2):
+        1. Write canonical identity/state to UDM (SSOT).
+        2. Update local ``_devices`` as transport/session cache only.
+        """
         device_id = message.get("device_id")
 
         try:
+            # Step 1 — canonical write to UDM (SSOT); must happen before local cache update.
+            self._write_registration_to_udm(device_id, message)
+
+            # Step 2 — update local transport/session cache.
             async with self._lock:
                 device = AndroidDevice.from_registration(message)
                 device.websocket = websocket
@@ -650,9 +807,18 @@ class AndroidBridge:
             )
 
     async def _handle_heartbeat(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理心跳，未注册设备仍回 ACK 并输出警告"""
+        """处理心跳，未注册设备仍回 ACK 并输出警告。
+
+        Heartbeat flow (PR-2):
+        1. Patch canonical runtime state in UDM (last_heartbeat + ONLINE).
+        2. Keep local transport cache in sync for operational use.
+        """
         device_id = message.get("device_id")
 
+        # Step 1 — canonical patch to UDM.
+        self._patch_heartbeat_to_udm(device_id)
+
+        # Step 2 — update local transport cache.
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].last_heartbeat = time.time()
@@ -666,10 +832,23 @@ class AndroidBridge:
         return MessageBuilder.heartbeat_ack(device_id)
 
     async def _handle_device_status(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理设备状态上报（battery, cpu, memory 等）"""
+        """处理设备状态上报（battery, cpu, memory 等）。
+
+        Status update flow (PR-2):
+        1. Patch canonical runtime state in UDM (last_heartbeat + metadata).
+        2. Keep local transport cache in sync.
+        """
         device_id = message.get("device_id")
         status_payload = message.get("status") or message.get("payload") or {}
 
+        # Step 1 — canonical patch to UDM (merge status metadata, update last_seen).
+        if device_id:
+            meta_patch: Dict[str, Any] = {}
+            if isinstance(status_payload, dict) and status_payload:
+                meta_patch["metadata"] = {"device_status_report": status_payload}
+            self._patch_runtime_state_to_udm(device_id, meta_patch, source="android_bridge_status")
+
+        # Step 2 — update local transport cache.
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].last_heartbeat = time.time()
@@ -1100,7 +1279,16 @@ class AndroidBridge:
                 if d.platform == DevicePlatform.ANDROID and d.connected]
     
     async def disconnect_device(self, device_id: str):
-        """断开设备连接"""
+        """断开设备连接。
+
+        Disconnect flow (PR-2):
+        1. Patch canonical runtime state in UDM to DISCONNECTED (identity preserved).
+        2. Clear WebSocket reference in local transport cache.
+        """
+        # Step 1 — canonical patch to UDM; identity is preserved, only status changes.
+        self._patch_disconnect_to_udm(device_id)
+
+        # Step 2 — clear transport/session cache entry.
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].connected = False
@@ -1122,7 +1310,15 @@ class AndroidBridge:
             logger.warning(f"Device timed out: {device_id}")
 
     async def reconnect_device(self, device_id: str, websocket: Any) -> bool:
-        """重新连接设备（WebSocket 断线重连时调用）"""
+        """重新连接设备（WebSocket 断线重连时调用）。
+
+        Reconnect flow (PR-2):
+        1. Patch canonical runtime state in UDM to ONLINE (no duplicate identity created).
+        2. Restore WebSocket reference in local transport cache.
+
+        Returns:
+            True if the device was already registered; False otherwise.
+        """
         async with self._lock:
             device = self._devices.get(device_id)
             if device is None:
@@ -1131,6 +1327,10 @@ class AndroidBridge:
             device.websocket = websocket
             device.connected = True
             device.last_heartbeat = time.time()
+
+        # Step 1 — patch canonical UDM state to ONLINE; existing identity is reused.
+        self._patch_reconnect_to_udm(device_id)
+
         logger.info(f"设备重连成功: {device_id}")
         return True
 
