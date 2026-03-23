@@ -1644,6 +1644,8 @@ class OpenClawd:
         remote_to_local_reason: Optional[str] = None,
         orchestration_downgrade_reason: Optional[str] = None,
         blocked_reason: Optional[str] = None,
+        # PR-24 — canonical multimodal routing decision to embed in the plan
+        multimodal_route_decision: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """PR-19 / PR-21 / PR-24: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
 
@@ -1661,6 +1663,10 @@ class OpenClawd:
         into the plan so the unified artifact is the single authoritative source
         for both perception and model-supply truth, eliminating the gap where
         model supply was built separately but not forwarded into the control plan.
+        PR-24 also embeds the native multimodal routing decision directly into
+        the plan via ``multimodal_route_decision``, eliminating the need for
+        consumers to read the deprecated top-level ``multimodal_route_decision``
+        metadata key, which is retained only for backward compatibility.
 
         The plan is additive and non-breaking: callers that do not read the
         ``unified_control_plan`` key in response metadata are unaffected.
@@ -1704,6 +1710,8 @@ class OpenClawd:
                 remote_to_local_reason=remote_to_local_reason,
                 orchestration_downgrade_reason=orchestration_downgrade_reason,
                 blocked_reason=blocked_reason,
+                # PR-24: embed routing decision in the canonical plan
+                multimodal_route_decision=multimodal_route_decision,
             )
             return _plan.to_dict()
         except Exception as _ucp_err:
@@ -2183,6 +2191,8 @@ class OpenClawd:
                         delegation_point="local",
                         lifecycle_target=_plan_k.lifecycle_state if _plan_k else None,
                         execution_plan_summary=self._summarise_execution_plan(_plan_k),
+                        # PR-24: embed canonical routing decision in the plan
+                        multimodal_route_decision=_multimodal_route,
                     )
                     return {
                         "success": kernel_result.success,
@@ -2233,11 +2243,11 @@ class OpenClawd:
                             "agent_steps": api_dict["agent_steps"],
                             "tool_calls": api_dict["tool_calls"],
                             "task_result": api_dict["task_result"],
-                            # PR-24: backward-compat field — raw fused multimodal context
+                            # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
                             # from MultimodalBus.ingest().  New consumers should prefer
                             # ``canonical_perception_state`` (PR-16) as the authoritative
-                            # perception source.  This field is retained for callers that
-                            # depend on the fused bus output directly.
+                            # perception source.  Retained only for backward compatibility;
+                            # do not add new consumers of this key.
                             "multimodal_context": _mm_context_dict,
                             # PR-16: canonical perception state (primary perception contract)
                             "canonical_perception_state": _canonical_perception,
@@ -2247,7 +2257,10 @@ class OpenClawd:
                             "canonical_model_supply_state": _canonical_model_supply,
                             # PR-19: canonical unified control plan
                             "unified_control_plan": _ucp_k,
-                            # PR-20: native multimodal-first routing decision
+                            # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
+                            # The canonical routing decision is now embedded inside
+                            # unified_control_plan["multimodal_route_decision"].
+                            # This key is retained only for backward compatibility.
                             "multimodal_route_decision": _multimodal_route,
                         },
                         # PR-14: additive introspection hints (non-breaking)
@@ -2456,6 +2469,8 @@ class OpenClawd:
                 remote_execution_mode=_remote_mode2,
                 lifecycle_target=_plan2.lifecycle_state if _plan2 else None,
                 execution_plan_summary=self._summarise_execution_plan(_plan2),
+                # PR-24: embed canonical routing decision in the plan
+                multimodal_route_decision=_multimodal_route,
             )
 
             return {
@@ -2493,11 +2508,11 @@ class OpenClawd:
                     "execution_lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
                     **provider_info,
                     **(result.get("metadata", {})),
-                    # PR-24: backward-compat field — raw fused multimodal context
+                    # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
                     # from MultimodalBus.ingest().  New consumers should prefer
                     # ``canonical_perception_state`` (PR-16) as the authoritative
-                    # perception source.  This field is retained for callers that
-                    # depend on the fused bus output directly.
+                    # perception source.  Retained only for backward compatibility;
+                    # do not add new consumers of this key.
                     "multimodal_context": _mm_context_dict,
                     # PR-16: canonical perception state (primary perception contract)
                     "canonical_perception_state": _canonical_perception,
@@ -2507,7 +2522,10 @@ class OpenClawd:
                     "canonical_model_supply_state": _canonical_model_supply,
                     # PR-19: canonical unified control plan
                     "unified_control_plan": _ucp2,
-                    # PR-20: native multimodal-first routing decision
+                    # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
+                    # The canonical routing decision is now embedded inside
+                    # unified_control_plan["multimodal_route_decision"].
+                    # This key is retained only for backward compatibility.
                     "multimodal_route_decision": _multimodal_route,
                 },
                 # PR-10: architecture diagnostics layer identifier (additive)
