@@ -42,6 +42,18 @@ from .perception_source_registry import (
     PerceptionSourceRecord,
     PerceptionSourceRegistry,
 )
+from .modality_confidence_policy import (
+    ModalityPresence,
+    SourceDegradationSeverity,
+    ModalitySemantics,
+    RoutingEligibilityReason,
+    ModalityConfidencePolicy,
+    RoutingEligibilityAssessment,
+    PerceptionRoutingReadiness,
+    assess_modality_confidence,
+    assess_routing_eligibility,
+    build_perception_routing_readiness,
+)
 
 __all__ = [
     # Core quality / frame types
@@ -74,4 +86,15 @@ __all__ = [
     "SourceHealthStatus",
     "PerceptionSourceRecord",
     "PerceptionSourceRegistry",
+    # Modality confidence policy — source-to-routing calibration (PR-27)
+    "ModalityPresence",
+    "SourceDegradationSeverity",
+    "ModalitySemantics",
+    "RoutingEligibilityReason",
+    "ModalityConfidencePolicy",
+    "RoutingEligibilityAssessment",
+    "PerceptionRoutingReadiness",
+    "assess_modality_confidence",
+    "assess_routing_eligibility",
+    "build_perception_routing_readiness",
 ]
