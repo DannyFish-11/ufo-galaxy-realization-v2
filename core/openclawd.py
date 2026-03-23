@@ -1399,6 +1399,74 @@ class OpenClawd:
             logger.debug("_apply_latency_budget failed (swallowed): %s", _exc)
             return None
 
+    def _build_permission_safety_state(
+        self,
+        *,
+        source_registry_snapshot: Optional[Dict[str, Any]] = None,
+        multimodal_route: Optional[Dict[str, Any]] = None,
+        execution_plan: Optional[Dict[str, Any]] = None,
+        degraded_operation_envelope: Optional[Dict[str, Any]] = None,
+        canonical_perception: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+        runtime_session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-32: Build the canonical permission/trust/safety snapshot.
+
+        Aggregates permission visibility, trust/risk labels, and control-safety
+        state from the current shell-owned source registry, routing decision,
+        execution plan, and degraded-operation envelope into a single canonical
+        :class:`~core.multimodal.permission_safety_state.PermissionSafetySnapshot`.
+
+        The snapshot is embedded in response metadata so projection and
+        diagnostics layers consume an authoritative safety view without
+        inventing separate trust semantics.
+
+        Parameters
+        ----------
+        source_registry_snapshot:
+            Shell-owned source registry snapshot dict.
+        multimodal_route:
+            Current multimodal route decision dict.
+        execution_plan:
+            Current execution plan dict.
+        degraded_operation_envelope:
+            Canonical degraded-operation envelope dict (PR-29).
+        canonical_perception:
+            Canonical perception state dict.
+        trace_id:
+            Correlation trace ID.
+        runtime_session_id:
+            Runtime session identifier.
+
+        Returns
+        -------
+        dict or None
+            Serialisable :class:`~core.multimodal.permission_safety_state.PermissionSafetySnapshot`
+            dict, or ``None`` on failure.
+        """
+        try:
+            from core.multimodal.permission_safety_state import (  # noqa: PLC0415
+                build_permission_safety_snapshot,
+                get_permission_safety_state,
+            )
+
+            snap = build_permission_safety_snapshot(
+                source_registry_snapshot=source_registry_snapshot,
+                multimodal_route=multimodal_route,
+                execution_plan=execution_plan,
+                degraded_operation_envelope=degraded_operation_envelope,
+                canonical_perception=canonical_perception,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+            )
+            # Commit to singleton so diagnostics/projection can access without
+            # rebuilding.
+            get_permission_safety_state().commit(snap)
+            return snap.to_dict()
+        except Exception as _exc:
+            logger.debug("_build_permission_safety_state failed (swallowed): %s", _exc)
+            return None
+
     def _build_execution_trace(
         self,
         intent_profile: Any,
@@ -2273,6 +2341,29 @@ class OpenClawd:
             runtime_session_id=runtime_session_id or "",
         )
 
+        # ── PR-32: Permission / Trust / Safety Snapshot ───────────────────
+        # Build the canonical permission visibility, trust-surface, and
+        # control-safety snapshot for this control-loop iteration.  This
+        # aggregates source registry health → permission status, routing
+        # degradation → trust label, and execution plan → risk tier into one
+        # authoritative artifact that projection and diagnostics layers consume
+        # without inventing separate trust semantics.
+        # Note: source_registry_snapshot is omitted here because the registry
+        # is shell-owned (DesktopPresenceRuntime) and is not directly accessible
+        # from OpenClawd.  The shell's permission_safety_summary() method builds
+        # a supplementary snapshot with full registry data when needed.
+        _permission_safety_state: Optional[Dict[str, Any]] = (
+            self._build_permission_safety_state(
+                source_registry_snapshot=None,  # registry is shell-owned; shell embeds it
+                multimodal_route=_multimodal_route,
+                execution_plan=None,  # plan not yet built at this stage
+                degraded_operation_envelope=_degraded_operation_envelope,
+                canonical_perception=_canonical_perception,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id or "",
+            )
+        )
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -2586,6 +2677,9 @@ class OpenClawd:
                             # PR-30: control-loop latency budget summary (ingest cadence,
                             # recompute throttling, projection refresh, fast-path).
                             "latency_budget_summary": _latency_budget_summary,
+                            # PR-32: canonical permission/trust/safety snapshot
+                            # (permission visibility, trust labels, safety gating).
+                            "permission_safety_state": _permission_safety_state,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2859,6 +2953,9 @@ class OpenClawd:
                     # PR-30: control-loop latency budget summary (ingest cadence,
                     # recompute throttling, projection refresh, fast-path).
                     "latency_budget_summary": _latency_budget_summary,
+                    # PR-32: canonical permission/trust/safety snapshot
+                    # (permission visibility, trust labels, safety gating).
+                    "permission_safety_state": _permission_safety_state,
                 },
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
                 # this field are unaffected).
