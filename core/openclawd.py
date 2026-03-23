@@ -1702,6 +1702,34 @@ class OpenClawd:
             logger.debug("_build_execution_trace failed (swallowed): %s", _exc)
             return None
 
+    def _build_production_baseline_summary(
+        self,
+        *,
+        response_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-36: Build a compact production baseline status summary.
+
+        Confirms that the unified canonical control loop is active as the
+        production baseline and reports coverage of canonical primary artifacts
+        found in *response_metadata*.  Errors are fully isolated — ``None``
+        is returned on any failure so the response flow is never interrupted.
+
+        Args:
+            response_metadata:
+                The partially-assembled metadata dict for the current response.
+                When provided, canonical artifact coverage is assessed.
+
+        Returns:
+            Compact production baseline summary dict, or ``None`` on failure.
+        """
+        try:
+            from core.production_baseline import build_production_baseline_summary as _build_pbs
+
+            return _build_pbs(response_metadata=response_metadata or {})
+        except Exception as _exc:
+            logger.debug("_build_production_baseline_summary failed (swallowed): %s", _exc)
+            return None
+
     def _build_canonical_perception_state(
         self,
         *,
@@ -2913,6 +2941,21 @@ class OpenClawd:
                             # (route selection, fallback transitions, operator override
                             # influence, trust/safety gating — all correlated and replayable).
                             "decision_timeline_snapshot": _decision_timeline_snapshot,
+                            # PR-36: production baseline status — confirms that the unified
+                            # canonical control loop is active as the production baseline
+                            # and reports coverage of canonical primary artifacts.
+                            "production_baseline_summary": self._build_production_baseline_summary(
+                                response_metadata={
+                                    "canonical_perception_state": _canonical_perception,
+                                    "canonical_model_supply_state": _canonical_model_supply,
+                                    "unified_control_plan": _ucp_k,
+                                    "degraded_operation_envelope": _degraded_operation_envelope,
+                                    "latency_budget_summary": _latency_budget_summary,
+                                    "permission_safety_state": _permission_safety_state,
+                                    "operator_override_state": _operator_override_state,
+                                    "decision_timeline_snapshot": _decision_timeline_snapshot,
+                                }
+                            ),
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -3196,6 +3239,21 @@ class OpenClawd:
                     # (route selection, fallback transitions, operator override
                     # influence, trust/safety gating — all correlated and replayable).
                     "decision_timeline_snapshot": _decision_timeline_snapshot,
+                    # PR-36: production baseline status — confirms that the unified
+                    # canonical control loop is active as the production baseline
+                    # and reports coverage of canonical primary artifacts.
+                    "production_baseline_summary": self._build_production_baseline_summary(
+                        response_metadata={
+                            "canonical_perception_state": _canonical_perception,
+                            "canonical_model_supply_state": _canonical_model_supply,
+                            "unified_control_plan": _ucp2,
+                            "degraded_operation_envelope": _degraded_operation_envelope,
+                            "latency_budget_summary": _latency_budget_summary,
+                            "permission_safety_state": _permission_safety_state,
+                            "operator_override_state": _operator_override_state,
+                            "decision_timeline_snapshot": _decision_timeline_snapshot,
+                        }
+                    ),
                 },
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
                 # this field are unaffected).

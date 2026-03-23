@@ -1100,6 +1100,56 @@ class DesktopPresenceRuntime:
                 "error": str(_err),
             }
 
+    def production_baseline_summary(
+        self,
+        result: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """PR-36: Return a shell-facing production baseline status summary.
+
+        Derives a compact production baseline status summary from the most
+        recent response result produced by OpenClawd.  The summary confirms
+        that the unified canonical control loop is active as the production
+        baseline and reports coverage of canonical primary artifacts.
+
+        This method is **derived-only** — it reads from the canonical
+        artifacts already present in *result* and never acts as an independent
+        truth source.  The runtime shell exposes this for status-board and
+        diagnostics rendering only.
+
+        Parameters
+        ----------
+        result:
+            The result dict from the most recent
+            :meth:`~core.openclawd.OpenClawd.process` call (or
+            :meth:`handle_request`).  The ``metadata`` sub-dict is read
+            to extract canonical artifact coverage information.
+
+        Returns
+        -------
+        dict
+            Compact production baseline summary.  Always returns a valid dict;
+            returns an error-annotated dict on failure.
+        """
+        try:
+            from core.production_baseline import build_production_baseline_summary as _build_pbs
+
+            metadata: Dict[str, Any] = {}
+            if isinstance(result, dict):
+                _meta = result.get("metadata") or {}
+                if isinstance(_meta, dict):
+                    metadata = _meta
+
+            return _build_pbs(response_metadata=metadata)
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.production_baseline_summary failed (non-fatal): %s",
+                _err,
+            )
+            return {
+                "baseline_active": True,
+                "error": str(_err),
+            }
+
     def build_desktop_status_projection(
         self,
         result: Optional[Dict[str, Any]] = None,
