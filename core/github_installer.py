@@ -396,40 +396,80 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
 
 # ── Registration Helpers ──────────────────────────────────────────────────────
 
+def _build_mcp_command(addon_dir: Path, entrypoint: Any) -> List[str]:
+    """Resolve an entrypoint value to a launch command list."""
+    if isinstance(entrypoint, list):
+        # Last element is treated as the script path relative to addon_dir
+        return [
+            str(addon_dir / part) if i == len(entrypoint) - 1 else part
+            for i, part in enumerate(entrypoint)
+        ]
+    entrypoint_str = str(entrypoint)
+    if entrypoint_str.endswith(".py"):
+        return [sys.executable, str(addon_dir / entrypoint_str)]
+    if entrypoint_str.endswith(".js"):
+        node_exec = shutil.which("node") or "node"
+        return [node_exec, str(addon_dir / entrypoint_str)]
+    return [str(addon_dir / entrypoint_str)]
+
+
 def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[str, Any]:
-    """Register an MCP tool addon into MCPLoader / MCPDynamicGateway.
+    """Validate *tool_manifest* against the MCP addon contract and register it.
 
-    The ``mcp_tool.json`` contract:
-    {
-        "name": "my-tool",
-        "entrypoint": "server.py",          # or ["node", "server.js"]
-        "description": "...",
-        "schema": {...},                     # optional, JSON schema
-        "dependencies": ["requests", ...],  # optional pip deps
-        "env": {"KEY": "VALUE"}             # optional env vars to inject
-    }
+    Validation is performed via :func:`~core.mcp_addon_contract.validate_mcp_addon_contract`
+    before any registration attempt.  Invalid manifests are rejected with a
+    structured error dict (``{"success": False, "error": ..., "violations": [...]}``)
+    without touching MCPLoader or the capability registry.
+
+    Registration order:
+    1. ``MCPLoader.load()`` (primary path).
+    2. ``MCPDynamicGateway.register_external_tool()`` (fallback, only when
+       MCPLoader.load() explicitly signals failure).
+
+    After a successful primary-path registration the capability registry is
+    refreshed automatically by MCPLoader's ``_refresh_capability_registry``.
     """
-    name = tool_manifest.get("name", "")
-    if not name:
-        return {"success": False, "error": "mcp_tool.json missing 'name' field"}
+    # ── Contract validation ──────────────────────────────────────────────────
+    try:
+        from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
+        contract = validate_mcp_addon_contract(tool_manifest)
+    except ImportError:
+        # Graceful degradation: fall back to minimal field checks if the
+        # contract module is unavailable (should never happen in production).
+        logger.warning(
+            "core.mcp_addon_contract not available; falling back to minimal validation"
+        )
+        name = tool_manifest.get("name", "")
+        if not name:
+            return {"success": False, "error": "mcp_tool.json missing 'name' field"}
+        entrypoint = tool_manifest.get("entrypoint")
+        if not entrypoint:
+            return {"success": False, "error": "mcp_tool.json missing 'entrypoint' field"}
+        contract = None  # type: ignore[assignment]
+    except Exception as exc:  # MCPAddonContractError or TypeError
+        violations = getattr(exc, "violations", [str(exc)])
+        addon_name = tool_manifest.get("name", "")
+        logger.warning(
+            "MCP addon contract validation failed for '%s': %s", addon_name, violations
+        )
+        return {
+            "success": False,
+            "error": f"mcp_tool.json contract validation failed: {exc}",
+            "violations": violations,
+        }
 
-    entrypoint = tool_manifest.get("entrypoint")
-    if not entrypoint:
-        return {"success": False, "error": "mcp_tool.json missing 'entrypoint' field"}
+    # Use normalised values from validated contract when available.
+    if contract is not None:
+        name = contract.name
+        entrypoint = contract.entrypoint
+        env_vars: Dict[str, str] = contract.env
+    else:
+        name = str(tool_manifest.get("name", ""))
+        entrypoint = tool_manifest.get("entrypoint")
+        env_vars = tool_manifest.get("env", {})
 
     # Build command
-    if isinstance(entrypoint, list):
-        command = [str(addon_dir / part) if i == len(entrypoint) - 1 else part
-                   for i, part in enumerate(entrypoint)]
-    elif entrypoint.endswith(".py"):
-        command = [sys.executable, str(addon_dir / entrypoint)]
-    elif entrypoint.endswith(".js"):
-        node_exec = shutil.which("node") or "node"
-        command = [node_exec, str(addon_dir / entrypoint)]
-    else:
-        command = [str(addon_dir / entrypoint)]
-
-    env_vars = tool_manifest.get("env", {})
+    command = _build_mcp_command(addon_dir, entrypoint)
 
     try:
         from core.mcp_loader import mcp_loader
@@ -460,7 +500,12 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
             return gw_result
 
         logger.info("MCP tool '%s' registered via MCPLoader", name)
-        return {"success": True, "type": "mcp", "name": name}
+        reg_info: Dict[str, Any] = {"success": True, "type": "mcp", "name": name, "loader": "MCPLoader"}
+        if contract is not None:
+            reg_info["schema_version"] = contract.schema_version
+            reg_info["protocol"] = contract.protocol
+            reg_info["transport"] = contract.transport
+        return reg_info
 
     except Exception as exc:
         logger.warning("MCP registration failed for '%s': %s", name, exc)
@@ -659,6 +704,26 @@ class GitHubInstaller:
             tool_manifest = json.loads(mcp_manifest_path.read_text(encoding="utf-8"))
         elif detected_type == "skill" and skill_manifest_path.exists():
             tool_manifest = json.loads(skill_manifest_path.read_text(encoding="utf-8"))
+
+        # 5a. Early contract validation for MCP addons — reject before installing deps
+        if detected_type == "mcp" and tool_manifest:
+            try:
+                from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
+                validate_mcp_addon_contract(tool_manifest)
+            except Exception as contract_exc:
+                violations = getattr(contract_exc, "violations", [str(contract_exc)])
+                logger.warning(
+                    "MCP addon contract validation failed for %s/%s: %s",
+                    owner, repo, violations,
+                )
+                return {
+                    "success": False,
+                    "error": f"mcp_tool.json contract validation failed: {contract_exc}",
+                    "violations": violations,
+                    "owner": owner,
+                    "repo": repo,
+                    "ref": effective_ref,
+                }
 
         addon_name = tool_manifest.get("name") or repo
 
