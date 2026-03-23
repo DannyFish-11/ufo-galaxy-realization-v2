@@ -611,6 +611,19 @@ class OpenClawd:
         except Exception as e:
             logger.warning(f"工具权限检查器不可用，所有工具将无限制: {e}")
 
+        # PR-001: Canonical capability dispatcher — single primary execution path
+        # owned by OpenClawd.  Initialized here so that the dispatcher shares
+        # the same node_id_to_key cache and permission checker as this instance.
+        try:
+            from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+            self._capability_dispatcher: Optional["CanonicalDispatcher"] = CanonicalDispatcher(
+                node_id_to_key=self._node_id_to_key,
+                tool_permission_checker=self._tool_permission_checker,
+            )
+        except Exception as _e:
+            logger.warning(f"CanonicalDispatcher 初始化失败，将回退到内联路径: {_e}")
+            self._capability_dispatcher = None
+
         logger.info("OpenClawd 星枢核心智能体初始化")
 
     # ========================================================================
@@ -2431,6 +2444,14 @@ class OpenClawd:
         self._current_trace_id = trace_id
         self._current_session_id = session_id
         self._current_device_id = device_id or ""
+
+        # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
+        # the current request's device/session/trace without needing explicit kwargs.
+        _dispatcher = getattr(self, "_capability_dispatcher", None)
+        if _dispatcher is not None:
+            _dispatcher.device_id = self._current_device_id
+            _dispatcher.session_id = session_id or ""
+            _dispatcher.trace_id = trace_id or ""
 
         if not session_id:
             session_id = f"session_{uuid.uuid4().hex[:12]}"
@@ -4498,6 +4519,11 @@ class OpenClawd:
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
         """根据工具名前缀分发到对应执行器
 
+        PR-001: This method now delegates to :class:`~core.capabilities.canonical_dispatcher.CanonicalDispatcher`
+        as the single canonical execution path.  The inline dispatch logic
+        below is retained as a compatibility fallback when the dispatcher is
+        unavailable.
+
         Args:
             tool_name: 格式为 "mcp__server__tool" / "skill__id" / "node__id__action"
             arguments: 工具参数
@@ -4505,6 +4531,30 @@ class OpenClawd:
         Returns:
             {"success": bool, "result": Any, "error": Optional[str]}
         """
+        # PR-001: Primary path — delegate to CanonicalDispatcher.
+        _dispatcher = getattr(self, "_capability_dispatcher", None)
+        if _dispatcher is not None:
+            try:
+                _dr = await _dispatcher.dispatch(
+                    tool_name,
+                    arguments,
+                    device_id=getattr(self, "_current_device_id", "") or "",
+                    session_id=getattr(self, "_current_session_id", "") or "",
+                    trace_id=getattr(self, "_current_trace_id", "") or "",
+                )
+                return _dr.as_legacy_dict()
+            except Exception as _exc:
+                logger.warning(
+                    "CanonicalDispatcher.dispatch raised unexpectedly [%s]: %s — falling back to inline path",
+                    tool_name,
+                    _exc,
+                )
+                # Fall through to the compatibility inline path below.
+
+        # PR-001: Compatibility/fallback inline path.
+        # This block remains authoritative only when the canonical dispatcher
+        # is unavailable (e.g. import error during startup).  It is explicitly
+        # secondary to the dispatcher above.
         # PR-8: emit SKILL_INVOKED before dispatch so the trace is recorded
         # even if the call fails.
         _pr8_trace_id = getattr(self, "_current_trace_id", None)
@@ -5538,7 +5588,15 @@ class OpenClawd:
         }
 
     async def _try_mcp_tool(self, tool_name: str, arguments: dict) -> Optional[dict]:
-        """尝试通过 MCP 调用工具"""
+        """尝试通过 MCP 调用工具
+
+        .. deprecated::
+            PR-001 — This helper is a **compatibility/fallback** path kept only for
+            ``handle_tool_call()`` consumers that do not yet use the canonical
+            ``mcp__<server>__<tool>`` naming convention.  New code should invoke
+            capabilities through :meth:`_dispatch_tool_call` or directly via
+            ``self._capability_dispatcher.dispatch(...)``.
+        """
         try:
             from core.mcp_loader import mcp_loader
 
@@ -5577,7 +5635,15 @@ class OpenClawd:
         return None
 
     async def _try_skill_execute(self, skill_name: str, params: dict) -> Optional[dict]:
-        """尝试通过 SkillLoader 执行技能"""
+        """尝试通过 SkillLoader 执行技能
+
+        .. deprecated::
+            PR-001 — This helper is a **compatibility/fallback** path kept only for
+            ``handle_tool_call()`` consumers that do not yet use the canonical
+            ``skill__<id>`` naming convention.  New code should invoke skills
+            through :meth:`_dispatch_tool_call` or directly via
+            ``self._capability_dispatcher.dispatch(...)``.
+        """
         try:
             from core.skill_loader import skill_loader
 
