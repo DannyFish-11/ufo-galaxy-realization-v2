@@ -378,7 +378,7 @@ class TestAssertSourceRegistryIsShellOwned:
 # ===========================================================================
 
 
-class TestAssertOpenclawd_IsFinalAuthority:
+class TestAssertOpenclawdIsFinalAuthority:
     def test_correct_role_passes(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
         snapshot = {

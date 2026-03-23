@@ -145,7 +145,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 #: Authority roles that may ONLY be claimed by the runtime shell layer.
-SHELL_OWNED_AUTHORITY_ROLES: frozenset = frozenset(
+SHELL_OWNED_AUTHORITY_ROLES: frozenset[str] = frozenset(
     {"runtime_shell_authority"}
 )
 
@@ -159,7 +159,7 @@ EXECUTION_SUBSTRATE_ROLE: str = "execution_substrate"
 ORCHESTRATION_LAYER_ROLE: str = "orchestration_layer"
 
 #: Roles that MUST NOT be claimed by substrate or orchestration components.
-_ELEVATED_ROLES: frozenset = frozenset(
+_ELEVATED_ROLES: frozenset[str] = frozenset(
     {
         "runtime_shell_authority",
         SUBJECT_CORE_AUTHORITY_ROLE,
@@ -167,7 +167,7 @@ _ELEVATED_ROLES: frozenset = frozenset(
 )
 
 #: Roles that MUST NOT be claimed by projection / status consumers.
-_AUTHORITY_ROLES_ALL: frozenset = frozenset(
+_AUTHORITY_ROLES_ALL: frozenset[str] = frozenset(
     {
         "runtime_shell_authority",
         SUBJECT_CORE_AUTHORITY_ROLE,
