@@ -17,13 +17,28 @@ Cross-Device Coordinator - 跨设备协同协调器
 实现多设备协同任务的编排和执行
 支持设备间数据传递和状态同步
 
+PR-6: Device-input authority model
+------------------------------------
+Device **selection** (deciding *which* devices to use) is now based on
+canonical projected device views (``RegisteredRuntimeDevice``), not on
+router-local device tables.
+
+The :class:`device_router` is still used for **routing/dispatch** (the
+transport substrate: WebSocket send, task dispatch), but it is not the
+authority for device identity or cross-device eligibility.
+
+Internal helpers that need the canonical device set call
+:meth:`_get_canonical_devices` which projects each router-registered device
+through :func:`~contracts.registered_runtime_device.from_router_device` and
+assesses participation via
+:func:`~core.device_selection.canonical_device_selector.assess_device_participation`.
+
 Author: Manus AI
 Version: 1.0
 Date: 2026-01-22
 """
 
 import asyncio
-import json
 import logging
 import os
 import shutil
@@ -38,11 +53,149 @@ logger = logging.getLogger(__name__)
 
 
 class CrossDeviceCoordinator:
-    """跨设备协同协调器"""
+    """跨设备协同协调器
+
+    PR-6: Device-selection authority model
+    ----------------------------------------
+    Device *selection* (which devices participate) is based on canonical
+    projected device views (``RegisteredRuntimeDevice``).  The router is
+    used for dispatch/transport only.
+    """
     
     def __init__(self):
         self.shared_clipboard: Dict[str, Any] = {}
         self.device_states: Dict[str, Dict] = {}
+
+    # ------------------------------------------------------------------
+    # PR-6: Canonical device resolution helpers
+    # ------------------------------------------------------------------
+
+    def _get_canonical_devices(
+        self,
+        router_liveness: Optional[Dict[str, bool]] = None,
+    ) -> list:
+        """Return the current device set as canonical projected device views.
+
+        Projects every device registered in the router through
+        :func:`~contracts.registered_runtime_device.from_router_device`,
+        giving a ``RegisteredRuntimeDevice`` for each.  The router is used
+        as a *source* here (it holds the current transport-level registration),
+        but the canonical contract — not the raw router object — is the
+        truth source for all downstream selection logic.
+
+        Router liveness (WebSocket connected / disconnected) is passed as
+        *enrichment* to :func:`~core.device_selection.assess_device_participation`
+        so that it can refine the ``routable`` flag without replacing canonical
+        identity.
+
+        Parameters
+        ----------
+        router_liveness:
+            Optional ``device_id → bool`` mapping.  When ``None`` the
+            function derives liveness from each device's WebSocket presence.
+
+        Returns
+        -------
+        list of RegisteredRuntimeDevice
+        """
+        try:
+            from contracts.registered_runtime_device import from_router_device
+
+            if router_liveness is None:
+                # Derive liveness from router websocket state as enrichment.
+                router_liveness = {
+                    dev_id: (getattr(dev, "websocket", None) is not None)
+                    for dev_id, dev in device_router.devices.items()
+                }
+
+            canonical_devices = [
+                from_router_device(dev)
+                for dev in device_router.devices.values()
+            ]
+            return canonical_devices
+        except Exception as exc:
+            logger.warning("_get_canonical_devices: error projecting devices: %s", exc)
+            return []
+
+    def _get_canonical_devices_by_type(
+        self,
+        device_type: DeviceType,
+        cross_device_eligible_only: bool = True,
+    ) -> list:
+        """Return canonical devices filtered by device type and eligibility.
+
+        Parameters
+        ----------
+        device_type:
+            The :class:`~core.device_types.DeviceType` to filter on.
+            Matching is performed against ``RegisteredRuntimeDevice.platform``
+            / ``device_type`` field.
+        cross_device_eligible_only:
+            When ``True`` (default), only devices assessed as
+            ``cross_device_eligible`` are returned.  When ``False`` all
+            devices matching *device_type* are returned regardless of
+            eligibility.
+
+        Returns
+        -------
+        list of RegisteredRuntimeDevice
+        """
+        from core.device_selection import assess_device_participation
+
+        # Build liveness map from router for enrichment
+        router_liveness: Dict[str, bool] = {
+            dev_id: (getattr(dev, "websocket", None) is not None)
+            for dev_id, dev in device_router.devices.items()
+        }
+
+        canonical_devices = self._get_canonical_devices(router_liveness=router_liveness)
+
+        # Normalise device_type to a lower-case string for matching
+        type_str = str(device_type.value if hasattr(device_type, "value") else device_type).lower()
+
+        results = []
+        for device in canonical_devices:
+            # Match against platform or device_type field
+            platform_val = str(getattr(device, "platform", "")).lower()
+            dev_type_val = str(getattr(device, "device_type", "")).lower()
+            if type_str not in (platform_val, dev_type_val) and type_str not in dev_type_val:
+                continue
+
+            if cross_device_eligible_only:
+                participation = assess_device_participation(
+                    device, router_liveness=router_liveness
+                )
+                if not participation.cross_device_eligible:
+                    continue
+
+            results.append(device)
+
+        return results
+
+    def _get_canonical_online_devices(self) -> list:
+        """Return all canonical devices that are cross-device eligible.
+
+        Used by broadcast-style operations (media control, notification sync)
+        that need to reach all currently reachable devices.
+
+        Returns
+        -------
+        list of RegisteredRuntimeDevice
+        """
+        from core.device_selection import (
+            assess_device_participation,
+            select_cross_device_candidates,
+        )
+
+        router_liveness: Dict[str, bool] = {
+            dev_id: (getattr(dev, "websocket", None) is not None)
+            for dev_id, dev in device_router.devices.items()
+        }
+        canonical_devices = self._get_canonical_devices(router_liveness=router_liveness)
+        entries = select_cross_device_candidates(
+            canonical_devices, router_liveness=router_liveness
+        )
+        return [entry.device for entry in entries]
     
     async def execute_cross_device_task(self, command: str, context: Dict = None) -> Dict:
         """
@@ -118,14 +271,21 @@ class CrossDeviceCoordinator:
                 "params": {}
             }
             
-            source_devices = device_router.get_devices_by_type(source_type)
+            # PR-6: resolve source devices from canonical projections
+            source_devices = self._get_canonical_devices_by_type(source_type)
             if not source_devices:
+                return {"success": False, "error": f"没有可用的{source_type}设备"}
+            
+            # Dispatch uses the router (transport substrate); identity from canonical device
+            source_device_id = source_devices[0].device_id
+            source_router_device = device_router.devices.get(source_device_id)
+            if source_router_device is None:
                 return {"success": False, "error": f"没有可用的{source_type}设备"}
             
             # 发送查询任务到源设备
             source_result = await device_router.dispatch_task(
                 {"task_id": "clipboard_get", "payload": source_task},
-                source_devices[0]
+                source_router_device
             )
             
             if not source_result.get("success"):
@@ -143,13 +303,19 @@ class CrossDeviceCoordinator:
                 }
             }
             
-            target_devices = device_router.get_devices_by_type(target_type)
+            # PR-6: resolve target devices from canonical projections
+            target_devices = self._get_canonical_devices_by_type(target_type)
             if not target_devices:
+                return {"success": False, "error": f"没有可用的{target_type}设备"}
+            
+            target_device_id = target_devices[0].device_id
+            target_router_device = device_router.devices.get(target_device_id)
+            if target_router_device is None:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
             
             target_result = await device_router.dispatch_task(
                 {"task_id": "clipboard_set", "payload": target_task},
-                target_devices[0]
+                target_router_device
             )
             
             return {
@@ -186,16 +352,24 @@ class CrossDeviceCoordinator:
             file_name = context.get("file_name", os.path.basename(file_path) if file_path else "")
 
             # 获取源设备和目标设备
-            source_devices = device_router.get_devices_by_type(source_type)
-            target_devices = device_router.get_devices_by_type(target_type)
+            # PR-6: resolve devices from canonical projections; router used for dispatch only
+            source_canonical = self._get_canonical_devices_by_type(source_type)
+            target_canonical = self._get_canonical_devices_by_type(target_type)
 
-            if not source_devices:
+            if not source_canonical:
                 return {"success": False, "error": f"没有可用的{source_type}设备"}
-            if not target_devices:
+            if not target_canonical:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
 
-            source_device = source_devices[0]
-            target_device = target_devices[0]
+            source_device_id = source_canonical[0].device_id
+            target_device_id = target_canonical[0].device_id
+            source_device = device_router.devices.get(source_device_id)
+            target_device = device_router.devices.get(target_device_id)
+
+            if source_device is None:
+                return {"success": False, "error": f"没有可用的{source_type}设备"}
+            if target_device is None:
+                return {"success": False, "error": f"没有可用的{target_type}设备"}
 
             # 步骤 1: 从源设备拉取文件到中转目录
             transfer_path = os.path.join(transfer_dir, f"{hashlib.md5(file_name.encode()).hexdigest()}_{file_name}")
@@ -288,8 +462,13 @@ class CrossDeviceCoordinator:
         try:
             logger.info("🎵 执行媒体控制同步")
             
-            # 获取所有在线设备
-            all_devices = [d for d in device_router.devices.values() if d.status == "online"]
+            # PR-6: get online devices via canonical projections; router used for dispatch only
+            canonical_online = self._get_canonical_online_devices()
+            all_devices = [
+                device_router.devices[d.device_id]
+                for d in canonical_online
+                if d.device_id in device_router.devices
+            ]
             
             # 解析媒体控制命令
             action = self._parse_media_action(command)
@@ -336,8 +515,13 @@ class CrossDeviceCoordinator:
             # 提取通知内容
             notification_text = context.get("notification_text", command)
             
-            # 获取所有在线设备
-            all_devices = [d for d in device_router.devices.values() if d.status == "online"]
+            # PR-6: get online devices via canonical projections; router used for dispatch only
+            canonical_online = self._get_canonical_online_devices()
+            all_devices = [
+                device_router.devices[d.device_id]
+                for d in canonical_online
+                if d.device_id in device_router.devices
+            ]
             
             # 并行发送通知到所有设备
             tasks = []

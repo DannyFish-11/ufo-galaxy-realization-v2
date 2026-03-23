@@ -564,6 +564,84 @@ class SwarmCoordinator:
             )
             return None
 
+    # ------------------------------------------------------------------
+    # PR-6: Canonical device candidate resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def device_candidates_from_canonical(
+        canonical_devices: List[Any],
+        router_liveness: Optional[Dict[str, bool]] = None,
+        required_capabilities: Optional[List[str]] = None,
+        latency_map: Optional[Dict[str, float]] = None,
+        load_map: Optional[Dict[str, float]] = None,
+    ) -> List[Any]:
+        """Build a ``DeviceScoreInput`` list from canonical device projections.
+
+        PR-6: This is the canonical → scoring-engine bridge.  Callers that
+        have a list of ``RegisteredRuntimeDevice`` projections should use this
+        helper to produce device candidates for :meth:`dispatch_team` or
+        :meth:`build_orchestration_plan`, rather than building
+        ``DeviceScoreInput`` objects from private device tables.
+
+        Only devices assessed as ``orchestration_eligible`` are included.
+        If *required_capabilities* is provided, devices missing any required
+        capability are filtered out before scoring.
+
+        Parameters
+        ----------
+        canonical_devices:
+            List of ``RegisteredRuntimeDevice`` canonical projections.
+            These are the **base truth source** for device identity.
+        router_liveness:
+            Optional ``device_id → bool`` routing-feasibility enrichment.
+            Used by :func:`~core.device_selection.assess_device_participation`
+            to determine routability; does not replace canonical identity.
+        required_capabilities:
+            Optional list of capability strings used for capability-filter
+            pre-screening.  Passed through to
+            :func:`~core.device_selection.select_orchestration_candidates`.
+        latency_map:
+            Optional ``device_id → ping_latency_ms`` override for scoring.
+        load_map:
+            Optional ``device_id → load_pct`` override for scoring.
+
+        Returns
+        -------
+        list of DeviceScoreInput
+            Ready for use with :meth:`dispatch_team` or
+            :meth:`build_orchestration_plan`.  Returns ``[]`` on error
+            (never raises).
+        """
+        try:
+            from core.device_selection import (
+                select_orchestration_candidates,
+                device_score_input_from_canonical,
+            )
+
+            entries = select_orchestration_candidates(
+                canonical_devices,
+                router_liveness=router_liveness,
+                required_capabilities=required_capabilities,
+            )
+
+            score_inputs = []
+            for entry in entries:
+                device_id = entry.device_id
+                score_input = device_score_input_from_canonical(
+                    entry,
+                    ping_latency_ms=(latency_map or {}).get(device_id, 0.0),
+                    load_pct=(load_map or {}).get(device_id, 0.0),
+                )
+                if score_input is not None:
+                    score_inputs.append(score_input)
+
+            return score_inputs
+        except Exception as exc:
+            logger.warning(
+                "SwarmCoordinator.device_candidates_from_canonical: error: %s", exc
+            )
+            return []
 
 
     async def _dispatch_one(self, manifest) -> Dict[str, Any]:
