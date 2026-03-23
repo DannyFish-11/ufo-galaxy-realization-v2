@@ -1036,6 +1036,70 @@ class DesktopPresenceRuntime:
                 "error": str(_err),
             }
 
+    def decision_timeline_replay(
+        self,
+        *,
+        result: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """PR-34: Return a shell-facing replay of the decision timeline.
+
+        Derives an :class:`~core.decision_timeline.ExplainabilitySnapshot` for
+        shell-facing replay and diagnostics.  When *result* is provided (an
+        OpenClawd response dict), the embedded ``decision_timeline_snapshot`` is
+        preferred; otherwise the process-wide
+        :class:`~core.decision_timeline.DecisionTimeline` singleton is queried
+        directly to build a fresh snapshot.
+
+        This method is the runtime shell's primary entry point for presenting
+        decision history to operators, dashboards, and replay tools.  It
+        derives from canonical state and never acts as an independent truth
+        source.
+
+        Parameters
+        ----------
+        result:
+            Optional OpenClawd response dict.  When provided, the embedded
+            ``decision_timeline_snapshot`` snapshot is preferred.
+        trace_id:
+            Optional correlation trace ID.
+
+        Returns
+        -------
+        dict
+            Serialisable :class:`~core.decision_timeline.ExplainabilitySnapshot`
+            dict.  Always has ``"events"``, ``"total_events"``,
+            ``"kind_counts"``, and ``"snapshot_id"`` keys.  Never raises.
+        """
+        try:
+            from core.decision_timeline import (  # noqa: PLC0415
+                build_explainability_snapshot,
+                ExplainabilitySnapshot,
+            )
+
+            snap_dict: Optional[Dict[str, Any]] = None
+            if isinstance(result, dict):
+                snap_dict = result.get("metadata", {}).get("decision_timeline_snapshot")
+
+            if isinstance(snap_dict, dict):
+                return snap_dict
+
+            # Fall back to live snapshot from global timeline singleton
+            snap = build_explainability_snapshot(trace_id=trace_id)
+            return snap.to_dict()
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.decision_timeline_replay failed (non-fatal): %s",
+                _err,
+            )
+            return {
+                "snapshot_id": "",
+                "events": [],
+                "total_events": 0,
+                "kind_counts": {},
+                "error": str(_err),
+            }
+
     def build_desktop_status_projection(
         self,
         result: Optional[Dict[str, Any]] = None,
