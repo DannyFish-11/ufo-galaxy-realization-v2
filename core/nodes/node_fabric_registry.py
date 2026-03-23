@@ -62,6 +62,58 @@ class NodeRole(str, Enum):
     CUSTOM = "custom"          # 自定义角色
 
 
+class NodeArchitecturalClass(str, Enum):
+    """Node architectural classification for the OpenClawd capability architecture.
+
+    Every registered node must carry one of these classes so that the fabric
+    registry—and downstream consumers such as OpenClawd—can determine how to
+    treat the node without inspecting its name or role heuristically.
+
+    ``CAPABILITY_NODE``
+        Healthy nodes that expose callable capabilities/actions to OpenClawd.
+        These are the *only* nodes whose capabilities are surfaced into the
+        CapabilityRegistry (capability bus).  They are represented as
+        ``node__<node_id>__<action>`` entries and serve OpenClawd directly.
+
+    ``SERVICE_NODE``
+        Specialised backend providers (e.g. OCR, vision, knowledge retrieval,
+        embedding engines).  They may be invoked through internal service
+        adapters but must **not** be treated as capability sources or
+        orchestration authorities.  New code should access them through an
+        explicit service/provider interface, not via direct node imports.
+
+    ``LEGACY_ORCHESTRATOR_NODE``
+        Historical multi-node orchestrator entrypoints that previously acted
+        as parallel system brains (e.g. Node_110, Node_81, Node_50).
+        These are explicitly demoted: they must not be primary entry surfaces,
+        and their orchestration paths are guarded by
+        ``core.orchestration_authority.legacy_paths``.  Kept for thin-wrapper
+        compatibility only; no new work should depend on them.
+
+    ``EXPERIMENTAL_NODE``
+        In-development or prototype nodes not yet promoted to a stable class.
+        These are excluded from capability sync until explicitly promoted.
+
+    ``ARCHIVED_NODE``
+        Nodes that are kept for historical reference only and should never be
+        invoked in a live system.  Capability sync is always skipped.
+    """
+
+    CAPABILITY_NODE = "capability_node"
+    SERVICE_NODE = "service_node"
+    LEGACY_ORCHESTRATOR_NODE = "legacy_orchestrator_node"
+    EXPERIMENTAL_NODE = "experimental_node"
+    ARCHIVED_NODE = "archived_node"
+
+
+#: Set of architectural classes whose capabilities are eligible for injection
+#: into the CapabilityRegistry (OpenClawd capability bus).
+#: Only CAPABILITY_NODE nodes are surfaced as capabilities.
+_CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset({
+    NodeArchitecturalClass.CAPABILITY_NODE,
+})
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 数据模型
 # ─────────────────────────────────────────────────────────────────────────────
@@ -93,6 +145,20 @@ class NodeInfo:
 
     role: NodeRole = NodeRole.WORKER
     """节点角色"""
+
+    architectural_class: NodeArchitecturalClass = NodeArchitecturalClass.CAPABILITY_NODE
+    """Architectural classification of this node.
+
+    Determines how OpenClawd and the capability bus treat the node:
+    - CAPABILITY_NODE: capabilities surfaced to OpenClawd via CapabilityRegistry.
+    - SERVICE_NODE: backend-only; not exposed as capabilities.
+    - LEGACY_ORCHESTRATOR_NODE: demoted; not exposed as capabilities; guarded.
+    - EXPERIMENTAL_NODE / ARCHIVED_NODE: excluded from capability sync.
+
+    Contributors: set this field explicitly when registering a node so that
+    its architectural role is unambiguous.  Use CAPABILITY_NODE only if the
+    node genuinely exposes actions for OpenClawd to invoke.
+    """
 
     host: str = "localhost"
     """节点主机地址"""
@@ -150,6 +216,11 @@ class NodeInfo:
         return {
             "node_id": self.node_id,
             "role": self.role.value if isinstance(self.role, NodeRole) else self.role,
+            "architectural_class": (
+                self.architectural_class.value
+                if isinstance(self.architectural_class, NodeArchitecturalClass)
+                else self.architectural_class
+            ),
             "host": self.host,
             "port": self.port,
             "status": self.status.value if isinstance(self.status, NodeStatus) else self.status,
@@ -359,6 +430,21 @@ class NodeFabricRegistry:
                 if n.is_healthy(self._heartbeat_ttl)
             ]
 
+    def list_by_architectural_class(
+        self, architectural_class: NodeArchitecturalClass
+    ) -> List[NodeInfo]:
+        """Return all nodes with the given :class:`NodeArchitecturalClass`.
+
+        Use this to find, for example, all CAPABILITY_NODE nodes that are
+        eligible for capability-bus surfacing, or all LEGACY_ORCHESTRATOR_NODE
+        nodes that need guardrail enforcement.
+        """
+        with self._rw_lock:
+            return [
+                n for n in self._nodes.values()
+                if n.architectural_class == architectural_class
+            ]
+
     def count(self) -> int:
         """返回当前注册节点总数。"""
         with self._rw_lock:
@@ -392,9 +478,16 @@ class NodeFabricRegistry:
 
     def sync_capabilities_to_registry(self) -> int:
         """
-        将所有健康节点的能力同步注入 CapabilityRegistry（OpenClawd capability bus）。
+        将所有健康的 CAPABILITY_NODE 节点的能力同步注入 CapabilityRegistry（OpenClawd capability bus）。
 
-        只同步 is_healthy() = True 的节点的能力。
+        Only nodes with ``architectural_class == CAPABILITY_NODE`` are
+        synchronised.  SERVICE_NODE, LEGACY_ORCHESTRATOR_NODE, EXPERIMENTAL_NODE,
+        and ARCHIVED_NODE nodes are intentionally excluded:
+
+        - SERVICE_NODE   → accessed through explicit service/provider adapters.
+        - LEGACY_ORCHESTRATOR_NODE → demoted; guarded by legacy_paths; no
+          new capability entries should be created for them.
+        - EXPERIMENTAL_NODE / ARCHIVED_NODE → not ready / not active.
 
         Returns:
             注入的能力条目数量。
@@ -407,9 +500,22 @@ class NodeFabricRegistry:
 
         registry = CapabilityRegistry.get_instance()
         injected = 0
+        skipped_non_capability = 0
 
         with self._rw_lock:
             for node in self._nodes.values():
+                # Only CAPABILITY_NODE nodes are surfaced to OpenClawd.
+                if node.architectural_class not in _CAPABILITY_SYNC_ELIGIBLE:
+                    skipped_non_capability += 1
+                    logger.debug(
+                        "Skipping capability sync for node %s "
+                        "(architectural_class=%s; not a CAPABILITY_NODE)",
+                        node.node_id,
+                        node.architectural_class.value
+                        if isinstance(node.architectural_class, NodeArchitecturalClass)
+                        else node.architectural_class,
+                    )
+                    continue
                 if not node.is_healthy(self._heartbeat_ttl):
                     continue
                 for cap in node.capabilities:
@@ -427,6 +533,11 @@ class NodeFabricRegistry:
                         metadata={
                             "node_id": node.node_id,
                             "node_role": str(node.role),
+                            "node_architectural_class": (
+                                node.architectural_class.value
+                                if isinstance(node.architectural_class, NodeArchitecturalClass)
+                                else node.architectural_class
+                            ),
                             "host": node.host,
                             "port": node.port,
                             "registered_at": cap.registered_at,
@@ -437,9 +548,15 @@ class NodeFabricRegistry:
 
         if injected:
             logger.info(
-                "Node capability sync: injected %d items into CapabilityRegistry",
+                "Node capability sync: injected %d items into CapabilityRegistry "
+                "(skipped %d non-capability nodes)",
                 injected,
-                extra={"event": "node_capability_sync", "injected": injected},
+                skipped_non_capability,
+                extra={
+                    "event": "node_capability_sync",
+                    "injected": injected,
+                    "skipped_non_capability": skipped_non_capability,
+                },
             )
         return injected
 
@@ -494,6 +611,7 @@ class NodeFabricRegistry:
             total = len(self._nodes)
             by_status: Dict[str, int] = {}
             by_role: Dict[str, int] = {}
+            by_architectural_class: Dict[str, int] = {}
             health_scores: List[float] = []
 
             for node in self._nodes.values():
@@ -501,6 +619,12 @@ class NodeFabricRegistry:
                 by_status[s] = by_status.get(s, 0) + 1
                 r = str(node.role.value if isinstance(node.role, NodeRole) else node.role)
                 by_role[r] = by_role.get(r, 0) + 1
+                ac = str(
+                    node.architectural_class.value
+                    if isinstance(node.architectural_class, NodeArchitecturalClass)
+                    else node.architectural_class
+                )
+                by_architectural_class[ac] = by_architectural_class.get(ac, 0) + 1
                 health_scores.append(node.health_score(self._heartbeat_ttl))
 
             healthy_count = sum(1 for s in health_scores if s >= 0.5)
@@ -512,6 +636,7 @@ class NodeFabricRegistry:
             "avg_health_score": round(avg_health, 4),
             "by_status": by_status,
             "by_role": by_role,
+            "by_architectural_class": by_architectural_class,
         }
 
 

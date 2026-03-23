@@ -50,6 +50,7 @@ __all__ = [
     "LegacyPathStatus",
     "LegacyPathEntry",
     "LEGACY_PATH_REGISTRY",
+    "LEGACY_ORCHESTRATOR_NODE_PREFIXES",
     "is_legacy_path",
     "get_legacy_entry",
     "emit_legacy_guardrail",
@@ -257,6 +258,68 @@ _register(
         ),
     ),
 )
+
+
+# PR-003: Explicitly record legacy orchestrator nodes as LEGACY_ORCHESTRATOR_NODE
+# architectural class entries.  These paths are already guarded above; these
+# entries extend the registry with the canonical architectural-class mapping so
+# that diagnostics and contributor tooling can cross-reference the two layers.
+_register(
+    LegacyPathEntry(
+        module_path="nodes.Node_110_SmartOrchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Node_110_SmartOrchestrator is classified as a LEGACY_ORCHESTRATOR_NODE. "
+            "Register it with architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE "
+            "in NodeFabricRegistry.  Do not use as a capability source or primary authority. "
+            "Route new requests through core.openclawd (OpenClawd) instead."
+        ),
+        pr_guardrail_added="PR-003",
+        notes=(
+            "Node_110 SmartOrchestrator — LEGACY_ORCHESTRATOR_NODE. "
+            "Demoted in PR-003 node classification.  Not a capability-bus source."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="nodes.Node_81_Orchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Node_81_Orchestrator is classified as a LEGACY_ORCHESTRATOR_NODE. "
+            "Register it with architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE "
+            "in NodeFabricRegistry.  Do not use as a capability source or primary authority. "
+            "Route new requests through core.openclawd (OpenClawd) instead."
+        ),
+        pr_guardrail_added="PR-003",
+        notes=(
+            "Node_81 Orchestrator — LEGACY_ORCHESTRATOR_NODE. "
+            "Demoted in PR-003 node classification.  Not a capability-bus source."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="nodes.Node_50_Transformer",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "Node_50_Transformer is classified as a LEGACY_ORCHESTRATOR_NODE. "
+            "Register it with architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE "
+            "in NodeFabricRegistry.  Superseded by TaskEnvelope routing. "
+            "Use core.schemas.task_envelope.TaskEnvelope for internal routing."
+        ),
+        pr_guardrail_added="PR-003",
+        notes=(
+            "Node_50 Transformer — LEGACY_ORCHESTRATOR_NODE (deprecated). "
+            "Demoted in PR-003 node classification.  Not a capability-bus source."
+        ),
+    ),
+)
+
+#: Frozenset of node module prefixes that are LEGACY_ORCHESTRATOR_NODE class.
+#: Contributors: when registering any node whose module path starts with one of
+#: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.
+LEGACY_ORCHESTRATOR_NODE_PREFIXES: frozenset = frozenset({
+    "nodes.Node_110_SmartOrchestrator",
+    "nodes.Node_81_Orchestrator",
+    "nodes.Node_50_Transformer",
+})
 
 
 def is_legacy_path(module_path: str) -> bool:
