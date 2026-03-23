@@ -2,6 +2,17 @@
 Galaxy Dashboard 后端
 ====================
 
+.. deprecated:: PR-8  LEGACY UI SURFACE
+   ``dashboard/backend/main.py`` is a **legacy UI surface** (PR-8).
+   It is a compatibility surface only.  It must not define system structure,
+   claim status authority, or maintain a parallel source of truth for system
+   state.
+
+   Canonical status truth:  ``GET /api/v1/projection/runtime``
+                            (RuntimeProjection / DesktopStatusProjection)
+   Canonical status board:  ``windows_client/status_board_v2/``
+   Canonical REST API:      ``core/api_routes.py``, ``core/routes/``
+
 使用已有协议:
 - core/node_protocol.py
 - enhancements/multidevice/device_protocol.py
