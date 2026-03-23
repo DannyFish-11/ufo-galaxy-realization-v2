@@ -515,31 +515,38 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
 def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str, Any]:
     """Register a Skill addon into SkillLoader.
 
-    The ``skill.json`` contract:
-    {
-        "name": "my-skill",
-        "description": "...",
-        "entrypoint": "handler.py",         # Python file with async def execute(...)
-        "dependencies": ["requests", ...],  # optional pip deps
-        "parameters": [                     # optional param schema
-            {"name": "query", "type": "string", "required": true}
-        ]
-    }
+    Validates the manifest against :class:`~core.skill_package_contract.SkillPackageContract`
+    (PR-005) before delegating to :class:`~core.skill_loader.SkillLoader`.
+    Returns a structured error dict when the contract is violated.
     """
-    name = skill_manifest.get("name", "")
-    if not name:
-        return {"success": False, "error": "skill.json missing 'name' field"}
+    # ── Contract validation (PR-005) ────────────────────────────────────────
+    try:
+        from core.skill_package_contract import (
+            validate_skill_package_contract,
+            SkillPackageContractError,
+            build_skill_package_contract_summary,
+        )
+        contract = validate_skill_package_contract(skill_manifest)
+        logger.debug(
+            "skill.json contract validated: %s",
+            build_skill_package_contract_summary(contract),
+        )
+    except SkillPackageContractError as exc:
+        logger.warning(
+            "Skill install rejected — skill.json contract invalid: %s",
+            exc.violations,
+        )
+        return {
+            "success": False,
+            "error": f"skill.json contract validation failed: {exc.violations}",
+            "violations": exc.violations,
+            "error_code": exc.error_code,
+        }
+    except TypeError as exc:
+        return {"success": False, "error": str(exc)}
 
-    # Build a skill definition compatible with SkillLoader
-    skill_def = {
-        "id": name,
-        "name": name,
-        "description": skill_manifest.get("description", ""),
-        "version": skill_manifest.get("version", "1.0.0"),
-        "entrypoint": skill_manifest.get("entrypoint", ""),
-        "parameters": skill_manifest.get("parameters", []),
-        "source": str(addon_dir),
-    }
+    # Contract validation guarantees 'name' is non-empty; prefer it over 'id' for display.
+    name = skill_manifest.get("name") or skill_manifest.get("id", "")
 
     try:
         from core.skill_loader import skill_loader
@@ -557,7 +564,12 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
 
         if result.get("success", False):
             logger.info("Skill '%s' registered via SkillLoader", name)
-            return {"success": True, "type": "skill", "name": name}
+            return {
+                "success": True,
+                "type": "skill",
+                "name": name,
+                "schema_version": skill_manifest.get("schema_version", "1"),
+            }
         return {"success": False, "error": result.get("error", "SkillLoader.load failed")}
 
     except Exception as exc:

@@ -241,6 +241,25 @@ class SkillLoader:
             # 读取技能定义
             with open(skill_file, encoding="utf-8") as f:
                 skill_def = json.load(f)
+
+            # 验证 skill.json 符合 SkillPackageContract（PR-005）
+            try:
+                from core.skill_package_contract import (
+                    validate_skill_package_contract,
+                    SkillPackageContractError,
+                )
+                validate_skill_package_contract(skill_def)
+            except SkillPackageContractError as contract_exc:
+                logger.error(
+                    "skill.json 未通过契约验证 (%s): %s",
+                    path,
+                    contract_exc.violations,
+                )
+                return {
+                    "success": False,
+                    "error": f"skill.json contract validation failed: {contract_exc.violations}",
+                    "violations": contract_exc.violations,
+                }
             
             # 生成 ID
             if not skill_id:
