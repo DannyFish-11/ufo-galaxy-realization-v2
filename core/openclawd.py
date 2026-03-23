@@ -1205,6 +1205,48 @@ class OpenClawd:
             logger.debug("_build_fallback_trace failed (swallowed): %s", _exc)
             return None
 
+    def _emit_routing_decision_event(
+        self,
+        route_dict: Dict[str, Any],
+        *,
+        trace_id: Optional[str] = None,
+        runtime_session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-41: Emit a structured routing observability event from a canonical routing decision.
+
+        Records the routing decision into the global :class:`~core.routing_observability.ControlLoopMetrics`
+        singleton and returns a compact serialisable dict for embedding in response
+        metadata.  Errors are fully isolated — ``None`` is returned on any failure
+        so that the existing request flow is never interrupted.
+
+        Parameters
+        ----------
+        route_dict:
+            The dict returned by :meth:`_select_multimodal_route`.
+        trace_id:
+            Correlation trace ID for the request.
+        runtime_session_id:
+            Active session ID for the request.
+
+        Returns
+        -------
+        dict or None
+            Serialisable :class:`~core.routing_observability.RoutingDecisionEvent` dict,
+            or ``None`` on failure.
+        """
+        try:
+            from core.routing_observability import record_routing_decision  # noqa: PLC0415
+
+            event = record_routing_decision(
+                route_dict,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+            )
+            return event.to_dict()
+        except Exception as _exc:
+            logger.debug("_emit_routing_decision_event failed (swallowed): %s", _exc)
+            return None
+
     def _build_execution_trace(
         self,
         intent_profile: Any,
@@ -1958,6 +2000,17 @@ class OpenClawd:
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
 
+        # ── PR-41: Routing Observability ──────────────────────────────────────
+        # Emit a structured RoutingDecisionEvent from the canonical routing
+        # decision.  This is the primary integration point for route/fallback
+        # observability — events are derived from the canonical decision, not
+        # inferred afterward from logs or metadata.
+        _routing_decision_event: Optional[Dict[str, Any]] = self._emit_routing_decision_event(
+            route_dict=_multimodal_route,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id,
+        )
+
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
         # Run SceneInterpreter after perception fusion to select an
         # InteractionMode and produce UI/voice/avatar hints.  This is purely
@@ -2262,6 +2315,9 @@ class OpenClawd:
                             # unified_control_plan["multimodal_route_decision"].
                             # This key is retained only for backward compatibility.
                             "multimodal_route_decision": _multimodal_route,
+                            # PR-41: structured routing observability event derived
+                            # from the canonical routing decision (not inferred).
+                            "routing_decision_event": _routing_decision_event,
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -2527,6 +2583,9 @@ class OpenClawd:
                     # unified_control_plan["multimodal_route_decision"].
                     # This key is retained only for backward compatibility.
                     "multimodal_route_decision": _multimodal_route,
+                    # PR-41: structured routing observability event derived
+                    # from the canonical routing decision (not inferred).
+                    "routing_decision_event": _routing_decision_event,
                 },
                 # PR-10: architecture diagnostics layer identifier (additive)
                 "arch_layer_id": "subject_core",
