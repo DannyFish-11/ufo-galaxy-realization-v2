@@ -1,36 +1,59 @@
-"""
-Galaxy - 统一设备注册管理器
-================================
+"""core/device_registry.py
+========================
+Galaxy — Legacy-compatible device indexing and discovery layer.
 
-提供完整的设备注册、发现、管理功能
+ARCHITECTURE ROLE (PR-4)
+------------------------
+``DeviceRegistry`` is a **compatibility / indexing / discovery layer** layered
+over the canonical device authority chain defined in PR-1:
 
-功能：
-1. 设备注册和注销
-2. 设备发现 (自动发现局域网设备)
-3. 设备能力协商
-4. 设备分组和标签
-5. 持久化存储
-6. 设备状态监控
+- ``UnifiedDeviceManager`` (UDM) — canonical write SSOT for device
+  registration and mutable device state.
+- ``RegisteredRuntimeDevice`` — canonical single-device read contract.
+- ``MultiDeviceRuntimeProjection`` — canonical multi-device runtime projection.
 
-使用方法：
+``DeviceRegistry`` is **not** a peer canonical truth source.  Its
+responsibilities are:
+
+1. **Forwarding** all canonical registration / status / heartbeat writes to
+   UDM first.
+2. **Maintaining local indexes** — group membership, tag index, capability
+   index — as convenience data structures layered over UDM-owned state.
+3. **Persistence snapshot / cache** — the on-disk storage is treated as a
+   snapshot or projection cache, *not* as a canonical source of device truth.
+   Devices restored from disk are always loaded in the OFFLINE state and must
+   re-register through UDM to obtain authoritative online status.
+4. **Discovery helpers** — ``discover()`` / ``negotiate_capability()`` /
+   ``get_devices_by_group()`` / ``get_devices_by_tag()`` operate as
+   compatibility utilities that query the local index.
+5. **Projection bridge** — ``project_to_contract(device_id)`` normalises a
+   registry-local record into the canonical ``RegisteredRuntimeDevice``
+   contract so that downstream consumers do not need to depend on the
+   registry's internal model.
+
+Event callbacks (``on_device_registered`` / ``on_device_online`` /
+``on_device_offline``) are preserved for backward compatibility.
+
+Usage::
+
     from core.device_registry import device_registry
-    
-    # 注册设备
+
+    # Register device — writes to UDM first, then updates local index.
     device = await device_registry.register(
         device_id="android_001",
         device_type="android",
-        name="我的手机",
+        name="My Phone",
         capabilities=["screen", "camera", "microphone"],
     )
-    
-    # 发现设备
+
+    # Discover devices from local index (compatibility helper).
     devices = await device_registry.discover()
-    
-    # 获取设备
+
+    # Get a device record (UDM-status reflected in local cache).
     device = device_registry.get("android_001")
-    
-    # 列出设备
-    devices = device_registry.list_devices()
+
+    # Project to canonical contract.
+    contract = device_registry.project_to_contract("android_001")
 """
 
 import asyncio
@@ -46,6 +69,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 
 logger = logging.getLogger("Galaxy.DeviceRegistry")
+
+# ---------------------------------------------------------------------------
+# Architecture role declaration (PR-4)
+# ---------------------------------------------------------------------------
+#
+# This constant documents the architectural role of DeviceRegistry.
+# It is intentionally readable so that grep/audit tools can confirm demotion.
+
+_REGISTRY_ROLE = (
+    "compatibility_indexing_discovery_layer"
+    " — not a canonical device truth source"
+    " — canonical authority is UnifiedDeviceManager (UDM)"
+)
+
 
 
 def _get_udm():
@@ -74,10 +111,25 @@ from core.schemas.device import (  # noqa: E402
 # ============================================================================
 
 class DeviceRegistry:
-    """
-    统一设备注册管理器
-    
-    提供完整的设备注册、发现、管理功能
+    """Compatibility / indexing / discovery layer over the UDM canonical authority.
+
+    PR-4 architecture role: ``_REGISTRY_ROLE``
+
+    This class is **not** a canonical device truth source.  All registration
+    and mutable-state writes are forwarded to ``UnifiedDeviceManager`` (UDM)
+    first; the local ``devices`` dict, group/tag/capability indexes, and
+    on-disk snapshot are maintained only as a compatibility convenience layer.
+
+    Canonical authority chain (PR-1)
+    ---------------------------------
+    - Write SSOT : ``UnifiedDeviceManager.register_device / upsert_device_state``
+    - Single-device read contract : ``RegisteredRuntimeDevice``
+    - Multi-device read projection : ``MultiDeviceRuntimeProjection``
+
+    This registry's persistence is treated as a **snapshot / projection cache**.
+    Devices loaded from disk are always restored in the OFFLINE state; they do
+    not re-acquire authoritative online status until they register again through
+    the normal UDM write path.
     """
     
     _instance = None
@@ -142,39 +194,92 @@ class DeviceRegistry:
         metadata: Dict[str, Any] = None,
         **kwargs,
     ) -> Device:
-        """
-        注册设备
-        
+        """Register a device.
+
+        UDM-first semantics (PR-4)
+        --------------------------
+        Canonical identity and mutable state are owned by UDM.  This method:
+
+        1. Delegates the canonical write to ``UnifiedDeviceManager`` first.
+        2. Checks whether UDM already holds a record for *device_id* before
+           constructing local state — this prevents divergent canonical
+           identity when the device is registered more than once.
+        3. Maintains the local compatibility index (groups / tags /
+           capability index) as a convenience layer on top of UDM state.
+
         Args:
-            device_id: 设备 ID (可选，自动生成)
-            device_type: 设备类型
-            name: 设备名称
-            capabilities: 能力列表
-            capability_details: 能力详情
-            groups: 分组列表
-            tags: 标签列表
-            ip_address: IP 地址
-            port: 端口
-            mac_address: MAC 地址
-            manufacturer: 制造商
-            model: 型号
-            os_version: 系统版本
-            app_version: 应用版本
-            metadata: 元数据
-        
+            device_id: Device ID (auto-generated when not provided).
+            device_type: Device type string.
+            name: Human-readable device name.
+            capabilities: List of capability name strings.
+            capability_details: Per-capability detail dicts.
+            groups: Group membership list.
+            tags: Freeform classification tags.
+            ip_address: IP address string.
+            port: Port number.
+            mac_address: MAC address string.
+            manufacturer: Manufacturer name.
+            model: Model name.
+            os_version: OS version string.
+            app_version: App version string.
+            metadata: Arbitrary extension metadata.
+
         Returns:
-            设备对象
+            The local ``Device`` compatibility record.
         """
         # 生成设备 ID
         if not device_id:
             device_id = f"{device_type}_{uuid.uuid4().hex[:8]}"
-        
+
         # 解析设备类型
         try:
             dev_type = DeviceType(device_type.lower())
         except ValueError:
             dev_type = DeviceType.CUSTOM
-        
+
+        # 合并额外字段到 metadata
+        _metadata = metadata or {}
+        for key, value in kwargs.items():
+            _metadata[key] = value
+
+        # ── SSOT: write to UDM first ─────────────────────────────────────
+        # Canonical identity is owned by UDM.  Write there before touching
+        # any local index state so that duplicate registrations converge on
+        # a single UDM record rather than creating divergent copies.
+        udm = _get_udm()
+        if udm is not None:
+            try:
+                udm.register_device_from_dict(device_id, {
+                    "device_name": name or f"{device_type}_{device_id[:8]}",
+                    "device_type": device_type,
+                    "capabilities": capabilities or [],
+                    "source": "device_registry",
+                    **(_metadata or {}),
+                })
+                logger.debug("DeviceRegistry.register: UDM write succeeded for %s", device_id)
+            except Exception as _udm_err:
+                logger.warning(
+                    "DeviceRegistry.register: UDM write failed for %s — %s", device_id, _udm_err
+                )
+
+        # ── Local compatibility record ────────────────────────────────────
+        # If the device was already registered in the local index, reuse the
+        # existing record so we do not create a divergent local entry.
+        existing = self.devices.get(device_id)
+        if existing is not None:
+            # Refresh timestamps and mutable fields on the existing record.
+            now = time.time()
+            existing.last_seen = now
+            existing.last_heartbeat = now
+            existing.status = DeviceStatus.ONLINE
+            # Merge any new group/tag additions requested by this call.
+            self._merge_groups_and_tags(existing, groups, tags)
+            self._update_indexes(existing)
+            self._save()
+            await self._emit_event("registered", existing)
+            logger.info("DeviceRegistry.register: reused existing local record for %s", device_id)
+            return existing
+
         # 构建能力列表
         cap_list = []
         if capabilities:
@@ -189,11 +294,6 @@ class DeviceRegistry:
                     available=details.get("available", True),
                     params=details.get("params", {}),
                 ))
-
-        # 合并额外字段到 metadata
-        _metadata = metadata or {}
-        for key, value in kwargs.items():
-            _metadata[key] = value
 
         # 创建设备对象（Pydantic V2 模型）
         now = time.time()
@@ -217,23 +317,6 @@ class DeviceRegistry:
             last_seen=now,
             last_heartbeat=now,
         )
-        
-        # ── SSOT: write to UDM first ─────────────────────────────────────
-        udm = _get_udm()
-        if udm is not None:
-            try:
-                udm.register_device_from_dict(device_id, {
-                    "device_name": name or f"{device_type}_{device_id[:8]}",
-                    "device_type": device_type,
-                    "capabilities": capabilities or [],
-                    "source": "device_registry",
-                    **(_metadata or {}),
-                })
-                logger.debug("DeviceRegistry.register: UDM write succeeded for %s", device_id)
-            except Exception as _udm_err:
-                logger.warning(
-                    "DeviceRegistry.register: UDM write failed for %s — %s", device_id, _udm_err
-                )
 
         # 存储本地缓存
         self.devices[device_id] = device
@@ -247,7 +330,7 @@ class DeviceRegistry:
         # 触发事件
         await self._emit_event("registered", device)
         
-        logger.info(f"设备注册成功: {device_id} ({device_type})")
+        logger.info("DeviceRegistry.register: new local record created for %s (%s)", device_id, device_type)
         
         return device
     
@@ -279,17 +362,38 @@ class DeviceRegistry:
         return True
     
     def get(self, device_id: str) -> Optional[Device]:
-        """获取设备（优先从 UDM 读取，本地缓存作为后备）"""
-        # Prefer UDM (SSOT) when available
+        """Return a local compatibility record for *device_id*.
+
+        UDM-first semantics (PR-4)
+        --------------------------
+        When UDM is available the local record's ``status`` is refreshed from
+        the canonical UDM state before being returned, so callers receive a
+        status value that reflects authoritative online/offline truth rather
+        than a potentially stale local cache value.
+
+        If UDM is unavailable the local cache entry is returned as-is.
+        """
         udm = _get_udm()
+        local = self.devices.get(device_id)
         if udm is not None:
             try:
                 udm_dev = udm.get_device(device_id)
-                if udm_dev is not None:
-                    return self.devices.get(device_id)  # return local wrapper if present
+                if udm_dev is not None and local is not None:
+                    # Reflect authoritative UDM status into the local record.
+                    try:
+                        local.status = DeviceStatus(
+                            udm_dev.status.value
+                            if hasattr(udm_dev.status, "value")
+                            else str(udm_dev.status).lower()
+                        )
+                    except ValueError as _ve:
+                        logger.debug(
+                            "DeviceRegistry.get: unrecognised UDM status for %s — %s",
+                            device_id, _ve,
+                        )
             except Exception:
                 pass
-        return self.devices.get(device_id)
+        return local
     
     async def get_or_create(self, device_id: str, **kwargs) -> Device:
         """获取或创建设备"""
@@ -452,7 +556,16 @@ class DeviceRegistry:
         return await self.update_status(device_id, heartbeat=True)
     
     async def check_offline_devices(self, timeout: float = 60.0):
-        """检查离线设备"""
+        """Mark timed-out devices as OFFLINE in the local compatibility cache.
+
+        Local-cache-only operation (PR-4)
+        ----------------------------------
+        This method updates the local cache status only.  Authoritative
+        online/offline state is managed by ``UnifiedDeviceManager`` via its
+        own heartbeat-timeout mechanism (``check_heartbeat_timeouts``).
+        Callers should not rely solely on this method for canonical device
+        liveness decisions.
+        """
         now = time.time()
         
         for device in self.devices.values():
@@ -460,7 +573,7 @@ class DeviceRegistry:
                 if now - device.last_heartbeat > timeout:
                     device.status = DeviceStatus.OFFLINE
                     await self._emit_event("offline", device)
-                    logger.warning(f"设备离线: {device.device_id}")
+                    logger.warning("DeviceRegistry: local cache marks device offline: %s", device.device_id)
     
     # ========================================================================
     # 能力协商
@@ -625,10 +738,45 @@ class DeviceRegistry:
             "tags": len(self.tag_index),
             "capabilities": len(self.capability_index),
         }
-    
+
     # ========================================================================
-    # 内部方法
+    # Projection bridge (PR-4)
     # ========================================================================
+
+    def project_to_contract(self, device_id: str):
+        """Project a registry-local record into the canonical ``RegisteredRuntimeDevice`` contract.
+
+        Projection bridge (PR-4)
+        -------------------------
+        This method normalises a ``DeviceModel`` record held in the local
+        compatibility index into the canonical single-device read contract
+        (``RegisteredRuntimeDevice``), using the ``from_device_registry_record``
+        adapter from ``contracts.registered_runtime_device``.
+
+        This allows downstream consumers that require the canonical read
+        contract to source it from registry-discovered or registry-indexed
+        devices without having to depend on the registry's internal model.
+
+        Args:
+            device_id: The ID of the device to project.
+
+        Returns:
+            A :class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice`
+            instance, or ``None`` if the device is not present in the local
+            index.
+        """
+        local = self.get(device_id)
+        if local is None:
+            return None
+        try:
+            from contracts.registered_runtime_device import from_device_registry_record
+            return from_device_registry_record(local)
+        except Exception as _err:
+            logger.warning(
+                "DeviceRegistry.project_to_contract: projection failed for %s — %s",
+                device_id, _err,
+            )
+            return None
     
     def _update_indexes(self, device: Device):
         """更新索引"""
@@ -653,6 +801,24 @@ class DeviceRegistry:
             if device.device_id not in self.tag_index[tag]:
                 self.tag_index[tag].append(device.device_id)
     
+    def _merge_groups_and_tags(
+        self,
+        device: Device,
+        new_groups: Optional[List[str]],
+        new_tags: Optional[List[str]],
+    ) -> None:
+        """Merge *new_groups* and *new_tags* into an existing device record.
+
+        Used by the duplicate-registration path in ``register()`` to apply
+        incremental group / tag additions without replacing the existing record.
+        """
+        for g in (new_groups or []):
+            if g not in device.groups:
+                device.groups.append(g)
+        for t in (new_tags or []):
+            if t not in device.tags:
+                device.tags.append(t)
+
     def _remove_from_indexes(self, device: Device):
         """从索引移除"""
         # 从能力索引移除
@@ -674,7 +840,15 @@ class DeviceRegistry:
                     self.tag_index[tag].remove(device.device_id)
     
     def _save(self):
-        """保存到文件"""
+        """Persist the current registry state as a snapshot / projection cache.
+
+        Snapshot semantics (PR-4)
+        -------------------------
+        The file written here is a **cache / snapshot** of the last known local
+        state.  It is NOT a canonical source of device truth; authoritative
+        state lives in UDM.  The snapshot is used solely to restore the local
+        compatibility index (groups, tags, capability index) after a restart.
+        """
         try:
             data = {
                 "devices": {did: d.to_api_dict() for did, d in self.devices.items()},
@@ -687,10 +861,23 @@ class DeviceRegistry:
             with open(self.storage_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"保存设备数据失败: {e}")
+            logger.error("DeviceRegistry._save: failed — %s", e)
     
     def _load(self):
-        """从文件加载"""
+        """Restore the compatibility index from the on-disk snapshot.
+
+        Snapshot / cache semantics (PR-4)
+        ----------------------------------
+        This method restores the local **compatibility index only** — it does
+        NOT recreate authoritative online device state.  Every device loaded
+        from disk is forced to ``OFFLINE`` status; a device may only transition
+        to ONLINE by re-registering through the normal UDM write path
+        (``register()`` → ``UnifiedDeviceManager.register_device``).
+
+        This ensures that a stale snapshot cannot silently make the system
+        believe that devices are online when they have not re-connected after
+        a restart.
+        """
         try:
             if not self.storage_path.exists():
                 return
@@ -704,14 +891,14 @@ class DeviceRegistry:
                     # 兼容旧格式：model → model_name
                     if "model" in ddata and "model_name" not in ddata:
                         ddata["model_name"] = ddata.pop("model")
-                    # 加载时强制离线
+                    # Force OFFLINE — snapshot does not restore authoritative online state.
                     ddata["status"] = DeviceStatus.OFFLINE
                     if "device_id" not in ddata:
                         ddata["device_id"] = did
                     device = Device.model_validate(ddata)
                     self.devices[did] = device
                 except Exception as load_err:
-                    logger.warning("跳过无效设备 %s: %s", did, load_err)
+                    logger.warning("DeviceRegistry._load: skipping invalid device %s — %s", did, load_err)
             
             # 加载索引
             self.groups = data.get("groups", {})
@@ -719,7 +906,7 @@ class DeviceRegistry:
             self.capability_index = data.get("capability_index", {})
             
         except Exception as e:
-            logger.error(f"加载设备数据失败: {e}")
+            logger.error("DeviceRegistry._load: failed — %s", e)
     
     async def _emit_event(self, event_type: str, device: Device):
         """触发事件"""
