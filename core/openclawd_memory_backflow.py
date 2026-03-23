@@ -8,6 +8,22 @@ OpenClawd 记忆回流 — 跨设备任务完成后将结果存入记忆 DB。
 将 task_id / device_id / route_mode 等上下文持久化到 TaskMemory，供后续
 LLM 上下文注入与历史查询。
 
+PR-7 — Canonical chain result backflow
+---------------------------------------
+:func:`store_result_envelope` is the **canonical backflow entry point** for
+cross-device results that have been normalised into a
+:class:`~core.cross_device_execution_chain.ResultEnvelope`.  It:
+
+1. Writes the result to TaskMemory (same as :func:`store_task_result`).
+2. Records the execution in the canonical chain singleton via
+   :func:`~core.cross_device_execution_chain.record_chain_execution`.
+3. Marks the envelope as ``memory_backflow_stored=True`` so downstream
+   consumers (projection, audit) can detect whether backflow has occurred.
+
+The original :func:`store_task_result` is retained for backward compatibility
+with the AndroidBridge path that delivers raw ``task_result`` dicts before
+they have been wrapped in a ``ResultEnvelope``.
+
 设计原则:
   - 轻量：尽量不阻塞 WebSocket 消息处理循环。
   - 容错：TaskMemory 不可用时静默忽略（非关键路径）。
@@ -24,6 +40,17 @@ try:
     from core.task_memory import get_task_memory
 except ImportError:
     get_task_memory = None  # type: ignore[assignment]
+
+# PR-7: canonical chain import — non-fatal if not available
+try:
+    from core.cross_device_execution_chain import (
+        ResultEnvelope as _ResultEnvelope,
+        record_chain_execution as _record_chain_execution,
+        CANONICAL_CHAIN_ORDER as _CANONICAL_CHAIN_ORDER,
+    )
+    _CHAIN_AVAILABLE = True
+except ImportError:
+    _CHAIN_AVAILABLE = False
 
 
 async def store_task_result(
@@ -95,3 +122,114 @@ async def store_task_result(
             "Memory backflow store failed (non-fatal): task_id=%s error=%s",
             task_id, exc,
         )
+
+
+async def store_result_envelope(
+    envelope: "Any",
+    *,
+    chain_metadata: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Canonical PR-7 backflow entry point for :class:`ResultEnvelope` results.
+
+    Writes the result to TaskMemory, records the execution in the canonical
+    chain singleton, and marks the envelope as ``memory_backflow_stored=True``.
+
+    Parameters
+    ----------
+    envelope:
+        A :class:`~core.cross_device_execution_chain.ResultEnvelope` instance
+        produced by the canonical cross-device execution chain.
+    chain_metadata:
+        Optional extra metadata to attach to the chain execution record
+        (e.g. ``authority_role``, ``session_id``, ``projection_id``).
+
+    Returns
+    -------
+    bool
+        True if backflow storage succeeded; False if it was skipped or failed.
+    """
+    if not _CHAIN_AVAILABLE:
+        # Degrade gracefully — log and return False rather than raising.
+        logger.debug(
+            "store_result_envelope: canonical chain module unavailable; "
+            "falling back to store_task_result for task_id=%s",
+            getattr(envelope, "task_id", "unknown"),
+        )
+        return False
+
+    task_id = getattr(envelope, "task_id", "") or ""
+    device_id = getattr(envelope, "device_id", "") or ""
+    route_mode = getattr(envelope, "route_mode", "cross_device") or "cross_device"
+    session_id = getattr(envelope, "session_id", None)
+    trace_id = getattr(envelope, "trace_id", None)
+
+    # Write to TaskMemory (non-fatal)
+    if get_task_memory is not None:
+        try:
+            mem = get_task_memory()
+            success = getattr(envelope, "success", False)
+            status = getattr(envelope, "status", "unknown")
+            error = getattr(envelope, "error", None)
+            result_summary = (
+                f"device={device_id} status={status}"
+                + (f" error={error}" if error else "")
+            )
+            mem.record_task(
+                task=f"[cross_device_chain] task_id={task_id}",
+                result_summary=result_summary,
+                success=success,
+                strategy=route_mode,
+                session_id=session_id or "",
+                tags=["cross_device", route_mode, device_id, "result_envelope"],
+                extra={
+                    "task_id": task_id,
+                    "device_id": device_id,
+                    "route_mode": route_mode,
+                    "trace_id": trace_id,
+                    "result_envelope": {
+                        k: v for k, v in envelope.to_dict().items()
+                        if k not in ("image_base64", "screenshot_base64", "raw_bytes")
+                    },
+                    "chain_metadata": chain_metadata or {},
+                },
+            )
+            # Mark the envelope so downstream consumers know backflow occurred.
+            envelope.memory_backflow_stored = True
+        except Exception as exc:
+            logger.warning(
+                "store_result_envelope: memory write failed (non-fatal): "
+                "task_id=%s error=%s",
+                task_id,
+                exc,
+            )
+
+    # Record the full canonical chain execution in the chain singleton.
+    try:
+        _record_chain_execution(
+            task_id=task_id,
+            trace_id=trace_id,
+            device_id=device_id,
+            route_mode=route_mode,
+            steps_completed=list(_CANONICAL_CHAIN_ORDER),
+            result_envelope=envelope,
+            extra=chain_metadata or {},
+        )
+    except Exception as exc:
+        logger.warning(
+            "store_result_envelope: chain record failed (non-fatal): "
+            "task_id=%s error=%s",
+            task_id,
+            exc,
+        )
+        return False
+
+    logger.debug(
+        "store_result_envelope: backflow complete: "
+        "task_id=%s device_id=%s route_mode=%s success=%s memory=%s",
+        task_id,
+        device_id,
+        route_mode,
+        getattr(envelope, "success", False),
+        getattr(envelope, "memory_backflow_stored", False),
+    )
+    return True

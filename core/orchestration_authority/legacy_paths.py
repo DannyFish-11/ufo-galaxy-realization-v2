@@ -312,6 +312,85 @@ _register(
     ),
 )
 
+# PR-7: Formally demote gateway orchestrator paths that bypass the canonical
+# cross-device execution chain (OpenClawd → CommandRouter → TaskEnvelope →
+# Gateway substrate → Worker/Device/Node → ResultEnvelope → OpenClawd feedback).
+# These paths previously allowed the gateway to act as a routing authority or
+# planning brain; they are now demoted to LEGACY_COMPATIBILITY substrates.
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.orchestrator.galaxy_orchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "GalaxyOrchestrator is a legacy gateway-level planner.  "
+            "The canonical cross-device chain is: "
+            "OpenClawd → CommandRouter → TaskEnvelope → Gateway substrate → "
+            "Worker/Device/Node → ResultEnvelope → OpenClawd feedback.  "
+            "Gateway substrate components must not make routing decisions; "
+            "route new cross-device tasks through core.openclawd.OpenClawd "
+            "which delegates to core.command_router.CommandRouter."
+        ),
+        pr_guardrail_added="PR-7",
+        notes=(
+            "GalaxyOrchestrator — legacy gateway-level orchestration planner.  "
+            "Demoted in PR-7: gateway is execution substrate only, not a "
+            "planning brain.  Do not invoke as a primary cross-device entrypoint."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "TaskOrchestrator in the gateway orchestrator package predates "
+            "CommandRouter.route_envelope as the canonical substrate root.  "
+            "Use core.command_router.CommandRouter.route_envelope for all "
+            "cross-device task dispatch.  TaskOrchestrator is retained only "
+            "as a compatibility fallback for existing integrations."
+        ),
+        pr_guardrail_added="PR-7",
+        notes=(
+            "Gateway TaskOrchestrator — legacy multi-device dispatch path.  "
+            "Demoted in PR-7: CommandRouter.route_envelope is the sole router. "
+            "Not a primary entrypoint for new cross-device work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.device_router.DeviceRouter.route_task",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "DeviceRouter.route_task performs gateway-level routing analysis "
+            "and cross-device dispatch that is now owned by OpenClawd and "
+            "CommandRouter.  New cross-device tasks must enter through "
+            "OpenClawd._dispatch_device → OpenClawd.send_gateway_command → "
+            "CommandRouter.route_envelope.  DeviceRouter.route_task is "
+            "retained as a compatibility fallback only."
+        ),
+        pr_guardrail_added="PR-7",
+        notes=(
+            "DeviceRouter.route_task — gateway-level task router.  "
+            "Demoted in PR-7: routing authority belongs to OpenClawd and "
+            "CommandRouter, not the gateway.  Do not call directly in new code."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "CrossDeviceCoordinator is a gateway-internal coordinator that "
+            "predates the CommandRouter substrate root.  It is invoked as a "
+            "fallback when the AgentBridge import fails in DeviceRouter.  "
+            "New code should not call it directly; route through "
+            "CommandRouter.route_envelope instead."
+        ),
+        pr_guardrail_added="PR-7",
+        notes=(
+            "CrossDeviceCoordinator — gateway-internal fallback coordinator.  "
+            "Demoted in PR-7: not a primary cross-device entrypoint.  "
+            "Used only as a last-resort fallback within DeviceRouter."
+        ),
+    ),
+)
+
 #: Frozenset of node module prefixes that are LEGACY_ORCHESTRATOR_NODE class.
 #: Contributors: when registering any node whose module path starts with one of
 #: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.

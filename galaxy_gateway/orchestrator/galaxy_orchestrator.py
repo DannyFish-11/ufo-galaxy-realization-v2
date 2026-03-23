@@ -612,7 +612,19 @@ class DeviceManager:
 
 
 class GalaxyOrchestrator:
-    """Galaxy 统一调度器 - 串联端到端流程"""
+    """Galaxy 统一调度器 - 串联端到端流程
+
+    .. deprecated:: PR-7
+        ``GalaxyOrchestrator`` is a legacy gateway-level orchestration planner.
+        The canonical cross-device execution chain is:
+
+        OpenClawd → CommandRouter → TaskEnvelope → Gateway substrate →
+        Worker/Device/Node → ResultEnvelope → OpenClawd feedback
+
+        Do not invoke this class as a primary cross-device entrypoint.
+        It is retained as a compatibility fallback only.
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry entry.
+    """
 
     def __init__(self, config: Dict[str, Any]):
         """
@@ -650,6 +662,18 @@ class GalaxyOrchestrator:
         }
 
         logger.info("GalaxyOrchestrator 初始化完成")
+
+        # PR-7: emit legacy guardrail — GalaxyOrchestrator is demoted to a
+        # compatibility fallback.  The canonical chain is:
+        # OpenClawd → CommandRouter → TaskEnvelope → Gateway substrate →
+        # Worker/Device/Node → ResultEnvelope → OpenClawd feedback.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.orchestrator.galaxy_orchestrator",
+            )
+        except Exception:
+            pass
 
     async def start(self):
         """启动调度器"""
