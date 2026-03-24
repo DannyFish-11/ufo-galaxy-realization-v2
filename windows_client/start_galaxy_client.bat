@@ -1,6 +1,19 @@
 @echo off
 setlocal
 
+REM ══════════════════════════════════════════════════════════════
+REM  LEGACY PATH — windows_client Gateway WebSocket client (RETIRED)
+REM  This is the old direct Gateway WebSocket client model.
+REM  It is retained for compatibility only and is NOT the active
+REM  Windows architecture direction.
+REM
+REM  Active Windows direction:
+REM    DesktopPresenceRuntime (tri-state lifecycle shell) +
+REM    windows_client/status_board_v2/ (desktop status surface)
+REM
+REM  Do not use this script as a primary Windows entry path.
+REM ══════════════════════════════════════════════════════════════
+
 REM --- Galaxy Windows Client Starter ---
 
 REM 统一入口：Galaxy Gateway (AIP v3)

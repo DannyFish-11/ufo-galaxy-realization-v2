@@ -1049,8 +1049,8 @@ class UnifiedWebUI:
         except ImportError as e:
             logger.error("Web UI 依赖未安装: %s", e)
             
-    # Minimal fallback HTML — the real dashboard is served from
-    # dashboard/frontend/public/index.html (SONARA galaxy style) at :8299.
+    # Minimal fallback HTML — the legacy dashboard frontend is at
+    # dashboard/frontend/public/index.html (SONARA galaxy style, non-primary surface) at :8299.
     FALLBACK_HTML = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Galaxy</title></head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
@@ -1522,6 +1522,14 @@ def main():
         description="Galaxy - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+权威启动路径:
+    python main.py                          # ← 推荐（委托到 unified_launcher.py）
+    python unified_launcher.py              # 等效主入口
+
+已弃用的兼容性包装器（将在未来版本移除）:
+    python start_galaxy.py                  # 兼容性包装器，已弃用
+    python start_l4.py                      # 兼容性包装器，已弃用（PR6 已冻结）
+
 示例:
     python unified_launcher.py              # 默认启动（完整模式）
     python unified_launcher.py --minimal    # 最小启动

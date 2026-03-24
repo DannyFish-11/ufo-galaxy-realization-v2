@@ -23,8 +23,9 @@ This script's sole role: bootstrap the process, then yield to
     python main.py --help       → 查看所有启动选项
 
 其他入口（均委托到同一启动器）:
-    python unified_launcher.py  → 直接调用统一启动器
-    python start_galaxy.py      → 轻量 Dashboard 快速启动
+    python unified_launcher.py  → 直接调用统一启动器（与 main.py 等效）
+    python start_galaxy.py      → 兼容性包装器（已弃用，请使用 main.py）
+    python start_l4.py          → 兼容性包装器（已弃用，请使用 main.py）
 """
 
 import os

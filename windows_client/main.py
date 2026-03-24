@@ -1,5 +1,23 @@
 """
-Windows Client 主程序
+Windows Client 主程序 — LEGACY CHAT/SIDEBAR CLIENT (RETIRED)
+=============================================================
+
+.. deprecated::
+    ``windows_client/main.py`` is the old F12-hotkey chat/sidebar client.
+    It is retained for compatibility only and is **not** the active Windows
+    architecture direction.
+
+    **Active Windows direction**:
+    - :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` — the
+      desktop tri-state lifecycle runtime shell.
+    - ``windows_client/status_board_v2/`` — the canonical read-only desktop
+      status surface, driven by projection output from
+      ``GET /api/v1/projection/runtime``.
+
+    The chat/sidebar model (F12 hotkey, ``ui_sidebar.py``,
+    ``ui/galaxy_client_ui.py``) is superseded by the runtime/status-surface
+    direction above.  New Windows-side development must target the
+    DesktopPresenceRuntime + status_board_v2 direction.
 
 整合侧边栏 UI 和自主操纵功能
 通过 HTTP 连接 Galaxy 后端 API 实现知识查询、记忆存储、代码执行等功能
