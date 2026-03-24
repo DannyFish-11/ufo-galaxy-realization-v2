@@ -678,7 +678,7 @@ class NodeSystemLauncher:
                                         "节点 %s 健康检查通过 (尝试 %d/10, 端口 %d)",
                                         node_name, attempt, port,
                                     )
-                                await self._register_node_with_dashboard(node_name, port)
+                                await self._register_node_with_runtime_registry(node_name, port)
                                 return True
                 except Exception:
                     pass
@@ -705,16 +705,21 @@ class NodeSystemLauncher:
 
         # 无端口信息时降级：进程已启动即认为成功
         logger.info("节点 %s 已启动（无端口，跳过健康检查）", node_name)
-        await self._register_node_with_dashboard(node_name, port)
+        await self._register_node_with_runtime_registry(node_name, port)
         return True
 
-    async def _register_node_with_dashboard(self, node_name: str, port: Optional[int]) -> None:
-        """向 Dashboard 运行时注册表注册已启动的节点（失败时静默忽略）。"""
+    async def _register_node_with_runtime_registry(self, node_name: str, port: Optional[int]) -> None:
+        """向运行时节点注册表注册已启动的节点（失败时静默忽略）。
+
+        注册端点来自 core/api_routes.py（权威 API 层）。
+        dashboard/backend 的 /api/v1/nodes/register 已降级为遗留路由，
+        由 core.api_routes 的同路径路由覆盖。
+        """
         try:
             import aiohttp
-            dashboard_port = self.config.web_ui_port
-            dashboard_host = os.environ.get("DASHBOARD_HOST", "127.0.0.1")
-            url = f"http://{dashboard_host}:{dashboard_port}/api/v1/nodes/register"
+            api_host = os.environ.get("GALAXY_API_HOST", "127.0.0.1")
+            api_port = self.config.web_ui_port
+            url = f"http://{api_host}:{api_port}/api/v1/nodes/register"
             payload = {
                 "node_id": node_name,
                 "name": node_name,
@@ -726,9 +731,9 @@ class NodeSystemLauncher:
             ) as session:
                 async with session.post(url, json=payload) as resp:
                     if resp.status < 400:
-                        logger.debug("节点 %s 已注册到 Dashboard", node_name)
+                        logger.debug("节点 %s 已注册到运行时注册表", node_name)
         except Exception as _exc:
-            logger.debug("注册节点 %s 到 Dashboard 失败（可忽略）: %s", node_name, _exc)
+            logger.debug("注册节点 %s 到运行时注册表失败（可忽略）: %s", node_name, _exc)
         
     async def start_nodes(self, nodes: List[str], parallel: bool = True) -> Dict[str, bool]:
         """启动多个节点"""
@@ -880,65 +885,79 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动统一 Web UI 和完整 API 服务
+        """启动 Galaxy API 服务（核心运行时 API 层）
 
         架构说明（API 单一入口原则）：
           core/api_routes.py 是 Galaxy 系统的 **唯一权威 API 定义**。
           所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
 
-          1. 以 dashboard.backend.main.app 为基础应用（仅用于静态文件服务
-             和 Dashboard 专属 UI 路由）。Dashboard 中与 core 重叠的 API 路由
-             会被步骤 3 中 core.api_routes 的同路径路由覆盖。
+          当前系统表层方向：桌面三态运行层 + 桌面状态板（desktop tri-state runtime
+          + desktop status surface）。dashboard/frontend 是 **遗留表层**，不是
+          现行主系统表层，仅作过渡期兼容保留。
+
+          1. 以内建 FastAPI 应用为主应用（权威应用）。
+             可选：加载 dashboard.backend.main 的遗留路由作为非主路由
+             （低优先级，会被步骤 3 中 core.api_routes 的同路径路由覆盖）。
           2. 在其上叠加 core.startup 引导的子系统中间件
           3. 叠加 core.api_routes 作为 **主 API 层**（系统管理、设备、节点、
              监控、观测性、AI、chat 等全部路由）
           4. 添加健康检查路由
-          5. 统一在 8299 端口提供服务（避免与 galaxy-core:9000 冲突）
+          5. 统一在配置端口提供服务
 
         注意：此启动器 **不应** 定义自己的 inline API 路由。
         如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
         """
-        # 检查前端静态资源是否已构建
+        # dashboard/frontend 是遗留表层，其静态资源不存在属于正常情况，仅 debug 级记录。
         frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
         frontend_dist = PROJECT_ROOT / "dashboard" / "frontend" / "dist"
         if not frontend_index.exists():
-            logger.warning(
-                "Dashboard 静态资源未找到: %s\n"
-                "  → API 服务仍将启动，但浏览器访问 / 时将显示降级页面。\n"
-                "  → 如需完整 Dashboard，请先构建前端:\n"
-                "       cd dashboard/frontend && npm install && npm run build",
+            logger.debug(
+                "Legacy dashboard frontend 静态资源未找到: %s（非当前主表层，可忽略）",
                 frontend_index,
             )
             if frontend_dist.exists():
-                logger.info("检测到构建产物目录 %s，但缺少 public/index.html", frontend_dist)
+                logger.debug("检测到遗留构建产物目录 %s，但缺少 public/index.html", frontend_dist)
         try:
             from fastapi.responses import HTMLResponse, JSONResponse
             import uvicorn
 
-            # === 步骤 1：以 dashboard/backend/main.py 的完整 app 为基础 ===
-            # 这一步确保原 Dashboard 的所有路由（agents、devices、LLM providers、
-            # MCP、twins、config、observability 等 60+ 端点）全部纳入统一服务。
+            # === 步骤 1：以内建 FastAPI 应用为主应用（权威 API 基础） ===
+            # dashboard/frontend 是遗留表层（PR-8 已降级），不作为主应用基础。
+            # 遗留 dashboard 路由将在后续步骤以非主路由形式可选加载，
+            # 并会被 core.api_routes 的同路径路由覆盖。
+            from fastapi import FastAPI
+            from fastapi.middleware.cors import CORSMiddleware
+            from nodes.common.cors_config import get_cors_origins
+            self.app = FastAPI(
+                title="Galaxy",
+                description="L4 级自主性智能系统",
+                version="2.0"
+            )
+            self.app.add_middleware(
+                CORSMiddleware,
+                allow_origins=get_cors_origins(),
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+
+            # Optional: load legacy dashboard routes (non-primary, superseded by core.api_routes).
+            # dashboard/backend/main.py is a LEGACY UI SURFACE (PR-8).  Any overlapping routes
+            # defined there will be superseded by the core.api_routes layer in Step 3.
             try:
-                from dashboard.backend.main import app as _dashboard_app
-                self.app = _dashboard_app
-                logger.info("Dashboard 路由已加载（来自 dashboard/backend/main.py）")
+                from dashboard.backend import main as _dashboard_backend_module
+                _legacy_app = getattr(_dashboard_backend_module, "app", None)
+                if _legacy_app is not None:
+                    _existing_paths = {getattr(r, "path", None) for r in self.app.routes}
+                    for _route in getattr(_legacy_app, "routes", []):
+                        if hasattr(_route, "path") and _route.path not in _existing_paths:
+                            self.app.routes.append(_route)
+                            _existing_paths.add(_route.path)
+                    logger.debug(
+                        "Legacy dashboard routes imported (non-primary; superseded by core.api_routes)"
+                    )
             except Exception as _e:
-                logger.warning("dashboard.backend.main 加载失败，回退到内建 FastAPI 应用: %s", _e)
-                from fastapi import FastAPI
-                from fastapi.middleware.cors import CORSMiddleware
-                from nodes.common.cors_config import get_cors_origins
-                self.app = FastAPI(
-                    title="Galaxy",
-                    description="L4 级自主性智能系统",
-                    version="2.0"
-                )
-                self.app.add_middleware(
-                    CORSMiddleware,
-                    allow_origins=get_cors_origins(),
-                    allow_credentials=True,
-                    allow_methods=["*"],
-                    allow_headers=["*"]
-                )
+                logger.debug("Legacy dashboard backend not loaded (expected if removed): %s", _e)
 
             # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
             try:
@@ -1040,37 +1059,38 @@ class UnifiedWebUI:
             )
             server = uvicorn.Server(_uvi_config)
             logger.info(
-                "统一 Dashboard 启动: http://%s:%d",
+                "Galaxy API 服务启动: http://%s:%d",
                 self.config.host, self.config.web_ui_port
             )
             logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
             await server.serve()
 
         except ImportError as e:
-            logger.error("Web UI 依赖未安装: %s", e)
-            
-    # Minimal fallback HTML — the legacy dashboard frontend is at
-    # dashboard/frontend/public/index.html (SONARA galaxy style, non-primary surface) at :8299.
+            logger.error("API 服务依赖未安装: %s", e)
+
+    # Minimal fallback HTML — points to the API docs.
+    # dashboard/frontend is a LEGACY UI SURFACE (PR-8) and is not the current primary surface.
     FALLBACK_HTML = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Galaxy</title></head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
-<h1>Galaxy Dashboard</h1>
-<p>Dashboard is served at <a href="http://localhost:8299" style="color:#00CED1">http://localhost:8299</a></p>
+<h1>Galaxy</h1>
+<p>API docs: <a href="/docs" style="color:#00CED1">/docs</a></p>
+<p style="font-size:0.8em;color:#888">Current surface: desktop tri-state runtime + desktop status board</p>
 </div></body></html>"""
 
-    def _get_dashboard_html(self) -> str:
-        """获取仪表板 HTML — 从 dashboard/frontend/public/ 读取
+    def _get_legacy_dashboard_html(self) -> str:
+        """读取遗留 dashboard/frontend 的 index.html（LEGACY UI SURFACE）。
 
-        优先加载独立 Dashboard 的 index.html（SONARA galaxy style），
-        如果不存在则返回指向 :8299 的最小化引导页面。
+        dashboard/frontend 已通过 PR-8 降级为遗留表层，不再是当前主系统表层。
+        如果遗留文件不存在（属于正常情况），返回 FALLBACK_HTML。
         """
         dashboard_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
         if dashboard_path.exists():
             try:
                 return dashboard_path.read_text(encoding="utf-8")
             except Exception as exc:
-                logger.warning("读取 Dashboard HTML 失败: %s", exc)
+                logger.debug("读取遗留 dashboard HTML 失败（非关键）: %s", exc)
 
         return self.FALLBACK_HTML
 
@@ -1240,11 +1260,11 @@ class GalaxyUnified:
         except Exception as _brain_err:
             print_status(f"MasterBrain 初始化异常 (非致命): {_brain_err}", "warning")
         
-        # 5. 启动 Web UI
+        # 5. 启动 API 服务
         if self.config.enable_web_ui:
-            print_section("Web UI")
+            print_section("API 服务")
             self.service_manager.state = SystemState.STARTING_UI
-            print_status(f"Web UI 启动中: http://localhost:{self.config.web_ui_port}", "info")
+            print_status(f"API 服务启动中: http://localhost:{self.config.web_ui_port}", "info")
             
         # 系统就绪
         self.service_manager.state = SystemState.RUNNING
@@ -1259,7 +1279,8 @@ class GalaxyUnified:
         print_section("系统就绪")
         print_status("Galaxy 统一系统已启动！", "success")
         if self.config.enable_web_ui:
-            print_status(f"控制面板: http://localhost:{self.config.web_ui_port}", "info")
+            print_status(f"API 服务 (REST/WS): http://localhost:{self.config.web_ui_port}", "info")
+            print_status(f"API 文档: http://localhost:{self.config.web_ui_port}/docs", "info")
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
         _nats_url_display = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222 (默认)")
@@ -1539,13 +1560,13 @@ def main():
         """
     )
     parser.add_argument("--minimal", "-m", action="store_true", help="最小启动模式")
-    parser.add_argument("--no-ui", action="store_true", help="不启动 Web UI")
+    parser.add_argument("--no-ui", action="store_true", help="不启动 API 服务")
     parser.add_argument("--no-l4", action="store_true", help="不启动 L4 增强模块")
     parser.add_argument("--no-nodes", action="store_true", help="不启动节点系统")
     parser.add_argument("--status", action="store_true", help="查看系统状态")
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
-    parser.add_argument("--port", "-p", type=int, default=8299, help="Web UI 端口")
+    parser.add_argument("--port", "-p", type=int, default=8299, help="API 服务端口")
     parser.add_argument(
         "--docker-full",
         action="store_true",
