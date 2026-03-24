@@ -2921,6 +2921,10 @@ class OpenClawd:
                             "handler": "agent_kernel",
                             "entry_mode": _entry_mode,
                             "execution_path": _exec_path_k,
+                            # PR-1: authority_role stamps OpenClawd as subject decision
+                            # authority in the kernel path, consistent with the
+                            # direct-path (non-kernel) response for full observability.
+                            "authority_role": "subject_decision_authority",
                             # PR-3: delegation_point names which boundary was used.
                             # AgentKernel is embedded in OpenClawd → always local.
                             "delegation_point": "local",
