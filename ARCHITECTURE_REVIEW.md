@@ -1,3 +1,23 @@
+> ## ⚠️ HISTORICAL SNAPSHOT — NOT AUTHORITATIVE
+>
+> **This document is a historical architecture review snapshot (last updated
+> 2026-03-22). It may be outdated and is NOT the authoritative source for
+> current node or system governance status.**
+>
+> Maintainers must rely on the following canonical sources:
+>
+> | Source | Role |
+> |--------|------|
+> | `node_dependencies.json` | Machine-readable source of truth for node registry and startup policy |
+> | `docs/node_audit_report.json` | Machine-readable source of truth for audit results |
+> | `docs/NODE_ACTIVE_MANIFEST.md` | Human-readable active-node view (must align with registry/audit outputs) |
+> | `docs/NODE_SYSTEM_AUDIT.md` | Human-readable rendered audit report derived from canonical audit output |
+>
+> See `docs/MAINTAINER_RUNBOOK.md § Authoritative Governance Sources` for the
+> full precedence order and how to resolve discrepancies.
+
+---
+
 # UFO Galaxy Realization v2 - 系统架构审查报告
 
 **审查日期**: 2026-03-08  
