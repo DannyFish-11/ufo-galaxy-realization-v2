@@ -53,13 +53,16 @@ def main():
     warnings.warn(
         "start_galaxy.py is a compatibility wrapper. "
         "Use 'python unified_launcher.py' (or 'python main.py') as the primary entry point. "
-        "Both dashboards have been merged to port 9000.",
+        "The legacy dashboard surfaces have been demoted; the current runtime direction is the "
+        "desktop tri-state runtime + desktop status board.",
         DeprecationWarning,
         stacklevel=1,
     )
     logger.warning(
         "⚠  COMPATIBILITY WRAPPER: start_galaxy.py delegates to unified_launcher.py. "
-        "Use 'python unified_launcher.py' directly. All services run on port 9000."
+        "Use 'python unified_launcher.py' directly. "
+        "Legacy dashboard surfaces have been demoted (PR-8/PR-4). "
+        "Current runtime direction: desktop tri-state runtime + desktop status board."
     )
 
     import argparse
@@ -67,8 +70,8 @@ def main():
         description="Galaxy Quick Start (compatibility wrapper → unified_launcher.py)"
     )
     parser.add_argument("--desktop", action="store_true", help="Also launch Windows desktop UI")
-    parser.add_argument("--all", action="store_true", help="Dashboard + desktop UI")
-    parser.add_argument("--port", type=int, default=9000, help="Dashboard port (default: 9000)")
+    parser.add_argument("--all", action="store_true", help="All components (desktop UI + API service)")
+    parser.add_argument("--port", type=int, default=9000, help="API service port (default: 9000)")
     # Accept (and ignore) any extra unified_launcher flags so existing scripts don't break
     parser.add_argument("--no-l4", action="store_true", help="Pass through to unified_launcher")
     parser.add_argument("--no-nodes", action="store_true", help="Pass through to unified_launcher")
