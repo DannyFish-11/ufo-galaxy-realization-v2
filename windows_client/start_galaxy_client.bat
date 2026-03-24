@@ -37,19 +37,20 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-REM 检查依赖是否安装
-python -c "import websockets; import pyautogui" >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [INFO] Installing required packages (websockets, pyautogui)...
-    pip install websockets pyautogui
-)
-
-REM 启动客户端
-echo [INFO] Starting Galaxy Windows Client...
-echo [INFO] Connecting to Galaxy Gateway at %GALAXY_GATEWAY_URL%...
-
-python client.py --gateway_url %GALAXY_GATEWAY_URL% --client_id %CLIENT_ID%
-
+REM ── RETIRED — do not proceed ─────────────────────────────────────────────
+echo.
+echo [ERROR] This script invokes windows_client/client.py, which is HARD-DISABLED.
+echo         Running it will raise a RuntimeError immediately.
+echo.
+echo [ACTION] Use the authoritative startup path instead:
+echo            python unified_launcher.py
+echo          or on Windows:
+echo            start.bat
+echo.
+echo         For Windows device ingress use:
+echo            windows_aip_client.py (calls WindowsExecutionArbiter)
+echo         See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture.
+echo.
 endlocal
 pause
-pause
+exit /b 1
