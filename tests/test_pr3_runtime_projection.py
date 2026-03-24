@@ -360,11 +360,14 @@ class TestSerialisationStability:
             "support_model_ids",
             "active_weights",
             "route_reason",
+            "routing_authority",
             "active_device_ids",
             "execution_stage",
             "current_task_summary",
             "execution_intent_summary",
             "governance",
+            "runtime_governance_snapshot",
+            "policy_alignment",
             "timestamp",
         }
         assert expected_keys == set(d.keys())

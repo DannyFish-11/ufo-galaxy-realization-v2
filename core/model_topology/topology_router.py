@@ -16,6 +16,23 @@ Architecture
 ``TopologyRoutePlan`` is the stable output contract consumed by downstream
 layers (execution arbiter, status board projection, etc.).
 
+Canonical Routing Authority
+---------------------------
+**This module is the single canonical model-routing authority.**
+
+- ``TopologyRouter`` is the sole canonical routing decision-maker.
+- ``TopologyRoutePlan`` is the sole canonical routing output contract.
+- All projection-facing routing fields (selected model, selected provider,
+  native multimodal flag, support models, route reason, weights) must be
+  sourced from a ``TopologyRoutePlan`` whenever one is available.
+
+The ``CANONICAL_ROUTING_AUTHORITY`` sentinel (below) identifies this module
+as the authority source for runtime diagnostics and guardrail tooling.
+
+Legacy routing helpers (``MultiLLMRouter``, dashboard provider endpoints,
+top-level ``chosen_model``/``chosen_provider`` UCP keys) are compatibility
+bridges only.  See ``docs/MODEL_ROUTING_AUTHORITY.md`` for the full policy.
+
 Design
 ------
 - Deterministic: same inputs → same output.
@@ -45,6 +62,19 @@ from .routing_policy import (
 from .topology_types import AggregatorRouterHint
 
 logger = logging.getLogger("Galaxy.ModelTopology.TopologyRouter")
+
+# ---------------------------------------------------------------------------
+# Canonical routing authority sentinel
+# ---------------------------------------------------------------------------
+
+#: Identifies this module as the **single canonical model-routing authority**.
+#:
+#: Downstream consumers (projection builders, diagnostics, guardrail tooling)
+#: can compare against this value to assert that routing data originates from
+#: the topology-routing path rather than legacy scattered sources.
+#:
+#: See ``docs/MODEL_ROUTING_AUTHORITY.md`` for the full routing authority policy.
+CANONICAL_ROUTING_AUTHORITY: str = "core.model_topology.topology_router.TopologyRouter"
 
 
 # ---------------------------------------------------------------------------

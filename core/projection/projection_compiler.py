@@ -169,8 +169,13 @@ def build_runtime_projection(
     support_model_ids: List[str] = []
     active_weights: Dict[str, float] = {}
     route_reason: Optional[str] = None
+    # Routing authority: set to CANONICAL_ROUTING_AUTHORITY when populated from
+    # a TopologyRoutePlan; "none" otherwise.
+    routing_authority: str = "none"
 
     if route_plan is not None:
+        from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
+
         if route_plan.primary_model is not None:
             primary_model_id = route_plan.primary_model.node_id
 
@@ -183,6 +188,7 @@ def build_runtime_projection(
         }
 
         route_reason = route_plan.route_reason
+        routing_authority = CANONICAL_ROUTING_AUTHORITY
 
     # --- Device/execution-derived fields -----------------------------------
     active_device_ids: List[str] = []
@@ -239,6 +245,7 @@ def build_runtime_projection(
         support_model_ids=support_model_ids,
         active_weights=active_weights,
         route_reason=route_reason,
+        routing_authority=routing_authority,
         active_device_ids=active_device_ids,
         execution_stage=execution_stage,
         current_task_summary=current_task_summary,

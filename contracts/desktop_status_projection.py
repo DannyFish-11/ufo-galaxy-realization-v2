@@ -294,6 +294,14 @@ class ModelRoutingProjection(BaseModel):
         Whether the selected provider is currently available.
     health_severity
         Health severity for the model/routing block.
+    routing_authority_source
+        Identifies which source populated the routing fields.
+        ``"topology_router"`` — fields sourced from a canonical
+        ``TopologyRoutePlan`` (``ucp["topology_route_plan"]`` block).
+        ``"legacy_ucp_keys"`` — fields assembled from legacy/compat UCP
+        keys (``chosen_model``, ``chosen_provider``, ``multimodal_route``).
+        ``"none"`` — no routing data was available.
+        Consumers should prefer ``"topology_router"`` as the canonical source.
     """
 
     selected_provider: Optional[str] = Field(
@@ -327,6 +335,15 @@ class ModelRoutingProjection(BaseModel):
     health_severity: ProjectionHealthSeverity = Field(
         default=ProjectionHealthSeverity.unknown,
         description="Health severity for the model/routing block.",
+    )
+    routing_authority_source: str = Field(
+        default="none",
+        description=(
+            "Identifies which source populated the routing fields. "
+            "'topology_router' = canonical TopologyRoutePlan path; "
+            "'legacy_ucp_keys' = legacy/compat UCP keys; "
+            "'none' = no routing data available."
+        ),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -809,30 +826,85 @@ def _build_perception_projection(
 
 
 def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjection:
-    """Build the model/routing sub-projection from the unified control plan."""
-    chosen_model = _safe_str(ucp.get("chosen_model"))
-    chosen_provider = _safe_str(ucp.get("chosen_provider"))
-    is_native_mm = _safe_bool(ucp.get("is_native_multimodal"))
+    """Build the model/routing sub-projection from the unified control plan.
 
-    # Support model hints — from support_model_ids in the plan.
-    support_model_hints: List[str] = _safe_list(ucp.get("support_model_ids"))
+    Source priority (highest to lowest):
 
-    route_reason = _safe_str(ucp.get("route_reason"))
-    route_summary: Optional[str] = None
+    1. **CANONICAL** — ``ucp["topology_route_plan"]`` block
+       (``TopologyRoutePlan.to_dict()`` output from
+       ``core.model_topology.topology_router.TopologyRouter``).
+       When present, *all* routing fields are read from this block and
+       ``routing_authority_source`` is set to ``"topology_router"``.
 
-    # Try to get a richer route reason from the multimodal_route block (PR-20).
-    mm_route = _safe_dict(ucp.get("multimodal_route"))
-    if mm_route:
-        if not route_reason:
-            route_reason = _safe_str(mm_route.get("route_reason"))
-        if not is_native_mm:
-            is_native_mm = _safe_bool(mm_route.get("is_native_multimodal"))
-        if not chosen_model:
-            chosen_model = _safe_str(mm_route.get("selected_model"))
-        if not chosen_provider:
-            chosen_provider = _safe_str(mm_route.get("selected_provider"))
+    2. **LEGACY COMPAT** — top-level UCP keys (``chosen_model``,
+       ``chosen_provider``, ``is_native_multimodal``, ``support_model_ids``,
+       ``route_reason``) and the ``multimodal_route`` block (PR-20).
+       ``routing_authority_source`` is set to ``"legacy_ucp_keys"``.
+
+    Consumers should inspect ``routing_authority_source`` to understand which
+    path was taken.  The canonical path (``"topology_router"``) is preferred.
+    """
+    routing_authority_source = "none"
+    chosen_model: Optional[str] = None
+    chosen_provider: Optional[str] = None
+    is_native_mm: bool = False
+    support_model_hints: List[str] = []
+    route_reason: Optional[str] = None
+
+    # -----------------------------------------------------------------------
+    # CANONICAL PATH: topology_route_plan (TopologyRoutePlan.to_dict() output)
+    # Use key-presence check so that an empty topology_route_plan dict still
+    # activates the canonical path (it means "topology router ran, no routes").
+    # -----------------------------------------------------------------------
+    if "topology_route_plan" in ucp:
+        routing_authority_source = "topology_router"
+        topology_plan = _safe_dict(ucp["topology_route_plan"])
+        primary = _safe_dict(topology_plan.get("primary_model"))
+        if primary:
+            chosen_model = _safe_str(primary.get("model_id"))
+            is_native_mm = _safe_bool(primary.get("native_multimodal"))
+        support_nodes = _safe_list(topology_plan.get("support_models"))
+        support_model_hints = [
+            _safe_str(s.get("model_id"))
+            for s in support_nodes
+            if isinstance(s, dict) and _safe_str(s.get("model_id"))
+        ]
+        route_reason = _safe_str(topology_plan.get("route_reason"))
+        # Provider is not part of TopologyRoutePlan.to_dict() directly;
+        # supplement from canonical_model_supply if available (see below).
+
+    else:
+        # -------------------------------------------------------------------
+        # LEGACY COMPAT PATH — top-level UCP keys and multimodal_route block
+        # These paths are compatibility bridges only and must not be treated
+        # as canonical routing authority.  See docs/MODEL_ROUTING_AUTHORITY.md
+        # -------------------------------------------------------------------
+        chosen_model = _safe_str(ucp.get("chosen_model"))
+        chosen_provider = _safe_str(ucp.get("chosen_provider"))
+        is_native_mm = _safe_bool(ucp.get("is_native_multimodal"))
+
+        # Support model hints — from support_model_ids in the plan.
+        support_model_hints = _safe_list(ucp.get("support_model_ids"))
+
+        route_reason = _safe_str(ucp.get("route_reason"))
+
+        # Try to get a richer route reason from the multimodal_route block (PR-20).
+        mm_route = _safe_dict(ucp.get("multimodal_route"))
+        if mm_route:
+            if not route_reason:
+                route_reason = _safe_str(mm_route.get("route_reason"))
+            if not is_native_mm:
+                is_native_mm = _safe_bool(mm_route.get("is_native_multimodal"))
+            if not chosen_model:
+                chosen_model = _safe_str(mm_route.get("selected_model"))
+            if not chosen_provider:
+                chosen_provider = _safe_str(mm_route.get("selected_provider"))
+
+        if chosen_model or chosen_provider or route_reason:
+            routing_authority_source = "legacy_ucp_keys"
 
     # Build a compact route summary for display.
+    route_summary: Optional[str] = None
     if chosen_provider and chosen_model:
         mm_flag = " [native-MM]" if is_native_mm else ""
         route_summary = f"{chosen_provider}/{chosen_model}{mm_flag}"
@@ -867,6 +939,7 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
         route_summary=route_summary,
         provider_available=provider_available,
         health_severity=sev,
+        routing_authority_source=routing_authority_source,
     )
 
 
