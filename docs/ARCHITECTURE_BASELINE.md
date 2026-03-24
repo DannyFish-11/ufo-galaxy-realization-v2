@@ -231,6 +231,13 @@ for dim in scorecard.blocking_dimensions():
 
 ## 8. Next Steps for Implementation Hardening
 
+> **PR-10 (Final Legacy Purge) status**: The dead `_start_desktop()` /
+> `run_ui.py` reference in `start_galaxy.py` has been removed, legacy wrapper
+> scripts have been hardened, and the purge registry
+> (`core/legacy_purge_registry.py`) now serves as the machine-readable audit
+> log.  See `docs/LEGACY_PURGE_HARDENING.md` for the full list of purge
+> decisions.
+
 The following are the current blocking or partial dimensions and their
 recommended next actions:
 
@@ -259,4 +266,6 @@ recommended next actions:
 ---
 
 *This document was produced by PR-010 (Consolidate architecture invariants
-after PR-001 through PR-009).*
+after PR-001 through PR-009) and updated in PR-10 final purge/hardening
+to reflect the legacy purge decisions catalogued in
+`core/legacy_purge_registry.py` and `docs/LEGACY_PURGE_HARDENING.md`.*
