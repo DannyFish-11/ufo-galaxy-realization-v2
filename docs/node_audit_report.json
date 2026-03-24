@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-24T09:03:32Z",
+  "generated_at": "2026-03-24T10:12:47Z",
   "project_root": "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2",
   "nominal_count": 130,
   "runnable_count": 129,
@@ -30,10 +30,7 @@
   "port_conflicts": [],
   "syntax_error_nodes": [],
   "missing_packaging_nodes": [],
-  "hygiene_violation_nodes": [
-    "Node_00_StateMachine",
-    "Node_95_WebRTC_Receiver"
-  ],
+  "hygiene_violation_nodes": [],
   "policy_violation_nodes": [],
   "missing_required_files_nodes": [
     "Node_120_File",
@@ -95,16 +92,14 @@
       "syntax_error": null,
       "has_health_endpoint": true,
       "has_status_endpoint": true,
-      "hygiene_violations": [
-        "__pycache__"
-      ],
+      "hygiene_violations": [],
       "checks": {
         "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
         "runtime_contract": "pass",
-        "hygiene": "fail"
+        "hygiene": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4925,16 +4920,14 @@
       "syntax_error": null,
       "has_health_endpoint": true,
       "has_status_endpoint": true,
-      "hygiene_violations": [
-        "node95.pid"
-      ],
+      "hygiene_violations": [],
       "checks": {
         "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
         "runtime_contract": "pass",
-        "hygiene": "fail"
+        "hygiene": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
