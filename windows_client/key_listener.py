@@ -1,24 +1,34 @@
-import keyboard
-import threading
+# windows_client/key_listener.py — HARD-DISABLED STUB
+#
+# This module has been hard-disabled.  The F12 global hotkey listener was
+# part of the legacy chat/sidebar client (windows_client/main.py), which
+# has been retired.
+#
+# Active Windows direction:
+#   DesktopPresenceRuntime (core/desktop_presence_runtime.py)
+#     — desktop tri-state lifecycle runtime shell (silent/liminal/manifest)
+#   windows_client/status_board_v2/
+#     — canonical read-only desktop status surface, projection-driven
+#
+# See docs/WINDOWS_EXECUTION_PIPELINE.md.
 
-class KeyListener(threading.Thread):
-    def __init__(self, toggle_callback):
-        super().__init__()
-        self.toggle_callback = toggle_callback
-        self.daemon = True
+import warnings
 
-    def run(self):
-        # 监听所有按键，找到 Fn 键的 scan code
-        # 注意：Fn 键通常没有标准的 keycode，需要通过 scan code 捕获
-        # 这里我们用 F12 作为替代，因为 Fn 键很难直接捕获
-        keyboard.add_hotkey('f12', self.toggle_callback)
-        print("Press F12 to toggle the sidebar.")
-        keyboard.wait()
+warnings.warn(
+    "windows_client/key_listener.py is hard-disabled.  "
+    "The F12 hotkey listener was part of the retired legacy sidebar client.  "
+    "Active Windows direction: DesktopPresenceRuntime + status_board_v2.  "
+    "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-if __name__ == '__main__':
-    def test_toggle():
-        print("Sidebar toggled!")
-
-    listener = KeyListener(test_toggle)
-    listener.start()
-    listener.join() # Keep the main thread alive
+raise RuntimeError(
+    "windows_client/key_listener.py is hard-disabled.  "
+    "The F12 hotkey keyboard listener was part of the legacy sidebar/chat client "
+    "which has been retired.\n"
+    "Active Windows direction:\n"
+    "  core/desktop_presence_runtime.py  (DesktopPresenceRuntime tri-state shell)\n"
+    "  windows_client/status_board_v2/   (projection-driven desktop status surface)\n"
+    "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
+)
