@@ -1,7 +1,6 @@
 # Galaxy Node-System Audit Report
 
-> Generated: 2026-03-24T10:40:21Z  
-> Updated: 2026-03-24T11:27:00Z — PR-7 active-node baseline fixes applied  
+> Generated: 2026-03-24T13:34:22Z
 > Authority: `scripts/node_audit.py` — canonical repository governance engine (PR-2)
 
 ## Summary Counts
@@ -17,8 +16,8 @@
 
 | Action | Count | Meaning |
 |--------|-------|---------|
-| **keep** | 148 | Healthy, orchestrated, no issues |
-| **repair** | 0 | Valuable role; fix config/impl before use |
+| **keep** | 124 | Healthy, orchestrated, no issues |
+| **repair** | 1 | Valuable role; fix config/impl before use |
 | **archive** | 2 | Non-trivial but not orchestrated; preserve |
 | **delete** | 3 | Placeholder/stub/duplicate with no unique value |
 
@@ -26,7 +25,7 @@
 
 | Category | Failing | Warning |
 |----------|---------|---------|
-| Source completeness (main.py / fusion_entry.py / README.md) | 0 | 7 |
+| Source completeness (main.py / fusion_entry.py / README.md) | 0 | 1 |
 | Syntax safety (py_compile check) | 0 | 0 |
 | Packaging (Dockerfile / requirements.txt) | 0 | 0 |
 | Registry governance (node_dependencies.json + policy) | 0 | 0 |
@@ -69,18 +68,9 @@ _No hygiene violations detected._
 
 Nodes missing one or more of: `main.py`, `fusion_entry.py`, `README.md`
 
-> **PR-7 status:** All active nodes now satisfy the baseline artifact requirement.
-> The nodes listed below are `optional` or `skip` policy class and are out of scope for this PR.
-
-| Node | Policy | main.py | fusion_entry.py | README.md |
-|------|--------|---------|-----------------|-----------|
-| `Node_120_File` | optional | ✓ | ✓ | ✗ |
-| `Node_121_Web` | optional | ✓ | ✓ | ✗ |
-| `Node_122_Shell` | optional | ✓ | ✓ | ✗ |
-| `Node_124_LinuxDesktopAuto` | optional | ✓ | ✓ | ✗ |
-| `Node_130_AutonomousCoding` | skip | ✓ | ✓ | ✗ |
-| `Node_70_AutonomousLearning` | optional | ✓ | ✓ | ✗ |
-| `Node_71_MultiDeviceCoordination` | optional | ✓ | ✓ | ✗ |
+| Node | main.py | fusion_entry.py | README.md |
+|------|---------|-----------------|-----------|
+| `Node_130_AutonomousCoding` | ✓ | ✓ | ✗ |
 
 ## Nodes with Syntax Errors
 _No syntax errors detected._
@@ -91,9 +81,7 @@ _No syntax errors detected._
 
 ### Nodes Missing `Dockerfile`
 
-_All active nodes now have a `Dockerfile`. (PR-7 fix: Node_26_Discord)_
-
-_Nodes with optional/skip policy are not required to have a Dockerfile at this governance tier._
+_All nodes have a `Dockerfile`._
 
 ### Nodes Missing `requirements.txt`
 
@@ -107,12 +95,125 @@ _All nodes have a `requirements.txt`._
 | `optional` | 29 | 29 | 0 | 0 |
 | `skip` | 6 | 6 | 0 | 0 |
 
+## Optional-Node Governance (PR-8)
+
+> **Optional nodes** are a deliberate governance state: registered in
+> `node_dependencies.json` with `startup_policy: optional`, started if
+> available (startup failure does not abort the system), and on a tracked
+> path to promotion to `active`.
+
+### Optional-Node Counts
+
+| Category | Count |
+|----------|-------|
+| Total optional nodes | **29** |
+| Baseline: **pass** (all optional-baseline checks green) | 29 |
+| Baseline: **partial** (some checks warn) | 0 |
+| Baseline: **fail** (one or more checks failing) | 0 |
+| Promotion gap: **ready** (all active-grade checks pass) | 29 |
+| Promotion gap: **near_ready** (≤1 gap to active) | 0 |
+| Promotion gap: **not_ready** (≥2 gaps to active) | 0 |
+
+### Optional-Baseline Minimum Requirements
+
+An optional node must satisfy the following to be considered well-governed:
+
+| Check | Requirement |
+|-------|-------------|
+| `registry_present` | Entry in `node_dependencies.json` with `startup_policy: optional` |
+| `has_main_py` | `main.py` exists |
+| `has_fusion_entry` | `fusion_entry.py` exists |
+| `syntax_ok` | `main.py` / `fusion_entry.py` pass `py_compile` |
+| `has_readme` | `README.md` exists (describability requirement) |
+| `hygiene_clean` | No runtime-artifact violations in node root |
+
+### Optional-Node Baseline Status
+
+| Node | Baseline | Promotion | reg | main | fusion | syn | readme | hyg | docker | req | health | status |
+|------|----------|-----------|-----|------|--------|-----|--------|-----|--------|-----|--------|--------|
+| `Node_107_FunctionCalling` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_108_MetaCognition` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_109_ProactiveSensing` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_114_DocumentIntelligence` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_115_PluginManager` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_116_ExternalToolWrapper` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_117_OpenCode` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_118_NodeFactory` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_119_BenchmarkEval` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_120_File` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_121_Web` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_122_Shell` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_124_LinuxDesktopAuto` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_60_ReinforcementLearning` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_63_FuzzyLogicEngine` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_70_AutonomousLearning` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_71_MultiDeviceCoordination` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_75_DataPipeline` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_76_AlertManager` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_77_TaskScheduler` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_78_DataValidator` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_86_SpeechProcessor` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_87_ImageAnalysis` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_88_WorkflowEngine` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_89_APIGateway` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_93_VideoProcessor` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_94_AudioAnalysis` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_98_MultimodalFusion` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_99_EmbeddingService` | **pass** | ready | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+**Baseline column key:** ✓=pass · ✗=fail · ~=warn · ?=unknown
+
+**Promotion columns** (docker, req, health, status) show gaps that must be
+closed before a node is eligible for `optional → active` promotion.
+
+### Promotion-Ready Optional Nodes
+
+These nodes meet all active-grade promotion-gap checks and may be candidates
+for `optional → active` promotion after governance review:
+
+- `Node_107_FunctionCalling`
+- `Node_108_MetaCognition`
+- `Node_109_ProactiveSensing`
+- `Node_114_DocumentIntelligence`
+- `Node_115_PluginManager`
+- `Node_116_ExternalToolWrapper`
+- `Node_117_OpenCode`
+- `Node_118_NodeFactory`
+- `Node_119_BenchmarkEval`
+- `Node_120_File`
+- `Node_121_Web`
+- `Node_122_Shell`
+- `Node_124_LinuxDesktopAuto`
+- `Node_60_ReinforcementLearning`
+- `Node_63_FuzzyLogicEngine`
+- `Node_70_AutonomousLearning`
+- `Node_71_MultiDeviceCoordination`
+- `Node_75_DataPipeline`
+- `Node_76_AlertManager`
+- `Node_77_TaskScheduler`
+- `Node_78_DataValidator`
+- `Node_86_SpeechProcessor`
+- `Node_87_ImageAnalysis`
+- `Node_88_WorkflowEngine`
+- `Node_89_APIGateway`
+- `Node_93_VideoProcessor`
+- `Node_94_AudioAnalysis`
+- `Node_98_MultimodalFusion`
+- `Node_99_EmbeddingService`
+
+### Optional Nodes with Baseline Gaps
+
+These nodes have at least one failing optional-baseline check and need
+remediation before they can be considered well-governed optional nodes:
+
+_All optional nodes meet the optional baseline._
+
 ## Node Inventory
 
 | Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |
 |------|-------|-------|------|--------|------|--------|-----|-----|-----|-----|----|-----|
 | `Node_00_StateMachine` | 390 | core | 8000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_01_OneAPI` | 687 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_01_OneAPI` | 721 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_02_Tasker` | 316 | core | 8002 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_03_SecretVault` | 324 | core | 8003 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_04_Router` | 480 | core | 8004 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -143,11 +244,11 @@ _All nodes have a `requirements.txt`._
 | `Node_118_NodeFactory` | 613 | development | 8118 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_119_BenchmarkEval` | 430 | development | 8119 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_11_GitHub` | 303 | development | 8011 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_120_File` | 748 | development | 8120 | optional | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_121_Web` | 561 | development | 8121 | optional | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_122_Shell` | 552 | development | 8122 | optional | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_120_File` | 748 | development | 8120 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_121_Web` | 561 | development | 8121 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_122_Shell` | 552 | development | 8122 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_123_Calendar` | 223 | development | 8123 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_124_LinuxDesktopAuto` | 456 | extended | 8124 | optional | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_124_LinuxDesktopAuto` | 456 | extended | 8124 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_125_MediaGen` | 409 | extended | 8125 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_126_AgentSwarm` | 981 | extended | 8126 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_127_BambuLab` | 172 | extended | 8127 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -211,8 +312,8 @@ _All nodes have a `requirements.txt`._
 | `Node_67_HealthMonitor` | 654 | extended | 8067 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_68_Security` | 428 | extended | 8068 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_69_BackupRestore` | 759 | extended | 8069 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_70_AutonomousLearning` | 503 | academic | 8070 | optional | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_71_MultiDeviceCoordination` | 846 | extended | 8071 | optional | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_70_AutonomousLearning` | 503 | academic | 8070 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_71_MultiDeviceCoordination` | 846 | extended | 8071 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_72_KnowledgeBase` | 414 | extended | 8072 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_73_Learning` | 389 | extended | 8073 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_74_DigitalTwin` | 403 | extended | 8074 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |

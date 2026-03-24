@@ -160,14 +160,14 @@ Any legacy code path that is still callable must:
 | Policy | Count | Meaning | Launcher behaviour |
 |--------|-------|---------|-------------------|
 | `active` | 95 | Healthy, orchestrated | Started unconditionally |
-| `optional` | 29 | Valid role, config-drift resolved (PR-7) | Started if available; failure does not abort system |
+| `optional` | 29 | Deliberate governed state (PR-8) | Started if available; failure does not abort system |
 | `skip` | 6 | Archived / deleted / stub | **Never started** |
 
 ### Startup policy state machine
 
 ```
          optional → active
-    (health check passes; maintainer promotes)
+    (promotion checklist complete; governance review)
          ▲                    │
          │                    │ active → optional
     ┌────────┐                │ (drift / known issue; demote for soft-fail)
@@ -182,14 +182,56 @@ Any legacy code path that is still callable must:
                        └──────┘
 ```
 
+### Optional-node governance (PR-8)
+
+`optional` is a **deliberate governance state**.  Every optional node is expected
+to meet the optional-node minimum baseline and is tracked toward `active`.
+
+**Optional-node minimum baseline** (all must pass):
+
+| Check | Requirement |
+|-------|-------------|
+| `registry_present` | In `node_dependencies.json` with `startup_policy: "optional"` |
+| `has_main_py` | `main.py` exists |
+| `has_fusion_entry` | `fusion_entry.py` exists |
+| `syntax_ok` | Entry files pass `py_compile` |
+| `has_readme` | `README.md` exists |
+| `hygiene_clean` | No runtime artifacts in node root |
+
+**Promotion-gap checks** (tracked; required before promoting to `active`):
+
+| Check | Requirement |
+|-------|-------------|
+| `has_dockerfile` | `Dockerfile` present |
+| `has_requirements` | `requirements.txt` present |
+| `has_health_endpoint` | `/health` endpoint declared in `main.py` |
+| `has_status_endpoint` | `/status` endpoint declared in `main.py` |
+
+Run the audit to see per-node optional baseline and promotion-gap status:
+
+```bash
+python scripts/node_audit.py
+# See docs/NODE_SYSTEM_AUDIT.md §Optional-Node Governance for the full table
+```
+
+See `docs/NODE_ACTIVE_MANIFEST.md §Optional-Node Governance` for the complete
+optional-node list, baseline status, and the formal promotion checklist.
+
 ### Promote a node from `optional` → `active`
 
-1. Verify the node starts cleanly and passes its health check.
-2. Confirm `/health` and `/status` endpoints respond correctly.
-3. Change `startup_policy` in `node_dependencies.json` from `"optional"` to `"active"`.
-4. Update the counts table in `docs/NODE_ACTIVE_MANIFEST.md`.
-5. Run `python scripts/validate_runtime.py` to confirm no regressions.
-6. Open a PR and include the health-check evidence in the PR description.
+Use the full promotion checklist in `docs/NODE_ACTIVE_MANIFEST.md`.
+
+Summary:
+
+1. Confirm all optional-baseline checks pass in the audit report.
+2. Confirm all promotion-gap checks pass (Dockerfile, requirements.txt, /health, /status).
+3. Verify the node starts cleanly and `/health` + `/status` respond over HTTP.
+4. Confirm no open issues blocking promotion.
+5. Change `startup_policy` in `node_dependencies.json` from `"optional"` to `"active"`.
+6. Update counts table in `docs/NODE_ACTIVE_MANIFEST.md`.
+7. Run `python scripts/node_audit.py` to regenerate the audit report.
+8. Run `python scripts/validate_runtime.py` to confirm no regressions.
+9. Open a PR with health-check evidence in the description.
 
 ### Demote a node from `active` → `optional`
 
@@ -212,9 +254,6 @@ Any legacy code path that is still callable must:
 - The registry entry is retained for audit traceability.
 - A skipped node's code directory may still exist on disk; it is not deleted automatically.
 - To resurrect a skipped node, open a dedicated PR with a full implementation review and change `startup_policy` back to `"optional"` initially.
-
----
-
 ## 6. How to Validate the System
 
 ### Quick validation (no live services needed)
@@ -396,9 +435,14 @@ python scripts/validate_ports.py
 
 | Tier | Required files | Additional requirements |
 |------|---------------|------------------------|
-| **Baseline** (any non-skip node) | `main.py`, `fusion_entry.py`, `README.md` | — |
-| **Active** (`startup_policy: active`) | above + `requirements.txt`, `Dockerfile` | `/health` + `/status` endpoints; entry in `node_dependencies.json` with port |
-| **Optional** (`startup_policy: optional`) | above + `requirements.txt`, `Dockerfile` | Same contract as Active; startup failure does not abort system |
+| **Baseline** (any non-skip node) | `main.py`, `fusion_entry.py`, `README.md` | Syntax-clean; hygiene-clean; in `node_dependencies.json` |
+| **Optional** (`startup_policy: optional`) | same as Baseline | PR-8 optional baseline checks must pass; startup failure does not abort system |
+| **Active** (`startup_policy: active`) | above + `requirements.txt`, `Dockerfile` | `/health` + `/status` endpoints; packaging complete; promotion checklist done |
+
+> **PR-8 clarification:** The `optional` contract is weaker than `active`.  Optional nodes
+> are **not** required to have Dockerfile, requirements.txt, or runtime-contract endpoints
+> as part of the baseline — these are tracked as promotion-gap checks.
+> See `docs/NODE_ACTIVE_MANIFEST.md §Optional-Node Governance` for the full optional baseline.
 
 See `CONTRIBUTING.md § Canonical Node Contract` for the full specification.
 | New docs | `docs/` |
@@ -483,4 +527,4 @@ git commit -m "chore: remove committed runtime artifact <name>"
 
 ---
 
-*Last updated: PR-6 — Node Registry Normalization & Startup Policy State Machine.*
+*Last updated: PR-8 — Optional-Node Governance & Promotion Workflow.*
