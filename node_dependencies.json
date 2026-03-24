@@ -28,7 +28,8 @@
       "priority": 1,
       "dependencies": [],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_00_StateMachine"
+      "description": "Auto-generated config for Node_00_StateMachine",
+      "startup_policy": "active"
     },
     "Node_01_OneAPI": {
       "port": 7995,
@@ -36,7 +37,8 @@
       "priority": 1,
       "dependencies": [],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_01_OneAPI"
+      "description": "Auto-generated config for Node_01_OneAPI",
+      "startup_policy": "active"
     },
     "Node_02_Tasker": {
       "port": 8002,
@@ -46,7 +48,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_02_Tasker"
+      "description": "Auto-generated config for Node_02_Tasker",
+      "startup_policy": "active"
     },
     "Node_03_SecretVault": {
       "port": 8003,
@@ -56,7 +59,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_03_SecretVault"
+      "description": "Auto-generated config for Node_03_SecretVault",
+      "startup_policy": "active"
     },
     "Node_04_Router": {
       "port": 8004,
@@ -66,7 +70,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_04_Router"
+      "description": "Auto-generated config for Node_04_Router",
+      "startup_policy": "active"
     },
     "Node_05_Auth": {
       "port": 8005,
@@ -76,7 +81,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_05_Auth"
+      "description": "Auto-generated config for Node_05_Auth",
+      "startup_policy": "active"
     },
     "Node_06_Filesystem": {
       "port": 8006,
@@ -86,7 +92,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_06_Filesystem"
+      "description": "Auto-generated config for Node_06_Filesystem",
+      "startup_policy": "active"
     },
     "Node_07_Git": {
       "port": 8007,
@@ -96,7 +103,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_07_Git"
+      "description": "Auto-generated config for Node_07_Git",
+      "startup_policy": "active"
     },
     "Node_08_Fetch": {
       "port": 8008,
@@ -113,7 +121,8 @@
         "async_requests",
         "rate_limiting",
         "caching"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_09_Sandbox": {
       "port": 7996,
@@ -123,7 +132,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_09_Sandbox"
+      "description": "Auto-generated config for Node_09_Sandbox",
+      "startup_policy": "active"
     },
     "Node_10_Slack": {
       "port": 8010,
@@ -139,7 +149,8 @@
         "channel_management",
         "event_listening",
         "file_upload"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_11_GitHub": {
       "port": 8011,
@@ -155,7 +166,8 @@
         "issue_tracking",
         "pr_operations",
         "webhook_handling"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_12_Postgres": {
       "port": 8012,
@@ -165,7 +177,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_12_Postgres"
+      "description": "Auto-generated config for Node_12_Postgres",
+      "startup_policy": "active"
     },
     "Node_13_SQLite": {
       "port": 8013,
@@ -175,7 +188,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_13_SQLite"
+      "description": "Auto-generated config for Node_13_SQLite",
+      "startup_policy": "active"
     },
     "Node_14_FFmpeg": {
       "port": 8014,
@@ -185,7 +199,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_14_FFmpeg"
+      "description": "Auto-generated config for Node_14_FFmpeg",
+      "startup_policy": "active"
     },
     "Node_15_OCR": {
       "port": 8015,
@@ -201,7 +216,8 @@
         "pdf_ocr",
         "multi_language",
         "image_preprocessing"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_16_Email": {
       "port": 8016,
@@ -211,7 +227,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_16_Email"
+      "description": "Auto-generated config for Node_16_Email",
+      "startup_policy": "active"
     },
     "Node_17_EdgeTTS": {
       "port": 8017,
@@ -227,7 +244,8 @@
         "multi_voice",
         "ssml_support",
         "audio_streaming"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_18_DeepL": {
       "port": 8018,
@@ -237,7 +255,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_18_DeepL"
+      "description": "Auto-generated config for Node_18_DeepL",
+      "startup_policy": "active"
     },
     "Node_19_Crypto": {
       "port": 8019,
@@ -247,7 +266,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_19_Crypto"
+      "description": "Auto-generated config for Node_19_Crypto",
+      "startup_policy": "active"
     },
     "Node_20_Qdrant": {
       "port": 8020,
@@ -257,7 +277,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_20_Qdrant"
+      "description": "Auto-generated config for Node_20_Qdrant",
+      "startup_policy": "active"
     },
     "Node_21_Notion": {
       "port": 8021,
@@ -267,7 +288,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_21_Notion"
+      "description": "Auto-generated config for Node_21_Notion",
+      "startup_policy": "active"
     },
     "Node_22_BraveSearch": {
       "port": 8022,
@@ -277,7 +299,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_22_BraveSearch"
+      "description": "Auto-generated config for Node_22_BraveSearch",
+      "startup_policy": "active"
     },
     "Node_123_Calendar": {
       "port": 8123,
@@ -287,7 +310,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_123_Calendar"
+      "description": "Auto-generated config for Node_123_Calendar",
+      "startup_policy": "active"
     },
     "Node_23_Time": {
       "port": 9000,
@@ -297,7 +321,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_23_Time"
+      "description": "Auto-generated config for Node_23_Time",
+      "startup_policy": "active"
     },
     "Node_24_Weather": {
       "port": 8024,
@@ -307,7 +332,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_24_Weather"
+      "description": "Auto-generated config for Node_24_Weather",
+      "startup_policy": "active"
     },
     "Node_25_GoogleSearch": {
       "port": 8025,
@@ -323,7 +349,8 @@
         "image_search",
         "result_parsing",
         "safe_search"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_28_Reserved": {
       "port": 8028,
@@ -423,7 +450,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_33_ADB"
+      "description": "Auto-generated config for Node_33_ADB",
+      "startup_policy": "active"
     },
     "Node_34_Scrcpy": {
       "port": 8034,
@@ -433,7 +461,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_34_Scrcpy"
+      "description": "Auto-generated config for Node_34_Scrcpy",
+      "startup_policy": "active"
     },
     "Node_35_AppleScript": {
       "port": 8035,
@@ -449,7 +478,8 @@
         "app_control",
         "system_events",
         "ui_scripting"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_36_UIAWindows": {
       "port": 8036,
@@ -459,7 +489,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_36_UIAWindows"
+      "description": "Auto-generated config for Node_36_UIAWindows",
+      "startup_policy": "active"
     },
     "Node_37_LinuxDBus": {
       "port": 8037,
@@ -474,7 +505,8 @@
         "dbus_communication",
         "service_discovery",
         "desktop_notifications"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_38_BLE": {
       "port": 8038,
@@ -490,7 +522,8 @@
         "ble_connection",
         "gatt_operations",
         "notifications"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_39_SSH": {
       "port": 8039,
@@ -500,7 +533,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_39_SSH"
+      "description": "Auto-generated config for Node_39_SSH",
+      "startup_policy": "active"
     },
     "Node_40_SFTP": {
       "port": 8040,
@@ -516,7 +550,8 @@
         "file_download",
         "directory_management",
         "ssh_key_auth"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_41_MQTT": {
       "port": 8041,
@@ -526,7 +561,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_41_MQTT"
+      "description": "Auto-generated config for Node_41_MQTT",
+      "startup_policy": "active"
     },
     "Node_42_CANbus": {
       "port": 8042,
@@ -541,7 +577,8 @@
         "can_communication",
         "message_filtering",
         "protocol_support"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_43_MAVLink": {
       "port": 8043,
@@ -551,7 +588,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_43_MAVLink"
+      "description": "Auto-generated config for Node_43_MAVLink",
+      "startup_policy": "active"
     },
     "Node_44_NFC": {
       "port": 8044,
@@ -567,7 +605,8 @@
         "tag_writing",
         "ndef_support",
         "device_pairing"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_45_DesktopAuto": {
       "port": 8045,
@@ -577,7 +616,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_45_DesktopAuto"
+      "description": "Auto-generated config for Node_45_DesktopAuto",
+      "startup_policy": "active"
     },
     "Node_46_Camera": {
       "port": 8046,
@@ -593,7 +633,8 @@
         "video_recording",
         "live_streaming",
         "camera_control"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_47_Audio": {
       "port": 8047,
@@ -609,7 +650,8 @@
         "audio_playback",
         "format_conversion",
         "audio_effects"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_125_MediaGen": {
       "port": 8125,
@@ -619,7 +661,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_125_MediaGen"
+      "description": "Auto-generated config for Node_125_MediaGen",
+      "startup_policy": "active"
     },
     "Node_48_Serial": {
       "port": 9001,
@@ -635,7 +678,8 @@
         "device_connection",
         "data_transfer",
         "protocol_handling"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_49_OctoPrint": {
       "port": 8049,
@@ -645,7 +689,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_49_OctoPrint"
+      "description": "Auto-generated config for Node_49_OctoPrint",
+      "startup_policy": "active"
     },
     "Node_50_Transformer": {
       "port": 8050,
@@ -655,7 +700,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_50_Transformer"
+      "description": "Auto-generated config for Node_50_Transformer",
+      "startup_policy": "active"
     },
     "Node_51_QuantumDispatcher": {
       "port": 8051,
@@ -665,7 +711,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_51_QuantumDispatcher"
+      "description": "Auto-generated config for Node_51_QuantumDispatcher",
+      "startup_policy": "active"
     },
     "Node_52_QiskitSimulator": {
       "port": 8052,
@@ -675,7 +722,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_52_QiskitSimulator"
+      "description": "Auto-generated config for Node_52_QiskitSimulator",
+      "startup_policy": "active"
     },
     "Node_53_GraphLogic": {
       "port": 8053,
@@ -685,7 +733,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_53_GraphLogic"
+      "description": "Auto-generated config for Node_53_GraphLogic",
+      "startup_policy": "active"
     },
     "Node_54_SymbolicMath": {
       "port": 8054,
@@ -695,7 +744,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_54_SymbolicMath"
+      "description": "Auto-generated config for Node_54_SymbolicMath",
+      "startup_policy": "active"
     },
     "Node_55_MultiModal": {
       "port": 8055,
@@ -705,7 +755,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Multimodal AI processing node supporting text and image embeddings via transformers"
+      "description": "Multimodal AI processing node supporting text and image embeddings via transformers",
+      "startup_policy": "active"
     },
     "Node_126_AgentSwarm": {
       "port": 8126,
@@ -715,7 +766,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_126_AgentSwarm"
+      "description": "Auto-generated config for Node_126_AgentSwarm",
+      "startup_policy": "active"
     },
     "Node_56_Planning": {
       "port": 9002,
@@ -725,7 +777,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_56_Planning"
+      "description": "Auto-generated config for Node_56_Planning",
+      "startup_policy": "active"
     },
     "Node_57_QuantumCloud": {
       "port": 8057,
@@ -735,7 +788,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_57_QuantumCloud"
+      "description": "Auto-generated config for Node_57_QuantumCloud",
+      "startup_policy": "active"
     },
     "Node_58_ModelRouter": {
       "port": 8058,
@@ -745,7 +799,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_58_ModelRouter"
+      "description": "Auto-generated config for Node_58_ModelRouter",
+      "startup_policy": "active"
     },
     "Node_59_CausalInference": {
       "port": 8059,
@@ -755,7 +810,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_59_CausalInference"
+      "description": "Auto-generated config for Node_59_CausalInference",
+      "startup_policy": "active"
     },
     "Node_61_GeometricReasoning": {
       "port": 8061,
@@ -765,7 +821,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_61_GeometricReasoning"
+      "description": "Auto-generated config for Node_61_GeometricReasoning",
+      "startup_policy": "active"
     },
     "Node_62_ProbabilisticProgramming": {
       "port": 8062,
@@ -775,7 +832,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_62_ProbabilisticProgramming"
+      "description": "Auto-generated config for Node_62_ProbabilisticProgramming",
+      "startup_policy": "active"
     },
     "Node_64_Telemetry": {
       "port": 8064,
@@ -785,7 +843,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_64_Telemetry"
+      "description": "Auto-generated config for Node_64_Telemetry",
+      "startup_policy": "active"
     },
     "Node_65_LoggerCentral": {
       "port": 8065,
@@ -795,7 +854,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_65_LoggerCentral"
+      "description": "Auto-generated config for Node_65_LoggerCentral",
+      "startup_policy": "active"
     },
     "Node_66_ConfigManager": {
       "port": 8066,
@@ -811,7 +871,8 @@
         "hot_reload",
         "validation",
         "version_control"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_67_HealthMonitor": {
       "port": 8067,
@@ -821,7 +882,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_67_HealthMonitor"
+      "description": "Auto-generated config for Node_67_HealthMonitor",
+      "startup_policy": "active"
     },
     "Node_68_Security": {
       "port": 8068,
@@ -831,7 +893,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_68_Security"
+      "description": "Auto-generated config for Node_68_Security",
+      "startup_policy": "active"
     },
     "Node_69_BackupRestore": {
       "port": 8069,
@@ -841,7 +904,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_69_BackupRestore"
+      "description": "Auto-generated config for Node_69_BackupRestore",
+      "startup_policy": "active"
     },
     "Node_127_BambuLab": {
       "port": 8127,
@@ -851,7 +915,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_127_BambuLab"
+      "description": "Auto-generated config for Node_127_BambuLab",
+      "startup_policy": "active"
     },
     "Node_128_MediaGen": {
       "port": 8128,
@@ -867,7 +932,8 @@
         "video_generation",
         "audio_synthesis",
         "ai_models"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_72_KnowledgeBase": {
       "port": 8072,
@@ -883,7 +949,8 @@
         "semantic_search",
         "reasoning",
         "graph_queries"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_73_Learning": {
       "port": 8073,
@@ -899,7 +966,8 @@
         "inference",
         "online_learning",
         "model_management"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_74_DigitalTwin": {
       "port": 8074,
@@ -915,7 +983,8 @@
         "simulation",
         "state_sync",
         "prediction"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_79_LocalLLM": {
       "port": 8079,
@@ -925,7 +994,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_79_LocalLLM"
+      "description": "Auto-generated config for Node_79_LocalLLM",
+      "startup_policy": "active"
     },
     "Node_80_MemorySystem": {
       "port": 8080,
@@ -935,7 +1005,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_80_MemorySystem"
+      "description": "Auto-generated config for Node_80_MemorySystem",
+      "startup_policy": "active"
     },
     "Node_81_Orchestrator": {
       "port": 8081,
@@ -945,7 +1016,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_81_Orchestrator"
+      "description": "Auto-generated config for Node_81_Orchestrator",
+      "startup_policy": "active"
     },
     "Node_82_NetworkGuard": {
       "port": 8082,
@@ -955,7 +1027,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_82_NetworkGuard"
+      "description": "Auto-generated config for Node_82_NetworkGuard",
+      "startup_policy": "active"
     },
     "Node_83_NewsAggregator": {
       "port": 8083,
@@ -965,7 +1038,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_83_NewsAggregator"
+      "description": "Auto-generated config for Node_83_NewsAggregator",
+      "startup_policy": "active"
     },
     "Node_84_StockTracker": {
       "port": 8084,
@@ -975,7 +1049,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_84_StockTracker"
+      "description": "Auto-generated config for Node_84_StockTracker",
+      "startup_policy": "active"
     },
     "Node_85_PromptLibrary": {
       "port": 8085,
@@ -985,7 +1060,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_85_PromptLibrary"
+      "description": "Auto-generated config for Node_85_PromptLibrary",
+      "startup_policy": "active"
     },
     "Node_90_MultimodalVision": {
       "port": 8090,
@@ -995,7 +1071,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_90_MultimodalVision"
+      "description": "Auto-generated config for Node_90_MultimodalVision",
+      "startup_policy": "active"
     },
     "Node_91_MultimodalAgent": {
       "port": 8091,
@@ -1005,7 +1082,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_91_MultimodalAgent"
+      "description": "Auto-generated config for Node_91_MultimodalAgent",
+      "startup_policy": "active"
     },
     "Node_92_AutoControl": {
       "port": 8092,
@@ -1015,7 +1093,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_92_AutoControl"
+      "description": "Auto-generated config for Node_92_AutoControl",
+      "startup_policy": "active"
     },
     "Node_95_WebRTC_Receiver": {
       "port": 8095,
@@ -1025,7 +1104,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_95_WebRTC_Receiver"
+      "description": "Auto-generated config for Node_95_WebRTC_Receiver",
+      "startup_policy": "active"
     },
     "Node_96_SmartTransportRouter": {
       "port": 8096,
@@ -1041,7 +1121,8 @@
         "load_balancing",
         "failover",
         "qos_management"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_97_AcademicSearch": {
       "port": 8097,
@@ -1051,7 +1132,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_97_AcademicSearch"
+      "description": "Auto-generated config for Node_97_AcademicSearch",
+      "startup_policy": "active"
     },
     "Node_100_MemorySystem": {
       "port": 8100,
@@ -1061,7 +1143,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_100_MemorySystem"
+      "description": "Auto-generated config for Node_100_MemorySystem",
+      "startup_policy": "active"
     },
     "Node_101_CodeEngine": {
       "port": 8101,
@@ -1071,7 +1154,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_101_CodeEngine"
+      "description": "Auto-generated config for Node_101_CodeEngine",
+      "startup_policy": "active"
     },
     "Node_102_DebugOptimize": {
       "port": 8102,
@@ -1081,7 +1165,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_102_DebugOptimize"
+      "description": "Auto-generated config for Node_102_DebugOptimize",
+      "startup_policy": "active"
     },
     "Node_103_KnowledgeGraph": {
       "port": 8103,
@@ -1091,7 +1176,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_103_KnowledgeGraph"
+      "description": "Auto-generated config for Node_103_KnowledgeGraph",
+      "startup_policy": "active"
     },
     "Node_104_AgentCPM": {
       "port": 8104,
@@ -1101,7 +1187,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_104_AgentCPM"
+      "description": "Auto-generated config for Node_104_AgentCPM",
+      "startup_policy": "active"
     },
     "Node_105_UnifiedKnowledgeBase": {
       "port": 8105,
@@ -1111,7 +1198,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_105_UnifiedKnowledgeBase"
+      "description": "Auto-generated config for Node_105_UnifiedKnowledgeBase",
+      "startup_policy": "active"
     },
     "Node_106_GitHubFlow": {
       "port": 8106,
@@ -1121,7 +1209,8 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_106_GitHubFlow"
+      "description": "Auto-generated config for Node_106_GitHubFlow",
+      "startup_policy": "active"
     },
     "Node_110_SmartOrchestrator": {
       "port": 7997,
@@ -1134,7 +1223,8 @@
         "Node_103_KnowledgeGraph"
       ],
       "optional_dependencies": [],
-      "description": "智能任务编排引擎 - 动态任务分解、并行执行、自适应优化"
+      "description": "智能任务编排引擎 - 动态任务分解、并行执行、自适应优化",
+      "startup_policy": "active"
     },
     "Node_111_ContextManager": {
       "port": 7998,
@@ -1147,7 +1237,8 @@
         "Node_100_MemorySystem"
       ],
       "optional_dependencies": [],
-      "description": "上下文管理引擎 - 跨会话持久化、用户画像、智能检索"
+      "description": "上下文管理引擎 - 跨会话持久化、用户画像、智能检索",
+      "startup_policy": "active"
     },
     "Node_112_SelfHealing": {
       "port": 7999,
@@ -1160,7 +1251,8 @@
         "Node_73_Learning"
       ],
       "optional_dependencies": [],
-      "description": "节点自愈引擎 - 异常检测、自动诊断、自动修复、故障预测"
+      "description": "节点自愈引擎 - 异常检测、自动诊断、自动修复、故障预测",
+      "startup_policy": "active"
     },
     "Node_113_AndroidVLM": {
       "port": 8113,
@@ -1169,7 +1261,8 @@
       ],
       "priority": 40,
       "group": "enhancement",
-      "description": "Android GUI 理解引擎（VLM + 无障碍服务）"
+      "description": "Android GUI 理解引擎（VLM + 无障碍服务）",
+      "startup_policy": "active"
     },
     "Node_26_Discord": {
       "port": 8023,
@@ -1187,7 +1280,8 @@
         "guild_info",
         "add_reaction",
         "webhook_send"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_27_SmartHome": {
       "port": 8027,
@@ -1204,7 +1298,8 @@
         "ha_service_call",
         "ha_states",
         "device_registry"
-      ]
+      ],
+      "startup_policy": "active"
     },
     "Node_60_ReinforcementLearning": {
       "port": 8060,
@@ -1640,6 +1735,30 @@
       "repair": "Valuable role; config drift resolved; marked optional until fully verified",
       "archive": "Non-trivial stub preserved for reference; excluded from active startup",
       "delete": "Placeholder with no unique value; excluded from active startup"
+    }
+  },
+  "_pr6_policy_normalization": {
+    "pr": "PR-6",
+    "description": "Normalize node registry fields and formalize startup policy state machine",
+    "change": "All 95 previously-implicit active nodes now carry an explicit startup_policy: \"active\" field. The registry is now fully normalized: every node entry has an explicit startup_policy.",
+    "policy_counts": {
+      "active": 95,
+      "optional": 29,
+      "skip": 6,
+      "total": 130
+    },
+    "state_machine": {
+      "states": [
+        "active",
+        "optional",
+        "skip"
+      ],
+      "transitions": {
+        "optional -> active": "Node passes integration test and health check; maintainer updates field in node_dependencies.json",
+        "active -> optional": "Node develops a known issue or config drift; maintainer demotes to allow soft-fail startup",
+        "active -> skip": "Node is retired, archived, or identified as a stub with no unique value",
+        "optional -> skip": "Repair attempt abandoned; node archived or deleted"
+      }
     }
   }
 }
