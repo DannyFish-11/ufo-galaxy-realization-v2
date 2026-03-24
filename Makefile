@@ -8,6 +8,7 @@
 #   test:fast    — pytest smoke suite (-m "not slow"), fast CI gate
 #   contract     — protobuf stub generation + proto lint
 #   quick-verify — run the 10-min local minimal-stack smoke script
+#   governance   — run all CI governance checks locally (mirrors node-governance.yml)
 #   help         — show this help
 #
 # Usage:
@@ -46,6 +47,7 @@ help:
 	@echo "  test:fast     Fast smoke tests (not slow)"
 	@echo "  contract      Generate protobuf stubs + proto lint"
 	@echo "  quick-verify  10-min local minimal-stack smoke"
+	@echo "  governance    Run all CI governance checks locally"
 	@echo "  ─────────────────────────────────────────────────────"
 	@echo ""
 
@@ -94,3 +96,16 @@ quick-verify:
 install-dev:
 	$(PIP) install -r requirements.txt -r requirements-dev.txt
 	@echo "✓ Dev dependencies installed."
+
+# ── Governance (mirrors the node-governance CI workflow) ──────────────────
+.PHONY: governance
+governance:
+	@echo "→ [1/4] Canonical node audit (strict mode)..."
+	$(PYTHON) scripts/node_audit.py --print-summary --strict
+	@echo "→ [2/4] Repository hygiene check..."
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_repo_hygiene.py
+	@echo "→ [3/4] Runtime structural validation..."
+	$(PYTHON) scripts/validate_runtime.py
+	@echo "→ [4/4] Governance unit tests..."
+	$(PYTEST) tests/test_pr6_node_audit.py tests/test_pr8_optional_governance.py tests/test_repo_hygiene.py -v --tb=short
+	@echo "✓ All governance checks passed."

@@ -527,4 +527,70 @@ git commit -m "chore: remove committed runtime artifact <name>"
 
 ---
 
-*Last updated: PR-8 — Optional-Node Governance & Promotion Workflow.*
+## 10. CI Governance Gates
+
+The `.github/workflows/node-governance.yml` workflow runs automatically on
+every push to `main` and on every pull request.  It enforces the canonical
+governance checks so that regressions cannot merge silently.
+
+### Jobs in the workflow
+
+| Job | Script | Fails on |
+|-----|--------|----------|
+| **Canonical Node Audit** | `scripts/node_audit.py --strict` | Port conflicts, invalid `startup_policy` values, registry drift (config entry without on-disk directory), syntax errors in active node entry files |
+| **Repository Hygiene** | `scripts/check_repo_hygiene.py` | Any committed runtime artifacts (`*.pid`, `*.pyc`, `__pycache__`, `*.db` in `nodes/`, etc.) |
+| **Runtime Structural Validation** | `scripts/validate_runtime.py` | Startup-path incoherence, unimportable authority chain, node-registry inconsistency, missing critical docs |
+| **Governance Unit Tests** | `pytest tests/test_pr6_node_audit.py tests/test_pr8_optional_governance.py tests/test_repo_hygiene.py` | Any test failure in the governance test suite |
+
+### Running governance checks locally
+
+Run the exact same checks as CI with a single command:
+
+```bash
+make governance
+```
+
+Or run individual checks:
+
+```bash
+# Canonical node audit (strict — exits 1 on critical failures)
+python scripts/node_audit.py --print-summary --strict
+
+# Repository hygiene (exits 1 on any violation)
+PYTHONDONTWRITEBYTECODE=1 python scripts/check_repo_hygiene.py
+
+# Runtime structural validation (exits 1 on FAIL results)
+python scripts/validate_runtime.py
+
+# Governance-focused unit tests
+python -m pytest tests/test_pr6_node_audit.py \
+  tests/test_pr8_optional_governance.py \
+  tests/test_repo_hygiene.py -v --tb=short
+```
+
+### What counts as governance-critical (`--strict` in node audit)
+
+| Finding | Field in report | Why critical |
+|---------|-----------------|--------------|
+| Port conflict | `port_conflicts` | Two nodes claim the same port — deployment breaks |
+| Invalid `startup_policy` | `policy_violation_nodes` | Registry corruption — launcher behaviour undefined |
+| Config entry without on-disk dir | `in_config_not_on_disk` | Registry drift — dead entry references phantom node |
+| Syntax error in entry file | `syntax_error_nodes` | Active node cannot be imported — runtime crash |
+
+Non-critical findings (missing packaging files, optional-node promotion gaps,
+etc.) appear in the reports and are visible in CI output, but they do **not**
+fail the pipeline unless they escalate to one of the above categories.
+
+### Audit report artifacts
+
+After every CI run the `node-audit` job uploads:
+
+- `docs/node_audit_report.json` — machine-readable full audit
+- `docs/NODE_SYSTEM_AUDIT.md`   — human-readable Markdown summary
+
+These are available under the **Artifacts** section of the workflow run in
+GitHub Actions.
+
+---
+
+*Last updated: PR-9 — CI Governance Gates.*

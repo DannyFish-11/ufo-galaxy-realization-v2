@@ -182,6 +182,51 @@ python scripts/verify_capability_registry.py
 - Open a pull request targeting `main`
 - All CI checks must pass before merging
 
+## CI Governance Gates
+
+Every pull request automatically runs the **Node Governance** workflow
+(`.github/workflows/node-governance.yml`).  This workflow fails CI for
+governance-critical regressions before they reach `main`.
+
+### What the workflow checks
+
+| Job | What it enforces |
+|-----|-----------------|
+| **Canonical Node Audit** | No port conflicts, no invalid `startup_policy` values, no registry drift, no syntax errors in active node entry files |
+| **Repository Hygiene** | No forbidden runtime artifacts committed (PID files, bytecode, `__pycache__`, runtime databases in `nodes/`, etc.) |
+| **Runtime Structural Validation** | Startup-path coherence, authority chain importable, node registry consistent, critical docs present |
+| **Governance Unit Tests** | Tests in `test_pr6_node_audit.py`, `test_pr8_optional_governance.py`, `test_repo_hygiene.py` all pass |
+
+### Running the same checks locally
+
+Before pushing, you can reproduce the full governance check suite with one
+command:
+
+```bash
+make governance
+```
+
+Or step by step:
+
+```bash
+# 1. Canonical node audit — exits 1 on critical failures
+python scripts/node_audit.py --print-summary --strict
+
+# 2. Repository hygiene — exits 1 on any violation
+PYTHONDONTWRITEBYTECODE=1 python scripts/check_repo_hygiene.py
+
+# 3. Runtime structural validation — exits 1 on FAIL results
+python scripts/validate_runtime.py
+
+# 4. Governance unit tests
+python -m pytest tests/test_pr6_node_audit.py \
+  tests/test_pr8_optional_governance.py \
+  tests/test_repo_hygiene.py -v --tb=short
+```
+
+See `docs/MAINTAINER_RUNBOOK.md § CI Governance Gates` for a detailed
+explanation of every failure category and how to resolve common issues.
+
 ## Repository Hygiene Policy
 
 ### What must never be committed
