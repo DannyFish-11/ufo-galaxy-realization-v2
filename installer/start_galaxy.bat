@@ -78,14 +78,27 @@ if not exist ".env" (
     exit /b 1
 )
 
+:: ══════════════════════════════════════════════════════════════
+:: NOTICE: installer/start_galaxy.bat — LEGACY INSTALLER SCRIPT
+:: This script previously started services individually by invoking:
+::   galaxy_main_loop_l4.py  (retired — now managed by unified_launcher.py)
+::   windows_client/main.py  (retired — legacy F12 sidebar client)
+::   dashboard/app.py        (retired — superseded by unified web UI)
+::
+:: All modes now delegate to the authoritative startup path:
+::   python unified_launcher.py
+:: or the top-level wrapper:
+::   start.bat  (in the repository root)
+:: ══════════════════════════════════════════════════════════════
+
 :: 启动模式选择
 echo ╔══════════════════════════════════════════════════════════╗
 echo ║                    请选择启动模式                        ║
 echo ╠══════════════════════════════════════════════════════════╣
 echo ║  [1]  完整模式  - 启动所有服务（推荐）                   ║
-echo ║  [2]  轻量模式  - 仅启动核心服务                         ║
+echo ║  [2]  最小模式  - 仅启动核心服务                         ║
 echo ║  [3]  开发模式  - 启动带调试信息                         ║
-echo ║  [4]  客户端    - 仅启动 Windows 客户端                  ║
+echo ║  [4]  客户端    - [已停用，见下方说明]                   ║
 echo ║  [5]  退出                                               ║
 echo ╚══════════════════════════════════════════════════════════╝
 echo.
@@ -101,56 +114,44 @@ goto invalid
 :full_mode
 echo.
 echo   [>>] 完整模式                       启动中...
-echo   [1/4] Galaxy Gateway               启动中...
-start /b python galaxy_gateway/main.py
-timeout /t 2 >nul
-echo   [2/4] L4 主循环                    启动中...
-start /b python galaxy_main_loop_l4.py
-timeout /t 2 >nul
-echo   [3/4] Windows 客户端               启动中...
-start /b python windows_client/main.py
-timeout /t 2 >nul
-echo   [4/4] Dashboard                    启动中...
-start /b python dashboard/app.py
+echo   [>>] 权威入口: unified_launcher.py
 echo.
-echo   [OK] 所有服务                       已启动
-echo   [i]  提示                           按 Ctrl+C 停止所有服务
-echo.
-goto wait
+python unified_launcher.py
+goto end
 
 :lite_mode
 echo.
-echo   [>>] 轻量模式                       启动中...
-echo   [1/2] Galaxy Gateway               启动中...
-start /b python galaxy_gateway/main.py
-timeout /t 2 >nul
-echo   [2/2] Windows 客户端               启动中...
-start /b python windows_client/main.py
+echo   [>>] 最小模式                       启动中...
+echo   [>>] 权威入口: unified_launcher.py --minimal
 echo.
-echo   [OK] 核心服务                       已启动
-goto wait
+python unified_launcher.py --minimal
+goto end
 
 :dev_mode
 echo.
 echo   [>>] 开发模式                       启动中...
 set DEBUG=1
 set LOG_LEVEL=DEBUG
-echo   [1/3] Galaxy Gateway (调试)        启动中...
-start cmd /k "python galaxy_gateway/main.py"
-timeout /t 2 >nul
-echo   [2/3] L4 主循环 (调试)             启动中...
-start cmd /k "python galaxy_main_loop_l4.py"
-timeout /t 2 >nul
-echo   [3/3] Windows 客户端 (调试)        启动中...
-start cmd /k "python windows_client/main.py"
+echo   [>>] 权威入口: unified_launcher.py
 echo.
-echo   [OK] 开发模式                       已启动（各服务在独立窗口）
+python unified_launcher.py
 goto end
 
 :client_mode
 echo.
-echo   [>>] 客户端模式                     启动中...
-python windows_client/main.py
+echo   [X]  Windows 客户端独立模式已停用
+echo.
+echo        windows_client/main.py (旧 F12 侧边栏客户端) 已退役。
+echo        windows_client/client.py 已硬禁用 (会抛出 RuntimeError)。
+echo.
+echo        当前 Windows 方向:
+echo          DesktopPresenceRuntime + windows_client/status_board_v2/
+echo.
+echo        如需启动完整系统，请选择选项 [1] 或直接运行:
+echo          python unified_launcher.py
+echo        或顶层包装器:
+echo          ..\start.bat
+echo.
 goto end
 
 :invalid

@@ -55,25 +55,18 @@ if %errorLevel% equ 0 (
 )
 
 echo.
-echo [4/4] 启动客户端...
+echo [ERROR] This script targets windows_client/main.py (the legacy F12 sidebar
+echo         client), which is RETIRED and no longer the active Windows direction.
 echo.
-echo ========================================
-echo    客户端已启动！
-echo ========================================
+echo [ACTION] Use the authoritative startup path instead:
+echo            start.bat                (Windows bootstrap launcher)
+echo          or:
+echo            python unified_launcher.py
 echo.
-echo 按 F12 键唤醒/隐藏侧边栏
-echo 在侧边栏中输入命令并按回车发送
+echo         Active Windows direction:
+echo            DesktopPresenceRuntime + windows_client/status_board_v2/
+echo         See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture.
 echo.
-echo 示例命令:
-echo   - 打印一个警告标志
-echo   - 生成一个关于宇宙探索的视频
-echo   - 优化从北京到上海的路线
-echo.
-echo 按 Ctrl+C 停止客户端
-echo ========================================
-echo.
-
-cd /d "%~dp0"
-python main.py
-
+endlocal
 pause
+exit /b 1
