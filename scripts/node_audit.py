@@ -4,6 +4,7 @@ scripts/node_audit.py — Canonical Node-System Audit Tool
 =========================================================
 
 PR-6: Node-system audit and canonical inventory establishment.
+PR-2 (upgrade): Promoted to the repository-wide canonical governance engine.
 
 Produces a machine-readable JSON audit report and a human-readable Markdown
 summary that together answer:
@@ -13,16 +14,22 @@ summary that together answer:
   3. How many are clearly orchestrated (present in node_dependencies.json)?
   4. Which nodes should be kept / repaired / archived / deleted?
 
+Governance check categories (PR-2):
+  - source_completeness   : main.py / fusion_entry.py / README.md presence
+  - syntax_safety         : py_compile check for Python entry files
+  - packaging             : Dockerfile / requirements.txt presence
+  - registry_governance   : node_dependencies.json presence + policy validity
+  - runtime_contract      : /health and /status endpoint declarations (static)
+  - hygiene               : absence of runtime-generated artifacts (pid/log/tmp…)
+
 Cross-checks:
   - node_dependencies.json  ← authoritative startup config
   - nodes/ directory        ← filesystem reality
   - launcher/node_startup.py ← runtime discovery logic (get_all_nodes)
 
 Usage:
-    python scripts/node_audit.py [--output PATH]
-
-    --output PATH   Write JSON report to PATH instead of the default
-                    docs/node_audit_report.json.
+    python scripts/node_audit.py [--output PATH] [--markdown PATH]
+                                  [--print-summary]
 """
 
 from __future__ import annotations
@@ -30,12 +37,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import py_compile
 import re
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Project root resolution
@@ -43,6 +52,46 @@ from typing import Dict, List, Optional
 
 _SCRIPT_DIR = Path(__file__).parent.absolute()
 PROJECT_ROOT = _SCRIPT_DIR.parent
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_RUNNABLE_MIN_LINES = 100   # nodes with fewer lines are classified as stubs
+_RICH_MIN_LINES     = 300   # nodes with ≥300 lines are considered well-implemented
+
+# Valid startup_policy values in node_dependencies.json
+_VALID_STARTUP_POLICIES = frozenset({"active", "optional", "skip"})
+
+# Patterns that indicate a /health endpoint declaration in source
+_HEALTH_PATTERNS = re.compile(
+    r'["\'/]health["\']|def health_check|def health\b',
+    re.IGNORECASE,
+)
+# Patterns that indicate a /status endpoint declaration in source
+_STATUS_PATTERNS = re.compile(
+    r'["\'/]status["\']|def status_check|def status\b',
+    re.IGNORECASE,
+)
+
+# File suffixes / names that are runtime-generated artifacts (hygiene check)
+_HYGIENE_SUFFIXES = frozenset({".pid", ".log", ".tmp", ".lock", ".cache"})
+_HYGIENE_NAMES   = frozenset({"__pycache__"})
+
+# Check category keys (used in NodeAuditEntry.checks dict)
+CHECK_SOURCE_COMPLETENESS  = "source_completeness"
+CHECK_SYNTAX_SAFETY        = "syntax_safety"
+CHECK_PACKAGING            = "packaging"
+CHECK_REGISTRY_GOVERNANCE  = "registry_governance"
+CHECK_RUNTIME_CONTRACT     = "runtime_contract"
+CHECK_HYGIENE              = "hygiene"
+
+# Check result values
+CHECK_PASS    = "pass"
+CHECK_WARN    = "warn"
+CHECK_FAIL    = "fail"
+CHECK_UNKNOWN = "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -82,14 +131,31 @@ class NodeAuditEntry:
     main_py_lines:    int = 0
 
     # Config signals
-    in_node_dependencies: bool = False
-    config_port:          Optional[int] = None
-    config_group:         Optional[str] = None
-    config_priority:      Optional[int] = None
-    config_deps:          List[str] = field(default_factory=list)
+    in_node_dependencies:  bool = False
+    config_port:           Optional[int] = None
+    config_group:          Optional[str] = None
+    config_priority:       Optional[int] = None
+    config_deps:           List[str] = field(default_factory=list)
+    config_startup_policy: Optional[str] = None   # PR-2: explicit startup_policy value
+    policy_valid:          Optional[bool] = None  # PR-2: True/False/None (not in config)
 
     # Docker / orchestration signals
     in_docker_compose:    bool = False
+
+    # PR-2: Syntax safety
+    syntax_ok:         Optional[bool] = None   # None = not applicable (no main.py)
+    fusion_syntax_ok:  Optional[bool] = None   # None = not applicable (no fusion_entry.py)
+    syntax_error:      Optional[str]  = None   # first error message if syntax fails
+
+    # PR-2: Runtime contract (static inspection only)
+    has_health_endpoint: bool = False
+    has_status_endpoint: bool = False
+
+    # PR-2: Hygiene violations (runtime-generated artifacts found in node dir)
+    hygiene_violations: List[str] = field(default_factory=list)
+
+    # PR-2: Per-category check results (pass/fail/warn/unknown)
+    checks: Dict[str, str] = field(default_factory=dict)
 
     # Classification
     tier:   str = NodeTier.NOMINAL
@@ -128,6 +194,14 @@ class NodeAuditReport:
     numbering_gaps:        List[int] = field(default_factory=list)
     missing_main_py:       List[str] = field(default_factory=list)
 
+    # PR-2: Failure category aggregates
+    port_conflicts:           List[str] = field(default_factory=list)
+    syntax_error_nodes:       List[str] = field(default_factory=list)
+    missing_packaging_nodes:  List[str] = field(default_factory=list)
+    hygiene_violation_nodes:  List[str] = field(default_factory=list)
+    policy_violation_nodes:   List[str] = field(default_factory=list)
+    missing_required_files_nodes: List[str] = field(default_factory=list)
+
     nodes: List[NodeAuditEntry] = field(default_factory=list)
 
     def to_dict(self) -> Dict:
@@ -139,10 +213,6 @@ class NodeAuditReport:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_RUNNABLE_MIN_LINES = 100   # nodes with fewer lines are classified as stubs
-_RICH_MIN_LINES     = 300   # nodes with ≥300 lines are considered well-implemented
-
 
 def _load_node_dependencies(project_root: Path) -> Dict:
     """Load and return the 'nodes' dict from node_dependencies.json."""
@@ -167,6 +237,125 @@ def _load_docker_compose_nodes(project_root: Path) -> set:
         return set(re.findall(r"Node_\d+_[A-Za-z]+", content))
     except Exception:
         return set()
+
+
+def _check_syntax(py_path: Path) -> Tuple[bool, Optional[str]]:
+    """
+    Compile-check a Python file.  Returns (ok, error_message).
+    Uses py_compile with a throwaway destination to avoid side-effects.
+    """
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pyc", delete=True) as tmp:
+            py_compile.compile(str(py_path), cfile=tmp.name, doraise=True)
+        return True, None
+    except py_compile.PyCompileError as exc:
+        return False, str(exc)
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _check_runtime_contract(main_py: Path) -> Tuple[bool, bool]:
+    """
+    Static inspection of main.py for /health and /status endpoint declarations.
+    Returns (has_health, has_status).
+    """
+    try:
+        content = main_py.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return False, False
+    return bool(_HEALTH_PATTERNS.search(content)), bool(_STATUS_PATTERNS.search(content))
+
+
+def _check_hygiene(node_dir: Path) -> List[str]:
+    """
+    Return a list of runtime-generated artifact paths found directly inside
+    the node directory (non-recursive scan).
+    """
+    violations: List[str] = []
+    try:
+        for child in node_dir.iterdir():
+            if child.name in _HYGIENE_NAMES:
+                violations.append(child.name)
+            elif child.suffix in _HYGIENE_SUFFIXES:
+                violations.append(child.name)
+    except Exception:
+        pass
+    return sorted(violations)
+
+
+def _detect_port_conflicts(node_deps: Dict) -> List[str]:
+    """
+    Detect duplicate port assignments across all nodes in node_dependencies.json.
+    Returns human-readable conflict descriptions.
+    """
+    port_owners: Dict[int, List[str]] = {}
+    for name, cfg in node_deps.items():
+        port = cfg.get("port")
+        if port is not None:
+            port_owners.setdefault(int(port), []).append(name)
+    conflicts = []
+    for port, owners in sorted(port_owners.items()):
+        if len(owners) > 1:
+            conflicts.append(f"port {port}: {', '.join(sorted(owners))}")
+    return conflicts
+
+
+def _build_checks(entry: NodeAuditEntry) -> Dict[str, str]:
+    """Derive per-category check results for a node entry."""
+    checks: Dict[str, str] = {}
+
+    # --- source_completeness ---
+    if not entry.has_main_py:
+        checks[CHECK_SOURCE_COMPLETENESS] = CHECK_FAIL
+    elif entry.has_fusion_entry and entry.has_readme:
+        checks[CHECK_SOURCE_COMPLETENESS] = CHECK_PASS
+    else:
+        checks[CHECK_SOURCE_COMPLETENESS] = CHECK_WARN
+
+    # --- syntax_safety ---
+    if entry.syntax_ok is None and entry.fusion_syntax_ok is None:
+        checks[CHECK_SYNTAX_SAFETY] = CHECK_UNKNOWN
+    elif entry.syntax_ok is False or entry.fusion_syntax_ok is False:
+        checks[CHECK_SYNTAX_SAFETY] = CHECK_FAIL
+    else:
+        checks[CHECK_SYNTAX_SAFETY] = CHECK_PASS
+
+    # --- packaging ---
+    if entry.has_dockerfile and entry.has_requirements:
+        checks[CHECK_PACKAGING] = CHECK_PASS
+    elif entry.has_dockerfile or entry.has_requirements:
+        checks[CHECK_PACKAGING] = CHECK_WARN
+    else:
+        checks[CHECK_PACKAGING] = CHECK_FAIL
+
+    # --- registry_governance ---
+    if not entry.in_node_dependencies:
+        checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_FAIL
+    elif entry.policy_valid is False:
+        checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_FAIL
+    elif entry.config_startup_policy is None:
+        # In config, no explicit policy → treated as "active" (valid but implicit)
+        checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_PASS
+    else:
+        checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_PASS
+
+    # --- runtime_contract ---
+    if not entry.has_main_py:
+        checks[CHECK_RUNTIME_CONTRACT] = CHECK_UNKNOWN
+    elif entry.has_health_endpoint and entry.has_status_endpoint:
+        checks[CHECK_RUNTIME_CONTRACT] = CHECK_PASS
+    elif entry.has_health_endpoint or entry.has_status_endpoint:
+        checks[CHECK_RUNTIME_CONTRACT] = CHECK_WARN
+    else:
+        checks[CHECK_RUNTIME_CONTRACT] = CHECK_WARN
+
+    # --- hygiene ---
+    if entry.hygiene_violations:
+        checks[CHECK_HYGIENE] = CHECK_FAIL
+    else:
+        checks[CHECK_HYGIENE] = CHECK_PASS
+
+    return checks
 
 
 def _classify(entry: NodeAuditEntry) -> None:
@@ -256,6 +445,9 @@ def run_audit(project_root: Path) -> NodeAuditReport:
         d.name for d in node_dirs if not (d / "main.py").exists()
     )
 
+    # PR-2: Port conflict detection across registry entries
+    report.port_conflicts = _detect_port_conflicts(node_deps)
+
     # Duplicate role detection (same suffix → same role)
     role_map: Dict[str, List[str]] = {}
     for name in nodes_on_disk:
@@ -283,6 +475,7 @@ def run_audit(project_root: Path) -> NodeAuditReport:
     for node_dir in node_dirs:
         name = node_dir.name
         main_py = node_dir / "main.py"
+        fusion_py = node_dir / "fusion_entry.py"
         cfg = node_deps.get(name, {})
 
         lines = 0
@@ -297,13 +490,45 @@ def run_audit(project_root: Path) -> NodeAuditReport:
             if f.suffix == ".py" and f.name not in ("main.py", "__init__.py", "fusion_entry.py")
         ]
 
+        # PR-2: Startup policy
+        raw_policy = cfg.get("startup_policy") if cfg else None
+        policy_valid: Optional[bool] = None
+        if cfg:  # node is in config
+            if raw_policy is None:
+                # Implicit "active" — treated as valid
+                policy_valid = True
+            else:
+                policy_valid = raw_policy in _VALID_STARTUP_POLICIES
+
+        # PR-2: Syntax checks
+        syntax_ok: Optional[bool] = None
+        fusion_syntax_ok: Optional[bool] = None
+        syntax_error: Optional[str] = None
+        if main_py.exists():
+            syntax_ok, err = _check_syntax(main_py)
+            if not syntax_ok and syntax_error is None:
+                syntax_error = err
+        if fusion_py.exists():
+            fusion_syntax_ok, err = _check_syntax(fusion_py)
+            if not fusion_syntax_ok and syntax_error is None:
+                syntax_error = err
+
+        # PR-2: Runtime contract (static)
+        has_health = False
+        has_status = False
+        if main_py.exists():
+            has_health, has_status = _check_runtime_contract(main_py)
+
+        # PR-2: Hygiene
+        hygiene_violations = _check_hygiene(node_dir)
+
         entry = NodeAuditEntry(
             name=name,
             path=str(node_dir.relative_to(project_root)),
             has_main_py=main_py.exists(),
             has_dockerfile=(node_dir / "Dockerfile").exists(),
             has_readme=(node_dir / "README.md").exists(),
-            has_fusion_entry=(node_dir / "fusion_entry.py").exists(),
+            has_fusion_entry=fusion_py.exists(),
             has_requirements=(node_dir / "requirements.txt").exists(),
             extra_py_files=sorted(extra_py),
             main_py_lines=lines,
@@ -312,10 +537,19 @@ def run_audit(project_root: Path) -> NodeAuditReport:
             config_group=cfg.get("group") if cfg else None,
             config_priority=cfg.get("priority") if cfg else None,
             config_deps=list(cfg.get("dependencies", [])) if cfg else [],
+            config_startup_policy=raw_policy,
+            policy_valid=policy_valid,
             in_docker_compose=name in docker_nodes,
+            syntax_ok=syntax_ok,
+            fusion_syntax_ok=fusion_syntax_ok,
+            syntax_error=syntax_error,
+            has_health_endpoint=has_health,
+            has_status_endpoint=has_status,
+            hygiene_violations=hygiene_violations,
         )
 
         _classify(entry)
+        entry.checks = _build_checks(entry)
         entries.append(entry)
 
     report.nodes = entries
@@ -329,6 +563,26 @@ def run_audit(project_root: Path) -> NodeAuditReport:
     report.repair_count       = sum(1 for e in entries if e.action == RecommendedAction.REPAIR)
     report.archive_count      = sum(1 for e in entries if e.action == RecommendedAction.ARCHIVE)
     report.delete_count       = sum(1 for e in entries if e.action == RecommendedAction.DELETE)
+
+    # PR-2: Failure category aggregates
+    report.syntax_error_nodes = sorted(
+        e.name for e in entries
+        if e.syntax_ok is False or e.fusion_syntax_ok is False
+    )
+    report.missing_packaging_nodes = sorted(
+        e.name for e in entries
+        if not e.has_dockerfile and not e.has_requirements
+    )
+    report.hygiene_violation_nodes = sorted(
+        e.name for e in entries if e.hygiene_violations
+    )
+    report.policy_violation_nodes = sorted(
+        e.name for e in entries if e.policy_valid is False
+    )
+    report.missing_required_files_nodes = sorted(
+        e.name for e in entries
+        if not e.has_main_py or not e.has_fusion_entry or not e.has_readme
+    )
 
     return report
 
@@ -344,16 +598,21 @@ def _render_markdown(report: NodeAuditReport) -> str:
     a("# Galaxy Node-System Audit Report")
     a("")
     a(f"> Generated: {report.generated_at}")
+    a("> Authority: `scripts/node_audit.py` — canonical repository governance engine (PR-2)")
     a("")
+
+    # ── Summary Counts ──────────────────────────────────────────────────────
     a("## Summary Counts")
     a("")
     a("| Metric | Count |")
     a("|--------|-------|")
-    a(f"| Nominal node directories | {report.nominal_count} |")
+    a(f"| Total nodes audited | **{report.nominal_count}** |")
     a(f"| Runnable nodes (has main.py + ≥{_RUNNABLE_MIN_LINES} lines) | {report.runnable_count} |")
     a(f"| Orchestrated nodes (in node_dependencies.json) | {report.orchestrated_count} |")
     a(f"| Stub nodes (main.py < {_RUNNABLE_MIN_LINES} lines) | {report.stub_count} |")
     a("")
+
+    # ── Recommended Actions ─────────────────────────────────────────────────
     a("## Recommended Actions")
     a("")
     a("| Action | Count | Meaning |")
@@ -364,7 +623,31 @@ def _render_markdown(report: NodeAuditReport) -> str:
     a(f"| **delete** | {report.delete_count} | Placeholder/stub/duplicate with no unique value |")
     a("")
 
-    # Config drift
+    # ── Failure Summary by Category (PR-2) ──────────────────────────────────
+    a("## Failure Summary by Category")
+    a("")
+
+    def _category_counts(category: str) -> Tuple[int, int]:
+        fail_n = sum(1 for e in report.nodes if e.checks.get(category) == CHECK_FAIL)
+        warn_n = sum(1 for e in report.nodes if e.checks.get(category) == CHECK_WARN)
+        return fail_n, warn_n
+
+    categories = [
+        (CHECK_SOURCE_COMPLETENESS, "Source completeness (main.py / fusion_entry.py / README.md)"),
+        (CHECK_SYNTAX_SAFETY,       "Syntax safety (py_compile check)"),
+        (CHECK_PACKAGING,           "Packaging (Dockerfile / requirements.txt)"),
+        (CHECK_REGISTRY_GOVERNANCE, "Registry governance (node_dependencies.json + policy)"),
+        (CHECK_RUNTIME_CONTRACT,    "Runtime contract (health / status endpoint)"),
+        (CHECK_HYGIENE,             "Hygiene (no runtime artifacts)"),
+    ]
+    a("| Category | Failing | Warning |")
+    a("|----------|---------|---------|")
+    for cat_key, cat_label in categories:
+        fail_n, warn_n = _category_counts(cat_key)
+        a(f"| {cat_label} | {fail_n} | {warn_n} |")
+    a("")
+
+    # ── Config Drift ─────────────────────────────────────────────────────────
     a("## Config Drift")
     a("")
     a("### Nodes in `node_dependencies.json` but NOT on disk")
@@ -414,27 +697,87 @@ def _render_markdown(report: NodeAuditReport) -> str:
         a("_No gaps in node numbering._")
     a("")
 
-    # Per-node table
+    # ── Port Conflicts (PR-2) ────────────────────────────────────────────────
+    a("## Port Conflicts")
+    if report.port_conflicts:
+        for pc in report.port_conflicts:
+            a(f"- {pc}")
+    else:
+        a("_No port conflicts detected across registry entries._")
+    a("")
+
+    # ── Hygiene Violations (PR-2) ────────────────────────────────────────────
+    a("## Nodes with Hygiene Violations")
+    if report.hygiene_violation_nodes:
+        for n in report.hygiene_violation_nodes:
+            entry = next(e for e in report.nodes if e.name == n)
+            a(f"- `{n}`: {', '.join(entry.hygiene_violations)}")
+    else:
+        a("_No hygiene violations detected._")
+    a("")
+
+    # ── Missing Required Artifacts (PR-2) ────────────────────────────────────
+    a("## Nodes with Missing Required Artifacts")
+    a("")
+    a("Nodes missing one or more of: `main.py`, `fusion_entry.py`, `README.md`")
+    a("")
+    if report.missing_required_files_nodes:
+        a("| Node | main.py | fusion_entry.py | README.md |")
+        a("|------|---------|-----------------|-----------|")
+        for n in report.missing_required_files_nodes:
+            e = next(x for x in report.nodes if x.name == n)
+            a(
+                f"| `{n}` "
+                f"| {'✓' if e.has_main_py else '✗'} "
+                f"| {'✓' if e.has_fusion_entry else '✗'} "
+                f"| {'✓' if e.has_readme else '✗'} |"
+            )
+    else:
+        a("_All nodes have the required source artifacts._")
+    a("")
+
+    # ── Syntax Errors (PR-2) ─────────────────────────────────────────────────
+    a("## Nodes with Syntax Errors")
+    if report.syntax_error_nodes:
+        for n in report.syntax_error_nodes:
+            entry = next(e for e in report.nodes if e.name == n)
+            a(f"- `{n}`: {entry.syntax_error or 'syntax error'}")
+    else:
+        a("_No syntax errors detected._")
+    a("")
+
+    # ── Node Inventory ───────────────────────────────────────────────────────
     a("## Node Inventory")
     a("")
-    a("| Node | Lines | Group | Port | In Config | Tier | Action | Notes |")
-    a("|------|-------|-------|------|-----------|------|--------|-------|")
+    a("| Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |")
+    a("|------|-------|-------|------|--------|------|--------|-----|-----|-----|-----|----|-----|")
+    _icon = {CHECK_PASS: "✓", CHECK_WARN: "~", CHECK_FAIL: "✗", CHECK_UNKNOWN: "?"}
     for e in report.nodes:
-        notes_str = "; ".join(e.notes) if e.notes else ""
+        c = e.checks
+        policy_display = e.config_startup_policy or ("—" if not e.in_node_dependencies else "active")
         a(
             f"| `{e.name}` "
             f"| {e.main_py_lines if e.has_main_py else '—'} "
             f"| {e.config_group or '—'} "
             f"| {e.config_port or '—'} "
-            f"| {'✓' if e.in_node_dependencies else '✗'} "
+            f"| {policy_display} "
             f"| {e.tier} "
             f"| **{e.action}** "
-            f"| {notes_str} |"
+            f"| {_icon.get(c.get(CHECK_SOURCE_COMPLETENESS, CHECK_UNKNOWN), '?')} "
+            f"| {_icon.get(c.get(CHECK_SYNTAX_SAFETY, CHECK_UNKNOWN), '?')} "
+            f"| {_icon.get(c.get(CHECK_PACKAGING, CHECK_UNKNOWN), '?')} "
+            f"| {_icon.get(c.get(CHECK_REGISTRY_GOVERNANCE, CHECK_UNKNOWN), '?')} "
+            f"| {_icon.get(c.get(CHECK_RUNTIME_CONTRACT, CHECK_UNKNOWN), '?')} "
+            f"| {_icon.get(c.get(CHECK_HYGIENE, CHECK_UNKNOWN), '?')} |"
         )
 
     a("")
+    a("**Column key:** src=source_completeness · syn=syntax_safety · pkg=packaging · "
+      "reg=registry_governance · rt=runtime_contract · hyg=hygiene")
+    a("**Icon key:** ✓=pass · ~=warn · ✗=fail · ?=unknown")
+    a("")
     a("---")
-    a("*This report is generated by `scripts/node_audit.py`. "
+    a("*This report is generated by `scripts/node_audit.py` (canonical governance engine). "
       "Re-run after node changes to refresh.*")
 
     return "\n".join(lines)

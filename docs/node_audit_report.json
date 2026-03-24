@@ -1,47 +1,16 @@
 {
-  "generated_at": "2026-03-24T03:27:28Z",
+  "generated_at": "2026-03-24T09:03:32Z",
   "project_root": "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2",
   "nominal_count": 130,
   "runnable_count": 129,
-  "orchestrated_count": 100,
+  "orchestrated_count": 129,
   "stub_count": 1,
-  "keep_count": 94,
-  "repair_count": 31,
+  "keep_count": 123,
+  "repair_count": 2,
   "archive_count": 2,
   "delete_count": 3,
   "in_config_not_on_disk": [],
-  "on_disk_not_in_config": [
-    "Node_107_FunctionCalling",
-    "Node_108_MetaCognition",
-    "Node_109_ProactiveSensing",
-    "Node_114_DocumentIntelligence",
-    "Node_115_PluginManager",
-    "Node_116_ExternalToolWrapper",
-    "Node_117_OpenCode",
-    "Node_118_NodeFactory",
-    "Node_119_BenchmarkEval",
-    "Node_120_File",
-    "Node_121_Web",
-    "Node_122_Shell",
-    "Node_124_LinuxDesktopAuto",
-    "Node_130_AutonomousCoding",
-    "Node_60_ReinforcementLearning",
-    "Node_63_FuzzyLogicEngine",
-    "Node_70_AutonomousLearning",
-    "Node_71_MultiDeviceCoordination",
-    "Node_75_DataPipeline",
-    "Node_76_AlertManager",
-    "Node_77_TaskScheduler",
-    "Node_78_DataValidator",
-    "Node_86_SpeechProcessor",
-    "Node_87_ImageAnalysis",
-    "Node_88_WorkflowEngine",
-    "Node_89_APIGateway",
-    "Node_93_VideoProcessor",
-    "Node_94_AudioAnalysis",
-    "Node_98_MultimodalFusion",
-    "Node_99_EmbeddingService"
-  ],
+  "on_disk_not_in_config": [],
   "reserved_nodes": [
     "Node_28_Reserved",
     "Node_29_Reserved",
@@ -58,6 +27,48 @@
     129
   ],
   "missing_main_py": [],
+  "port_conflicts": [],
+  "syntax_error_nodes": [],
+  "missing_packaging_nodes": [],
+  "hygiene_violation_nodes": [
+    "Node_00_StateMachine",
+    "Node_95_WebRTC_Receiver"
+  ],
+  "policy_violation_nodes": [],
+  "missing_required_files_nodes": [
+    "Node_120_File",
+    "Node_121_Web",
+    "Node_122_Shell",
+    "Node_123_Calendar",
+    "Node_124_LinuxDesktopAuto",
+    "Node_125_MediaGen",
+    "Node_126_AgentSwarm",
+    "Node_127_BambuLab",
+    "Node_128_MediaGen",
+    "Node_130_AutonomousCoding",
+    "Node_26_Discord",
+    "Node_61_GeometricReasoning",
+    "Node_62_ProbabilisticProgramming",
+    "Node_64_Telemetry",
+    "Node_65_LoggerCentral",
+    "Node_66_ConfigManager",
+    "Node_67_HealthMonitor",
+    "Node_68_Security",
+    "Node_69_BackupRestore",
+    "Node_70_AutonomousLearning",
+    "Node_71_MultiDeviceCoordination",
+    "Node_72_KnowledgeBase",
+    "Node_73_Learning",
+    "Node_74_DigitalTwin",
+    "Node_81_Orchestrator",
+    "Node_82_NetworkGuard",
+    "Node_83_NewsAggregator",
+    "Node_84_StockTracker",
+    "Node_85_PromptLibrary",
+    "Node_90_MultimodalVision",
+    "Node_91_MultimodalAgent",
+    "Node_92_AutoControl"
+  ],
   "nodes": [
     {
       "name": "Node_00_StateMachine",
@@ -76,7 +87,25 @@
       "config_group": "core",
       "config_priority": 1,
       "config_deps": [],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [
+        "__pycache__"
+      ],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "fail"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -96,7 +125,23 @@
       "config_group": "core",
       "config_priority": 1,
       "config_deps": [],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -118,7 +163,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -140,7 +201,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -165,7 +242,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -187,7 +280,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -209,7 +318,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -231,7 +356,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -253,7 +394,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -275,7 +432,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -297,7 +470,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -319,7 +508,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -341,7 +546,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -363,7 +584,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -385,7 +622,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -407,7 +660,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -429,7 +698,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -444,17 +729,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 462,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8107,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_108_MetaCognition",
@@ -469,17 +770,33 @@
         "test_metacognition.py"
       ],
       "main_py_lines": 601,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8108,
+      "config_group": "academic",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_109_ProactiveSensing",
@@ -493,17 +810,33 @@
         "server.py"
       ],
       "main_py_lines": 532,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8109,
+      "config_group": "academic",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_10_Slack",
@@ -522,7 +855,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -550,7 +899,23 @@
         "Node_67_HealthMonitor",
         "Node_103_KnowledgeGraph"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -577,7 +942,23 @@
         "Node_73_Learning",
         "Node_100_MemorySystem"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -604,7 +985,23 @@
         "Node_67_HealthMonitor",
         "Node_73_Learning"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -628,7 +1025,23 @@
       "config_deps": [
         "Node_90_MultimodalVision"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -643,17 +1056,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 321,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8114,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_115_PluginManager",
@@ -665,17 +1094,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 322,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8115,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_116_ExternalToolWrapper",
@@ -689,17 +1134,33 @@
         "server.py"
       ],
       "main_py_lines": 498,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8116,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_117_OpenCode",
@@ -713,17 +1174,33 @@
         "server.py"
       ],
       "main_py_lines": 472,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8117,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_118_NodeFactory",
@@ -737,17 +1214,33 @@
         "server.py"
       ],
       "main_py_lines": 613,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8118,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_119_BenchmarkEval",
@@ -759,17 +1252,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 430,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8119,
+      "config_group": "development",
+      "config_priority": 4,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_11_GitHub",
@@ -788,7 +1297,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -803,17 +1328,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 748,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8120,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_121_Web",
@@ -825,17 +1366,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 561,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8121,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_122_Shell",
@@ -847,17 +1404,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 552,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8122,
+      "config_group": "development",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_123_Calendar",
@@ -876,7 +1449,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -891,17 +1480,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 456,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8124,
+      "config_group": "extended",
+      "config_priority": 4,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_125_MediaGen",
@@ -922,7 +1527,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -944,7 +1565,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -968,7 +1605,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -992,7 +1645,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1014,7 +1683,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1029,12 +1714,30 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 90,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8130,
+      "config_group": "development",
+      "config_priority": 4,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "skip",
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "stub",
       "action": "repair",
       "notes": [
@@ -1059,7 +1762,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1081,7 +1800,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1106,7 +1841,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1128,7 +1879,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1150,7 +1917,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1172,7 +1955,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1194,7 +1993,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1216,7 +2031,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1238,7 +2069,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1260,7 +2107,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1282,7 +2145,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1306,7 +2185,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1328,7 +2223,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1350,7 +2261,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": null,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "warn",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "repair",
       "notes": [
@@ -1372,7 +2299,23 @@
       "config_group": "tools",
       "config_priority": 3,
       "config_deps": [],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1394,7 +2337,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": "skip",
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "archive",
       "notes": [
@@ -1418,7 +2377,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": "skip",
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "archive",
       "notes": [
@@ -1442,7 +2417,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": "skip",
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -1466,7 +2457,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": "skip",
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -1490,7 +2497,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": "skip",
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -1516,7 +2539,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1538,7 +2577,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1560,7 +2615,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1584,7 +2655,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1606,7 +2693,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1628,7 +2731,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1650,7 +2769,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1672,7 +2807,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1694,7 +2845,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1716,7 +2883,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1741,7 +2924,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1763,7 +2962,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1787,7 +3002,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1809,7 +3040,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1831,7 +3078,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1853,7 +3116,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1877,7 +3156,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1902,7 +3197,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1924,7 +3235,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1946,7 +3273,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1968,7 +3311,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1990,7 +3349,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2012,7 +3387,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2034,7 +3425,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2056,7 +3463,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2078,7 +3501,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2100,7 +3539,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2115,17 +3570,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 319,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8060,
+      "config_group": "academic",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_61_GeometricReasoning",
@@ -2144,7 +3615,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2166,7 +3653,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2181,17 +3684,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 399,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8063,
+      "config_group": "academic",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_64_Telemetry",
@@ -2210,7 +3729,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2232,7 +3767,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2254,7 +3805,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2276,7 +3843,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2298,7 +3881,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2320,7 +3919,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2335,17 +3950,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 503,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8070,
+      "config_group": "academic",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_71_MultiDeviceCoordination",
@@ -2357,17 +3988,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 846,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8071,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_72_KnowledgeBase",
@@ -2388,7 +4035,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2412,7 +4075,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2436,7 +4115,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2451,17 +4146,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 345,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8075,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_76_AlertManager",
@@ -2473,17 +4184,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 335,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8076,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_77_TaskScheduler",
@@ -2495,17 +4222,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 374,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8077,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_78_DataValidator",
@@ -2517,17 +4260,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 303,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8078,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_79_LocalLLM",
@@ -2546,7 +4305,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2570,7 +4345,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2592,7 +4383,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2614,7 +4421,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2636,7 +4459,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2658,7 +4497,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2680,7 +4535,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2695,17 +4566,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 635,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8086,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_87_ImageAnalysis",
@@ -2717,17 +4604,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 597,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8087,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_88_WorkflowEngine",
@@ -2739,17 +4642,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 597,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8088,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_89_APIGateway",
@@ -2761,17 +4680,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 520,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8089,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_90_MultimodalVision",
@@ -2790,7 +4725,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2812,7 +4763,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2834,7 +4801,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "warn",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2849,17 +4832,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 485,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8093,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_94_AudioAnalysis",
@@ -2871,17 +4870,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 450,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8094,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_95_WebRTC_Receiver",
@@ -2902,7 +4917,25 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": false,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [
+        "node95.pid"
+      ],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "fail"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2924,7 +4957,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2946,7 +4995,23 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
+      "config_startup_policy": null,
+      "policy_valid": true,
       "in_docker_compose": true,
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2961,17 +5026,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 318,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8098,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     },
     {
       "name": "Node_99_EmbeddingService",
@@ -2983,17 +5064,33 @@
       "has_requirements": true,
       "extra_py_files": [],
       "main_py_lines": 317,
-      "in_node_dependencies": false,
-      "config_port": null,
-      "config_group": null,
-      "config_priority": null,
-      "config_deps": [],
+      "in_node_dependencies": true,
+      "config_port": 8099,
+      "config_group": "extended",
+      "config_priority": 3,
+      "config_deps": [
+        "Node_01_OneAPI"
+      ],
+      "config_startup_policy": "optional",
+      "policy_valid": true,
       "in_docker_compose": true,
-      "tier": "runnable",
-      "action": "repair",
-      "notes": [
-        "Not in node_dependencies.json — config drift"
-      ]
+      "syntax_ok": true,
+      "fusion_syntax_ok": true,
+      "syntax_error": null,
+      "has_health_endpoint": true,
+      "has_status_endpoint": true,
+      "hygiene_violations": [],
+      "checks": {
+        "source_completeness": "pass",
+        "syntax_safety": "pass",
+        "packaging": "pass",
+        "registry_governance": "pass",
+        "runtime_contract": "pass",
+        "hygiene": "pass"
+      },
+      "tier": "orchestrated",
+      "action": "keep",
+      "notes": []
     }
   ]
 }
