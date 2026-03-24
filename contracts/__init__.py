@@ -175,6 +175,7 @@ from contracts.mesh_session_coordinator import (
 
 # PR-38: Unified Multi-Device Runtime Projection
 from contracts.multi_device_runtime_projection import (
+    CANONICAL_TOP_LEVEL_PROJECTION,
     MultiDeviceRuntimeProjection,
     RuntimeProjectionDeviceEntry,
     RuntimeProjectionHostEntry,
@@ -193,6 +194,7 @@ from contracts.multi_device_runtime_projection import (
     project_takeovers,
     project_coordinator_state,
     project_merged_results,
+    from_registered_runtime_device as projection_from_registered_runtime_device,
 )
 
 # PR-39: Runtime Recovery and Reconciliation Contract
@@ -379,6 +381,8 @@ __all__ = [
     "update_coordinator_with_merged_result",
     "build_coordinator_summary",
     # PR-38: Unified Multi-Device Runtime Projection
+    # PR-8 consolidation: CANONICAL_TOP_LEVEL_PROJECTION marker and from_registered_runtime_device
+    "CANONICAL_TOP_LEVEL_PROJECTION",
     "MultiDeviceRuntimeProjection",
     "RuntimeProjectionDeviceEntry",
     "RuntimeProjectionHostEntry",
@@ -397,6 +401,7 @@ __all__ = [
     "project_takeovers",
     "project_coordinator_state",
     "project_merged_results",
+    "projection_from_registered_runtime_device",
     # PR-39: Runtime Recovery and Reconciliation Contract
     "RecoveryIncidentType",
     "RecoveryStatus",

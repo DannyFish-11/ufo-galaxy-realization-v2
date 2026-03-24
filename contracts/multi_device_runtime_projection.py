@@ -1,6 +1,14 @@
 """contracts/multi_device_runtime_projection.py
 =================================================
-Unified Multi-Device Runtime Projection Contract — PR-38.
+Unified Multi-Device Runtime Projection Contract — PR-38 / PR-8 consolidation.
+
+**PR-8 canonical closure:** This module is the **sole canonical top-level
+multi-device runtime read projection** for the Galaxy / OpenClawd system.  No
+new top-level multi-device read model should be introduced outside this module.
+Device entries are explicitly anchored on
+:class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice` (the
+canonical single-device read contract) via the
+:func:`from_registered_runtime_device` adapter introduced in PR-8.
 
 This module defines the **canonical Unified Multi-Device Runtime Projection**:
 a single, fully serialisable, read-only contract that aggregates the multi-device
@@ -76,6 +84,24 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+
+# ---------------------------------------------------------------------------
+# PR-8 canonical authority markers
+# ---------------------------------------------------------------------------
+
+#: True-valued sentinel that lets downstream code and audit tooling assert that
+#: this module is the canonical top-level multi-device runtime read projection.
+CANONICAL_TOP_LEVEL_PROJECTION: bool = True
+
+#: Human-readable authority declaration consumed by anti-drift audit scripts.
+__canonical_authority__: str = (
+    "MultiDeviceRuntimeProjection is the sole canonical top-level multi-device "
+    "runtime read projection.  All downstream consumers must read this projection "
+    "rather than assembling cross-runtime state from individual contract modules. "
+    "Device entries are anchored on RegisteredRuntimeDevice (canonical single-device "
+    "read contract).  No parallel top-level multi-device read model should be "
+    "introduced outside this module.  — PR-8 consolidation."
+)
 
 # ---------------------------------------------------------------------------
 # Sub-projection entry contracts
@@ -593,6 +619,73 @@ def project_runtime_devices(
         except Exception:
             pass
     return result
+
+
+def from_registered_runtime_device(device: Any) -> RuntimeProjectionDeviceEntry:
+    """Build a :class:`RuntimeProjectionDeviceEntry` explicitly from a canonical
+    :class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice`.
+
+    This is the **PR-8 canonical adapter**.  It makes the anchoring of device
+    entries on the canonical single-device read contract explicit and auditable.
+    Downstream code that populates projection device entries should prefer this
+    function over raw dict construction.
+
+    The function is intentionally tolerant: it also accepts a ``dict`` with the
+    same field names as ``RegisteredRuntimeDevice``, so callers can pass either
+    a live contract object or a previously serialised ``to_dict()`` payload.
+
+    Parameters
+    ----------
+    device:
+        A :class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice`
+        instance, or a compatible dict produced by
+        ``RegisteredRuntimeDevice.to_dict()``.
+
+    Returns
+    -------
+    RuntimeProjectionDeviceEntry
+        A compact, stable read projection entry anchored on the canonical
+        single-device contract.
+
+    Raises
+    ------
+    ValueError
+        If *device* is ``None`` or cannot be coerced to a valid entry.
+    """
+    if device is None:
+        raise ValueError("device must not be None")
+    d = _safe_dict(device)
+    if not d:
+        raise ValueError(f"Cannot build RuntimeProjectionDeviceEntry from {device!r}")
+
+    # Extract connection state from the canonical connection_summary sub-contract
+    # (RegisteredRuntimeDevice.connection.state) or a flat connection_state field.
+    connection_state = d.get("connection_state")
+    if not connection_state:
+        conn = _safe_dict(d.get("connection") or d.get("connection_summary") or {})
+        connection_state = conn.get("state") or conn.get("connection_state")
+
+    # Extract health_score — RegisteredRuntimeDevice carries this at the top level.
+    health_score = d.get("health_score")
+    if health_score is not None:
+        try:
+            health_score = float(health_score)
+        except (TypeError, ValueError):
+            health_score = None
+
+    return RuntimeProjectionDeviceEntry(
+        device_id=_safe_str(
+            d.get("device_id") or d.get("id"),
+            default=f"dev_{uuid.uuid4().hex[:8]}",
+        ),
+        platform=d.get("platform"),
+        form_factor=d.get("form_factor"),
+        status=d.get("status"),
+        connection_state=connection_state,
+        runtime_capable=bool(d.get("runtime_capable", True)),
+        health_score=health_score,
+        metadata=_safe_dict(d.get("metadata", {})),
+    )
 
 
 def project_runtime_hosts(

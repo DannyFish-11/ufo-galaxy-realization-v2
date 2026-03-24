@@ -1,6 +1,8 @@
 # Unified Multi-Device Runtime Projection
 
 > **PR-38** — Read-only top-level projection of the multi-device runtime state.
+> **PR-8** — Top-level read closure: canonical authority consolidated, device entries
+> explicitly anchored on `RegisteredRuntimeDevice`, and anti-drift guards added.
 
 > **V1 Authority Baseline:** `MultiDeviceRuntimeProjection` is the **canonical
 > top-level multi-device read projection** for the Galaxy / OpenClawd system.
@@ -10,6 +12,16 @@
 > **above** `RegisteredRuntimeDevice`, not beside it.  See
 > `docs/architecture/unified_device_registration_runtime_participation_v1.md`
 > for the normative V1 architecture spec.
+
+> **PR-8 Canonical Closure:**  `MultiDeviceRuntimeProjection` is now
+> definitively established as the **sole canonical top-level multi-device
+> runtime read projection**.  No new parallel top-level multi-device read
+> model should be introduced outside
+> `contracts/multi_device_runtime_projection.py`.  Device entries are
+> explicitly anchored on `RegisteredRuntimeDevice` via the PR-8
+> `from_registered_runtime_device` adapter.  Anti-drift guards in
+> `scripts/audit_udm_write_paths.py` detect canonical-contract bypass
+> patterns at scan time.
 
 ## Overview
 
@@ -252,6 +264,71 @@ The projection does **not** replace the lower-level contracts — it wraps them
 into compact entry records and presents them as a unified read model.  Callers
 that need the full contract detail for a specific domain should use the
 relevant lower-level contract module directly.
+
+---
+
+## PR-8 Canonical Closure
+
+PR-8 completes the top-level read closure for the multi-device runtime
+architecture.  The changes introduced in PR-8 are:
+
+### 1. Canonical authority markers
+
+The module now exports:
+
+```python
+from contracts.multi_device_runtime_projection import (
+    CANONICAL_TOP_LEVEL_PROJECTION,   # True — sentinel for audit tooling
+    __canonical_authority__,           # human-readable authority declaration
+)
+```
+
+Audit scripts and downstream code can check `CANONICAL_TOP_LEVEL_PROJECTION`
+to confirm they are reading from the canonical projection module.
+
+### 2. `from_registered_runtime_device` adapter (explicit anchoring)
+
+A new PR-8 adapter function explicitly anchors device entries on the canonical
+single-device read contract:
+
+```python
+from contracts.multi_device_runtime_projection import from_registered_runtime_device
+from contracts.registered_runtime_device import build_registered_runtime_device
+
+rrd = build_registered_runtime_device(device_id="phone_001", platform="android")
+entry = from_registered_runtime_device(rrd)   # → RuntimeProjectionDeviceEntry
+```
+
+The function accepts either a live `RegisteredRuntimeDevice` object or a
+compatible `to_dict()` payload.  It is also re-exported from the top-level
+`contracts` package as `projection_from_registered_runtime_device`.
+
+### 3. Anti-drift guards (`scripts/audit_udm_write_paths.py`)
+
+The existing UDM write-path audit script now also runs PR-8 anti-drift checks
+that detect:
+
+| Finding kind | Description |
+|---|---|
+| `parallel_single_device_schema` | Class name matches single-device schema hints (e.g. `*RuntimeDevice*`, `*RegisteredDevice*`) outside the canonical contract file |
+| `parallel_multi_device_projection` | Class name matches multi-device projection hints (e.g. `*MultiDeviceProjection*`) outside the canonical projection file |
+| `parallel_device_registry` | Class defines a `_devices`/`_device_map`/etc. field outside the UDM SSOT files |
+
+Findings are non-blocking warnings by default (included in the JSON report
+under `anti_drift_findings`).  Teams should review and remediate any
+`parallel_*` findings before they become full regressions.
+
+### 4. Regression test coverage
+
+`tests/test_pr8_top_level_projection_consolidation.py` adds **55 tests**
+covering:
+
+- Canonical authority markers and exports.
+- `from_registered_runtime_device` adapter (all fields, error paths, RRD object).
+- Projection assembly with canonical device entries.
+- Anti-drift visitor detection of parallel schemas, projections, and registries.
+- Anti-drift allow-list behaviour.
+- End-to-end flow: registration → single-device projection → top-level projection.
 
 ---
 

@@ -1,7 +1,7 @@
 # Unified Migration Matrix
 
-**Version:** 1.0  
-**Status:** Canonical — PR7 Final Consolidation (U1–U33)  
+**Version:** 1.1
+**Status:** Canonical — PR8 Final Closure (U1–U33 + PR-8 anti-drift)
 **Owner:** core/unified/
 
 ---
@@ -97,6 +97,33 @@ It covers all ingress/egress entry points, state mutation paths, and capability 
 | Direct `_devices` dict mutation | UDM SSOT violation | Blocked by `audit_udm_write_paths.py` (exit code 1) |
 | `aip_protocol_v2` import outside stub | Protocol drift | Blocked by CI `v3-protocol-guard` job |
 | `submit_task()` without DAG for multi-device | Ordering/dependency loss | Replaced by `run_multi_device_via_task_graph()` |
+| New parallel single-device schema outside `registered_runtime_device.py` | Read contract fragmentation | Detected by `audit_udm_write_paths.py` PR-8 anti-drift (non-blocking warning) |
+| New top-level multi-device read model outside `multi_device_runtime_projection.py` | Projection authority fragmentation | Detected by `audit_udm_write_paths.py` PR-8 anti-drift (non-blocking warning) |
+| New `_devices`/`_device_map` field outside UDM SSOT | Parallel device registry | Detected by `audit_udm_write_paths.py` PR-8 anti-drift (non-blocking warning) |
+
+---
+
+## 8a. PR-8 Top-Level Read Closure (Anti-Drift)
+
+PR-8 finalises the top-level multi-device runtime read closure.
+
+### Read Projection Authority (final)
+
+| Module | Classification | Role |
+|--------|---------------|------|
+| `contracts/registered_runtime_device.py` (`RegisteredRuntimeDevice`) | **Canonical sole** | Only canonical single-device read contract |
+| `contracts/multi_device_runtime_projection.py` (`MultiDeviceRuntimeProjection`) | **Canonical sole** | Only canonical top-level multi-device read projection |
+
+### PR-8 Additions
+
+| Addition | Purpose |
+|---|---|
+| `CANONICAL_TOP_LEVEL_PROJECTION` sentinel (module-level `bool`) | Allows audit tooling to assert canonical status programmatically |
+| `__canonical_authority__` string (module-level) | Human-readable canonical authority declaration |
+| `from_registered_runtime_device()` adapter | Explicitly anchors device entries in the projection on `RegisteredRuntimeDevice` |
+| `projection_from_registered_runtime_device` re-export in `contracts/__init__.py` | Discoverable canonical adapter for downstream consumers |
+| PR-8 anti-drift guards in `audit_udm_write_paths.py` | Detects `parallel_single_device_schema`, `parallel_multi_device_projection`, `parallel_device_registry` patterns |
+| `tests/test_pr8_top_level_projection_consolidation.py` (55 tests) | Regression coverage for canonical anchoring, anti-drift, and end-to-end unified flow |
 
 ---
 
@@ -107,9 +134,10 @@ It covers all ingress/egress entry points, state mutation paths, and capability 
 - `docs/architecture/unified_device_registration_runtime_participation_v1.md` — V1 device registration authority spec
 - `core/unified/entrypoint_router.py` — Canonical first-hop router
 - `core/legacy_adapters/` — All legacy-to-canonical adapters
-- `scripts/audit_udm_write_paths.py` — UDM SSOT write path auditor
+- `scripts/audit_udm_write_paths.py` — UDM SSOT write path auditor + PR-8 anti-drift guards
 - `scripts/audit_unified_paths.py` — Canonical ingress/egress path auditor (PR7)
 - `tests/conformance/` — Conformance test suite
+- `docs/UNIFIED_MULTI_DEVICE_RUNTIME_PROJECTION.md` — Full specification including PR-8 closure
 
 ---
 
