@@ -153,18 +153,65 @@ Any legacy code path that is still callable must:
 
 ### `startup_policy` values
 
-| Policy | Meaning | Launcher behaviour |
-|--------|---------|-------------------|
-| `active` (95 nodes) | Healthy, orchestrated | Started unconditionally |
-| `optional` (29 nodes) | Valid role, config-drift resolved (PR-7) | Started if available; failure does not abort system |
-| `skip` (6 nodes) | Archived / deleted / stub | **Never started** |
+> **PR-6 normalization**: All 130 registry entries now carry an **explicit**
+> `startup_policy` field.  Implicit defaults are no longer accepted as a
+> governance practice.
+
+| Policy | Count | Meaning | Launcher behaviour |
+|--------|-------|---------|-------------------|
+| `active` | 95 | Healthy, orchestrated | Started unconditionally |
+| `optional` | 29 | Valid role, config-drift resolved (PR-7) | Started if available; failure does not abort system |
+| `skip` | 6 | Archived / deleted / stub | **Never started** |
+
+### Startup policy state machine
+
+```
+         optional → active
+    (health check passes; maintainer promotes)
+         ▲                    │
+         │                    │ active → optional
+    ┌────────┐                │ (drift / known issue; demote for soft-fail)
+    │ active │◄───────────────┘
+    └────────┘
+         │
+         │ active → skip          optional → skip
+         │ (retired / archived)   (repair abandoned)
+         ▼                                ▼
+                       ┌──────┐
+                       │ skip │  (terminal / holding state)
+                       └──────┘
+```
 
 ### Promote a node from `optional` → `active`
 
 1. Verify the node starts cleanly and passes its health check.
-2. Change `startup_policy` in `node_dependencies.json` from `"optional"` to `"active"`.
-3. Update `docs/NODE_ACTIVE_MANIFEST.md` counts.
-4. Run `python scripts/validate_runtime.py` to confirm no regressions.
+2. Confirm `/health` and `/status` endpoints respond correctly.
+3. Change `startup_policy` in `node_dependencies.json` from `"optional"` to `"active"`.
+4. Update the counts table in `docs/NODE_ACTIVE_MANIFEST.md`.
+5. Run `python scripts/validate_runtime.py` to confirm no regressions.
+6. Open a PR and include the health-check evidence in the PR description.
+
+### Demote a node from `active` → `optional`
+
+1. Identify the drift or issue (failing health check, missing dependency, etc.).
+2. Open a tracking issue documenting the problem.
+3. Change `startup_policy` to `"optional"` and update `description` in `node_dependencies.json`.
+4. Update manifest counts in `docs/NODE_ACTIVE_MANIFEST.md`.
+
+### Retire a node (`active` or `optional` → `skip`)
+
+1. Confirm the node has no unique active callers in the orchestration graph.
+2. Change `startup_policy` to `"skip"` in `node_dependencies.json`.
+3. Update `description` to document the reason (archived / deleted / stub).
+4. Keep the registry entry — it serves as audit history.
+5. Update manifest counts in `docs/NODE_ACTIVE_MANIFEST.md`.
+
+### What `skip` means operationally
+
+- The node **is never started** by `launcher/node_startup.py` (`should_skip()` returns `True`).
+- The registry entry is retained for audit traceability.
+- A skipped node's code directory may still exist on disk; it is not deleted automatically.
+- To resurrect a skipped node, open a dedicated PR with a full implementation review and change `startup_policy` back to `"optional"` initially.
 
 ---
 
@@ -315,14 +362,17 @@ Add an entry to `node_dependencies.json`:
 ```json
 "Node_XXX_YourNodeName": {
     "port": XXXX,
-    "startup_policy": "auto",
+    "group": "development",
+    "startup_policy": "optional",
     "dependencies": [],
     "description": "Short human-readable description"
 }
 ```
 
-Valid `startup_policy` values: `"auto"`, `"manual"`, `"optional"`, `"skip"`.
-Only nodes with `"auto"` or `"required"` are started by the unified launcher.
+Valid `startup_policy` values: `"active"`, `"optional"`, `"skip"`.
+New nodes should start as `"optional"` until they have passed integration
+testing and a health-check review.  Promote to `"active"` following the
+procedure in §5.  Use `"skip"` only for stubs or archived entries.
 
 **5. Fill in `README.md`**
 
@@ -347,7 +397,8 @@ python scripts/validate_ports.py
 | Tier | Required files | Additional requirements |
 |------|---------------|------------------------|
 | **Baseline** (any non-skip node) | `main.py`, `fusion_entry.py`, `README.md` | — |
-| **Active** (`startup_policy: auto / required`) | above + `requirements.txt`, `Dockerfile` | `/health` + `/status` endpoints; entry in `node_dependencies.json` with port |
+| **Active** (`startup_policy: active`) | above + `requirements.txt`, `Dockerfile` | `/health` + `/status` endpoints; entry in `node_dependencies.json` with port |
+| **Optional** (`startup_policy: optional`) | above + `requirements.txt`, `Dockerfile` | Same contract as Active; startup failure does not abort system |
 
 See `CONTRIBUTING.md § Canonical Node Contract` for the full specification.
 | New docs | `docs/` |
@@ -432,4 +483,4 @@ git commit -m "chore: remove committed runtime artifact <name>"
 
 ---
 
-*Last updated: PR-4 — canonical node contract and reusable node templates.*
+*Last updated: PR-6 — Node Registry Normalization & Startup Policy State Machine.*

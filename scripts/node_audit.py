@@ -447,8 +447,9 @@ def _build_checks(entry: NodeAuditEntry) -> Dict[str, str]:
     elif entry.policy_valid is False:
         checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_FAIL
     elif entry.config_startup_policy is None:
-        # In config, no explicit policy → treated as "active" (valid but implicit)
-        checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_PASS
+        # PR-6: all registry entries should carry an explicit startup_policy.
+        # An absent field is flagged as WARN to surface any regressions.
+        checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_WARN
     else:
         checks[CHECK_REGISTRY_GOVERNANCE] = CHECK_PASS
 
@@ -608,7 +609,9 @@ def run_audit(project_root: Path) -> NodeAuditReport:
         policy_valid: Optional[bool] = None
         if cfg:  # node is in config
             if raw_policy is None:
-                # Implicit "active" — treated as valid
+                # PR-6: implicit "active" (no explicit field) is treated as
+                # functionally valid but flagged via CHECK_REGISTRY_GOVERNANCE
+                # as WARN to surface regressions against the normalization goal.
                 policy_valid = True
             else:
                 policy_valid = raw_policy in _VALID_STARTUP_POLICIES

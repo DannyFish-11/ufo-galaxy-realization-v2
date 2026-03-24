@@ -1,28 +1,69 @@
 # Galaxy Node Active Manifest
 
-> **PR-7 — Node System Unification**
-> Generated from the PR-6 canonical node audit.
+> **PR-6 — Node Registry Normalization & Startup Policy State Machine**
+> **PR-7 — Node System Unification** (prior PR; PR-6 builds on its audit results)
 
-This document records the **authoritative active-node set** after PR-7 alignment.
-It is the human-readable companion to the machine-readable `node_dependencies.json`
-registry and the `docs/node_audit_report.json` audit output.
+This document records the **authoritative active-node set** and **startup policy
+state machine** after PR-6 registry normalization.  It is the human-readable
+companion to the machine-readable `node_dependencies.json` registry and the
+`docs/node_audit_report.json` audit output.
 
 ---
 
 ## Startup Policy Semantics
 
-`node_dependencies.json` now carries a `startup_policy` field on every node entry.
+`node_dependencies.json` carries an explicit `startup_policy` field on **every**
+node entry (normalized in PR-6 — all 130 entries now carry an explicit value;
+implicit defaults are no longer accepted as a governance practice).
+
 The launcher (`launcher/node_startup.py`) respects this field to decide what to start.
 
 | Policy | Meaning | Launcher behaviour |
 |--------|---------|--------------------|
-| `active` _(default)_ | Healthy, orchestrated, no issues | Started unconditionally |
+| `active` | Healthy, orchestrated, no issues | Started unconditionally |
 | `optional` | Runnable, valid role, but config-drift node needing further verification | Started if available; failure does not abort system |
 | `skip` | Archived, deleted, or unfinished stub | **Never started** — registry entry kept for audit tracking only |
 
+### Startup Policy State Machine
+
+States and legal transitions:
+
+```
+         ┌─────────────────────────────────────┐
+         │  optional → active                  │
+         │  (integration test + health check   │
+         │   passes; maintainer promotes)      │
+         ▼                                     │
+    ┌─────────┐   active → optional        ┌──────────┐
+    │ active  │ ─────────────────────────► │ optional │
+    └─────────┘   (known issue / drift;    └──────────┘
+         │         soft-fail tolerated)         │
+         │                                      │
+         │  active → skip                       │  optional → skip
+         │  (node retired / archived /          │  (repair abandoned;
+         │   identified as stub)                │   node archived)
+         ▼                                      ▼
+                        ┌──────┐
+                        │ skip │
+                        └──────┘
+```
+
+| Transition | Trigger | Required action |
+|------------|---------|-----------------|
+| `optional` → `active` | Node passes integration test and health check | Update `startup_policy` in `node_dependencies.json`; update manifest counts |
+| `active` → `optional` | Node develops a known issue or config drift | Demote to allow soft-fail startup; open a tracking issue |
+| `active` → `skip` | Node retired, archived, or confirmed stub | Update `startup_policy`; document reason in registry `description` |
+| `optional` → `skip` | Repair attempt abandoned | Update `startup_policy`; document reason in registry `description` |
+
+> **Note**: `skip` is a terminal/holding state.  A `skip` node must not be started by any launcher path.  To resurrect a skipped node, open a dedicated PR with a full implementation review.
+
 ---
 
-## Active Node Counts (post PR-7)
+## Active Node Counts (post PR-6 normalization)
+
+> **PR-6 change**: All 95 previously-implicit `active` nodes now carry an
+> explicit `"startup_policy": "active"` field.  The registry is fully
+> normalized: every entry has an explicit startup policy.
 
 | Category | Count |
 |----------|-------|
@@ -129,4 +170,4 @@ remain active.
 
 ---
 
-*Last updated: PR-7 — Node System Unification*
+*Last updated: PR-6 — Node Registry Normalization & Startup Policy State Machine*
