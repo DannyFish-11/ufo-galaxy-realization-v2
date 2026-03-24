@@ -228,6 +228,8 @@ Key rules enforced there:
 
 - [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md) — canonical model topology semantics for the right-side board
 - [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) — canonical display boundary contract
+- [`docs/LIMINAL_SPACE_MAPPING.md`](LIMINAL_SPACE_MAPPING.md) — canonical liminal space mapping definition (three allowed content classes)
+- [`docs/SANDBOX_SIMULATION_PROJECTION.md`](SANDBOX_SIMULATION_PROJECTION.md) — sandbox/speculative execution field semantics
 - [`docs/RUNTIME_PROJECTION.md`](RUNTIME_PROJECTION.md) — full design rationale for `RuntimeProjection`
 - [`windows_client/status_board.py`](../windows_client/status_board.py) — original minimal status board (still functional)
 - [`core/projection/`](../core/projection/) — `RuntimeProjection` model and `build_runtime_projection` compiler
