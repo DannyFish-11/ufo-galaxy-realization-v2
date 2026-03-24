@@ -23,8 +23,16 @@ Together they form one subject::
         └─ owns: session, tri-state lifecycle, native multimodal ingress
         └─ invokes OpenClawd inside liminal
               └─ OpenClawd: ingest → continuum → branch → manifest
-                    ├─ local execution loop (Windows / System API)
-                    └─ cross-device execution loop (gateway expansion)
+                    ├─ LOCAL EXECUTION CHAIN   (core/local_execution_chain.py)
+                    │     OpenClawd → AgentKernel → CommandRouter[LOCAL] →
+                    │     local executor → LocalExecutionResult → feedback
+                    └─ CROSS-DEVICE EXECUTION CHAIN  (core/cross_device_execution_chain.py)
+                          OpenClawd → CommandRouter[REMOTE] → TaskEnvelope →
+                          gateway → worker → ResultEnvelope → feedback
+
+Both chains are **first-class canonical runtime chains** with documented step
+ordering, authority ownership, and projection-facing summary support.  See
+``docs/LOCAL_EXECUTION_CHAIN.md`` and ``docs/CROSS_DEVICE_EXECUTION_CHAIN.md``.
 
 **Canonical Tri-State Lifecycle** (carried by this shell)
 ----------------------------------------------------------
@@ -234,8 +242,10 @@ class DesktopPresenceRuntime:
             └─ runtime_session_id generator & propagator
             └─ invokes OpenClawd during the LIMINAL phase
                   └─ OpenClawd (subject core): ingest → continuum → branch
-                        ├─ local execution loop (Windows / System API)
-                        └─ cross-device execution loop (gateway)
+                        ├─ LOCAL EXECUTION CHAIN   (core/local_execution_chain.py)
+                        │     → AgentKernel → CommandRouter[LOCAL] → executor
+                        └─ CROSS-DEVICE EXECUTION CHAIN  (core/cross_device_execution_chain.py)
+                              → CommandRouter[REMOTE] → gateway → worker
 
     **Canonical Lifecycle**
 

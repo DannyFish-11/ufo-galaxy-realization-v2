@@ -4,9 +4,20 @@
 
 **Unified-Subject Architecture — Canonical Cross-Device Execution Chain**
 --------------------------------------------------------------------------
-This module establishes the **single canonical cross-device execution chain** for
-the Galaxy runtime and provides the vocabulary for tracking, auditing, and
-projecting its state.
+This module establishes the **canonical cross-device execution chain** for
+the Galaxy runtime.  It is one of **two first-class runtime chains** under
+the unified subject:
+
+.. code-block:: text
+
+    DesktopPresenceRuntime (outer shell / Windows clothing)
+        └─ unified subject runtime
+              ├─ LOCAL EXECUTION CHAIN      (core/local_execution_chain.py)
+              └─ CROSS-DEVICE EXECUTION CHAIN  ← this module
+
+Both chains are canonical, parallel, and explicitly defined.  Neither is
+more "real" than the other.  See ``docs/CROSS_DEVICE_EXECUTION_CHAIN.md``
+and ``docs/LOCAL_EXECUTION_CHAIN.md`` for full documentation.
 
 Canonical Chain
 ---------------
