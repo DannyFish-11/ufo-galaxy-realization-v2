@@ -1,11 +1,32 @@
 """
-Node 01: OneAPI Gateway - 真实可用的多模型 AI 网关
+Node 01: OneAPI Gateway — 系统级聚合器接入位
 ================================================
-支持: OpenRouter, 智谱AI, Groq, Claude, OpenWeather, BraveSearch
+System position: EXTERNAL AGGREGATOR INTEGRATION LAYER
+See: docs/ONEAPI_SYSTEM_POSITION.md
 
-所有 API 都经过实际测试验证可用。
-若 .env 缺失或 API Key 未配置，节点以降级（degraded）模式启动，
-健康检查仍返回 HTTP 200，不影响系统启动。
+This node is the Galaxy integration point for an external OneAPI-compatible
+aggregator gateway.  It is NOT a direct/native-multimodal top-layer provider.
+
+Key system-wide effect semantics:
+- ONEAPI_BASE_URL + ONEAPI_API_KEY configure the system-wide aggregator
+  integration entry point, not a dashboard-local setting.
+- When set, "oneapi" is added to the global provider list consumed by
+  MultiLLMRouter and ProviderInventory (ProviderCategory.ONEAPI).
+- This propagates to TopologyRouter's routing candidate pool, the
+  DesktopStatusProjection, and the right-side status board.
+- OneAPI must appear as a separate lower-layer row in any model topology
+  display, distinct from direct/native-multimodal providers.
+
+Direct/native-multimodal top-layer providers (e.g. OpenAI, Anthropic, Gemini)
+are separate from this aggregator layer and are not listed here.
+
+Upstream vendor coverage (via configured external OneAPI gateway):
+  OpenRouter, 智谱AI, Groq, Claude, Together AI, Perplexity, and any other
+  vendor accessible through the connected external OneAPI instance.
+
+Startup behaviour: if .env is missing or API keys are not configured, the
+node starts in degraded mode.  Health checks still return HTTP 200, so the
+overall system startup is not blocked.
 """
 import os
 import time
@@ -23,7 +44,11 @@ from nodes.common.cors_config import get_cors_origins
 logger = logging.getLogger("Node_01_OneAPI")
 
 # ============ API 配置 (从环境变量读取) ============
-# 可选的 OneAPI 聚合端点（优先使用）
+# --- 系统级聚合器接入配置（全局生效）---
+# ONEAPI_BASE_URL / ONEAPI_API_KEY 配置后系统全局生效：
+#   进入 ProviderInventory（ProviderCategory.ONEAPI）→ TopologyRouter 路由候选池
+#   → DesktopStatusProjection → 右侧状态板（独立下层行）
+# 这不是 dashboard 局部配置，而是系统级聚合器接入位。
 ONEAPI_BASE_URL = os.getenv("ONEAPI_BASE_URL", "")
 ONEAPI_API_KEY  = os.getenv("ONEAPI_API_KEY", "")
 
@@ -51,7 +76,16 @@ _startup_mode: str = "starting"  # "healthy" | "degraded" | "skipped"
 
 
 def _collect_cloud_providers() -> List[str]:
-    """返回已配置（有 API Key）的云端提供商列表，不发起任何网络请求。"""
+    """返回已配置（有 API Key）的云端提供商列表，不发起任何网络请求。
+
+    System-wide note: "oneapi" is listed first because it represents the
+    external aggregator integration layer (ProviderCategory.ONEAPI).  When
+    ONEAPI_BASE_URL and ONEAPI_API_KEY are both set, the system registers a
+    global "oneapi" provider entry in MultiLLMRouter / ProviderInventory,
+    which propagates to TopologyRouter and DesktopStatusProjection.
+    All other entries in this list are direct/cloud vendors that enter the
+    provider pool independently of the OneAPI aggregator.
+    """
     providers: List[str] = []
     if ONEAPI_BASE_URL and ONEAPI_API_KEY:
         providers.append("oneapi")
