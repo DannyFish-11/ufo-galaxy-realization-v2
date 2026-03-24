@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-24T13:00:26Z",
+  "generated_at": "2026-03-24T13:34:22Z",
   "project_root": "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2",
   "nominal_count": 130,
   "runnable_count": 129,
@@ -33,16 +33,77 @@
   "hygiene_violation_nodes": [],
   "policy_violation_nodes": [],
   "missing_required_files_nodes": [
+    "Node_130_AutonomousCoding"
+  ],
+  "missing_dockerfile_nodes": [],
+  "missing_requirements_nodes": [],
+  "optional_count": 29,
+  "optional_baseline_pass": [
+    "Node_107_FunctionCalling",
+    "Node_108_MetaCognition",
+    "Node_109_ProactiveSensing",
+    "Node_114_DocumentIntelligence",
+    "Node_115_PluginManager",
+    "Node_116_ExternalToolWrapper",
+    "Node_117_OpenCode",
+    "Node_118_NodeFactory",
+    "Node_119_BenchmarkEval",
     "Node_120_File",
     "Node_121_Web",
     "Node_122_Shell",
     "Node_124_LinuxDesktopAuto",
-    "Node_130_AutonomousCoding",
+    "Node_60_ReinforcementLearning",
+    "Node_63_FuzzyLogicEngine",
     "Node_70_AutonomousLearning",
-    "Node_71_MultiDeviceCoordination"
+    "Node_71_MultiDeviceCoordination",
+    "Node_75_DataPipeline",
+    "Node_76_AlertManager",
+    "Node_77_TaskScheduler",
+    "Node_78_DataValidator",
+    "Node_86_SpeechProcessor",
+    "Node_87_ImageAnalysis",
+    "Node_88_WorkflowEngine",
+    "Node_89_APIGateway",
+    "Node_93_VideoProcessor",
+    "Node_94_AudioAnalysis",
+    "Node_98_MultimodalFusion",
+    "Node_99_EmbeddingService"
   ],
-  "missing_dockerfile_nodes": [],
-  "missing_requirements_nodes": [],
+  "optional_baseline_partial": [],
+  "optional_baseline_fail": [],
+  "optional_promotion_ready": [
+    "Node_107_FunctionCalling",
+    "Node_108_MetaCognition",
+    "Node_109_ProactiveSensing",
+    "Node_114_DocumentIntelligence",
+    "Node_115_PluginManager",
+    "Node_116_ExternalToolWrapper",
+    "Node_117_OpenCode",
+    "Node_118_NodeFactory",
+    "Node_119_BenchmarkEval",
+    "Node_120_File",
+    "Node_121_Web",
+    "Node_122_Shell",
+    "Node_124_LinuxDesktopAuto",
+    "Node_60_ReinforcementLearning",
+    "Node_63_FuzzyLogicEngine",
+    "Node_70_AutonomousLearning",
+    "Node_71_MultiDeviceCoordination",
+    "Node_75_DataPipeline",
+    "Node_76_AlertManager",
+    "Node_77_TaskScheduler",
+    "Node_78_DataValidator",
+    "Node_86_SpeechProcessor",
+    "Node_87_ImageAnalysis",
+    "Node_88_WorkflowEngine",
+    "Node_89_APIGateway",
+    "Node_93_VideoProcessor",
+    "Node_94_AudioAnalysis",
+    "Node_98_MultimodalFusion",
+    "Node_99_EmbeddingService"
+  ],
+  "optional_promotion_near": [],
+  "optional_promotion_not_ready": [],
   "nodes": [
     {
       "name": "Node_00_StateMachine",
@@ -86,6 +147,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -130,6 +195,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -176,6 +245,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -222,6 +295,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -271,6 +348,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -317,6 +398,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -363,6 +448,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -409,6 +498,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -455,6 +548,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -501,6 +598,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -547,6 +648,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -593,6 +698,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -639,6 +748,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -685,6 +798,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -731,6 +848,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -777,6 +898,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -823,6 +948,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -869,6 +998,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -918,6 +1063,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -966,6 +1127,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1012,6 +1189,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1064,6 +1245,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1115,6 +1300,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1166,6 +1355,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1214,6 +1407,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1260,6 +1457,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1306,6 +1519,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1354,6 +1583,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1402,6 +1647,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1450,6 +1711,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1496,6 +1773,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1542,6 +1835,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1551,7 +1848,7 @@
       "path": "nodes/Node_120_File",
       "has_main_py": true,
       "has_dockerfile": true,
-      "has_readme": false,
+      "has_readme": true,
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
@@ -1573,7 +1870,7 @@
       "has_status_endpoint": true,
       "hygiene_violations": [],
       "checks": {
-        "source_completeness": "warn",
+        "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
@@ -1588,6 +1885,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1597,7 +1910,7 @@
       "path": "nodes/Node_121_Web",
       "has_main_py": true,
       "has_dockerfile": true,
-      "has_readme": false,
+      "has_readme": true,
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
@@ -1619,7 +1932,7 @@
       "has_status_endpoint": true,
       "hygiene_violations": [],
       "checks": {
-        "source_completeness": "warn",
+        "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
@@ -1634,6 +1947,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1643,7 +1972,7 @@
       "path": "nodes/Node_122_Shell",
       "has_main_py": true,
       "has_dockerfile": true,
-      "has_readme": false,
+      "has_readme": true,
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
@@ -1665,7 +1994,7 @@
       "has_status_endpoint": true,
       "hygiene_violations": [],
       "checks": {
-        "source_completeness": "warn",
+        "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
@@ -1680,6 +2009,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1726,6 +2071,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1735,7 +2084,7 @@
       "path": "nodes/Node_124_LinuxDesktopAuto",
       "has_main_py": true,
       "has_dockerfile": true,
-      "has_readme": false,
+      "has_readme": true,
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
@@ -1757,7 +2106,7 @@
       "has_status_endpoint": true,
       "hygiene_violations": [],
       "checks": {
-        "source_completeness": "warn",
+        "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
@@ -1772,6 +2121,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1820,6 +2185,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1866,6 +2235,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1914,6 +2287,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1962,6 +2339,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2008,6 +2389,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2054,6 +2439,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "stub",
       "action": "repair",
       "notes": [
@@ -2103,6 +2492,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2149,6 +2542,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2198,6 +2595,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2244,6 +2645,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2290,6 +2695,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2336,6 +2745,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2382,6 +2795,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2428,6 +2845,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2474,6 +2895,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2520,6 +2945,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2566,6 +2995,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2614,6 +3047,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2660,6 +3097,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2706,6 +3147,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2750,6 +3195,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2796,6 +3245,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "archive",
       "notes": [
@@ -2844,6 +3297,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "archive",
       "notes": [
@@ -2892,6 +3349,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -2940,6 +3401,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -2988,6 +3453,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -3038,6 +3507,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3084,6 +3557,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3130,6 +3607,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3178,6 +3659,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3224,6 +3709,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3270,6 +3759,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3316,6 +3809,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3362,6 +3859,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3408,6 +3909,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3454,6 +3959,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3503,6 +4012,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3549,6 +4062,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3597,6 +4114,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3643,6 +4164,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3689,6 +4214,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3735,6 +4264,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3783,6 +4316,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3832,6 +4369,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3878,6 +4419,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3924,6 +4469,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3970,6 +4519,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4016,6 +4569,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4062,6 +4619,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4108,6 +4669,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4154,6 +4719,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4200,6 +4769,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4246,6 +4819,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4292,6 +4869,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4338,6 +4931,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4384,6 +4981,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4430,6 +5031,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4476,6 +5093,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4522,6 +5143,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4568,6 +5193,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4614,6 +5243,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4660,6 +5293,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4706,6 +5343,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4715,7 +5356,7 @@
       "path": "nodes/Node_70_AutonomousLearning",
       "has_main_py": true,
       "has_dockerfile": true,
-      "has_readme": false,
+      "has_readme": true,
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
@@ -4737,7 +5378,7 @@
       "has_status_endpoint": true,
       "hygiene_violations": [],
       "checks": {
-        "source_completeness": "warn",
+        "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
@@ -4752,6 +5393,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4761,7 +5418,7 @@
       "path": "nodes/Node_71_MultiDeviceCoordination",
       "has_main_py": true,
       "has_dockerfile": true,
-      "has_readme": false,
+      "has_readme": true,
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
@@ -4783,7 +5440,7 @@
       "has_status_endpoint": true,
       "hygiene_violations": [],
       "checks": {
-        "source_completeness": "warn",
+        "source_completeness": "pass",
         "syntax_safety": "pass",
         "packaging": "pass",
         "registry_governance": "pass",
@@ -4798,6 +5455,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4846,6 +5519,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4894,6 +5571,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4942,6 +5623,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4988,6 +5673,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5034,6 +5735,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5080,6 +5797,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5126,6 +5859,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5172,6 +5921,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5220,6 +5973,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5266,6 +6023,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5312,6 +6073,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5358,6 +6123,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5404,6 +6173,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5450,6 +6223,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5496,6 +6273,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5542,6 +6335,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5588,6 +6397,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5634,6 +6459,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5680,6 +6521,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5726,6 +6571,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5772,6 +6621,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5818,6 +6671,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5864,6 +6733,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5912,6 +6797,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5958,6 +6847,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -6004,6 +6897,10 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {},
+      "optional_baseline_result": "",
+      "promotion_gap_checks": {},
+      "promotion_readiness": "",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -6050,6 +6947,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -6096,6 +7009,22 @@
         "status": "pass",
         "severity": "pass"
       },
+      "optional_baseline_checks": {
+        "registry_present": "pass",
+        "has_main_py": "pass",
+        "has_fusion_entry": "pass",
+        "syntax_ok": "pass",
+        "has_readme": "pass",
+        "hygiene_clean": "pass"
+      },
+      "optional_baseline_result": "pass",
+      "promotion_gap_checks": {
+        "has_dockerfile": "pass",
+        "has_requirements": "pass",
+        "has_health_endpoint": "pass",
+        "has_status_endpoint": "pass"
+      },
+      "promotion_readiness": "ready",
       "tier": "orchestrated",
       "action": "keep",
       "notes": []

@@ -5,6 +5,8 @@ scripts/node_audit.py — Canonical Node-System Audit Tool
 
 PR-6: Node-system audit and canonical inventory establishment.
 PR-2 (upgrade): Promoted to the repository-wide canonical governance engine.
+PR-8: Added optional-node governance section — baseline compliance check and
+      promotion-readiness assessment for all optional nodes.
 
 Produces a machine-readable JSON audit report and a human-readable Markdown
 summary that together answer:
@@ -13,6 +15,8 @@ summary that together answer:
   2. How many are complete / runnable (have main.py + meaningful implementation)?
   3. How many are clearly orchestrated (present in node_dependencies.json)?
   4. Which nodes should be kept / repaired / archived / deleted?
+  5. (PR-8) Which optional nodes meet the optional baseline, and which are
+     close enough to promote to active?
 
 Governance check categories (PR-2):
   - source_completeness   : main.py / fusion_entry.py / README.md presence
@@ -21,6 +25,20 @@ Governance check categories (PR-2):
   - registry_governance   : node_dependencies.json presence + policy validity
   - runtime_contract      : /health and /status endpoint declarations (static)
   - hygiene               : absence of runtime-generated artifacts (pid/log/tmp…)
+
+PR-8 optional-baseline checks (applied to every optional-policy node):
+  - registry_present      : node in node_dependencies.json with startup_policy=optional
+  - has_main_py           : main.py exists
+  - has_fusion_entry      : fusion_entry.py exists
+  - syntax_ok             : main.py / fusion_entry.py pass py_compile
+  - has_readme            : README.md exists (documentation / describability)
+  - hygiene_clean         : no forbidden runtime artifacts in node root
+
+PR-8 promotion-readiness checks (gap to active):
+  - has_dockerfile        : Dockerfile present (containerised deployment)
+  - has_requirements      : requirements.txt present
+  - has_health_endpoint   : /health endpoint declared
+  - has_status_endpoint   : /status endpoint declared
 
 Cross-checks:
   - node_dependencies.json  ← authoritative startup config
@@ -98,6 +116,34 @@ CHECK_PASS    = "pass"
 CHECK_WARN    = "warn"
 CHECK_FAIL    = "fail"
 CHECK_UNKNOWN = "unknown"
+
+# ---------------------------------------------------------------------------
+# PR-8: Optional-baseline check keys
+# ---------------------------------------------------------------------------
+
+# Optional baseline (minimum required to be a well-governed optional node)
+OPT_CHECK_REGISTRY_PRESENT = "registry_present"   # in ndj with startup_policy=optional
+OPT_CHECK_HAS_MAIN_PY      = "has_main_py"        # main.py exists
+OPT_CHECK_HAS_FUSION_ENTRY = "has_fusion_entry"   # fusion_entry.py exists
+OPT_CHECK_SYNTAX_OK        = "syntax_ok"           # py_compile passes
+OPT_CHECK_HAS_README       = "has_readme"          # README.md exists
+OPT_CHECK_HYGIENE_CLEAN    = "hygiene_clean"       # no runtime artifacts
+
+# Promotion-gap checks (what an optional node needs to reach active)
+PROMO_CHECK_HAS_DOCKERFILE  = "has_dockerfile"
+PROMO_CHECK_HAS_REQUIREMENTS = "has_requirements"
+PROMO_CHECK_HAS_HEALTH      = "has_health_endpoint"
+PROMO_CHECK_HAS_STATUS      = "has_status_endpoint"
+
+# Optional baseline result — aggregated across all OPT_CHECK_* keys
+OPT_BASELINE_PASS    = "pass"     # all optional-baseline checks pass
+OPT_BASELINE_PARTIAL = "partial"  # some optional-baseline checks warn/fail
+OPT_BASELINE_FAIL    = "fail"     # one or more optional-baseline checks fail
+
+# Promotion readiness result
+PROMO_READY     = "ready"     # all promotion-gap checks pass
+PROMO_NEAR_READY = "near_ready"  # ≤1 gap
+PROMO_NOT_READY = "not_ready"  # ≥2 gaps
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +250,12 @@ class NodeAuditEntry:
     # PR-5: Structured packaging status (canonical per-node packaging record)
     packaging: NodePackagingStatus = field(default_factory=NodePackagingStatus)
 
+    # PR-8: Optional-node governance (populated only when startup_policy=optional)
+    optional_baseline_checks: Dict[str, str] = field(default_factory=dict)
+    optional_baseline_result: str = ""         # pass / partial / fail / "" (n/a)
+    promotion_gap_checks: Dict[str, str] = field(default_factory=dict)
+    promotion_readiness: str = ""              # ready / near_ready / not_ready / ""
+
     # Classification
     tier:   str = NodeTier.NOMINAL
     action: str = RecommendedAction.ARCHIVE
@@ -252,6 +304,15 @@ class NodeAuditReport:
     # PR-5: Packaging-specific aggregate lists (separate from the combined list above)
     missing_dockerfile_nodes:   List[str] = field(default_factory=list)
     missing_requirements_nodes: List[str] = field(default_factory=list)
+
+    # PR-8: Optional-node governance aggregates
+    optional_count:             int = 0
+    optional_baseline_pass:     List[str] = field(default_factory=list)
+    optional_baseline_partial:  List[str] = field(default_factory=list)
+    optional_baseline_fail:     List[str] = field(default_factory=list)
+    optional_promotion_ready:   List[str] = field(default_factory=list)
+    optional_promotion_near:    List[str] = field(default_factory=list)
+    optional_promotion_not_ready: List[str] = field(default_factory=list)
 
     nodes: List[NodeAuditEntry] = field(default_factory=list)
 
@@ -418,8 +479,86 @@ def _build_packaging_status(entry: NodeAuditEntry) -> NodePackagingStatus:
     )
 
 
+def _build_optional_governance(entry: NodeAuditEntry) -> None:
+    """Populate PR-8 optional-node baseline and promotion-gap fields.
+
+    Only runs when ``entry.config_startup_policy == "optional"``.  Modifies
+    ``entry`` in-place.
+
+    Optional baseline (minimum for a well-governed optional node):
+      - registry_present   : in node_dependencies.json with policy=optional  ✓/✗
+      - has_main_py        : main.py exists                                   ✓/✗
+      - has_fusion_entry   : fusion_entry.py exists                           ✓/✗
+      - syntax_ok          : py_compile passes on entry files                 ✓/✗
+      - has_readme         : README.md exists                                 ✓/✗
+      - hygiene_clean      : no runtime-artifact violations                   ✓/✗
+
+    Promotion-gap checks (delta to active):
+      - has_dockerfile     : Dockerfile present
+      - has_requirements   : requirements.txt present
+      - has_health_endpoint: /health declared in main.py
+      - has_status_endpoint: /status declared in main.py
+    """
+    if entry.config_startup_policy != "optional":
+        return
+
+    # --- optional baseline ---
+    baseline: Dict[str, str] = {}
+
+    baseline[OPT_CHECK_REGISTRY_PRESENT] = (
+        CHECK_PASS if entry.in_node_dependencies else CHECK_FAIL
+    )
+    baseline[OPT_CHECK_HAS_MAIN_PY] = (
+        CHECK_PASS if entry.has_main_py else CHECK_FAIL
+    )
+    baseline[OPT_CHECK_HAS_FUSION_ENTRY] = (
+        CHECK_PASS if entry.has_fusion_entry else CHECK_FAIL
+    )
+    # syntax: pass if all applicable files compiled ok; unknown if no py files
+    if entry.syntax_ok is False or entry.fusion_syntax_ok is False:
+        baseline[OPT_CHECK_SYNTAX_OK] = CHECK_FAIL
+    elif entry.syntax_ok is True or entry.fusion_syntax_ok is True:
+        baseline[OPT_CHECK_SYNTAX_OK] = CHECK_PASS
+    else:
+        baseline[OPT_CHECK_SYNTAX_OK] = CHECK_UNKNOWN
+
+    baseline[OPT_CHECK_HAS_README] = (
+        CHECK_PASS if entry.has_readme else CHECK_FAIL
+    )
+    baseline[OPT_CHECK_HYGIENE_CLEAN] = (
+        CHECK_PASS if not entry.hygiene_violations else CHECK_FAIL
+    )
+
+    # aggregate baseline result
+    baseline_values = list(baseline.values())
+    if all(v in (CHECK_PASS, CHECK_UNKNOWN) for v in baseline_values):
+        entry.optional_baseline_result = OPT_BASELINE_PASS
+    elif any(v == CHECK_FAIL for v in baseline_values):
+        entry.optional_baseline_result = OPT_BASELINE_FAIL
+    else:
+        entry.optional_baseline_result = OPT_BASELINE_PARTIAL
+
+    entry.optional_baseline_checks = baseline
+
+    # --- promotion gap ---
+    gap: Dict[str, str] = {}
+    gap[PROMO_CHECK_HAS_DOCKERFILE]    = CHECK_PASS if entry.has_dockerfile       else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_REQUIREMENTS]  = CHECK_PASS if entry.has_requirements     else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_HEALTH]        = CHECK_PASS if entry.has_health_endpoint  else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_STATUS]        = CHECK_PASS if entry.has_status_endpoint  else CHECK_FAIL
+
+    fail_count = sum(1 for v in gap.values() if v == CHECK_FAIL)
+    if fail_count == 0:
+        entry.promotion_readiness = PROMO_READY
+    elif fail_count == 1:
+        entry.promotion_readiness = PROMO_NEAR_READY
+    else:
+        entry.promotion_readiness = PROMO_NOT_READY
+
+    entry.promotion_gap_checks = gap
+
+
 def _build_checks(entry: NodeAuditEntry) -> Dict[str, str]:
-    """Derive per-category check results for a node entry."""
     checks: Dict[str, str] = {}
 
     # --- source_completeness ---
@@ -668,6 +807,8 @@ def run_audit(project_root: Path) -> NodeAuditReport:
         # PR-5: build packaging status first so _build_checks can use it
         entry.packaging = _build_packaging_status(entry)
         entry.checks = _build_checks(entry)
+        # PR-8: optional-node governance assessment
+        _build_optional_governance(entry)
         entries.append(entry)
 
     report.nodes = entries
@@ -709,6 +850,28 @@ def run_audit(project_root: Path) -> NodeAuditReport:
     report.missing_required_files_nodes = sorted(
         e.name for e in entries
         if not e.has_main_py or not e.has_fusion_entry or not e.has_readme
+    )
+
+    # PR-8: optional-node governance aggregates
+    opt_nodes = [e for e in entries if e.config_startup_policy == "optional"]
+    report.optional_count = len(opt_nodes)
+    report.optional_baseline_pass = sorted(
+        e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_PASS
+    )
+    report.optional_baseline_partial = sorted(
+        e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_PARTIAL
+    )
+    report.optional_baseline_fail = sorted(
+        e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_FAIL
+    )
+    report.optional_promotion_ready = sorted(
+        e.name for e in opt_nodes if e.promotion_readiness == PROMO_READY
+    )
+    report.optional_promotion_near = sorted(
+        e.name for e in opt_nodes if e.promotion_readiness == PROMO_NEAR_READY
+    )
+    report.optional_promotion_not_ready = sorted(
+        e.name for e in opt_nodes if e.promotion_readiness == PROMO_NOT_READY
     )
 
     return report
@@ -926,6 +1089,106 @@ def _render_markdown(report: NodeAuditReport) -> str:
         no_df = sum(1 for e in pc_nodes if not e.has_dockerfile)
         no_req = sum(1 for e in pc_nodes if not e.has_requirements)
         a(f"| `{pc}` | {total_pc} | {full} | {no_df} | {no_req} |")
+    a("")
+
+    # ── PR-8: Optional-Node Governance ──────────────────────────────────────
+    a("## Optional-Node Governance (PR-8)")
+    a("")
+    a("> **Optional nodes** are a deliberate governance state: registered in")
+    a("> `node_dependencies.json` with `startup_policy: optional`, started if")
+    a("> available (startup failure does not abort the system), and on a tracked")
+    a("> path to promotion to `active`.")
+    a("")
+
+    opt_nodes = [e for e in report.nodes if e.config_startup_policy == "optional"]
+    a("### Optional-Node Counts")
+    a("")
+    a("| Category | Count |")
+    a("|----------|-------|")
+    a(f"| Total optional nodes | **{report.optional_count}** |")
+    a(f"| Baseline: **pass** (all optional-baseline checks green) | {len(report.optional_baseline_pass)} |")
+    a(f"| Baseline: **partial** (some checks warn) | {len(report.optional_baseline_partial)} |")
+    a(f"| Baseline: **fail** (one or more checks failing) | {len(report.optional_baseline_fail)} |")
+    a(f"| Promotion gap: **ready** (all active-grade checks pass) | {len(report.optional_promotion_ready)} |")
+    a(f"| Promotion gap: **near_ready** (≤1 gap to active) | {len(report.optional_promotion_near)} |")
+    a(f"| Promotion gap: **not_ready** (≥2 gaps to active) | {len(report.optional_promotion_not_ready)} |")
+    a("")
+
+    a("### Optional-Baseline Minimum Requirements")
+    a("")
+    a("An optional node must satisfy the following to be considered well-governed:")
+    a("")
+    a("| Check | Requirement |")
+    a("|-------|-------------|")
+    a("| `registry_present` | Entry in `node_dependencies.json` with `startup_policy: optional` |")
+    a("| `has_main_py` | `main.py` exists |")
+    a("| `has_fusion_entry` | `fusion_entry.py` exists |")
+    a("| `syntax_ok` | `main.py` / `fusion_entry.py` pass `py_compile` |")
+    a("| `has_readme` | `README.md` exists (describability requirement) |")
+    a("| `hygiene_clean` | No runtime-artifact violations in node root |")
+    a("")
+
+    a("### Optional-Node Baseline Status")
+    a("")
+    if opt_nodes:
+        _bicon = {
+            CHECK_PASS: "✓", CHECK_FAIL: "✗", CHECK_UNKNOWN: "?", CHECK_WARN: "~"
+        }
+        a("| Node | Baseline | Promotion | reg | main | fusion | syn | readme | hyg | docker | req | health | status |")
+        a("|------|----------|-----------|-----|------|--------|-----|--------|-----|--------|-----|--------|--------|")
+        for e in opt_nodes:
+            bc = e.optional_baseline_checks
+            pc = e.promotion_gap_checks
+            bl = e.optional_baseline_result or "—"
+            pr = e.promotion_readiness or "—"
+            a(
+                f"| `{e.name}` "
+                f"| **{bl}** "
+                f"| {pr} "
+                f"| {_bicon.get(bc.get(OPT_CHECK_REGISTRY_PRESENT, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(bc.get(OPT_CHECK_HAS_MAIN_PY, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(bc.get(OPT_CHECK_HAS_FUSION_ENTRY, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(bc.get(OPT_CHECK_SYNTAX_OK, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(bc.get(OPT_CHECK_HAS_README, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(bc.get(OPT_CHECK_HYGIENE_CLEAN, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(pc.get(PROMO_CHECK_HAS_DOCKERFILE, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(pc.get(PROMO_CHECK_HAS_REQUIREMENTS, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(pc.get(PROMO_CHECK_HAS_HEALTH, CHECK_UNKNOWN), '?')} "
+                f"| {_bicon.get(pc.get(PROMO_CHECK_HAS_STATUS, CHECK_UNKNOWN), '?')} |"
+            )
+        a("")
+        a("**Baseline column key:** ✓=pass · ✗=fail · ~=warn · ?=unknown")
+        a("")
+        a("**Promotion columns** (docker, req, health, status) show gaps that must be")
+        a("closed before a node is eligible for `optional → active` promotion.")
+    else:
+        a("_No optional nodes found in this audit run._")
+    a("")
+
+    a("### Promotion-Ready Optional Nodes")
+    a("")
+    a("These nodes meet all active-grade promotion-gap checks and may be candidates")
+    a("for `optional → active` promotion after governance review:")
+    a("")
+    if report.optional_promotion_ready:
+        for n in report.optional_promotion_ready:
+            a(f"- `{n}`")
+    else:
+        a("_No optional nodes currently meet all promotion-gap checks._")
+    a("")
+
+    a("### Optional Nodes with Baseline Gaps")
+    a("")
+    a("These nodes have at least one failing optional-baseline check and need")
+    a("remediation before they can be considered well-governed optional nodes:")
+    a("")
+    if report.optional_baseline_fail:
+        for n in report.optional_baseline_fail:
+            e = next(x for x in opt_nodes if x.name == n)
+            failing = [k for k, v in e.optional_baseline_checks.items() if v == CHECK_FAIL]
+            a(f"- `{n}`: failing checks — {', '.join(f'`{f}`' for f in failing)}")
+    else:
+        a("_All optional nodes meet the optional baseline._")
     a("")
 
 
