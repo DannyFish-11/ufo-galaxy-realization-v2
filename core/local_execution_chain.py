@@ -281,6 +281,12 @@ class LocalExecutionResult:
             "timestamp": self.timestamp,
             "extra": self.extra,
             "openclawd_merged": self.openclawd_merged,
+            # PR-1: canonical authority and execution-path stamps so that every
+            # LocalExecutionResult can be traced back to the canonical local chain.
+            # authority_role identifies this as the execution substrate layer
+            # (downstream of OpenClawd, which is the subject decision authority).
+            "authority_role": "execution_substrate",
+            "execution_path": "local",
         }
 
     @classmethod

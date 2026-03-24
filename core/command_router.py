@@ -889,8 +889,11 @@ class CommandRouter:
                 logger.debug("PR-13 failure_domain stamp skipped: %s", _fd_exc)
 
         # PR-14: stamp additive introspection hints on substrate result.
+        # PR-1: execution_path="local" normalised to match the canonical local
+        #        execution chain (core/local_execution_chain.py).
         result.setdefault("introspection_snapshot", {
             "authority_role": "execution_substrate",
+            "execution_path": "local",
             "execution_substrate_role": result.get("execution_substrate_role", "execution_substrate"),
             "execution_mode": result.get("remote_execution_mode"),
             "lifecycle_state": result.get("lifecycle_state"),
