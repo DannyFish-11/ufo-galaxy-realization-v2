@@ -102,6 +102,52 @@ python scripts/verify_capability_registry.py
 - Open a pull request targeting `main`
 - All CI checks must pass before merging
 
+## Repository Hygiene Policy
+
+### What must never be committed
+
+The following artifact types are **forbidden** from being committed anywhere in
+the repository, and are especially prohibited inside `nodes/` directories:
+
+| Category | Examples | Why |
+|----------|----------|-----|
+| PID files | `*.pid`, `node95.pid` | Runtime state — meaningless outside the running process |
+| Runtime databases | `*.db`, `*.sqlite`, `*.sqlite3` inside `nodes/` | Generated at runtime; often large and binary |
+| Log files | `*.log` inside `nodes/` | Runtime output — must not accumulate in source control |
+| Python bytecode | `*.pyc`, `*.pyo`, `__pycache__/` | Derived artifacts; rebuilt automatically |
+| Pytest/tool caches | `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/` | Local dev artefacts |
+| Temp / scratch files | `*.tmp`, `*.temp`, `*.bak` | Transient output |
+
+These patterns are enforced in `.gitignore`.  The hygiene checker at
+`scripts/check_repo_hygiene.py` can be run at any time to audit the working
+tree for violations:
+
+```bash
+python scripts/check_repo_hygiene.py          # scan the whole repo
+python scripts/check_repo_hygiene.py nodes/   # scan only node dirs
+python scripts/check_repo_hygiene.py --json   # machine-readable output
+```
+
+The script exits with code `1` when violations are found and prints each
+offending path together with the violation category and reason.
+
+### Where test fixtures and example data should live
+
+If a node genuinely needs a small, static fixture file for its unit tests
+(e.g. a tiny pre-seeded SQLite database for a test scenario), place it under
+a clearly labelled sub-directory such as `nodes/Node_XX_Name/tests/fixtures/`
+and add an explicit entry to the `ALLOWLIST` in
+`scripts/check_repo_hygiene.py`.  Use the smallest possible fixture and keep
+it in a format that makes its purpose clear.  Do not commit runtime-generated
+databases or logs under any circumstances.
+
+### Checklist before opening a PR
+
+1. Run `python scripts/check_repo_hygiene.py` — it must exit `0`.
+2. Confirm no `.pid`, `.log`, `.db`, or `.sqlite` files appear in `git status`.
+3. Confirm no `__pycache__/` or `.pytest_cache/` directories appear in
+   `git status`.
+
 ## Android Client
 
 The Android client code belongs **exclusively** in the

@@ -275,6 +275,63 @@ When two sources disagree, apply this precedence (highest authority first):
 
 ---
 
+## 10. Repository Hygiene
+
+### Policy summary
+
+Runtime artifacts, generated files, and temporary state must never be
+committed to this repository.  This is especially important inside `nodes/`
+where hundreds of independent node directories create many opportunities for
+accidental pollution.
+
+**Forbidden everywhere:**
+- `*.pid` — PID files are runtime state, meaningless outside a live process
+- `*.pyc`, `*.pyo`, `__pycache__/` — compiled Python bytecode
+- `*.tmp`, `*.temp`, `*.bak` — temp/scratch files
+- `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/` — local dev caches
+
+**Forbidden inside `nodes/` (stricter policy):**
+- `*.log` — runtime log output
+- `*.db`, `*.sqlite`, `*.sqlite3` — runtime database files
+
+### Hygiene checker
+
+A static hygiene checker is available at `scripts/check_repo_hygiene.py`.
+Run it before merging any PR that touches `nodes/`:
+
+```bash
+# Check entire repository
+python scripts/check_repo_hygiene.py
+
+# Check only node directories
+python scripts/check_repo_hygiene.py nodes/
+
+# Machine-readable JSON output (useful for CI integration)
+python scripts/check_repo_hygiene.py --json
+```
+
+Exit code `0` = clean.  Exit code `1` = violations found, with each violation
+printed as `<path>  [<category>]  <reason>`.
+
+### Allowlisting legitimate fixtures
+
+If a node needs a small static fixture file that happens to match a forbidden
+extension (e.g. a tiny pre-seeded `.db` for a unit test), add an explicit
+path entry to `ALLOWLIST` in `scripts/check_repo_hygiene.py` and document
+the reason in a comment.  Do **not** weaken the global rules.
+
+### Removing a committed artifact
+
+```bash
+git rm --cached <path-to-artifact>
+# Verify .gitignore covers the pattern so it cannot be re-added
+echo "pattern" >> .gitignore
+git add .gitignore
+git commit -m "chore: remove committed runtime artifact <name>"
+```
+
+---
+
 ## 9. Key Documentation Index
 
 | Document | Purpose |
