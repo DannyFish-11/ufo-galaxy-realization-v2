@@ -61,8 +61,8 @@ Validates:
   48. run_audit() Node_01_OneAPI has a config_port.
   49. run_audit() every orchestrated node has in_node_dependencies == True.
   50. run_audit() all reserved nodes have action != keep.
-  51. run_audit() Node_130_AutonomousCoding on_disk_not_in_config (orphan).
-  52. run_audit() Node_60_ReinforcementLearning on_disk_not_in_config.
+  51. run_audit() Node_130_AutonomousCoding stub has main_py_lines < 100 (PR-7: now in config with startup_policy=skip).
+  52. run_audit() Node_60_ReinforcementLearning has main.py (PR-7: now in config with startup_policy=optional).
   53. run_audit() report.nodes list length == nominal_count.
   54. run_audit() generated_at is a non-empty string.
   55. run_audit() project_root is a non-empty string.
@@ -383,12 +383,29 @@ def test_50_all_reserved_nodes_not_keep(audit_report, nodes_by_name):
         )
 
 
-def test_51_node130_autonomous_coding_is_orphan(audit_report):
-    assert "Node_130_AutonomousCoding" in audit_report.on_disk_not_in_config
+def test_51_node130_autonomous_coding_is_in_config_post_pr7(audit_report):
+    # PR-7 added Node_130_AutonomousCoding to node_dependencies.json with
+    # startup_policy='skip' (stub — needs real implementation before promotion).
+    # It is no longer an orphan; verify the audit detects it as a stub.
+    entry = next(
+        (n for n in audit_report.nodes if n.name == "Node_130_AutonomousCoding"),
+        None,
+    )
+    assert entry is not None, "Node_130_AutonomousCoding not found in audit nodes"
+    # Stub classification: main.py is < 100 lines
+    assert entry.main_py_lines < 100
 
 
-def test_52_node60_reinforcement_learning_is_orphan(audit_report):
-    assert "Node_60_ReinforcementLearning" in audit_report.on_disk_not_in_config
+def test_52_node60_reinforcement_learning_in_config_post_pr7(audit_report):
+    # PR-7 added Node_60_ReinforcementLearning to node_dependencies.json with
+    # startup_policy='optional' (config drift resolved). It is no longer an
+    # orphan; verify the audit sees it as a runnable node.
+    entry = next(
+        (n for n in audit_report.nodes if n.name == "Node_60_ReinforcementLearning"),
+        None,
+    )
+    assert entry is not None, "Node_60_ReinforcementLearning not found in audit nodes"
+    assert entry.has_main_py is True
 
 
 def test_53_report_nodes_length_equals_nominal_count(audit_report):
