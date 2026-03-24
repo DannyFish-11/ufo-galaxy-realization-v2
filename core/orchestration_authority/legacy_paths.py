@@ -580,7 +580,76 @@ _register(
     ),
 )
 
-#: Frozenset of node module prefixes that are LEGACY_ORCHESTRATOR_NODE class.
+# ---------------------------------------------------------------------------
+# PR-oneapi-system-position entries
+# ---------------------------------------------------------------------------
+# These entries document paths related to the OneAPI aggregator integration.
+# They are NOT "broken" or "to-be-removed" paths; they are ACTIVE_INTEGRATION
+# entries that record the canonical system-wide effect semantics for
+# OneAPI-related configuration and state flows.
+#
+# Rule: any component that reads ONEAPI_BASE_URL / ONEAPI_API_KEY or
+# accesses the "oneapi" provider record must treat those values as
+# system-wide aggregator integration inputs, not as dashboard-local state.
+# ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="nodes.Node_01_OneAPI.main",
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "nodes/Node_01_OneAPI/main.py is the GALAXY INTEGRATION POINT "
+            "for the external OneAPI aggregator gateway.  "
+            "ONEAPI_BASE_URL and ONEAPI_API_KEY configured here have "
+            "SYSTEM-WIDE EFFECT: they enter ProviderInventory "
+            "(ProviderCategory.ONEAPI), propagate to TopologyRouter's routing "
+            "candidate pool, and surface via DesktopStatusProjection.  "
+            "Do NOT treat this node as a local/isolated configuration surface.  "
+            "See docs/ONEAPI_SYSTEM_POSITION.md for the canonical definition."
+        ),
+        pr_guardrail_added="PR-oneapi-system-position",
+        notes=(
+            "Node_01_OneAPI — AGGREGATOR INTEGRATION LAYER (not a direct provider).  "
+            "System-wide effect: ProviderCategory.ONEAPI → TopologyRouter → "
+            "DesktopStatusProjection → status board lower row."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="dashboard.backend.main.oneapi_configured",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "The 'oneapi_configured' status flag in the dashboard backend is a "
+            "LEGACY SURFACE (PR-oneapi-system-position).  "
+            "OneAPI configuration/availability truth must be sourced from "
+            "core.oneapi_system_position.build_oneapi_integration_summary() and "
+            "reflected via DesktopStatusProjection (ModelRoutingProjection) rather "
+            "than as a standalone dashboard endpoint.  "
+            "This endpoint is retained only for legacy dashboard UI compatibility."
+        ),
+        pr_guardrail_added="PR-oneapi-system-position",
+        notes=(
+            "dashboard oneapi_configured flag — LEGACY STATUS SURFACE.  "
+            "Canonical OneAPI state must flow through DesktopStatusProjection."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.api_manager.APIManager._validate_oneapi",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "APIManager._validate_oneapi() is a LEGACY VALIDATION HELPER "
+            "(PR-oneapi-system-position).  "
+            "OneAPI availability must be determined by ProviderInventory / "
+            "TopologyRouter participation rather than ad-hoc API-manager probes.  "
+            "This helper is retained for the API key validation endpoint only."
+        ),
+        pr_guardrail_added="PR-oneapi-system-position",
+        notes=(
+            "api_manager OneAPI validation — LEGACY HELPER.  "
+            "Availability truth belongs in ProviderInventory / TopologyRouter."
+        ),
+    ),
+)
+
 #: Contributors: when registering any node whose module path starts with one of
 #: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.
 LEGACY_ORCHESTRATOR_NODE_PREFIXES: frozenset = frozenset({
