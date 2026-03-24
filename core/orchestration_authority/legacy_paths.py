@@ -477,6 +477,43 @@ _register(
     ),
 )
 
+# ---------------------------------------------------------------------------
+# PR-8-layout: Register transitional surface paths introduced by the
+# repository-layout reorganisation PR.
+# ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="enhancements.clients.windows_client.run_ui",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "enhancements/clients/windows_client/run_ui.py is HARD-DISABLED (PR-3).  "
+            "It targeted the retired legacy chat/sidebar client.  "
+            "Active Windows direction: DesktopPresenceRuntime + status_board_v2/.  "
+            "Authoritative startup path: python unified_launcher.py"
+        ),
+        pr_guardrail_added="PR-8-layout",
+        notes=(
+            "Hard-disabled stub.  Emits DeprecationWarning on import.  "
+            "See enhancements/LEGACY_TRANSITION.md."
+        ),
+    ),
+)
+
+_register(
+    LegacyPathEntry(
+        module_path="enhancements.clients.windows_client",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "enhancements/clients/windows_client/ is a TRANSITIONAL directory (PR-8-layout).  "
+            "The run_ui launcher is hard-disabled.  "
+            "Active Windows direction: DesktopPresenceRuntime + status_board_v2/."
+        ),
+        pr_guardrail_added="PR-8-layout",
+        notes="enhancements/clients/windows_client/ — TRANSITIONAL.  See enhancements/LEGACY_TRANSITION.md.",
+    ),
+)
+
 #: Frozenset of node module prefixes that are LEGACY_ORCHESTRATOR_NODE class.
 #: Contributors: when registering any node whose module path starts with one of
 #: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.
