@@ -4,6 +4,17 @@ launcher/node_startup.py — Node system startup.
 Responsibilities:
 - NodeSystemLauncher: discover, configure, and start Galaxy nodes,
   including per-node health polling and runtime-registry registration.
+
+Startup policy semantics (PR-7 node unification):
+  "active"   — healthy, orchestrated node; started unconditionally.
+  "optional" — runnable node with a valid role but needing work;
+                started if available, failure does not abort the system.
+  "skip"     — archived, deleted, or stub node; never included in any
+                startup path.
+
+The ``startup_policy`` field in ``node_dependencies.json`` is the canonical
+authority for these distinctions.  Nodes whose policy is absent default to
+``"active"``.
 """
 
 import os
@@ -61,43 +72,95 @@ class NodeSystemLauncher:
         )
         return {}
 
-    def get_core_nodes(self) -> List[str]:
-        """获取核心节点列表。
+    # ── Startup-policy helpers (PR-7) ─────────────────────────────────────────
 
-        优先使用节点配置中标记 "group": "core" 的节点。
-        若无任何节点具有该标记（如 node_registry.json 未设置），则回退为
-        按节点目录名称升序排列的前 10 个基础节点（Node_00–Node_09），确保
-        系统始终能自动启动最核心的节点而不报告"节点数量为 0"。
+    _POLICY_SKIP = "skip"
+    _POLICY_OPTIONAL = "optional"
+    _POLICY_ACTIVE = "active"
+
+    def get_startup_policy(self, node_name: str) -> str:
+        """Return the startup_policy for *node_name* from the loaded config.
+
+        Falls back to ``"active"`` when the node is absent from config or
+        the field is not set, preserving backward-compatibility with legacy
+        ``node_registry.json`` entries that pre-date the PR-7 policy field.
+        """
+        cfg = self.node_configs.get(node_name)
+        if isinstance(cfg, dict):
+            return cfg.get("startup_policy", self._POLICY_ACTIVE)
+        return self._POLICY_ACTIVE
+
+    def should_skip(self, node_name: str) -> bool:
+        """Return True when a node must be excluded from all startup paths.
+
+        Nodes with ``startup_policy: "skip"`` are archived, deleted, or
+        unfinished stubs.  They are registered in ``node_dependencies.json``
+        for audit tracking only and must never be started by the launcher.
+        """
+        return self.get_startup_policy(node_name) == self._POLICY_SKIP
+
+    def get_active_nodes(self) -> List[str]:
+        """Return nodes eligible for startup — policy is 'active' or 'optional'.
+
+        Nodes whose ``startup_policy`` is ``"skip"`` (Reserved placeholders,
+        stubs, archived/deleted entries introduced by PR-7) are excluded.
+        The result is sorted by config priority then name.
+        """
+        eligible = [
+            name for name in self.node_configs
+            if not self.should_skip(name)
+            and (self.nodes_dir / name / "main.py").exists()
+        ]
+
+        def _sort_key(name: str):
+            cfg = self.node_configs.get(name, {})
+            priority = cfg.get("priority", 99) if isinstance(cfg, dict) else 99
+            return (priority, name)
+
+        return sorted(eligible, key=_sort_key)
+
+    # ── Node-list accessors ────────────────────────────────────────────────────
+
+    def get_core_nodes(self) -> List[str]:
+        """Return core-group nodes eligible for startup.
+
+        Returns nodes marked ``"group": "core"`` in config, excluding any with
+        ``startup_policy: "skip"``.  Falls back to the first 10 nodes from
+        ``get_active_nodes()`` (by priority then name) when no core-group
+        entries are found, ensuring the system can always bootstrap.
         """
         import re as _re
-        core_nodes = []
-        for name, cfg in self.node_configs.items():
-            if isinstance(cfg, dict) and cfg.get("group") == "core":
-                core_nodes.append(name)
+        core_nodes = [
+            name for name, cfg in self.node_configs.items()
+            if isinstance(cfg, dict)
+            and cfg.get("group") == "core"
+            and not self.should_skip(name)
+            and (self.nodes_dir / name / "main.py").exists()
+        ]
         if core_nodes:
             return sorted(
                 core_nodes,
                 key=lambda x: self.node_configs.get(x, {}).get("priority", 99),
             )
 
-        all_nodes = self.get_all_nodes()
-        if not all_nodes:
+        all_active = self.get_active_nodes()
+        if not all_active:
             return []
 
-        def _node_key(name: str) -> int:
-            m = _re.match(r"Node_0*(\d+)", name)
-            return int(m.group(1)) if m else 999
-
-        fundamental = sorted(all_nodes, key=_node_key)[:10]
+        fundamental = all_active[:10]
         logger.info(
             "节点配置中未找到 'group': 'core' 标记，"
-            "自动回退为前 10 个基础节点: %s",
+            "自动回退为前 10 个活跃节点: %s",
             fundamental,
         )
         return fundamental
 
     def get_all_nodes(self) -> List[str]:
-        """获取所有节点列表"""
+        """Return all nodes that have a ``main.py`` on disk.
+
+        This is a filesystem scan — it does NOT filter by startup policy.
+        Use :meth:`get_active_nodes` when you need only startup-eligible nodes.
+        """
         if not self.nodes_dir.exists():
             return []
         return sorted(
@@ -257,31 +320,38 @@ class NodeSystemLauncher:
         return results
 
     async def start_all(self, minimal: bool = False) -> Dict[str, bool]:
-        """启动节点集合。
+        """Start the active node set.
 
-        优先使用 "group": "core" 标记的节点；若为空则自动回退为
-        get_all_nodes() 的完整列表（非 minimal 模式）或前 10 个节点
-        （minimal 模式），并记录 warning，确保系统始终能够启动而不
-        静默返回空字典。
+        Uses :meth:`get_core_nodes` as the default startup surface.  When that
+        list is empty (legacy config without group annotations) the launcher
+        falls back to :meth:`get_active_nodes` — the full set of startup-
+        eligible nodes — and emits a warning so operators know why.
+
+        Nodes with ``startup_policy: "skip"`` are **never** started regardless
+        of the ``minimal`` flag; they are excluded at the source by
+        :meth:`get_core_nodes` and :meth:`get_active_nodes`.
 
         Args:
-            minimal: True 时最多启动前 10 个节点。
+            minimal: When True, limit the startup batch to the first 10 nodes
+                     from the resolved list (by priority then name).
         """
         nodes = self.get_core_nodes()
 
         if not nodes:
-            fallback = self.get_all_nodes()
+            fallback = self.get_active_nodes()
             if fallback:
                 logger.warning(
                     "核心节点列表为空（node_dependencies.json 中无 'group': 'core' 标记），"
-                    "自动回退为全量节点列表（共 %d 个）。",
+                    "自动回退为全量活跃节点列表（共 %d 个）。"
+                    "注意：startup_policy='skip' 的节点已被排除。",
                     len(fallback),
                 )
                 nodes = fallback
             else:
                 logger.error(
-                    "核心节点与全量节点列表均为空，节点系统将不会启动。"
-                    "请确认 nodes/ 目录下存在包含 main.py 的子目录。"
+                    "核心节点与活跃节点列表均为空，节点系统将不会启动。"
+                    "请确认 nodes/ 目录下存在包含 main.py 的子目录，"
+                    "且对应节点的 startup_policy 不为 'skip'。"
                 )
                 return {}
 
