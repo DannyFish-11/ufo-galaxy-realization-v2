@@ -17,7 +17,7 @@ displayed `tri_state_phase` and `runtime_domain`) by adding:
 |---------|-----------------|
 | **PhaseSurface** | `tri_state_phase` (silent / liminal / manifest) |
 | **DomainSurface** | `runtime_domain` (local / cross_device / transition) |
-| **TopologySurface** | `primary_model_id`, `support_model_ids`, `active_weights` (top-5 bar chart), `route_reason` |
+| **TopologySurface** | `primary_model_id` [with `[MM]` badge when native-multimodal], `vendor_source`, `topology_role`, `support_model_ids`, `active_weights` (top-5 bar chart), `route_reason`, `routing_authority`, `oneapi_source` (lower aggregator row) |
 | **DeviceSurface** | `active_device_ids`, `execution_stage`, `current_task_summary` |
 | **MetricsSurface** | `presence_intensity`, `coherence`, `collapse_tendency`, `retreat_tendency` |
 
@@ -170,6 +170,40 @@ pytest tests/test_pr4_status_board_v2.py -v
 
 ---
 
+## Model Topology Semantics
+
+`TopologySurface` renders the model routing topology as a **native-multimodal-
+first layered structure**, not a flat provider list.  This is documented in full
+in [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md).
+
+### Layer structure
+
+```
+MAIN ROUTE (direct / native-multimodal first)
+  ★ <primary_model>  [MM]  [vendor]  weight ████████░░
+
+SUPPORT
+  · <support_model_1>  [vendor]  weight █████░░░░░
+  · <support_model_2>  [vendor]  weight ███░░░░░░░
+
+Reason  : <route_reason>
+Authority: <routing_authority>
+
+─────────────────────────────────────────────────────
+ONEAPI AGGREGATOR  (lower-layer / not a direct provider)
+  <base_url>  [configured]  <N models>
+```
+
+### Key rules
+
+- Primary model is always in the MAIN ROUTE layer, marked `★`.
+- `[MM]` badge appears when `is_native_multimodal` is `True` in the projection.
+- OneAPI appears **only** in the lower AGGREGATOR row, never mixed into the
+  main-route or support layer.
+- When `oneapi_source` is absent from the projection, the OneAPI row is omitted.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
@@ -192,6 +226,7 @@ Key rules enforced there:
 
 ## Related Documents
 
+- [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md) — canonical model topology semantics for the right-side board
 - [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) — canonical display boundary contract
 - [`docs/RUNTIME_PROJECTION.md`](RUNTIME_PROJECTION.md) — full design rationale for `RuntimeProjection`
 - [`windows_client/status_board.py`](../windows_client/status_board.py) — original minimal status board (still functional)

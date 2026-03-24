@@ -30,11 +30,30 @@ system structure.
 | `phase_surface.py` | Tri-state phase display (silent / liminal / manifest) |
 | `device_surface.py` | Connected device status |
 | `metrics_surface.py` | Runtime metrics surface |
-| `topology_surface.py` | System topology view |
+| `topology_surface.py` | Model topology view (native-multimodal-first; see below) |
 | `domain_surface.py` | Domain / capability surface |
 | `manifest_surface.py` | Manifest-stage surface |
 | `return_surface.py` | Return-intelligence surface |
 | `liminal_surface.py` | Liminal-space surface |
+
+## Model topology semantics (`topology_surface.py`)
+
+`topology_surface.py` renders the model routing topology as a **native-
+multimodal-first layered structure**, per
+[`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](../../docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md):
+
+1. **MAIN ROUTE** — primary model with optional `[MM]` native-multimodal badge
+   and vendor/source tag.
+2. **SUPPORT** — auxiliary/support models with weights and vendor tags.
+3. **Route reason / routing authority** — human-readable rationale and
+   canonical authority source.
+4. **ONEAPI AGGREGATOR** (lower row, separated by a rule) — rendered only
+   when `oneapi_source` data is present; never mixed into the main
+   direct-provider layer.
+
+This is a **topology**, not a flat provider list.  See
+[`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](../../docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md)
+for full semantics, invariants, and display-field reference.
 
 ## Relationship to legacy status board
 

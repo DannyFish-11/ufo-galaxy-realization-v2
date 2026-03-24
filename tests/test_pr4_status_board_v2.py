@@ -264,7 +264,7 @@ class TestTopologySurface:
         from windows_client.status_board_v2.topology_surface import TopologySurface
         out = TopologySurface().render(_SAMPLE_PROJECTION)
         assert "gpt-4o" in out
-        assert "Primary" in out
+        assert "MAIN ROUTE" in out  # Updated: header is now "MAIN ROUTE" (native-multimodal-first)
         # Weight bars rendered
         assert "█" in out or "Weights" in out
 
