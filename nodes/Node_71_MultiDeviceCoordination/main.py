@@ -1,8 +1,18 @@
 """
 Node 71 - MultiDeviceCoordination (多设备协调节点)
-提供多设备协同控制、任务分配和状态同步能力
 
-修复: 真正调用设备控制服务执行操作
+架构定位（PR-7）
+-----------------
+Node_71 是一个 **编排 / 协调消费者（orchestration / coordination consumer）**。
+
+设备权威边界：
+- 规范设备真实来源 (SSOT)：UnifiedDeviceManager (UDM)。
+- 单设备规范读取契约：RegisteredRuntimeDevice (contracts/registered_runtime_device.py)。
+- Node_71 通过 canonical_device_view_adapter 将规范投影摄取为本地协调视图，
+  供任务调度和设备分组使用。
+- Node_71 的本地状态仅限于协调/调度范围，不写回 UDM，不代表规范设备状态。
+
+功能: 多设备协同控制、任务分配和状态同步
 """
 import os
 import json
@@ -32,6 +42,13 @@ from core.device_types import DeviceType  # noqa: F811,E402
 
 from core.device_types import DeviceStatus  # noqa: F811,E402
 from core.schemas.device import DeviceModel  # noqa: E402
+from nodes.Node_71_MultiDeviceCoordination.core.canonical_device_view_adapter import (  # noqa: E402
+    CoordinationDeviceView,
+    CoordinationDeviceStatus,
+    adapt_registered_runtime_device,
+    adapt_registered_runtime_device_dict,
+    refresh_coordination_view,
+)
 
 
 class DeviceState(str, Enum):
@@ -149,15 +166,30 @@ class DeviceGroup:
 
 
 class MultiDeviceCoordinator:
-    """多设备协调器 - 真正执行设备操作"""
-    
+    """多设备协调器 — 编排 / 协调消费者（PR-7）。
+
+    架构定位
+    --------
+    本协调器是 **编排 / 协调消费者**，不充当对等的规范设备注册权威。
+
+    - 规范设备摄取路径：:meth:`ingest_canonical_device_view` /
+      :meth:`ingest_canonical_device_view_dict`（首选）。
+    - 本地协调状态（``_canonical_views``）仅用于任务调度和设备分组，
+      不向 UDM 写入任何状态，不代表规范设备真实状态。
+    - ``self.devices`` / ``register_device()`` / ``update_device_state()``
+      保留用于向后兼容，属于协调本地操作。
+    """
+
     def __init__(self):
+        # 协调本地设备表（向后兼容；新代码使用 _canonical_views）
         self.devices: Dict[str, Device] = {}
+        # 规范设备协调视图（canonical intake path — PR-7）
+        self._canonical_views: Dict[str, CoordinationDeviceView] = {}
         self.tasks: Dict[str, CoordinatedTask] = {}
         self.groups: Dict[str, DeviceGroup] = {}
         self._task_queue: asyncio.Queue = asyncio.Queue()
         self._is_running = False
-        
+
         # 设备控制服务地址 — 优先从 node registry 查找，env-var 为 fallback
         self.device_control_url = self._resolve_node_url(
             "Node_92_AutoControl", "DEVICE_CONTROL_URL", "http://localhost:8092"
@@ -165,10 +197,10 @@ class MultiDeviceCoordinator:
         self.auto_control_url = self._resolve_node_url(
             "Node_92_AutoControl", "NODE_92_URL", "http://localhost:8092"
         )
-        
+
         # HTTP 客户端
         self._client: Optional[httpx.AsyncClient] = None
-    
+
     @staticmethod
     def _resolve_node_url(node_id: str, env_var: str, default: str) -> str:
         """Resolve a node URL: registry → env var → default"""
@@ -188,25 +220,123 @@ class MultiDeviceCoordinator:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
-    
-    def register_device(self, device: Device) -> bool:
-        """注册设备"""
-        self.devices[device.device_id] = device
-        logger.info(f"Registered device: {device.device_id} ({device.name})")
+
+    # ==================== 规范设备摄取（Canonical Device Intake — PR-7）====================
+
+    def ingest_canonical_device_view(self, rrd: Any) -> bool:
+        """将规范设备投影（RegisteredRuntimeDevice）摄取为本地协调视图。
+
+        这是 Node_71 **首选的设备摄取路径**（PR-7）。产生的视图仅用于本地
+        协调调度，不向 UDM 写入任何状态。
+
+        Args:
+            rrd: RegisteredRuntimeDevice 实例或具有相同字段的对象。
+
+        Returns:
+            bool: 成功返回 True；出错返回 False。
+        """
+        try:
+            device_id = getattr(rrd, "device_id", None)
+            if not device_id:
+                logger.warning("ingest_canonical_device_view: rrd missing device_id, skipping")
+                return False
+
+            existing = self._canonical_views.get(str(device_id))
+            if existing is not None:
+                view = refresh_coordination_view(existing, rrd)
+                logger.debug(f"Refreshed canonical view for device: {device_id}")
+            else:
+                view = adapt_registered_runtime_device(rrd)
+                logger.info(f"Ingested canonical device view: {device_id}")
+
+            self._canonical_views[view.device_id] = view
+            return True
+        except Exception as exc:
+            logger.error(f"ingest_canonical_device_view error: {exc}")
+            return False
+
+    def ingest_canonical_device_view_dict(self, data: Dict[str, Any]) -> bool:
+        """将字典格式的规范投影摄取为本地协调视图（canonical intake — PR-7）。
+
+        Args:
+            data: RegisteredRuntimeDevice.to_dict() 格式的字典。
+
+        Returns:
+            bool: 成功返回 True；出错返回 False。
+        """
+        try:
+            device_id = data.get("device_id", "")
+            if not device_id:
+                return False
+            existing = self._canonical_views.get(str(device_id))
+            new_view = adapt_registered_runtime_device_dict(data)
+            if existing is not None:
+                new_view.current_task_id = existing.current_task_id
+                new_view.assigned_task_ids = list(existing.assigned_task_ids)
+                new_view.group_ids = list(existing.group_ids)
+                if existing.current_task_id is not None:
+                    new_view.coordination_status = CoordinationDeviceStatus.BUSY
+            self._canonical_views[new_view.device_id] = new_view
+            return True
+        except Exception as exc:
+            logger.error(f"ingest_canonical_device_view_dict error: {exc}")
+            return False
+
+    def remove_canonical_device_view(self, device_id: str) -> bool:
+        """从本地协调运行时中移除设备的规范视图（协调本地操作）。"""
+        if device_id not in self._canonical_views:
+            return False
+        del self._canonical_views[device_id]
+        logger.info(f"Removed canonical view for device: {device_id}")
         return True
-    
+
+    def get_canonical_view(self, device_id: str) -> Optional[CoordinationDeviceView]:
+        """获取设备的本地协调视图。"""
+        return self._canonical_views.get(device_id)
+
+    def list_canonical_views(self, available_only: bool = False) -> List[CoordinationDeviceView]:
+        """列出所有本地协调视图。"""
+        views = list(self._canonical_views.values())
+        if available_only:
+            views = [v for v in views if v.is_available_for_task()]
+        return views
+
+    # ==================== 设备管理（协调本地，向后兼容）====================
+    # 以下方法为协调本地操作，不写入 UDM，不代表规范设备状态变更。
+
+    def register_device(self, device: Device) -> bool:
+        """将设备加入本地协调表（协调本地，向后兼容）。
+
+        .. deprecated::
+            新代码应优先使用 :meth:`ingest_canonical_device_view`。
+            本方法仅写入 Node_71 本地协调表，不向 UDM 写入任何状态。
+        """
+        self.devices[device.device_id] = device
+        logger.info(f"Device added to local coordination table: {device.device_id} ({device.name})")
+        return True
+
     def unregister_device(self, device_id: str) -> bool:
-        """注销设备"""
+        """从本地协调表中移除设备（协调本地，向后兼容）。
+
+        .. deprecated::
+            新代码应优先使用 :meth:`remove_canonical_device_view`。
+            本方法仅操作 Node_71 本地表，不向 UDM 发送注销请求。
+        """
         if device_id in self.devices:
             del self.devices[device_id]
             return True
         return False
-    
+
     def update_device_state(self, device_id: str, state: DeviceState) -> bool:
-        """更新设备状态"""
+        """更新设备的协调本地状态（协调本地，向后兼容）。
+
+        .. note::
+            本方法更新的是 Node_71 本地协调表中的设备状态，
+            **不** 向 UDM 写入任何规范状态变更。
+        """
         if device_id not in self.devices:
             return False
-        
+
         self.devices[device_id].state = state
         self.devices[device_id].last_heartbeat = datetime.now()
         return True
