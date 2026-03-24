@@ -2,13 +2,16 @@
 """
 scripts/audit_udm_write_paths.py
 =================================
-Galaxy SSOT / UDM 写路径完整性审计工具 — Block-6 / PR-6
+Galaxy SSOT / UDM 写路径完整性审计工具 — Block-6 / PR-6 / PR-8 anti-drift
 
 功能：
   1. 静态扫描仓库中所有 Python 文件，找出绕过 SSOT
      (UnifiedDeviceManager) 直接修改设备状态的写路径。
   2. 检查 state_version 单调性（如果能连接到运行中的 UDM）。
-  3. 输出 JSON 报告 + 人类可读摘要。
+  3. **PR-8 anti-drift**：检测新引入的平行设备注册表、绕过
+     RegisteredRuntimeDevice 的单设备 Schema、以及绕过
+     MultiDeviceRuntimeProjection 的多设备顶层读模型。
+  4. 输出 JSON 报告 + 人类可读摘要。
 
 SSOT 规则：
   - 合法写入 API（白名单）：
@@ -20,6 +23,14 @@ SSOT 规则：
       UnifiedDeviceManager.heartbeat()
   - 非法写路径：直接修改 _devices 字典、
     直接写 UnifiedDevice 字段（status/capabilities 等）而不经过 UDM。
+
+PR-8 anti-drift 规则：
+  - 不得在 contracts/registered_runtime_device.py 之外定义新的单设备读 Schema
+    （类名含 RuntimeDevice / RegisteredDevice / DeviceContract 等）。
+  - 不得在 contracts/multi_device_runtime_projection.py 之外定义新的顶层
+    多设备读模型（类名含 MultiDeviceProjection / DevicesProjection 等）。
+  - 不得在 UnifiedDeviceManager SSOT 之外定义 _devices / _device_map 等
+    平行设备注册表字段。
 
 退出码：
   0 — 无非法写路径
@@ -133,6 +144,7 @@ class AuditResult:
     scanned_lines: int = 0
     violations: List[WriteViolation] = field(default_factory=list)
     state_version_issues: List[Dict[str, Any]] = field(default_factory=list)
+    anti_drift_findings: List[Dict[str, Any]] = field(default_factory=list)
     elapsed_secs: float = 0.0
     error: Optional[str] = None
 
@@ -147,6 +159,7 @@ class AuditResult:
             "illegal_write_paths": self.illegal_count,
             "violations": [v.to_dict() for v in self.violations],
             "state_version_issues": self.state_version_issues,
+            "anti_drift_findings": self.anti_drift_findings,
             "elapsed_secs": round(self.elapsed_secs, 3),
             "error": self.error,
         }
@@ -293,6 +306,221 @@ def _collect_py_files(root: Path) -> List[Path]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PR-8 Anti-drift guards — canonical contract bypass detection
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Canonical single-device read contract location (relative to repo root).
+_CANONICAL_SINGLE_DEVICE_CONTRACT = "contracts/registered_runtime_device.py"
+
+# Canonical top-level multi-device read projection location.
+_CANONICAL_MULTI_DEVICE_PROJECTION = "contracts/multi_device_runtime_projection.py"
+
+# Canonical device write SSOT locations (allowed to own _devices state).
+_CANONICAL_WRITE_SSOT_FILES: frozenset = frozenset(
+    [
+        "core/unified/device_manager.py",
+        "core/unified/models.py",
+    ]
+)
+
+# Heuristic class name fragments that suggest a new single-device schema
+# when found OUTSIDE the canonical single-device contract module.
+_SINGLE_DEVICE_SCHEMA_HINTS: frozenset = frozenset(
+    [
+        "RuntimeDevice",
+        "RegisteredDevice",
+        "DeviceContract",
+        "DeviceRecord",
+        "DeviceEntry",
+        "DeviceProjection",
+        "SingleDevice",
+    ]
+)
+
+# Heuristic field names that suggest a parallel device collection / registry.
+_PARALLEL_REGISTRY_FIELD_HINTS: frozenset = frozenset(
+    [
+        "_devices",
+        "_device_map",
+        "_device_registry",
+        "_device_store",
+        "_registered_devices",
+    ]
+)
+
+# Heuristic class name fragments that suggest a new top-level multi-device
+# read model when found OUTSIDE the canonical projection module.
+_MULTI_DEVICE_PROJECTION_HINTS: frozenset = frozenset(
+    [
+        "MultiDeviceProjection",
+        "MultiDeviceRuntime",
+        "DevicesProjection",
+        "AllDevicesSnapshot",
+        "DeviceFleetProjection",
+        "DeviceFleetSnapshot",
+        "MultiRuntimeProjection",
+    ]
+)
+
+# Files that are explicitly allowed to define device-like classes (adapters,
+# legacy stubs, or other canonical modules that legitimately extend the chain).
+_ANTI_DRIFT_ALLOW_LIST: frozenset = frozenset(
+    [
+        "contracts/registered_runtime_device.py",
+        "contracts/multi_device_runtime_projection.py",
+        "core/unified/device_manager.py",
+        "core/unified/models.py",
+        "scripts/audit_udm_write_paths.py",
+        "tests/",
+        "scripts/",
+    ]
+)
+
+
+def _is_anti_drift_allowed(rel_path: str) -> bool:
+    """Return True if *rel_path* is in the anti-drift allow list."""
+    for allowed in _ANTI_DRIFT_ALLOW_LIST:
+        if rel_path == allowed or rel_path.startswith(allowed):
+            return True
+    return False
+
+
+class _AntiDriftVisitor(ast.NodeVisitor):
+    """AST visitor that detects canonical-contract bypass patterns (PR-8).
+
+    Checks performed
+    ----------------
+    1. **Parallel device registries** — class-level assignments of
+       ``_devices``, ``_device_map``, etc. as ``dict``-typed attributes
+       outside the canonical UDM files.
+    2. **Parallel single-device schemas** — class definitions whose names
+       contain single-device schema hints and are NOT in the canonical
+       single-device contract file.
+    3. **Parallel top-level multi-device read models** — class definitions
+       whose names contain multi-device projection hints and are NOT in the
+       canonical projection file.
+    """
+
+    def __init__(self, source_lines: List[str]) -> None:
+        self.findings: List[Tuple[int, str, str]] = []  # (line, kind, detail)
+        self._source_lines = source_lines
+
+    def _snippet(self, lineno: int) -> str:
+        idx = lineno - 1
+        if 0 <= idx < len(self._source_lines):
+            return self._source_lines[idx].rstrip()
+        return ""
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        class_name = node.name
+
+        # Check 2: Parallel single-device schema
+        for hint in _SINGLE_DEVICE_SCHEMA_HINTS:
+            if hint in class_name:
+                self.findings.append((
+                    node.lineno,
+                    "parallel_single_device_schema",
+                    (
+                        f"Class '{class_name}' resembles a single-device schema "
+                        f"(hint: '{hint}').  Use or extend "
+                        f"'RegisteredRuntimeDevice' from "
+                        f"'contracts/registered_runtime_device.py' instead."
+                    ),
+                ))
+                break
+
+        # Check 3: Parallel top-level multi-device read model
+        for hint in _MULTI_DEVICE_PROJECTION_HINTS:
+            if hint in class_name:
+                self.findings.append((
+                    node.lineno,
+                    "parallel_multi_device_projection",
+                    (
+                        f"Class '{class_name}' resembles a top-level multi-device "
+                        f"read model (hint: '{hint}').  Use or extend "
+                        f"'MultiDeviceRuntimeProjection' from "
+                        f"'contracts/multi_device_runtime_projection.py' instead."
+                    ),
+                ))
+                break
+
+        # Check 1: Parallel device registry fields defined inside this class
+        for stmt in node.body:
+            if isinstance(stmt, ast.AnnAssign):
+                target = stmt.target
+                if isinstance(target, ast.Name) and target.id in _PARALLEL_REGISTRY_FIELD_HINTS:
+                    self.findings.append((
+                        stmt.lineno,
+                        "parallel_device_registry",
+                        (
+                            f"Class '{class_name}' declares a parallel device "
+                            f"registry field '{target.id}'.  Device state must be "
+                            f"owned exclusively by 'UnifiedDeviceManager'."
+                        ),
+                    ))
+
+        self.generic_visit(node)
+
+
+def _check_anti_drift(
+    root: Path,
+    py_files: Optional[List[Path]] = None,
+) -> List[Dict[str, Any]]:
+    """Scan Python files for canonical-contract bypass patterns (PR-8 anti-drift).
+
+    Parameters
+    ----------
+    root:
+        Repository root directory.
+    py_files:
+        Pre-collected list of Python files.  If ``None``, files are collected
+        from *root* using :func:`_collect_py_files`.
+
+    Returns
+    -------
+    list of finding dicts, each with keys:
+        ``file``, ``line``, ``kind``, ``detail``.
+    """
+    if py_files is None:
+        py_files = _collect_py_files(root)
+
+    findings: List[Dict[str, Any]] = []
+
+    for fpath in py_files:
+        try:
+            rel = str(fpath.relative_to(root))
+        except ValueError:
+            rel = str(fpath)
+
+        if _is_anti_drift_allowed(rel):
+            continue
+
+        try:
+            source = fpath.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        source_lines = source.splitlines()
+        try:
+            tree = ast.parse(source, filename=str(fpath))
+        except SyntaxError:
+            continue
+
+        visitor = _AntiDriftVisitor(source_lines)
+        visitor.visit(tree)
+
+        for lineno, kind, detail in visitor.findings:
+            findings.append({
+                "file": rel,
+                "line": lineno,
+                "kind": kind,
+                "detail": detail,
+            })
+
+    return findings
+
+
 def _check_state_version_monotonicity() -> List[Dict[str, Any]]:
     """
     尝试连接 UnifiedDeviceManager，验证已注册设备的 state_version >= 0。
@@ -385,6 +613,9 @@ def run_audit(
     # 3. state_version 单调性
     result.state_version_issues = _check_state_version_monotonicity()
 
+    # 4. PR-8 anti-drift: canonical contract bypass detection
+    result.anti_drift_findings = _check_anti_drift(root, py_files)
+
     result.elapsed_secs = time.monotonic() - t0
 
     # 4. 输出 JSON
@@ -411,6 +642,7 @@ def _print_summary(result: AuditResult) -> None:
     print(f"  Elapsed         : {result.elapsed_secs:.2f}s")
     print(f"  Illegal paths   : {result.illegal_count}")
     print(f"  StateVer issues : {len(result.state_version_issues)}")
+    print(f"  Anti-drift warn : {len(result.anti_drift_findings)}")
     print()
 
     if result.violations:
@@ -434,9 +666,24 @@ def _print_summary(result: AuditResult) -> None:
         print("  ✓ state_version monotonicity checks passed.")
         print()
 
+    if result.anti_drift_findings:
+        print("ANTI-DRIFT WARNINGS (PR-8 canonical contract bypass patterns):")
+        for f in result.anti_drift_findings:
+            print(f"  [{f['kind']}] {f['file']}:{f['line']}")
+            print(f"    Detail : {f['detail']}")
+        print()
+    else:
+        print("  ✓ No canonical contract bypass patterns detected.")
+        print()
+
     print(sep)
     if result.illegal_count == 0 and not result.state_version_issues:
         print("AUDIT PASSED — 0 illegal write paths, state_version OK.")
+        if result.anti_drift_findings:
+            print(
+                f"  WARNING: {len(result.anti_drift_findings)} anti-drift finding(s) "
+                f"may indicate architectural drift (non-blocking)."
+            )
     else:
         print(
             f"AUDIT FAILED — {result.illegal_count} illegal write path(s), "
