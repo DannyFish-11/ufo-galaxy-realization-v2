@@ -44,6 +44,27 @@ endpoint.  It has been superseded by this module.
 
 Do NOT extend `status_board.py`.  Extend `status_board_v2/` instead.
 
+## Display boundary
+
+This surface is **exclusively** a structured information display layer.  It
+must not carry liminal-space content.
+
+Per [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](../../docs/DESKTOP_DISPLAY_BOUNDARIES.md):
+
+- **Right-side status board (this surface)**: model/routing information,
+  provider/vendor status, primary/support model topology, system state and
+  execution summary, device/task/metrics panels.
+- **Liminal space** (`liminal_surface.py`, `manifest_surface.py`): local
+  execution chain, cross-device execution chain, sandbox/speculative execution
+  field only.
+
+**Prohibited in this surface**: execution-field spatial dimensions as primary
+panels (depth_factor, ambient_intensity, domain_path_emphasis — those belong
+to the liminal space).
+
+**Prohibited in liminal space**: provider list cards, dashboard-style model
+panels, full metrics/status-board panels, generic operator information blocks.
+
 ## Authority references
 
 - `core/ui_surface_authority.py` — registers this surface as `PROJECTION_DRIVEN`

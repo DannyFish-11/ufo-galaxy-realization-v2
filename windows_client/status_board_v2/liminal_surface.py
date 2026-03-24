@@ -6,6 +6,23 @@ Status Board V2.
 
 READ-ONLY surface: displays information only, never sends commands.
 
+Display boundary
+----------------
+This surface is part of the **liminal middle-state space** — a spatial
+execution field, NOT a second status board.  It must carry only:
+
+1. Local execution chain
+2. Cross-device execution chain
+3. Sandbox simulation / speculative execution field
+
+It must NOT carry: provider list cards, dashboard-style model panels, full
+metrics/status-board panels, or generic operator information blocks.
+Those belong exclusively to the right-side desktop status board.
+
+See ``docs/DESKTOP_DISPLAY_BOUNDARIES.md`` for the canonical boundary contract.
+
+Architecture
+------------
 This surface is an integration adapter between the
 :class:`~desktop_projection.LiminalSpaceEngine` and the Status Board V2
 rendering loop.  It reads the four spatial dimensions from a

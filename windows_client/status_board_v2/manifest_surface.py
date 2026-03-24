@@ -6,6 +6,25 @@ Status Board V2.
 
 READ-ONLY surface: displays information only, never sends commands.
 
+Display boundary
+----------------
+This surface sits at the boundary between the liminal middle-state space and
+the manifest phase.  It represents the **execution context** that emerges from
+the liminal field's transition into manifest — it is NOT a second status board
+or a provider/metrics panel.
+
+Permitted content: execution focus (focus intensity, active stage, routed
+models, active devices, route reason) — fields that describe *where the
+execution field landed*, not a general system information panel.
+
+Prohibited content: provider list cards, dashboard-style model panels, full
+metrics/status-board panels, generic operator information blocks.  Those belong
+exclusively to the right-side desktop status board.
+
+See ``docs/DESKTOP_DISPLAY_BOUNDARIES.md`` for the canonical boundary contract.
+
+Architecture
+------------
 This surface integrates with :class:`~desktop_projection.ManifestStageController`
 to show the manifest-stage state that emerges from the liminal projection.
 It mirrors the structure of :class:`~windows_client.status_board_v2.liminal_surface.LiminalSurface`
