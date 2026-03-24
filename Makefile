@@ -3,13 +3,16 @@
 # =============================================================================
 #
 # Targets:
-#   fmt          — auto-format Python source (black + isort)
-#   lint         — static analysis (flake8 on core/ + tests/)
-#   test:fast    — pytest smoke suite (-m "not slow"), fast CI gate
-#   contract     — protobuf stub generation + proto lint
-#   quick-verify — run the 10-min local minimal-stack smoke script
-#   governance   — run all CI governance checks locally (mirrors node-governance.yml)
-#   help         — show this help
+#   fmt            — auto-format Python source (black + isort)
+#   lint           — static analysis (flake8 on core/ + tests/)
+#   test:fast      — pytest smoke suite (-m "not slow"), fast CI gate
+#   contract       — protobuf stub generation + proto lint
+#   quick-verify   — run the 10-min local minimal-stack smoke script
+#   governance     — run all CI governance checks locally (mirrors node-governance.yml)
+#   audit-regen    — regenerate docs/node_audit_report.json + docs/NODE_SYSTEM_AUDIT.md
+#   manifest-regen — regenerate docs/NODE_ACTIVE_MANIFEST.md from canonical sources
+#   regen-all      — run audit-regen then manifest-regen (full governance doc refresh)
+#   help           — show this help
 #
 # Usage:
 #   make fmt
@@ -17,6 +20,10 @@
 #   make test:fast
 #   make contract
 #   make quick-verify
+#   make governance
+#   make audit-regen
+#   make manifest-regen
+#   make regen-all
 #
 # Cross-platform notes:
 #   Linux / macOS: works as-is with make >= 3.81.
@@ -42,12 +49,16 @@ help:
 	@echo ""
 	@echo "  Galaxy — available Make targets"
 	@echo "  ─────────────────────────────────────────────────────"
-	@echo "  fmt           Auto-format Python source (black + isort)"
-	@echo "  lint          Static analysis (flake8)"
-	@echo "  test:fast     Fast smoke tests (not slow)"
-	@echo "  contract      Generate protobuf stubs + proto lint"
-	@echo "  quick-verify  10-min local minimal-stack smoke"
-	@echo "  governance    Run all CI governance checks locally"
+	@echo "  fmt            Auto-format Python source (black + isort)"
+	@echo "  lint           Static analysis (flake8)"
+	@echo "  test:fast      Fast smoke tests (not slow)"
+	@echo "  contract       Generate protobuf stubs + proto lint"
+	@echo "  quick-verify   10-min local minimal-stack smoke"
+	@echo "  governance     Run all CI governance checks locally"
+	@echo "  ─────────────────────────────────────────────────────"
+	@echo "  audit-regen    Regenerate audit report + NODE_SYSTEM_AUDIT.md"
+	@echo "  manifest-regen Regenerate NODE_ACTIVE_MANIFEST.md"
+	@echo "  regen-all      Full governance doc refresh (audit + manifest)"
 	@echo "  ─────────────────────────────────────────────────────"
 	@echo ""
 
@@ -109,3 +120,36 @@ governance:
 	@echo "→ [4/4] Governance unit tests..."
 	$(PYTEST) tests/test_pr6_node_audit.py tests/test_pr8_optional_governance.py tests/test_repo_hygiene.py -v --tb=short
 	@echo "✓ All governance checks passed."
+
+# ── Governance document regeneration (PR-10) ─────────────────────────────
+
+# Regenerate the structured audit report (JSON) and the human-readable
+# Markdown summary.  Run after any change to nodes/ or node_dependencies.json.
+.PHONY: audit-regen
+audit-regen:
+	@echo "→ Regenerating node audit report + NODE_SYSTEM_AUDIT.md..."
+	$(PYTHON) scripts/node_audit.py --print-summary
+	@echo "✓ Audit docs regenerated."
+
+# Regenerate NODE_ACTIVE_MANIFEST.md from the canonical JSON sources.
+# Requires docs/node_audit_report.json to be current; run audit-regen first
+# if the audit data may be stale.
+.PHONY: manifest-regen
+manifest-regen:
+	@echo "→ Regenerating NODE_ACTIVE_MANIFEST.md..."
+	$(PYTHON) scripts/gen_node_active_manifest.py --print-summary
+	@echo "✓ NODE_ACTIVE_MANIFEST.md regenerated."
+
+# Full governance document refresh: regenerate audit outputs then rebuild
+# NODE_ACTIVE_MANIFEST.md so all human-readable governance docs stay in sync
+# with the canonical machine-readable sources.
+#
+# Run this before opening any PR that changes node_dependencies.json or
+# any node directory:
+#
+#   make regen-all
+#   git add docs/node_audit_report.json docs/NODE_SYSTEM_AUDIT.md docs/NODE_ACTIVE_MANIFEST.md
+#   git commit -m "chore: regenerate governance docs"
+.PHONY: regen-all
+regen-all: audit-regen manifest-regen
+	@echo "✓ All governance docs regenerated."

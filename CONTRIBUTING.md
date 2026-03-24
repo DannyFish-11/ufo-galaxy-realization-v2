@@ -272,6 +272,30 @@ databases or logs under any circumstances.
 2. Confirm no `.pid`, `.log`, `.db`, or `.sqlite` files appear in `git status`.
 3. Confirm no `__pycache__/` or `.pytest_cache/` directories appear in
    `git status`.
+4. If you changed `node_dependencies.json` or any `nodes/` directory, run
+   `make regen-all` and include the regenerated governance docs in your commit.
+
+## Regenerating Governance Artifacts
+
+The human-readable governance documents (`docs/NODE_SYSTEM_AUDIT.md` and
+`docs/NODE_ACTIVE_MANIFEST.md`) are **generated companions** to the canonical
+machine-readable sources.  Do not edit them by hand.
+
+| Artifact | Canonical source | How to regenerate |
+|----------|-----------------|-------------------|
+| `docs/node_audit_report.json` | computed by audit script | `make audit-regen` |
+| `docs/NODE_SYSTEM_AUDIT.md` | `docs/node_audit_report.json` | `make audit-regen` |
+| `docs/NODE_ACTIVE_MANIFEST.md` | `node_dependencies.json` + `docs/node_audit_report.json` | `make manifest-regen` |
+
+To refresh all three in one step:
+
+```bash
+make regen-all
+```
+
+See `docs/MAINTAINER_RUNBOOK.md §11` for the full workflow, including when to
+regenerate, how to respond to CI failures, and the end-to-end node-addition
+workflow.
 
 ## Android Client
 
