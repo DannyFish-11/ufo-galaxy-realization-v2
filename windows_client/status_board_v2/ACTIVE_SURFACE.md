@@ -34,7 +34,7 @@ system structure.
 | `domain_surface.py` | Domain / capability surface |
 | `manifest_surface.py` | Manifest-stage surface |
 | `return_surface.py` | Return-intelligence surface |
-| `liminal_surface.py` | Liminal-space surface |
+| `liminal_surface.py` | Liminal-space surface (local chain / cross-device chain / sandbox simulation) |
 
 ## Model topology semantics (`topology_surface.py`)
 
@@ -90,6 +90,9 @@ panels, full metrics/status-board panels, generic operator information blocks.
 - `core/repo_layout_registry.py` — classifies as `ACTIVE_DESKTOP_STATUS`
 - `contracts/desktop_status_projection.py` — canonical projection contract
 - `core/routes/` — `GET /api/v1/projection/runtime` endpoint
+- `core/liminal_space_mapping.py` — canonical liminal-facing structures
+- `docs/LIMINAL_SPACE_MAPPING.md` — canonical liminal space mapping definition
+- `docs/SANDBOX_SIMULATION_PROJECTION.md` — sandbox/simulation field semantics
 
 ## Migration guidance
 
