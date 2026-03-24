@@ -207,7 +207,58 @@ python scripts/validate_ports.py
 
 ---
 
-## 7. Adding New Code — Where It Belongs
+## 7. Authoritative Governance Sources
+
+This section defines the **single sources of truth (SSOT)** for node registry
+and system governance.  When files disagree, consult them in the precedence
+order below.
+
+### 7.1 Canonical sources (authoritative)
+
+| File | Format | Role |
+|------|--------|------|
+| `node_dependencies.json` | JSON (machine-readable) | **Authoritative registry** — defines every active node, its startup policy, and inter-node dependencies. This is the sole source for which nodes exist and how they start. |
+| `docs/node_audit_report.json` | JSON (machine-readable) | **Authoritative audit results** — contains the most recent structured integrity assessment for all nodes. |
+| `docs/NODE_ACTIVE_MANIFEST.md` | Markdown (human-readable) | **Active-node view** — human-friendly mirror of the registry and audit outputs. Must stay aligned with the two JSON sources above; if they conflict, the JSON files win. |
+| `docs/NODE_SYSTEM_AUDIT.md` | Markdown (human-readable) | **Rendered audit report** — a human-readable rendering of `docs/node_audit_report.json`. Derived from the canonical audit output, not an independent truth. |
+
+### 7.2 Historical / non-authoritative documents (do not rely on for current status)
+
+The following files are **historical snapshots** captured at specific points in
+time.  They may be outdated.  They are preserved for archaeological context only
+and must not be used as the basis for governance decisions.
+
+| File | Snapshot date | Why non-authoritative |
+|------|---------------|----------------------|
+| `SYSTEM_INTEGRITY_REPORT.md` | 2026-02-14 | Generated against an older codebase; does not reflect current node registry or audit state |
+| `FULL_SYSTEM_AUDIT.md` | 2026-03-08 | Point-in-time full-system audit; superseded by `docs/node_audit_report.json` |
+| `ARCHITECTURE_REVIEW.md` | 2026-03-22 | Architecture review snapshot; useful as history but not a governance source |
+
+Each of these files carries a prominent **⚠️ HISTORICAL SNAPSHOT** banner at
+the top directing readers to the canonical sources.
+
+### 7.3 Precedence order for resolving discrepancies
+
+When two sources disagree, apply this precedence (highest authority first):
+
+1. `node_dependencies.json` — for registry membership and startup policy
+2. `docs/node_audit_report.json` — for audit status and integrity findings
+3. `docs/NODE_ACTIVE_MANIFEST.md` — for human-verified active-node descriptions
+4. `docs/NODE_SYSTEM_AUDIT.md` — rendered view; update to match sources above
+5. **Historical documents** — informational only; never authoritative
+
+### 7.4 Keeping sources in sync
+
+- After any node is added, removed, or renamed, update `node_dependencies.json`
+  first, then regenerate or manually update `docs/NODE_ACTIVE_MANIFEST.md`.
+- After running an audit, write results to `docs/node_audit_report.json`, then
+  re-render `docs/NODE_SYSTEM_AUDIT.md`.
+- Do **not** create new top-level markdown reports claiming system-wide
+  integrity status.  Route those findings into the canonical JSON files instead.
+
+---
+
+## 8. Adding New Code — Where It Belongs
 
 | What you're adding | Where it goes |
 |--------------------|---------------|
@@ -224,7 +275,7 @@ python scripts/validate_ports.py
 
 ---
 
-## 8. Key Documentation Index
+## 9. Key Documentation Index
 
 | Document | Purpose |
 |----------|---------|

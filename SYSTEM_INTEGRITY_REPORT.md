@@ -1,3 +1,23 @@
+> ## ⚠️ HISTORICAL SNAPSHOT — NOT AUTHORITATIVE
+>
+> **This document is a historical integrity snapshot generated on 2026-02-14.
+> It may be outdated and is NOT the authoritative source for current node or
+> system governance status.**
+>
+> Maintainers must rely on the following canonical sources:
+>
+> | Source | Role |
+> |--------|------|
+> | `node_dependencies.json` | Machine-readable source of truth for node registry and startup policy |
+> | `docs/node_audit_report.json` | Machine-readable source of truth for audit results |
+> | `docs/NODE_ACTIVE_MANIFEST.md` | Human-readable active-node view (must align with registry/audit outputs) |
+> | `docs/NODE_SYSTEM_AUDIT.md` | Human-readable rendered audit report derived from canonical audit output |
+>
+> See `docs/MAINTAINER_RUNBOOK.md § Authoritative Governance Sources` for the
+> full precedence order and how to resolve discrepancies.
+
+---
+
 # Galaxy V2 系统完整性检查报告
 
 **检查时间**: 2026-02-14
