@@ -1252,6 +1252,17 @@ def _parse_args() -> argparse.Namespace:
         default=False,
         help="Print a brief summary to stdout",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help=(
+            "Exit 1 if any governance-critical failures are detected: "
+            "port conflicts, invalid startup_policy values, registry drift "
+            "(config entries without matching on-disk directory), or syntax "
+            "errors in active node entry files."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1284,6 +1295,24 @@ def main() -> int:
             f"keep={report.keep_count}  repair={report.repair_count}  "
             f"archive={report.archive_count}  delete={report.delete_count}"
         )
+
+    if args.strict:
+        _critical_checks = [
+            ("port conflicts",    report.port_conflicts),
+            ("policy violations", report.policy_violation_nodes),
+            ("registry drift",    report.in_config_not_on_disk),
+            ("syntax errors",     report.syntax_error_nodes),
+        ]
+        failure_lines = [
+            f"  {label}: {nodes}"
+            for label, nodes in _critical_checks
+            if nodes
+        ]
+        if failure_lines:
+            print("\n\u274c Governance-critical failures detected (--strict mode):")
+            print("\n".join(failure_lines))
+            return 1
+        print("\n\u2705 No governance-critical failures (--strict mode)")
 
     return 0
 

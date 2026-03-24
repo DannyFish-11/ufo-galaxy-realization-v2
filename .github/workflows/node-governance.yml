@@ -1,0 +1,131 @@
+name: Node Governance
+
+# Runs the canonical governance checks on every push to main and on every
+# pull request targeting main.  Governance-critical regressions fail CI.
+#
+# Jobs:
+#   node-audit          — canonical node audit (registry drift, policy, ports, syntax)
+#   repo-hygiene        — repository hygiene (forbidden runtime artifacts)
+#   runtime-validation  — structural / startup-path validation (static mode)
+#   governance-tests    — focused unit tests for audit, hygiene, and registry
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Canonical Node Audit
+  # ---------------------------------------------------------------------------
+  node-audit:
+    name: Canonical Node Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run canonical node audit (strict mode)
+        # --strict exits 1 on governance-critical failures:
+        #   port conflicts, invalid startup_policy, registry drift, syntax errors.
+        # The audit always writes docs/node_audit_report.json and
+        # docs/NODE_SYSTEM_AUDIT.md so maintainers can inspect the full report.
+        run: |
+          python scripts/node_audit.py \
+            --print-summary \
+            --strict
+
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-audit-reports
+          path: |
+            docs/node_audit_report.json
+            docs/NODE_SYSTEM_AUDIT.md
+
+  # ---------------------------------------------------------------------------
+  # 2. Repository Hygiene Check
+  # ---------------------------------------------------------------------------
+  repo-hygiene:
+    name: Repository Hygiene Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check for forbidden runtime artifacts
+        # Exits 1 if any *.pid, *.pyc, *.log (in nodes/), __pycache__,
+        # *.db, tmp files, etc. are committed to the repository.
+        # PYTHONDONTWRITEBYTECODE prevents Python from creating __pycache__
+        # directories while running this check.
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python scripts/check_repo_hygiene.py
+
+  # ---------------------------------------------------------------------------
+  # 3. Runtime / Structural Validation
+  # ---------------------------------------------------------------------------
+  runtime-validation:
+    name: Runtime Structural Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run runtime structural validation
+        # Validates startup-path coherence, authority-chain importability,
+        # node-registry consistency, legacy-surface isolation, and critical
+        # docs — all via static/import checks, no live services required.
+        # Exits 1 on any FAIL result; warnings are visible but non-blocking.
+        run: python scripts/validate_runtime.py
+
+  # ---------------------------------------------------------------------------
+  # 4. Governance Unit Tests
+  # ---------------------------------------------------------------------------
+  governance-tests:
+    name: Governance Unit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run governance-focused test suite
+        # Targets: node audit, optional-node governance, repo hygiene.
+        # Uses -x to stop on first failure for fast feedback.
+        run: |
+          python -m pytest \
+            tests/test_pr6_node_audit.py \
+            tests/test_pr8_optional_governance.py \
+            tests/test_repo_hygiene.py \
+            -v --tb=short -x

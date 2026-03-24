@@ -639,13 +639,15 @@ def test_90_no_policy_violations(audit_report):
 
 
 def test_91_node95_has_hygiene_violation(audit_report, nodes_by_name):
-    """Node_95_WebRTC_Receiver contains a tracked .pid file — hygiene fail."""
+    """Node_95_WebRTC_Receiver passes hygiene — committed .pid fixture was removed."""
     entry = nodes_by_name.get("Node_95_WebRTC_Receiver")
     assert entry is not None
-    assert entry.hygiene_violations, (
-        "Expected hygiene violations on Node_95_WebRTC_Receiver (.pid file)"
+    # The .pid file that previously existed was cleaned up; the node is now clean.
+    assert not entry.hygiene_violations, (
+        f"Unexpected hygiene violations on Node_95_WebRTC_Receiver: "
+        f"{entry.hygiene_violations}"
     )
-    assert entry.checks.get(CHECK_HYGIENE) == CHECK_FAIL
+    assert entry.checks.get(CHECK_HYGIENE) == CHECK_PASS
 
 
 def test_92_node00_passes_syntax_check(nodes_by_name):
