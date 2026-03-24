@@ -255,8 +255,13 @@ class TestBoundaryDeclarations:
 # 2. LiminalSurface rendering — spatial field only
 # ---------------------------------------------------------------------------
 
-# Content that must be present in a spatial-field surface
-_LIMINAL_SPATIAL_LABELS = ["Depth", "Topology", "Domain Path", "Ambient"]
+# Content that must be present in the canonical liminal execution-field surface.
+# The liminal surface now renders the three allowed content classes
+# (local chain / cross-device chain / sandbox simulation) rather than the
+# older spatial-dimension bars (depth_factor, topology_visibility, etc.).
+# Tests below validate the *canonical* rendering introduced in the execution-
+# chain consolidation work.
+_LIMINAL_CANONICAL_LABELS = ["Local Execution Chain", "Cross-Device Execution Chain", "Sandbox"]
 
 # Keywords that must NEVER appear in liminal rendering
 # (These represent information-board / provider-list content)
@@ -282,19 +287,26 @@ class TestLiminalSurfaceRendering:
         rendered = self._render(_SAMPLE_PROJECTION)
         assert isinstance(rendered, str) and len(rendered) > 0
 
-    def test_render_contains_spatial_label_depth(self) -> None:
+    def test_render_contains_canonical_label_local_chain(self) -> None:
+        """Liminal surface canonical rendering must show Local Execution Chain panel."""
         rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Depth" in rendered, "Liminal surface must show spatial depth_factor label"
-
-    def test_render_contains_spatial_label_topology(self) -> None:
-        rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Topology" in rendered, (
-            "Liminal surface must show topology_visibility label"
+        assert "Local Execution Chain" in rendered, (
+            "Liminal surface canonical rendering must show Local Execution Chain"
         )
 
-    def test_render_contains_spatial_label_ambient(self) -> None:
+    def test_render_contains_canonical_label_cross_device_chain(self) -> None:
+        """Liminal surface canonical rendering must show Cross-Device Execution Chain panel."""
         rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Ambient" in rendered, "Liminal surface must show ambient_intensity label"
+        assert "Cross-Device Execution Chain" in rendered, (
+            "Liminal surface canonical rendering must show Cross-Device Execution Chain"
+        )
+
+    def test_render_contains_canonical_label_sandbox(self) -> None:
+        """Liminal surface canonical rendering must show Sandbox / Speculative panel."""
+        rendered = self._render(_SAMPLE_PROJECTION)
+        assert "Sandbox" in rendered, (
+            "Liminal surface canonical rendering must show Sandbox / Speculative panel"
+        )
 
     def test_render_does_not_contain_provider_list_header(self) -> None:
         """Liminal surface must not render provider-list-style headers."""

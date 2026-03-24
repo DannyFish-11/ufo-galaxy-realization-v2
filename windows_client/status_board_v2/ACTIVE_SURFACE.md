@@ -7,6 +7,24 @@
 `windows_client/status_board_v2/` is the **canonical read-only desktop status
 board** for the Galaxy system.
 
+## Tri-state alignment
+
+This surface renders and tracks all three canonical desktop states:
+
+| State | Displayed as | Surface behaviour |
+|-------|-------------|-------------------|
+| `silent` | Phase label (grey) | Minimal display; all fields at defaults |
+| `liminal` | Phase label (amber) | Routing and execution-context fields active |
+| `manifest` | Phase label (green) | Full execution context; device IDs; task summary |
+
+The tri-state lifecycle is owned exclusively by `DesktopPresenceRuntime`
+(`core/desktop_presence_runtime.py`).  This surface **consumes** the lifecycle
+value from the canonical projection endpoint — it never sets or drives the
+tri-state value.
+
+See [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](../../docs/DESKTOP_SEMANTIC_CLOSURE.md)
+for the authoritative definition of all three states and their invariants.
+
 ## What this surface does
 
 Consumes the canonical runtime projection endpoint and renders the current
@@ -93,6 +111,9 @@ panels, full metrics/status-board panels, generic operator information blocks.
 - `core/liminal_space_mapping.py` — canonical liminal-facing structures
 - `docs/LIMINAL_SPACE_MAPPING.md` — canonical liminal space mapping definition
 - `docs/SANDBOX_SIMULATION_PROJECTION.md` — sandbox/simulation field semantics
+- `docs/DESKTOP_SEMANTIC_CLOSURE.md` — canonical tri-state semantic closure
+- `docs/STATUS_AND_STATISTICS_OWNERSHIP.md` — statistics / summary ownership
+- `docs/CONFIGURATION_ENTRY_UNIFICATION.md` — configuration entry semantics
 
 ## Migration guidance
 
