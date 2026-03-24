@@ -42,9 +42,20 @@ env/
 *.log
 logs/
 
-# Database
-*.db
+# Database (global)
 *.sqlite3
+
+# Runtime artifacts — forbidden inside node directories (and anywhere else)
+*.pid
+
+# Node-directory runtime artifacts: databases, logs, caches
+nodes/**/*.db
+nodes/**/*.sqlite
+nodes/**/*.sqlite3
+nodes/**/*.log
+nodes/**/*.pid
+nodes/**/__pycache__/
+nodes/**/.pytest_cache/
 
 # OS
 .DS_Store
