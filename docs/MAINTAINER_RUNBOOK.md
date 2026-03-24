@@ -268,6 +268,88 @@ When two sources disagree, apply this precedence (highest authority first):
 | New data contract | `contracts/` |
 | New cross-device logic | `galaxy_gateway/` (substrate) or `core/` (authority) |
 | New desktop status display | `windows_client/status_board_v2/` (read-only projection consumer) |
+
+### 8a. How to add a new node (step-by-step)
+
+This section provides the complete workflow for adding a node that will pass
+the canonical audit engine and meet the node contract.
+
+**1. Copy the template**
+
+```bash
+cp -r templates/node_template nodes/Node_XXX_YourNodeName
+```
+
+The template at `templates/node_template/` contains:
+
+| File | Purpose |
+|------|---------|
+| `main.py` | Starter FastAPI service with `/health` and `/status` |
+| `fusion_entry.py` | Fusion-layer shim using `importlib.util` |
+| `README.md` | Structured placeholder (port, endpoints, env vars, …) |
+| `requirements.txt` | Minimal dependency starter |
+| `Dockerfile` | Minimal container definition |
+
+**2. Rename placeholder strings**
+
+Find and replace every occurrence of `Node_XXX_YourNodeName` and `<PORT>`
+inside your new directory:
+
+```bash
+# Linux / macOS
+cd nodes/Node_XXX_YourNodeName
+grep -rl 'Node_XXX_YourNodeName' . | xargs sed -i 's/Node_XXX_YourNodeName/Node_042_Scheduler/g'
+grep -rl '<PORT>' .               | xargs sed -i 's/<PORT>/8142/g'
+```
+
+**3. Implement your logic in `main.py`**
+
+- Keep `/health` and `/status` endpoints (required by the active-node contract).
+- Add your own business-logic routes below the marked section.
+- Do **not** remove the `sys.path` fix block at the top of `main.py`.
+
+**4. Register the node**
+
+Add an entry to `node_dependencies.json`:
+
+```json
+"Node_XXX_YourNodeName": {
+    "port": XXXX,
+    "startup_policy": "auto",
+    "dependencies": [],
+    "description": "Short human-readable description"
+}
+```
+
+Valid `startup_policy` values: `"auto"`, `"manual"`, `"optional"`, `"skip"`.
+Only nodes with `"auto"` or `"required"` are started by the unified launcher.
+
+**5. Fill in `README.md`**
+
+Complete every placeholder section (Purpose, Port, Endpoints, Env Vars,
+Dependencies, Startup).  Remove the checklist section before merging.
+
+**6. Verify**
+
+```bash
+# Audit engine — new node must show "keep" with no integrity failures
+python scripts/node_audit.py
+
+# Hygiene checker — must exit 0
+python scripts/check_repo_hygiene.py nodes/Node_XXX_YourNodeName/
+
+# Port registry — ensure no port conflicts
+python scripts/validate_ports.py
+```
+
+### 8b. Canonical node contract summary
+
+| Tier | Required files | Additional requirements |
+|------|---------------|------------------------|
+| **Baseline** (any non-skip node) | `main.py`, `fusion_entry.py`, `README.md` | — |
+| **Active** (`startup_policy: auto / required`) | above + `requirements.txt`, `Dockerfile` | `/health` + `/status` endpoints; entry in `node_dependencies.json` with port |
+
+See `CONTRIBUTING.md § Canonical Node Contract` for the full specification.
 | New docs | `docs/` |
 | New validation / integration check | `scripts/` + `tests/` |
 
@@ -344,8 +426,10 @@ git commit -m "chore: remove committed runtime artifact <name>"
 | `docs/UNIFIED_SUBJECT_ARCHITECTURE.md` | DesktopPresenceRuntime + OpenClawd unified subject model |
 | `dashboard/LEGACY_SURFACE.md` | Dashboard legacy/demotion notice |
 | `windows_client/status_board_v2/ACTIVE_SURFACE.md` | Status board v2 active surface notice |
+| `CONTRIBUTING.md § Canonical Node Contract` | Baseline and active-node contract specification |
+| `templates/node_template/` | Copy-ready node template (baseline + active files) |
 | `docs/MAINTAINER_RUNBOOK.md` | **This file** |
 
 ---
 
-*Last updated: PR-9 — integration validation + authoritative documentation.*
+*Last updated: PR-4 — canonical node contract and reusable node templates.*
