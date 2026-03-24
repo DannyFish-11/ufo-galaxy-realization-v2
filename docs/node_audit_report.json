@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-03-24T11:52:50Z",
+  "generated_at": "2026-03-24T13:00:26Z",
   "project_root": "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2",
   "nominal_count": 130,
   "runnable_count": 129,
   "orchestrated_count": 129,
   "stub_count": 1,
-  "keep_count": 123,
-  "repair_count": 2,
+  "keep_count": 124,
+  "repair_count": 1,
   "archive_count": 2,
   "delete_count": 3,
   "in_config_not_on_disk": [],
@@ -61,7 +61,7 @@
       "config_group": "core",
       "config_priority": 1,
       "config_deps": [],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -99,13 +99,13 @@
       "has_fusion_entry": true,
       "has_requirements": true,
       "extra_py_files": [],
-      "main_py_lines": 687,
+      "main_py_lines": 721,
       "in_node_dependencies": true,
       "config_port": 7995,
       "config_group": "core",
       "config_priority": 1,
       "config_deps": [],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -151,7 +151,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -197,7 +197,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -246,7 +246,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -292,7 +292,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -338,7 +338,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -384,7 +384,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -430,7 +430,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -476,7 +476,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -522,7 +522,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -568,7 +568,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -614,7 +614,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -660,7 +660,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -706,7 +706,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -752,7 +752,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -798,7 +798,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -987,7 +987,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1039,7 +1039,7 @@
         "Node_67_HealthMonitor",
         "Node_103_KnowledgeGraph"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1090,7 +1090,7 @@
         "Node_73_Learning",
         "Node_100_MemorySystem"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1141,7 +1141,7 @@
         "Node_67_HealthMonitor",
         "Node_73_Learning"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1189,7 +1189,7 @@
       "config_deps": [
         "Node_90_MultimodalVision"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1517,7 +1517,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1701,7 +1701,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1728,9 +1728,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_124_LinuxDesktopAuto",
@@ -1797,7 +1795,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1824,9 +1822,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_126_AgentSwarm",
@@ -1845,7 +1841,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1872,9 +1868,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_127_BambuLab",
@@ -1895,7 +1889,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1922,9 +1916,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_128_MediaGen",
@@ -1945,7 +1937,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -1972,9 +1964,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_12_Postgres",
@@ -1993,7 +1983,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2088,7 +2078,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2134,7 +2124,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2183,7 +2173,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2229,7 +2219,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2275,7 +2265,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2321,7 +2311,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2367,7 +2357,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2413,7 +2403,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2459,7 +2449,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2505,7 +2495,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2551,7 +2541,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2599,7 +2589,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2645,7 +2635,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2691,7 +2681,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -2718,9 +2708,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added fusion_entry.py and Dockerfile"
-      ]
+      "notes": []
     },
     {
       "name": "Node_27_SmartHome",
@@ -2737,7 +2725,7 @@
       "config_group": "tools",
       "config_priority": 3,
       "config_deps": [],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3025,7 +3013,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3071,7 +3059,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3117,7 +3105,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3165,7 +3153,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3211,7 +3199,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3257,7 +3245,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3303,7 +3291,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3349,7 +3337,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3395,7 +3383,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3441,7 +3429,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3490,7 +3478,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3536,7 +3524,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3584,7 +3572,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3630,7 +3618,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3676,7 +3664,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3722,7 +3710,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3770,7 +3758,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3819,7 +3807,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3865,7 +3853,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3911,7 +3899,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -3957,7 +3945,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4003,7 +3991,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4049,7 +4037,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4095,7 +4083,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4141,7 +4129,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4187,7 +4175,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4233,7 +4221,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4325,7 +4313,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4352,9 +4340,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_62_ProbabilisticProgramming",
@@ -4373,7 +4359,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4400,9 +4386,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_63_FuzzyLogicEngine",
@@ -4467,7 +4451,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4494,9 +4478,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_65_LoggerCentral",
@@ -4515,7 +4497,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4542,9 +4524,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_66_ConfigManager",
@@ -4563,7 +4543,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4590,9 +4570,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_67_HealthMonitor",
@@ -4611,7 +4589,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4638,9 +4616,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_68_Security",
@@ -4659,7 +4635,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4686,9 +4662,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_69_BackupRestore",
@@ -4707,7 +4681,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4734,9 +4708,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_70_AutonomousLearning",
@@ -4849,7 +4821,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4876,9 +4848,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_73_Learning",
@@ -4899,7 +4869,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4926,9 +4896,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_74_DigitalTwin",
@@ -4949,7 +4917,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -4976,9 +4944,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_75_DataPipeline",
@@ -5181,7 +5147,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5229,7 +5195,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5275,7 +5241,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5302,9 +5268,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_82_NetworkGuard",
@@ -5323,7 +5287,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5350,9 +5314,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_83_NewsAggregator",
@@ -5371,7 +5333,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5398,9 +5360,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_84_StockTracker",
@@ -5419,7 +5379,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5446,9 +5406,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_85_PromptLibrary",
@@ -5467,7 +5425,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5494,9 +5452,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_86_SpeechProcessor",
@@ -5699,7 +5655,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5726,9 +5682,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_91_MultimodalAgent",
@@ -5747,7 +5701,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5774,9 +5728,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_92_AutoControl",
@@ -5795,7 +5747,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -5822,9 +5774,7 @@
       },
       "tier": "orchestrated",
       "action": "keep",
-      "notes": [
-        "PR-7: added README.md"
-      ]
+      "notes": []
     },
     {
       "name": "Node_93_VideoProcessor",
@@ -5937,7 +5887,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": false,
       "syntax_ok": true,
@@ -5983,7 +5933,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -6029,7 +5979,7 @@
       "config_deps": [
         "Node_01_OneAPI"
       ],
-      "config_startup_policy": null,
+      "config_startup_policy": "active",
       "policy_valid": true,
       "in_docker_compose": true,
       "syntax_ok": true,
@@ -6150,68 +6100,5 @@
       "action": "keep",
       "notes": []
     }
-  ],
-  "_pr7_baseline_fix": {
-    "applied_at": "2026-03-24T11:52:50Z",
-    "description": "PR-7: brought all active nodes to governance-compliant baseline",
-    "nodes_fixed": [
-      "Node_123_Calendar",
-      "Node_125_MediaGen",
-      "Node_126_AgentSwarm",
-      "Node_127_BambuLab",
-      "Node_128_MediaGen",
-      "Node_26_Discord",
-      "Node_61_GeometricReasoning",
-      "Node_62_ProbabilisticProgramming",
-      "Node_64_Telemetry",
-      "Node_65_LoggerCentral",
-      "Node_66_ConfigManager",
-      "Node_67_HealthMonitor",
-      "Node_68_Security",
-      "Node_69_BackupRestore",
-      "Node_72_KnowledgeBase",
-      "Node_73_Learning",
-      "Node_74_DigitalTwin",
-      "Node_81_Orchestrator",
-      "Node_82_NetworkGuard",
-      "Node_83_NewsAggregator",
-      "Node_84_StockTracker",
-      "Node_85_PromptLibrary",
-      "Node_90_MultimodalVision",
-      "Node_91_MultimodalAgent",
-      "Node_92_AutoControl"
-    ],
-    "fix_summary": {
-      "Node_26_Discord": [
-        "added fusion_entry.py",
-        "added Dockerfile"
-      ],
-      "README_added": [
-        "Node_123_Calendar",
-        "Node_125_MediaGen",
-        "Node_126_AgentSwarm",
-        "Node_127_BambuLab",
-        "Node_128_MediaGen",
-        "Node_61_GeometricReasoning",
-        "Node_62_ProbabilisticProgramming",
-        "Node_64_Telemetry",
-        "Node_65_LoggerCentral",
-        "Node_66_ConfigManager",
-        "Node_67_HealthMonitor",
-        "Node_68_Security",
-        "Node_69_BackupRestore",
-        "Node_72_KnowledgeBase",
-        "Node_73_Learning",
-        "Node_74_DigitalTwin",
-        "Node_81_Orchestrator",
-        "Node_82_NetworkGuard",
-        "Node_83_NewsAggregator",
-        "Node_84_StockTracker",
-        "Node_85_PromptLibrary",
-        "Node_90_MultimodalVision",
-        "Node_91_MultimodalAgent",
-        "Node_92_AutoControl"
-      ]
-    }
-  }
+  ]
 }

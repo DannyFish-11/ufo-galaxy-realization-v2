@@ -1,7 +1,6 @@
 # Galaxy Node-System Audit Report
 
-> Generated: 2026-03-24T10:40:21Z  
-> Updated: 2026-03-24T11:27:00Z — PR-7 active-node baseline fixes applied  
+> Generated: 2026-03-24T13:00:26Z
 > Authority: `scripts/node_audit.py` — canonical repository governance engine (PR-2)
 
 ## Summary Counts
@@ -17,8 +16,8 @@
 
 | Action | Count | Meaning |
 |--------|-------|---------|
-| **keep** | 148 | Healthy, orchestrated, no issues |
-| **repair** | 0 | Valuable role; fix config/impl before use |
+| **keep** | 124 | Healthy, orchestrated, no issues |
+| **repair** | 1 | Valuable role; fix config/impl before use |
 | **archive** | 2 | Non-trivial but not orchestrated; preserve |
 | **delete** | 3 | Placeholder/stub/duplicate with no unique value |
 
@@ -69,18 +68,15 @@ _No hygiene violations detected._
 
 Nodes missing one or more of: `main.py`, `fusion_entry.py`, `README.md`
 
-> **PR-7 status:** All active nodes now satisfy the baseline artifact requirement.
-> The nodes listed below are `optional` or `skip` policy class and are out of scope for this PR.
-
-| Node | Policy | main.py | fusion_entry.py | README.md |
-|------|--------|---------|-----------------|-----------|
-| `Node_120_File` | optional | ✓ | ✓ | ✗ |
-| `Node_121_Web` | optional | ✓ | ✓ | ✗ |
-| `Node_122_Shell` | optional | ✓ | ✓ | ✗ |
-| `Node_124_LinuxDesktopAuto` | optional | ✓ | ✓ | ✗ |
-| `Node_130_AutonomousCoding` | skip | ✓ | ✓ | ✗ |
-| `Node_70_AutonomousLearning` | optional | ✓ | ✓ | ✗ |
-| `Node_71_MultiDeviceCoordination` | optional | ✓ | ✓ | ✗ |
+| Node | main.py | fusion_entry.py | README.md |
+|------|---------|-----------------|-----------|
+| `Node_120_File` | ✓ | ✓ | ✗ |
+| `Node_121_Web` | ✓ | ✓ | ✗ |
+| `Node_122_Shell` | ✓ | ✓ | ✗ |
+| `Node_124_LinuxDesktopAuto` | ✓ | ✓ | ✗ |
+| `Node_130_AutonomousCoding` | ✓ | ✓ | ✗ |
+| `Node_70_AutonomousLearning` | ✓ | ✓ | ✗ |
+| `Node_71_MultiDeviceCoordination` | ✓ | ✓ | ✗ |
 
 ## Nodes with Syntax Errors
 _No syntax errors detected._
@@ -91,9 +87,7 @@ _No syntax errors detected._
 
 ### Nodes Missing `Dockerfile`
 
-_All active nodes now have a `Dockerfile`. (PR-7 fix: Node_26_Discord)_
-
-_Nodes with optional/skip policy are not required to have a Dockerfile at this governance tier._
+_All nodes have a `Dockerfile`._
 
 ### Nodes Missing `requirements.txt`
 
@@ -112,7 +106,7 @@ _All nodes have a `requirements.txt`._
 | Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |
 |------|-------|-------|------|--------|------|--------|-----|-----|-----|-----|----|-----|
 | `Node_00_StateMachine` | 390 | core | 8000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_01_OneAPI` | 687 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_01_OneAPI` | 721 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_02_Tasker` | 316 | core | 8002 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_03_SecretVault` | 324 | core | 8003 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_04_Router` | 480 | core | 8004 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
