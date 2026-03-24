@@ -89,6 +89,18 @@ from scripts.node_audit import (
     NodeAuditEntry,
     NodeAuditReport,
     run_audit,
+    # PR-2 check category constants
+    CHECK_SOURCE_COMPLETENESS,
+    CHECK_SYNTAX_SAFETY,
+    CHECK_PACKAGING,
+    CHECK_REGISTRY_GOVERNANCE,
+    CHECK_RUNTIME_CONTRACT,
+    CHECK_HYGIENE,
+    # PR-2 check result constants
+    CHECK_PASS,
+    CHECK_WARN,
+    CHECK_FAIL,
+    CHECK_UNKNOWN,
 )
 
 # ---------------------------------------------------------------------------
@@ -438,3 +450,288 @@ def test_59_node00_main_py_lines_gte_100(nodes_by_name):
 
 def test_60_keep_count_gte_80(audit_report):
     assert audit_report.keep_count >= 80
+
+
+# ---------------------------------------------------------------------------
+# 61–100: PR-2 canonical governance engine tests
+# ---------------------------------------------------------------------------
+
+# ── Check category constants ──────────────────────────────────────────────
+
+def test_61_check_source_completeness_constant():
+    assert CHECK_SOURCE_COMPLETENESS == "source_completeness"
+
+
+def test_62_check_syntax_safety_constant():
+    assert CHECK_SYNTAX_SAFETY == "syntax_safety"
+
+
+def test_63_check_packaging_constant():
+    assert CHECK_PACKAGING == "packaging"
+
+
+def test_64_check_registry_governance_constant():
+    assert CHECK_REGISTRY_GOVERNANCE == "registry_governance"
+
+
+def test_65_check_runtime_contract_constant():
+    assert CHECK_RUNTIME_CONTRACT == "runtime_contract"
+
+
+def test_66_check_hygiene_constant():
+    assert CHECK_HYGIENE == "hygiene"
+
+
+def test_67_check_pass_constant():
+    assert CHECK_PASS == "pass"
+
+
+def test_68_check_warn_constant():
+    assert CHECK_WARN == "warn"
+
+
+def test_69_check_fail_constant():
+    assert CHECK_FAIL == "fail"
+
+
+def test_70_check_unknown_constant():
+    assert CHECK_UNKNOWN == "unknown"
+
+
+# ── NodeAuditEntry new PR-2 fields ───────────────────────────────────────
+
+def test_71_node_audit_entry_has_syntax_ok_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "syntax_ok")
+    assert e.syntax_ok is None
+
+
+def test_72_node_audit_entry_has_fusion_syntax_ok_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "fusion_syntax_ok")
+    assert e.fusion_syntax_ok is None
+
+
+def test_73_node_audit_entry_has_config_startup_policy_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "config_startup_policy")
+    assert e.config_startup_policy is None
+
+
+def test_74_node_audit_entry_has_policy_valid_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "policy_valid")
+    assert e.policy_valid is None
+
+
+def test_75_node_audit_entry_has_health_endpoint_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "has_health_endpoint")
+    assert e.has_health_endpoint is False
+
+
+def test_76_node_audit_entry_has_status_endpoint_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "has_status_endpoint")
+    assert e.has_status_endpoint is False
+
+
+def test_77_node_audit_entry_has_hygiene_violations_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "hygiene_violations")
+    assert isinstance(e.hygiene_violations, list)
+
+
+def test_78_node_audit_entry_has_checks_field():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    assert hasattr(e, "checks")
+    assert isinstance(e.checks, dict)
+
+
+def test_79_node_audit_entry_to_dict_contains_new_fields():
+    e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
+    d = e.to_dict()
+    for key in ("syntax_ok", "fusion_syntax_ok", "config_startup_policy",
+                "policy_valid", "has_health_endpoint", "has_status_endpoint",
+                "hygiene_violations", "checks"):
+        assert key in d, f"to_dict() missing key '{key}'"
+
+
+# ── NodeAuditReport new PR-2 fields ──────────────────────────────────────
+
+def test_80_report_has_port_conflicts_field(audit_report):
+    assert hasattr(audit_report, "port_conflicts")
+    assert isinstance(audit_report.port_conflicts, list)
+
+
+def test_81_report_has_syntax_error_nodes_field(audit_report):
+    assert hasattr(audit_report, "syntax_error_nodes")
+    assert isinstance(audit_report.syntax_error_nodes, list)
+
+
+def test_82_report_has_missing_packaging_nodes_field(audit_report):
+    assert hasattr(audit_report, "missing_packaging_nodes")
+    assert isinstance(audit_report.missing_packaging_nodes, list)
+
+
+def test_83_report_has_hygiene_violation_nodes_field(audit_report):
+    assert hasattr(audit_report, "hygiene_violation_nodes")
+    assert isinstance(audit_report.hygiene_violation_nodes, list)
+
+
+def test_84_report_has_policy_violation_nodes_field(audit_report):
+    assert hasattr(audit_report, "policy_violation_nodes")
+    assert isinstance(audit_report.policy_violation_nodes, list)
+
+
+def test_85_report_has_missing_required_files_nodes_field(audit_report):
+    assert hasattr(audit_report, "missing_required_files_nodes")
+    assert isinstance(audit_report.missing_required_files_nodes, list)
+
+
+# ── Integration: PR-2 check results on real nodes ────────────────────────
+
+def test_86_all_entries_have_all_six_checks(audit_report):
+    """Every node entry must have all six check categories populated."""
+    required = {
+        CHECK_SOURCE_COMPLETENESS, CHECK_SYNTAX_SAFETY, CHECK_PACKAGING,
+        CHECK_REGISTRY_GOVERNANCE, CHECK_RUNTIME_CONTRACT, CHECK_HYGIENE,
+    }
+    valid_values = {CHECK_PASS, CHECK_WARN, CHECK_FAIL, CHECK_UNKNOWN}
+    for entry in audit_report.nodes:
+        missing = required - set(entry.checks)
+        assert not missing, f"{entry.name} missing checks: {missing}"
+        for cat, val in entry.checks.items():
+            assert val in valid_values, (
+                f"{entry.name} check '{cat}' has invalid value '{val}'"
+            )
+
+
+def test_87_orchestrated_nodes_pass_registry_governance(audit_report):
+    """Every ORCHESTRATED node must pass the registry_governance check."""
+    for entry in audit_report.nodes:
+        if entry.tier == NodeTier.ORCHESTRATED:
+            result = entry.checks.get(CHECK_REGISTRY_GOVERNANCE)
+            assert result == CHECK_PASS, (
+                f"{entry.name} tier=orchestrated but registry_governance={result}"
+            )
+
+
+def test_88_no_syntax_errors_in_repo(audit_report):
+    """No node should have a Python syntax error — all files must compile."""
+    assert audit_report.syntax_error_nodes == [], (
+        f"Nodes with syntax errors: {audit_report.syntax_error_nodes}"
+    )
+
+
+def test_89_no_port_conflicts_in_registry(audit_report):
+    """node_dependencies.json must not assign the same port to two nodes."""
+    assert audit_report.port_conflicts == [], (
+        f"Port conflicts detected: {audit_report.port_conflicts}"
+    )
+
+
+def test_90_no_policy_violations(audit_report):
+    """No node should have an invalid startup_policy value."""
+    assert audit_report.policy_violation_nodes == [], (
+        f"Nodes with invalid policy: {audit_report.policy_violation_nodes}"
+    )
+
+
+def test_91_node95_has_hygiene_violation(audit_report, nodes_by_name):
+    """Node_95_WebRTC_Receiver contains a tracked .pid file — hygiene fail."""
+    entry = nodes_by_name.get("Node_95_WebRTC_Receiver")
+    assert entry is not None
+    assert entry.hygiene_violations, (
+        "Expected hygiene violations on Node_95_WebRTC_Receiver (.pid file)"
+    )
+    assert entry.checks.get(CHECK_HYGIENE) == CHECK_FAIL
+
+
+def test_92_node00_passes_syntax_check(nodes_by_name):
+    """Node_00_StateMachine must pass the syntax_safety check."""
+    entry = nodes_by_name["Node_00_StateMachine"]
+    assert entry.syntax_ok is True
+    assert entry.checks.get(CHECK_SYNTAX_SAFETY) == CHECK_PASS
+
+
+def test_93_node00_has_runtime_contract(nodes_by_name):
+    """Node_00_StateMachine declares /health and /status endpoints."""
+    entry = nodes_by_name["Node_00_StateMachine"]
+    assert entry.has_health_endpoint is True
+    assert entry.has_status_endpoint is True
+    assert entry.checks.get(CHECK_RUNTIME_CONTRACT) == CHECK_PASS
+
+
+def test_94_node00_policy_valid(nodes_by_name):
+    """Node_00_StateMachine is in config and should have policy_valid=True."""
+    entry = nodes_by_name["Node_00_StateMachine"]
+    assert entry.policy_valid is True
+
+
+def test_95_missing_required_files_contains_nodes_without_main(audit_report):
+    """missing_required_files_nodes must include every node that has no main.py."""
+    for entry in audit_report.nodes:
+        if not entry.has_main_py:
+            assert entry.name in audit_report.missing_required_files_nodes, (
+                f"{entry.name} has no main.py but not in missing_required_files_nodes"
+            )
+
+
+def test_96_checks_dict_is_json_serialisable(audit_report):
+    """All checks dicts must round-trip through JSON (required for report output)."""
+    for entry in audit_report.nodes:
+        json.dumps(entry.checks)  # must not raise
+
+
+def test_97_report_to_dict_contains_pr2_aggregate_fields(audit_report):
+    d = audit_report.to_dict()
+    for key in (
+        "port_conflicts", "syntax_error_nodes", "missing_packaging_nodes",
+        "hygiene_violation_nodes", "policy_violation_nodes",
+        "missing_required_files_nodes",
+    ):
+        assert key in d, f"report.to_dict() missing key '{key}'"
+
+
+def test_98_core_module_exports_check_constants():
+    """core/node_audit.py must re-export all PR-2 check constants."""
+    from core.node_audit import (
+        CHECK_SOURCE_COMPLETENESS as CSC,
+        CHECK_SYNTAX_SAFETY as CSS,
+        CHECK_PACKAGING as CPK,
+        CHECK_REGISTRY_GOVERNANCE as CRG,
+        CHECK_RUNTIME_CONTRACT as CRC,
+        CHECK_HYGIENE as CHY,
+        CHECK_PASS, CHECK_WARN, CHECK_FAIL, CHECK_UNKNOWN,
+    )
+    assert CSC == "source_completeness"
+    assert CSS == "syntax_safety"
+    assert CPK == "packaging"
+    assert CRG == "registry_governance"
+    assert CRC == "runtime_contract"
+    assert CHY == "hygiene"
+    assert CHECK_PASS == "pass"
+    assert CHECK_WARN == "warn"
+    assert CHECK_FAIL == "fail"
+    assert CHECK_UNKNOWN == "unknown"
+
+
+def test_99_nodes_without_fusion_entry_have_source_completeness_warn_or_fail(audit_report):
+    """Nodes missing fusion_entry.py must not have source_completeness=pass."""
+    for entry in audit_report.nodes:
+        if not entry.has_fusion_entry:
+            result = entry.checks.get(CHECK_SOURCE_COMPLETENESS)
+            assert result in (CHECK_WARN, CHECK_FAIL, CHECK_UNKNOWN), (
+                f"{entry.name} missing fusion_entry.py but has "
+                f"source_completeness={result}"
+            )
+
+
+def test_100_hygiene_violation_nodes_list_consistent_with_entry_violations(audit_report):
+    """hygiene_violation_nodes aggregate must be consistent with per-entry data."""
+    from_entries = sorted(
+        e.name for e in audit_report.nodes if e.hygiene_violations
+    )
+    assert audit_report.hygiene_violation_nodes == from_entries
+
