@@ -514,6 +514,72 @@ _register(
     ),
 )
 
+# ---------------------------------------------------------------------------
+# PR-routing-authority: Demote legacy model-routing paths to bridge-only roles.
+#
+# The canonical model-routing authority is:
+#   core.model_topology.topology_router.TopologyRouter  (TopologyRoutePlan output)
+#
+# Legacy routing helpers listed below are retained only for backward
+# compatibility.  They must not be used as authoritative routing sources
+# in new code.  See docs/MODEL_ROUTING_AUTHORITY.md for the full policy.
+# ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="core.multi_llm_router.MultiLLMRouter",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "MultiLLMRouter is a LEGACY ROUTING HELPER (PR-routing-authority).  "
+            "It selects a provider/model at runtime but does not produce a "
+            "TopologyRoutePlan and is not the canonical routing authority.  "
+            "New routing decisions must go through "
+            "core.model_topology.topology_router.TopologyRouter which produces "
+            "a TopologyRoutePlan as the sole canonical routing output.  "
+            "MultiLLMRouter is retained as a compatibility bridge only; "
+            "do not treat its output as authoritative routing truth."
+        ),
+        pr_guardrail_added="PR-routing-authority",
+        notes=(
+            "MultiLLMRouter — LEGACY ROUTING HELPER.  "
+            "Demoted in PR-routing-authority: not the canonical routing authority.  "
+            "Canonical authority: TopologyRouter → TopologyRoutePlan."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.multi_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/multi_llm_router.py is a LEGACY ROUTING MODULE (PR-routing-authority).  "
+            "See core.multi_llm_router.MultiLLMRouter entry for migration guidance."
+        ),
+        pr_guardrail_added="PR-routing-authority",
+        notes="core/multi_llm_router.py — LEGACY ROUTING MODULE.  Demoted in PR-routing-authority.",
+    ),
+    LegacyPathEntry(
+        module_path="dashboard.backend.main.llm_providers",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "dashboard/backend/main.py llm_providers endpoint is a LEGACY PROVIDER "
+            "ROUTING SURFACE (PR-routing-authority).  "
+            "Provider/model selection data served from this endpoint is not the "
+            "canonical routing truth.  The canonical routing authority is "
+            "core.model_topology.topology_router.TopologyRouter.  "
+            "Consumers needing model routing state must read from "
+            "GET /api/v1/projection/runtime (RuntimeProjection) or "
+            "GET /api/v1/projection/return (DesktopStatusProjection) which embed "
+            "routing data sourced from TopologyRoutePlan.  "
+            "This endpoint is retained only for legacy dashboard UI compatibility."
+        ),
+        pr_guardrail_added="PR-routing-authority",
+        notes=(
+            "dashboard llm_providers — LEGACY PROVIDER ROUTING SURFACE.  "
+            "Demoted in PR-routing-authority: not canonical routing truth.  "
+            "Do not use as a model/provider selection authority."
+        ),
+    ),
+)
+
 #: Frozenset of node module prefixes that are LEGACY_ORCHESTRATOR_NODE class.
 #: Contributors: when registering any node whose module path starts with one of
 #: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.

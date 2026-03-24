@@ -145,6 +145,17 @@ class RuntimeProjection(BaseModel):
         default=None,
         description="Human-readable explanation of the last routing decision.",
     )
+    routing_authority: str = Field(
+        default="none",
+        description=(
+            "Identifies the routing authority that populated the model-routing fields "
+            "(primary_model_id, support_model_ids, active_weights, route_reason). "
+            "Set to CANONICAL_ROUTING_AUTHORITY "
+            "('core.model_topology.topology_router.TopologyRouter') when the fields "
+            "were populated from a TopologyRoutePlan.  Set to 'none' when no route "
+            "plan was provided.  Read-only; for diagnostics and guardrail tooling."
+        ),
+    )
     active_device_ids: List[str] = Field(
         default_factory=list,
         description="IDs of currently active devices.",
@@ -233,6 +244,7 @@ class RuntimeProjection(BaseModel):
             "support_model_ids": list(self.support_model_ids),
             "active_weights": dict(self.active_weights),
             "route_reason": self.route_reason,
+            "routing_authority": self.routing_authority,
             "active_device_ids": list(self.active_device_ids),
             "execution_stage": self.execution_stage,
             "current_task_summary": self.current_task_summary,
