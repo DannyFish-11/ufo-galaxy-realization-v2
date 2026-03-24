@@ -2,6 +2,29 @@
 
 本目录包含Galaxy系统的P0级优先节点实现。
 
+---
+
+## ✅ 快速验证 / Quick Validation (PR-9)
+
+After the PR-1 through PR-8 structural cleanup, use these commands to confirm
+the authoritative runtime system is coherent:
+
+```bash
+# Validate startup path, authority chain, node registry, legacy isolation, docs
+python scripts/validate_runtime.py
+
+# JSON output (for CI integration)
+python scripts/validate_runtime.py --json
+
+# Run the integration validation test suite
+pytest tests/test_pr9_integration_validation.py -v
+```
+
+For the authoritative maintainer reference see:
+**[docs/MAINTAINER_RUNBOOK.md](docs/MAINTAINER_RUNBOOK.md)**
+
+---
+
 ## 🧠 统一主体架构 (Unified Subject Architecture)
 
 > **核心原则**: `DesktopPresenceRuntime` 和 `OpenClawd` **不是**两个并列主体，而是**同一个主体的两层**。
