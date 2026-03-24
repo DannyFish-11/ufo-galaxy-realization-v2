@@ -380,10 +380,17 @@ export MQTT_PORT="1883"
 
 ```
 Node_XX_Name/
-├── main.py          # 主要业务逻辑
-├── fusion_entry.py  # 融合入口文件
-└── README.md        # 节点说明（可选）
+├── main.py          # 主要业务逻辑 (required)
+├── fusion_entry.py  # 融合入口文件 (required)
+├── README.md        # 节点说明 (required)
+├── requirements.txt # Python 依赖 (required for active nodes)
+└── Dockerfile       # 容器化支持 (required for active nodes)
 ```
+
+A ready-to-copy template is provided at `templates/node_template/`.
+The full node contract (baseline vs active requirements, port registration,
+health/status surface) is documented in `CONTRIBUTING.md § Canonical Node Contract`
+and `docs/MAINTAINER_RUNBOOK.md § 8a`.
 
 ## 依赖说明
 

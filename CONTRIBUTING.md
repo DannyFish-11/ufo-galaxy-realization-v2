@@ -21,16 +21,96 @@ Thank you for contributing!
    pip install -r requirements-dev.txt
    ```
 
+## Canonical Node Contract
+
+Every node directory under `nodes/` must meet the requirements for its
+governance tier.  The audit engine in `scripts/node_audit.py` checks these
+requirements automatically.
+
+### Baseline contract (all non-skipped nodes)
+
+The following files are **required** for any node that is not explicitly
+marked `skip` or `archive` in `node_dependencies.json`:
+
+| File | Purpose |
+|------|---------|
+| `main.py` | Node entry point — core logic, FastAPI app, or equivalent |
+| `fusion_entry.py` | Fusion-layer integration shim (see pattern below) |
+| `README.md` | Human-readable description, port, endpoints, env vars |
+
+A node that exists on disk but is missing any of these three files is
+treated as **incomplete** by the audit engine.
+
+### Active-node contract (nodes with `"startup_policy": "auto"` or `"required"`)
+
+Active nodes must additionally satisfy:
+
+| Requirement | Detail |
+|-------------|--------|
+| `requirements.txt` | All Python runtime dependencies declared |
+| `Dockerfile` | Node can be containerised independently |
+| `/health` endpoint | `GET /health` returns `{"status": "healthy", "node": "..."}` with HTTP 200 |
+| `/status` endpoint | `GET /status` returns at minimum `{"node": "...", "port": ..., "ready": bool}` |
+| Registry entry | Listed in `node_dependencies.json` with `port`, `startup_policy`, and `dependencies` |
+
+### `fusion_entry.py` contract
+
+Every `fusion_entry.py` must:
+
+1. Use `importlib.util.spec_from_file_location` to load `main.py` — **never
+   mutate `sys.path`** from within `fusion_entry.py`.
+2. Expose a `FusionNode` class with an async `execute(command, **params)`
+   method that returns `{"success": bool, ...}`.
+3. Expose a module-level `get_node_instance()` function that returns a
+   `FusionNode`.
+
+### Port and registry fields
+
+Ports are declared in `node_dependencies.json`.  Do **not** hard-code a port
+only in `main.py` without also registering it in the JSON.  The JSON entry
+for a node should look like:
+
+```json
+"Node_XXX_YourNodeName": {
+    "port": XXXX,
+    "startup_policy": "auto",
+    "dependencies": ["Node_YYY_Other"],
+    "description": "Short description"
+}
+```
+
+### Node template
+
+A ready-to-copy baseline template lives at `templates/node_template/`.
+Copy the entire directory and rename it before editing:
+
+```bash
+cp -r templates/node_template nodes/Node_XXX_YourNodeName
+```
+
+Then find-and-replace `Node_XXX_YourNodeName` and `<PORT>` throughout the
+copied files.
+
+---
+
 ## Adding a New Node
 
-1. Create a directory under `nodes/` following the naming convention `Node_XX_Name/`.
-2. Each node directory must contain at minimum:
+1. Copy the template: `cp -r templates/node_template nodes/Node_XXX_YourName/`
+2. Rename all placeholder strings (`Node_XXX_YourNodeName`, `<PORT>`) to match
+   your actual node ID and port.
+3. Each node directory must contain at minimum:
    - `main.py` – entry point with the node's core logic
    - `fusion_entry.py` – integration shim used by the fusion layer
-3. **Register the node in `node_dependencies.json`.**  This file is the
+   - `README.md` – purpose, port, endpoints, env vars, dependencies
+4. **Register the node in `node_dependencies.json`.**  This file is the
    machine-readable source of truth for the node registry and startup policy.
    A node that is not listed there is not considered part of the active system,
    regardless of whether its directory exists on disk.
+5. For active nodes, also add `requirements.txt` and `Dockerfile` (both are
+   included in the template).
+6. Run `python scripts/node_audit.py` and confirm the new node shows `keep`
+   status with no integrity failures.
+7. Run `python scripts/check_repo_hygiene.py` — must exit `0`.
 
 ## Authoritative Sources of Truth
 
