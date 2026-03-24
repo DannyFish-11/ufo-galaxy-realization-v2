@@ -170,8 +170,29 @@ pytest tests/test_pr4_status_board_v2.py -v
 
 ---
 
+## Display Boundary
+
+> **Status Board V2 is the right-side structured information display layer.**
+> It must not cross into the liminal space's responsibilities.
+
+The canonical boundary between this board and the liminal middle-state space
+is defined in [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md).
+Key rules enforced there:
+
+- The **status board** is the correct and only place for model/routing
+  information, provider/vendor status, metrics, and device/task panels.
+- The **liminal space** (`liminal_surface.py`, `manifest_surface.py`) carries
+  only: local execution chain, cross-device execution chain, and
+  sandbox/speculative execution field content.
+- Provider list cards, dashboard-style model panels, full metrics/status-board
+  panels, and generic operator information blocks must **not** appear in
+  liminal space.
+
+---
+
 ## Related Documents
 
+- [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) — canonical display boundary contract
 - [`docs/RUNTIME_PROJECTION.md`](RUNTIME_PROJECTION.md) — full design rationale for `RuntimeProjection`
 - [`windows_client/status_board.py`](../windows_client/status_board.py) — original minimal status board (still functional)
 - [`core/projection/`](../core/projection/) — `RuntimeProjection` model and `build_runtime_projection` compiler
