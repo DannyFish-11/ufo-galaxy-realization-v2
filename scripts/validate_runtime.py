@@ -345,6 +345,7 @@ def check_docs() -> None:
         ("docs/NODE_ACTIVE_MANIFEST.md", "Active node set manifest"),
         ("docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md", "Surface demotion policy"),
         ("docs/MAINTAINER_RUNBOOK.md", "Maintainer runbook (PR-9)"),
+        ("docs/LEGACY_PURGE_HARDENING.md", "Final legacy purge decisions (PR-10)"),
     ]
     for rel_path, description in required_docs:
         path = PROJECT_ROOT / rel_path
@@ -354,6 +355,98 @@ def check_docs() -> None:
             f"({description})",
         )
         _print_result(r)
+
+
+def check_purge_hardening() -> None:
+    """PR-10: Verify final legacy purge and baseline hardening decisions."""
+    _section("6. PR-10 Legacy Purge Hardening")
+
+    # 6a. start_galaxy.py must not contain the dead _start_desktop() function
+    start_galaxy = PROJECT_ROOT / "start_galaxy.py"
+    if start_galaxy.exists():
+        text = start_galaxy.read_text(encoding="utf-8")
+        r = _record(
+            "start_galaxy.py: _start_desktop() removed",
+            "def _start_desktop(" not in text,
+            "Dead reference to hard-disabled run_ui.py must be removed (PR-10)",
+        )
+        _print_result(r)
+
+        r = _record(
+            "start_galaxy.py: run_ui.py os.system call removed",
+            "os.system" not in text,
+            "os.system() call to hard-disabled run_ui.py must be removed (PR-10)",
+        )
+        _print_result(r)
+
+        r = _record(
+            "start_galaxy.py: desktop_proc launch block removed",
+            "desktop_proc" not in text,
+            "multiprocessing desktop_proc launch block must be removed (PR-10)",
+        )
+        _print_result(r)
+
+        r = _record(
+            "start_galaxy.py: PR-10 LEGACY WRAPPER guard present",
+            "PR-10 LEGACY WRAPPER" in text,
+            "Wrapper guard comment must be present to block future additions",
+        )
+        _print_result(r)
+
+    else:
+        _print_result(_record(
+            "start_galaxy.py exists",
+            False,
+            "start_galaxy.py not found",
+        ))
+
+    # 6b. Legacy purge registry importable
+    try:
+        from core.legacy_purge_registry import (  # type: ignore[import]
+            PURGE_REGISTRY,
+            purge_registry_summary,
+        )
+        summary = purge_registry_summary()
+        r = _record(
+            "core.legacy_purge_registry importable",
+            True,
+            f"total entries: {summary['total_entries']}",
+        )
+        _print_result(r)
+
+        r = _record(
+            "purge registry: PR-10 entries present",
+            "PR-10" in summary.get("by_pr", {}),
+            "Registry must contain PR-10 purge decisions",
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "core.legacy_purge_registry importable",
+            False,
+            f"import failed: {exc}",
+        ))
+
+    # 6c. docs/LEGACY_PURGE_HARDENING.md exists (also checked in section 5,
+    #     but we verify content here)
+    purge_doc = PROJECT_ROOT / "docs" / "LEGACY_PURGE_HARDENING.md"
+    if purge_doc.exists():
+        content = purge_doc.read_text(encoding="utf-8")
+        r = _record(
+            "docs/LEGACY_PURGE_HARDENING.md: mentions _start_desktop removal",
+            "_start_desktop" in content,
+            "Purge doc must document the _start_desktop() dead reference removal",
+        )
+        _print_result(r)
+    else:
+        _print_result(_record(
+            "docs/LEGACY_PURGE_HARDENING.md content",
+            False,
+            "File not found; skipping content check",
+        ))
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +496,7 @@ def _to_json() -> Dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Galaxy runtime integration validator (PR-9)"
+        description="Galaxy runtime integration validator (PR-9 / PR-10)"
     )
     parser.add_argument(
         "--json",
@@ -419,7 +512,7 @@ def main() -> int:
 
     if not args.json:
         print("=" * 60)
-        print("  Galaxy — Runtime Integration Validator (PR-9)")
+        print("  Galaxy — Runtime Integration Validator (PR-9 / PR-10)")
         print("=" * 60)
 
     check_startup_path()
@@ -427,6 +520,7 @@ def main() -> int:
     check_node_registry()
     check_legacy_isolation()
     check_docs()
+    check_purge_hardening()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
