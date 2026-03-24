@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-24T10:12:47Z",
+  "generated_at": "2026-03-24T10:40:21Z",
   "project_root": "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2",
   "nominal_count": 130,
   "runnable_count": 129,
@@ -29,7 +29,9 @@
   "missing_main_py": [],
   "port_conflicts": [],
   "syntax_error_nodes": [],
-  "missing_packaging_nodes": [],
+  "missing_packaging_nodes": [
+    "Node_26_Discord"
+  ],
   "hygiene_violation_nodes": [],
   "policy_violation_nodes": [],
   "missing_required_files_nodes": [
@@ -66,6 +68,10 @@
     "Node_91_MultimodalAgent",
     "Node_92_AutoControl"
   ],
+  "missing_dockerfile_nodes": [
+    "Node_26_Discord"
+  ],
+  "missing_requirements_nodes": [],
   "nodes": [
     {
       "name": "Node_00_StateMachine",
@@ -100,6 +106,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -136,6 +150,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -175,6 +197,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -212,6 +242,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -254,6 +292,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -291,6 +337,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -330,6 +384,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -367,6 +429,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -406,6 +476,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -443,6 +521,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -482,6 +568,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -519,6 +613,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -558,6 +660,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -595,6 +705,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -634,6 +752,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -671,6 +797,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -710,6 +844,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -747,6 +889,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -789,6 +939,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -829,6 +987,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -866,6 +1032,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -911,6 +1085,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -953,6 +1135,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -997,6 +1187,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1037,6 +1235,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1075,6 +1281,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1112,6 +1326,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1153,6 +1375,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1192,6 +1422,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1233,6 +1471,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1270,6 +1516,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1309,6 +1563,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1346,6 +1608,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1385,6 +1655,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1422,6 +1700,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1461,6 +1747,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1498,6 +1792,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1539,6 +1841,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1576,6 +1886,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1617,6 +1935,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1657,6 +1983,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1695,6 +2029,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1732,6 +2074,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "skip",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "stub",
       "action": "repair",
@@ -1774,6 +2124,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1811,6 +2169,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1853,6 +2219,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1890,6 +2264,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -1929,6 +2311,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -1966,6 +2356,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2005,6 +2403,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2042,6 +2448,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2081,6 +2495,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2119,6 +2541,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2156,6 +2586,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2197,6 +2635,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2235,6 +2681,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2268,10 +2722,20 @@
       "checks": {
         "source_completeness": "warn",
         "syntax_safety": "pass",
-        "packaging": "warn",
+        "packaging": "fail",
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": false,
+        "has_requirements": true,
+        "missing": [
+          "Dockerfile"
+        ],
+        "policy_class": "active",
+        "status": "fail",
+        "severity": "fail"
       },
       "tier": "orchestrated",
       "action": "repair",
@@ -2311,6 +2775,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2348,6 +2820,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "skip",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "archive",
@@ -2389,6 +2869,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "skip",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "archive",
       "notes": [
@@ -2428,6 +2916,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "skip",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "delete",
@@ -2469,6 +2965,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "skip",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "delete",
       "notes": [
@@ -2508,6 +3012,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "skip",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "delete",
@@ -2551,6 +3063,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2589,6 +3109,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2626,6 +3154,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2667,6 +3203,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2704,6 +3248,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2743,6 +3295,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2780,6 +3340,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2819,6 +3387,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2857,6 +3433,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2894,6 +3478,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -2936,6 +3528,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -2973,6 +3573,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3014,6 +3622,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3051,6 +3667,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3090,6 +3714,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3127,6 +3759,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3167,6 +3807,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3209,6 +3857,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3246,6 +3902,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3285,6 +3949,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3322,6 +3994,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3361,6 +4041,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3398,6 +4086,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3437,6 +4133,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3474,6 +4178,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3513,6 +4225,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3550,6 +4270,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3589,6 +4317,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3626,6 +4362,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3665,6 +4409,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3702,6 +4454,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3741,6 +4501,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3778,6 +4546,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3817,6 +4593,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3854,6 +4638,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3893,6 +4685,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -3930,6 +4730,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -3969,6 +4777,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4006,6 +4822,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4047,6 +4871,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4086,6 +4918,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4127,6 +4967,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4164,6 +5012,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4203,6 +5059,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4240,6 +5104,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4279,6 +5151,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4316,6 +5196,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4357,6 +5245,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4394,6 +5290,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4433,6 +5337,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4470,6 +5382,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4509,6 +5429,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4546,6 +5474,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4585,6 +5521,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4622,6 +5566,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4661,6 +5613,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4698,6 +5658,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4737,6 +5705,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4774,6 +5750,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4813,6 +5797,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4851,6 +5843,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4888,6 +5888,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -4929,6 +5937,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -4966,6 +5982,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",
@@ -5005,6 +6029,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "active",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5043,6 +6075,14 @@
         "runtime_contract": "pass",
         "hygiene": "pass"
       },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
+      },
       "tier": "orchestrated",
       "action": "keep",
       "notes": []
@@ -5080,6 +6120,14 @@
         "registry_governance": "pass",
         "runtime_contract": "pass",
         "hygiene": "pass"
+      },
+      "packaging": {
+        "has_dockerfile": true,
+        "has_requirements": true,
+        "missing": [],
+        "policy_class": "optional",
+        "status": "pass",
+        "severity": "pass"
       },
       "tier": "orchestrated",
       "action": "keep",

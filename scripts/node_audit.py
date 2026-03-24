@@ -46,6 +46,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# PR-5: packaging audit integration
+PACKAGING_POLICY_ACTIVE       = "active"
+PACKAGING_POLICY_OPTIONAL     = "optional"
+PACKAGING_POLICY_SKIP         = "skip"
+PACKAGING_POLICY_UNREGISTERED = "unregistered"
+
 # ---------------------------------------------------------------------------
 # Project root resolution
 # ---------------------------------------------------------------------------
@@ -115,6 +121,44 @@ class RecommendedAction:
 
 
 @dataclass
+class NodePackagingStatus:
+    """Structured packaging completeness record for a single node.
+
+    PR-5: Unified packaging coverage in the canonical node audit.
+
+    Attributes
+    ----------
+    has_dockerfile : bool
+        ``True`` when a ``Dockerfile`` exists in the node directory.
+    has_requirements : bool
+        ``True`` when ``requirements.txt`` exists in the node directory.
+    missing : List[str]
+        Names of the packaging files that are absent (empty list = fully covered).
+    policy_class : str
+        Governance class of the node: ``active`` | ``optional`` | ``skip`` |
+        ``unregistered``.  Derived from ``startup_policy`` in
+        ``node_dependencies.json`` (``None`` / absent policy → ``active``).
+    status : str
+        Canonical packaging check result: ``pass`` | ``warn`` | ``fail``.
+    severity : str
+        Human-readable severity label aligned to the packaging outcome.
+        ``"fail"`` for active nodes with missing Dockerfile; ``"warn"`` for
+        optional / skip / unregistered nodes or active nodes missing only
+        ``requirements.txt``; ``"pass"`` when fully covered.
+    """
+
+    has_dockerfile:  bool = False
+    has_requirements: bool = False
+    missing:         List[str] = field(default_factory=list)
+    policy_class:    str = PACKAGING_POLICY_UNREGISTERED
+    status:          str = CHECK_UNKNOWN
+    severity:        str = CHECK_UNKNOWN
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+@dataclass
 class NodeAuditEntry:
     name: str
     path: str
@@ -156,6 +200,9 @@ class NodeAuditEntry:
 
     # PR-2: Per-category check results (pass/fail/warn/unknown)
     checks: Dict[str, str] = field(default_factory=dict)
+
+    # PR-5: Structured packaging status (canonical per-node packaging record)
+    packaging: NodePackagingStatus = field(default_factory=NodePackagingStatus)
 
     # Classification
     tier:   str = NodeTier.NOMINAL
@@ -201,6 +248,10 @@ class NodeAuditReport:
     hygiene_violation_nodes:  List[str] = field(default_factory=list)
     policy_violation_nodes:   List[str] = field(default_factory=list)
     missing_required_files_nodes: List[str] = field(default_factory=list)
+
+    # PR-5: Packaging-specific aggregate lists (separate from the combined list above)
+    missing_dockerfile_nodes:   List[str] = field(default_factory=list)
+    missing_requirements_nodes: List[str] = field(default_factory=list)
 
     nodes: List[NodeAuditEntry] = field(default_factory=list)
 
@@ -300,6 +351,73 @@ def _detect_port_conflicts(node_deps: Dict) -> List[str]:
     return conflicts
 
 
+def _packaging_policy_class(entry: NodeAuditEntry) -> str:
+    """Determine the packaging policy class from the node's startup_policy.
+
+    PR-5: Used to calibrate packaging severity per node governance class.
+    """
+    if not entry.in_node_dependencies:
+        return PACKAGING_POLICY_UNREGISTERED
+    policy = entry.config_startup_policy
+    if policy is None:
+        # Implicit "active" when in config but no explicit policy key
+        return PACKAGING_POLICY_ACTIVE
+    if policy == "optional":
+        return PACKAGING_POLICY_OPTIONAL
+    if policy == "skip":
+        return PACKAGING_POLICY_SKIP
+    # Any other value (including "active") maps to active
+    return PACKAGING_POLICY_ACTIVE
+
+
+def _build_packaging_status(entry: NodeAuditEntry) -> NodePackagingStatus:
+    """Build a structured packaging status record for a node entry.
+
+    PR-5: Canonical packaging assessment path.
+
+    Severity rules
+    --------------
+    - ``active`` nodes missing Dockerfile  → **fail**  (containerised deployment blocked)
+    - ``active`` nodes missing requirements.txt only → **warn**  (may still be deployable)
+    - ``optional`` / ``skip`` nodes missing any packaging file → **warn**
+    - ``unregistered`` nodes missing any packaging file → **warn**
+    - All files present → **pass**
+    """
+    policy_class = _packaging_policy_class(entry)
+    missing: List[str] = []
+    if not entry.has_dockerfile:
+        missing.append("Dockerfile")
+    if not entry.has_requirements:
+        missing.append("requirements.txt")
+
+    if not missing:
+        status = CHECK_PASS
+        severity = CHECK_PASS
+    elif policy_class == PACKAGING_POLICY_ACTIVE:
+        # Active nodes: missing Dockerfile is a hard failure; missing only
+        # requirements.txt is a warning.
+        if not entry.has_dockerfile:
+            status = CHECK_FAIL
+            severity = CHECK_FAIL
+        else:
+            # has Dockerfile, missing requirements.txt only
+            status = CHECK_WARN
+            severity = CHECK_WARN
+    else:
+        # optional / skip / unregistered — packaging gaps are warnings
+        status = CHECK_WARN
+        severity = CHECK_WARN
+
+    return NodePackagingStatus(
+        has_dockerfile=entry.has_dockerfile,
+        has_requirements=entry.has_requirements,
+        missing=missing,
+        policy_class=policy_class,
+        status=status,
+        severity=severity,
+    )
+
+
 def _build_checks(entry: NodeAuditEntry) -> Dict[str, str]:
     """Derive per-category check results for a node entry."""
     checks: Dict[str, str] = {}
@@ -320,13 +438,8 @@ def _build_checks(entry: NodeAuditEntry) -> Dict[str, str]:
     else:
         checks[CHECK_SYNTAX_SAFETY] = CHECK_PASS
 
-    # --- packaging ---
-    if entry.has_dockerfile and entry.has_requirements:
-        checks[CHECK_PACKAGING] = CHECK_PASS
-    elif entry.has_dockerfile or entry.has_requirements:
-        checks[CHECK_PACKAGING] = CHECK_WARN
-    else:
-        checks[CHECK_PACKAGING] = CHECK_FAIL
+    # --- packaging (PR-5: derive from the structured packaging status) ---
+    checks[CHECK_PACKAGING] = entry.packaging.status
 
     # --- registry_governance ---
     if not entry.in_node_dependencies:
@@ -549,6 +662,8 @@ def run_audit(project_root: Path) -> NodeAuditReport:
         )
 
         _classify(entry)
+        # PR-5: build packaging status first so _build_checks can use it
+        entry.packaging = _build_packaging_status(entry)
         entry.checks = _build_checks(entry)
         entries.append(entry)
 
@@ -569,9 +684,18 @@ def run_audit(project_root: Path) -> NodeAuditReport:
         e.name for e in entries
         if e.syntax_ok is False or e.fusion_syntax_ok is False
     )
+    # PR-5: missing_packaging_nodes now covers nodes missing EITHER file
+    # (previously only nodes missing BOTH were included)
     report.missing_packaging_nodes = sorted(
         e.name for e in entries
-        if not e.has_dockerfile and not e.has_requirements
+        if not e.has_dockerfile or not e.has_requirements
+    )
+    # PR-5: fine-grained per-file packaging aggregates
+    report.missing_dockerfile_nodes = sorted(
+        e.name for e in entries if not e.has_dockerfile
+    )
+    report.missing_requirements_nodes = sorted(
+        e.name for e in entries if not e.has_requirements
     )
     report.hygiene_violation_nodes = sorted(
         e.name for e in entries if e.hygiene_violations
@@ -746,7 +870,62 @@ def _render_markdown(report: NodeAuditReport) -> str:
         a("_No syntax errors detected._")
     a("")
 
-    # ── Node Inventory ───────────────────────────────────────────────────────
+    # ── Packaging Coverage (PR-5) ────────────────────────────────────────────
+    a("## Packaging Coverage")
+    a("")
+    a("> **Canonical source of truth:** `scripts/node_audit.py` — `tools/check_node_packaging.sh` is a "
+      "thin companion that defers to this report.")
+    a("")
+
+    # --- Nodes missing Dockerfile ---
+    a("### Nodes Missing `Dockerfile`")
+    a("")
+    if report.missing_dockerfile_nodes:
+        a("| Node | Policy Class | Severity |")
+        a("|------|-------------|----------|")
+        for n in report.missing_dockerfile_nodes:
+            e = next(x for x in report.nodes if x.name == n)
+            a(f"| `{n}` | {e.packaging.policy_class} | **{e.packaging.severity}** |")
+    else:
+        a("_All nodes have a `Dockerfile`._")
+    a("")
+
+    # --- Nodes missing requirements.txt ---
+    a("### Nodes Missing `requirements.txt`")
+    a("")
+    if report.missing_requirements_nodes:
+        a("| Node | Policy Class | Severity |")
+        a("|------|-------------|----------|")
+        for n in report.missing_requirements_nodes:
+            e = next(x for x in report.nodes if x.name == n)
+            a(f"| `{n}` | {e.packaging.policy_class} | **{e.packaging.severity}** |")
+    else:
+        a("_All nodes have a `requirements.txt`._")
+    a("")
+
+    # --- Packaging summary by policy class ---
+    a("### Packaging Summary by Policy Class")
+    a("")
+    policy_classes = [
+        PACKAGING_POLICY_ACTIVE,
+        PACKAGING_POLICY_OPTIONAL,
+        PACKAGING_POLICY_SKIP,
+        PACKAGING_POLICY_UNREGISTERED,
+    ]
+    a("| Policy Class | Total | Full Coverage | Missing Dockerfile | Missing requirements.txt |")
+    a("|-------------|-------|--------------|-------------------|--------------------------|")
+    for pc in policy_classes:
+        pc_nodes = [e for e in report.nodes if e.packaging.policy_class == pc]
+        total_pc = len(pc_nodes)
+        if total_pc == 0:
+            continue
+        full = sum(1 for e in pc_nodes if e.packaging.status == CHECK_PASS)
+        no_df = sum(1 for e in pc_nodes if not e.has_dockerfile)
+        no_req = sum(1 for e in pc_nodes if not e.has_requirements)
+        a(f"| `{pc}` | {total_pc} | {full} | {no_df} | {no_req} |")
+    a("")
+
+
     a("## Node Inventory")
     a("")
     a("| Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |")
