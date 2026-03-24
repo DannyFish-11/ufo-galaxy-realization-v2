@@ -1,6 +1,6 @@
 # Galaxy Node-System Audit Report
 
-> Generated: 2026-03-24T09:03:32Z
+> Generated: 2026-03-24T10:40:21Z
 > Authority: `scripts/node_audit.py` — canonical repository governance engine (PR-2)
 
 ## Summary Counts
@@ -27,10 +27,10 @@
 |----------|---------|---------|
 | Source completeness (main.py / fusion_entry.py / README.md) | 0 | 32 |
 | Syntax safety (py_compile check) | 0 | 0 |
-| Packaging (Dockerfile / requirements.txt) | 0 | 1 |
+| Packaging (Dockerfile / requirements.txt) | 1 | 0 |
 | Registry governance (node_dependencies.json + policy) | 0 | 0 |
 | Runtime contract (health / status endpoint) | 0 | 0 |
-| Hygiene (no runtime artifacts) | 2 | 0 |
+| Hygiene (no runtime artifacts) | 0 | 0 |
 
 ## Config Drift
 
@@ -62,8 +62,7 @@ Missing node numbers: [129]
 _No port conflicts detected across registry entries._
 
 ## Nodes with Hygiene Violations
-- `Node_00_StateMachine`: __pycache__
-- `Node_95_WebRTC_Receiver`: node95.pid
+_No hygiene violations detected._
 
 ## Nodes with Missing Required Artifacts
 
@@ -107,11 +106,33 @@ Nodes missing one or more of: `main.py`, `fusion_entry.py`, `README.md`
 ## Nodes with Syntax Errors
 _No syntax errors detected._
 
+## Packaging Coverage
+
+> **Canonical source of truth:** `scripts/node_audit.py` — `tools/check_node_packaging.sh` is a thin companion that defers to this report.
+
+### Nodes Missing `Dockerfile`
+
+| Node | Policy Class | Severity |
+|------|-------------|----------|
+| `Node_26_Discord` | active | **fail** |
+
+### Nodes Missing `requirements.txt`
+
+_All nodes have a `requirements.txt`._
+
+### Packaging Summary by Policy Class
+
+| Policy Class | Total | Full Coverage | Missing Dockerfile | Missing requirements.txt |
+|-------------|-------|--------------|-------------------|--------------------------|
+| `active` | 95 | 94 | 1 | 0 |
+| `optional` | 29 | 29 | 0 | 0 |
+| `skip` | 6 | 6 | 0 | 0 |
+
 ## Node Inventory
 
 | Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |
 |------|-------|-------|------|--------|------|--------|-----|-----|-----|-----|----|-----|
-| `Node_00_StateMachine` | 390 | core | 8000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| `Node_00_StateMachine` | 390 | core | 8000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_01_OneAPI` | 687 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_02_Tasker` | 316 | core | 8002 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_03_SecretVault` | 324 | core | 8003 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -167,7 +188,7 @@ _No syntax errors detected._
 | `Node_23_Time` | 225 | development | 9000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_24_Weather` | 260 | development | 8024 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_25_GoogleSearch` | 299 | development | 8025 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_26_Discord` | 249 | tools | 8023 | active | orchestrated | **repair** | ~ | ✓ | ~ | ✓ | ✓ | ✓ |
+| `Node_26_Discord` | 249 | tools | 8023 | active | orchestrated | **repair** | ~ | ✓ | ✗ | ✓ | ✓ | ✓ |
 | `Node_27_SmartHome` | 303 | tools | 8027 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_28_Reserved` | 252 | development | 8028 | skip | orchestrated | **archive** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_29_Reserved` | 262 | development | 8029 | skip | orchestrated | **archive** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -236,7 +257,7 @@ _No syntax errors detected._
 | `Node_92_AutoControl` | 307 | academic | 8092 | active | orchestrated | **keep** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_93_VideoProcessor` | 485 | extended | 8093 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_94_AudioAnalysis` | 450 | extended | 8094 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_95_WebRTC_Receiver` | 470 | academic | 8095 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| `Node_95_WebRTC_Receiver` | 470 | academic | 8095 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_96_SmartTransportRouter` | 412 | academic | 8096 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_97_AcademicSearch` | 592 | academic | 8097 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_98_MultimodalFusion` | 318 | extended | 8098 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |

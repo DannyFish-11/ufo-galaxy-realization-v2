@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 # tools/check_node_packaging.sh
 #
-# Diagnostic script: identify nodes that are missing a Dockerfile and/or
-# requirements.txt.  Run from the repository root:
+# Lightweight companion diagnostic: quickly identify nodes that are missing a
+# Dockerfile and/or requirements.txt, then exit non-zero if any are absent.
+#
+# CANONICAL SOURCE OF TRUTH
+# --------------------------
+# As of PR-5, the authoritative packaging assessment for the repository lives
+# in the canonical node audit:
+#
+#   python scripts/node_audit.py
+#       → docs/node_audit_report.json   (machine-readable, per-node packaging object)
+#       → docs/NODE_SYSTEM_AUDIT.md     (human-readable, dedicated packaging sections)
+#
+# This script is a thin companion that replicates the same file-presence checks
+# for fast shell-only use (e.g. pre-commit hooks, local spot-checks).  It does
+# NOT override or replace the canonical Python audit results.
+#
+# Run from the repository root:
 #
 #   bash tools/check_node_packaging.sh
+#
+# For a full governance view including policy-aware severity and structured JSON
+# output, run the canonical audit instead:
+#
+#   python scripts/node_audit.py --print-summary
 #
 # Exit codes:
 #   0  — all nodes have both Dockerfile and requirements.txt
@@ -98,7 +118,10 @@ echo "  3. Use the template in the script header as a starting point."
 echo "  4. Prioritise nodes with complex dependencies first:"
 echo "     Node_101_CodeEngine, Node_90_MultimodalVision, Node_79_LocalLLM,"
 echo "     Node_103_KnowledgeGraph"
-echo "  5. Consider adding a CI check to enforce coverage on new node PRs."
+echo "  5. For policy-aware severity and structured JSON, run the canonical audit:"
+echo "       python scripts/node_audit.py --print-summary"
+echo "     Results are saved to docs/node_audit_report.json and"
+echo "     docs/NODE_SYSTEM_AUDIT.md (Packaging Coverage section)."
 echo ""
 
 if [ ${#missing_dockerfile[@]} -gt 0 ] || [ ${#missing_requirements[@]} -gt 0 ]; then
