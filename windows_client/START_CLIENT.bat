@@ -2,6 +2,19 @@
 chcp 65001 >nul 2>&1
 setlocal
 
+REM ══════════════════════════════════════════════════════════════
+REM  LEGACY PATH — windows_client chat/sidebar client (RETIRED)
+REM  This is the old F12-hotkey sidebar/chat client model.
+REM  It is retained for compatibility only and is NOT the active
+REM  Windows architecture direction.
+REM
+REM  Active Windows direction:
+REM    DesktopPresenceRuntime (tri-state lifecycle shell) +
+REM    windows_client/status_board_v2/ (desktop status surface)
+REM
+REM  Do not use this script as a primary Windows entry path.
+REM ══════════════════════════════════════════════════════════════
+
 REM 设置 UTF-8 编码环境（修复中文用户名路径问题）
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
