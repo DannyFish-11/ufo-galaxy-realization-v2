@@ -205,28 +205,47 @@ class AutonomousLearningEngine:
         self.knowledge_base[knowledge.knowledge_id] = knowledge
 
     async def _push_to_rag_memory(self, knowledge: KnowledgeItem):
-        """Push extracted knowledge to RAGMemory for cross-node retrieval"""
+        """Push extracted knowledge to Knowledge Core via RAGMemory (unified backflow path)
+
+        Uses RAGMemory.ingest_knowledge() as the normalized backflow contract,
+        which routes to Node_105 (primary backend) and local experience log.
+        Tags and metadata are normalized for consistent retrieval.
+        """
         try:
             from core.rag_memory import get_rag_memory
             rag = get_rag_memory()
-            rag.log_experience(
-                agent_name="autonomous_learning",
-                instruction=f"Knowledge extracted: {knowledge.category}",
-                steps=[{
-                    "thought": "Extracted knowledge from experience",
-                    "action": "extract_knowledge",
-                    "observation": knowledge.content,
-                }],
-                final_output=knowledge.content,
-                success=True,
-                tags=["knowledge", knowledge.category, f"confidence:{knowledge.confidence:.2f}"],
+            rag.ingest_knowledge(
+                content=knowledge.content,
+                source="autonomous_learning",
+                source_type="experience",
+                tags=[
+                    "autonomous_learning",
+                    knowledge.category,
+                    f"confidence:{knowledge.confidence:.2f}",
+                ],
+                metadata={
+                    "knowledge_id": knowledge.knowledge_id,
+                    "category": knowledge.category,
+                    "confidence": knowledge.confidence,
+                    "source": knowledge.source,
+                },
             )
-            logger.info(f"Pushed knowledge {knowledge.knowledge_id} to RAGMemory")
+            logger.info(f"Pushed knowledge {knowledge.knowledge_id} to Knowledge Core via RAGMemory")
         except Exception as e:
             logger.debug(f"RAGMemory push skipped: {e}")
 
     async def _push_to_knowledge_base(self, knowledge: KnowledgeItem):
-        """Push to Node_105 UnifiedKnowledgeBase if available"""
+        """Push to Node_105 UnifiedKnowledgeBase if available
+
+        Note: _push_to_rag_memory() already routes through RAGMemory →
+        Node_105 (in-process). This method is kept as a secondary HTTP-based
+        path for cases where the in-process route is unavailable (e.g. separate
+        process deployment). Both paths are safe to call concurrently.
+
+        Deduplication: Node_105 uses content-hash-based IDs (_generate_id),
+        so writing the same content twice produces the same entry_id and
+        overwrites in-place without creating duplicate entries.
+        """
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
@@ -242,9 +261,9 @@ class AutonomousLearningEngine:
                     timeout=aiohttp.ClientTimeout(total=5),
                 ) as resp:
                     if resp.status == 200:
-                        logger.info(f"Pushed knowledge to Node_105: {knowledge.knowledge_id}")
+                        logger.info(f"Pushed knowledge to Node_105 (HTTP): {knowledge.knowledge_id}")
         except Exception as e:
-            logger.debug(f"Node_105 push skipped: {e}")
+            logger.debug(f"Node_105 HTTP push skipped: {e}")
     
     def _similarity(self, text1: str, text2: str) -> float:
         """简单的文本相似度计算"""

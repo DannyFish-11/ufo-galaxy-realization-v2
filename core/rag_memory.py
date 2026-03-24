@@ -1,8 +1,21 @@
 """
-RAGMemory — 检索增强记忆系统
-==============================
+RAGMemory — 检索增强记忆系统 (Knowledge Core 统一入口)
+======================================================
 
-Phase 4 Matrix OS 核心组件。
+**架构地位: OpenClawd 侧唯一知识访问入口 (Knowledge Core)**
+
+本模块是 Galaxy/OpenClawd 系统中所有知识/记忆相关操作的规范化入口层。
+所有 Agent、Planner 及上层组件应通过本模块访问知识，而不直接调用底层节点。
+
+知识后端优先级（查询路径）:
+  1. Node_105_UnifiedKnowledgeBase — 主多源知识后端/索引器
+  2. Node_72_KnowledgeBase         — 轻量兼容/回退后端
+  3. Node_80_MemorySystem (Memos)  — 长期记忆持久化来源
+  4. 内部经验日志                   — 本地 RAGMemory 经验库
+
+写入路径 (ingest_knowledge):
+  - 优先写入 Node_105 (in-process)
+  - 同时追加到本地经验日志，保证回退可用性
 
 将分散的记忆/知识系统统一为一个可被 Agent 调用的 RAG 管道:
 
@@ -12,16 +25,21 @@ Phase 4 Matrix OS 核心组件。
    - 支持相似经验检索 (为 Agent 提供 Few-shot 参考)
 
 2. 知识库检索 (Knowledge RAG):
-   - 对接 Node_105_UnifiedKnowledgeBase 和 Node_72_KnowledgeBase
+   - 优先对接 Node_105_UnifiedKnowledgeBase (主后端)
+   - 回退 Node_72_KnowledgeBase (兼容/轻量后端)
    - 向量相似性搜索 + 关键词混合
    - 返回最相关的知识片段注入到 Agent system_prompt
 
-3. 对话记忆 (Conversation):
+3. 知识写入 (Knowledge Ingestion):
+   - ingest_knowledge() 方法写入统一知识流
+   - 自主学习/记忆回写通过此接口归一化
+
+4. 对话记忆 (Conversation):
    - 融合 ai_intent.ConversationMemory
    - 长短期记忆管理
    - 跨会话摘要
 
-4. 学习积累 (Learning):
+5. 学习积累 (Learning):
    - 从重复 pattern 中提取知识
    - 自动生成新工具/新规则建议
 """
@@ -84,25 +102,62 @@ class ExperienceEntry:
 
 @dataclass
 class KnowledgeChunk:
-    """知识片段"""
+    """知识片段 — 统一知识核心标准结构
+
+    所有知识后端（Node_105、Node_72、Node_80 等）返回的知识片段
+    均规范化为此结构，保证上层消费者的一致性。
+
+    字段说明:
+        chunk_id       — 知识条目唯一 ID（来源后端的原始 ID）
+        content        — 知识正文
+        source         — 来源标识（如 "Node_105"、"Node_72"、文件路径、URL 等）
+        source_type    — 来源类型分类（"node"、"file"、"url"、"memos"、"experience" 等）
+        relevance_score — 与查询的相关性评分（0.0–1.0）
+        tags           — 语义标签（用于过滤和检索增强）
+        metadata       — 来源后端的扩展元数据
+    """
     chunk_id: str = ""
     content: str = ""
-    source: str = ""          # 来源 (node_name, file_path, url)
+    source: str = ""          # 来源标识 (node_name, file_path, url)
+    source_type: str = "node" # 来源类型: node | file | url | memos | experience
     relevance_score: float = 0.0
+    tags: List[str] = field(default_factory=list)
     metadata: Dict = field(default_factory=dict)
 
 
 class RAGMemory:
     """
-    检索增强记忆系统
+    Knowledge Core — OpenClawd 侧统一知识访问入口
+    ==============================================
 
-    统一入口, 整合:
+    **架构地位**: 本类是 Galaxy/OpenClawd 系统中知识访问的唯一规范化入口。
+    Agent、Planner 及高层组件应通过此类访问或写入知识，而不直接调用
+    Node_105、Node_72 或 Node_80 等底层节点。
+
+    功能整合:
     - 经验日志 (内存 + 文件持久化)
-    - 知识库检索 (对接现有 Node)
+    - 知识库检索 (Node_105 主后端 → Node_72 回退)
+    - 知识写入 (ingest_knowledge → Node_105 主后端)
     - 对话记忆 (对接 ai_intent)
     - 学习积累 (pattern → rule)
 
-    新增：命名空间/租户隔离
+    主要公共 API:
+        query_knowledge(query, top_k, sources) → List[KnowledgeChunk]
+            检索相关知识片段，结果规范化为 KnowledgeChunk 格式。
+
+        ingest_knowledge(content, source, source_type, tags, metadata) → str
+            写入一条知识到统一知识流（优先 Node_105，保底内部日志）。
+
+        enhance_agent_prompt(instruction, ...) → str
+            综合 RAG 增强，返回可追加到 system_prompt 的上下文。
+
+        log_experience(agent_name, instruction, steps, ...) → ExperienceEntry
+            记录 Agent 执行经验（不经过外部节点，直接本地持久化）。
+
+        recall_similar(instruction, top_k, ...) → List[ExperienceEntry]
+            检索相似历史经验用于 Few-shot。
+
+    命名空间/租户隔离:
     - 传入 namespace 参数时，按命名空间读写，互不干扰
     - 不传 namespace 则使用全局（默认）行为，兼容现有代码
     """
@@ -255,16 +310,24 @@ class RAGMemory:
         self, query: str, top_k: int = 5, sources: List[str] = None
     ) -> List[KnowledgeChunk]:
         """
-        从知识库检索相关片段
+        从知识库检索相关片段 (Knowledge Core 查询入口)
 
-        尝试对接:
-        1. Node_105_UnifiedKnowledgeBase
-        2. Node_72_KnowledgeBase
-        3. 内置简单搜索
+        查询路径（优先级顺序）:
+        1. Node_105_UnifiedKnowledgeBase — 主多源知识后端
+        2. Node_72_KnowledgeBase         — 兼容/回退后端
+        3. Node_80 Memos                 — 长期记忆来源
+
+        Args:
+            query:   查询文本
+            top_k:   最多返回的知识片段数量
+            sources: 限定来源过滤（None 表示查全部）
+
+        Returns:
+            规范化的 KnowledgeChunk 列表，按相关性降序排列。
         """
         chunks = []
 
-        # 尝试 Node_105 (UnifiedKnowledgeBase)
+        # ── 1. Node_105 (UnifiedKnowledgeBase) — 主后端 ──────────────────
         try:
             from nodes.Node_105_UnifiedKnowledgeBase.main import kb as node105_kb
             results = await asyncio.get_running_loop().run_in_executor(
@@ -275,28 +338,45 @@ class RAGMemory:
                     chunk_id=getattr(r, "id", ""),
                     content=getattr(r, "content", ""),
                     source="Node_105",
+                    source_type=getattr(r, "source_type", "node"),
                     relevance_score=0.8,
+                    tags=list(getattr(r, "metadata", {}).get("tags", [])),
                     metadata=getattr(r, "metadata", {}),
                 ))
         except Exception as e:
             logger.debug(f"Node_105 query failed: {e}")
 
-        # 尝试 Node_72
+        # ── 2. Node_72 (KnowledgeBase) — 兼容/回退后端 ───────────────────
         if len(chunks) < top_k:
             try:
                 from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
-                kb = KnowledgeBaseSystem()
-                results = kb.search(query, top_k=top_k - len(chunks))
+                kb72 = KnowledgeBaseSystem()
+                results = kb72.search(query, top_k=top_k - len(chunks))
                 for r in (results or []):
+                    # KnowledgeBaseSystem.search() 返回 KnowledgeEntry dataclass
+                    if hasattr(r, "content"):
+                        content = r.content
+                        meta = getattr(r, "metadata", {}) or {}
+                        entry_id = getattr(r, "id", "")
+                    else:
+                        # 兼容旧版本返回 dict 的情况 (已弃用，未来将移除)
+                        logger.debug("Node_72 returned dict instead of KnowledgeEntry (deprecated path)")
+                        content = r.get("content", r.get("text", ""))
+                        meta = r.get("metadata", {})
+                        entry_id = r.get("id", "")
                     chunks.append(KnowledgeChunk(
-                        content=r.get("content", r.get("text", "")),
+                        chunk_id=entry_id,
+                        content=content,
                         source="Node_72",
-                        relevance_score=r.get("score", 0.0),
+                        source_type="node",
+                        relevance_score=meta.get("score", 0.0),
+                        tags=list(meta.get("tags", [])),
+                        metadata=meta,
                     ))
             except Exception as e:
                 logger.debug(f"Node_72 query failed: {e}")
 
-        # 尝试 Node_80 Memos 长期记忆
+        # ── 3. Node_80 Memos — 长期记忆来源 ──────────────────────────────
         if len(chunks) < top_k:
             try:
                 import httpx
@@ -312,7 +392,9 @@ class RAGMemory:
                                 chunk_id=mem.get("id", ""),
                                 content=mem.get("content", ""),
                                 source="Node_80_Memos",
+                                source_type="memos",
                                 relevance_score=mem.get("relevance_score", 0.5),
+                                tags=mem.get("tags", []),
                                 metadata=mem.get("metadata", {}),
                             ))
             except Exception as e:
@@ -336,6 +418,70 @@ class RAGMemory:
             "\n\nRELEVANT KNOWLEDGE:\n"
             + "\n\n".join(sections) + "\n"
         )
+
+    def ingest_knowledge(
+        self,
+        content: str,
+        source: str = "direct",
+        source_type: str = "text",
+        tags: List[str] = None,
+        metadata: Dict = None,
+    ) -> str:
+        """
+        写入一条知识到统一知识流 (Knowledge Core 写入入口)
+
+        这是 Agent、自主学习模块及外部组件向 Knowledge Core 写入知识的
+        规范化接口。调用方无需直接操作 Node_105 或 Node_72。
+
+        写入路径:
+          1. 尝试写入 Node_105_UnifiedKnowledgeBase (主后端，in-process)
+          2. 无论 Node_105 是否成功，都同步写入本地经验日志（保底可用性）
+
+        Args:
+            content:     知识正文
+            source:      来源标识（如 "autonomous_learning"、文件路径、URL 等）
+            source_type: 来源类型（"text"、"file"、"url"、"memos"、"experience" 等）
+            tags:        语义标签列表
+            metadata:    扩展元数据
+
+        Returns:
+            写入成功的条目 ID（来自 Node_105 或本地经验日志）
+        """
+        tags = tags or []
+        metadata = metadata or {}
+        entry_id = ""
+
+        # ── 1. 写入 Node_105 (主后端，in-process) ────────────────────────
+        try:
+            from nodes.Node_105_UnifiedKnowledgeBase.main import kb as node105_kb
+            entry_id = node105_kb.ingest_knowledge(
+                content=content,
+                source=source,
+                source_type=source_type,
+                tags=tags,
+                metadata=metadata,
+            )
+            logger.info(f"Knowledge ingested to Node_105: {entry_id} (source={source})")
+        except Exception as e:
+            logger.debug(f"Node_105 ingest failed, falling back to local log: {e}")
+
+        # ── 2. 同步写入本地经验日志（保底） ──────────────────────────────
+        experience_entry = self.log_experience(
+            agent_name=source,
+            instruction=f"[ingest:{source_type}] {content[:120]}",
+            steps=[{
+                "thought": "Knowledge ingested into unified knowledge flow",
+                "action": "ingest_knowledge",
+                "observation": content,
+            }],
+            final_output=content,
+            success=True,
+            tags=["knowledge_ingestion", source_type] + tags,
+        )
+        if not entry_id:
+            entry_id = experience_entry.experience_id
+
+        return entry_id
 
     # ================================================================
     # 对话记忆 (桥接)
