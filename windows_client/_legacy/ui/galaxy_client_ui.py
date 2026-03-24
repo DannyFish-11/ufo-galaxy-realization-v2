@@ -2715,14 +2715,15 @@ class GalaxyClientUI(QWidget):
 
 
 def main():
-    """独立运行测试"""
-    logging.basicConfig(level=logging.INFO)
-    app = QApplication(sys.argv)
-
-    client = GalaxyClientUI()
-    client.show_sidebar()
-
-    sys.exit(app.exec_())
+    """独立运行测试 — RETIRED, DO NOT RUN"""
+    raise RuntimeError(
+        "windows_client/_legacy/ui/galaxy_client_ui.py is a retired legacy "
+        "asset and must not be executed.\n"
+        "Active Windows direction:\n"
+        "  core/desktop_presence_runtime.py  (DesktopPresenceRuntime tri-state shell)\n"
+        "  windows_client/status_board_v2/   (projection-driven desktop status surface)\n"
+        "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
+    )
 
 
 if __name__ == "__main__":
