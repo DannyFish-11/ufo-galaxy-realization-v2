@@ -1,8 +1,12 @@
 # OneAPI System Position
 
-> **Status:** Canonical — formalised in this PR.
+> **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze).
 > **Scope:** Defines what OneAPI is, what it is not, and how its configuration
 > and state must influence the broader Galaxy system.
+>
+> Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
+> [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
+> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
 
 ---
 
@@ -50,12 +54,20 @@ See `core/oneapi_system_position.py` for the full sentinel and registry.
 | Just another direct vendor provider | An **external aggregator** that wraps many providers behind one endpoint |
 | A local node implementation detail | A **system-wide aggregator source** whose config has global effect |
 | A dashboard-local configuration surface | A **system-level integration input** that feeds provider pool, routing, and status |
-| A peer of top-layer direct/native-multimodal models | A **distinct lower-layer** row in the model supply topology |
+| A peer of top-layer direct/native-multimodal models | A **distinct lower-layer aggregator horizon** in the model supply topology |
 | An internally invented "new provider philosophy" | An **external open-source project** (one-api / new-api compatible gateway) integrated as a source |
 
 OneAPI **must not** be conflated with direct/native-multimodal providers such
 as OpenAI, Anthropic, or Gemini.  Those providers form the primary (top) model
-layer.  OneAPI is a separate row below them.
+layer.  OneAPI is a **separate aggregator horizon below them**.
+
+**Any top-layer rendering of OneAPI — placing it at the same visual or
+architectural level as direct/native-multimodal providers — is architecturally
+incorrect and must not be introduced in any new code, documentation, or UI.**
+
+This constraint applies equally to the desktop status board, any future
+constellation topology surface, and any dashboard migration artefact.  The
+OneAPI Aggregator Horizon separation is a hard architectural invariant.
 
 ---
 
@@ -122,19 +134,24 @@ projection contract and therefore via the right-side desktop status board.
 ### 4.4 Downstream status-board semantics
 
 On the right-side desktop status board (`status_board_v2/`), OneAPI **must**
-appear as a separate lower-layer row — distinct from the top-layer
-direct/native-multimodal providers.  See
-`docs/DESKTOP_DISPLAY_BOUNDARIES.md` for the display-layer contract.
+appear as a **separate lower-layer row — the OneAPI Aggregator Horizon** —
+distinct from the top-layer direct/native-multimodal providers.  See
+`docs/DESKTOP_DISPLAY_BOUNDARIES.md` for the display-layer contract and
+[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md)
+§3 Layer 5 for the constellation topology specification.
 
 The status board **must not** intermingle OneAPI status with direct vendor
-provider rows.
+provider rows.  This is a hard architectural constraint.  Any rendering that
+places OneAPI at the same visual level as direct providers is architecturally
+incorrect regardless of the surface it appears on.
 
 ---
 
 ## 5. How Later Status-Board / Model-Topology Work Should Represent OneAPI
 
 When the full model-topology UI (right-side board topology graph) is
-implemented in a later PR, the following rules apply:
+implemented in a later PR, the following rules apply.  These rules are
+**non-negotiable architectural constraints** established in PR-1.
 
 ```
 ┌─ Model Supply Topology (right-side status board) ─────────────────┐
@@ -144,29 +161,33 @@ implemented in a later PR, the following rules apply:
 │  │  OpenAI    │  │ Anthropic │  │ Gemini │  │  xAI   │  …        │
 │  └────────────┘  └───────────┘  └────────┘  └────────┘            │
 │       ↑ primary / support / weight bars displayed here             │
-│                                                                    │
+│                                                                     │
 │  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─   │
-│                                                                    │
-│  LOWER ROW — aggregator integration layer                          │
+│                                                                     │
+│  ONEAPI AGGREGATOR HORIZON — architecturally lower layer            │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  OneAPI  [configured / not configured]  [health indicator]   │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-│       ↑ distinct row; click opens system-wide config entry point   │
+│       ↑ distinct row; never interleaved with the top layer         │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
 Rules for this representation:
 
-1. **OneAPI is always a separate row**, not interleaved with direct providers.
+1. **OneAPI is always in the Aggregator Horizon layer**, not interleaved with
+   direct providers.  This is a hard architectural invariant.
 2. **Clicking the OneAPI row opens a system-wide config surface**, not a
    dashboard-local settings pane.
 3. **Configuring OneAPI from that surface must propagate globally** — it must
    update `ONEAPI_BASE_URL` / `ONEAPI_API_KEY` (or the equivalent runtime
    config), trigger a re-registration of the `oneapi` provider in
    `MultiLLMRouter` / `ProviderInventory`, and cause the projection to refresh.
-4. **OneAPI health/availability** is shown in this lower row, not in the
-   direct-provider cluster.
+4. **OneAPI health/availability** is shown in the Aggregator Horizon row, not
+   in the direct-provider cluster.
+5. **The horizontal separator and `ONEAPI AGGREGATOR HORIZON` label are
+   mandatory** — they must be present even when OneAPI is not configured, to
+   make the architectural boundary visible at all times.
 
 ---
 

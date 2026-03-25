@@ -1,11 +1,22 @@
 # windows_client/status_board_v2/ — ACTIVE DESKTOP STATUS SURFACE
 
-> **Status: ACTIVE / CANONICAL** (established PR-8)
+> **Status: ACTIVE / CANONICAL** (established PR-8; confirmed PR-1 architecture freeze)
 >
 > Role: `ACTIVE_DESKTOP_STATUS`
 
 `windows_client/status_board_v2/` is the **canonical read-only desktop status
-board** for the Galaxy system.
+board and the sole canonical operator-visible model topology surface** for the
+Galaxy system.
+
+The dashboard (`dashboard/`) is in retirement and is no longer the target
+primary UI surface.  See
+[`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](../../docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md)
+for the retirement and migration plan.
+
+The target visual grammar for the model topology display is the
+**Native-Multimodal-First Sky-Grown Constellation Topology**
+(星空一体化生长式星座拓扑树), defined in
+[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](../../docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md).
 
 ## Tri-state alignment
 
@@ -58,16 +69,23 @@ system structure.
 
 `topology_surface.py` renders the model routing topology as a **native-
 multimodal-first layered structure**, per
-[`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](../../docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md):
+[`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](../../docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md).
+
+The target visual identity is the **Native-Multimodal-First Sky-Grown
+Constellation Topology** — a depth-illusion / 2.5-D semantic structure, not a
+flat provider card grid, not true 3-D.  See
+[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](../../docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md)
+for the full specification.
 
 1. **MAIN ROUTE** — primary model with optional `[MM]` native-multimodal badge
    and vendor/source tag.
 2. **SUPPORT** — auxiliary/support models with weights and vendor tags.
 3. **Route reason / routing authority** — human-readable rationale and
-   canonical authority source.
-4. **ONEAPI AGGREGATOR** (lower row, separated by a rule) — rendered only
-   when `oneapi_source` data is present; never mixed into the main
-   direct-provider layer.
+   canonical authority source.  Degraded authority must be highlighted.
+4. **ONEAPI AGGREGATOR HORIZON** (lower row, separated by a mandatory rule) —
+   always rendered; never mixed into the main direct-provider layer.
+   Rendering OneAPI at the same level as direct providers is
+   **architecturally incorrect**.
 
 This is a **topology**, not a flat provider list.  See
 [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](../../docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md)
