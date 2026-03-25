@@ -1,22 +1,49 @@
 """
-galaxy_gateway/device_router.py — Runtime Session / Routing Adapter
-=====================================================================
+galaxy_gateway/device_router.py — Single Dispatch and Cross-Device Orchestration Entry
+========================================================================================
 
-**Unified-Subject Architecture — Runtime Session Adapter over Canonical State**
---------------------------------------------------------------------------------
-``DeviceRouter`` is the **runtime session and routing substrate** for the
-cross-device execution layer.  It is NOT a canonical device registry and must
-not be treated as an alternate source of truth for device identity or state.
+**PR-3: DeviceRouter as the Single Dispatch Authority**
+--------------------------------------------------------
+``DeviceRouter`` is the **single dispatch and cross-device orchestration entry**
+for all device-bound tasks, commands, and actions.  All call sites that need to
+send work to a device must ultimately pass through ``DeviceRouter``.
 
-Authority model (PR-3)
-----------------------
+Dispatch authority model (PR-3)
+--------------------------------
+- **Single dispatcher**: :class:`DeviceRouter` — owns all dispatch decisions for
+  device-bound tasks, commands, and Android-specific actions.  No other module
+  may independently decide "dispatch this to device X" without going through
+  :meth:`route_task`, :meth:`dispatch_task`, :meth:`dispatch_action`, or
+  :meth:`dispatch_command`.
+- **Cross-device orchestration entry**: :meth:`route_task` and
+  :meth:`_dispatch_cross_device_task` are the canonical entries for all
+  cross-device orchestration decisions.
+- **Android action adapter**: :class:`~galaxy_gateway.android_bridge.AndroidBridge`
+  is retained as the transport/action-translation adapter.  It MUST NOT exercise
+  independent dispatch authority; all Android action dispatches are initiated by
+  ``DeviceRouter.dispatch_action`` and fulfilled by
+  ``AndroidBridge.send_action``.
+- **RepoCoordinator / shared wrappers**: These are preserved as compatibility
+  facades.  Their dispatch paths MUST delegate to ``DeviceRouter`` and MUST NOT
+  maintain independent dispatch authority.
 - **Canonical write SSOT**: :class:`~core.unified.device_manager.UnifiedDeviceManager`
   (UDM) — the only authoritative registry for device identity and mutable state.
 - **Canonical read contract**: :class:`~contracts.registered_runtime_device.RegisteredRuntimeDevice`
   — the stable projection of a runtime-capable device.
-- **This module**: runtime session adapter — manages active WebSocket/transport
-  connections, routes live tasks, and **patches canonical runtime state in UDM**
-  for every connection lifecycle event (connect / disconnect).
+
+Canonical dispatch entry points
+---------------------------------
+- :meth:`route_task` — high-level NL command → device routing (with analysis,
+  capability-aware device selection, and cross-device orchestration).
+- :meth:`dispatch_task` — lower-level task dict → single device dispatch (used
+  internally by ``route_task`` and directly by components that already have a
+  constructed task).
+- :meth:`dispatch_action` — Android-specific action dispatch entry (click,
+  swipe, screenshot, etc.).  Delegates action translation to
+  ``AndroidBridge.send_action`` while keeping routing authority here.
+- :meth:`dispatch_command` — device command dispatch entry (used by
+  RepoCoordinator and other facades that need to send typed commands).
+  Internally routes through :meth:`route_task` for full chain traversal.
 
 Local state policy
 ------------------
@@ -54,8 +81,8 @@ for runtime/transport enrichment via :meth:`get_enriched_device_view`.
 - REST      : ``/api/v1/devices/*``
 
 Author: Manus AI
-Version: 2.0 (PR-3: runtime session adapter normalisation)
-Date: 2026-03-07
+Version: 3.0 (PR-3: DeviceRouter promoted to single dispatch authority)
+Date: 2026-03-25
 """
 
 import asyncio
@@ -198,16 +225,29 @@ class Device:
 
 
 class DeviceRouter:
-    """Runtime session adapter and cross-device routing substrate.
+    """Single dispatch and cross-device orchestration entry for all device-bound work.
 
-    **Role (PR-3)**
-    ---------------
-    ``DeviceRouter`` is a **runtime session adapter** over canonical device
-    state maintained by :class:`~core.unified.device_manager.UnifiedDeviceManager`
-    (UDM).  It is NOT a peer device truth source.
+    **Role (PR-3: promoted to single dispatch authority)**
+    -------------------------------------------------------
+    ``DeviceRouter`` is the **single dispatch and cross-device orchestration
+    entry**.  All device-bound tasks, commands, and actions must ultimately
+    pass through this class.
 
-    Responsibilities
-    ~~~~~~~~~~~~~~~~
+    Canonical dispatch entry points
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    - :meth:`route_task` — NL command → capability-aware device routing +
+      cross-device orchestration.  This is the highest-level entry.
+    - :meth:`dispatch_task` — task dict → single-device dispatch.  Used
+      internally and by components that already have a constructed task.
+    - :meth:`dispatch_action` — Android-specific action dispatch (click,
+      swipe, screenshot, etc.).  Delegates action translation to
+      ``AndroidBridge.send_action`` as a transport adapter; routing authority
+      stays here.
+    - :meth:`dispatch_command` — typed command dispatch entry used by
+      RepoCoordinator and other compatibility facades.
+
+    Runtime session adapter responsibilities
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     1. Manage active WebSocket / transport session handles for live task
        dispatch — the ``self.devices`` table is an **operational cache only**.
     2. Patch canonical runtime state in UDM for every connection lifecycle
@@ -1189,6 +1229,80 @@ class DeviceRouter:
         # 实际应该根据任务类型智能分解
         return [task.copy() for _ in devices]
     
+    async def dispatch_action(
+        self,
+        device_id: str,
+        action: str,
+        params: Dict[str, Any],
+        context: Optional[Dict] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Route an Android-specific action through DeviceRouter (single dispatch entry).
+
+        PR-3: This is the canonical entry point for all Android device action
+        dispatches.  Android-specific message building is delegated to the
+        AndroidBridge adapter via :meth:`~galaxy_gateway.android_bridge.AndroidBridge.send_action`.
+        The dispatch authority (observability, cross-device gating) lives here.
+
+        Args:
+            device_id: Target device identifier.
+            action:    Action name (e.g. ``"click"``, ``"swipe"``, ``"input_text"``,
+                       ``"screenshot"``, ``"query_elements"``).
+            params:    Action parameters (action-specific).
+            context:   Optional routing context (``trace_id``, etc.).
+
+        Returns:
+            Result dict from the transport adapter, or an error dict.
+        """
+        ctx = context or {}
+        trace_ctx = TraceContext.from_message(ctx)
+
+        emit_gateway_log(
+            "action_dispatch",
+            trace_ctx=trace_ctx,
+            device_id=device_id,
+            action=action,
+        )
+
+        try:
+            from galaxy_gateway.android_bridge import android_bridge as _bridge  # lazy — avoids circular import
+            result = await _bridge.send_action(device_id, action, params)
+            return result if result is not None else {"success": False, "error": "No response from device"}
+        except Exception as _err:
+            logger.error(
+                "DeviceRouter.dispatch_action failed: device=%s action=%s error=%s",
+                device_id, action, _err,
+            )
+            return {"success": False, "error": str(_err)}
+
+    async def dispatch_command(
+        self,
+        device_id: str,
+        command_type: str,
+        params: Dict[str, Any],
+        context: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Route a typed device command through DeviceRouter (single dispatch entry).
+
+        PR-3: This is the canonical entry point for device-bound commands
+        dispatched by compatibility facades such as RepoCoordinator.  Internally
+        delegates to :meth:`route_task` so all commands traverse the full
+        dispatch chain (capability-aware selection, observability, cross-device
+        gating).
+
+        Args:
+            device_id:     Target device identifier.
+            command_type:  Command type label (e.g. ``"task_assign"``).
+            params:        Command parameters.
+            context:       Optional routing context (``trace_id``, etc.).
+
+        Returns:
+            Standardised result dict.
+        """
+        ctx = dict(context or {})
+        ctx["device_id"] = device_id
+        command = params.get("command") or command_type
+        return await self.route_task(command, ctx)
+
     async def handle_task_result(self, task_id: str, result: Dict):
         """处理任务执行结果（幂等：同一 task_id 的重复结果将被忽略）。"""
         try:
