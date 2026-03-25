@@ -2115,6 +2115,63 @@ class OpenClawd:
             logger.debug("_build_execution_trace failed (swallowed): %s", _exc)
             return None
 
+    def _build_mainline_convergence_stamp(
+        self,
+        *,
+        trace_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        execution_path: Optional[str] = None,
+        capability_source: Optional[str] = None,
+        knowledge_source: Optional[str] = None,
+        resource_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """PR-8: Build the mainline convergence stamp for this response.
+
+        Records one :class:`~core.mainline_convergence.MainlineExecutionTrace`
+        in the module-level registry and returns a compact dict suitable for
+        embedding in response metadata.  Errors are fully isolated — ``None``
+        is returned on any failure so the response flow is never interrupted.
+
+        Returns:
+            Compact mainline convergence dict, or ``None`` on failure.
+        """
+        try:
+            from core.mainline_convergence import (
+                build_mainline_trace,
+                get_mainline_convergence_registry,
+                MainlineChainStage,
+                MainlinePathClass,
+                OPENCLAWD_AUTHORITY_ROLE,
+            )
+
+            trace = build_mainline_trace(
+                trace_id=trace_id,
+                session_id=session_id,
+                task_id=task_id,
+                entry_stage=MainlineChainStage.OPENCLAWD_AUTHORITY,
+                execution_path=execution_path,
+                path_class=MainlinePathClass.MAINLINE,
+                authority_role=OPENCLAWD_AUTHORITY_ROLE,
+                capability_source=capability_source,
+                knowledge_source=knowledge_source,
+                resource_type=resource_type,
+            )
+            trace.add_stage(MainlineChainStage.RESPONSE_EMISSION)
+            trace.close(success=True)
+            get_mainline_convergence_registry().record(trace)
+
+            return {
+                "trace_id": trace.trace_id,
+                "path_class": trace.path_class,
+                "stages_visited": list(trace.stages_visited),
+                "authority_role": trace.authority_role,
+                "execution_path": trace.execution_path,
+            }
+        except Exception as _exc:
+            logger.debug("_build_mainline_convergence_stamp failed (swallowed): %s", _exc)
+            return None
+
     def _build_production_baseline_summary(
         self,
         *,
@@ -3417,6 +3474,15 @@ class OpenClawd:
                                     "decision_timeline_snapshot": _decision_timeline_snapshot,
                                 }
                             ),
+                            # PR-8: mainline convergence stamp — records that this
+                            # response traversed the canonical OpenClawd authority
+                            # stage, making the mainline path explicit and traceable.
+                            "mainline_convergence": self._build_mainline_convergence_stamp(
+                                trace_id=trace_id,
+                                session_id=session_id,
+                                task_id=task_id_for_trace,
+                                execution_path=_exec_path_k,
+                            ),
                         },
                         # PR-14: additive introspection hints (non-breaking)
                         "arch_layer_id": "subject_core",
@@ -3714,6 +3780,14 @@ class OpenClawd:
                             "operator_override_state": _operator_override_state,
                             "decision_timeline_snapshot": _decision_timeline_snapshot,
                         }
+                    ),
+                    # PR-8: mainline convergence stamp — records that this
+                    # response traversed the canonical OpenClawd authority
+                    # stage, making the mainline path explicit and traceable.
+                    "mainline_convergence": self._build_mainline_convergence_stamp(
+                        trace_id=trace_id,
+                        session_id=session_id,
+                        execution_path=_exec_path2,
                     ),
                 },
                 # PR-14: additive introspection hints (non-breaking; callers ignoring
