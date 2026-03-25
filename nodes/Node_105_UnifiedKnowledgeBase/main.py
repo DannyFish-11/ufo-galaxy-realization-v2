@@ -30,6 +30,15 @@ from nodes.common.cors_config import get_cors_origins
 
 logger = logging.getLogger("Galaxy.Node105KB")
 
+# ============================================================================
+# Knowledge Core 角色声明
+# ============================================================================
+
+# Node_105 是 Galaxy/OpenClawd Knowledge Core 的主多源知识后端/索引器。
+# 上层组件（RAGMemory、OpenClawd、Planner）应通过 RAGMemory 访问本节点，
+# 而不直接调用 kb 全局实例（测试和内部集成除外）。
+KNOWLEDGE_CORE_ROLE = "primary_backend"
+
 app = FastAPI(title="Node 105 - Unified Knowledge Base", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -338,6 +347,51 @@ class UnifiedKnowledgeBase:
                 results.append(entry)
                 seen_ids.add(entry.id)
         return results[:top_k]
+
+    def ingest_knowledge(
+        self,
+        content: str,
+        source: str = "direct",
+        source_type: str = "text",
+        tags: List[str] = None,
+        metadata: Dict[str, Any] = None,
+    ) -> str:
+        """
+        Knowledge Core 统一写入接口 — 供 RAGMemory 等上层组件直接调用
+
+        本方法是 Node_105 对 RAGMemory/OpenClawd 侧的规范化写入入口。
+        上层组件应通过 RAGMemory.ingest_knowledge() 调用此方法，
+        而不直接操作 KnowledgeEntry 或 knowledge_entries 字典。
+
+        Args:
+            content:     知识正文
+            source:      来源标识（如 "autonomous_learning"、文件路径、URL）
+            source_type: 来源类型（"text"、"file"、"url"、"memos"、"experience"）
+            tags:        语义标签列表（写入 metadata["tags"]）
+            metadata:    扩展元数据
+
+        Returns:
+            写入成功的条目 ID
+        """
+        tags = tags or []
+        meta = dict(metadata or {})
+        if tags:
+            meta["tags"] = tags
+
+        entry_id = self._generate_id(content, source)
+        entry = KnowledgeEntry(
+            id=entry_id,
+            content=content,
+            source_type=source_type,
+            source=source,
+            metadata=meta,
+            timestamp=time.time(),
+        )
+        self.knowledge_entries[entry_id] = entry
+        self._index_entry(entry)
+        self._save_knowledge()
+        logger.info(f"Knowledge ingested: {entry_id} (source={source}, type={source_type})")
+        return entry_id
     
     def ask(self, question: str, top_k: int = 3) -> Dict[str, Any]:
         """RAG 问答"""

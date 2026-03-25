@@ -1,5 +1,19 @@
 """
-Galaxy 知识库系统 - Node 72
+Galaxy 知识库系统 - Node 72 (兼容/回退后端)
+=============================================
+
+**架构地位: 兼容/轻量回退后端 (Fallback/Compatibility Backend)**
+
+本模块是 Galaxy Knowledge Core 中的轻量兼容后端，提供简单的关键词+向量
+知识存储能力。它不是主权威知识来源，而是作为以下情况的回退层：
+
+1. Node_105_UnifiedKnowledgeBase 不可用时的降级后端
+2. 轻量本地知识存储场景（无需多源索引的简单用例）
+3. 历史遗留知识的兼容访问路径
+
+**正确使用方式**: 上层组件（Agent、Planner、OpenClawd）不应直接调用本模块，
+而应通过 `core.rag_memory.RAGMemory` 统一访问知识，由 RAGMemory 按优先级
+路由至 Node_105（主后端）或本模块（回退后端）。
 
 功能：
 1. 向量数据库存储（通过 core.vector_backend 统一接口）
@@ -23,6 +37,16 @@ from dataclasses import dataclass
 import hashlib
 
 logger = logging.getLogger("Galaxy.KnowledgeBase72")
+
+# ============================================================================
+# Knowledge Core 角色声明
+# ============================================================================
+
+# Node_72 是 Galaxy/OpenClawd Knowledge Core 的兼容/回退后端。
+# 它不是主权威知识来源。主后端为 Node_105_UnifiedKnowledgeBase。
+# 上层组件应通过 core.rag_memory.RAGMemory 访问知识，由 RAGMemory
+# 按优先级路由（Node_105 优先，Node_72 作为回退）。
+KNOWLEDGE_BACKEND_ROLE = "fallback"
 
 
 @dataclass
