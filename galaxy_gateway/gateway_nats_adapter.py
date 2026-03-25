@@ -75,7 +75,15 @@ class GatewayNATSAdapter:
         self._dlq_subject = dlq_subject
 
         # Pending task futures: task_id -> asyncio.Future
+        # PR-S5: this local dict is retained as a COMPAT SURFACE only.
+        # Canonical pending-future tracking now uses
+        # core.task_envelope_lifecycle_registry.TaskEnvelopeLifecycleRegistry.
+        # New code must use the canonical registry; this dict is updated in
+        # parallel so that legacy callers of resolve_task() continue to work.
         self._pending: Dict[str, asyncio.Future] = {}
+
+        # PR-S5: reference to the canonical lifecycle registry (lazy-init).
+        self._lifecycle_registry: Optional[Any] = None
 
         self._started = False
         self._stats = {
@@ -122,6 +130,13 @@ class GatewayNATSAdapter:
     async def stop(self) -> None:
         """Cancel all pending tasks and unsubscribe."""
         self._started = False
+        # PR-S5: cancel via the canonical registry first, then drain compat dict.
+        try:
+            reg = self._get_lifecycle_registry()
+            if reg is not None:
+                reg.cancel_all()
+        except Exception:
+            pass
         for fut in list(self._pending.values()):
             if not fut.done():
                 fut.cancel()
@@ -135,10 +150,34 @@ class GatewayNATSAdapter:
 
         Called from the WebSocket message handler when a task_result message
         arrives from a device.
+
+        PR-S5: result completion is now delegated to the canonical lifecycle
+        registry.  The local ``_pending`` compat dict is also updated so that
+        callers that hold a reference to the legacy future still see the result.
         """
+        # PR-S5: canonical registry is the authoritative completer.
+        try:
+            reg = self._get_lifecycle_registry()
+            if reg is not None:
+                reg.complete(task_id, result)
+        except Exception as _reg_exc:
+            logger.debug("resolve_task: registry complete error — %s", _reg_exc)
+        # Compat: also resolve the local future if still present.
         fut = self._pending.get(task_id)
         if fut and not fut.done():
             fut.set_result(result)
+
+    # ── Lifecycle registry access ─────────────────────────────────────────────
+
+    def _get_lifecycle_registry(self) -> Optional[Any]:
+        """Lazily obtain the canonical TaskEnvelopeLifecycleRegistry (fail-soft)."""
+        if self._lifecycle_registry is None:
+            try:
+                from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+                self._lifecycle_registry = get_lifecycle_registry()
+            except Exception as _e:
+                logger.debug("GatewayNATSAdapter: lifecycle registry unavailable — %s", _e)
+        return self._lifecycle_registry
 
     # ── Internal handlers ────────────────────────────────────────────────────
 
@@ -385,8 +424,37 @@ class GatewayNATSAdapter:
 
         # 2. Try WebSocket manager directly
         if self._websocket_manager and target_device:
+            # PR-S5: register with the canonical lifecycle registry so that
+            # pending-future ownership and timeout semantics are unified.
             fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            # Compat surface: also update the local _pending dict so that
+            # legacy callers of resolve_task() continue to work.
             self._pending[task_id] = fut
+            try:
+                from core.task_envelope_lifecycle_registry import (
+                    get_lifecycle_registry,
+                    LifecycleOwner as _Owner,
+                )
+                # Build a minimal envelope-like object for the registry.
+                class _EnvProxy:
+                    pass
+                _ep = _EnvProxy()
+                _ep.task_id = task_id
+                _ep.trace_id = ""
+                _ep.target = target_device
+                _ep.tool_name = task_type
+                _ep.timeout = self._task_timeout
+                get_lifecycle_registry().register(
+                    _ep,
+                    future=fut,
+                    owner=_Owner.DEVICE_DISPATCH,
+                    metadata={"source": "gateway_nats_adapter"},
+                )
+            except Exception as _reg_exc:
+                logger.debug(
+                    "_forward_to_device: lifecycle registry register skipped — %s",
+                    _reg_exc,
+                )
             try:
                 ws_message: dict = {
                     "type": "task_assign",
@@ -490,9 +558,18 @@ class GatewayNATSAdapter:
 
     def get_stats(self) -> dict:
         """Return adapter statistics."""
+        # PR-S5: include canonical registry pending count alongside local compat dict.
+        registry_pending = 0
+        try:
+            reg = self._get_lifecycle_registry()
+            if reg is not None:
+                registry_pending = reg.pending_count()
+        except Exception:
+            pass
         return {
             "started": self._started,
             "pending_tasks": len(self._pending),
+            "registry_pending_tasks": registry_pending,
             **self._stats,
         }
 
