@@ -1256,47 +1256,93 @@ class AndroidBridge:
     
     async def click(self, device_id: str, x: int, y: int,
                    element_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """在设备上执行点击"""
+        """Android GUI action adapter — translate click to AIP protocol and send.
+
+        This is an Android-specific action translation adapter (PR-S3).  It does
+        not hold independent dispatch authority; it uses send_to_device() for
+        the transport substrate within the AndroidBridge session layer.
+        """
         msg = MessageBuilder.gui_click(device_id, x, y, element_id)
         return await self.send_to_device(device_id, msg, wait_response=True)
-    
+
     async def swipe(self, device_id: str, start_x: int, start_y: int,
                    end_x: int, end_y: int, duration_ms: int = 300) -> Optional[Dict[str, Any]]:
-        """在设备上执行滑动"""
+        """Android GUI action adapter — translate swipe to AIP protocol and send.
+
+        This is an Android-specific action translation adapter (PR-S3).
+        """
         msg = MessageBuilder.gui_swipe(device_id, start_x, start_y, end_x, end_y, duration_ms)
         return await self.send_to_device(device_id, msg, wait_response=True)
-    
+
     async def input_text(self, device_id: str, text: str,
                         element_id: Optional[str] = None,
                         clear_first: bool = False) -> Optional[Dict[str, Any]]:
-        """在设备上输入文本"""
+        """Android GUI action adapter — translate text input to AIP protocol and send.
+
+        This is an Android-specific action translation adapter (PR-S3).
+        """
         msg = MessageBuilder.gui_input(device_id, text, element_id, clear_first)
         return await self.send_to_device(device_id, msg, wait_response=True)
-    
+
     async def screenshot(self, device_id: str, quality: int = 80,
                         scale: float = 1.0) -> Optional[Dict[str, Any]]:
-        """获取设备截图"""
+        """Android GUI action adapter — translate screenshot request to AIP protocol and send.
+
+        This is an Android-specific action translation adapter (PR-S3).
+        """
         msg = MessageBuilder.gui_screenshot(device_id, quality, scale)
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=60.0)
-    
+
     async def query_elements(self, device_id: str,
                             text: Optional[str] = None,
                             class_name: Optional[str] = None,
                             view_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """查询设备上的 UI 元素"""
+        """Android GUI action adapter — translate element query to AIP protocol and send.
+
+        This is an Android-specific action translation adapter (PR-S3).
+        """
         msg = MessageBuilder.gui_element_query(device_id, text, class_name, view_id)
         return await self.send_to_device(device_id, msg, wait_response=True)
     
     async def assign_task(self, device_id: str, task_id: str, task_type: str,
                          payload: Dict[str, Any], priority: int = 5,
                          timeout: int = 300) -> Optional[Dict[str, Any]]:
-        """分配任务到设备"""
-        msg = MessageBuilder.task_assign(device_id, task_id, task_type, payload, priority, timeout)
-        
+        """分配任务到设备 — delegates dispatch authority to DeviceRouter (PR-S3).
+
+        Android-specific task message construction (action translation) stays
+        in AndroidBridge.  Dispatch authority is delegated to
+        DeviceRouter.dispatch_task() as the canonical single dispatch entry.
+
+        Falls back to direct send_to_device() only when the device is not
+        registered in DeviceRouter (compatibility mode).
+        """
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].current_task_id = task_id
-        
+
+        # PR-S3: delegate dispatch authority to DeviceRouter.
+        try:
+            from galaxy_gateway.device_router import device_router as _device_router
+            router_device = _device_router.devices.get(device_id)
+            if router_device is not None:
+                task_dict = {
+                    "task_id": task_id,
+                    "payload": {
+                        "task_type": task_type,
+                        "priority": priority,
+                        **payload,
+                    },
+                }
+                return await _device_router.dispatch_task(task_dict, router_device)
+        except Exception as _router_err:
+            logger.warning(
+                "AndroidBridge.assign_task: DeviceRouter dispatch failed, "
+                "falling back to send_to_device — %s", _router_err
+            )
+
+        # Compatibility fallback: transport via AndroidBridge transport layer when
+        # the device is not registered in DeviceRouter.
+        msg = MessageBuilder.task_assign(device_id, task_id, task_type, payload, priority, timeout)
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
     
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:

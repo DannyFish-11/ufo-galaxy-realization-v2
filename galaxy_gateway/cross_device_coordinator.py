@@ -53,7 +53,20 @@ logger = logging.getLogger(__name__)
 
 
 class CrossDeviceCoordinator:
-    """跨设备协同协调器
+    """跨设备协同协调器 — DeviceRouter-internal cross-device substrate (PR-S3).
+
+    **Architecture role (PR-S3)**
+    -----------------------------
+    ``CrossDeviceCoordinator`` is an **internal coordinator** called by
+    :class:`~galaxy_gateway.device_router.DeviceRouter` when it determines
+    that a task requires cross-device coordination.  It is NOT a public
+    dispatch entry; external callers must use
+    :meth:`~galaxy_gateway.device_router.DeviceRouter.route_task` instead.
+
+    DeviceRouter is the canonical single entry for all device-bound dispatch
+    and cross-device orchestration decisions (``CANONICAL_DISPATCH_AUTHORITY``).
+    This coordinator provides the implementation substrate for cross-device
+    tasks once DeviceRouter has made the routing decision.
 
     PR-6: Device-selection authority model
     ----------------------------------------
@@ -198,9 +211,13 @@ class CrossDeviceCoordinator:
         return [entry.device for entry in entries]
     
     async def execute_cross_device_task(self, command: str, context: Dict = None) -> Dict:
-        """
-        执行跨设备协同任务
-        
+        """执行跨设备协同任务 — DeviceRouter-internal coordinator (PR-S3).
+
+        **Called by DeviceRouter only.**  External code must route through
+        :meth:`~galaxy_gateway.device_router.DeviceRouter.route_task` and let
+        DeviceRouter decide whether to delegate here.  Do not call directly
+        from outside the gateway dispatch substrate.
+
         典型场景：
         1. 从手机复制文本到电脑
         2. 在电脑上打开手机拍的照片

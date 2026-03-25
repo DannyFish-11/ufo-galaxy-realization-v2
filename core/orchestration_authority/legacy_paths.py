@@ -356,37 +356,81 @@ _register(
     ),
     LegacyPathEntry(
         module_path="galaxy_gateway.device_router.DeviceRouter.route_task",
-        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        status=LegacyPathStatus.ACTIVE,
         recommendation=(
-            "DeviceRouter.route_task performs gateway-level routing analysis "
-            "and cross-device dispatch that is now owned by OpenClawd and "
-            "CommandRouter.  New cross-device tasks must enter through "
-            "OpenClawd._dispatch_device → OpenClawd.send_gateway_command → "
-            "CommandRouter.route_envelope.  DeviceRouter.route_task is "
-            "retained as a compatibility fallback only."
+            "DeviceRouter.route_task is the CANONICAL SINGLE DISPATCH ENTRY "
+            "(PR-S3) for all device-bound tasks and cross-device orchestration "
+            "decisions.  All previously fragmented dispatch paths "
+            "(AndroidBridge.assign_task, RepoCoordinator.dispatch_agent_to_android) "
+            "now delegate here.  Use DeviceRouter.route_task as the primary "
+            "entrypoint for all new device-bound task dispatch."
         ),
-        pr_guardrail_added="PR-7",
+        pr_guardrail_added="PR-S3",
         notes=(
-            "DeviceRouter.route_task — gateway-level task router.  "
-            "Demoted in PR-7: routing authority belongs to OpenClawd and "
-            "CommandRouter, not the gateway.  Do not call directly in new code."
+            "DeviceRouter.route_task — CANONICAL DISPATCH AUTHORITY (PR-S3).  "
+            "Promoted from LEGACY_COMPATIBILITY (PR-7) to ACTIVE.  "
+            "DeviceRouter is the single entry for all device-bound dispatch "
+            "and cross-device orchestration decisions."
         ),
     ),
     LegacyPathEntry(
         module_path="galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator",
         status=LegacyPathStatus.LEGACY_COMPATIBILITY,
         recommendation=(
-            "CrossDeviceCoordinator is a gateway-internal coordinator that "
-            "predates the CommandRouter substrate root.  It is invoked as a "
-            "fallback when the AgentBridge import fails in DeviceRouter.  "
-            "New code should not call it directly; route through "
-            "CommandRouter.route_envelope instead."
+            "CrossDeviceCoordinator is a DeviceRouter-internal coordinator "
+            "(PR-S3).  It is invoked by DeviceRouter as a fallback when the "
+            "AgentBridge import fails.  External code must not call it "
+            "directly; route through DeviceRouter.route_task instead."
         ),
-        pr_guardrail_added="PR-7",
+        pr_guardrail_added="PR-S3",
         notes=(
-            "CrossDeviceCoordinator — gateway-internal fallback coordinator.  "
-            "Demoted in PR-7: not a primary cross-device entrypoint.  "
-            "Used only as a last-resort fallback within DeviceRouter."
+            "CrossDeviceCoordinator — DeviceRouter-internal fallback coordinator.  "
+            "Not a public dispatch entry (PR-S3).  "
+            "External callers must use DeviceRouter.route_task."
+        ),
+    ),
+)
+
+# PR-S3: Consolidate dispatch authority in DeviceRouter.
+# AndroidBridge.assign_task and RepoCoordinator.dispatch_agent_to_android
+# previously held independent dispatch authority and bypassed DeviceRouter.
+# They are now demoted to LEGACY_COMPATIBILITY adapters that delegate to
+# DeviceRouter.route_task() / DeviceRouter.dispatch_task().
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.android_bridge.AndroidBridge.assign_task",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "AndroidBridge.assign_task previously dispatched tasks directly "
+            "via send_to_device(), bypassing DeviceRouter (PR-S3).  It now "
+            "delegates to DeviceRouter.dispatch_task() as the canonical single "
+            "dispatch entry.  The compatibility fallback to send_to_device() "
+            "is retained only when the device is not registered in DeviceRouter.  "
+            "New code should dispatch through DeviceRouter.route_task() directly."
+        ),
+        pr_guardrail_added="PR-S3",
+        notes=(
+            "AndroidBridge.assign_task — demoted in PR-S3.  "
+            "Now a thin adapter that delegates dispatch to DeviceRouter.  "
+            "Android-specific action translation (MessageBuilder) remains here."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "RepoCoordinator.dispatch_agent_to_android previously built AIP "
+            "messages and dispatched them directly via WebSocket/HTTP, "
+            "bypassing DeviceRouter (PR-S3).  It now delegates to "
+            "DeviceRouter.route_task() as the canonical single dispatch entry.  "
+            "New code should dispatch through DeviceRouter.route_task() directly."
+        ),
+        pr_guardrail_added="PR-S3",
+        notes=(
+            "RepoCoordinator.dispatch_agent_to_android — demoted in PR-S3.  "
+            "Now a thin adapter that delegates dispatch to DeviceRouter.  "
+            "Compatibility fallback (direct send) retained for when "
+            "DeviceRouter is unavailable."
         ),
     ),
 )
