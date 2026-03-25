@@ -1,9 +1,24 @@
 """
 Parallel Group Tracker — gateway-level shared state machine.
 
-Tracks parallel subtask results arriving via WebSocket across **both** entry
-chains (A: websocket_handler → device_router, B: handlers/message_handler →
-task_orchestrator).  All in-memory; no persistence required.
+.. note:: PR-S5 — Legacy compatibility surface
+
+    This tracker bridges **two** entry chains:
+
+    * **Chain A (canonical)**: ``websocket_handler → DeviceRouter``
+      (``galaxy_gateway.websocket_handler`` → ``galaxy_gateway.device_router``)
+    * **Chain B (legacy)**: ``handlers/message_handler → TaskOrchestrator``
+      (``galaxy_gateway.handlers.MessageHandler`` →
+      ``galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator``)
+
+    **Chain A is the canonical server pipeline.**  Chain B is the legacy path
+    retained for backward compatibility.
+
+    For canonical parallel result aggregation use
+    :mod:`core.cross_device_execution_chain` (``CrossDeviceChainSingleton``),
+    which records the authoritative execution trace for every dispatched task.
+    This tracker remains only to ensure legacy chain-B callers can still
+    collect parallel results without data loss during migration to chain A.
 
 Usage::
 

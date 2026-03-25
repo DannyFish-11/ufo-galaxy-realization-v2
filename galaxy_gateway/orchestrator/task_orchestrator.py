@@ -65,8 +65,26 @@ class Task:
 
 
 class TaskOrchestrator:
-    """任务编排器"""
-    
+    """任务编排器 — Legacy gateway-level task dispatch layer.
+
+    .. deprecated:: PR-7 (demoted), PR-S5 (clarified)
+        ``TaskOrchestrator`` is a **legacy gateway-level transport layer**.
+        The canonical cross-device execution chain is:
+
+        OpenClawd → CommandRouter → TaskEnvelope → TaskGraph (core.task_graph)
+        → DeviceRouter.route_task → Worker/Device → ResultEnvelope → OpenClawd feedback
+
+        ``TaskOrchestrator`` is retained only as a compatibility fallback for
+        existing integrations (e.g. ``galaxy_gateway.app`` startup).
+        It must not be invoked as a new primary cross-device entrypoint.
+
+        Preferred replacement:
+            ``core.e2e_orchestrator.process_user_input()``
+            or ``galaxy_gateway.device_router.DeviceRouter.route_task()``
+
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry entry.
+    """
+
     def __init__(
         self,
         device_manager: DeviceManager,
@@ -76,7 +94,7 @@ class TaskOrchestrator:
         self.device_manager = device_manager
         self.message_handler = message_handler
         self.websocket_manager = websocket_manager
-        
+
         self.tasks: Dict[str, Task] = {}
         self.task_queue: asyncio.Queue = asyncio.Queue()
         self._running = False
@@ -86,7 +104,18 @@ class TaskOrchestrator:
         # PR-2: TaskEnvelope registry — each submitted task is wrapped in an
         # envelope immediately so all internal processing uses the unified format.
         self._task_envelopes: Dict[str, Any] = {}
-        
+
+        # PR-S5: emit legacy guardrail — TaskOrchestrator is a compatibility
+        # transport layer only.  The canonical dispatch chain is:
+        # OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter.route_task.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator",
+            )
+        except Exception:
+            pass
+
     async def start(self):
         """启动编排器"""
         self._running = True
@@ -670,8 +699,23 @@ class TaskOrchestrator:
 
 
 class MultiDeviceOrchestrator(TaskOrchestrator):
-    """多设备协同编排器"""
-    
+    """多设备协同编排器 — Legacy compat subclass of TaskOrchestrator.
+
+    .. deprecated:: PR-S5
+        ``MultiDeviceOrchestrator`` inherits the legacy status of
+        :class:`TaskOrchestrator` (PR-7).  It is a **compatibility subclass**
+        retained so that existing callers that reference it directly do not
+        immediately break.  All multi-device execution is now routed through
+        ``submit_dag_task()`` which delegates to :mod:`core.task_graph` and
+        :class:`~galaxy_gateway.device_router.DeviceRouter`.
+
+        Preferred canonical path:
+            ``core.e2e_orchestrator.process_user_input(targets=[…])``
+
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry
+        entry (``galaxy_gateway.orchestrator.task_orchestrator.MultiDeviceOrchestrator``).
+    """
+
     async def submit_multi_device_task(
         self,
         user_request: str,
