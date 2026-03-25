@@ -1,5 +1,6 @@
 """
-Galaxy - 任务路由和调度模块
+galaxy_gateway.task_router — Legacy Gateway Task Router (PR-S6 demoted)
+=======================================================================
 
 功能：
 1. 任务路由 - 将任务发送到目标设备
@@ -11,6 +12,31 @@ Galaxy - 任务路由和调度模块
 作者：Manus AI
 日期：2026-01-22
 版本：1.0
+
+.. note:: PR-S6 — Legacy compatibility surface; NOT a canonical dispatch entry
+
+    ``TaskRouter`` and ``TaskScheduler`` are **legacy gateway-level routing
+    components** that carry independent task-scheduling and device-dispatch
+    logic.  They predate the canonical server-side pipeline and **must not**
+    be used as a primary dispatch surface.
+
+    The **canonical server dispatch pipeline** is::
+
+        OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter → device
+
+    ``TaskRouter.execute_tasks()`` sends tasks directly to devices via HTTP
+    without routing through the canonical TaskEnvelope / DeviceRouter chain.
+    This bypasses task-lifecycle tracking, result-envelope semantics, and the
+    canonical cross-device chain (``core.cross_device_execution_chain``).
+
+    Both ``TaskRouter`` and ``TaskScheduler`` are retained as compatibility
+    shims only.  New server-side task dispatch **must** use
+    ``core.e2e_orchestrator.process_user_input()`` or
+    ``galaxy_gateway.device_router.DeviceRouter.route_task()``.
+
+    See :mod:`core.orchestration_authority.legacy_paths` for the registry
+    entries (``galaxy_gateway.task_router.TaskRouter`` and
+    ``galaxy_gateway.task_router.TaskScheduler``).
 """
 from core.port_config import get_service_port
 
@@ -63,10 +89,31 @@ class ExecutionPlan:
 # ============================================================================
 
 class TaskScheduler:
-    """任务调度器 - 管理任务执行顺序和依赖"""
-    
+    """任务调度器 - 管理任务执行顺序和依赖
+
+    .. deprecated:: PR-S6
+        ``TaskScheduler`` is a **legacy gateway-level task planner** (PR-S6).
+        It is retained as a compatibility shim inside ``TaskRouter`` only.
+        Server-side execution planning is handled by the canonical pipeline:
+        ``OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter``.
+        Do not instantiate ``TaskScheduler`` directly from new server-side code.
+    """
+
     def __init__(self):
         """初始化组件"""
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.task_router.TaskScheduler",
+                recommendation=(
+                    "TaskScheduler is a LEGACY GATEWAY PLANNER (PR-S6).  "
+                    "Canonical server-side execution planning uses: "
+                    "OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter.  "
+                    "Do not instantiate TaskScheduler from new server-side code."
+                ),
+            )
+        except Exception:
+            pass
         self.initialized_at = datetime.now()
     
     def create_execution_plan(self, tasks: List[Any]) -> ExecutionPlan:
@@ -127,15 +174,46 @@ class TaskScheduler:
 # ============================================================================
 
 class TaskRouter:
-    """任务路由器 - 将任务发送到目标设备"""
-    
+    """任务路由器 - 将任务发送到目标设备
+
+    .. deprecated:: PR-S6
+        ``TaskRouter`` is a **legacy gateway-level dispatch surface** (PR-S6).
+        It sends tasks directly to devices via HTTP, bypassing the canonical
+        ``TaskEnvelope`` / ``DeviceRouter`` chain and the cross-device execution
+        chain (``core.cross_device_execution_chain``).
+
+        Retained as a **compatibility shim only**.  New server-side task dispatch
+        **must** route through::
+
+            core.e2e_orchestrator.process_user_input()
+            # or
+            galaxy_gateway.device_router.DeviceRouter.route_task()
+
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry
+        entry (``galaxy_gateway.task_router.TaskRouter``).
+    """
+
     def __init__(self, device_registry):
         """
         初始化任务路由器
-        
+
         Args:
             device_registry: 设备注册表
         """
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.task_router.TaskRouter",
+                recommendation=(
+                    "TaskRouter is a LEGACY GATEWAY DISPATCH SURFACE (PR-S6).  "
+                    "It routes tasks directly to devices via HTTP, bypassing the "
+                    "canonical TaskEnvelope / DeviceRouter chain.  "
+                    "Use core.e2e_orchestrator.process_user_input() or "
+                    "galaxy_gateway.device_router.DeviceRouter.route_task() instead."
+                ),
+            )
+        except Exception:
+            pass
         self.device_registry = device_registry
         self.scheduler = TaskScheduler()
         self.active_tasks: Dict[str, TaskResult] = {}

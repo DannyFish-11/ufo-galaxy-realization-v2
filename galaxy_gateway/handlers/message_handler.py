@@ -1,10 +1,36 @@
 """
-消息处理器
+galaxy_gateway.handlers.message_handler — Legacy Chain-B Ingress Handler (PR-S6)
+==================================================================================
 
 负责:
 1. 路由不同类型的消息
 2. 调用相应的处理逻辑
 3. 生成响应消息
+
+.. note:: PR-S6 — Legacy chain-B ingress; NOT a canonical server-side runtime entry
+
+    ``MessageHandler`` is the **chain B ingress handler** in the legacy
+    dual-entry architecture:
+
+    * **Chain A (canonical)**: ``websocket_handler → DeviceRouter``
+      This is the canonical server pipeline.
+    * **Chain B (legacy)**: ``MessageHandler → TaskOrchestrator``
+      This path is retained for backward compatibility only.
+
+    Chain B was identified in PR-S5 (via ``ParallelGroupTracker`` demotion)
+    as the legacy side of a split-entry design.  This PR-S6 demotion makes
+    the ingress boundary of chain B explicit: ``MessageHandler`` **must not**
+    be used as a primary server-side runtime entry point.  New task dispatch
+    **must** enter through the canonical pipeline:
+
+        ``OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter``
+
+    ``MessageHandler`` is retained as a **compatibility shim** so that legacy
+    chain-B callers are not broken, but it carries **no independent runtime
+    authority**.  It must not be extended with new execution logic.
+
+    See :mod:`core.orchestration_authority.legacy_paths` for the registry
+    entry (``galaxy_gateway.handlers.message_handler.MessageHandler``).
 """
 
 import logging
@@ -32,9 +58,36 @@ def _publish_m2_safe(event_type: str, device_id: str, payload: dict, **kw) -> No
 
 
 class MessageHandler:
-    """消息处理器"""
-    
+    """消息处理器 — Legacy Chain-B Ingress (PR-S6)
+
+    .. deprecated:: PR-S6
+        ``MessageHandler`` is the **legacy chain-B ingress handler** (PR-S6).
+        Chain B (``MessageHandler → TaskOrchestrator``) is a legacy duplicate
+        of the canonical chain A (``websocket_handler → DeviceRouter``).
+
+        ``MessageHandler`` is retained as a **compatibility shim** only.  It
+        carries **no independent runtime authority** and must not be extended
+        with new execution or dispatch logic.  New server-side task dispatch
+        **must** enter through the canonical pipeline:
+        ``OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter``.
+    """
+
     def __init__(self, device_manager: DeviceManager):
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.handlers.message_handler.MessageHandler",
+                recommendation=(
+                    "MessageHandler is the LEGACY CHAIN-B INGRESS HANDLER (PR-S6).  "
+                    "Chain B (MessageHandler → TaskOrchestrator) is the legacy side "
+                    "of the split-entry design demoted in PR-S5/PR-S6.  "
+                    "Canonical server task dispatch enters via chain A: "
+                    "websocket_handler → DeviceRouter.  "
+                    "Do not extend MessageHandler with new execution logic."
+                ),
+            )
+        except Exception:
+            pass
         self.device_manager = device_manager
         self.task_handlers: Dict[str, Callable] = {}
         self.pending_tasks: Dict[str, dict] = {}  # task_id -> task_info

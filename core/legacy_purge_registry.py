@@ -291,6 +291,63 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         ),
         canonical_replacement="python unified_launcher.py  (or python main.py)",
     ),
+
+    # ── PR-S6: Finalize server-side legacy demotion ────────────────────────
+
+    PurgeDecision(
+        asset_path="galaxy_gateway/task_router.py::TaskRouter",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S6",
+        rationale=(
+            "TaskRouter is a legacy gateway-level HTTP task dispatcher that sends "
+            "tasks directly to devices, bypassing the canonical "
+            "TaskEnvelope / DeviceRouter chain and core.cross_device_execution_chain.  "
+            "PR-S6 adds a LEGACY PATH GUARDRAIL in TaskRouter.__init__, a deprecation "
+            "docstring, and registers the path in LEGACY_PATH_REGISTRY.  "
+            "TaskRouter is retained as a compatibility shim only; it must not be "
+            "extended with new execution logic."
+        ),
+        canonical_replacement=(
+            "core.e2e_orchestrator.process_user_input()  "
+            "or galaxy_gateway.device_router.DeviceRouter.route_task()"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/task_router.py::TaskScheduler",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S6",
+        rationale=(
+            "TaskScheduler is a legacy gateway-level task planner bundled inside "
+            "TaskRouter.  It performs topological-sort scheduling that predates "
+            "core.task_graph.  PR-S6 adds a LEGACY PATH GUARDRAIL in "
+            "TaskScheduler.__init__, a deprecation docstring, and registers the path "
+            "in LEGACY_PATH_REGISTRY.  Do not instantiate directly from new code."
+        ),
+        canonical_replacement=(
+            "OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter  "
+            "(canonical server-side execution planning pipeline)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/handlers/message_handler.py::MessageHandler",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S6",
+        rationale=(
+            "MessageHandler is the chain-B ingress handler (chain B: "
+            "MessageHandler → TaskOrchestrator).  The dual-entry architecture "
+            "(chain A canonical + chain B legacy) was identified in PR-S5; this "
+            "PR-S6 decision makes the chain-B ingress boundary explicit.  "
+            "PR-S6 adds a LEGACY PATH GUARDRAIL in MessageHandler.__init__, a "
+            "deprecation docstring, and registers the path in LEGACY_PATH_REGISTRY.  "
+            "MessageHandler carries no independent runtime authority and must not be "
+            "extended with new execution or dispatch logic."
+        ),
+        canonical_replacement=(
+            "Chain A: galaxy_gateway.websocket_handler → "
+            "galaxy_gateway.device_router.DeviceRouter  "
+            "(canonical server-side ingress pipeline)"
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------

@@ -1028,6 +1028,93 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-S6: Finalize server-side legacy demotion — remove non-canonical runtime
+#         entry leftovers
+#
+# After PR-S5 (MultiDeviceOrchestrator / ParallelGroupTracker / LocalAgentRuntime
+# demotion), the following server-side modules still carried independent
+# runtime-control or dispatch authority that could bypass the canonical pipeline:
+#
+#   galaxy_gateway.task_router.TaskRouter
+#       Legacy gateway-level task router.  Sends tasks directly to devices via
+#       HTTP without routing through the canonical TaskEnvelope / DeviceRouter
+#       chain.  Bypasses task-lifecycle tracking, result-envelope semantics, and
+#       core.cross_device_execution_chain.
+#
+#   galaxy_gateway.task_router.TaskScheduler
+#       Legacy gateway-level task planner bundled inside TaskRouter.  Carries
+#       an independent topological-sort scheduling algorithm that predates the
+#       canonical TaskGraph (core.task_graph) and DeviceRouter dispatch.
+#
+#   galaxy_gateway.handlers.message_handler.MessageHandler
+#       Legacy chain-B ingress handler.  Chain B
+#       (MessageHandler → TaskOrchestrator) is the duplicate entry that was
+#       identified in PR-S5 (via ParallelGroupTracker demotion) but whose
+#       *ingress* boundary was not yet explicitly registered.  Chain A
+#       (websocket_handler → DeviceRouter) is the canonical server pipeline.
+# ---------------------------------------------------------------------------
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_router.TaskRouter",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "TaskRouter is a LEGACY GATEWAY DISPATCH SURFACE (PR-S6).  "
+            "It routes tasks directly to devices via HTTP, bypassing the canonical "
+            "TaskEnvelope / DeviceRouter chain and core.cross_device_execution_chain.  "
+            "New server-side task dispatch must use:  "
+            "core.e2e_orchestrator.process_user_input() or  "
+            "galaxy_gateway.device_router.DeviceRouter.route_task().  "
+            "TaskRouter is retained as a compatibility shim only and must not be "
+            "extended with new execution logic."
+        ),
+        pr_guardrail_added="PR-S6",
+        notes=(
+            "TaskRouter — legacy gateway HTTP dispatch surface (PR-S6).  "
+            "Bypasses canonical TaskEnvelope/DeviceRouter chain.  "
+            "Compatibility shim; canonical path is DeviceRouter.route_task."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_router.TaskScheduler",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "TaskScheduler is a LEGACY GATEWAY PLANNER (PR-S6).  "
+            "It is bundled inside the legacy TaskRouter and performs topological-sort "
+            "scheduling that predates core.task_graph.  "
+            "Canonical server-side execution planning is handled by the pipeline:  "
+            "OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter.  "
+            "Do not instantiate TaskScheduler directly from new server-side code."
+        ),
+        pr_guardrail_added="PR-S6",
+        notes=(
+            "TaskScheduler — legacy gateway task planner (PR-S6).  "
+            "Internal to the legacy TaskRouter; not a canonical planner.  "
+            "Canonical planning is via TaskEnvelope / DeviceRouter."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.handlers.message_handler.MessageHandler",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "MessageHandler is the LEGACY CHAIN-B INGRESS HANDLER (PR-S6).  "
+            "Chain B (MessageHandler → TaskOrchestrator) is the legacy duplicate of "
+            "the canonical chain A (websocket_handler → DeviceRouter, PR-S5).  "
+            "MessageHandler is retained as a compatibility shim only and carries NO "
+            "independent runtime authority.  It must not be extended with new "
+            "execution or dispatch logic.  "
+            "New server-side task dispatch must enter through the canonical pipeline:  "
+            "OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter."
+        ),
+        pr_guardrail_added="PR-S6",
+        notes=(
+            "MessageHandler — legacy chain-B ingress handler (PR-S6).  "
+            "Chain B ingress; no independent runtime authority.  "
+            "Canonical entry is chain A: websocket_handler → DeviceRouter."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
