@@ -189,7 +189,20 @@ class RouteConnectionPool:
     async def send_command_and_wait(
         self, device_id: str, command: str, params: dict, timeout: float = 15.0
     ) -> dict:
-        """发送命令到设备并等待设备回传结果 (request-response 模式)"""
+        """发送命令到设备并等待设备回传结果 (request-response 模式)。
+
+        委托 UCM 管理 pending futures（presence backbone owns the request-response
+        wait path）；本地 _pending_responses 保留为向后兼容。
+        """
+        # Delegate to UCM (presence backbone owns pending response futures)
+        try:
+            return await self._unified().send_command_and_wait(
+                device_id, command, params, timeout=timeout
+            )
+        except Exception:
+            pass
+
+        # Fallback: local pending-response path (compat)
         command_id = f"cmd_{uuid.uuid4().hex[:12]}"
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
@@ -217,11 +230,22 @@ class RouteConnectionPool:
             self._pending_responses.pop(command_id, None)
 
     def resolve_command_response(self, command_id: str, payload: dict):
-        """设备回传 command_result 时调用，唤醒等待中的 Future"""
+        """设备回传 command_result 时调用，唤醒等待中的 Future。
+
+        优先委托 UCM（presence backbone owns pending futures）；本地
+        _pending_responses 保留为向后兼容。
+        """
+        # Delegate to UCM first
+        try:
+            self._unified().resolve_command_response(command_id, payload)
+        except Exception:
+            pass
+
+        # Local fallback (compat)
         future = self._pending_responses.get(command_id)
         if future and not future.done():
             future.set_result(payload)
-            logger.debug(f"命令响应已匹配: {command_id}")
+            logger.debug(f"命令响应已匹配(local): {command_id}")
         else:
             logger.debug(f"收到无人等待的命令响应: {command_id}")
 

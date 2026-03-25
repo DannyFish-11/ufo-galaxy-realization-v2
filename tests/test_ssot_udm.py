@@ -165,6 +165,8 @@ class TestWSManagerDisconnectOrder(unittest.TestCase):
 
     def test_local_state_cleaned_even_when_udm_fails(self):
         """Socket is gone — local state must still be cleaned up on UDM failure."""
+        # Ensure module is imported before patch() resolves the target attribute
+        import galaxy_gateway.websocket_handler  # noqa: F401
         with (
             patch("galaxy_gateway.websocket_handler.udm_write_unregister", return_value=False),
             patch("galaxy_gateway.websocket_handler.device_router"),

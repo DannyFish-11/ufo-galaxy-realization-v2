@@ -8,6 +8,7 @@ Galaxy 系统统一连接管理器（单例）。
   - 提供带超时控制和指数退避重试的消息发送
   - 支持 WebSocket 直连与 HTTP fallback
   - 提供结构化日志
+  - 维护 last_seen / routable 在线态（presence backbone）
 
 所有旧 ConnectionManager 实现（core/routes/_shared.py、
 galaxy_gateway/websocket_handler.py、integration/websocket_server.py）
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -90,10 +92,13 @@ class UnifiedConnectionManager:
         """注册设备 WebSocket 连接。"""
         async with self._lock:
             self._websockets[device_id] = websocket
+            now = time.time()
             self._connections[device_id] = UnifiedConnectionInfo(
                 device_id=device_id,
                 state=UnifiedConnectionState.CONNECTED,
                 connected_at=datetime.utcnow(),
+                last_seen=now,
+                routable=True,
                 metadata=metadata or {},
             )
         logger.info(
@@ -115,6 +120,7 @@ class UnifiedConnectionManager:
             info = self._connections.get(device_id)
             if info:
                 info.state = UnifiedConnectionState.DISCONNECTED
+                info.routable = False
                 self._connections.pop(device_id, None)
 
         logger.info(
@@ -136,6 +142,141 @@ class UnifiedConnectionManager:
     def is_device_connected(self, device_id: str) -> bool:
         """判断设备是否有活跃 WebSocket 连接。"""
         return device_id in self._websockets
+
+    # ------------------------------------------------------------------
+    # Presence backbone: heartbeat / routable / reconnect / offline
+    # ------------------------------------------------------------------
+
+    def update_heartbeat(self, device_id: str) -> bool:
+        """记录设备心跳，更新 last_seen 并确保 routable=True。
+
+        若设备不在本地连接表中（仅通过 gateway fallback 连接），静默忽略并返回 False。
+
+        Returns:
+            True — 心跳已记录；False — 设备不在本地连接表中。
+        """
+        info = self._connections.get(device_id)
+        if info is None:
+            return False
+        now = time.time()
+        info.last_seen = now
+        info.last_heartbeat = datetime.utcnow()
+        info.routable = True
+        if info.state not in (
+            UnifiedConnectionState.CONNECTED,
+            UnifiedConnectionState.CONNECTED.value,
+        ):
+            info.state = UnifiedConnectionState.CONNECTED
+        logger.debug(
+            "Heartbeat recorded",
+            extra={"event": "heartbeat_recorded", "device_id": device_id, "last_seen": now},
+        )
+        return True
+
+    def mark_offline(self, device_id: str) -> None:
+        """将设备标记为不可路由（保留连接记录，但 routable=False）。
+
+        不删除 _connections 条目，保留历史 last_seen；仅用于心跳超时等
+        软性下线场景。若要完全移除请调用 unregister_connection()。
+        """
+        info = self._connections.get(device_id)
+        if info is not None:
+            info.routable = False
+            info.state = UnifiedConnectionState.DISCONNECTED
+        # Always remove from active websocket map on soft-offline
+        self._websockets.pop(device_id, None)
+        logger.info(
+            "Device marked offline",
+            extra={"event": "mark_offline", "device_id": device_id},
+        )
+
+    async def reconnect_patch(
+        self,
+        device_id: str,
+        websocket: WebSocket,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """设备重连时修补现有连接记录（不创建重复 identity）。
+
+        与 register_connection 的区别：重连路径会增加 total_reconnects 计数器
+        并将 state 置为 RECONNECTING → CONNECTED，而不是全新注册。
+        """
+        async with self._lock:
+            self._websockets[device_id] = websocket
+            now = time.time()
+            existing = self._connections.get(device_id)
+            if existing is not None:
+                existing.state = UnifiedConnectionState.CONNECTED
+                existing.last_seen = now
+                existing.last_heartbeat = datetime.utcnow()
+                existing.routable = True
+                existing.total_reconnects += 1
+                if metadata:
+                    existing.metadata.update(metadata)
+            else:
+                self._connections[device_id] = UnifiedConnectionInfo(
+                    device_id=device_id,
+                    state=UnifiedConnectionState.CONNECTED,
+                    connected_at=datetime.utcnow(),
+                    last_seen=now,
+                    routable=True,
+                    metadata=metadata or {},
+                )
+        logger.info(
+            "Device connection reconnect-patched",
+            extra={"event": "reconnect_patch", "device_id": device_id},
+        )
+        await self._broadcast_status(
+            {
+                "type": "device_reconnected",
+                "device_id": device_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+    def check_heartbeat_timeouts(self, timeout_seconds: float = 60.0) -> List[str]:
+        """扫描所有连接，将超时设备标记为 offline 并返回其 device_id 列表。
+
+        Args:
+            timeout_seconds: 超过此秒数未收到心跳则标记 offline。
+
+        Returns:
+            被标记为 offline 的设备 ID 列表。
+        """
+        now = time.time()
+        timed_out: List[str] = []
+        for device_id, info in list(self._connections.items()):
+            if info.last_seen > 0 and (now - info.last_seen) > timeout_seconds:
+                self.mark_offline(device_id)
+                timed_out.append(device_id)
+                logger.warning(
+                    "Device heartbeat timeout — marked offline",
+                    extra={
+                        "event": "heartbeat_timeout",
+                        "device_id": device_id,
+                        "idle_seconds": now - info.last_seen,
+                    },
+                )
+        return timed_out
+
+    def get_presence_view(self) -> Dict[str, Dict[str, Any]]:
+        """返回所有已知设备的 presence 快照。
+
+        键为 device_id，值包含：online、routable、last_seen、state。
+        这是 UCM 的 authoritative presence projection。
+        """
+        result: Dict[str, Dict[str, Any]] = {}
+        for device_id, info in self._connections.items():
+            connected = device_id in self._websockets
+            result[device_id] = {
+                "device_id": device_id,
+                "online": connected and info.routable,
+                "routable": info.routable,
+                "last_seen": info.last_seen,
+                "state": info.state if isinstance(info.state, str) else info.state.value,
+                "total_reconnects": info.total_reconnects,
+            }
+        return result
 
     # ------------------------------------------------------------------
     # 消息发送（带超时控制 + 指数退避重试）

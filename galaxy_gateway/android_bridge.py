@@ -577,6 +577,8 @@ class AndroidBridge:
     def _patch_heartbeat_to_udm(self, device_id: str) -> None:
         """Record heartbeat in UDM canonical state (updates last_heartbeat + keeps ONLINE).
 
+        Also updates the UCM presence backbone (last_seen + routable).
+
         Args:
             device_id: Device that sent the heartbeat.
         """
@@ -589,8 +591,20 @@ class AndroidBridge:
                 device_id, exc,
             )
 
+        # ── Presence backbone: update UCM last_seen / routable ──
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+            get_unified_connection_manager().update_heartbeat(device_id)
+        except Exception as exc:
+            logger.debug(
+                "android_bridge: UCM heartbeat patch failed (non-fatal): device_id=%s error=%s",
+                device_id, exc,
+            )
+
     def _patch_disconnect_to_udm(self, device_id: str) -> None:
         """Mark device as DISCONNECTED in UDM without removing canonical identity.
+
+        Also marks the device offline in UCM presence backbone.
 
         Args:
             device_id: Device that disconnected.
@@ -601,8 +615,20 @@ class AndroidBridge:
             source="android_bridge_disconnect",
         )
 
+        # ── Presence backbone: mark offline in UCM ──
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+            get_unified_connection_manager().mark_offline(device_id)
+        except Exception as exc:
+            logger.debug(
+                "android_bridge: UCM mark_offline failed (non-fatal): device_id=%s error=%s",
+                device_id, exc,
+            )
+
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
         """Mark device as ONLINE in UDM on reconnect (no duplicate identity created).
+
+        Also patches the UCM presence backbone so routable=True is restored.
 
         Args:
             device_id: Device that reconnected.
@@ -612,6 +638,18 @@ class AndroidBridge:
             {"status": "online"},
             source="android_bridge_reconnect",
         )
+
+        # ── Presence backbone: update UCM heartbeat to restore routable ──
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+            ucm = get_unified_connection_manager()
+            # Attempt update_heartbeat; if device isn't in UCM yet, that's OK
+            ucm.update_heartbeat(device_id)
+        except Exception as exc:
+            logger.debug(
+                "android_bridge: UCM reconnect patch failed (non-fatal): device_id=%s error=%s",
+                device_id, exc,
+            )
     
     def _register_default_handlers(self):
         """注册默认消息处理器"""

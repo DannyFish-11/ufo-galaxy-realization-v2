@@ -28,35 +28,69 @@ logger = logging.getLogger(__name__)
 
 
 class GatewayWSManager:
-    """WebSocket 连接管理器"""
-    
+    """WebSocket 连接管理器
+
+    Thin ingress layer: accepts, normalises, and delegates presence ownership
+    to :class:`~core.unified.connection_manager.UnifiedConnectionManager` (UCM),
+    which is the authoritative runtime presence backbone.
+
+    Local ``active_connections`` / ``device_connections`` maps are kept for
+    connection-id → WebSocket lookup (needed because the gateway uses ephemeral
+    connection IDs), but online/routable state truth lives in UCM.
+    """
+
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.device_connections: Dict[str, str] = {}  # device_id -> connection_id
-    
+
+    # ------------------------------------------------------------------
+    # Internal: lazy UCM accessor (avoids circular import at module load)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ucm():
+        from core.unified.connection_manager import get_unified_connection_manager
+        return get_unified_connection_manager()
+
     async def connect(self, websocket: WebSocket, connection_id: str):
         """接受新连接"""
         await websocket.accept()
         self.active_connections[connection_id] = websocket
         logger.info(f"✅ WebSocket 连接建立: {connection_id}")
-    
+
     def disconnect(self, connection_id: str):
         """断开连接"""
         if connection_id in self.active_connections:
             del self.active_connections[connection_id]
-            
+
             # 注销设备
             device_id = None
             for did, cid in self.device_connections.items():
                 if cid == connection_id:
                     device_id = did
                     break
-            
+
             if device_id:
                 # ── SSOT: write-through to UDM FIRST, then clean up local state ──
                 # Even if UDM write fails the socket IS gone, so we must still
                 # remove the local entry; the warning is logged by the helper.
                 udm_write_unregister(device_id)
+
+                # ── Presence backbone: unregister from UCM ──
+                try:
+                    ucm = self._ucm()
+                    import asyncio as _asyncio
+                    loop = None
+                    try:
+                        loop = _asyncio.get_running_loop()
+                    except RuntimeError:
+                        pass
+                    if loop is not None and loop.is_running():
+                        loop.create_task(ucm.unregister_connection(device_id))
+                    else:
+                        ucm.mark_offline(device_id)
+                except Exception as _ucm_err:
+                    logger.debug("UCM unregister on disconnect failed (non-fatal): %s", _ucm_err)
 
                 device_router.unregister_device(device_id)
                 del self.device_connections[device_id]
@@ -71,19 +105,36 @@ class GatewayWSManager:
                     pass
 
             logger.info(f"✅ WebSocket 连接断开: {connection_id}")
-    
+
     async def send_message(self, connection_id: str, message: Dict):
         """发送消息到指定连接"""
         if connection_id in self.active_connections:
             websocket = self.active_connections[connection_id]
             await websocket.send_json(message)
-    
+
     async def send_to_device(self, device_id: str, message: Dict):
-        """发送消息到指定设备"""
+        """发送消息到指定设备 — 委托 UCM 处理（含 fallback 逻辑）。"""
+        # Fast path: use local connection_id map for direct send
+        connection_id = self.device_connections.get(device_id)
+        if connection_id and connection_id in self.active_connections:
+            try:
+                await self.send_message(connection_id, message)
+                return
+            except Exception as e:
+                logger.warning("GatewayWSManager.send_to_device local send failed, delegating to UCM: %s", e)
+
+        # Delegate to UCM (presence backbone) for fallback / gateway paths
+        try:
+            await self._ucm().send_to_device(device_id, message)
+        except Exception as e:
+            logger.error(f"❌ UCM send_to_device failed for {device_id}: {e}")
+
+    def is_device_connected(self, device_id: str) -> bool:
+        """Check if a device has an active connection (UCM is authoritative)."""
         if device_id in self.device_connections:
-            connection_id = self.device_connections[device_id]
-            await self.send_message(connection_id, message)
-    
+            return True
+        return self._ucm().is_device_connected(device_id)
+
     async def broadcast(self, message: Dict):
         """广播消息到所有连接"""
         for connection_id in list(self.active_connections.keys()):
@@ -91,6 +142,10 @@ class GatewayWSManager:
                 await self.send_message(connection_id, message)
             except Exception as e:
                 logger.error(f"❌ 广播消息失败: {e}")
+
+    def get_connected_devices(self) -> list:
+        """返回当前本地已连接的设备 ID 列表。"""
+        return list(self.device_connections.keys())
 
 
 # 全局连接管理器
@@ -252,6 +307,16 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
             if success:
                 connection_manager.device_connections[device_id] = connection_id
 
+                # ── Presence backbone: register with UCM (reconnect-safe) ──
+                try:
+                    ucm = connection_manager._ucm()
+                    if ucm.is_device_connected(device_id):
+                        await ucm.reconnect_patch(device_id, websocket, metadata)
+                    else:
+                        await ucm.register_connection(device_id, websocket, metadata)
+                except Exception as _ucm_err:
+                    logger.debug("UCM register on handle_register failed (non-fatal): %s", _ucm_err)
+
                 # 同步设备能力到 CapabilityRegistry
                 try:
                     from core.routes.devices import _sync_device_to_capability_registry
@@ -320,6 +385,12 @@ async def handle_heartbeat(connection_id: str, aip_msg):
             if device:
                 device.last_seen = datetime.now()
                 device.status = "online"
+
+        # ── Presence backbone: update UCM heartbeat / last_seen ──
+        try:
+            connection_manager._ucm().update_heartbeat(device_id)
+        except Exception as _ucm_err:
+            logger.debug("UCM update_heartbeat failed (non-fatal): %s", _ucm_err)
 
         # 发送 AIP v3 心跳确认响应
         response = {
