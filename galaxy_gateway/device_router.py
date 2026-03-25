@@ -1123,13 +1123,64 @@ class DeviceRouter:
                 event = asyncio.Event()
                 self._task_events[task_id] = event
 
+                # PR-S5: use envelope timeout if available; fall back to 30 s.
+                # The timeout is read from the TaskEnvelope created earlier in
+                # dispatch_task so that all paths respect the same value.
+                _ws_timeout = 30.0
                 try:
-                    await asyncio.wait_for(event.wait(), timeout=30.0)
+                    if _task_envelope is not None:
+                        _ws_timeout = _task_envelope.timeout
+                except Exception:
+                    pass
+
+                # PR-S5: register with canonical lifecycle registry so that
+                # reconnect/resume and ownership tracking are unified.
+                try:
+                    from core.task_envelope_lifecycle_registry import (
+                        get_lifecycle_registry as _get_lcr,
+                        LifecycleOwner as _LCOwner,
+                    )
+                    class _EnvProxy:
+                        pass
+                    _ep = _EnvProxy()
+                    _ep.task_id = task_id
+                    _ep.trace_id = task.get("trace_id", "")
+                    _ep.target = device.device_id
+                    _ep.tool_name = task.get("command", "")
+                    _ep.timeout = _ws_timeout
+                    _get_lcr().register(
+                        _ep,
+                        owner=_LCOwner.DEVICE_DISPATCH,
+                        metadata={"source": "device_router.dispatch_task.ws_fallback"},
+                    )
+                except Exception as _lcr_err:
+                    logger.debug(
+                        "DeviceRouter.dispatch_task: lifecycle registry register "
+                        "skipped — %s", _lcr_err
+                    )
+
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=_ws_timeout)
                     if task_id in self.task_results:
                         result = self.task_results.pop(task_id)
+                        # PR-S5: complete via canonical registry on success.
+                        try:
+                            from core.task_envelope_lifecycle_registry import (
+                                get_lifecycle_registry as _get_lcr2,
+                            )
+                            _get_lcr2().complete(task_id, result)
+                        except Exception:
+                            pass
                         return result
                 except asyncio.TimeoutError:
-                    pass
+                    # PR-S5: record timeout via canonical registry.
+                    try:
+                        from core.task_envelope_lifecycle_registry import (
+                            get_lifecycle_registry as _get_lcr3,
+                        )
+                        _get_lcr3().fail(task_id, "dispatch_task ws_fallback timeout")
+                    except Exception:
+                        pass
                 finally:
                     self._task_events.pop(task_id, None)
                 
