@@ -14,6 +14,23 @@ OpenAI-compatible endpoint.  Its configuration and state have **system-wide
 effect** — they feed into the provider/model source pool, routing candidate
 pool, projection-facing status, and downstream status-board semantics.
 
+Architecture freeze (PR-1)
+--------------------------
+The following constraints are non-negotiable and established as part of the
+PR-1 architecture freeze:
+
+* OneAPI is always the **OneAPI Aggregator Horizon** — a lower architectural
+  tier, never a peer of direct/native-multimodal top-layer providers.
+* Any top-layer rendering of OneAPI (placing it at the same visual or
+  architectural level as OpenAI, Anthropic, Gemini, etc.) is
+  **architecturally incorrect**.
+* The horizontal separator and ``ONEAPI AGGREGATOR HORIZON`` label in the
+  desktop topology surface are mandatory; they must not be removed.
+
+See ``docs/ONEAPI_SYSTEM_POSITION.md`` and
+``docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`` §3 Layer 5 for the full
+canonical definition.
+
 Canonical position in the model supply topology::
 
     ┌──────────────────────────────────────────────────────────────────┐
@@ -24,11 +41,9 @@ Canonical position in the model supply topology::
               primary/main model topology anchored here
                                   │
     ┌──────────────────────────────────────────────────────────────────┐
-    │  OneAPI Aggregator Integration Layer  (separate lower row)      │
+    │  OneAPI Aggregator Horizon  (separate lower layer — always)     │
     │  nodes/Node_01_OneAPI — external aggregator gateway             │
     └──────────────────────────────────────────────────────────────────┘
-
-See ``docs/ONEAPI_SYSTEM_POSITION.md`` for the full canonical definition.
 
 Exported symbols
 ----------------

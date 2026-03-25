@@ -1,7 +1,11 @@
 # Model Routing Authority
 
-> **Status:** Canonical — formalised in this PR.  
+> **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze).
 > **Scope:** Routing authority for projection-facing model/provider selection semantics.
+>
+> Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
+> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
+> [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md)
 
 ---
 
@@ -30,12 +34,25 @@ AggregatorRouterHint ┘          │
 core/model_topology/topology_router.py
 ```
 
-- **`TopologyRouter`** is the sole canonical routing decision-maker.
-- **`TopologyRoutePlan`** is the sole canonical routing output contract.
+- **`TopologyRouter`** is the **sole** canonical routing decision-maker.  No other
+  component has routing-truth authority.
+- **`TopologyRoutePlan`** is the **sole** canonical routing output contract.  Any
+  routing summary produced outside of a `TopologyRoutePlan` is a legacy
+  compatibility artefact, not an authority source.
 - `TopologyRouter.route(phase, domain)` produces a deterministic, stable plan.
 - All routing-related projection fields (`selected_model`, `selected_provider`,
   `is_native_multimodal`, `support_models`, `route_reason`) must be sourced from a
   `TopologyRoutePlan` whenever one is available.
+- **The desktop status board topology display must consume canonical route truth
+  from `TopologyRoutePlan` via the projection layer.**  The topology surface
+  must never derive its own routing conclusions.
+- **The dashboard is not a routing-truth authority surface.**  Dashboard endpoints
+  and frontend state may display routing information, but they do not own it and
+  must not be treated as the source of truth.
+- **Any routing path that does not originate from `TopologyRouter` is a degraded
+  compatibility path**, not a canonical alternative.  These paths are registered
+  in `core/orchestration_authority/legacy_paths.py` with
+  `LegacyPathStatus.LEGACY_COMPATIBILITY`.
 
 The authority is identified by the sentinel:
 
@@ -102,19 +119,21 @@ empty collections.  `routing_authority` is set to `"none"`.
 
 The `routing_authority_source` field on `ModelRoutingProjection` tells consumers
 which path was taken.  Any consumer that receives `routing_authority_source != "topology_router"`
-should treat the routing data as potentially assembled from mixed legacy sources.
+should treat the routing data as a **degraded compatibility result from a non-canonical
+authority path**.  It must not be presented as authoritative topology state.
 
 ---
 
 ## 5. Legacy Compatibility Routing Semantics
 
 The following structures are retained **for backward compatibility only**.  They are
-**not** routing authority sources and must not be treated as canonical:
+**not** routing authority sources and must never be treated as canonical.  All are
+classified as degraded compatibility paths:
 
 | Structure | Role | Canonical replacement |
 |---|---|---|
 | `core.multi_llm_router.MultiLLMRouter` | Legacy multi-provider LLM selector | `TopologyRouter` |
-| `dashboard.backend.main` (provider routing endpoints) | Legacy dashboard provider list | `TopologyRouter` via `ProviderInventory` |
+| `dashboard.backend.main` (provider routing endpoints) | Legacy dashboard provider list — **not a routing-truth authority** | `TopologyRouter` via `ProviderInventory` |
 | `ucp["chosen_model"]` / `ucp["chosen_provider"]` top-level keys | Legacy UCP compat keys | `ucp["topology_route_plan"]` |
 | `ucp["multimodal_route"]` block | PR-20 multimodal route compat | `ucp["topology_route_plan"]` (preferred) |
 
@@ -123,10 +142,16 @@ These paths are registered in `core/orchestration_authority/legacy_paths.py` wit
 
 ### 5.1 What must no longer claim routing authority
 
-- `dashboard/` endpoints must not define the active model/provider selection.
+- **`dashboard/` endpoints must not define the active model/provider selection.**
+  The dashboard is not a routing-truth authority surface; it is in retirement per
+  [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md).
 - `MultiLLMRouter` must not be used as the primary routing decision-maker for new code.
 - Top-level scattered `chosen_model` / `chosen_provider` keys in the UCP must not be
   used directly when a `topology_route_plan` block is present.
+- **Any summary of routing state that does not originate from `TopologyRoutePlan` is a
+  degraded compatibility result**, not an authoritative routing view.  Such summaries
+  must be labelled as `routing_authority_source: "legacy_ucp_keys"` or similar so that
+  consumers can detect the degraded state.
 
 ---
 

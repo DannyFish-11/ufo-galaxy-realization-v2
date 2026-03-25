@@ -1,8 +1,11 @@
 # Node_01_OneAPI
 
-> **System position:** External aggregator integration layer — see
-> [`docs/ONEAPI_SYSTEM_POSITION.md`](../../docs/ONEAPI_SYSTEM_POSITION.md)
-> for the canonical definition.
+> **System position:** External aggregator integration layer —
+> **OneAPI Aggregator Horizon** in the model supply topology.
+> See [`docs/ONEAPI_SYSTEM_POSITION.md`](../../docs/ONEAPI_SYSTEM_POSITION.md)
+> for the canonical definition and
+> [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](../../docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md)
+> §3 Layer 5 for the visual grammar.
 
 LLM 统一接入网关，支持 OpenAI、Azure OpenAI、Anthropic、Google Gemini 等多个大模型提供商。
 
@@ -13,15 +16,19 @@ aggregator gateway**.  It is **not** a direct/native-multimodal vendor provider.
 
 Key properties:
 
-- **Aggregator integration layer** — wraps multiple upstream LLM vendors behind a single
+- **Aggregator Horizon** — wraps multiple upstream LLM vendors behind a single
   OpenAI-compatible endpoint.  Galaxy treats it as `ProviderCategory.ONEAPI`, which is
   distinct from `ProviderCategory.DIRECT` (direct vendor APIs).
+- **Always a lower architectural tier** — OneAPI must never be placed at the same
+  visual or architectural level as direct/native-multimodal top-layer providers
+  (OpenAI, Anthropic, Gemini, xAI, etc.).  Any such placement is architecturally
+  incorrect.  This is a non-negotiable constraint established in PR-1.
 - **System-wide configuration** — `ONEAPI_BASE_URL` / `ONEAPI_API_KEY` propagate to the
   global provider registry (`MultiLLMRouter`, `ProviderInventory`) and routing graph
   (`TopologyRouter`).  They are **not** dashboard-local settings.
-- **Separate lower-layer row** — in the model supply topology, OneAPI appears as a distinct
-  lower-layer row below the top-layer direct/native-multimodal providers.  It must not be
-  interleaved with direct vendor rows in status-board displays.
+- **Separate Aggregator Horizon row** — in the model supply topology, OneAPI appears as
+  a distinct lower-layer row below the top-layer direct/native-multimodal providers,
+  separated by a mandatory horizontal rule.
 - **Routing role** — assigned `TopologyRole.ROUTING` by the config bridge, reflecting its
   aggregator nature rather than that of a native multimodal primary provider.
 

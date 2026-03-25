@@ -2,6 +2,11 @@
 
 > **READ-ONLY.**  The Status Board V2 never accepts chat input, never sends
 > commands, and never triggers any actions.  It is a pure display surface.
+>
+> **Canonical desktop operator-visible surface** for model topology, routing state,
+> and provider status in the Galaxy system.  The dashboard is in retirement; this
+> board is the target surface for all operator-facing model topology work.
+> See [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md).
 
 ---
 
@@ -9,6 +14,12 @@
 
 Status Board V2 is a lightweight, dependency-free CLI status board that
 visualises the current `RuntimeProjection` assembled by the Galaxy server.
+
+`windows_client/status_board_v2/` is the **canonical desktop structured
+operator-visible surface** for model topology.  The target visual grammar for
+the model topology display is the **Native-Multimodal-First Sky-Grown
+Constellation Topology** defined in
+[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md).
 
 It supersedes the minimal `windows_client/status_board.py` board (which only
 displayed `tri_state_phase` and `runtime_domain`) by adding:
@@ -176,6 +187,13 @@ pytest tests/test_pr4_status_board_v2.py -v
 first layered structure**, not a flat provider list.  This is documented in full
 in [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md).
 
+The target visual identity for this surface is the **Native-Multimodal-First
+Sky-Grown Constellation Topology** (星空一体化生长式星座拓扑树), defined in
+[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md).
+This is a depth-illusion / 2.5-D semantic structure — not true 3-D, not a flat
+dashboard card grid, but a projection-driven constellation-style layout where
+position, brightness, and separator depth express routing relationships.
+
 ### Layer structure
 
 ```
@@ -190,7 +208,7 @@ Reason  : <route_reason>
 Authority: <routing_authority>
 
 ─────────────────────────────────────────────────────
-ONEAPI AGGREGATOR  (lower-layer / not a direct provider)
+ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
   <base_url>  [configured]  <N models>
 ```
 
@@ -198,9 +216,12 @@ ONEAPI AGGREGATOR  (lower-layer / not a direct provider)
 
 - Primary model is always in the MAIN ROUTE layer, marked `★`.
 - `[MM]` badge appears when `is_native_multimodal` is `True` in the projection.
-- OneAPI appears **only** in the lower AGGREGATOR row, never mixed into the
-  main-route or support layer.
+- OneAPI appears **only** in the lower AGGREGATOR HORIZON row, never mixed into
+  the main-route or support layer.  **Any rendering that places OneAPI at the
+  same visual level as direct providers is architecturally incorrect.**
 - When `oneapi_source` is absent from the projection, the OneAPI row is omitted.
+- When `routing_authority` is not `topology_router`, the surface must highlight
+  the degraded authority state rather than silently accepting it.
 
 ---
 
