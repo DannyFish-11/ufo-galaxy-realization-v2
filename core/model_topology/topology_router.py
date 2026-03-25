@@ -84,7 +84,15 @@ CANONICAL_ROUTING_AUTHORITY: str = "core.model_topology.topology_router.Topology
 
 @dataclass
 class TopologyRoutePlan:
-    """The output of a single routing decision.
+    """The canonical routing output contract produced by ``TopologyRouter``.
+
+    This is the **sole** canonical routing output contract for downstream
+    projection consumers (execution arbiter, status-board projection, desktop
+    topology surface, etc.).  Downstream surfaces must source all routing truth
+    from a ``TopologyRoutePlan`` when one is available, and must not reconstruct
+    routing conclusions from legacy scattered keys (``chosen_model``,
+    ``chosen_provider``, ``MultiLLMRouter`` summaries, or dashboard-era UCP
+    fields).
 
     Attributes
     ----------
@@ -95,7 +103,9 @@ class TopologyRoutePlan:
         Ordered list of supporting model nodes (up to ``max_support_models``).
     active_weights:
         Mapping of node_id → ``ModelWeightField`` for every node considered
-        during this routing cycle.
+        during this routing cycle.  Carries the full weight breakdown
+        (base_weight, state_modifier, domain_modifier, combined_weight) for
+        all considered nodes, not only those selected.
     route_reason:
         Human-readable string explaining the routing decision.
     phase:
@@ -105,6 +115,13 @@ class TopologyRoutePlan:
     graph:
         The ``ModelSupplyGraph`` constructed for this plan (available for
         inspection / downstream use).
+
+    Serialisation
+    -------------
+    ``to_dict()`` is the **stable serialisation pathway** consumed by
+    downstream projection builders.  It exposes the complete canonical
+    primary/support/route-metadata/weight semantics required by later
+    projection and desktop-status-board PRs.
     """
 
     primary_model: Optional[ModelNode]
@@ -115,38 +132,89 @@ class TopologyRoutePlan:
     domain: RuntimeDomain
     graph: ModelSupplyGraph
 
+    # ------------------------------------------------------------------
+    # Serialisation helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _node_to_dict(node: ModelNode, wf: ModelWeightField) -> dict:
+        """Serialize a single ``ModelNode`` with its weight field.
+
+        Returns the canonical per-node shape consumed by downstream
+        projection layers:
+
+        - ``node_id``          — unique identity in the supply graph
+        - ``model_id``         — canonical model identifier
+        - ``provider_id``      — canonical provider identity
+        - ``vendor_source``    — provider category (direct / oneapi / local …)
+        - ``native_multimodal``— whether the node handles media natively
+        - ``topology_role``    — primary topological role
+        - ``combined_weight``  — effective weight for this routing cycle
+        """
+        return {
+            "node_id": node.node_id,
+            "model_id": node.model.model_id,
+            "provider_id": node.provider.provider_id,
+            "vendor_source": node.category.value,
+            "native_multimodal": node.is_multimodal_native,
+            "topology_role": node.topology_role.value,
+            "combined_weight": wf.combined_weight,
+        }
+
     def to_dict(self) -> dict:
+        """Return the stable serialised form of this route plan.
+
+        This is the canonical downstream-facing representation.  All
+        projection builders consuming routing truth should use this dict
+        rather than reading raw ``ModelNode`` attributes directly, so that
+        the contract can evolve in one place.
+
+        Top-level keys
+        --------------
+        phase, domain         — routing context
+        primary_model         — canonical primary model record (or ``None``)
+        support_models        — list of canonical support model records
+        route_reason          — human-readable routing rationale
+        authority             — ``CANONICAL_ROUTING_AUTHORITY`` sentinel;
+                                downstream can assert this is present to
+                                confirm the plan originated from the
+                                topology-routing path
+        active_weights        — full weight breakdown for every node
+                                considered in this cycle (node_id →
+                                {base, state_modifier, domain_modifier,
+                                combined}); allows downstream to understand
+                                which nodes were evaluated and at what weight
+        graph_stats           — summary statistics from the supply graph
+        """
+        def _wf_for(node: ModelNode) -> ModelWeightField:
+            return self.active_weights.get(
+                node.node_id,
+                compute_weight_field(node, self.phase, self.domain),
+            )
+
         return {
             "phase": self.phase.value,
             "domain": self.domain.value,
             "primary_model": (
-                {
-                    "node_id": self.primary_model.node_id,
-                    "model_id": self.primary_model.model.model_id,
-                    "topology_role": self.primary_model.topology_role.value,
-                    "native_multimodal": self.primary_model.is_multimodal_native,
-                    "combined_weight": self.active_weights.get(
-                        self.primary_model.node_id,
-                        compute_weight_field(self.primary_model, self.phase, self.domain),
-                    ).combined_weight,
-                }
+                self._node_to_dict(self.primary_model, _wf_for(self.primary_model))
                 if self.primary_model
                 else None
             ),
             "support_models": [
-                {
-                    "node_id": n.node_id,
-                    "model_id": n.model.model_id,
-                    "topology_role": n.topology_role.value,
-                    "native_multimodal": n.is_multimodal_native,
-                    "combined_weight": self.active_weights.get(
-                        n.node_id,
-                        compute_weight_field(n, self.phase, self.domain),
-                    ).combined_weight,
-                }
+                self._node_to_dict(n, _wf_for(n))
                 for n in self.support_models
             ],
             "route_reason": self.route_reason,
+            "authority": CANONICAL_ROUTING_AUTHORITY,
+            "active_weights": {
+                node_id: {
+                    "base_weight": wf.base_weight,
+                    "state_modifier": wf.state_modifier,
+                    "domain_modifier": wf.domain_modifier,
+                    "combined_weight": wf.combined_weight,
+                }
+                for node_id, wf in self.active_weights.items()
+            },
             "graph_stats": self.graph.to_dict()["stats"],
         }
 
