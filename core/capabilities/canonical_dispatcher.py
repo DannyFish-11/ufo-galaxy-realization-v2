@@ -75,6 +75,7 @@ class CapabilityLayer(str, Enum):
     MCP_GW = "mcp_gw"      # mcp__gateway__<tool>
     SKILL = "skill"        # skill__<id>
     NODE = "node"          # node__<id>__<action>
+    DEVICE = "device"      # device__<device_id>__<action>
     GITHUB = "github"      # github__<action>
     UNKNOWN = "unknown"    # unrecognised prefix
 
@@ -89,6 +90,8 @@ class CapabilityLayer(str, Enum):
             return cls.SKILL
         if tool_name.startswith("node__"):
             return cls.NODE
+        if tool_name.startswith("device__"):
+            return cls.DEVICE
         if tool_name.startswith("github__"):
             return cls.GITHUB
         return cls.UNKNOWN
@@ -250,6 +253,8 @@ class CanonicalDispatcher:
                 )
             elif layer == CapabilityLayer.NODE:
                 result = await self._dispatch_node(tool_name, arguments)
+            elif layer == CapabilityLayer.DEVICE:
+                result = await self._dispatch_device(tool_name, arguments)
             elif layer == CapabilityLayer.GITHUB:
                 result = await self._dispatch_github(tool_name, arguments)
             else:
@@ -570,6 +575,84 @@ class CanonicalDispatcher:
         except Exception as exc:
             logger.warning("CanonicalDispatcher: github__%s failed: %s", action, exc)
             return DispatchResult(success=False, error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Device backend adapter (PR-3)
+    # ------------------------------------------------------------------
+
+    async def _dispatch_device(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+    ) -> DispatchResult:
+        """Route a ``device__*`` invocation to the device communication layer.
+
+        The canonical name format is ``device__<device_id>__<action>``.
+        The call is forwarded to :mod:`core.device_communication` via the
+        ``send_command`` path if the device is currently connected, or falls
+        back to a structured error response if it is not.
+
+        Parameters
+        ----------
+        tool_name:
+            Canonical tool name (``device__<device_id>__<action>``).
+        arguments:
+            Arguments dict forwarded verbatim as the command payload.
+        """
+        parts = tool_name.split("__", 2)
+        if len(parts) < 3:
+            return DispatchResult(
+                success=False,
+                error=f"无效 Device 工具名: {tool_name} — 期望 device__<device_id>__<action>",
+                tool_name=tool_name,
+                layer=CapabilityLayer.DEVICE,
+            )
+        device_id, action = parts[1], parts[2]
+
+        try:
+            from core.device_communication import device_comm
+
+            raw = await device_comm.send_command(device_id, action, arguments)
+            return DispatchResult(success=True, result=raw)
+        except Exception as exc:
+            logger.warning(
+                "CanonicalDispatcher: device__%s__%s failed: %s",
+                device_id,
+                action,
+                exc,
+            )
+            return DispatchResult(
+                success=False,
+                error=f"设备 '{device_id}' 指令 '{action}' 执行失败: {exc}",
+                tool_name=tool_name,
+                layer=CapabilityLayer.DEVICE,
+            )
+
+    # ------------------------------------------------------------------
+    # Capability bus catalog (PR-3)
+    # ------------------------------------------------------------------
+
+    def bus_catalog(self) -> Dict[str, Any]:
+        """Return a snapshot of the :class:`~core.capability_bus.CapabilityBus`.
+
+        This is a convenience accessor so that callers holding a
+        :class:`CanonicalDispatcher` reference can inspect the capability
+        universe without importing :mod:`core.capability_bus` directly.
+
+        Returns
+        -------
+        dict
+            The result of :meth:`~core.capability_bus.CapabilityBus.bus_snapshot`
+            serialised via :meth:`~core.capability_bus.BusSnapshot.to_dict`.
+            Returns ``{"error": ...}`` when the bus is not available.
+        """
+        try:
+            from core.capability_bus import get_capability_bus
+
+            return get_capability_bus().bus_snapshot().to_dict()
+        except Exception as exc:
+            logger.debug("CanonicalDispatcher.bus_catalog: %s", exc)
+            return {"error": str(exc), "total_count": 0}
 
     # ------------------------------------------------------------------
     # Observability helpers
