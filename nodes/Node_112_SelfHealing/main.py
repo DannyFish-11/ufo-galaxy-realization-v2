@@ -839,8 +839,79 @@ class SelfHealingEngine:
         else:
             _self_healing_logger.info("[VERIFICATION] 修复失败: action=%s message=%s", fix_result.action.value, fix_result.message)
 
-        # 若开启自动提交且 CODE_FIX 成功，将修复写入磁盘
-        if self.auto_commit and fix_result.action == FixAction.CODE_FIX and fix_result.success:
+        # When a CODE_FIX is produced, delegate to the mediated SelfHealingLoop
+        # (PR-6) instead of directly writing code to disk.  The loop becomes the
+        # sole authority for staged code-improvement actions under OpenClawd.
+        if fix_result.action == FixAction.CODE_FIX:
+            try:
+                from core.self_improvement import get_self_healing_loop
+                loop = get_self_healing_loop()
+                # Stage 1: DIAGNOSE
+                proposal = loop.submit_diagnosis(
+                    issue_summary=diagnosis.recommendation,
+                    source="Node_112",
+                    metadata={
+                        "cpu_percent": metrics.cpu_percent,
+                        "memory_percent": metrics.memory_percent,
+                        "issue_type": diagnosis.issue_type.value,
+                        "fix_success": fix_result.success,
+                        "fix_message": fix_result.message,
+                    },
+                )
+                # Stage 2: GATHER_CONTEXT — attach metrics snapshot
+                loop.attach_context(
+                    proposal_id=proposal.proposal_id,
+                    context={
+                        "metrics": {
+                            "cpu_percent": metrics.cpu_percent,
+                            "memory_percent": metrics.memory_percent,
+                            "disk_percent": metrics.disk_percent,
+                            "network_ok": metrics.network_ok,
+                        },
+                        "diagnosis": {
+                            "issue_type": diagnosis.issue_type.value,
+                            "recommendation": diagnosis.recommendation,
+                        },
+                    },
+                )
+                # Stage 3: PLAN_PATCH — use the code content produced by AutoFixer
+                patch_content = fix_result.message if fix_result.success else ""
+                loop.plan_patch(
+                    proposal_id=proposal.proposal_id,
+                    patch_content=patch_content or diagnosis.recommendation,
+                    target_files=[],
+                )
+                # Stage 4: APPLY — record that the fix was applied (or attempted)
+                loop.apply_patch(
+                    proposal_id=proposal.proposal_id,
+                    apply_metadata={
+                        "success": fix_result.success,
+                        "message": fix_result.message,
+                        "auto_commit": self.auto_commit,
+                        "applied_fixes_dir": self.applied_fixes_dir,
+                    },
+                )
+                # Stage 5: VALIDATE
+                loop.validate(
+                    proposal_id=proposal.proposal_id,
+                    validation_notes=fix_result.message,
+                    passed=fix_result.success,
+                )
+                # Stage 6: RECORD_OUTCOME — persist to Knowledge Core
+                loop.record_outcome(proposal_id=proposal.proposal_id)
+                _self_healing_logger.info(
+                    "[MEDIATED] Code-fix proposal %s submitted through SelfHealingLoop",
+                    proposal.proposal_id,
+                )
+            except Exception as _loop_exc:
+                _self_healing_logger.error(
+                    "[MEDIATED] SelfHealingLoop delegation failed: %s", _loop_exc
+                )
+                # Fallback: honour auto_commit flag as before
+                if self.auto_commit and fix_result.success:
+                    self.fixer.apply_code_fix(target_dir=self.applied_fixes_dir)
+        elif self.auto_commit and fix_result.action == FixAction.CODE_FIX and fix_result.success:
+            # Legacy path — only reached when SelfHealingLoop delegation raised an exception
             self.fixer.apply_code_fix(target_dir=self.applied_fixes_dir)
 
         report = self.reporter.generate_report(

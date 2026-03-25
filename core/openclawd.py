@@ -535,6 +535,173 @@ _ACADEMIC_BUILTIN_TOOLS: List[Dict] = [
 ]
 
 
+# Engineering loop built-in tools (mediated self-healing, PR-6)
+_ENGINEER_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__diagnose",
+            "description": (
+                "向受管工程循环（SelfHealingLoop）提交一条诊断/问题，创建新的 PatchProposal，"
+                "进入 DIAGNOSE 阶段。这是所有自愈/代码修复流程的唯一受控入口。"
+                "返回 proposal_id，用于后续 engineer__plan / engineer__apply 等步骤。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_summary": {
+                        "type": "string",
+                        "description": "问题的人类可读描述（例如 'CPU 过载 > 90%，需修复调度逻辑'）",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "诊断来源（例如 'Node_112'、'user'、'openclawd'）",
+                    },
+                },
+                "required": ["issue_summary"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__context",
+            "description": (
+                "将代码/仓库上下文附加到指定的 PatchProposal，并推进到 GATHER_CONTEXT 阶段。"
+                "上下文可包含文件代码片段、仓库元数据、相关日志等。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "string",
+                        "description": "由 engineer__diagnose 返回的 proposal_id",
+                    },
+                    "context": {
+                        "type": "object",
+                        "description": "上下文字典（文件代码片段、仓库元数据、日志等）",
+                    },
+                },
+                "required": ["proposal_id", "context"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__plan",
+            "description": (
+                "为 PatchProposal 附加具体的补丁计划，推进到 PLAN_PATCH 阶段。"
+                "必须先完成 engineer__context 步骤。"
+                "补丁内容可以是 diff、伪代码描述或修改说明。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "string",
+                        "description": "由 engineer__diagnose 返回的 proposal_id",
+                    },
+                    "patch_content": {
+                        "type": "string",
+                        "description": "补丁描述或 diff 文本",
+                    },
+                    "target_files": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "补丁目标文件路径列表（可选）",
+                    },
+                },
+                "required": ["proposal_id", "patch_content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__apply",
+            "description": (
+                "通过受控执行路径应用已计划的补丁，推进 PatchProposal 到 APPLY 阶段。"
+                "安全门控：仅处于 PLAN_PATCH 阶段的提案才允许应用，防止未经规划的直接代码变更。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "string",
+                        "description": "由 engineer__diagnose 返回的 proposal_id",
+                    },
+                },
+                "required": ["proposal_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__validate",
+            "description": (
+                "对已应用的补丁运行验证检查，推进 PatchProposal 到 VALIDATE 阶段。"
+                "记录验证结果（通过/失败）和验证说明。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "string",
+                        "description": "由 engineer__diagnose 返回的 proposal_id",
+                    },
+                    "passed": {
+                        "type": "boolean",
+                        "description": "验证是否通过（默认 true）",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "验证说明或测试输出",
+                    },
+                },
+                "required": ["proposal_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__record",
+            "description": (
+                "将修复结果记录到统一知识库（Knowledge Core），推进 PatchProposal 到 RECORD_OUTCOME 阶段。"
+                "使用 RAGMemory.ingest_knowledge 写入，source_type='engineering'，"
+                "与其他知识共享同一 RAG 检索流水线，不创建独立的修复专用知识孤岛。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "string",
+                        "description": "由 engineer__diagnose 返回的 proposal_id",
+                    },
+                },
+                "required": ["proposal_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "engineer__status",
+            "description": (
+                "获取受管工程循环（SelfHealingLoop）的当前状态快照，"
+                "包括待处理的提案列表及最近完成的修复记录。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+]
+
+
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
 
@@ -4797,6 +4964,9 @@ class OpenClawd:
         # ── Academic 学术检索工具 (始终收集) ─────────────────────────────
         tools.extend(_ACADEMIC_BUILTIN_TOOLS)
 
+        # ── Engineering loop tools (始终收集, PR-6) ─────────────────────
+        tools.extend(_ENGINEER_BUILTIN_TOOLS)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -5016,6 +5186,11 @@ class OpenClawd:
                 action = tool_name[10:]  # strip "academic__"
                 return await self._dispatch_academic_tool(action, arguments)
 
+            elif tool_name.startswith("engineer__"):
+                # Mediated engineering loop tools (PR-6): engineer__diagnose, __plan, __apply, etc.
+                action = tool_name[10:]  # strip "engineer__"
+                return await self._dispatch_engineer_tool(action, arguments)
+
             else:
                 return {"success": False, "error": f"未知工具前缀: {tool_name}"}
 
@@ -5215,6 +5390,113 @@ class OpenClawd:
                 }
         except Exception as exc:
             logger.warning("_dispatch_academic_tool '%s' failed: %s", action, exc)
+            return {"success": False, "error": str(exc)}
+
+    # ========================================================================
+    # Engineering Loop Tools — PR-6 mediated self-healing
+    # engineer__diagnose / __context / __plan / __apply / __validate /
+    # __record / __status
+    # ========================================================================
+
+    async def _dispatch_engineer_tool(self, action: str, arguments: dict) -> dict:
+        """Dispatch ``engineer__*`` tool calls to :class:`~core.self_improvement.SelfHealingLoop`.
+
+        All self-healing and code-improvement actions flow through the mediated
+        engineering loop rather than direct mutation paths.
+
+        Args:
+            action:    Action name (strip of ``engineer__`` prefix).
+            arguments: Tool arguments dict from the LLM function call.
+
+        Returns:
+            ``{"success": bool, ...}``
+        """
+        try:
+            from core.self_improvement import get_self_healing_loop
+
+            loop = get_self_healing_loop()
+
+            if action == "diagnose":
+                issue_summary = arguments.get("issue_summary", "")
+                if not issue_summary:
+                    return {"success": False, "error": "engineer__diagnose requires 'issue_summary' argument"}
+                source = arguments.get("source", "openclawd")
+                proposal = loop.submit_diagnosis(
+                    issue_summary=issue_summary,
+                    source=source,
+                    metadata=arguments.get("metadata", {}),
+                )
+                return {
+                    "success": True,
+                    "proposal_id": proposal.proposal_id,
+                    "stage": proposal.stage.value,
+                    "issue_summary": proposal.issue_summary,
+                    "source": proposal.source,
+                }
+
+            elif action == "context":
+                proposal_id = arguments.get("proposal_id", "")
+                if not proposal_id:
+                    return {"success": False, "error": "engineer__context requires 'proposal_id' argument"}
+                context = arguments.get("context", {})
+                if not isinstance(context, dict):
+                    logger.warning(
+                        "_dispatch_engineer_tool 'context': expected dict for 'context', got %s — wrapping",
+                        type(context).__name__,
+                    )
+                    context = {"raw": str(context)}
+                return loop.attach_context(proposal_id=proposal_id, context=context)
+
+            elif action == "plan":
+                proposal_id = arguments.get("proposal_id", "")
+                patch_content = arguments.get("patch_content", "")
+                if not proposal_id:
+                    return {"success": False, "error": "engineer__plan requires 'proposal_id' argument"}
+                if not patch_content:
+                    return {"success": False, "error": "engineer__plan requires 'patch_content' argument"}
+                return loop.plan_patch(
+                    proposal_id=proposal_id,
+                    patch_content=patch_content,
+                    target_files=arguments.get("target_files", []),
+                )
+
+            elif action == "apply":
+                proposal_id = arguments.get("proposal_id", "")
+                if not proposal_id:
+                    return {"success": False, "error": "engineer__apply requires 'proposal_id' argument"}
+                return loop.apply_patch(
+                    proposal_id=proposal_id,
+                    apply_metadata=arguments.get("apply_metadata", {}),
+                )
+
+            elif action == "validate":
+                proposal_id = arguments.get("proposal_id", "")
+                if not proposal_id:
+                    return {"success": False, "error": "engineer__validate requires 'proposal_id' argument"}
+                passed = bool(arguments.get("passed", True))
+                notes = arguments.get("notes", "")
+                return loop.validate(proposal_id=proposal_id, validation_notes=notes, passed=passed)
+
+            elif action == "record":
+                proposal_id = arguments.get("proposal_id", "")
+                if not proposal_id:
+                    return {"success": False, "error": "engineer__record requires 'proposal_id' argument"}
+                return loop.record_outcome(proposal_id=proposal_id)
+
+            elif action == "status":
+                snap = loop.snapshot()
+                return {"success": True, **snap.to_dict()}
+
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unknown engineer action: '{action}'. "
+                        "Valid actions: diagnose, context, plan, apply, validate, record, status."
+                    ),
+                }
+        except Exception as exc:
+            logger.warning("_dispatch_engineer_tool '%s' failed: %s", action, exc)
             return {"success": False, "error": str(exc)}
 
     # ========================================================================

@@ -109,6 +109,9 @@ class CapabilityBusRole(str, Enum):
     ACADEMIC = "academic"
     """Academic search/ingest/recall action (academic__<action>)."""
 
+    ENGINEERING = "engineering"
+    """Mediated self-healing engineering loop action (engineer__<action>)."""
+
     BUILTIN = "builtin"
     """Hardwired system built-in (builtin__<name>)."""
 
@@ -132,6 +135,8 @@ class CapabilityBusRole(str, Enum):
             return cls.GITHUB
         if tool_name.startswith("academic__"):
             return cls.ACADEMIC
+        if tool_name.startswith("engineer__"):
+            return cls.ENGINEERING
         if tool_name.startswith("builtin__"):
             return cls.BUILTIN
         return cls.UNKNOWN
@@ -670,10 +675,34 @@ class CapabilityBus:
         self.register(entry)
         return entry
 
+    def register_engineering_capability(
+        self,
+        action: str,
+        description: str = "",
+        *,
+        schema: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        health: CapabilityHealthStatus = CapabilityHealthStatus.HEALTHY,
+    ) -> CapabilityBusEntry:
+        """Register a mediated engineering loop capability in the bus.
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
+        Canonical name: ``engineer__{action}`` (e.g. ``engineer__diagnose``).
+        """
+        canonical = f"engineer__{action}"
+        entry = CapabilityBusEntry(
+            name=canonical,
+            display_name=f"{action} (engineering)",
+            description=description or f"Engineering capability '{action}'",
+            role=CapabilityBusRole.ENGINEERING,
+            source_id=action,
+            health=health,
+            tags=list(tags or []) + ["engineering"],
+            metadata=dict(metadata or {}),
+            schema=dict(schema or {}),
+        )
+        self.register(entry)
+        return entry
 
 
 def _default_registry_path() -> str:
