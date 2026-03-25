@@ -774,15 +774,6 @@ def emit_legacy_guardrail(
 
 
 # ---------------------------------------------------------------------------
-# Compatibility shim: expose same symbol as constellation_runtime
-# ---------------------------------------------------------------------------
-
-#: Frozenset of legacy paths — same shape as ``LEGACY_ORCHESTRATOR_PATHS``
-#: in ``core/constellation_runtime.py``, extended with PR-9 additions.
-LEGACY_ORCHESTRATOR_PATHS: frozenset = frozenset(LEGACY_PATH_REGISTRY.keys())
-
-
-# ---------------------------------------------------------------------------
 # PR-S4: Demote android_bridge device query surface, repo_coordinator Android
 # control-plane posture, and _shared.py compat state helpers.
 #
@@ -944,3 +935,106 @@ _register(
         ),
     ),
 )
+
+# ---------------------------------------------------------------------------
+# PR-S5: Collapse remaining legacy runtime duplication.
+#
+# After PR-S4 (Android bridge / repo-coordinator / shared-state demotion), the
+# following server-side modules still maintained independent runtime control
+# paths or state stores that compete with the canonical pipeline:
+#
+#   galaxy_gateway.orchestrator.task_orchestrator.MultiDeviceOrchestrator
+#       Subclass of the already-demoted TaskOrchestrator.  Retained only as a
+#       compatibility shim; canonical multi-device execution goes through the
+#       TaskGraph → DeviceRouter chain.
+#
+#   galaxy_gateway.orchestrator.parallel_tracker.ParallelGroupTracker
+#       Tracks parallel subtask results across *both* websocket_handler and
+#       task_orchestrator entry chains.  The canonical entry is the
+#       websocket_handler → DeviceRouter chain (entry A).  Entry chain B
+#       (handlers/message_handler → task_orchestrator) is the legacy path; the
+#       tracker is retained only to avoid breaking the legacy chain.
+#
+#   core.local_agent_runtime.LocalAgentRuntime
+#       Phase-1 Matrix OS component that runs its own Thought/Action/Observation
+#       loop.  Server-side agent execution is now brokered via the canonical
+#       OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter pipeline.
+#       LocalAgentRuntime is retained as a device-side execution sandbox that
+#       receives already-dispatched manifests; it must not be invoked as a
+#       primary server-side execution planner.
+# ---------------------------------------------------------------------------
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.orchestrator.task_orchestrator.MultiDeviceOrchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "MultiDeviceOrchestrator is a LEGACY COMPAT SUBCLASS of the already-demoted "
+            "TaskOrchestrator (PR-7, PR-S5).  "
+            "Canonical multi-device execution is:  "
+            "OpenClawd → CommandRouter → TaskEnvelope → TaskGraph (core.task_graph) → "
+            "DeviceRouter.route_task.  "
+            "MultiDeviceOrchestrator.submit_multi_device_task() now delegates to "
+            "submit_dag_task() which uses core.task_graph for multi-device dispatch.  "
+            "New code must route directly through core.e2e_orchestrator.process_user_input() "
+            "or DeviceRouter.route_task(), not through this class."
+        ),
+        pr_guardrail_added="PR-S5",
+        notes=(
+            "MultiDeviceOrchestrator — LEGACY COMPAT SUBCLASS (PR-S5).  "
+            "Extends TaskOrchestrator; both are demoted compatibility paths.  "
+            "Canonical multi-device path is TaskGraph → DeviceRouter."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.orchestrator.parallel_tracker.ParallelGroupTracker",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "ParallelGroupTracker is a LEGACY COMPAT STATE STORE (PR-S5).  "
+            "It bridges two entry chains: the canonical entry "
+            "(websocket_handler → DeviceRouter, chain A) and the legacy entry "
+            "(handlers/message_handler → TaskOrchestrator, chain B).  "
+            "The canonical server pipeline is chain A only.  "
+            "The tracker is retained so that legacy chain-B callers can still collect "
+            "parallel results without data loss during migration, but new code must "
+            "route through DeviceRouter and rely on core.cross_device_execution_chain "
+            "for parallel result aggregation."
+        ),
+        pr_guardrail_added="PR-S5",
+        notes=(
+            "ParallelGroupTracker — bridges canonical chain A and legacy chain B (PR-S5).  "
+            "Canonical parallel result authority is cross_device_execution_chain.  "
+            "Legacy chain B is TaskOrchestrator; not a primary entrypoint."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.local_agent_runtime.LocalAgentRuntime",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "LocalAgentRuntime is a PHASE-1 DEVICE-SIDE EXECUTION SANDBOX (PR-S5).  "
+            "It is NOT a server-side primary execution planner.  "
+            "Server-side agent execution is brokered by:  "
+            "OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter → device.  "
+            "LocalAgentRuntime runs on the device side after a manifest has already "
+            "been dispatched by the canonical pipeline.  Do not call it as a "
+            "server-side planner or scheduler; it receives already-decided manifests."
+        ),
+        pr_guardrail_added="PR-S5",
+        notes=(
+            "LocalAgentRuntime — Phase-1 device-side execution sandbox (PR-S5).  "
+            "Not a server-side canonical planner.  Receives dispatched manifests only.  "
+            "Canonical server execution path is OpenClawd → DeviceRouter."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Compatibility shim: expose same symbol as constellation_runtime
+#
+# NOTE: This definition MUST remain at the end of the module, after ALL
+# _register() calls.  Moving it earlier would freeze the frozenset before
+# later _register() calls are evaluated, causing the shim to omit those paths.
+# ---------------------------------------------------------------------------
+
+#: Frozenset of legacy paths — same shape as ``LEGACY_ORCHESTRATOR_PATHS``
+#: in ``core/constellation_runtime.py``, extended with all PR additions.
+LEGACY_ORCHESTRATOR_PATHS: frozenset = frozenset(LEGACY_PATH_REGISTRY.keys())

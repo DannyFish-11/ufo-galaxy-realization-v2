@@ -14,6 +14,22 @@ Phase 1 Matrix OS 核心组件。
 日志回传:
 - 每一步 Thought/Action/Observation 都通过回调函数上报
 - 上报格式兼容 AIP v2 AGENT_STATUS 消息类型
+
+.. note:: PR-S5 — Device-side execution sandbox; NOT a server-side planner
+
+    ``LocalAgentRuntime`` is a **device-side execution sandbox**.  It receives
+    ``AgentManifest`` objects that have already been decided and dispatched by
+    the canonical server-side pipeline:
+
+        OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter → device
+
+    It must **not** be invoked as a server-side execution planner, scheduler,
+    or primary decision-maker.  If you need to trigger local agent execution
+    from the server side, dispatch through the canonical pipeline and let the
+    device-side runtime handle the manifest it receives.
+
+    See :mod:`core.orchestration_authority.legacy_paths` for the registry entry
+    (``core.local_agent_runtime.LocalAgentRuntime``).
 """
 
 import asyncio
