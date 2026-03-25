@@ -447,7 +447,7 @@ class TestUCMGetPresenceView:
 class TestGatewayWSManagerPresenceDelegation:
     def test_33_disconnect_calls_ucm_mark_offline(self):
         """disconnect() must call UCM mark_offline (sync) when no event loop running."""
-        import galaxy_gateway.websocket_handler as _wsh  # ensure imported
+        import galaxy_gateway.websocket_handler  # noqa: F401
         from galaxy_gateway.websocket_handler import GatewayWSManager
 
         mock_ucm = MagicMock()
@@ -544,30 +544,24 @@ class TestAndroidBridgeUCMRouting:
         mock_ucm.update_heartbeat.assert_called_once_with("ab_dev1")
 
     def test_39_patch_disconnect_calls_ucm_mark_offline(self):
+        from galaxy_gateway.android_bridge import AndroidBridge
         mock_ucm = MagicMock()
         with (
             patch("core.unified.connection_manager.get_unified_connection_manager", return_value=mock_ucm),
-            patch.object(
-                __import__("galaxy_gateway.android_bridge", fromlist=["AndroidBridge"]).AndroidBridge,
-                "_patch_runtime_state_to_udm",
-            ),
+            patch.object(AndroidBridge, "_patch_runtime_state_to_udm"),
         ):
-            from galaxy_gateway.android_bridge import AndroidBridge
             bridge = AndroidBridge()
             bridge._patch_disconnect_to_udm("ab_dev2")
 
         mock_ucm.mark_offline.assert_called_once_with("ab_dev2")
 
     def test_40_patch_reconnect_calls_ucm_update_heartbeat(self):
+        from galaxy_gateway.android_bridge import AndroidBridge
         mock_ucm = MagicMock()
         with (
             patch("core.unified.connection_manager.get_unified_connection_manager", return_value=mock_ucm),
-            patch.object(
-                __import__("galaxy_gateway.android_bridge", fromlist=["AndroidBridge"]).AndroidBridge,
-                "_patch_runtime_state_to_udm",
-            ),
+            patch.object(AndroidBridge, "_patch_runtime_state_to_udm"),
         ):
-            from galaxy_gateway.android_bridge import AndroidBridge
             bridge = AndroidBridge()
             bridge._patch_reconnect_to_udm("ab_dev3")
 

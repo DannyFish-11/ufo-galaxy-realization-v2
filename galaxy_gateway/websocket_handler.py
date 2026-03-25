@@ -79,10 +79,9 @@ class GatewayWSManager:
                 # ── Presence backbone: unregister from UCM ──
                 try:
                     ucm = self._ucm()
-                    import asyncio as _asyncio
                     loop = None
                     try:
-                        loop = _asyncio.get_running_loop()
+                        loop = asyncio.get_running_loop()
                     except RuntimeError:
                         pass
                     if loop is not None and loop.is_running():
