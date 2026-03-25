@@ -88,7 +88,7 @@ class TestCapabilityBusRoleEnum:
 
     def test_all_expected_roles_present(self):
         from core.capability_bus import CapabilityBusRole
-        expected = {"node", "device", "skill", "mcp", "mcp_gw", "github", "builtin", "unknown"}
+        expected = {"node", "device", "skill", "mcp", "mcp_gw", "github", "academic", "builtin", "unknown"}
         actual = {r.value for r in CapabilityBusRole}
         assert expected == actual
 

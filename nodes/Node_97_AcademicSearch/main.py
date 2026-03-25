@@ -51,6 +51,7 @@ class SearchRequest(BaseModel):
     source: str = "all"  # all, arxiv, scholar, semantic_scholar, pubmed, ieee
     max_results: int = 10
     save_to_memos: bool = True
+    ingest_to_knowledge_core: bool = False  # ingest results into unified Knowledge Core
 
 class PaperNote(BaseModel):
     paper_id: str
@@ -500,13 +501,27 @@ async def search_papers(request: SearchRequest):
         if request.save_to_memos:
             for paper in all_papers:
                 await save_to_memos(paper)
-        
+
+        # 摄取到统一知识库（Knowledge Core）
+        ingested_count = 0
+        if request.ingest_to_knowledge_core:
+            try:
+                from core.academic_retrieval import get_academic_retriever
+                retriever = get_academic_retriever()
+                for paper in all_papers:
+                    eid = retriever.ingest_paper(paper)
+                    if eid:
+                        ingested_count += 1
+            except Exception as _e:
+                logger.warning(f"Knowledge Core ingestion failed: {_e}")
+
         return {
             "success": True,
             "query": request.query,
             "source": request.source,
             "total_results": len(all_papers),
-            "papers": all_papers
+            "papers": all_papers,
+            "ingested_count": ingested_count,
         }
     
     except Exception as e:
@@ -588,5 +603,31 @@ async def get_status():
 
 if __name__ == "__main__":
     import uvicorn
+
+    # Register academic capabilities in the unified Capability Bus so that
+    # OpenClawd and planners can discover them through the standard capability
+    # directory without invoking Node_97 directly.
+    try:
+        from core.capability_bus import get_capability_bus
+        _bus = get_capability_bus()
+        _bus.register_academic_capability(
+            "search",
+            description="Search arXiv / Semantic Scholar / PubMed / IEEE Xplore and optionally ingest results into Knowledge Core.",
+            tags=["arxiv", "semantic_scholar", "pubmed", "ieee"],
+        )
+        _bus.register_academic_capability(
+            "ingest",
+            description="Ingest a single paper dict into the unified Knowledge Core with academic source attribution.",
+            tags=["knowledge_core"],
+        )
+        _bus.register_academic_capability(
+            "recall",
+            description="Recall previously-ingested academic knowledge from the unified Knowledge Core.",
+            tags=["knowledge_core", "rag"],
+        )
+        logger.info("Node_97: academic capabilities registered in CapabilityBus")
+    except Exception as _e:
+        logger.debug(f"CapabilityBus registration skipped: {_e}")
+
     port = int(os.getenv("NODE_97_PORT", "8097"))
     uvicorn.run(app, host="0.0.0.0", port=port)

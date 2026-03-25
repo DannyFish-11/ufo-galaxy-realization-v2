@@ -34,6 +34,7 @@ Naming convention (aligns with CanonicalDispatcher prefixes)
   ``node__<node_id>__<action>``        → :attr:`CapabilityBusRole.NODE`
   ``device__<device_id>__<action>``    → :attr:`CapabilityBusRole.DEVICE`
   ``github__<action>``                 → :attr:`CapabilityBusRole.GITHUB`
+  ``academic__<action>``               → :attr:`CapabilityBusRole.ACADEMIC`
   ``builtin__<name>``                  → :attr:`CapabilityBusRole.BUILTIN`
 
 Public API
@@ -105,6 +106,9 @@ class CapabilityBusRole(str, Enum):
     GITHUB = "github"
     """GitHub add-on action (github__<action>)."""
 
+    ACADEMIC = "academic"
+    """Academic search/ingest/recall action (academic__<action>)."""
+
     BUILTIN = "builtin"
     """Hardwired system built-in (builtin__<name>)."""
 
@@ -126,6 +130,8 @@ class CapabilityBusRole(str, Enum):
             return cls.DEVICE
         if tool_name.startswith("github__"):
             return cls.GITHUB
+        if tool_name.startswith("academic__"):
+            return cls.ACADEMIC
         if tool_name.startswith("builtin__"):
             return cls.BUILTIN
         return cls.UNKNOWN
@@ -629,6 +635,35 @@ class CapabilityBus:
             source_id=skill_id,
             health=health,
             tags=list(tags or []) + ["skill"],
+            metadata=dict(metadata or {}),
+            schema=dict(schema or {}),
+        )
+        self.register(entry)
+        return entry
+
+    def register_academic_capability(
+        self,
+        action: str,
+        description: str = "",
+        *,
+        schema: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        health: CapabilityHealthStatus = CapabilityHealthStatus.HEALTHY,
+    ) -> CapabilityBusEntry:
+        """Register an academic system resource capability in the bus.
+
+        Canonical name: ``academic__{action}`` (e.g. ``academic__search``).
+        """
+        canonical = f"academic__{action}"
+        entry = CapabilityBusEntry(
+            name=canonical,
+            display_name=f"{action} (academic)",
+            description=description or f"Academic capability '{action}'",
+            role=CapabilityBusRole.ACADEMIC,
+            source_id=action,
+            health=health,
+            tags=list(tags or []) + ["academic"],
             metadata=dict(metadata or {}),
             schema=dict(schema or {}),
         )
