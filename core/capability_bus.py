@@ -115,6 +115,9 @@ class CapabilityBusRole(str, Enum):
     BUILTIN = "builtin"
     """Hardwired system built-in (builtin__<name>)."""
 
+    RESOURCE = "resource"
+    """Governed system resource management action (resource__<action>)."""
+
     UNKNOWN = "unknown"
     """Source could not be determined."""
 
@@ -137,6 +140,8 @@ class CapabilityBusRole(str, Enum):
             return cls.ACADEMIC
         if tool_name.startswith("engineer__"):
             return cls.ENGINEERING
+        if tool_name.startswith("resource__"):
+            return cls.RESOURCE
         if tool_name.startswith("builtin__"):
             return cls.BUILTIN
         return cls.UNKNOWN
@@ -698,6 +703,41 @@ class CapabilityBus:
             source_id=action,
             health=health,
             tags=list(tags or []) + ["engineering"],
+            metadata=dict(metadata or {}),
+            schema=dict(schema or {}),
+        )
+        self.register(entry)
+        return entry
+
+    def register_resource_capability(
+        self,
+        action: str,
+        description: str = "",
+        *,
+        schema: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        health: CapabilityHealthStatus = CapabilityHealthStatus.HEALTHY,
+    ) -> CapabilityBusEntry:
+        """Register a governed system resource management capability in the bus.
+
+        Canonical name: ``resource__{action}``
+        (e.g. ``resource__list``, ``resource__status``).
+
+        These capabilities expose the :class:`~core.system_resource.SystemResourceRegistry`
+        through the unified capability dispatch path so that OpenClawd and other
+        consumers can query the governed resource layer without calling the
+        registry directly.
+        """
+        canonical = f"resource__{action}"
+        entry = CapabilityBusEntry(
+            name=canonical,
+            display_name=f"{action} (resource registry)",
+            description=description or f"Governed resource registry capability '{action}'",
+            role=CapabilityBusRole.RESOURCE,
+            source_id=action,
+            health=health,
+            tags=list(tags or []) + ["resource", "governance"],
             metadata=dict(metadata or {}),
             schema=dict(schema or {}),
         )

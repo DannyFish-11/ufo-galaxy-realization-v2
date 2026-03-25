@@ -702,6 +702,99 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
 ]
 
 
+# Governed system resource layer tools (PR-7: unified resource registry)
+_RESOURCE_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "resource__list",
+            "description": (
+                "列出受治理系统资源注册表中的所有资源。"
+                "资源涵盖 GitHub、学术检索、设备/运行时、本地工具、工程支持等所有外部接入面。"
+                "返回资源列表，包括类型、来源、健康状态、可用性、信任级别和能力列表。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "resource_type": {
+                        "type": "string",
+                        "enum": [
+                            "github", "academic", "device", "local_tool",
+                            "engineering", "mcp", "skill", "node", "builtin", "unknown",
+                        ],
+                        "description": "按资源类型过滤（可选，不填则返回全部类型）",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resource__status",
+            "description": (
+                "获取受治理系统资源注册表的状态快照，"
+                "包括已注册资源总数、健康资源数量、不可用资源数量。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resource__health",
+            "description": (
+                "更新指定资源的健康状态和可用性。"
+                "用于运行时健康监测路径将最新状态同步到受治理资源层。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "resource_id": {
+                        "type": "string",
+                        "description": "资源唯一标识符（如 builtin__github、device__android_001）",
+                    },
+                    "health": {
+                        "type": "string",
+                        "enum": ["healthy", "degraded", "unavailable", "unknown"],
+                        "description": "新的健康状态",
+                    },
+                    "availability": {
+                        "type": "string",
+                        "enum": ["available", "limited", "unavailable", "unknown"],
+                        "description": "新的可用性状态（可选）",
+                    },
+                },
+                "required": ["resource_id", "health"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resource__lookup",
+            "description": "按 resource_id 或 source URI 精确查找受治理资源记录。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "resource_id": {
+                        "type": "string",
+                        "description": "资源唯一标识符（与 source 二选一）",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "资源 source URI（如 github://api.github.com）",
+                    },
+                },
+            },
+        },
+    },
+]
+
+
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
 
@@ -4967,6 +5060,9 @@ class OpenClawd:
         # ── Engineering loop tools (始终收集, PR-6) ─────────────────────
         tools.extend(_ENGINEER_BUILTIN_TOOLS)
 
+        # ── Governed system resource layer tools (始终收集, PR-7) ─────────
+        tools.extend(_RESOURCE_BUILTIN_TOOLS)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -5190,6 +5286,11 @@ class OpenClawd:
                 # Mediated engineering loop tools (PR-6): engineer__diagnose, __plan, __apply, etc.
                 action = tool_name[10:]  # strip "engineer__"
                 return await self._dispatch_engineer_tool(action, arguments)
+
+            elif tool_name.startswith("resource__"):
+                # Governed system resource layer tools (PR-7): resource__list, __status, etc.
+                action = tool_name[10:]  # strip "resource__"
+                return await self._dispatch_resource_tool(action, arguments)
 
             else:
                 return {"success": False, "error": f"未知工具前缀: {tool_name}"}
@@ -5497,6 +5598,146 @@ class OpenClawd:
                 }
         except Exception as exc:
             logger.warning("_dispatch_engineer_tool '%s' failed: %s", action, exc)
+            return {"success": False, "error": str(exc)}
+
+    # ========================================================================
+    # Governed System Resource Layer Tools — PR-7
+    # resource__list / resource__status / resource__health / resource__lookup
+    # ========================================================================
+
+    async def _dispatch_resource_tool(self, action: str, arguments: dict) -> dict:
+        """Dispatch ``resource__*`` tool calls to :class:`~core.system_resource.SystemResourceRegistry`.
+
+        The governed system resource layer provides OpenClawd with a unified
+        view of all external and semi-external system-facing resources
+        (GitHub, academic, device, local tools, engineering loop, etc.)
+        through a single canonical registry.
+
+        Supported actions:
+            list    — list all registered resources, optionally filtered by type.
+            status  — registry-level status snapshot (counts / health summary).
+            health  — update health/availability for a specific resource.
+            lookup  — look up a resource by resource_id or source URI.
+
+        Args:
+            action:    Action name (stripped of ``resource__`` prefix).
+            arguments: Tool arguments dict from the LLM function call.
+
+        Returns:
+            ``{"success": bool, ...}``
+        """
+        try:
+            from core.system_resource import (
+                get_system_resource_registry,
+                SystemResourceType,
+                SystemResourceHealth,
+                SystemResourceAvailability,
+            )
+
+            registry = get_system_resource_registry()
+
+            if action == "list":
+                type_filter = arguments.get("resource_type")
+                if type_filter:
+                    try:
+                        rtype = SystemResourceType(type_filter)
+                    except ValueError:
+                        return {
+                            "success": False,
+                            "error": (
+                                f"Unknown resource_type: '{type_filter}'. "
+                                "Valid values: github, academic, device, local_tool, "
+                                "engineering, mcp, skill, node, builtin, unknown."
+                            ),
+                        }
+                    records = registry.list_by_type(rtype)
+                else:
+                    records = registry.list_all()
+                return {
+                    "success": True,
+                    "resources": [r.to_dict() for r in records],
+                    "count": len(records),
+                }
+
+            elif action == "status":
+                snap = registry.snapshot()
+                return {"success": True, **snap.to_dict()}
+
+            elif action == "health":
+                resource_id = arguments.get("resource_id", "")
+                if not resource_id:
+                    return {
+                        "success": False,
+                        "error": "resource__health requires 'resource_id' argument",
+                    }
+                health_str = arguments.get("health", "")
+                if not health_str:
+                    return {
+                        "success": False,
+                        "error": "resource__health requires 'health' argument",
+                    }
+                try:
+                    health = SystemResourceHealth(health_str)
+                except ValueError:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Unknown health value: '{health_str}'. "
+                            "Valid values: healthy, degraded, unavailable, unknown."
+                        ),
+                    }
+                availability_update: Optional[SystemResourceAvailability] = None
+                avail_str = arguments.get("availability")
+                if avail_str:
+                    try:
+                        availability_update = SystemResourceAvailability(avail_str)
+                    except ValueError:
+                        pass  # ignore invalid availability; health update still proceeds
+                updated = registry.set_health(
+                    resource_id=resource_id,
+                    health=health,
+                    availability=availability_update,
+                )
+                if not updated:
+                    return {
+                        "success": False,
+                        "error": f"resource_id '{resource_id}' not found in registry",
+                    }
+                return {
+                    "success": True,
+                    "resource_id": resource_id,
+                    "health": health.value,
+                    "availability": availability_update.value if availability_update is not None else None,
+                }
+
+            elif action == "lookup":
+                resource_id = arguments.get("resource_id")
+                source = arguments.get("source")
+                if resource_id:
+                    record = registry.lookup(resource_id)
+                elif source:
+                    record = registry.lookup_by_source(source)
+                else:
+                    return {
+                        "success": False,
+                        "error": (
+                            "resource__lookup requires either 'resource_id' or 'source' argument"
+                        ),
+                    }
+                if record is None:
+                    return {"success": False, "error": "Resource not found"}
+                return {"success": True, "resource": record.to_dict()}
+
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unknown resource action: '{action}'. "
+                        "Valid actions: list, status, health, lookup."
+                    ),
+                }
+        except Exception as exc:
+            logger.warning("_dispatch_resource_tool '%s' failed: %s", action, exc)
             return {"success": False, "error": str(exc)}
 
     # ========================================================================
