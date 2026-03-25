@@ -447,6 +447,93 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
     },
 ]
 
+# Academic 内置工具定义（供 LLM function calling 使用）
+_ACADEMIC_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "academic__search",
+            "description": (
+                "在学术数据库（arXiv、Semantic Scholar、PubMed、IEEE Xplore）中搜索论文。"
+                "默认将搜索结果摄取到统一知识库（Knowledge Core），以便后续回检与推理引用。"
+                "返回论文元数据列表，包括标题、作者、摘要、来源、标签和摘取的条目 ID。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词或自然语言问题",
+                    },
+                    "source": {
+                        "type": "string",
+                        "enum": ["all", "arxiv", "semantic_scholar", "pubmed", "ieee"],
+                        "description": "数据源，默认为 all（全部来源）",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "每个数据源最多返回的论文数量（默认 10）",
+                    },
+                    "ingest": {
+                        "type": "boolean",
+                        "description": "是否将搜索结果摄取到统一知识库（默认 true）",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "academic__ingest",
+            "description": (
+                "将单篇论文的元数据和摘要摄取到统一知识库（Knowledge Core）。"
+                "来源标注为 academic://{source}/{paper_id}，source_type 为 'academic'。"
+                "用于把已检索到的论文持久化为可回检的知识片段。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paper": {
+                        "type": "object",
+                        "description": (
+                            "论文元数据对象，至少包含 paper_id、title、abstract、source 字段。"
+                            "其他可选字段：authors、published_date、url、tags、notes、doi、citation_count。"
+                        ),
+                    },
+                },
+                "required": ["paper"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "academic__recall",
+            "description": (
+                "从统一知识库（Knowledge Core）中回检之前摄取的学术知识片段。"
+                "仅返回 source_type='academic' 或 source 以 academic:// 开头的知识条目。"
+                "可与 academic__search 配合使用：先搜索并摄取，后续对话中通过此工具回检。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "回检查询（自然语言）",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "最多返回的知识片段数量（默认 5）",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+]
+
 
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
@@ -4707,6 +4794,9 @@ class OpenClawd:
         # ── GitHub 插件工具 (始终收集) ─────────────────────────────────────
         tools.extend(_GITHUB_BUILTIN_TOOLS)
 
+        # ── Academic 学术检索工具 (始终收集) ─────────────────────────────
+        tools.extend(_ACADEMIC_BUILTIN_TOOLS)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -4921,6 +5011,11 @@ class OpenClawd:
                 action = tool_name[8:]  # strip "github__"
                 return await self._dispatch_github_tool(action, arguments)
 
+            elif tool_name.startswith("academic__"):
+                # Academic system resource tools: academic__search, academic__ingest, academic__recall
+                action = tool_name[10:]  # strip "academic__"
+                return await self._dispatch_academic_tool(action, arguments)
+
             else:
                 return {"success": False, "error": f"未知工具前缀: {tool_name}"}
 
@@ -5032,6 +5127,94 @@ class OpenClawd:
                 }
         except Exception as exc:
             logger.warning("_dispatch_github_tool '%s' failed: %s", action, exc)
+            return {"success": False, "error": str(exc)}
+
+    # ========================================================================
+    # Academic System Resource Tools — academic__search / __ingest / __recall
+    # ========================================================================
+
+    async def _dispatch_academic_tool(self, action: str, arguments: dict) -> dict:
+        """Dispatch academic system resource tool calls.
+
+        Academic search is a first-class system resource with three roles:
+        1. **Search source** — query arXiv/Semantic Scholar/PubMed/IEEE Xplore.
+           Handled by ``AcademicRetriever.search()``.
+        2. **Knowledge source** — ingest paper metadata/abstracts into the
+           unified Knowledge Core.  Handled by
+           ``AcademicRetriever.ingest_paper()``.
+        3. **Recall source** — retrieve previously-ingested academic knowledge
+           via the unified RAG path.  Handled by
+           ``AcademicRetriever.recall()``.
+
+        Supported actions:
+            search  — search academic databases, optionally ingest results.
+            ingest  — ingest a single paper dict into Knowledge Core.
+            recall  — recall academic knowledge from Knowledge Core.
+
+        Args:
+            action:    Action name (strip of ``academic__`` prefix).
+            arguments: Tool arguments from LLM tool_calls.
+
+        Returns:
+            ``{"success": bool, "result": Any, "error": Optional[str]}``
+        """
+        try:
+            from core.academic_retrieval import get_academic_retriever
+            retriever = get_academic_retriever()
+
+            if action == "search":
+                query = arguments.get("query", "")
+                if not query:
+                    return {"success": False, "error": "academic__search requires 'query' argument"}
+                try:
+                    max_results = int(arguments.get("max_results", 10))
+                except (TypeError, ValueError):
+                    max_results = 10
+                result = await retriever.search(
+                    query=query,
+                    source=arguments.get("source", "all"),
+                    max_results=max_results,
+                    ingest=bool(arguments.get("ingest", True)),
+                )
+                return result
+
+            elif action == "ingest":
+                paper = arguments.get("paper")
+                if not paper or not isinstance(paper, dict):
+                    return {"success": False, "error": "academic__ingest requires 'paper' argument (dict)"}
+                entry_id = retriever.ingest_paper(paper)
+                return {
+                    "success": True,
+                    "entry_id": entry_id,
+                    "paper_id": paper.get("paper_id", ""),
+                    "title": paper.get("title", ""),
+                    "source_type": "academic",
+                    "source": f"academic://{paper.get('source', 'unknown')}/{paper.get('paper_id', '')}",
+                }
+
+            elif action == "recall":
+                query = arguments.get("query", "")
+                if not query:
+                    return {"success": False, "error": "academic__recall requires 'query' argument"}
+                try:
+                    top_k = int(arguments.get("top_k", 5))
+                except (TypeError, ValueError):
+                    top_k = 5
+                return retriever.recall(
+                    query=query,
+                    top_k=top_k,
+                )
+
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unknown academic action: '{action}'. "
+                        "Valid actions: search, ingest, recall."
+                    ),
+                }
+        except Exception as exc:
+            logger.warning("_dispatch_academic_tool '%s' failed: %s", action, exc)
             return {"success": False, "error": str(exc)}
 
     # ========================================================================
