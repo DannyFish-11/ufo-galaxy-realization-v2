@@ -116,6 +116,10 @@ class UnifiedConnectionInfo(BaseModel):
     state: UnifiedConnectionState = UnifiedConnectionState.DISCONNECTED
     connected_at: Optional[datetime] = None
     last_heartbeat: Optional[datetime] = None
+    # last_seen: float epoch timestamp updated on every heartbeat/message
+    last_seen: float = 0.0
+    # routable: True when the device is reachable via the active transport
+    routable: bool = False
     retry_count: int = 0
     last_error: Optional[str] = None
     total_reconnects: int = 0
