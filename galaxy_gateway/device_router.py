@@ -95,6 +95,17 @@ from core.device_types import DeviceType, resolve_device_type  # noqa: E402
 # Module-level import so the function can be patched in tests
 from galaxy_gateway.capability_registry import get_gateway_capability_registry  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# PR-S3: Single dispatch and orchestration authority sentinel.
+#
+# DeviceRouter is the canonical single entry for all device-bound task
+# dispatch and cross-device orchestration decisions.  All callers that
+# previously owned independent dispatch authority (AndroidBridge.assign_task,
+# RepoCoordinator.dispatch_agent_to_android, etc.) must delegate to
+# DeviceRouter.route_task() or DeviceRouter.dispatch_task().
+# ---------------------------------------------------------------------------
+CANONICAL_DISPATCH_AUTHORITY = "galaxy_gateway.device_router.DeviceRouter"
+
 
 def _get_udm():
     """Lazily return the UnifiedDeviceManager singleton (avoids circular imports)."""
@@ -198,13 +209,30 @@ class Device:
 
 
 class DeviceRouter:
-    """Runtime session adapter and cross-device routing substrate.
+    """Single dispatch and cross-device orchestration entry for the gateway.
 
-    **Role (PR-3)**
-    ---------------
-    ``DeviceRouter`` is a **runtime session adapter** over canonical device
-    state maintained by :class:`~core.unified.device_manager.UnifiedDeviceManager`
+    **Role (PR-3, PR-S3)**
+    ----------------------
+    ``DeviceRouter`` is the **canonical single entry for all device-bound task
+    dispatch and cross-device orchestration decisions** (PR-S3 consolidation).
+    It is also a **runtime session adapter** over canonical device state
+    maintained by :class:`~core.unified.device_manager.UnifiedDeviceManager`
     (UDM).  It is NOT a peer device truth source.
+
+    Dispatch authority (PR-S3)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    All device-bound tasks, commands, and actions must ultimately pass through
+    :meth:`route_task` or :meth:`dispatch_task`.  Previously fragmented paths
+    that held independent dispatch authority now delegate here:
+
+    - ``AndroidBridge.assign_task`` → delegates to :meth:`dispatch_task`
+    - ``RepoCoordinator.dispatch_agent_to_android`` → delegates to :meth:`route_task`
+    - ``CrossDeviceCoordinator.execute_cross_device_task`` → DeviceRouter-internal
+      coordinator only; external callers use :meth:`route_task`
+
+    Android-specific action translation (click, swipe, etc.) remains in
+    :class:`~galaxy_gateway.android_bridge.AndroidBridge` as an adapter layer;
+    those adapters do not hold independent dispatch authority.
 
     Responsibilities
     ~~~~~~~~~~~~~~~~

@@ -154,16 +154,41 @@ class RepoCoordinator:
         task_type: str,
         params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        分发 Agent 到 Android 设备
-        
-        通过 WebSocket 或 HTTP 发送命令
+        """分发 Agent 到 Android 设备 — delegates to DeviceRouter (PR-S3).
+
+        Dispatch authority is delegated to DeviceRouter.route_task() as the
+        canonical single dispatch entry.  Direct WebSocket/HTTP send paths are
+        preserved as a compatibility fallback only.
+
+        Args:
+            device_id: Target Android device identifier.
+            task_type: Type of task to dispatch.
+            params: Task parameters.
         """
         if device_id not in self.android_devices:
             return {"success": False, "error": f"Device {device_id} not found"}
-        
+
+        # PR-S3: delegate dispatch authority to DeviceRouter.route_task().
+        try:
+            from galaxy_gateway.device_router import device_router as _device_router
+            command = task_type
+            context = {
+                "device_id": device_id,
+                "task_type": task_type,
+                "params": params,
+                "source": "repo_coordinator",
+            }
+            result = await _device_router.route_task(command, context)
+            return result
+        except Exception as _router_err:
+            logger.warning(
+                "RepoCoordinator.dispatch_agent_to_android: DeviceRouter fallback — %s",
+                _router_err,
+            )
+
+        # Compatibility fallback: direct send when DeviceRouter is unavailable.
         device = self.android_devices[device_id]
-        
+
         # 创建 AIP 任务消息（使用 v3 字段名 type / device_id）
         message = None
         if AIPMessage is not None and AIPMessageType is not None:
@@ -176,20 +201,20 @@ class RepoCoordinator:
                     "timestamp": datetime.now().isoformat()
                 }
             )
-        
+
         try:
             # 优先使用 WebSocket
             ws_url = device.get("websocket_url")
             if ws_url:
                 return await self._send_via_websocket(ws_url, message)
-            
+
             # 否则使用 HTTP
             endpoint = device.get("endpoint")
             if endpoint:
                 return await self._send_via_http(endpoint, message)
-            
+
             return {"success": False, "error": "No endpoint available"}
-        
+
         except Exception as e:
             logger.error(f"分发 Agent 到 {device_id} 失败: {e}")
             return {"success": False, "error": str(e)}
