@@ -5,6 +5,13 @@ AIP v3.0 协议模块
 """
 
 from .compat import parse_message_compat, normalize_action_in_payload
+from .normalized_ingress_event import (
+    NormalizedIngressEvent,
+    IngressEventKind,
+    to_normalized_ingress_event,
+    from_aip_message as ingress_event_from_aip_message,
+    from_normalized_dict as ingress_event_from_dict,
+)
 from .actions import (
     ActionType,
     LEGACY_ACTION_MAP,
@@ -59,6 +66,12 @@ __all__ = [
     # Legacy compat / shim
     "parse_message_compat",
     "normalize_action_in_payload",
+    # PR-56: Canonical Normalized Ingress Event
+    "NormalizedIngressEvent",
+    "IngressEventKind",
+    "to_normalized_ingress_event",
+    "ingress_event_from_aip_message",
+    "ingress_event_from_dict",
     # Canonical action vocabulary
     "ActionType",
     "LEGACY_ACTION_MAP",
