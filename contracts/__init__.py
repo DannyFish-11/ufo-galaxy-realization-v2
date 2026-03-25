@@ -10,8 +10,10 @@ in PR-35, the Cross-Runtime Result Merge contracts introduced in PR-36,
 the Mesh Session Coordinator contracts introduced in PR-37, the
 Unified Multi-Device Runtime Projection introduced in PR-38, the
 Runtime Recovery and Reconciliation Contract introduced in PR-39, the
-Durable Runtime Session Snapshot Contract introduced in PR-40, and
-the Desktop Status Projection introduced in PR-22.
+Durable Runtime Session Snapshot Contract introduced in PR-40, the
+Desktop Status Projection introduced in PR-22, the Canonical Device
+Identity contract introduced in PR-56, and the Runtime Presence Record
+contract introduced in PR-56.
 """
 
 from contracts.execution_trace import (
@@ -254,6 +256,22 @@ from contracts.desktop_status_projection import (
     desktop_status_projection_summary,
 )
 
+# PR-56: Canonical Device Identity Contract
+from contracts.canonical_device_identity import (
+    CanonicalDeviceIdentity,
+    build_canonical_device_identity,
+    from_registered_runtime_device as canonical_identity_from_rrd,
+    from_android_registration as canonical_identity_from_android,
+)
+
+# PR-56: Runtime Presence Record Contract
+from contracts.runtime_presence_record import (
+    RuntimePresenceRecord,
+    RuntimeTransport,
+    build_runtime_presence_record,
+    from_registered_runtime_device as presence_record_from_rrd,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -450,4 +468,14 @@ __all__ = [
     "DesktopStatusProjection",
     "build_desktop_status_projection",
     "desktop_status_projection_summary",
+    # PR-56: Canonical Device Identity Contract
+    "CanonicalDeviceIdentity",
+    "build_canonical_device_identity",
+    "canonical_identity_from_rrd",
+    "canonical_identity_from_android",
+    # PR-56: Runtime Presence Record Contract
+    "RuntimePresenceRecord",
+    "RuntimeTransport",
+    "build_runtime_presence_record",
+    "presence_record_from_rrd",
 ]
