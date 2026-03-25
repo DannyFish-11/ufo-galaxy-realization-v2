@@ -1,26 +1,18 @@
 """
-仓库协调层
-==========
+仓库协调层 — 遗留 / 管理 Facade
+=================================
 
-协调主仓库 和 Android 仓库
+架构角色 (PR-S4)
+-----------------
+``RepoCoordinator`` 是一个 **遗留/管理 facade**，不再是 Android 设备的主控
+平面（control plane）。
 
-主仓库:
-- 后端服务
-- Dashboard
-- 所有节点
-- 协议层
-
-Android 仓库:
-- Android APK
-- 无障碍服务
-- WebSocket 客户端
-- 设备注册
-
-协调方式:
-1. Android 设备注册到主仓库
-2. 主仓库分发 Agent 到 Android 设备
-3. Android 设备通过无障碍服务执行操作
-4. 结果返回主仓库
+- 设备注册 / 心跳 / 注销的 **canonical 状态写入** 经由
+  ``UnifiedDeviceManager`` (UDM) 完成。
+- ``self.android_devices`` 仅保留为 **legacy compatibility cache**，
+  供外部遗留调用方（dashboard、旧路由）只读使用；它不再是设备事实来源（SSOT）。
+- 所有写操作必须先写 UDM，再更新本地 compat cache。
+- 设备查询（``get_android_devices``、``get_android_device``）优先委托 UDM。
 
 版本: v2.3.23
 """
@@ -54,16 +46,29 @@ logger = logging.getLogger("RepoCoordinator")
 
 class RepoCoordinator:
     """
-    仓库协调器
-    
-    协调主仓库和 Android 仓库
+    仓库协调器 — 遗留/管理 facade（PR-S4）。
+
+    协调主仓库和 Android 仓库的遗留管理接口。
+
+    ⚠️  架构角色约束
+    ----------------
+    RepoCoordinator **不是** Android 设备的主控平面。
+
+    - 设备注册 / 心跳 / 注销的 canonical 写入委托给
+      ``UnifiedDeviceManager`` (UDM)。
+    - ``self.android_devices`` 是 **legacy compat cache**，
+      不是设备事实来源（SSOT）。  外部代码若需权威设备列表，
+      应查询 UDM，而非直接读取此字段。
+    - 任务分发已委托给 DeviceRouter（PR-S3）。
     """
     
     def __init__(self):
         # 主仓库配置
         self.main_repo_url = os.getenv("MAIN_REPO_URL", "http://localhost:8080")
         
-        # Android 设备注册表
+        # ⚠️  LEGACY COMPAT CACHE — 不是设备事实来源（SSOT）。
+        # 事实来源已迁移到 core.unified.device_manager.UnifiedDeviceManager (UDM)。
+        # 此字典仅供遗留代码只读兼容使用；所有写操作应优先通过 UDM 进行。
         self.android_devices: Dict[str, Dict] = {}
         
         # HTTP 客户端
@@ -78,7 +83,7 @@ class RepoCoordinator:
         return self._http_client
     
     # =========================================================================
-    # Android 设备注册
+    # Android 设备注册 — delegates to UDM (PR-S4)
     # =========================================================================
     
     async def register_android_device(
@@ -86,12 +91,15 @@ class RepoCoordinator:
         device_id: str,
         device_info: Dict[str, Any]
     ) -> Dict[str, Any]:
+        """注册 Android 设备 — canonical 写入委托 UDM（PR-S4）。
+
+        Canonical write path: UnifiedDeviceManager (UDM).
+        ``self.android_devices`` is updated as a legacy compat cache after
+        the UDM write succeeds.
+
+        Android 仓库通过此接口注册到主仓库。
         """
-        注册 Android 设备
-        
-        Android 仓库通过此接口注册到主仓库
-        """
-        self.android_devices[device_id] = {
+        device_record = {
             "device_id": device_id,
             "device_type": "android",
             "name": device_info.get("name", "Android Device"),
@@ -105,6 +113,25 @@ class RepoCoordinator:
             "status": "online",
             "registered_at": datetime.now().isoformat()
         }
+
+        # Step 1 — canonical write to UDM (SSOT).
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            udm.register_device_from_dict(device_id, device_record)
+            logger.info(
+                "repo_coordinator: wrote registration to UDM (SSOT): device_id=%s",
+                device_id,
+            )
+        except Exception as udm_err:
+            logger.warning(
+                "repo_coordinator: UDM registration write failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, udm_err,
+            )
+
+        # Step 2 — update legacy compat cache.
+        self.android_devices[device_id] = device_record
         
         logger.info(f"已注册 Android 设备: {device_id}")
         
@@ -129,7 +156,27 @@ class RepoCoordinator:
         }
     
     async def unregister_android_device(self, device_id: str) -> Dict[str, Any]:
-        """注销 Android 设备"""
+        """注销 Android 设备 — canonical 写入委托 UDM（PR-S4）。
+
+        Canonical write path: UnifiedDeviceManager (UDM).
+        ``self.android_devices`` compat cache is also cleared.
+        """
+        # Step 1 — canonical unregister in UDM.
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            udm.unregister_device(device_id)
+            logger.info(
+                "repo_coordinator: unregistered from UDM: device_id=%s", device_id,
+            )
+        except Exception as udm_err:
+            logger.warning(
+                "repo_coordinator: UDM unregister failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, udm_err,
+            )
+
+        # Step 2 — clear legacy compat cache.
         if device_id in self.android_devices:
             del self.android_devices[device_id]
             logger.info(f"已注销 Android 设备: {device_id}")
@@ -137,7 +184,24 @@ class RepoCoordinator:
         return {"success": False, "error": "Device not found"}
     
     async def heartbeat_android_device(self, device_id: str) -> Dict[str, Any]:
-        """Android 设备心跳"""
+        """Android 设备心跳 — canonical 写入委托 UDM（PR-S4）。
+
+        Canonical write path: UnifiedDeviceManager (UDM).
+        ``self.android_devices`` compat cache is also updated.
+        """
+        # Step 1 — canonical heartbeat in UDM.
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            udm.heartbeat(device_id)
+        except Exception as udm_err:
+            logger.debug(
+                "repo_coordinator: UDM heartbeat failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, udm_err,
+            )
+
+        # Step 2 — update legacy compat cache.
         if device_id in self.android_devices:
             self.android_devices[device_id]["last_heartbeat"] = datetime.now().isoformat()
             self.android_devices[device_id]["status"] = "online"
@@ -263,17 +327,35 @@ class RepoCoordinator:
         task_type: str,
         params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """广播到所有 Android 设备"""
+        """广播到所有 Android 设备 — device list from UDM (PR-S4).
+
+        Reads the target device list from UnifiedDeviceManager for canonical
+        coverage; falls back to the legacy compat cache when UDM is
+        unavailable.
+        """
+        # Prefer UDM device list for canonical coverage.
+        device_ids: List[str] = []
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            device_ids = [
+                d.device_id for d in udm.list_devices()
+                if str(getattr(d.device_type, "value", d.device_type)).lower()
+                in ("android", "android_phone", "android_tablet")
+            ]
+        except Exception:
+            device_ids = list(self.android_devices.keys())
+
         results = {}
         
         tasks = [
             self.dispatch_agent_to_android(device_id, task_type, params)
-            for device_id in self.android_devices.keys()
+            for device_id in device_ids
         ]
         
         responses = await asyncio.gather(*tasks, return_exceptions=True)
         
-        for device_id, response in zip(self.android_devices.keys(), responses):
+        for device_id, response in zip(device_ids, responses):
             if isinstance(response, Exception):
                 results[device_id] = {"success": False, "error": str(response)}
             else:
@@ -286,29 +368,108 @@ class RepoCoordinator:
         }
     
     # =========================================================================
-    # 状态查询
+    # 状态查询 — delegates to UDM (PR-S4)
     # =========================================================================
     
     def get_android_devices(self) -> List[Dict[str, Any]]:
-        """获取所有 Android 设备"""
+        """获取所有 Android 设备 — 优先委托 UDM（PR-S4）。
+
+        Returns the canonical device list from UnifiedDeviceManager when
+        available; falls back to the legacy compat cache ``android_devices``
+        if UDM is unavailable.
+        """
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            udm_devices = [
+                {
+                    "device_id": d.device_id,
+                    "device_type": getattr(d.device_type, "value", str(d.device_type)),
+                    "name": d.device_name,
+                    "capabilities": d.capabilities,
+                    "status": getattr(d.status, "value", str(d.status)),
+                    "source": "udm",
+                    **d.metadata,
+                }
+                for d in udm.list_devices()
+                if str(getattr(d.device_type, "value", d.device_type)).lower() in (
+                    "android", "android_phone", "android_tablet"
+                )
+            ]
+            if udm_devices:
+                return udm_devices
+        except Exception as udm_err:
+            logger.debug(
+                "repo_coordinator: UDM query failed, falling back to compat cache: %s",
+                udm_err,
+            )
+        # Legacy compat cache fallback.
         return list(self.android_devices.values())
     
     def get_android_device(self, device_id: str) -> Optional[Dict[str, Any]]:
-        """获取指定 Android 设备"""
+        """获取指定 Android 设备 — 优先委托 UDM（PR-S4）。
+
+        Queries UnifiedDeviceManager for canonical device state; falls back to
+        the legacy compat cache ``android_devices`` if UDM is unavailable.
+        """
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            device = udm.get_device(device_id)
+            if device is not None:
+                return {
+                    "device_id": device.device_id,
+                    "device_type": getattr(device.device_type, "value", str(device.device_type)),
+                    "name": device.device_name,
+                    "capabilities": device.capabilities,
+                    "status": getattr(device.status, "value", str(device.status)),
+                    "source": "udm",
+                    **device.metadata,
+                }
+        except Exception as udm_err:
+            logger.debug(
+                "repo_coordinator: UDM get_device failed, falling back to compat cache: %s",
+                udm_err,
+            )
+        # Legacy compat cache fallback.
         return self.android_devices.get(device_id)
     
     def get_status(self) -> Dict[str, Any]:
-        """获取状态"""
+        """获取协调器状态摘要 — 优先使用 UDM 设备计数（PR-S4）。"""
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            udm = UnifiedDeviceManager()
+            all_devices = udm.list_devices()
+            from core.unified.models import UnifiedDeviceStatus
+            android_devices = [
+                d for d in all_devices
+                if str(getattr(d.device_type, "value", d.device_type)).lower()
+                in ("android", "android_phone", "android_tablet")
+            ]
+            online_count = sum(
+                1 for d in android_devices
+                if getattr(d.status, "value", d.status) == UnifiedDeviceStatus.ONLINE.value
+            )
+            return {
+                "android_devices": len(android_devices),
+                "online_devices": online_count,
+                "main_repo_url": self.main_repo_url,
+                "timestamp": datetime.now().isoformat(),
+                "source": "udm",
+            }
+        except Exception:
+            pass
+
+        # Legacy compat cache fallback.
         online_count = sum(
             1 for d in self.android_devices.values()
             if d.get("status") == "online"
         )
-        
         return {
             "android_devices": len(self.android_devices),
             "online_devices": online_count,
             "main_repo_url": self.main_repo_url,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 

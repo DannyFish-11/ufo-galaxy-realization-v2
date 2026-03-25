@@ -780,3 +780,167 @@ def emit_legacy_guardrail(
 #: Frozenset of legacy paths — same shape as ``LEGACY_ORCHESTRATOR_PATHS``
 #: in ``core/constellation_runtime.py``, extended with PR-9 additions.
 LEGACY_ORCHESTRATOR_PATHS: frozenset = frozenset(LEGACY_PATH_REGISTRY.keys())
+
+
+# ---------------------------------------------------------------------------
+# PR-S4: Demote android_bridge device query surface, repo_coordinator Android
+# control-plane posture, and _shared.py compat state helpers.
+#
+# android_bridge.py public device query methods (get_all_devices, etc.) still
+# read from the local transport/session cache (_devices) as if it were
+# authoritative.  They are transport-cache views, not canonical device state.
+#
+# repo_coordinator.py android_devices dict and its registration/heartbeat
+# methods previously acted as an independent Android control plane; they now
+# delegate all canonical writes to UDM and treat android_devices as a
+# legacy compat cache.
+#
+# _shared.py RouteConnectionPool.active_devices and registered_devices dict
+# are compat/transport surfaces; presence authority is UCM, device SSOT is UDM.
+# ---------------------------------------------------------------------------
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.android_bridge.AndroidBridge.get_all_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "AndroidBridge.get_all_devices() returns the local transport/session "
+            "cache (_devices), NOT the canonical device registry.  "
+            "It reflects only devices with an active WebSocket session in the "
+            "current AndroidBridge instance.  "
+            "For the canonical device registry, use "
+            "UnifiedDeviceManager.list_devices() or "
+            "UnifiedDeviceManager.get_devices_by_type().  "
+            "PR-S4: transport-cache posture clarified."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes=(
+            "AndroidBridge.get_all_devices — transport cache view (PR-S4).  "
+            "Not an independent device registry.  "
+            "Delegate canonical reads to UDM."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.android_bridge.AndroidBridge.get_connected_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "AndroidBridge.get_connected_devices() is a transport-cache view.  "
+            "Use UnifiedConnectionManager or UDM for canonical presence state.  "
+            "PR-S4: transport-cache posture clarified."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes="AndroidBridge.get_connected_devices — transport cache view (PR-S4).",
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.android_bridge.AndroidBridge.get_android_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "AndroidBridge.get_android_devices() is a transport-cache view.  "
+            "Use UnifiedDeviceManager.get_devices_by_type() for canonical "
+            "Android device list.  PR-S4: transport-cache posture clarified."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes="AndroidBridge.get_android_devices — transport cache view (PR-S4).",
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.android_bridge.AndroidBridge.get_device_health",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "AndroidBridge.get_device_health() derives health from transport-layer "
+            "session state, not the canonical DeviceHealthRegistry.  "
+            "For authoritative health/circuit-breaker state, use DeviceHealthRegistry "
+            "or GET /api/v1/devices/{id}/health.  PR-S4: transport-cache posture "
+            "clarified."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes="AndroidBridge.get_device_health — transport cache view (PR-S4).",
+    ),
+)
+
+_register(
+    LegacyPathEntry(
+        module_path="core.repo_coordinator.RepoCoordinator.android_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "RepoCoordinator.android_devices is a LEGACY COMPAT CACHE, not a "
+            "canonical Android device registry (PR-S4).  "
+            "All canonical device writes go through UnifiedDeviceManager (UDM).  "
+            "Read canonical device state from UDM, not from this dict.  "
+            "This dict is retained only for backward-compatible reads by legacy "
+            "callers (dashboard routes, tests)."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes=(
+            "RepoCoordinator.android_devices — LEGACY COMPAT CACHE (PR-S4).  "
+            "Not the SSOT for Android devices.  Canonical write path is UDM."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.repo_coordinator.RepoCoordinator.register_android_device",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "RepoCoordinator.register_android_device() previously wrote directly "
+            "to the local android_devices dict, acting as an independent Android "
+            "control plane (PR-S4).  It now delegates canonical writes to "
+            "UnifiedDeviceManager (UDM) and updates android_devices only as a "
+            "legacy compat cache.  New code should register devices via the "
+            "canonical POST /api/v1/devices/register route which writes to UDM."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes=(
+            "RepoCoordinator.register_android_device — demoted in PR-S4.  "
+            "Now delegates canonical writes to UDM."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.repo_coordinator.RepoCoordinator.get_android_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "RepoCoordinator.get_android_devices() previously read exclusively "
+            "from the local android_devices compat cache (PR-S4).  It now "
+            "prefers UnifiedDeviceManager (UDM) for canonical device lists; "
+            "the compat cache is the fallback.  New code should query UDM "
+            "directly via UnifiedDeviceManager.list_devices()."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes=(
+            "RepoCoordinator.get_android_devices — demoted in PR-S4.  "
+            "Now prefers UDM; compat cache is fallback."
+        ),
+    ),
+)
+
+_register(
+    LegacyPathEntry(
+        module_path="core.routes._shared.registered_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core.routes._shared.registered_devices is a LEGACY COMPAT CACHE "
+            "(PR-S4).  Device SSOT is UnifiedDeviceManager (UDM).  "
+            "This dict is populated at startup from the persisted JSON file "
+            "for backward compat; canonical device reads should use UDM.  "
+            "Do not add new write paths here; writes must go through UDM first."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes=(
+            "core.routes._shared.registered_devices — LEGACY COMPAT CACHE (PR-S4).  "
+            "Not the SSOT for devices.  Use UDM for canonical reads/writes."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.routes._shared.RouteConnectionPool.active_devices",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "RouteConnectionPool.active_devices is a TRANSPORT HANDLE CACHE / "
+            "COMPAT SURFACE (PR-S4).  Presence authority is "
+            "core.unified.UnifiedConnectionManager (UCM).  "
+            "active_devices retains WebSocket handles for compat; all writes are "
+            "mirrored to UCM.  New code should use UCM directly for presence "
+            "queries and connection management."
+        ),
+        pr_guardrail_added="PR-S4",
+        notes=(
+            "RouteConnectionPool.active_devices — transport handle compat surface "
+            "(PR-S4).  Not the canonical presence store.  Use UCM."
+        ),
+    ),
+)

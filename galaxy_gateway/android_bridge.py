@@ -1,14 +1,24 @@
 """
-Android Bridge Service
-Galaxy - 服务端与安卓端对接桥接层
+Android Bridge Service — Android 动作适配器（PR-S4）
+=======================================================
 
-此模块负责：
-1. 处理安卓设备的注册和管理
-2. 将服务端任务转换为安卓可执行的命令
-3. 处理安卓端返回的结果
-4. 维护安卓设备状态
+架构角色
+--------
+``AndroidBridge`` 是一个 **Android-specific action / payload 翻译适配器**，
+不是独立的 presence 或 dispatch authority。
 
-与安卓端 AIPMessageV3.kt 完全对齐
+职责（保留）:
+  1. 处理 AIP v3 WebSocket 协议的收发与规范化。
+  2. 将服务端任务翻译为 Android 可执行的 AIP 命令（action/payload translation）。
+  3. 处理安卓端返回的结果并触发记忆回流。
+  4. 维护 WebSocket 连接句柄的 **传输/会话层本地缓存**（transport session cache）。
+
+职责（已移除 — PR-2 / PR-S3 / PR-S4）:
+  ✗ 不持有独立的设备 presence 权威（presence authority 在 UDM + UCM）。
+  ✗ 不持有独立的任务 dispatch 权威（dispatch authority 在 DeviceRouter）。
+  ✗ ``self._devices`` 不是设备事实来源（SSOT 在 UDM）。
+
+与安卓端 AIPMessageV3.kt 完全对齐。
 
 Author: Galaxy Team
 Version: 3.0.0
@@ -1346,19 +1356,40 @@ class AndroidBridge:
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
     
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:
-        """获取设备信息"""
+        """获取设备的传输/会话层缓存条目（transport cache view）。
+
+        ⚠️  Transport cache only — NOT the canonical device state.
+        Use ``UnifiedDeviceManager.get_device(device_id)`` for authoritative
+        device identity and runtime state.
+        """
         return self._devices.get(device_id)
     
     def get_all_devices(self) -> List[AndroidDevice]:
-        """获取所有设备"""
+        """获取所有设备的传输/会话层缓存列表（transport cache view）。
+
+        ⚠️  Transport cache only — reflects only devices with an active
+        WebSocket session in this AndroidBridge instance.
+        Use ``UnifiedDeviceManager.list_devices()`` for the canonical device
+        registry, which includes devices registered via other paths.
+        """
         return list(self._devices.values())
     
     def get_connected_devices(self) -> List[AndroidDevice]:
-        """获取所有已连接的设备"""
+        """获取已连接设备的传输/会话层缓存列表（transport cache view）。
+
+        ⚠️  Transport cache only — reflects transport-layer connection state,
+        not the authoritative presence state managed by UCM / UDM.
+        """
         return [d for d in self._devices.values() if d.connected]
     
     def get_android_devices(self) -> List[AndroidDevice]:
-        """获取所有 Android 设备"""
+        """获取 Android 平台设备的传输/会话层缓存列表（transport cache view）。
+
+        ⚠️  Transport cache only — reflects only Android devices with an
+        active WebSocket session in this AndroidBridge instance.
+        Use ``UnifiedDeviceManager.get_devices_by_type()`` for the canonical
+        registry view of all known Android devices.
+        """
         return [d for d in self._devices.values() 
                 if d.platform == DevicePlatform.ANDROID and d.connected]
     
@@ -1419,7 +1450,14 @@ class AndroidBridge:
         return True
 
     def get_device_health(self) -> Dict[str, Any]:
-        """获取所有设备的健康状态摘要"""
+        """获取所有设备的健康状态摘要（transport cache view）。
+
+        ⚠️  Transport cache only — health scores are derived from the local
+        WebSocket session state (last heartbeat, connected flag).  For the
+        canonical device health registry (circuit breaker state, quarantine,
+        consecutive failures), use ``DeviceHealthRegistry`` or the
+        ``/api/v1/devices/{id}/health`` endpoint.
+        """
         now = time.time()
         healthy = 0
         stale = 0

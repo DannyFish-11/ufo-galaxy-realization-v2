@@ -1,13 +1,20 @@
 """
-Galaxy - Shared Route State
-================================
+Galaxy - Shared Route State — 兼容投影层（PR-S4）
+================================================
 
-Module-level singletons shared across all route modules:
-  - RouteConnectionPool  (WebSocket connection pool)
-  - registered_devices (device registry)
-  - task_queue         (in-memory task store)
-  - node_status_cache  (node health cache)
-  - command_results    (unified-command result store)
+架构角色（PR-S4）
+-----------------
+此模块提供若干 **兼容性投影 (compatibility projections)** 和 **传输层辅助工具**，
+不是运行时设备状态的事实来源（SSOT）。
+
+- ``RouteConnectionPool`` — WebSocket 传输层连接池。
+  委托 ``core.unified.UnifiedConnectionManager``（UCM）管理 presence 状态；
+  ``active_devices`` 仅保留为传输句柄缓存，供遗留赋值兼容使用。
+- ``registered_devices`` — ⚠️ LEGACY COMPAT CACHE。
+  设备事实来源已迁移到 ``core.unified.device_manager.UnifiedDeviceManager``（UDM）。
+  此字典仅供遗留代码只读兼容使用；新代码不应写入此字典。
+- ``task_queue``、``node_status_cache``、``command_results`` — 遗留内存存储，
+  不是任务/节点/命令状态的 canonical store。
 
 Real-time update channel
 ------------------------
@@ -75,14 +82,28 @@ def _save_registered_devices(devices: Dict[str, Dict[str, Any]]) -> None:
 
 class RouteConnectionPool:
     """
-    WebSocket 连接管理器。
+    WebSocket 传输层连接池 — 兼容投影（PR-S4）。
+
+    架构角色约束
+    ------------
+    ``RouteConnectionPool`` 是一个 **传输层 WebSocket 连接池** 和 **向后兼容
+    投影**，不是 presence 权威或设备状态事实来源（SSOT）。
+
+    - Presence 权威：``core.unified.UnifiedConnectionManager``（UCM）。
+    - 设备状态 SSOT：``core.unified.device_manager.UnifiedDeviceManager``（UDM）。
+    - ``self.active_devices`` 是 **transport handle cache / compat surface**，
+      不是设备在线状态的 canonical store；所有写操作同步到 UCM，
+      旧代码可继续通过此字段读取连接句柄。
 
     委托 core.unified.UnifiedConnectionManager 管理实际连接状态，
     保留原有接口以维持向后兼容。
     """
 
     def __init__(self):
-        # 保留 active_devices 供直接赋值的旧代码读取，但写操作会同步到统一管理器
+        # ⚠️  LEGACY TRANSPORT HANDLE CACHE — NOT the canonical presence store.
+        # Presence authority is in core.unified.UnifiedConnectionManager (UCM).
+        # This dict retains WebSocket handles for compat; all writes are
+        # mirrored to UCM.  New code should use UCM directly.
         self.active_devices: Dict[str, WebSocket] = {}
         self.status_subscribers: Set[WebSocket] = set()
         # 命令响应等待器: command_id → asyncio.Future
@@ -276,10 +297,11 @@ ConnectionManager = RouteConnectionPool
 
 connection_manager = RouteConnectionPool()
 
-# 设备注册表（启动时从磁盘加载）
 # ⚠️  LEGACY COMPAT CACHE — 不是事实源（SSOT）。
-# 事实源已迁移到 core.unified.device_manager.UnifiedDeviceManager（UDM）。
-# 此字典仅供遗留代码只读兼容使用；所有写操作应优先通过 UDM 进行。
+# 事实来源已迁移到 core.unified.device_manager.UnifiedDeviceManager（UDM）。
+# 此字典仅供遗留代码只读兼容使用；新代码不应写入此字典。
+# 所有设备状态写入必须经由 UDM 进行（canonical write path）。
+# 见 core/routes/devices.py 的注册路由，其写入顺序为：先写 UDM，后更新此缓存。
 registered_devices: Dict[str, Dict[str, Any]] = _load_registered_devices()
 registered_devices_lock = asyncio.Lock()
 
