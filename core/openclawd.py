@@ -392,6 +392,59 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "github__ingest",
+            "description": (
+                "将 GitHub 仓库内容（README、文档、Manifest 等）摄取到统一知识库（Knowledge Core）。"
+                "摄取后，仓库内容可通过知识检索流程获取，来源标注为 github://{owner}/{repo}。"
+                "此操作不安装插件，仅建立知识关联。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "GitHub HTTPS 仓库 URL，例如 https://github.com/owner/repo",
+                    },
+                    "ref": {
+                        "type": "string",
+                        "description": "指定分支、Tag 或 Commit SHA（可选）",
+                    },
+                    "include_code": {
+                        "type": "boolean",
+                        "description": "是否同时摄取仓库根目录的源代码文件（默认 false）",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "github__context",
+            "description": (
+                "从 GitHub 仓库提取结构化工程上下文（README、描述、Topics、Manifest 等），"
+                "可注入到规划、编码或调试流程。不持久化到知识库，仅返回实时上下文。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "GitHub HTTPS 仓库 URL",
+                    },
+                    "ref": {
+                        "type": "string",
+                        "description": "指定分支、Tag 或 Commit SHA（可选）",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
 ]
 
 
@@ -4892,12 +4945,24 @@ class OpenClawd:
     # ========================================================================
 
     async def _dispatch_github_tool(self, action: str, arguments: dict) -> dict:
-        """Dispatch GitHub addon tool calls.
+        """Dispatch GitHub system resource tool calls.
+
+        GitHub is a first-class system resource with three roles:
+        1. **Addon source** — install/uninstall/list GitHub-sourced MCP tools
+           and Skills.  Handled by ``GitHubInstaller``.
+        2. **Knowledge source** — ingest repo content into the unified
+           Knowledge Core.  Handled by ``GitHubRepoIngester.ingest_repo()``.
+        3. **Engineering context source** — retrieve structured repo context
+           for planning/coding flows.  Handled by
+           ``GitHubRepoIngester.get_repo_context()``.
 
         Supported actions:
             install   — install MCP tool or Skill from GitHub URL.
             uninstall — uninstall addon by name.
             list      — list all installed GitHub addons.
+            status    — installer status.
+            ingest    — ingest repo content into Knowledge Core.
+            context   — retrieve engineering context from a GitHub repo.
 
         Args:
             action:    Action name (strip of ``github__`` prefix).
@@ -4934,12 +4999,35 @@ class OpenClawd:
             elif action == "status":
                 return installer.get_status()
 
+            elif action == "ingest":
+                url = arguments.get("url", "")
+                if not url:
+                    return {"success": False, "error": "github__ingest requires 'url' argument"}
+                from core.github_installer import get_github_ingester
+                ingester = get_github_ingester()
+                return await ingester.ingest_repo(
+                    url=url,
+                    ref=arguments.get("ref"),
+                    include_code=bool(arguments.get("include_code", False)),
+                )
+
+            elif action == "context":
+                url = arguments.get("url", "")
+                if not url:
+                    return {"success": False, "error": "github__context requires 'url' argument"}
+                from core.github_installer import get_github_ingester
+                ingester = get_github_ingester()
+                return ingester.get_repo_context(
+                    url=url,
+                    ref=arguments.get("ref"),
+                )
+
             else:
                 return {
                     "success": False,
                     "error": (
                         f"Unknown github action: '{action}'. "
-                        "Valid actions: install, uninstall, list, status."
+                        "Valid actions: install, uninstall, list, status, ingest, context."
                     ),
                 }
         except Exception as exc:

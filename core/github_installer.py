@@ -1,10 +1,15 @@
 """
-Galaxy — GitHub-powered MCP/Skill Auto-Installer
-=================================================
+Galaxy — GitHub System Resource Integration
+============================================
 
-Allows OpenClawd to fetch MCP tools and Skills directly from GitHub
-repositories, install them, register them, and make them immediately
-usable in OpenClawd tool calls.
+GitHub is a **first-class system resource** with three roles:
+
+1. **Addon source** — install MCP tools and Skills from GitHub repositories
+   (original responsibility, fully preserved via ``GitHubInstaller``).
+2. **Knowledge source** — ingest README/docs/manifests from GitHub repos into
+   the unified Knowledge Core via ``RAGMemory.ingest_knowledge()``.
+3. **Engineering context source** — extract structured repo context for
+   planning, coding, and debugging flows via ``GitHubRepoIngester``.
 
 Token is read from the ``GITHUB_TOKEN`` environment variable (or Dashboard
 config); it is *never* accepted from chat input.
@@ -22,6 +27,10 @@ Key features
 * Register Skills into ``SkillLoader``.
 * Uninstall and clean up.
 * Dry-run mode.
+* **Ingest repo content** (README/docs/manifests) into the unified Knowledge
+  Core via ``GitHubRepoIngester.ingest_repo()``.
+* **Extract engineering context** from GitHub repos via
+  ``GitHubRepoIngester.get_repo_context()``.
 
 Environment Variables
 ---------------------
@@ -37,7 +46,7 @@ Environment Variables
 
 Constraints
 -----------
-* C1  — module-level singleton ``github_installer``.
+* C1  — module-level singletons ``github_installer`` and ``github_ingester``.
 * C7  — all public methods return ``{"success": bool, ...}``.
 * C11 — uses stdlib ``logging``.
 """
@@ -69,6 +78,12 @@ _DEFAULT_INSTALL_DIR = _PROJECT_ROOT / "data" / "github_addons"
 _MANIFEST_FILENAME = "manifest.json"
 _MCP_TOOL_MANIFEST = "mcp_tool.json"
 _SKILL_MANIFEST = "skill.json"
+
+# Ingestion size limits — keep chunks small enough for the knowledge store
+# while preserving meaningful context.  These are intentionally conservative.
+_MAX_INGEST_FILE_SIZE = 8000    # bytes per file written to Knowledge Core
+_MAX_CONTEXT_README_SIZE = 4096  # bytes of README returned by get_repo_context
+_MAX_MANIFEST_SIZE = 2000        # bytes per manifest file in context result
 
 # GitHub archive download URL template (no git required)
 _ARCHIVE_URL_TMPL = (
@@ -865,11 +880,365 @@ class GitHubInstaller:
         return await self.install(url, ref=ref, dry_run=True)
 
 
-# ── Singleton ─────────────────────────────────────────────────────────────────
+# ── Singleton (installer) ──────────────────────────────────────────────────────
 
 github_installer = GitHubInstaller.get_instance()
 
 
 def get_github_installer() -> GitHubInstaller:
-    """Return the module-level singleton."""
+    """Return the module-level installer singleton."""
     return github_installer
+
+
+# ── GitHub API helpers for ingestion ──────────────────────────────────────────
+
+# Candidate files fetched during repo ingestion (in priority order)
+_INGEST_CANDIDATES: List[str] = [
+    "README.md",
+    "README.rst",
+    "README.txt",
+    "README",
+    "docs/index.md",
+    "ARCHITECTURE.md",
+    "CONTRIBUTING.md",
+    "mcp_tool.json",
+    "skill.json",
+    "package.json",
+    "pyproject.toml",
+    "setup.cfg",
+]
+
+# File extensions considered "code" for include_code=True ingestion
+_CODE_EXTENSIONS: List[str] = [".py", ".ts", ".js", ".go", ".rs", ".java"]
+
+
+def _fetch_file_content_api(
+    owner: str, repo: str, path: str, ref: str = "HEAD"
+) -> Optional[str]:
+    """Fetch a single file's decoded text content via the GitHub contents API.
+
+    Returns the UTF-8 decoded file content, or ``None`` if the request
+    fails or the file is not found.
+    """
+    import base64
+
+    url = f"{_GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}"
+    if ref and ref != "HEAD":
+        url += f"?ref={ref}"
+    try:
+        status, body = _http_get(url, _build_gh_headers())
+        if status != 200:
+            return None
+        data = json.loads(body)
+        # GitHub returns base64-encoded content with newlines
+        encoded = data.get("content", "")
+        if not encoded:
+            return None
+        return base64.b64decode(encoded.replace("\n", "")).decode("utf-8", errors="replace")
+    except Exception as exc:
+        logger.debug("_fetch_file_content_api %s/%s/%s failed: %s", owner, repo, path, exc)
+        return None
+
+
+def _fetch_repo_metadata_api(owner: str, repo: str) -> Dict[str, Any]:
+    """Fetch repository metadata from the GitHub repos API.
+
+    Returns a dict with ``description``, ``topics``, ``language``,
+    ``default_branch``, ``stargazers_count``, and ``html_url`` keys.
+    Returns an empty dict on failure.
+    """
+    url = f"{_GITHUB_API_BASE}/repos/{owner}/{repo}"
+    try:
+        status, body = _http_get(url, _build_gh_headers())
+        if status != 200:
+            return {}
+        data = json.loads(body)
+        return {
+            "description": data.get("description") or "",
+            "topics": data.get("topics") or [],
+            "language": data.get("language") or "",
+            "default_branch": data.get("default_branch") or "main",
+            "stargazers_count": data.get("stargazers_count", 0),
+            "html_url": data.get("html_url") or f"https://github.com/{owner}/{repo}",
+        }
+    except Exception as exc:
+        logger.debug("_fetch_repo_metadata_api %s/%s failed: %s", owner, repo, exc)
+        return {}
+
+
+# ── Knowledge Resource: GitHubRepoIngester ────────────────────────────────────
+
+class GitHubRepoIngester:
+    """GitHub repository knowledge and engineering context resource.
+
+    This class elevates GitHub from an addon installer path to a first-class
+    system resource with two additional roles:
+
+    * **Knowledge source** — ingest README/docs/manifests from GitHub
+      repositories into the unified Knowledge Core via
+      ``RAGMemory.ingest_knowledge()``.  Source attribution is always
+      ``github://{owner}/{repo}`` so consumers can identify GitHub-origin
+      knowledge.
+
+    * **Engineering context source** — retrieve structured repo context
+      (README, description, topics, manifests) for use by planning, coding,
+      and debugging flows.
+
+    Addon installation remains the responsibility of :class:`GitHubInstaller`.
+    This class does **not** duplicate that path.
+
+    Usage::
+
+        from core.github_installer import get_github_ingester
+        result = await ingester.ingest_repo("https://github.com/owner/repo")
+        ctx    = ingester.get_repo_context("https://github.com/owner/repo")
+    """
+
+    _instance: Optional["GitHubRepoIngester"] = None
+
+    def __init__(self) -> None:
+        logger.debug("GitHubRepoIngester initialised")
+
+    @classmethod
+    def get_instance(cls) -> "GitHubRepoIngester":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    # ── Public API ─────────────────────────────────────────────────────────
+
+    async def ingest_repo(
+        self,
+        url: str,
+        ref: Optional[str] = None,
+        include_code: bool = False,
+    ) -> Dict[str, Any]:
+        """Ingest a GitHub repository into the unified Knowledge Core.
+
+        Fetches README, key docs, and manifest files from the repository
+        and writes each piece of content into the unified Knowledge Core
+        via ``RAGMemory.ingest_knowledge()``.  Source attribution is set
+        to ``github://{owner}/{repo}`` on every ingested chunk so that
+        downstream consumers can identify GitHub-origin knowledge.
+
+        Does **not** install the repository as an addon; that path belongs
+        to :class:`GitHubInstaller`.
+
+        Args:
+            url:          GitHub HTTPS repository URL.
+            ref:          Branch, tag, or commit SHA (optional).
+            include_code: If ``True``, also ingest ``*.py``/``*.ts`` etc.
+                          source files found in the repo root.  Default is
+                          ``False`` because code files can be very large.
+
+        Returns:
+            ``{"success": bool, "owner": str, "repo": str, "ref": str,
+               "ingested_count": int, "entry_ids": [...], "source": str}``
+        """
+        # 1. Validate URL
+        validation = validate_repo_url(url)
+        if not validation["valid"]:
+            return {"success": False, "error": validation["error"]}
+
+        owner = validation["owner"]
+        repo = validation["repo"]
+        effective_ref = ref or validation["ref"]
+        source_label = f"github://{owner}/{repo}"
+
+        # 2. Fetch repo metadata for enriched context
+        meta = _fetch_repo_metadata_api(owner, repo)
+
+        entry_ids: List[str] = []
+        ingested_files: List[str] = []
+
+        # 3. Build the list of files to fetch
+        candidates = list(_INGEST_CANDIDATES)
+        if include_code:
+            # Add code files from root listing (best-effort via API)
+            try:
+                root_url = f"{_GITHUB_API_BASE}/repos/{owner}/{repo}/contents/"
+                status, body = _http_get(root_url, _build_gh_headers())
+                if status == 200:
+                    items = json.loads(body)
+                    for item in items:
+                        if item.get("type") == "file":
+                            name = item.get("name", "")
+                            if any(name.endswith(ext) for ext in _CODE_EXTENSIONS):
+                                if name not in candidates:
+                                    candidates.append(name)
+            except Exception as exc:
+                logger.debug("ingest_repo root listing failed: %s", exc)
+
+        # 4. Fetch and ingest each candidate file
+        try:
+            from core.rag_memory import RAGMemory
+            rag = RAGMemory()
+        except Exception as exc:
+            logger.warning("ingest_repo: RAGMemory unavailable: %s", exc)
+            rag = None
+
+        for path in candidates:
+            content = _fetch_file_content_api(owner, repo, path, effective_ref)
+            if not content:
+                continue
+            # Truncate very large files to avoid overwhelming the knowledge store
+            if len(content) > _MAX_INGEST_FILE_SIZE:
+                content = content[:_MAX_INGEST_FILE_SIZE] + "\n...[truncated]"
+
+            tags = ["github", f"github_repo:{owner}/{repo}", f"file:{path}"]
+            if meta.get("topics"):
+                tags += [f"topic:{t}" for t in meta["topics"][:5]]
+
+            chunk_text = (
+                f"# GitHub Repository: {owner}/{repo}\n"
+                f"File: {path}\n"
+                f"Source: {source_label}\n\n"
+                f"{content}"
+            )
+            metadata = {
+                "owner": owner,
+                "repo": repo,
+                "ref": effective_ref,
+                "file": path,
+                "html_url": f"https://github.com/{owner}/{repo}/blob/{effective_ref}/{path}",
+                "description": meta.get("description", ""),
+                "language": meta.get("language", ""),
+            }
+
+            if rag is not None:
+                try:
+                    entry_id = rag.ingest_knowledge(
+                        content=chunk_text,
+                        source=source_label,
+                        source_type="github_repo",
+                        tags=tags,
+                        metadata=metadata,
+                    )
+                    entry_ids.append(entry_id)
+                    ingested_files.append(path)
+                except Exception as exc:
+                    logger.warning(
+                        "ingest_repo: failed to ingest %s/%s/%s: %s",
+                        owner, repo, path, exc,
+                    )
+            else:
+                ingested_files.append(path)
+
+        logger.info(
+            "ingest_repo done | %s/%s ref=%s files=%d",
+            owner, repo, effective_ref, len(ingested_files),
+        )
+        return {
+            "success": True,
+            "owner": owner,
+            "repo": repo,
+            "ref": effective_ref,
+            "source": source_label,
+            "source_type": "github_repo",
+            "ingested_count": len(ingested_files),
+            "ingested_files": ingested_files,
+            "entry_ids": entry_ids,
+            "description": meta.get("description", ""),
+            "language": meta.get("language", ""),
+            "topics": meta.get("topics", []),
+        }
+
+    def get_repo_context(
+        self,
+        url: str,
+        ref: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Extract structured engineering context from a GitHub repository.
+
+        Fetches the README and key manifest files via the GitHub API and
+        returns them as a structured context dict that can be injected into
+        planning, coding, or debugging flows.  No content is persisted to
+        the Knowledge Core; for persistent ingestion use :meth:`ingest_repo`.
+
+        Args:
+            url: GitHub HTTPS repository URL.
+            ref: Branch, tag, or commit SHA (optional).
+
+        Returns:
+            ``{"success": bool, "owner": str, "repo": str, "ref": str,
+               "source": str, "source_type": str, "context": {...}}``
+
+            The ``context`` dict contains:
+            * ``readme``       — README text (first 4 KB) or empty string.
+            * ``description``  — repository description from GitHub.
+            * ``language``     — primary language.
+            * ``topics``       — list of repository topic strings.
+            * ``default_branch`` — default branch name.
+            * ``manifests``    — dict of {filename: parsed_json_or_text} for
+                                 ``mcp_tool.json``, ``skill.json``,
+                                 ``package.json``, ``pyproject.toml``.
+            * ``html_url``     — canonical GitHub URL for the repo.
+        """
+        # 1. Validate URL
+        validation = validate_repo_url(url)
+        if not validation["valid"]:
+            return {"success": False, "error": validation["error"]}
+
+        owner = validation["owner"]
+        repo = validation["repo"]
+        effective_ref = ref or validation["ref"]
+        source_label = f"github://{owner}/{repo}"
+
+        # 2. Repo metadata
+        meta = _fetch_repo_metadata_api(owner, repo)
+
+        # 3. README
+        readme_content = ""
+        for readme_path in ("README.md", "README.rst", "README.txt", "README"):
+            text = _fetch_file_content_api(owner, repo, readme_path, effective_ref)
+            if text:
+                readme_content = text[:_MAX_CONTEXT_README_SIZE]
+                break
+
+        # 4. Manifests
+        manifests: Dict[str, Any] = {}
+        for mfile in ("mcp_tool.json", "skill.json", "package.json"):
+            text = _fetch_file_content_api(owner, repo, mfile, effective_ref)
+            if text:
+                try:
+                    manifests[mfile] = json.loads(text)
+                except Exception:
+                    manifests[mfile] = text
+        for mfile in ("pyproject.toml", "setup.cfg"):
+            text = _fetch_file_content_api(owner, repo, mfile, effective_ref)
+            if text:
+                manifests[mfile] = text[:_MAX_MANIFEST_SIZE]
+
+        context: Dict[str, Any] = {
+            "readme": readme_content,
+            "description": meta.get("description", ""),
+            "language": meta.get("language", ""),
+            "topics": meta.get("topics", []),
+            "default_branch": meta.get("default_branch", "main"),
+            "manifests": manifests,
+            "html_url": meta.get("html_url", f"https://github.com/{owner}/{repo}"),
+        }
+
+        logger.info(
+            "get_repo_context done | %s/%s ref=%s manifests=%d readme_len=%d",
+            owner, repo, effective_ref, len(manifests), len(readme_content),
+        )
+        return {
+            "success": True,
+            "owner": owner,
+            "repo": repo,
+            "ref": effective_ref,
+            "source": source_label,
+            "source_type": "github_repo",
+            "context": context,
+        }
+
+
+# ── Singleton (ingester) ───────────────────────────────────────────────────────
+
+github_ingester = GitHubRepoIngester.get_instance()
+
+
+def get_github_ingester() -> GitHubRepoIngester:
+    """Return the module-level ingester singleton."""
+    return github_ingester
