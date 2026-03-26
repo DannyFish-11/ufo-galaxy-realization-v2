@@ -1,11 +1,33 @@
 """
-Galaxy - 复杂任务分解和跨设备协同模块
+galaxy_gateway/task_decomposer.py — Complex Task Decomposition (Legacy Compatibility Module — PR-S7)
 
-功能：
-1. 复杂任务分解 - 将复杂任务分解为多个子任务
-2. 跨设备协同 - 管理跨设备的数据传递和协同
+.. deprecated:: PR-S7
+    This module (``galaxy_gateway.task_decomposer``) is a **legacy compatibility
+    surface** retained for backward compatibility only.
+
+    The canonical server-side task planning pipeline is::
+
+        OpenClawd → CommandRouter → TaskEnvelope
+        → TaskGraph (core.task_graph)
+        → DeviceRouter.route_task
+        → Worker/Device
+
+    * :class:`TaskDecomposer` — legacy rule-based subtask splitter.  Canonical
+      replacement: ``core.task_graph.TaskGraph`` — the authoritative
+      dependency-ordered multi-device execution planner.
+    * :class:`IntelligentTaskPlanner` — legacy LLM-based task planner.  Canonical
+      replacement: ``core.e2e_orchestrator.process_user_input()`` — the canonical
+      end-to-end orchestration entry point that integrates with TaskGraph.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entries
+    (``galaxy_gateway.task_decomposer.TaskDecomposer`` and
+    ``galaxy_gateway.task_decomposer.IntelligentTaskPlanner``).
+
+功能（legacy compat — retained for backward compatibility only）：
+1. 复杂任务分解 - 将复杂任务分解为多个子任务（use core.task_graph for new work）
+2. 跨设备协同 - 管理跨设备的数据传递和协同（use DeviceRouter.route_task for new work）
 3. 数据流管理 - 管理任务间的数据流转
-4. 智能规划 - 根据设备能力智能规划任务
+4. 智能规划 - 根据设备能力智能规划任务（use core.e2e_orchestrator for new work）
 
 作者：Manus AI
 日期：2026-01-22
@@ -42,16 +64,40 @@ class DataFlow:
 # ============================================================================
 
 class TaskDecomposer:
-    """任务分解器 - 将复杂任务分解为多个子任务"""
+    """任务分解器 — Legacy compat rule-based task splitter.
+
+    .. deprecated:: PR-S7
+        ``TaskDecomposer`` is a **legacy compatibility task decomposer**.  It
+        splits complex tasks into sub-tasks using hard-coded rule patterns,
+        independently of the canonical :mod:`core.task_graph` (TaskGraph).
+
+        Canonical replacement:
+            ``core.task_graph.TaskGraph`` — the authoritative dependency-ordered
+            multi-device execution planner, which integrates with the canonical
+            OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter pipeline.
+
+        ``TaskDecomposer`` is retained only so gateway-internal callers that
+        pre-date the TaskGraph migration do not immediately break.  New task
+        decomposition must use ``core.task_graph.TaskGraph`` directly.
+    """
     
     def __init__(self, device_registry):
         """
         初始化任务分解器
-        
+
         Args:
             device_registry: 设备注册表
         """
         self.device_registry = device_registry
+        # PR-S7: emit legacy guardrail — TaskDecomposer is the legacy compat
+        # task splitter.  Canonical task decomposition uses core.task_graph.TaskGraph.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.task_decomposer.TaskDecomposer",
+            )
+        except Exception:
+            pass
     
     def decompose_file_transfer(
         self,
@@ -307,12 +353,28 @@ class TaskDecomposer:
 # ============================================================================
 
 class IntelligentTaskPlanner:
-    """智能任务规划器 - 使用 LLM 进行智能规划"""
+    """智能任务规划器 — Legacy compat LLM-based task planner.
+
+    .. deprecated:: PR-S7
+        ``IntelligentTaskPlanner`` is a **legacy compatibility LLM-based task
+        planner**.  It uses an LLM client to generate sub-tasks independently
+        of the canonical OpenClawd → CommandRouter → TaskGraph pipeline.
+
+        Canonical replacement:
+            ``core.e2e_orchestrator.process_user_input()`` — the canonical
+            end-to-end orchestration entry point that routes natural-language
+            user input through OpenClawd and the TaskGraph-backed pipeline.
+
+        ``IntelligentTaskPlanner`` is retained only so gateway-internal callers
+        that pre-date the canonical e2e orchestrator do not immediately break.
+        New task planning must use ``core.e2e_orchestrator.process_user_input()``
+        or the OpenClawd → CommandRouter → TaskGraph pathway directly.
+    """
     
     def __init__(self, device_registry, llm_client):
         """
         初始化智能规划器
-        
+
         Args:
             device_registry: 设备注册表
             llm_client: LLM 客户端
@@ -320,6 +382,15 @@ class IntelligentTaskPlanner:
         self.device_registry = device_registry
         self.llm_client = llm_client
         self.decomposer = TaskDecomposer(device_registry)
+        # PR-S7: emit legacy guardrail — IntelligentTaskPlanner is the legacy
+        # compat LLM planner.  Canonical planning uses core.e2e_orchestrator.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.task_decomposer.IntelligentTaskPlanner",
+            )
+        except Exception:
+            pass
     
     async def plan_complex_task(
         self,

@@ -1,11 +1,31 @@
 """
 galaxy_gateway/capability_registry.py
 ======================================
-Gateway Capability Registry — exec_mode-aware routing store.
+Gateway Capability Registry — exec_mode-aware routing store
+(Legacy Compatibility Module — PR-S7).
+
+.. deprecated:: PR-S7
+    This module (``galaxy_gateway.capability_registry``) is a **legacy
+    compatibility surface** retained for backward compatibility only.
+
+    The canonical capability registration and lookup path is::
+
+        core.capability_bus.CapabilityBus  (get_capability_bus())
+
+    :class:`GatewayCapabilityRegistry` is an in-gateway per-device capability
+    schema store that was introduced before ``core.capability_bus`` existed.
+    It is retained so existing DeviceRouter / capability_report pathways that
+    read from it do not immediately break.  New capability registration must
+    use :func:`core.capability_bus.get_capability_bus` and its
+    ``register_device_capability()`` / ``register_mcp_tool()`` methods.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entry
+    (``galaxy_gateway.capability_registry.GatewayCapabilityRegistry``).
 
 每台设备通过 ``capability_report`` 消息上报其动作 schema；本模块将这些
 schema 持久化在内存中，供路由层（DeviceRouter）在选择目标设备时参考
 ``exec_mode``（local / remote / both）。
+Legacy compat — for new capability registration use core.capability_bus.CapabilityBus.
 
 数据结构
 --------
@@ -30,7 +50,7 @@ ExecMode 语义
 公共 API
 --------
 GatewayCapabilityRegistry.get_instance() → GatewayCapabilityRegistry
-    返回全局单例。
+    返回全局单例。（Legacy compat — use core.capability_bus.get_capability_bus()）
 
 registry.upsert(device_id, action, schema_dict)
     插入或更新设备动作的能力 schema。
@@ -122,7 +142,26 @@ class CapabilitySchema:
 
 
 class GatewayCapabilityRegistry:
-    """线程安全的 Gateway 能力注册表（内存存储）。"""
+    """线程安全的 Gateway 能力注册表（内存存储） — Legacy compat store.
+
+    .. deprecated:: PR-S7
+        ``GatewayCapabilityRegistry`` is a **legacy compatibility capability
+        store**.  It maintains an in-gateway per-device action-schema map that
+        was introduced before the canonical :mod:`core.capability_bus`
+        (CapabilityBus) existed.
+
+        Canonical replacement:
+            :func:`core.capability_bus.get_capability_bus` — the authoritative
+            capability registration and lookup authority.  Use
+            ``register_device_capability()`` for device capabilities and
+            ``register_mcp_tool()`` / ``register_skill()`` for MCP / Skill
+            capabilities.
+
+        ``GatewayCapabilityRegistry`` is retained so existing DeviceRouter and
+        capability-report pathways that currently read from it do not
+        immediately break.  New capability registration and lookup must use
+        ``core.capability_bus.get_capability_bus()`` exclusively.
+    """
 
     _instance: Optional["GatewayCapabilityRegistry"] = None
     _instance_lock: threading.Lock = threading.Lock()
@@ -136,6 +175,16 @@ class GatewayCapabilityRegistry:
         self._registration_count: int = 0
         self._hit_count: int = 0
         self._miss_count: int = 0
+        # PR-S7: emit legacy guardrail — GatewayCapabilityRegistry is the legacy
+        # compat in-gateway capability store.  Canonical capability registration
+        # uses core.capability_bus.CapabilityBus.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.capability_registry.GatewayCapabilityRegistry",
+            )
+        except Exception:
+            pass
 
     # ── 单例 ──────────────────────────────────────────────────────────────────
 

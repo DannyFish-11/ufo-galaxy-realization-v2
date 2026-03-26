@@ -1120,6 +1120,100 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-S7: Finalize server-side compatibility demotion — demote last remaining
+# legacy control surfaces so they are operationally passive and clearly
+# delegating.
+#
+# After PR-S6 (TaskScheduler / TaskRouter / MessageHandler demotion) the
+# following server-side surfaces still carry independent runtime authority
+# that can bypass or obscure the canonical pipeline:
+#
+#   galaxy_gateway.task_decomposer.TaskDecomposer
+#       Rule-based complex-task splitter that creates sub-tasks independently
+#       of the canonical TaskGraph (core.task_graph).  Retained as a legacy
+#       compatibility utility; new task decomposition must use
+#       core.task_graph.TaskGraph directly.
+#
+#   galaxy_gateway.task_decomposer.IntelligentTaskPlanner
+#       LLM-based task planner that invokes TaskDecomposer independently of
+#       the canonical OpenClawd → CommandRouter → TaskGraph pipeline.
+#       Retained as a compatibility shim; new planning must route through
+#       core.e2e_orchestrator.process_user_input() or the canonical
+#       OpenClawd pipeline.
+#
+#   galaxy_gateway.capability_registry.GatewayCapabilityRegistry
+#       In-gateway per-device action-schema store introduced before
+#       core.capability_bus (CapabilityBus) existed.  Retained so existing
+#       DeviceRouter capability-report pathways do not immediately break;
+#       new capability registration must use core.capability_bus.CapabilityBus.
+# ---------------------------------------------------------------------------
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_decomposer.TaskDecomposer",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "TaskDecomposer is a LEGACY COMPAT TASK SPLITTER (PR-S7).  "
+            "It creates sub-tasks using hard-coded rule patterns independently "
+            "of the canonical TaskGraph (core.task_graph).  "
+            "New task decomposition must use core.task_graph.TaskGraph directly, "
+            "which integrates with the canonical OpenClawd → CommandRouter → "
+            "TaskEnvelope → DeviceRouter pipeline.  "
+            "TaskDecomposer is retained only so gateway-internal code that "
+            "pre-dates the TaskGraph migration does not immediately break."
+        ),
+        pr_guardrail_added="PR-S7",
+        notes=(
+            "TaskDecomposer — LEGACY COMPAT rule-based task splitter (PR-S7).  "
+            "Canonical task decomposition authority is core.task_graph.TaskGraph.  "
+            "Not a primary entrypoint; delegate to core.task_graph for new work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_decomposer.IntelligentTaskPlanner",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "IntelligentTaskPlanner is a LEGACY COMPAT LLM PLANNER (PR-S7).  "
+            "It uses an LLM client to generate sub-tasks independently of the "
+            "canonical OpenClawd → CommandRouter → TaskGraph pipeline.  "
+            "Canonical task planning is: "
+            "core.e2e_orchestrator.process_user_input() or directly through "
+            "OpenClawd → CommandRouter → TaskEnvelope → TaskGraph → DeviceRouter.  "
+            "IntelligentTaskPlanner is retained only for backward compatibility; "
+            "all new planning must route through core.e2e_orchestrator or the "
+            "canonical OpenClawd pipeline."
+        ),
+        pr_guardrail_added="PR-S7",
+        notes=(
+            "IntelligentTaskPlanner — LEGACY COMPAT LLM task planner (PR-S7).  "
+            "Canonical planning authority is core.e2e_orchestrator.process_user_input().  "
+            "Not a primary entrypoint; must not be used for new work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.capability_registry.GatewayCapabilityRegistry",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "GatewayCapabilityRegistry is a LEGACY COMPAT CAPABILITY STORE (PR-S7).  "
+            "It is an in-gateway per-device action-schema map introduced before "
+            "core.capability_bus (CapabilityBus) existed.  "
+            "Canonical capability registration and lookup is: "
+            "core.capability_bus.get_capability_bus() — use register_device_capability() "
+            "for device capabilities and register_mcp_tool() / register_skill() for "
+            "MCP / Skill capabilities.  "
+            "GatewayCapabilityRegistry is retained so existing DeviceRouter and "
+            "capability-report pathways do not immediately break; new capability "
+            "registration and lookup must use core.capability_bus.CapabilityBus."
+        ),
+        pr_guardrail_added="PR-S7",
+        notes=(
+            "GatewayCapabilityRegistry — LEGACY COMPAT in-gateway capability store (PR-S7).  "
+            "Canonical capability authority is core.capability_bus.CapabilityBus.  "
+            "Delegating surface only; must not be used for new capability work."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
