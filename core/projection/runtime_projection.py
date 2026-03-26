@@ -214,6 +214,27 @@ class RuntimeProjection(BaseModel):
             "Read-only surface; does not affect base projection behaviour."
         ),
     )
+    oneapi_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "OneAPI system integration position summary (PR-3). "
+            "Populated from core.oneapi_system_position when OneAPI is part of the "
+            "active route or when a canonical route plan is available. "
+            "Contains: system_layer, provider_category_value, registered_dimensions, "
+            "routing_authority_ref. "
+            "None when OneAPI is not involved in the current routing context."
+        ),
+    )
+    provider_status_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Provider health/availability summary (PR-3). "
+            "Contains a compact snapshot of provider availability derived from the "
+            "canonical model supply state: total, available, degraded, unavailable "
+            "counts plus a list of per-provider health records. "
+            "None when no canonical model supply state was available."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when this projection was assembled.",
@@ -252,6 +273,8 @@ class RuntimeProjection(BaseModel):
             "governance": self.governance,
             "runtime_governance_snapshot": self.runtime_governance_snapshot,
             "policy_alignment": self.policy_alignment,
+            "oneapi_summary": self.oneapi_summary,
+            "provider_status_summary": self.provider_status_summary,
             "timestamp": self.timestamp,
         }
 

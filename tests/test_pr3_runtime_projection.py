@@ -368,6 +368,8 @@ class TestSerialisationStability:
             "governance",
             "runtime_governance_snapshot",
             "policy_alignment",
+            "oneapi_summary",
+            "provider_status_summary",
             "timestamp",
         }
         assert expected_keys == set(d.keys())

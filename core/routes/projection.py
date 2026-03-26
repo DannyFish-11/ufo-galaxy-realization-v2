@@ -1511,6 +1511,66 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 }
             )
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/canonical-routing  (PR-3)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/canonical-routing")
+    async def get_canonical_routing_projection() -> JSONResponse:
+        """Return the canonical routing projection with OneAPI and provider status.
+
+        This endpoint is **read-only** and **additive** (PR-3).  It does not
+        modify any existing projection, router, or model supply module.
+
+        The response contains the standard
+        :class:`~core.projection.RuntimeProjection` fields plus enriched
+        canonical routing data, including:
+
+        - ``routing_authority`` — the canonical routing authority sentinel
+        - ``route_reason`` — human-readable routing rationale
+        - ``primary_model_id`` / ``support_model_ids`` — canonical model IDs
+        - ``active_weights`` — full weight breakdown
+        - ``oneapi_summary`` — OneAPI system integration position (when applicable)
+        - ``provider_status_summary`` — compact provider health summary (when available)
+
+        Source priority:
+
+        1. ``TopologyRoutePlan`` (canonical) — ``routing_authority`` is set to
+           :data:`~core.model_topology.topology_router.CANONICAL_ROUTING_AUTHORITY`.
+        2. No topology available — all routing fields are ``None``/empty with
+           ``routing_authority = "none"``.
+
+        This endpoint is the canonical integration point for desktop status
+        board consumers that need unified routing + provider status without
+        coupling to the dashboard UI.
+
+        Response schema
+        ---------------
+        See :class:`~core.projection.RuntimeProjection` for full field reference.
+        Additional top-level keys:
+
+        - ``oneapi_summary``          — OneAPI integration position dict or null
+        - ``provider_status_summary`` — provider health summary dict or null
+        - ``canonical_routing_hints`` — quick-access routing hints dict
+
+        Example ``canonical_routing_hints``::
+
+            {
+              "has_route": true,
+              "routing_authority": "core.model_topology.topology_router.TopologyRouter",
+              "is_canonical": true,
+              "is_legacy": false,
+              "primary_model_id": "openai/gpt-4o",
+              "support_count": 2,
+              "has_oneapi": false,
+              "provider_available_count": 3,
+              "provider_degraded_count": 0,
+              "route_reason": "..."
+            }
+        """
+        payload = _assemble_canonical_routing_payload()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -1642,6 +1702,155 @@ def _minimal_fallback_payload() -> Dict[str, Any]:
         "execution_stage": None,
         "current_task_summary": None,
         "timestamp": time.time(),
+    }
+
+
+def _assemble_canonical_routing_payload() -> Dict[str, Any]:
+    """Assemble a canonical routing projection payload with OneAPI and provider status.
+
+    Builds the standard RuntimeProjection and enriches it with:
+    - ``oneapi_summary`` from core.oneapi_system_position
+    - ``provider_status_summary`` from the canonical model supply state
+    - ``canonical_routing_hints`` for quick-access downstream consumers
+
+    Always returns a valid dict.  All enrichment steps are optional and
+    degrade gracefully when the relevant sub-systems are unavailable.
+    """
+    try:
+        from core.projection import build_runtime_projection, ExecutionSummary
+        from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
+    except Exception as exc:
+        logger.warning(
+            "_assemble_canonical_routing_payload: imports unavailable: %s", exc
+        )
+        base = _minimal_fallback_payload()
+        base["oneapi_summary"] = None
+        base["provider_status_summary"] = None
+        base["canonical_routing_hints"] = _build_routing_hints(base, None, None)
+        return base
+
+    continuum_state = _get_continuum_state()
+    route_plan = _get_route_plan(continuum_state)
+    execution_summary = _get_execution_summary()
+
+    # --- Derive oneapi_summary -------------------------------------------
+    oneapi_summary: Optional[Any] = None
+    try:
+        from core.projection.projection_helpers import (
+            extract_oneapi_source_from_route_plan,
+            build_oneapi_projection_summary,
+        )
+        if route_plan is not None:
+            route_plan_dict = route_plan.to_dict()
+            oneapi_summary = extract_oneapi_source_from_route_plan(route_plan_dict)
+        # If route-based extraction did not find OneAPI participation, fall back
+        # to the canonical system-level summary to make the integration position
+        # visible in the projection even when OneAPI is not the active route.
+        if oneapi_summary is None:
+            oneapi_summary = build_oneapi_projection_summary()
+    except Exception as exc:
+        logger.debug(
+            "_assemble_canonical_routing_payload: oneapi_summary derivation skipped: %s",
+            exc,
+        )
+
+    # --- Derive provider_status_summary ----------------------------------
+    provider_status_summary: Optional[Any] = None
+    try:
+        from core.projection.projection_helpers import extract_provider_status_summary
+
+        model_supply: Optional[Any] = None
+        try:
+            from core.model_topology import ProviderInventory
+            inventory = ProviderInventory.from_config()
+            # Build a minimal model_supply dict from the inventory if possible.
+            if hasattr(inventory, "to_dict"):
+                model_supply = inventory.to_dict()
+            elif hasattr(inventory, "providers"):
+                model_supply = {
+                    "providers": [
+                        {
+                            "provider_id": p.provider_id,
+                            "health_status": getattr(p, "health_status", "healthy"),
+                        }
+                        for p in (inventory.providers or [])
+                    ]
+                }
+        except Exception:
+            pass
+
+        if model_supply:
+            provider_status_summary = extract_provider_status_summary(model_supply)
+    except Exception as exc:
+        logger.debug(
+            "_assemble_canonical_routing_payload: provider_status_summary skipped: %s",
+            exc,
+        )
+
+    # --- Build projection -------------------------------------------------
+    try:
+        if continuum_state is None:
+            base = _minimal_fallback_payload()
+        else:
+            projection = build_runtime_projection(
+                continuum_state=continuum_state,
+                route_plan=route_plan,
+                execution_summary=execution_summary,
+                oneapi_summary=oneapi_summary,
+                provider_status_summary=provider_status_summary,
+                timestamp=time.time(),
+            )
+            base = projection.to_dict()
+    except Exception as exc:
+        logger.warning(
+            "_assemble_canonical_routing_payload: projection assembly failed: %s", exc
+        )
+        base = _minimal_fallback_payload()
+        base["oneapi_summary"] = oneapi_summary
+        base["provider_status_summary"] = provider_status_summary
+
+    # --- Attach canonical routing hints ----------------------------------
+    base["canonical_routing_hints"] = _build_routing_hints(
+        base, oneapi_summary, provider_status_summary
+    )
+    return base
+
+
+def _build_routing_hints(
+    projection_dict: Dict[str, Any],
+    oneapi_summary: Optional[Any],
+    provider_status_summary: Optional[Any],
+) -> Dict[str, Any]:
+    """Build a compact canonical routing hints dict for quick consumer access."""
+    from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
+
+    routing_authority = projection_dict.get("routing_authority", "none")
+    primary_model_id = projection_dict.get("primary_model_id")
+    support_model_ids = projection_dict.get("support_model_ids") or []
+    route_reason = projection_dict.get("route_reason")
+
+    has_route = bool(primary_model_id)
+    is_canonical = routing_authority == CANONICAL_ROUTING_AUTHORITY
+    is_legacy = routing_authority not in (CANONICAL_ROUTING_AUTHORITY, "none")
+    has_oneapi = oneapi_summary is not None
+
+    provider_available_count = 0
+    provider_degraded_count = 0
+    if isinstance(provider_status_summary, dict):
+        provider_available_count = provider_status_summary.get("available", 0)
+        provider_degraded_count = provider_status_summary.get("degraded", 0)
+
+    return {
+        "has_route": has_route,
+        "routing_authority": routing_authority,
+        "is_canonical": is_canonical,
+        "is_legacy": is_legacy,
+        "primary_model_id": primary_model_id,
+        "support_count": len(support_model_ids),
+        "has_oneapi": has_oneapi,
+        "provider_available_count": provider_available_count,
+        "provider_degraded_count": provider_degraded_count,
+        "route_reason": route_reason,
     }
 
 
