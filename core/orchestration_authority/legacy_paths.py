@@ -1120,6 +1120,74 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-S7: Make final server cleanup mechanical — canonical runtime declaration.
+#
+# After PR-S6 the canonical pipeline and all primary legacy entry points are
+# explicitly guardrailed.  PR-S7 adds the final residual entries to close the
+# remaining semantic gaps:
+#
+#   core.device_orchestrator.DeviceOrchestrator
+#       High-level device operation helper that delegates to DeviceRegistry /
+#       NodeRegistry / ConnectionManager.  Has no independent routing or
+#       dispatch authority — it must NOT be used as a substitute for
+#       DeviceRouter.route_task for task routing decisions.  Marked here so
+#       callers cannot mistake it for a canonical dispatch surface.
+#
+#   fusion.unified_orchestrator
+#       The module's own deprecation notice previously recommended migrating
+#       to galaxy_gateway.orchestrator.GalaxyOrchestrator, which has itself
+#       been demoted (PR-7).  PR-S7 corrects the recommendation to point to
+#       the actual canonical pipeline entry (core.e2e_orchestrator).
+# ---------------------------------------------------------------------------
+_register(
+    LegacyPathEntry(
+        module_path="core.device_orchestrator.DeviceOrchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "DeviceOrchestrator is a CANONICAL HELPER UTILITY (PR-S7), not a "
+            "dispatch authority.  It provides high-level device operations "
+            "(discover, send_command, file transfer) by delegating to "
+            "DeviceRegistry / NodeRegistry / ConnectionManager.  "
+            "It does NOT route tasks and must NOT be used in place of "
+            "DeviceRouter.route_task for task routing decisions.  "
+            "For task dispatch, use the canonical pipeline:  "
+            "core.e2e_orchestrator.process_user_input()  →  "
+            "DesktopPresenceRuntime → OpenClawd → CommandRouter → "
+            "TaskEnvelope → TaskGraph → DeviceRouter.route_task."
+        ),
+        pr_guardrail_added="PR-S7",
+        notes=(
+            "DeviceOrchestrator — CANONICAL HELPER UTILITY (PR-S7).  "
+            "Delegates to DeviceRegistry/NodeRegistry/ConnectionManager.  "
+            "Not a dispatch authority; use DeviceRouter for task routing."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="fusion.unified_orchestrator",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "fusion.unified_orchestrator is a DEPRECATED LEGACY ORCHESTRATION "
+            "SURFACE (PR-S7 updated).  "
+            "The module's inline deprecation notice formerly recommended "
+            "galaxy_gateway.orchestrator.GalaxyOrchestrator as the replacement; "
+            "however GalaxyOrchestrator has itself been demoted in PR-7 and is "
+            "no longer a canonical entrypoint.  "
+            "The canonical replacement is the full pipeline:  "
+            "core.e2e_orchestrator.process_user_input()  (programmatic entry)  "
+            "or  core.routes.chat  (HTTP ingress), which delegate through  "
+            "DesktopPresenceRuntime → OpenClawd → AgentKernel → CommandRouter "
+            "→ TaskGraph → DeviceRouter.route_task."
+        ),
+        pr_guardrail_added="PR-S7",
+        notes=(
+            "fusion.unified_orchestrator — DEPRECATED LEGACY (PR-S7).  "
+            "Canonical entry is core.e2e_orchestrator.process_user_input().  "
+            "Former recommendation (galaxy_gateway.orchestrator) is itself demoted."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL

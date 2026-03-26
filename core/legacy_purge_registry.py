@@ -340,6 +340,60 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "galaxy_gateway/websocket_handler.py  (chain A: websocket_handler → DeviceRouter)"
         ),
     ),
+
+    # ── PR-S7: Make final server cleanup mechanical ────────────────────────
+
+    PurgeDecision(
+        asset_path="core/device_orchestrator.py::DeviceOrchestrator",
+        status=PurgeStatus.LEGACY_MARKER_ADDED,
+        pr="PR-S7",
+        rationale=(
+            "DeviceOrchestrator is a high-level device operation helper "
+            "(discover, send_command, file transfer) that delegates to "
+            "DeviceRegistry / NodeRegistry / ConnectionManager.  "
+            "PR-S7 adds a LEGACY_PATH_REGISTRY entry explicitly classifying it "
+            "as a CANONICAL HELPER UTILITY with no independent dispatch authority, "
+            "preventing it from being mistaken for a canonical dispatch surface.  "
+            "Callers needing task dispatch must use DeviceRouter.route_task or "
+            "core.e2e_orchestrator.process_user_input()."
+        ),
+        canonical_replacement=(
+            "galaxy_gateway/device_router.py  (DeviceRouter.route_task)  "
+            "for task dispatch;  core/device_registry.py  for device discovery."
+        ),
+    ),
+    PurgeDecision(
+        asset_path="fusion/unified_orchestrator.py",
+        status=PurgeStatus.LEGACY_MARKER_ADDED,
+        pr="PR-S7",
+        rationale=(
+            "fusion/unified_orchestrator.py has an inline deprecation warning "
+            "but formerly directed callers to galaxy_gateway.orchestrator."
+            "GalaxyOrchestrator — which has itself been demoted in PR-7.  "
+            "PR-S7 adds a LEGACY_PATH_REGISTRY entry with an updated "
+            "recommendation pointing to the actual canonical pipeline entry: "
+            "core.e2e_orchestrator.process_user_input().  "
+            "The module is retained only for backward compatibility."
+        ),
+        canonical_replacement=(
+            "core/e2e_orchestrator.py  (process_user_input)  or  "
+            "core/routes/chat.py  (REST /api/v1/chat)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="core/canonical_runtime_declaration.py",
+        status=PurgeStatus.LEGACY_MARKER_ADDED,
+        pr="PR-S7",
+        rationale=(
+            "PR-S7 adds core/canonical_runtime_declaration.py as the "
+            "machine-readable, authoritative declaration of the canonical server "
+            "runtime pipeline.  This makes follow-up cleanup mechanical: any "
+            "surface not declared canonical in this module can be safely flagged "
+            "for removal or reduction.  The module itself is a new canonical "
+            "metadata surface (read-only, no runtime behaviour change)."
+        ),
+        canonical_replacement=None,
+    ),
 )
 
 # ---------------------------------------------------------------------------

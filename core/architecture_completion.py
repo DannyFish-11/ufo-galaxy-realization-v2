@@ -860,6 +860,81 @@ def build_architecture_completion_scorecard(
 
 
 # ---------------------------------------------------------------------------
+# PR-S7 overrides
+# ---------------------------------------------------------------------------
+
+
+def _build_prs7_overrides() -> Dict[CompletionDimension, DimensionScorecard]:
+    """Return dimension scorecard overrides reflecting the PR-S7 state.
+
+    PR-S7 adds ``core/canonical_runtime_declaration.py``, which provides a
+    machine-readable declaration of the canonical server runtime pipeline, its
+    entry surfaces, and all legacy zones.  This resolves the remaining
+    ambiguity in CANONICAL_PATH_COVERAGE (pipeline now explicitly declared)
+    and LEGACY_SURFACE_DEMOTION (DeviceOrchestrator and fusion.unified_orchestrator
+    explicitly classified; fusion deprecation notice corrected).
+    """
+    overrides: Dict[CompletionDimension, DimensionScorecard] = {}
+
+    # 2. Canonical Path Coverage → COMPLETE (was CANONICALIZED)
+    #    The addition of canonical_runtime_declaration.py provides an explicit,
+    #    machine-readable declaration of every pipeline step and entry surface.
+    overrides[CompletionDimension.CANONICAL_PATH_COVERAGE] = build_dimension_scorecard(
+        CompletionDimension.CANONICAL_PATH_COVERAGE,
+        MaturityLevel.COMPLETE,
+        canonical_path_established=True,
+        legacy_ambiguity_remains=False,
+        rationale=(
+            "PR-S7 adds core/canonical_runtime_declaration.py — a machine-readable "
+            "declaration of every canonical pipeline step (DesktopPresenceRuntime → "
+            "OpenClawd → AgentKernel → CommandRouter → TaskGraph → DeviceRouter → "
+            "ResultEnvelope) and every entry surface (canonical, helper, legacy).  "
+            "Any surface not declared canonical in this module can be mechanically "
+            "flagged for removal.  Combined with the existing guardrail registry in "
+            "orchestration_authority/legacy_paths.py, canonical path coverage is "
+            "explicitly declared end-to-end."
+        ),
+        evidence_modules=[
+            "core.canonical_runtime_declaration",
+            "core.constellation_runtime",
+            "core.e2e_orchestrator",
+            "core.orchestration_authority.legacy_paths",
+        ],
+        pr_last_updated="PR-S7",
+    )
+
+    # 3. Legacy Surface Demotion → stays CANONICALIZED; update evidence + notes
+    overrides[CompletionDimension.LEGACY_SURFACE_DEMOTION] = build_dimension_scorecard(
+        CompletionDimension.LEGACY_SURFACE_DEMOTION,
+        MaturityLevel.CANONICALIZED,
+        canonical_path_established=True,
+        legacy_ambiguity_remains=False,
+        rationale=(
+            "PR-S6 demoted TaskScheduler, TaskRouter (galaxy_gateway.task_router), "
+            "and MessageHandler (legacy chain B) with guardrails and registry entries.  "
+            "PR-S7 closes the remaining gaps: DeviceOrchestrator is explicitly "
+            "classified as a canonical helper (not a dispatch authority); "
+            "fusion.unified_orchestrator's stale deprecation notice (previously "
+            "pointing to the already-demoted GalaxyOrchestrator) is corrected to "
+            "point to core.e2e_orchestrator.  "
+            "All demoted surfaces carry guardrails, registry entries, and "
+            "canonical_replacement pointers."
+        ),
+        evidence_modules=[
+            "core.ui_surface_authority",
+            "core.orchestration_authority.legacy_paths",
+            "core.legacy_purge_registry",
+            "core.canonical_runtime_declaration",
+            "dashboard",
+            "enhancements.clients.windows_client",
+        ],
+        pr_last_updated="PR-S7",
+    )
+
+    return overrides
+
+
+# ---------------------------------------------------------------------------
 # Module-level singleton entry point
 # ---------------------------------------------------------------------------
 
@@ -878,11 +953,14 @@ def get_architecture_completion_scorecard(
     Returns
     -------
     ArchitectureCompletionScorecard
-        The current canonical scorecard reflecting PR-1 through PR-10.
+        The current canonical scorecard reflecting PR-1 through PR-S7.
     """
     global _CACHED_SCORECARD
     if _CACHED_SCORECARD is None or force_rebuild:
-        _CACHED_SCORECARD = build_architecture_completion_scorecard()
+        _CACHED_SCORECARD = build_architecture_completion_scorecard(
+            overrides=_build_prs7_overrides(),
+            generated_by_pr="PR-S7",
+        )
     return _CACHED_SCORECARD
 
 

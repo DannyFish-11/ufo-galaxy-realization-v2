@@ -78,6 +78,27 @@ class DeviceOrchestrator:
 
     内部委托到 DeviceRegistry（设备注册/发现）、NodeRegistry（节点调用）
     和 ConnectionManager（连接管理），在任一模块不可用时优雅降级。
+
+    .. note:: PR-S7 — Canonical Helper Classification
+        ``DeviceOrchestrator`` is classified as a **CANONICAL HELPER UTILITY**
+        (not a dispatch authority).  It provides high-level device operations
+        (discover, send_command, file transfer) by delegating to
+        ``DeviceRegistry`` / ``NodeRegistry`` / ``ConnectionManager``.
+
+        It does **NOT** make task routing or dispatch decisions and must NOT
+        be used in place of
+        :meth:`~galaxy_gateway.device_router.DeviceRouter.route_task` for
+        task routing.  For task dispatch use the canonical pipeline::
+
+            core.e2e_orchestrator.process_user_input()
+                → DesktopPresenceRuntime → OpenClawd
+                → CommandRouter → TaskGraph
+                → DeviceRouter.route_task
+
+        See :mod:`core.canonical_runtime_declaration` for the full pipeline
+        declaration, and
+        :mod:`core.orchestration_authority.legacy_paths` for the registry
+        entry (``core.device_orchestrator.DeviceOrchestrator``).
     """
 
     _instance: Optional["DeviceOrchestrator"] = None

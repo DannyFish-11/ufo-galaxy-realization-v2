@@ -2,10 +2,25 @@
 """
 Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 
-.. deprecated::
-    此模块已废弃。请使用 ``galaxy_gateway.orchestrator.GalaxyOrchestrator`` 作为
-    唯一的顶层编排器。本模块保留仅为向后兼容，``execute_task()`` 将委托给
-    GalaxyOrchestrator。
+.. deprecated:: PR-S7
+    此模块已废弃，保留仅为向后兼容。
+
+    **PR-S7 注意**: 本模块的旧版废弃说明曾建议迁移到
+    ``galaxy_gateway.orchestrator.GalaxyOrchestrator``，但该模块本身已在 PR-7
+    中被废弃，不再是规范入口。
+
+    正确的规范替代路径为：
+
+    * 程序化调用：``core.e2e_orchestrator.process_user_input()``
+    * HTTP 入口：``core.routes.chat``（REST /api/v1/chat）
+
+    上述入口沿规范管道流转：
+
+        DesktopPresenceRuntime → OpenClawd → AgentKernel
+        → CommandRouter → TaskGraph → DeviceRouter.route_task
+        → ResultEnvelope
+
+    详见 ``core.canonical_runtime_declaration`` 获取完整的规范管道声明。
 
 统一编排引擎 - 系统级涌现的核心（加固版）
 
@@ -18,12 +33,17 @@ Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 
 作者: Manus AI
 日期: 2026-01-26
-版本: 1.3.0 (生产级加固) → DEPRECATED in favor of galaxy_gateway.orchestrator
+版本: 1.3.0 (生产级加固) → DEPRECATED (PR-S7: canonical entry is core.e2e_orchestrator)
 """
 
 import warnings as _warnings
 _warnings.warn(
-    "fusion.unified_orchestrator 已废弃，请迁移到 galaxy_gateway.orchestrator.GalaxyOrchestrator",
+    "fusion.unified_orchestrator 已废弃（PR-S7）。"
+    "请迁移到 core.e2e_orchestrator.process_user_input() 或 core.routes.chat。"
+    "galaxy_gateway.orchestrator.GalaxyOrchestrator 本身已在 PR-7 中废弃，"
+    "不应作为迁移目标。"
+    "规范管道: DesktopPresenceRuntime → OpenClawd → DeviceRouter.route_task。"
+    "详见 core.canonical_runtime_declaration。",
     DeprecationWarning,
     stacklevel=2,
 )
