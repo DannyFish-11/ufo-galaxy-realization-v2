@@ -1,8 +1,26 @@
 """
-消息处理器
+消息处理器 (Legacy Compatibility Module — PR-S6)
+
+.. deprecated:: PR-S6
+    This module (``galaxy_gateway.handlers.message_handler``) is the legacy
+    **"chain B"** gateway message dispatcher.  It routes incoming messages
+    through the legacy path::
+
+        handlers/message_handler.MessageHandler → TaskOrchestrator  (chain B)
+
+    The canonical server ingress is **chain A**::
+
+        websocket_handler → DeviceRouter.route_task  (chain A)
+
+    :class:`MessageHandler` is retained only so existing integrations wired
+    to chain B do not immediately break.  New message routing must be wired
+    through ``galaxy_gateway.websocket_handler`` (chain A) exclusively.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entry
+    (``galaxy_gateway.handlers.message_handler.MessageHandler``).
 
 负责:
-1. 路由不同类型的消息
+1. 路由不同类型的消息（legacy chain B — new code must use websocket_handler chain A）
 2. 调用相应的处理逻辑
 3. 生成响应消息
 """
@@ -32,8 +50,25 @@ def _publish_m2_safe(event_type: str, device_id: str, payload: dict, **kw) -> No
 
 
 class MessageHandler:
-    """消息处理器"""
-    
+    """消息处理器 — Legacy chain B gateway ingress.
+
+    .. deprecated:: PR-S6
+        ``MessageHandler`` is the **legacy "chain B"** gateway message
+        dispatcher (``handlers/message_handler → TaskOrchestrator``).
+
+        The canonical server ingress is **chain A**::
+
+            websocket_handler → DeviceRouter.route_task
+
+        ``MessageHandler`` is retained only so integrations wired to chain B
+        do not immediately break.  New message routing must be wired through
+        ``galaxy_gateway.websocket_handler`` (chain A) only.
+
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry
+        entry
+        (``galaxy_gateway.handlers.message_handler.MessageHandler``).
+    """
+
     def __init__(self, device_manager: DeviceManager):
         self.device_manager = device_manager
         self.task_handlers: Dict[str, Callable] = {}
@@ -41,6 +76,15 @@ class MessageHandler:
         # Idempotency: seen task-result IDs and parallel subtask keys.
         self._seen_task_result_ids: Set[str] = set()
         self._seen_parallel_keys: Set[Tuple[str, int]] = set()  # (group_id, subtask_index)
+        # PR-S6: emit legacy guardrail — MessageHandler is the legacy chain B
+        # ingress.  Canonical ingress is websocket_handler → DeviceRouter (chain A).
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.handlers.message_handler.MessageHandler",
+            )
+        except Exception:
+            pass
         
     def register_task_handler(self, task_type: str, handler: Callable):
         """注册任务处理器"""

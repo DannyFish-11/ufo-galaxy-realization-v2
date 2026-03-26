@@ -291,6 +291,55 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         ),
         canonical_replacement="python unified_launcher.py  (or python main.py)",
     ),
+
+    # ── PR-S6: Final server-side legacy demotion ──────────────────────────
+
+    PurgeDecision(
+        asset_path="galaxy_gateway/task_router.py::TaskScheduler",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S6",
+        rationale=(
+            "TaskScheduler is a legacy topological scheduler that builds "
+            "ExecutionPlan objects outside the canonical TaskGraph pipeline.  "
+            "PR-S6 adds a deprecation docstring, a LEGACY PATH GUARDRAIL in "
+            "__init__, and a LEGACY_PATH_REGISTRY entry.  The class is retained "
+            "for backward compatibility; new scheduling must use core.task_graph."
+        ),
+        canonical_replacement="core/task_graph.py  (core.task_graph.TaskGraph)",
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/task_router.py::TaskRouter",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S6",
+        rationale=(
+            "TaskRouter is a legacy raw-HTTP dispatch loop that routes tasks "
+            "to devices bypassing DeviceRouter / TaskEnvelope / cross-device "
+            "chain.  PR-S6 adds a deprecation docstring, a LEGACY PATH GUARDRAIL "
+            "in __init__, and a LEGACY_PATH_REGISTRY entry.  The class is retained "
+            "for backward compatibility; new dispatch must use DeviceRouter.route_task."
+        ),
+        canonical_replacement=(
+            "galaxy_gateway/device_router.py  (DeviceRouter.route_task)  "
+            "or  core/e2e_orchestrator.py  (process_user_input)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/handlers/message_handler.py::MessageHandler",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S6",
+        rationale=(
+            "MessageHandler is the legacy 'chain B' gateway ingress "
+            "(handlers/message_handler → TaskOrchestrator).  The canonical "
+            "server ingress is websocket_handler → DeviceRouter (chain A).  "
+            "PR-S6 adds a deprecation docstring, a LEGACY PATH GUARDRAIL in "
+            "__init__, and a LEGACY_PATH_REGISTRY entry.  MessageHandler is "
+            "retained so existing chain-B integrations do not immediately break; "
+            "new routing must use websocket_handler (chain A) only."
+        ),
+        canonical_replacement=(
+            "galaxy_gateway/websocket_handler.py  (chain A: websocket_handler → DeviceRouter)"
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------

@@ -1028,6 +1028,98 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-S6: Finalize server-side legacy demotion — remove non-canonical runtime
+# entry leftovers.
+#
+# After PR-S5 (MultiDeviceOrchestrator / ParallelGroupTracker /
+# LocalAgentRuntime demotion) the following server-side entry points still
+# carried independent runtime authority that can bypass the canonical pipeline:
+#
+#   galaxy_gateway.task_router.TaskScheduler
+#       Standalone topological scheduler that builds ExecutionPlan objects
+#       independently of the canonical TaskGraph (core.task_graph).  Retained
+#       as a legacy compatibility utility for gateway-internal callers; new
+#       code must use core.task_graph directly.
+#
+#   galaxy_gateway.task_router.TaskRouter
+#       Standalone task-dispatch loop that routes tasks to devices via raw
+#       HTTP, bypassing the canonical DeviceRouter / TaskEnvelope / cross-
+#       device chain pipeline.  Retained as a compatibility shim; all new
+#       dispatch must go through DeviceRouter.route_task or the canonical
+#       OpenClawd → DeviceRouter chain.
+#
+#   galaxy_gateway.handlers.message_handler.MessageHandler
+#       The legacy "chain B" gateway message dispatcher
+#       (handlers/message_handler → TaskOrchestrator path).  The canonical
+#       server ingress is websocket_handler → DeviceRouter (chain A).
+#       MessageHandler is retained only so existing integrations do not
+#       immediately break; new routing must use chain A exclusively.
+# ---------------------------------------------------------------------------
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_router.TaskScheduler",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "TaskScheduler is a LEGACY COMPAT SCHEDULER (PR-S6).  "
+            "It builds topological ExecutionPlan objects independently of the "
+            "canonical TaskGraph (core.task_graph).  "
+            "New code must use core.task_graph.TaskGraph directly for dependency-"
+            "ordered multi-device execution, which integrates with the canonical "
+            "OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter pipeline.  "
+            "TaskScheduler is retained only so gateway-internal code that pre-dates "
+            "the TaskGraph migration does not immediately break."
+        ),
+        pr_guardrail_added="PR-S6",
+        notes=(
+            "TaskScheduler — LEGACY COMPAT topological scheduler (PR-S6).  "
+            "Canonical scheduling authority is core.task_graph.TaskGraph.  "
+            "Not a primary entrypoint; delegate to core.task_graph for new work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_router.TaskRouter",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "TaskRouter is a LEGACY COMPAT DISPATCH LOOP (PR-S6).  "
+            "It dispatches tasks to devices via raw HTTP, bypassing the canonical "
+            "DeviceRouter / TaskEnvelope / cross-device chain pipeline.  "
+            "Canonical task dispatch is:  "
+            "OpenClawd → CommandRouter → TaskEnvelope → TaskGraph (core.task_graph) "
+            "→ DeviceRouter.route_task → Worker/Device → ResultEnvelope.  "
+            "TaskRouter is retained only for backward compatibility; all new dispatch "
+            "must route through DeviceRouter.route_task or "
+            "core.e2e_orchestrator.process_user_input()."
+        ),
+        pr_guardrail_added="PR-S6",
+        notes=(
+            "TaskRouter — LEGACY COMPAT raw-HTTP dispatch loop (PR-S6).  "
+            "Canonical dispatch authority is DeviceRouter.route_task.  "
+            "Not a primary entrypoint; must not be invoked for new work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.handlers.message_handler.MessageHandler",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "MessageHandler is the LEGACY CHAIN B gateway ingress (PR-S6).  "
+            "It routes messages through the legacy path:  "
+            "handlers/message_handler → TaskOrchestrator (chain B).  "
+            "The canonical server ingress is chain A:  "
+            "websocket_handler → DeviceRouter.  "
+            "MessageHandler is retained only so existing integrations wired to "
+            "chain B do not immediately break.  New message routing must be wired "
+            "through websocket_handler (chain A) only."
+        ),
+        pr_guardrail_added="PR-S6",
+        notes=(
+            "MessageHandler — LEGACY CHAIN B gateway ingress (PR-S6).  "
+            "Canonical ingress chain is websocket_handler → DeviceRouter (chain A).  "
+            "MessageHandler → TaskOrchestrator path is the legacy chain B surface."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL

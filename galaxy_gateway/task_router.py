@@ -1,9 +1,32 @@
 """
-Galaxy - 任务路由和调度模块
+Galaxy - 任务路由和调度模块 (Legacy Compatibility Module — PR-S6)
+
+.. deprecated:: PR-S6
+    This module (``galaxy_gateway.task_router``) is a **legacy compatibility
+    surface** retained for backward compatibility only.
+
+    The canonical server-side task dispatch pipeline is::
+
+        OpenClawd → CommandRouter → TaskEnvelope
+        → TaskGraph (core.task_graph)
+        → DeviceRouter.route_task
+        → Worker/Device
+        → ResultEnvelope → OpenClawd feedback
+
+    * :class:`TaskScheduler` — legacy topological scheduler.  Canonical
+      replacement: ``core.task_graph.TaskGraph``.
+    * :class:`TaskRouter` — legacy raw-HTTP dispatch loop.  Canonical
+      replacement: ``galaxy_gateway.device_router.DeviceRouter.route_task()``.
+    * :class:`ResultAggregator` — legacy result collector.  Canonical
+      replacement: ``core.cross_device_execution_chain`` result envelopes.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entries
+    (``galaxy_gateway.task_router.TaskScheduler`` and
+    ``galaxy_gateway.task_router.TaskRouter``).
 
 功能：
-1. 任务路由 - 将任务发送到目标设备
-2. 任务调度 - 管理任务执行顺序和依赖
+1. 任务路由 - 将任务发送到目标设备（legacy compat — use DeviceRouter for new work）
+2. 任务调度 - 管理任务执行顺序和依赖（legacy compat — use core.task_graph for new work）
 3. 并行执行 - 支持多设备并行任务
 4. 结果聚合 - 收集和聚合任务执行结果
 5. 错误处理 - 处理任务失败和重试
@@ -63,11 +86,38 @@ class ExecutionPlan:
 # ============================================================================
 
 class TaskScheduler:
-    """任务调度器 - 管理任务执行顺序和依赖"""
-    
+    """任务调度器 — Legacy compat topological scheduler.
+
+    .. deprecated:: PR-S6
+        ``TaskScheduler`` is a **legacy compatibility scheduler**.  It builds
+        topological :class:`ExecutionPlan` objects independently of the
+        canonical :mod:`core.task_graph` (TaskGraph).
+
+        Canonical replacement:
+            ``core.task_graph.TaskGraph`` — the authoritative dependency-ordered
+            multi-device execution planner, which integrates with the canonical
+            OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter pipeline.
+
+        ``TaskScheduler`` is retained so gateway-internal code that pre-dates
+        the TaskGraph migration does not immediately break.  New code must not
+        invoke it as a primary scheduling authority.
+
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry
+        entry (``galaxy_gateway.task_router.TaskScheduler``).
+    """
+
     def __init__(self):
-        """初始化组件"""
+        """初始化组件 — PR-S6: emits legacy guardrail on construction."""
         self.initialized_at = datetime.now()
+        # PR-S6: emit legacy guardrail — TaskScheduler is a compatibility
+        # scheduler only.  The canonical scheduling authority is core.task_graph.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.task_router.TaskScheduler",
+            )
+        except Exception:
+            pass
     
     def create_execution_plan(self, tasks: List[Any]) -> ExecutionPlan:
         """
@@ -127,18 +177,51 @@ class TaskScheduler:
 # ============================================================================
 
 class TaskRouter:
-    """任务路由器 - 将任务发送到目标设备"""
-    
+    """任务路由器 — Legacy compat raw-HTTP dispatch loop.
+
+    .. deprecated:: PR-S6
+        ``TaskRouter`` is a **legacy compatibility dispatch loop**.  It routes
+        tasks to devices via raw HTTP, bypassing the canonical
+        DeviceRouter / TaskEnvelope / cross-device chain pipeline.
+
+        Canonical task dispatch::
+
+            OpenClawd → CommandRouter → TaskEnvelope
+            → TaskGraph (core.task_graph)
+            → DeviceRouter.route_task
+            → Worker/Device
+            → ResultEnvelope
+
+        Preferred replacements:
+            ``galaxy_gateway.device_router.DeviceRouter.route_task()``
+            ``core.e2e_orchestrator.process_user_input()``
+
+        ``TaskRouter`` is retained only for backward compatibility.  New
+        dispatch code must not be routed through this class.
+
+        See :mod:`core.orchestration_authority.legacy_paths` for the registry
+        entry (``galaxy_gateway.task_router.TaskRouter``).
+    """
+
     def __init__(self, device_registry):
         """
-        初始化任务路由器
-        
+        初始化任务路由器 — PR-S6: emits legacy guardrail on construction.
+
         Args:
             device_registry: 设备注册表
         """
         self.device_registry = device_registry
         self.scheduler = TaskScheduler()
         self.active_tasks: Dict[str, TaskResult] = {}
+        # PR-S6: emit legacy guardrail — TaskRouter is a legacy compat
+        # dispatch loop.  Canonical dispatch is DeviceRouter.route_task.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                caller="galaxy_gateway.task_router.TaskRouter",
+            )
+        except Exception:
+            pass
     
     async def execute_tasks(self, tasks: List[Any], trace_id: Optional[str] = None) -> List[TaskResult]:
         """
