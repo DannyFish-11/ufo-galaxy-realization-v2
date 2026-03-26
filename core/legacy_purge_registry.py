@@ -340,6 +340,73 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "galaxy_gateway/websocket_handler.py  (chain A: websocket_handler → DeviceRouter)"
         ),
     ),
+
+    # ── PR-S7: Final compatibility demotion — last remaining legacy control surfaces
+
+    PurgeDecision(
+        asset_path="galaxy_gateway/task_decomposer.py::TaskDecomposer",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S7",
+        rationale=(
+            "TaskDecomposer is a legacy rule-based task splitter that creates "
+            "sub-tasks independently of the canonical TaskGraph "
+            "(core.task_graph).  PR-S7 adds a deprecation docstring, a LEGACY "
+            "PATH GUARDRAIL in __init__, and a LEGACY_PATH_REGISTRY entry.  "
+            "The class is retained for backward compatibility; new task "
+            "decomposition must use core.task_graph.TaskGraph directly."
+        ),
+        canonical_replacement="core/task_graph.py  (core.task_graph.TaskGraph)",
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/task_decomposer.py::IntelligentTaskPlanner",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S7",
+        rationale=(
+            "IntelligentTaskPlanner is a legacy LLM-based task planner that "
+            "generates sub-tasks independently of the canonical OpenClawd → "
+            "CommandRouter → TaskGraph pipeline.  PR-S7 adds a deprecation "
+            "docstring, a LEGACY PATH GUARDRAIL in __init__, and a "
+            "LEGACY_PATH_REGISTRY entry.  Retained for backward compatibility; "
+            "new planning must use core.e2e_orchestrator.process_user_input()."
+        ),
+        canonical_replacement=(
+            "core/e2e_orchestrator.py  (core.e2e_orchestrator.process_user_input)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/capability_registry.py::GatewayCapabilityRegistry",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-S7",
+        rationale=(
+            "GatewayCapabilityRegistry is a legacy in-gateway per-device "
+            "action-schema store introduced before core.capability_bus "
+            "(CapabilityBus) existed.  PR-S7 adds a deprecation docstring, a "
+            "LEGACY PATH GUARDRAIL in __init__, and a LEGACY_PATH_REGISTRY "
+            "entry.  Retained so existing DeviceRouter capability-report "
+            "pathways do not immediately break; new capability registration "
+            "must use core.capability_bus.CapabilityBus."
+        ),
+        canonical_replacement=(
+            "core/capability_bus.py  (core.capability_bus.get_capability_bus)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/aip_protocol_v2.py",
+        status=PurgeStatus.HARD_DISABLED,
+        pr="PR-S7",
+        rationale=(
+            "galaxy_gateway.aip_protocol_v2 is the legacy AIP v2.0 protocol "
+            "module, superseded by galaxy_gateway.protocol.aip_v3 (v3 single "
+            "source of truth).  The module already raises ImportError on import "
+            "to prevent accidental use.  PR-S7 formalises this as a "
+            "HARD_DISABLED PURGE_REGISTRY entry so the purge audit log is "
+            "complete and tooling can verify the hard-disable is still in effect."
+        ),
+        canonical_replacement=(
+            "galaxy_gateway/protocol/aip_v3.py  "
+            "and  galaxy_gateway/protocol/compat.py::parse_message_compat"
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------
