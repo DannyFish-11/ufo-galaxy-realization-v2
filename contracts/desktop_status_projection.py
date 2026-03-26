@@ -290,6 +290,21 @@ class ModelRoutingProjection(BaseModel):
         Human-readable explanation of the current routing decision.
     route_summary
         Compact structured routing summary for display purposes.
+    vendor_source
+        Vendor category of the selected primary model node:
+        ``"direct"`` for top-layer direct/native providers,
+        ``"oneapi"`` for OneAPI aggregator entries,
+        ``"local"`` for local/embedded models, etc.
+        Populated from the canonical ``TopologyRoutePlan`` node's
+        ``vendor_source`` field; ``None`` on legacy path.
+    oneapi_source
+        Summary dict describing OneAPI's current integration position when
+        the selected route routes through OneAPI (i.e.
+        ``vendor_source == "oneapi"``), or when OneAPI status is available
+        in the control plan.  Contains at minimum:
+        ``system_layer``, ``provider_category_value``,
+        ``registered_dimensions``, ``routing_authority_ref``.
+        ``None`` when OneAPI is not applicable or not available.
     provider_available
         Whether the selected provider is currently available.
     health_severity
@@ -327,6 +342,22 @@ class ModelRoutingProjection(BaseModel):
     route_summary: Optional[str] = Field(
         default=None,
         description="Compact structured routing summary for display.",
+    )
+    vendor_source: Optional[str] = Field(
+        default=None,
+        description=(
+            "Vendor category of the selected primary model node "
+            "('direct', 'oneapi', 'local', …).  Populated from the "
+            "canonical TopologyRoutePlan; None on legacy path."
+        ),
+    )
+    oneapi_source: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "OneAPI integration position summary when the selected route "
+            "uses OneAPI (vendor_source == 'oneapi') or when OneAPI status "
+            "is available in the control plan.  None when not applicable."
+        ),
     )
     provider_available: bool = Field(
         default=True,
@@ -637,6 +668,27 @@ class DesktopStatusProjection(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _extract_oneapi_source_summary() -> Dict[str, Any]:
+    """Return a compact OneAPI integration position summary dict.
+
+    Pulls from :func:`~core.oneapi_system_position.build_oneapi_integration_summary`
+    when available; falls back to a minimal static dict on import error.
+    This function is intentionally cheap to call (no I/O).
+    """
+    try:
+        from core.oneapi_system_position import build_oneapi_integration_summary
+        snapshot = build_oneapi_integration_summary()
+        return snapshot.to_dict()
+    except Exception:
+        return {
+            "system_layer": "aggregator_integration",
+            "provider_category_value": "oneapi",
+            "routing_authority_ref": (
+                "core.model_topology.topology_router.TopologyRouter"
+            ),
+        }
+
+
 def _safe_str(value: object, default: Optional[str] = None) -> Optional[str]:
     """Return a string from *value* or *default*."""
     if value is None:
@@ -835,6 +887,9 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
        ``core.model_topology.topology_router.TopologyRouter``).
        When present, *all* routing fields are read from this block and
        ``routing_authority_source`` is set to ``"topology_router"``.
+       Extracts ``vendor_source`` and ``provider_id`` from the primary
+       model node dict (PR-2 fields).  When ``vendor_source == "oneapi"``,
+       populates ``oneapi_source`` with the canonical integration summary.
 
     2. **LEGACY COMPAT** — top-level UCP keys (``chosen_model``,
        ``chosen_provider``, ``is_native_multimodal``, ``support_model_ids``,
@@ -850,6 +905,8 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
     is_native_mm: bool = False
     support_model_hints: List[str] = []
     route_reason: Optional[str] = None
+    vendor_source: Optional[str] = None
+    oneapi_source: Optional[Dict[str, Any]] = None
 
     # -----------------------------------------------------------------------
     # CANONICAL PATH: topology_route_plan (TopologyRoutePlan.to_dict() output)
@@ -863,6 +920,9 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
         if primary:
             chosen_model = _safe_str(primary.get("model_id"))
             is_native_mm = _safe_bool(primary.get("native_multimodal"))
+            # provider_id and vendor_source are PR-2 canonical node fields.
+            chosen_provider = _safe_str(primary.get("provider_id"))
+            vendor_source = _safe_str(primary.get("vendor_source"))
         support_nodes = _safe_list(topology_plan.get("support_models"))
         support_model_hints = [
             _safe_str(s.get("model_id"))
@@ -870,8 +930,11 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
             if isinstance(s, dict) and _safe_str(s.get("model_id"))
         ]
         route_reason = _safe_str(topology_plan.get("route_reason"))
-        # Provider is not part of TopologyRoutePlan.to_dict() directly;
-        # supplement from canonical_model_supply if available (see below).
+
+        # When the selected provider is OneAPI, include the canonical
+        # OneAPI integration position summary.
+        if vendor_source == "oneapi":
+            oneapi_source = _extract_oneapi_source_summary()
 
     else:
         # -------------------------------------------------------------------
@@ -903,11 +966,20 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
         if chosen_model or chosen_provider or route_reason:
             routing_authority_source = "legacy_ucp_keys"
 
+    # If oneapi_source was not set from the canonical path, check whether the
+    # UCP carries an explicit oneapi_summary block (e.g. from enriched plans).
+    # Use explicit None check to avoid treating an empty dict as falsy.
+    if oneapi_source is None:
+        _ucp_oneapi = ucp.get("oneapi_summary") or ucp.get("oneapi_source")
+        if isinstance(_ucp_oneapi, dict) and _ucp_oneapi:
+            oneapi_source = _ucp_oneapi
+
     # Build a compact route summary for display.
     route_summary: Optional[str] = None
     if chosen_provider and chosen_model:
         mm_flag = " [native-MM]" if is_native_mm else ""
-        route_summary = f"{chosen_provider}/{chosen_model}{mm_flag}"
+        vs_flag = f" [{vendor_source}]" if vendor_source and vendor_source != "direct" else ""
+        route_summary = f"{chosen_provider}/{chosen_model}{mm_flag}{vs_flag}"
 
     # Determine provider availability from model supply state if embedded.
     provider_available = True
@@ -937,6 +1009,8 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
         support_model_hints=support_model_hints,
         route_reason=route_reason,
         route_summary=route_summary,
+        vendor_source=vendor_source,
+        oneapi_source=oneapi_source,
         provider_available=provider_available,
         health_severity=sev,
         routing_authority_source=routing_authority_source,

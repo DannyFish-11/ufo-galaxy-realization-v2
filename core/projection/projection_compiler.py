@@ -104,6 +104,8 @@ def build_runtime_projection(
     readiness_result: "Optional[Any]" = None,
     fallback_trace: "Optional[Any]" = None,
     execution_trace_envelope: "Optional[Any]" = None,
+    oneapi_summary: "Optional[Dict[str, Any]]" = None,
+    provider_status_summary: "Optional[Dict[str, Any]]" = None,
 ) -> RuntimeProjection:
     """Assemble a :class:`RuntimeProjection` from core runtime state.
 
@@ -150,6 +152,17 @@ def build_runtime_projection(
             (PR-25).  When provided together with other governance inputs, used
             to populate the ``governance`` field of the projection.
             Additive; does not affect base projection fields.
+        oneapi_summary:
+            Optional dict describing the OneAPI system integration position
+            (PR-3).  When ``None`` and a ``route_plan`` is provided, the
+            compiler will attempt to derive this automatically from the
+            canonical route plan when the primary node uses the OneAPI
+            vendor source.  Pass an explicit dict to override auto-derivation.
+        provider_status_summary:
+            Optional dict carrying a compact provider health/availability
+            summary (PR-3).  When ``None``, the field is absent from the
+            assembled projection.  Callers should derive this from the
+            canonical model supply state when available.
 
     Returns:
         A fully populated (or minimally populated) :class:`RuntimeProjection`.
@@ -189,6 +202,25 @@ def build_runtime_projection(
 
         route_reason = route_plan.route_reason
         routing_authority = CANONICAL_ROUTING_AUTHORITY
+
+        # Auto-derive oneapi_summary when the caller did not supply one and
+        # the primary node's vendor_source is "oneapi".
+        if oneapi_summary is None and route_plan.primary_model is not None:
+            try:
+                _category_obj = getattr(route_plan.primary_model, "category", None)
+                _category = (
+                    _category_obj.value
+                    if _category_obj is not None and hasattr(_category_obj, "value")
+                    else str(_category_obj) if _category_obj is not None else ""
+                )
+                if _category == "oneapi":
+                    from core.oneapi_system_position import build_oneapi_integration_summary
+                    oneapi_summary = build_oneapi_integration_summary().to_dict()
+            except Exception as _oa_exc:
+                logger.debug(
+                    "build_runtime_projection: oneapi_summary auto-derivation skipped: %s",
+                    _oa_exc,
+                )
 
     # --- Device/execution-derived fields -----------------------------------
     active_device_ids: List[str] = []
@@ -251,6 +283,8 @@ def build_runtime_projection(
         current_task_summary=current_task_summary,
         execution_intent_summary=execution_intent_summary,
         governance=governance,
+        oneapi_summary=oneapi_summary,
+        provider_status_summary=provider_status_summary,
         timestamp=ts,
     )
 
