@@ -84,10 +84,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os as _env_os
 import time
 import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse as _urlparse
 
 from pydantic import BaseModel, Field
 
@@ -298,13 +300,13 @@ class ModelRoutingProjection(BaseModel):
         Populated from the canonical ``TopologyRoutePlan`` node's
         ``vendor_source`` field; ``None`` on legacy path.
     oneapi_source
-        Summary dict describing OneAPI's current integration position when
-        the selected route routes through OneAPI (i.e.
-        ``vendor_source == "oneapi"``), or when OneAPI status is available
-        in the control plan.  Contains at minimum:
-        ``system_layer``, ``provider_category_value``,
-        ``registered_dimensions``, ``routing_authority_ref``.
-        ``None`` when OneAPI is not applicable or not available.
+        Summary dict describing OneAPI's integration position when the
+        selected route routes *through* OneAPI
+        (i.e. ``vendor_source == "oneapi"``).  ``None`` when the selected
+        route is NOT through OneAPI.  For the always-present lower-horizon
+        OneAPI block, see :attr:`DesktopStatusProjection.oneapi_integration`
+        (PR-4).  The ``oneapi_source`` field here must never be used to
+        represent a top-layer provider peer.
     provider_available
         Whether the selected provider is currently available.
     health_severity
@@ -355,8 +357,9 @@ class ModelRoutingProjection(BaseModel):
         default=None,
         description=(
             "OneAPI integration position summary when the selected route "
-            "uses OneAPI (vendor_source == 'oneapi') or when OneAPI status "
-            "is available in the control plan.  None when not applicable."
+            "uses OneAPI (vendor_source == 'oneapi').  None otherwise.  "
+            "Note: for the always-present lower-horizon OneAPI block, see "
+            "DesktopStatusProjection.oneapi_integration (PR-4)."
         ),
     )
     provider_available: bool = Field(
@@ -558,7 +561,7 @@ class ExplainabilityProjection(BaseModel):
 
 
 class DesktopStatusProjection(BaseModel):
-    """Canonical shell-facing desktop status projection — PR-22.
+    """Canonical shell-facing desktop status projection — PR-22, extended PR-4.
 
     A single, fully serialisable contract that the runtime shell uses as the
     primary contract for desktop status board rendering.
@@ -594,6 +597,14 @@ class DesktopStatusProjection(BaseModel):
         Lifecycle stage and health block.
     explainability
         Fallback, degradation, and diagnostics block.
+    oneapi_integration
+        PR-4 distinct lower-horizon OneAPI aggregator integration block.
+        Always present (even when OneAPI is not configured) as a separate
+        block intended for lower-horizon-only rendering.  Contains at
+        minimum: ``system_layer``, ``configured``, ``health``,
+        ``base_url_hint``, ``model_count``, ``gateway_identity``.
+        **This block must never be merged into the top-layer provider list
+        or route-plan primary/support fields.**
     overall_health
         Rolled-up overall health severity across all blocks.
     schema_version
@@ -631,6 +642,15 @@ class DesktopStatusProjection(BaseModel):
     explainability: ExplainabilityProjection = Field(
         default_factory=ExplainabilityProjection,
         description="Fallback, degradation, and diagnostics block.",
+    )
+    oneapi_integration: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "PR-4 distinct lower-horizon OneAPI aggregator integration block. "
+            "Always present as a separate block for lower-horizon-only "
+            "rendering.  Must never be merged into the top-layer provider "
+            "list or route-plan primary/support fields."
+        ),
     )
     overall_health: ProjectionHealthSeverity = Field(
         default=ProjectionHealthSeverity.unknown,
@@ -1173,6 +1193,82 @@ def _build_explainability_projection(ucp: Dict[str, Any]) -> ExplainabilityProje
     )
 
 
+def _build_oneapi_integration_projection(ucp: Dict[str, Any]) -> Dict[str, Any]:
+    """PR-4: Build the distinct OneAPI lower-horizon integration block.
+
+    This block is **always** present in :class:`DesktopStatusProjection` as
+    a top-level ``oneapi_integration`` field.  When OneAPI is not configured
+    it shows ``configured=False``; when configured it reflects live status.
+
+    **Architectural constraint**: This block is for lower-horizon rendering
+    only.  It must **never** be merged into the top-layer direct/native
+    provider list or into route-plan ``primary``/``support`` fields.  Any
+    such rendering is architecturally incorrect per
+    ``docs/ONEAPI_SYSTEM_POSITION.md``.
+
+    The function derives the summary from the following sources (in priority
+    order):
+
+    1. Explicit ``oneapi_status`` block in the UCP (from Node_01_OneAPI
+       ``/status`` response forwarded by the runtime).
+    2. ``oneapi_summary`` / ``oneapi_source`` blocks in the UCP (enriched
+       topology plans, PR-3).
+    3. Static build from :func:`~core.oneapi_system_position.build_oneapi_status_summary`
+       using environment variable detection.
+    """
+    # Priority 1: explicit oneapi_status block in UCP
+    _ucp_status = _safe_dict(ucp.get("oneapi_status"))
+    if _ucp_status:
+        _sl = _safe_str(_ucp_status.get("system_layer"))
+        if _sl == "aggregator_integration" or not _sl:
+            return dict(_ucp_status)
+
+    # Priority 2: oneapi_summary / oneapi_source blocks from enriched plans
+    _ucp_summary = _safe_dict(
+        ucp.get("oneapi_summary") or ucp.get("oneapi_source")
+    )
+    if _ucp_summary and _ucp_summary.get("system_layer") == "aggregator_integration":
+        return dict(_ucp_summary)
+
+    # Priority 3: static build via the oneapi_system_position module
+    try:
+        from core.oneapi_system_position import build_oneapi_status_summary
+        _base_url = _env_os.getenv("ONEAPI_BASE_URL", "")
+        _api_key = _env_os.getenv("ONEAPI_API_KEY", "")
+        _configured = bool(_base_url and _api_key)
+        _base_url_hint: Optional[str] = None
+        if _base_url:
+            try:
+                _p = _urlparse(_base_url)
+                _base_url_hint = (
+                    f"{_p.scheme}://{_p.netloc}" if _p.netloc else _base_url
+                )
+            except Exception:
+                pass
+        summary = build_oneapi_status_summary(
+            configured=_configured,
+            health="healthy" if _configured else "skipped",
+            base_url_hint=_base_url_hint,
+            model_count=None,
+            gateway_identity="oneapi-gateway" if _base_url else None,
+        )
+        return summary.to_dict()
+    except Exception as _exc:
+        _logger.debug(
+            "_build_oneapi_integration_projection: fallback to static dict: %s", _exc
+        )
+
+    # Absolute fallback: minimal static dict
+    return {
+        "system_layer": "aggregator_integration",
+        "configured": False,
+        "health": "skipped",
+        "base_url_hint": None,
+        "model_count": None,
+        "gateway_identity": None,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Primary builders
 # ---------------------------------------------------------------------------
@@ -1229,6 +1325,10 @@ def build_desktop_status_projection(
         lifecycle = _build_lifecycle_projection(ucp, tristate)
         explainability = _build_explainability_projection(ucp)
 
+        # PR-4: distinct lower-horizon OneAPI integration block.
+        # Always built; must not be merged into model_routing or any top-layer block.
+        oneapi_integration = _build_oneapi_integration_projection(ucp)
+
         # Roll up overall health from all blocks.
         overall_health = _rolled_up_severity([
             perception.health_severity,
@@ -1245,6 +1345,7 @@ def build_desktop_status_projection(
             execution=execution,
             lifecycle=lifecycle,
             explainability=explainability,
+            oneapi_integration=oneapi_integration,
             overall_health=overall_health,
         )
     except Exception as _err:

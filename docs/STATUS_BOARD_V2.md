@@ -219,7 +219,14 @@ ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
 - OneAPI appears **only** in the lower AGGREGATOR HORIZON row, never mixed into
   the main-route or support layer.  **Any rendering that places OneAPI at the
   same visual level as direct providers is architecturally incorrect.**
-- When `oneapi_source` is absent from the projection, the OneAPI row is omitted.
+- **PR-4**: the `oneapi_integration` top-level block in `DesktopStatusProjection`
+  is **always present** in the projection.  The OneAPI row must therefore always
+  be rendered — when not configured it shows `not configured`.  Omitting the
+  row entirely is not permitted.
+- The `oneapi_source` field in `ModelRoutingProjection` is `None` unless the
+  active route actually goes *through* OneAPI.  Do not use it as the data
+  source for the horizon row; use `DesktopStatusProjection.oneapi_integration`
+  instead.
 - When `routing_authority` is not `topology_router`, the surface must highlight
   the degraded authority state rather than silently accepting it.
 

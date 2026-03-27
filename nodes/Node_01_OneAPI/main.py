@@ -161,6 +161,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Node 01 - OneAPI Gateway", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _sanitise_base_url_hint(url: str) -> Optional[str]:
+    """Return a sanitised (non-secret) hint of *url* containing only scheme and host.
+
+    Strips path, query, and credentials so the hint is safe to expose in
+    status responses and projections.  Returns ``None`` on any parse error.
+    """
+    if not url:
+        return None
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        return f"{parsed.scheme}://{parsed.netloc}" if parsed.netloc else url
+    except Exception:
+        return None
+
 # ============ 请求模型 ============
 class ChatRequest(BaseModel):
     model: str = "auto"
@@ -480,29 +500,64 @@ async def health():
         ("video_generation", PIXVERSE_API_KEY),
     ] if v]
 
+    status_value = (
+        _startup_mode
+        if _startup_mode != "starting"
+        else ("healthy" if providers else "degraded")
+    )
+
+    # PR-4: include standardised OneAPI lower-horizon integration summary
+    # so that callers can populate the oneapi_integration projection block.
+    from core.oneapi_system_position import build_oneapi_status_summary
+
+    oneapi_status = build_oneapi_status_summary(
+        configured=bool(ONEAPI_BASE_URL and ONEAPI_API_KEY),
+        health=status_value,
+        base_url_hint=_sanitise_base_url_hint(ONEAPI_BASE_URL),
+        model_count=None,
+        gateway_identity="oneapi-gateway" if ONEAPI_BASE_URL else None,
+    )
+
     return {
-        "status": _startup_mode if _startup_mode != "starting" else ("healthy" if providers else "degraded"),
+        "status": status_value,
         "node_id": "01",
         "name": "OneAPI Gateway",
         "available_providers": providers,
         "available_tools": tools,
         "local_llm_enabled": LOCAL_LLM_ENABLED,
         "local_llm_priority": LOCAL_LLM_PRIORITY if LOCAL_LLM_ENABLED else None,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "oneapi_integration": oneapi_status.to_dict(),
     }
 
 @app.get("/status")
 async def node_status():
-    """Node status endpoint."""
+    """Node status endpoint — PR-4: exposes standardised OneAPI integration summary."""
     cloud = _collect_cloud_providers()
     providers = (["local"] if _local_llm_available else []) + cloud
+
+    # PR-4: include standardised OneAPI lower-horizon integration summary.
+    # This block describes the OneAPI aggregator integration layer; it must
+    # not be merged into the top-layer direct/native provider list.
+    from core.oneapi_system_position import build_oneapi_status_summary
+
+    status_value = _startup_mode if _startup_mode != "starting" else "healthy"
+    oneapi_status = build_oneapi_status_summary(
+        configured=bool(ONEAPI_BASE_URL and ONEAPI_API_KEY),
+        health=status_value,
+        base_url_hint=_sanitise_base_url_hint(ONEAPI_BASE_URL),
+        model_count=None,
+        gateway_identity="oneapi-gateway" if ONEAPI_BASE_URL else None,
+    )
+
     return {
         "node_id": "01",
         "name": "OneAPI",
         "port": 7995,
         "providers": providers,
         "request_count": 0,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "oneapi_integration": oneapi_status.to_dict(),
     }
 
 @app.get("/v1/models")
