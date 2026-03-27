@@ -132,6 +132,14 @@ PROJECTION_CONTRACT_AUTHORITY: str = (
     "contracts.desktop_status_projection.DesktopStatusProjection"
 )
 
+#: PR-6: Sentinel string identifying the topology-ready projection delivery
+#: block as a PR-6 canonical contract artefact.  Downstream desktop topology
+#: surfaces should verify this sentinel to confirm the block was produced by
+#: the canonical builder rather than assembled ad-hoc.
+TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY: str = (
+    "contracts.desktop_status_projection.DesktopTopologyProjection"
+)
+
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -612,12 +620,178 @@ class ExplainabilityProjection(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# PR-6: DesktopTopologyProjection — topology-ready block
+# ---------------------------------------------------------------------------
+
+
+class DesktopTopologyProjection(BaseModel):
+    """PR-6: Topology-ready projection block for desktop constellation/status-board surfaces.
+
+    A single structured block designed for desktop topology surface consumption.
+    Derived exclusively from canonical sources (``TopologyRoutePlan`` when
+    available; legacy fallback explicitly marked and degraded).
+
+    This block is **renderer-agnostic**: it contains no display coordinates,
+    colours, pixel positions, or animation hints.  The visualisation grammar
+    belongs to the rendering layer (e.g. ``windows_client/status_board_v2/``).
+
+    A desktop topology surface consumes this block to understand:
+
+    - Which model is the primary routed model
+    - Which models are support/auxiliary
+    - Provider identity and availability status
+    - Route reason, phase, and domain when available
+    - Whether canonical routing or legacy fallback was used
+    - The OneAPI lower-horizon integration position (as a separate block)
+
+    Architectural constraints
+    -------------------------
+    - ``oneapi_integration`` is a **lower-horizon** block only.  It must never
+      be promoted to a top-layer provider peer.
+    - ``legacy_fallback_active == True`` signals a degraded routing projection;
+      the topology surface should surface this status to the operator.
+    - ``contract_authority`` is a machine-checkable sentinel confirming this
+      block was produced by the canonical builder.
+
+    Fields
+    ------
+    primary_model_id
+        Canonical model identifier for the primary route.
+    primary_provider_id
+        Canonical provider identifier for the primary route.
+    primary_vendor_source
+        Vendor category of the primary route (``"direct"``, ``"oneapi"``,
+        ``"local"``, …).
+    primary_is_native_multimodal
+        Whether the primary route uses native multimodal APIs.
+    support_model_ids
+        Ordered list of support/auxiliary model identifiers.
+    route_reason
+        Human-readable explanation of the current routing decision.
+    route_phase
+        Active routing phase (e.g. ``"liminal"``, ``"manifest"``,
+        ``"silent"``).
+    route_domain
+        Active routing domain (e.g. ``"local"``, ``"cross_device"``).
+    primary_provider_available
+        Whether the primary provider is currently available.
+    routing_authority_source
+        ``"topology_router"`` when sourced from canonical
+        ``TopologyRoutePlan``; ``"legacy_ucp_keys"`` when sourced from
+        legacy UCP keys; ``"none"`` when no routing data was available.
+    canonical_source_present
+        ``True`` when a canonical ``TopologyRoutePlan`` was the routing
+        source for this block.
+    legacy_fallback_active
+        ``True`` when routing was assembled from legacy/compat UCP keys
+        rather than a canonical ``TopologyRoutePlan``.  Downstream
+        consumers should treat this topology block as degraded.
+    oneapi_integration
+        Lower-horizon OneAPI integration block (always present as a
+        separate integration block, never promoted to top-layer peer).
+        Contains at minimum: ``system_layer``, ``configured``, ``health``,
+        ``base_url_hint``, ``model_count``, ``gateway_identity``.
+    health_severity
+        Aggregated health severity for this topology block.
+    contract_authority
+        Machine-checkable sentinel identifying this block as a PR-6
+        topology-ready contract artefact produced by
+        :func:`build_desktop_status_projection`.
+    """
+
+    primary_model_id: Optional[str] = Field(
+        default=None,
+        description="Canonical model identifier for the primary route.",
+    )
+    primary_provider_id: Optional[str] = Field(
+        default=None,
+        description="Canonical provider identifier for the primary route.",
+    )
+    primary_vendor_source: Optional[str] = Field(
+        default=None,
+        description=(
+            "Vendor category of the primary route ('direct', 'oneapi', 'local', …). "
+            "Populated from the canonical TopologyRoutePlan; None on legacy path."
+        ),
+    )
+    primary_is_native_multimodal: bool = Field(
+        default=False,
+        description="Whether the primary route uses native multimodal APIs.",
+    )
+    support_model_ids: List[str] = Field(
+        default_factory=list,
+        description="Ordered list of support/auxiliary model identifiers.",
+    )
+    route_reason: Optional[str] = Field(
+        default=None,
+        description="Human-readable explanation of the current routing decision.",
+    )
+    route_phase: Optional[str] = Field(
+        default=None,
+        description="Active routing phase ('liminal', 'manifest', 'silent', …).",
+    )
+    route_domain: Optional[str] = Field(
+        default=None,
+        description="Active routing domain ('local', 'cross_device', …).",
+    )
+    primary_provider_available: bool = Field(
+        default=True,
+        description="Whether the primary provider is currently available.",
+    )
+    routing_authority_source: str = Field(
+        default="none",
+        description=(
+            "Identifies which source populated the routing fields. "
+            "'topology_router' = canonical TopologyRoutePlan path; "
+            "'legacy_ucp_keys' = legacy/compat UCP keys; "
+            "'none' = no routing data available."
+        ),
+    )
+    canonical_source_present: bool = Field(
+        default=False,
+        description="True when a canonical TopologyRoutePlan was the routing source.",
+    )
+    legacy_fallback_active: bool = Field(
+        default=False,
+        description=(
+            "True when routing was assembled from legacy/compat UCP keys rather than "
+            "a canonical TopologyRoutePlan.  Downstream consumers should treat this "
+            "topology block as degraded.  See LEGACY_UCP_ROUTING_KEYS and "
+            "docs/SERVER_SIDE_CANONICALIZATION.md."
+        ),
+    )
+    oneapi_integration: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "PR-4/PR-6 lower-horizon OneAPI integration block (always present as a "
+            "separate block; never promoted to top-layer provider peer). "
+            "Contains at minimum: system_layer, configured, health, base_url_hint, "
+            "model_count, gateway_identity."
+        ),
+    )
+    health_severity: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Aggregated health severity for this topology block.",
+    )
+    contract_authority: str = Field(
+        default=TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+        description=(
+            "Machine-checkable sentinel identifying this block as a PR-6 "
+            "topology-ready contract artefact produced by the canonical builder."
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
+
+
+# ---------------------------------------------------------------------------
 # Top-level DesktopStatusProjection
 # ---------------------------------------------------------------------------
 
 
 class DesktopStatusProjection(BaseModel):
-    """Canonical shell-facing desktop status projection — PR-22, extended PR-4.
+    """Canonical shell-facing desktop status projection — PR-22, extended PR-4, PR-6.
 
     A single, fully serialisable contract that the runtime shell uses as the
     primary contract for desktop status board rendering.
@@ -630,6 +804,8 @@ class DesktopStatusProjection(BaseModel):
     - **execution** — which execution path is active and where
     - **lifecycle** — where in the lifecycle the system is
     - **explainability** — fallback/degradation reasons and diagnostics
+    - **topology_ready** — PR-6 single structured block for desktop topology
+      surface consumption (renderer-agnostic, canonical sources first)
 
     Produced by :func:`build_desktop_status_projection` from a
     :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict
@@ -661,6 +837,13 @@ class DesktopStatusProjection(BaseModel):
         ``base_url_hint``, ``model_count``, ``gateway_identity``.
         **This block must never be merged into the top-layer provider list
         or route-plan primary/support fields.**
+    topology_ready
+        PR-6 topology-ready projection block for desktop constellation/
+        status-board surfaces.  A single structured block derived from
+        canonical sources (``TopologyRoutePlan`` first; legacy fallback
+        explicitly marked).  Renderer-agnostic.  Desktop topology surfaces
+        should consume this block rather than reconstructing routing truth
+        from legacy keys or dashboard-era summaries.
     overall_health
         Rolled-up overall health severity across all blocks.
     schema_version
@@ -706,6 +889,19 @@ class DesktopStatusProjection(BaseModel):
             "Always present as a separate block for lower-horizon-only "
             "rendering.  Must never be merged into the top-layer provider "
             "list or route-plan primary/support fields."
+        ),
+    )
+    topology_ready: Optional["DesktopTopologyProjection"] = Field(
+        default=None,
+        description=(
+            "PR-6 topology-ready projection block for desktop constellation/status-board "
+            "surfaces.  A single structured block derived from canonical sources "
+            "(TopologyRoutePlan first; legacy fallback explicitly marked and degraded).  "
+            "Renderer-agnostic: contains no display coordinates, colours, pixel positions, "
+            "or animation hints.  Desktop topology surfaces should consume this block "
+            "rather than reconstructing routing truth from legacy keys or dashboard-era "
+            "summaries.  OneAPI remains a separate lower-horizon integration block inside "
+            "this structure."
         ),
     )
     overall_health: ProjectionHealthSeverity = Field(
@@ -1339,6 +1535,147 @@ def _build_oneapi_integration_projection(ucp: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _build_topology_ready_projection(
+    ucp: Dict[str, Any],
+    oneapi_integration_block: Optional[Dict[str, Any]] = None,
+) -> "DesktopTopologyProjection":
+    """PR-6: Build the topology-ready projection block for desktop surfaces.
+
+    Derives a :class:`DesktopTopologyProjection` from the canonical
+    ``topology_route_plan`` block in the UCP when available, falling back to
+    legacy UCP keys with explicit degradation marking.
+
+    Parameters
+    ----------
+    ucp:
+        Unified control plan dict (from ``plan.to_dict()``).
+    oneapi_integration_block:
+        Pre-built OneAPI lower-horizon integration block (from
+        :func:`_build_oneapi_integration_projection`).  When ``None`` the
+        function builds its own copy so the topology block is always
+        self-contained.
+
+    Returns
+    -------
+    DesktopTopologyProjection
+        A fully populated, renderer-agnostic topology-ready block.
+    """
+    primary_model_id: Optional[str] = None
+    primary_provider_id: Optional[str] = None
+    primary_vendor_source: Optional[str] = None
+    primary_is_native_mm: bool = False
+    support_model_ids: List[str] = []
+    route_reason: Optional[str] = None
+    route_phase: Optional[str] = None
+    route_domain: Optional[str] = None
+    routing_authority_source: str = "none"
+    canonical_source_present: bool = False
+
+    # ------------------------------------------------------------------
+    # CANONICAL PATH: topology_route_plan
+    # ------------------------------------------------------------------
+    if "topology_route_plan" in ucp:
+        routing_authority_source = "topology_router"
+        canonical_source_present = True
+        topology_plan = _safe_dict(ucp["topology_route_plan"])
+        primary = _safe_dict(topology_plan.get("primary_model"))
+        if primary:
+            primary_model_id = _safe_str(primary.get("model_id"))
+            primary_provider_id = _safe_str(primary.get("provider_id"))
+            primary_vendor_source = _safe_str(primary.get("vendor_source"))
+            primary_is_native_mm = _safe_bool(primary.get("native_multimodal"))
+        support_nodes = _safe_list(topology_plan.get("support_models"))
+        support_model_ids = [
+            _safe_str(s.get("model_id"))
+            for s in support_nodes
+            if isinstance(s, dict) and _safe_str(s.get("model_id"))
+        ]
+        route_reason = _safe_str(topology_plan.get("route_reason"))
+        route_phase = _safe_str(topology_plan.get("phase"))
+        route_domain = _safe_str(topology_plan.get("domain"))
+
+    else:
+        # ------------------------------------------------------------------
+        # LEGACY COMPAT PATH — top-level UCP keys only
+        # ------------------------------------------------------------------
+        _model = _safe_str(ucp.get("chosen_model"))
+        _provider = _safe_str(ucp.get("chosen_provider"))
+        _reason = _safe_str(ucp.get("route_reason"))
+        _is_mm = _safe_bool(ucp.get("is_native_multimodal"))
+        _support = _safe_list(ucp.get("support_model_ids"))
+
+        # Also check multimodal_route block
+        mm_route = _safe_dict(ucp.get("multimodal_route"))
+        if mm_route:
+            if not _reason:
+                _reason = _safe_str(mm_route.get("route_reason"))
+            if not _is_mm:
+                _is_mm = _safe_bool(mm_route.get("is_native_multimodal"))
+            if not _model:
+                _model = _safe_str(mm_route.get("selected_model"))
+            if not _provider:
+                _provider = _safe_str(mm_route.get("selected_provider"))
+
+        primary_model_id = _model
+        primary_provider_id = _provider
+        primary_is_native_mm = _is_mm
+        support_model_ids = [s for s in _support if isinstance(s, str) and s]
+        route_reason = _reason
+
+        if _model or _provider or _reason:
+            routing_authority_source = "legacy_ucp_keys"
+
+    # ------------------------------------------------------------------
+    # Provider availability
+    # ------------------------------------------------------------------
+    primary_provider_available = True
+    model_supply = _safe_dict(ucp.get("canonical_model_supply"))
+    if model_supply and primary_provider_id:
+        for rec in _safe_list(model_supply.get("providers")):
+            if _safe_str(rec.get("provider_id")) == primary_provider_id:
+                health = _safe_str(rec.get("health_status"), "healthy")
+                if health in ("unavailable", "error"):
+                    primary_provider_available = False
+                break
+
+    # ------------------------------------------------------------------
+    # OneAPI integration block (lower-horizon; always separate)
+    # ------------------------------------------------------------------
+    if oneapi_integration_block is None:
+        oneapi_integration_block = _build_oneapi_integration_projection(ucp)
+
+    # ------------------------------------------------------------------
+    # Health severity
+    # ------------------------------------------------------------------
+    legacy_fallback = routing_authority_source == "legacy_ucp_keys"
+    if not primary_model_id and not primary_provider_id:
+        sev = ProjectionHealthSeverity.unknown
+    elif not primary_provider_available:
+        sev = ProjectionHealthSeverity.critical
+    elif legacy_fallback:
+        sev = ProjectionHealthSeverity.degraded
+    else:
+        sev = ProjectionHealthSeverity.ok
+
+    return DesktopTopologyProjection(
+        primary_model_id=primary_model_id,
+        primary_provider_id=primary_provider_id,
+        primary_vendor_source=primary_vendor_source,
+        primary_is_native_multimodal=primary_is_native_mm,
+        support_model_ids=support_model_ids,
+        route_reason=route_reason,
+        route_phase=route_phase,
+        route_domain=route_domain,
+        primary_provider_available=primary_provider_available,
+        routing_authority_source=routing_authority_source,
+        canonical_source_present=canonical_source_present,
+        legacy_fallback_active=legacy_fallback,
+        oneapi_integration=oneapi_integration_block,
+        health_severity=sev,
+        contract_authority=TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+    )
+
+
 def build_desktop_status_projection(
     *,
     unified_control_plan: Optional[Dict[str, Any]] = None,
@@ -1394,6 +1731,12 @@ def build_desktop_status_projection(
         # Always built; must not be merged into model_routing or any top-layer block.
         oneapi_integration = _build_oneapi_integration_projection(ucp)
 
+        # PR-6: topology-ready projection block for desktop topology surfaces.
+        # Pass the pre-built OneAPI block so it is shared (not rebuilt twice).
+        topology_ready = _build_topology_ready_projection(
+            ucp, oneapi_integration_block=oneapi_integration
+        )
+
         # Roll up overall health from all blocks.
         overall_health = _rolled_up_severity([
             perception.health_severity,
@@ -1411,6 +1754,7 @@ def build_desktop_status_projection(
             lifecycle=lifecycle,
             explainability=explainability,
             oneapi_integration=oneapi_integration,
+            topology_ready=topology_ready,
             overall_health=overall_health,
         )
     except Exception as _err:

@@ -1617,6 +1617,61 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_server_canonicalization_status()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/desktop-topology  (PR-6)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/desktop-topology")
+    async def get_desktop_topology_projection() -> JSONResponse:
+        """Return the PR-6 topology-ready projection block for desktop surfaces.
+
+        This endpoint is **read-only** and **additive** (PR-6).  It does not
+        modify any existing projection, router, or model supply module.
+
+        Returns the :class:`~contracts.desktop_status_projection.DesktopTopologyProjection`
+        block derived from the canonical ``TopologyRoutePlan`` (when available),
+        with legacy fallback explicitly marked and degraded.
+
+        This is the single canonical integration point for desktop topology
+        surfaces (constellation-style boards) that need a renderer-agnostic,
+        topology-ready projection without reconstructing routing truth from
+        legacy keys or dashboard-era summaries.
+
+        Key semantics
+        -------------
+        - ``canonical_source_present`` — ``true`` when sourced from
+          ``TopologyRoutePlan``; ``false`` on legacy/fallback path.
+        - ``legacy_fallback_active`` — ``true`` when routing data was
+          assembled from legacy UCP keys; signals degraded projection.
+        - ``oneapi_integration`` — always present as a lower-horizon block;
+          never promoted to top-layer peer.
+        - ``contract_authority`` — machine-checkable PR-6 sentinel.
+
+        Response schema
+        ---------------
+        .. code-block:: json
+
+            {
+              "primary_model_id": "gpt-4o",
+              "primary_provider_id": "openai",
+              "primary_vendor_source": "direct",
+              "primary_is_native_multimodal": false,
+              "support_model_ids": ["claude-3-5-sonnet"],
+              "route_reason": "...",
+              "route_phase": "manifest",
+              "route_domain": "local",
+              "primary_provider_available": true,
+              "routing_authority_source": "topology_router",
+              "canonical_source_present": true,
+              "legacy_fallback_active": false,
+              "oneapi_integration": { "system_layer": "aggregator_integration", ... },
+              "health_severity": "ok",
+              "contract_authority": "contracts.desktop_status_projection.DesktopTopologyProjection"
+            }
+        """
+        payload = _assemble_desktop_topology_payload()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -2693,4 +2748,77 @@ def _assemble_server_canonicalization_status() -> Dict[str, Any]:
             "desktop_status_endpoint": "/api/v1/projection/runtime",
         },
         "timestamp": time.time(),
+    }
+
+
+def _assemble_desktop_topology_payload() -> Dict[str, Any]:
+    """PR-6: Assemble the topology-ready projection payload for desktop surfaces.
+
+    Builds a :class:`~contracts.desktop_status_projection.DesktopTopologyProjection`
+    from live runtime state (canonical ``TopologyRoutePlan`` when available,
+    legacy fallback with explicit degradation marking otherwise).
+
+    Always returns a valid dict.  All sub-components are optional and degrade
+    gracefully when the relevant sub-systems are unavailable.
+    """
+    try:
+        from contracts.desktop_status_projection import (
+            build_desktop_status_projection,
+        )
+    except Exception as exc:
+        logger.warning(
+            "_assemble_desktop_topology_payload: import failed: %s", exc
+        )
+        return _minimal_desktop_topology_fallback()
+
+    # Build a UCP dict from the live topology route plan so that the
+    # topology-ready projection block is sourced from canonical data.
+    ucp: Dict[str, Any] = {}
+    try:
+        continuum_state = _get_continuum_state()
+        route_plan = _get_route_plan(continuum_state)
+        if route_plan is not None:
+            ucp["topology_route_plan"] = route_plan.to_dict()
+    except Exception as exc:
+        logger.debug(
+            "_assemble_desktop_topology_payload: route_plan derivation skipped: %s",
+            exc,
+        )
+
+    try:
+        proj = build_desktop_status_projection(unified_control_plan=ucp)
+        topo = proj.topology_ready
+        if topo is None:
+            return _minimal_desktop_topology_fallback()
+        result = topo.to_dict()
+        result["_assembled_at"] = time.time()
+        return result
+    except Exception as exc:
+        logger.warning(
+            "_assemble_desktop_topology_payload: projection assembly failed: %s", exc
+        )
+        return _minimal_desktop_topology_fallback()
+
+
+def _minimal_desktop_topology_fallback() -> Dict[str, Any]:
+    """Return a minimal valid desktop topology payload for failure cases."""
+    return {
+        "primary_model_id": None,
+        "primary_provider_id": None,
+        "primary_vendor_source": None,
+        "primary_is_native_multimodal": False,
+        "support_model_ids": [],
+        "route_reason": None,
+        "route_phase": None,
+        "route_domain": None,
+        "primary_provider_available": True,
+        "routing_authority_source": "none",
+        "canonical_source_present": False,
+        "legacy_fallback_active": False,
+        "oneapi_integration": None,
+        "health_severity": "unknown",
+        "contract_authority": (
+            "contracts.desktop_status_projection.DesktopTopologyProjection"
+        ),
+        "_assembled_at": time.time(),
     }
