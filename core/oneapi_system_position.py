@@ -6,6 +6,19 @@ core/oneapi_system_position.py
 Sentinel and registry module formalising OneAPI's canonical system position
 as a **system-level aggregator integration layer** in the Galaxy architecture.
 
+PR-4 note
+---------
+This module is the canonical authority for the PR-4 OneAPI horizon and global
+integration cleanup.  It supersedes prior PR-4 attempts, including PR #408 and
+any earlier replacement attempts related to OneAPI horizon cleanup.
+
+PR-4 adds :class:`OneAPIStatusSummary` — a runtime-enriched status snapshot
+that carries ``configured``, ``health``, ``base_url_hint``, ``model_count``,
+and ``gateway_identity`` fields.  Downstream projection code (e.g.
+``contracts/desktop_status_projection.py``) consumes this to populate the
+distinct ``oneapi_integration`` lower-horizon block in
+:class:`~contracts.desktop_status_projection.DesktopStatusProjection`.
+
 Architecture position
 ---------------------
 OneAPI is *not* a direct/native-multimodal top-layer provider.  It is an
@@ -63,6 +76,11 @@ build_oneapi_integration_summary()
     Builder that returns a dict snapshot of the current integration position
     (used by projection consumers and diagnostics).
 
+build_oneapi_status_summary(configured, health, base_url_hint, model_count, gateway_identity)
+    PR-4 builder that returns a :class:`OneAPIStatusSummary` runtime snapshot
+    with live status fields.  Intended for lower-horizon projection rendering
+    and Node_01_OneAPI /status output.
+
 get_oneapi_integration_registry() / reset_oneapi_integration_registry()
     Singleton accessor and test-reset helpers.
 """
@@ -84,7 +102,9 @@ __all__ = [
     "OneAPIIntegrationEntry",
     "ONEAPI_INTEGRATION_REGISTRY",
     "OneAPIIntegrationSnapshot",
+    "OneAPIStatusSummary",
     "build_oneapi_integration_summary",
+    "build_oneapi_status_summary",
     "get_oneapi_integration_registry",
     "reset_oneapi_integration_registry",
 ]
@@ -302,7 +322,72 @@ class OneAPIIntegrationSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# Builder
+# PR-4: OneAPI runtime status summary
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=False)
+class OneAPIStatusSummary:
+    """PR-4 runtime status snapshot for OneAPI lower-horizon rendering.
+
+    This is the standardised status structure that downstream projection code
+    (``contracts/desktop_status_projection.py``) and the Node_01_OneAPI
+    ``/status`` endpoint expose for lower-horizon-only rendering on the status
+    board.
+
+    **Architectural constraint**: This object describes the OneAPI aggregator
+    horizon — a *lower* tier in the model supply topology.  It must **never**
+    be merged into the top-layer direct/native provider list or route-plan
+    primary/support fields.  Any such rendering is architecturally incorrect
+    per ``docs/ONEAPI_SYSTEM_POSITION.md``.
+
+    Attributes
+    ----------
+    system_layer:
+        Always ``"aggregator_integration"`` (matches
+        :data:`ONEAPI_SYSTEM_LAYER`).  Consumers can assert this value to
+        confirm the object originates from the lower aggregator horizon.
+    configured:
+        ``True`` when both ``ONEAPI_BASE_URL`` and ``ONEAPI_API_KEY`` are
+        set in the environment; ``False`` otherwise.  When ``False``, the
+        horizon row still appears in the status board but shows
+        ``"not configured"``.
+    health:
+        One of ``"healthy"``, ``"degraded"``, or ``"skipped"``.
+        ``"skipped"`` means the node was not started / has no credentials.
+    base_url_hint:
+        Sanitised (non-secret) hint of the base URL, e.g. ``"http://host:3000"``
+        with no path or credential components.  ``None`` when not configured.
+    model_count:
+        Number of models available through this gateway, if known.
+        ``None`` when the model list has not been fetched or the gateway is
+        not reachable.
+    gateway_identity:
+        Short identity string for the external gateway, e.g.
+        ``"oneapi-gateway"`` or a vendor-specific label.  ``None`` when
+        not configured or not available.
+    """
+
+    system_layer: str
+    configured: bool
+    health: str
+    base_url_hint: Optional[str]
+    model_count: Optional[int]
+    gateway_identity: Optional[str]
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "system_layer": self.system_layer,
+            "configured": self.configured,
+            "health": self.health,
+            "base_url_hint": self.base_url_hint,
+            "model_count": self.model_count,
+            "gateway_identity": self.gateway_identity,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Builders
 # ---------------------------------------------------------------------------
 
 
@@ -325,6 +410,55 @@ def build_oneapi_integration_summary() -> OneAPIIntegrationSnapshot:
             dim.value for dim in ONEAPI_INTEGRATION_REGISTRY
         ),
         routing_authority_ref=_ROUTING_AUTHORITY_REF,
+    )
+
+
+def build_oneapi_status_summary(
+    *,
+    configured: bool = False,
+    health: str = "skipped",
+    base_url_hint: Optional[str] = None,
+    model_count: Optional[int] = None,
+    gateway_identity: Optional[str] = None,
+) -> OneAPIStatusSummary:
+    """PR-4 builder for the standardised OneAPI lower-horizon status summary.
+
+    Constructs a :class:`OneAPIStatusSummary` describing the live runtime
+    state of the OneAPI aggregator integration.  The result is intended for:
+
+    - the ``oneapi_integration`` top-level block of
+      :class:`~contracts.desktop_status_projection.DesktopStatusProjection`;
+    - the ``/status`` response body of ``nodes/Node_01_OneAPI/main.py``;
+    - lower-horizon rendering on the status board.
+
+    This object must **never** be merged into the top-layer provider list or
+    route-plan primary/support fields.
+
+    Parameters
+    ----------
+    configured:
+        ``True`` when both ``ONEAPI_BASE_URL`` and ``ONEAPI_API_KEY`` are set.
+    health:
+        One of ``"healthy"``, ``"degraded"``, or ``"skipped"``.
+    base_url_hint:
+        Sanitised base URL hint (no secrets).  Pass ``None`` when not
+        configured.
+    model_count:
+        Number of models available, or ``None`` if unknown.
+    gateway_identity:
+        Short gateway identity label, e.g. ``"oneapi-gateway"``.
+
+    Returns
+    -------
+    OneAPIStatusSummary
+    """
+    return OneAPIStatusSummary(
+        system_layer=ONEAPI_SYSTEM_LAYER,
+        configured=configured,
+        health=health,
+        base_url_hint=base_url_hint,
+        model_count=model_count,
+        gateway_identity=gateway_identity,
     )
 
 

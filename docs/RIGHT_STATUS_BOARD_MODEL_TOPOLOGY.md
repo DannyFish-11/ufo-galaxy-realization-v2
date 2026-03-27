@@ -147,20 +147,35 @@ architecturally below the direct-vendor tier.  It is therefore rendered as a
 **separate, clearly labelled lower row — the OneAPI Aggregator Horizon** — in
 the topology display.
 
-This is a hard architectural constraint, not a layout preference.  Any rendering
-that places OneAPI at the same visual level as direct/native-multimodal providers
-is **architecturally incorrect**.
+This is a hard architectural constraint, not a layout preference.  **Any
+rendering that places OneAPI at the same visual level as direct/native-multimodal
+providers is architecturally incorrect.**
 
-Rules enforced by the topology surface:
+### PR-4 enforcement
 
-1. OneAPI is never mixed into the main direct-provider layer.
-2. When `oneapi_source` data is present in the projection, a horizontal rule
-   separates the main-route and support layers from the OneAPI Aggregator Horizon.
-3. The OneAPI Aggregator Horizon shows: base URL, health/configured status, and
-   model count if known.
-4. When OneAPI is not configured, the Horizon row still appears but shows
+PR-4 further hardens this constraint with the following rules:
+
+1. **OneAPI is always in the lower aggregator horizon row** and only there.
+   It must never appear in the top-layer direct/native provider list or in
+   route-plan primary/support fields, regardless of routing weight or
+   configuration state.
+2. **The `oneapi_integration` block** (added to `DesktopStatusProjection` in
+   PR-4) is **always present** in the projection — even when OneAPI is not
+   configured.  The block shows `configured=False` and `health="skipped"` in
+   that case.
+3. **The `oneapi_source` field in `ModelRoutingProjection`** is populated
+   *only* when the selected route actually routes *through* OneAPI
+   (`vendor_source == "oneapi"`).  It is `None` otherwise.
+4. **Absence of OneAPI data** must not cause fallback to top-layer rendering.
+   The horizon row shows the unconfigured state instead.
+5. OneAPI is never mixed into the main direct-provider layer.
+6. A horizontal rule separates the main-route and support layers from the
+   OneAPI Aggregator Horizon.
+7. The OneAPI Aggregator Horizon shows: base URL hint, health/configured
+   status, model count if known, gateway identity if available.
+8. When OneAPI is not configured, the Horizon row still appears but shows
    `not configured`.
-5. The horizontal separator and the `ONEAPI AGGREGATOR HORIZON` label are
+9. The horizontal separator and the `ONEAPI AGGREGATOR HORIZON` label are
    mandatory; they must not be removed.
 
 This mirrors the principle in [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md)

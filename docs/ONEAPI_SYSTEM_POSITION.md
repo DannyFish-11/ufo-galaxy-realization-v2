@@ -1,12 +1,40 @@
 # OneAPI System Position
 
-> **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze).
+> **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze);
+> further enforced in PR-4 (OneAPI horizon and global integration cleanup).
+> **PR-4 note:** This document supersedes prior PR-4 attempts, including PR #408 and
+> any earlier replacement attempt related to OneAPI horizon cleanup.
 > **Scope:** Defines what OneAPI is, what it is not, and how its configuration
 > and state must influence the broader Galaxy system.
 >
 > Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
 > [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
+
+---
+
+## PR-4: OneAPI Horizon Enforcement
+
+PR-4 strengthens the OneAPI lower-horizon enforcement established in PR-1 with
+the following additional architectural rules:
+
+1. **OneAPI is always rendered in the lower aggregator horizon row** — it must
+   never appear in the top-layer direct/native provider list or in the
+   route-plan primary/support fields, regardless of configuration or routing
+   weight.
+2. **OneAPI configuration is system-wide** — `ONEAPI_BASE_URL` and
+   `ONEAPI_API_KEY` are global system inputs, not dashboard-local config.
+3. **The `oneapi_integration` top-level block** is added to
+   `DesktopStatusProjection` (PR-4) and is **always present**, even when
+   OneAPI is not configured.  When not configured, it shows `configured=False`
+   and `health="skipped"`.
+4. **The `oneapi_source` field in `ModelRoutingProjection`** is populated
+   **only** when the selected route actually routes through OneAPI
+   (`vendor_source == "oneapi"`).  It is `None` otherwise.  Using it to
+   represent a top-layer provider peer is architecturally incorrect.
+5. **Absence of OneAPI data** (not configured) must not cause fallback to
+   top-layer rendering — the lower-horizon block simply shows the unconfigured
+   state.
 
 ---
 
@@ -219,3 +247,44 @@ Any code or documentation that treats OneAPI as:
 - a dashboard-local configuration surface only
 
 …is **incorrect** and should be updated to match this canonical position.
+
+---
+
+## 8. PR-4 Projection Contract Changes
+
+PR-4 adds a distinct `oneapi_integration` top-level field to
+`DesktopStatusProjection` in `contracts/desktop_status_projection.py`.
+
+### `oneapi_integration` block (always present)
+
+```json
+{
+  "system_layer": "aggregator_integration",
+  "configured": true,
+  "health": "healthy",
+  "base_url_hint": "http://host:3000",
+  "model_count": null,
+  "gateway_identity": "oneapi-gateway"
+}
+```
+
+- `system_layer` is always `"aggregator_integration"`.
+- `configured` is `true` when `ONEAPI_BASE_URL` and `ONEAPI_API_KEY` are both set.
+- `health` is one of `"healthy"`, `"degraded"`, `"skipped"`.
+- `base_url_hint` is a sanitised (non-secret) hint of the base URL.
+- `model_count` is the number of models available, or `null` if unknown.
+- `gateway_identity` is a short identity string (e.g. `"oneapi-gateway"`).
+
+### Separation from top-layer routing
+
+The `oneapi_integration` block is **entirely separate** from
+`model_routing.selected_provider`, `model_routing.selected_model`, and
+`model_routing.support_model_hints`.  No code path should ever:
+
+- Copy `oneapi_integration` fields into the top-layer provider list.
+- Set `model_routing.vendor_source` to `"oneapi"` unless the primary route
+  actually goes through the OneAPI node.
+- Render the OneAPI aggregator horizon at the same visual level as top-layer
+  direct/native providers.
+
+Any such rendering is **architecturally incorrect**.
