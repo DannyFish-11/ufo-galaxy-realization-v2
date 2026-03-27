@@ -692,6 +692,113 @@ class AndroidBridge:
                 device_id, exc,
             )
     
+    # ─────────────────────────────────────────────────────────────────────────
+    #  设备 Fan-out 辅助方法（PARALLEL_SUBTASK / 多设备协作）
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _fan_out_task_assign(
+        self,
+        task_id: str,
+        task_type: str,
+        goal: str,
+        device_ids: List[str],
+        session_id: str,
+        trace_id: str,
+        max_steps: int = 10,
+        constraints: Optional[List[str]] = None,
+        group_id: Optional[str] = None,
+        require_local_agent: bool = True,
+    ) -> Dict[str, Any]:
+        """将 task_assign 扇出（fan-out）到多台设备。
+
+        用于 PARALLEL_SUBTASK 的服务器端 fan-out：
+        1. 查询 UnifiedDeviceManager 获取目标设备的 WebSocket 连接
+        2. 向每台设备下发独立的 task_assign（包含 subtask_index）
+        3. 返回汇总状态（而非等待所有设备完成）
+
+        注意：这是 fire-and-forget 的异步广播，不等待设备执行结果。
+        设备执行完毕后通过 GOAL_EXECUTION_RESULT 回传结果。
+
+        Args:
+            task_id: 父任务 ID
+            task_type: task_assign 类型（parallel_subtask / goal_execution）
+            goal: 自然语言目标
+            device_ids: 目标设备 ID 列表
+            session_id: 会话 ID
+            trace_id: 追踪 ID
+            max_steps: 最大步数
+            constraints: 约束条件
+            group_id: 分组 ID（用于结果汇聚）
+            require_local_agent: 是否要求本地执行
+
+        Returns:
+            汇总状态（fan-out 到的设备数 / 失败数）
+        """
+        constraints = constraints or []
+        results = {"fanout": 0, "failed": 0, "device_ids": [], "errors": []}
+
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+            ucm = get_unified_connection_manager()
+        except Exception as ucm_err:
+            logger.warning(
+                "PARALLEL_SUBTASK fan-out: UCM 不可用，跳过 fan-out | error=%s",
+                ucm_err,
+            )
+            return {"fanout": 0, "failed": len(device_ids), "device_ids": [], "errors": [str(ucm_err)]}
+
+        for idx, device_id in enumerate(device_ids):
+            try:
+                task_assign_payload: Dict[str, Any] = {
+                    "task_id": task_id,
+                    "goal": goal,
+                    "constraints": constraints,
+                    "max_steps": max_steps,
+                    "require_local_agent": require_local_agent,
+                    "trace_id": trace_id,
+                    "session_id": session_id,
+                    "runtime_session_id": trace_id,
+                    "success": True,
+                    "group_id": group_id,
+                    "subtask_index": idx,  # 每台设备分配不同 subtask_index
+                }
+
+                msg = MessageBuilder.task_assign(
+                    device_id=device_id,
+                    task_id=task_id,
+                    task_type=task_type,
+                    payload=task_assign_payload,
+                )
+                msg["trace_id"] = trace_id
+                msg["session_id"] = session_id
+
+                # 通过 UCM 查找设备的 WebSocket 连接并下发
+                sent = await ucm.send_to_device(device_id, msg)
+                if sent:
+                    results["fanout"] += 1
+                    results["device_ids"].append(device_id)
+                    logger.debug(
+                        "PARALLEL_SUBTASK fan-out → device_id=%s subtask_index=%s",
+                        device_id, idx,
+                    )
+                else:
+                    results["failed"] += 1
+                    results["errors"].append(f"device {device_id}: WebSocket not connected")
+
+            except Exception as fan_err:
+                results["failed"] += 1
+                results["errors"].append(f"device {device_id}: {fan_err}")
+                logger.warning(
+                    "PARALLEL_SUBTASK fan-out → device_id=%s failed: %s",
+                    device_id, fan_err,
+                )
+
+        logger.info(
+            "PARALLEL_SUBTASK fan-out 完成: fanout=%s failed=%s total=%s",
+            results["fanout"], results["failed"], len(device_ids),
+        )
+        return results
+
     def _register_default_handlers(self):
         """注册默认消息处理器"""
         self._message_handlers[MessageType.DEVICE_REGISTER] = self._handle_device_register
@@ -1305,17 +1412,20 @@ class AndroidBridge:
     # ─────────────────────────────────────────────────────────────────────────
 
     async def _handle_parallel_subtask(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """处理 PARALLEL_SUBTASK — 多设备并行任务协调。
-
-        Android 收到 parallel_subtask 后，在本设备执行子任务并上报结果。
-        Gateway 此处收到后：
-        1. 记录协调上下文（group_id / subtask_index）
-        2. 将子任务分发到对应设备执行（通过 Node_71 MultiDeviceCoordinator）
-        3. 返回 task_assign 让该设备执行（实际执行在 Android 端）
+        """处理 PARALLEL_SUBTASK — 服务器端多设备 Fan-out 协调。
 
         与 goal_execution 的区别：
         - parallel_subtask 有 group_id + subtask_index，用于结果汇聚
-        - parallel_subtask 可并发分发到多设备（fan-out）
+        - 服务器端做 fan-out：查询所有已连接设备，向每台设备下发独立的 task_assign
+
+        流程：
+        1. 解析 parallel_subtask payload
+        2. 通过 DesktopPresenceRuntime 将 goal 转换为可执行文本
+        3. 查询 UnifiedDeviceManager 获取所有已连接的 Android 设备
+        4. 向每台设备发送独立的 task_assign（包含 subtask_index）
+        5. 返回 fan-out 结果（异步，不等待设备执行完成）
+
+        Android 端每个设备执行完子任务后，通过 GOAL_EXECUTION_RESULT 回传结果。
         """
         payload = message.get("payload", {})
         device_id = message.get("device_id") or payload.get("device_id", "unknown")
@@ -1323,8 +1433,9 @@ class AndroidBridge:
         trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
         task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
         goal = payload.get("goal", "").strip()
-        group_id = payload.get("group_id") or "unknown"
-        subtask_index = payload.get("subtask_index", 0)
+        group_id = payload.get("group_id") or f"group_{uuid.uuid4().hex[:8]}"
+        constraints = payload.get("constraints", [])
+        max_steps = payload.get("max_steps", 10)
 
         if not goal:
             return MessageBuilder.error(
@@ -1335,11 +1446,11 @@ class AndroidBridge:
             )
 
         logger.info(
-            "PARALLEL_SUBTASK received: task_id=%s device_id=%s group_id=%s subtask_index=%s goal=%r",
-            task_id, device_id, group_id, subtask_index, goal[:80],
+            "PARALLEL_SUBTASK received: task_id=%s device_id=%s group_id=%s goal=%r",
+            task_id, device_id, group_id, goal[:80],
         )
 
-        # 通过 DesktopPresenceRuntime 处理
+        # ── Step 1: 通过 DesktopPresenceRuntime 规范化 goal ──────────────
         result: Dict[str, Any] = {"success": False, "response": ""}
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
@@ -1364,35 +1475,110 @@ class AndroidBridge:
                 correlation_id=task_id,
             )
 
-        success = result.get("success", False)
         response_text = result.get("response", "") or str(result.get("reply", ""))
         runtime_session_id = result.get("runtime_session_id", "")
 
-        parallel_task_assign_payload: Dict[str, Any] = {
-            "task_id": task_id,
-            "goal": response_text if response_text else goal,
-            "constraints": payload.get("constraints", []),
-            "max_steps": payload.get("max_steps", 10),
-            "require_local_agent": True,
-            "trace_id": trace_id,
-            "session_id": session_id,
-            "runtime_session_id": runtime_session_id,
-            "success": success,
-            "group_id": group_id,
-            "subtask_index": subtask_index,
-        }
+        # ── Step 2: 查询所有已连接设备 ───────────────────────────────────
+        all_device_ids: List[str] = []
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+            ucm = get_unified_connection_manager()
+            # 过滤 Android 设备（ANDROID 类型）
+            # get_all_devices() 返回 Dict[device_id, device_info]
+            all_device_ids = [
+                device_id
+                for device_id, d in ucm.get_all_devices().items()
+                if d.get("device_type", "").upper() in ("ANDROID", "MOBILE", "PHONE")
+                or device_id.startswith("android_")
+                or d.get("online")  # 只要在线的都考虑
+            ]
+            logger.debug(
+                "PARALLEL_SUBTASK: 发现 %d 台 Android 设备",
+                len(all_device_ids),
+            )
+        except Exception as ucm_err:
+            logger.warning(
+                "PARALLEL_SUBTASK: UCM 查询失败，使用空设备列表 | error=%s",
+                ucm_err,
+            )
 
-        logger.info(
-            "PARALLEL_SUBTASK → task_assign: task_id=%s subtask_index=%s goal=%r",
-            task_id, subtask_index, response_text[:80] if response_text else goal[:80],
-        )
+        # 排除当前发送者设备（避免重复执行）
+        target_device_ids = [d for d in all_device_ids if d != device_id]
 
-        return MessageBuilder.task_assign(
-            device_id=device_id,
-            task_id=task_id,
-            task_type="parallel_subtask",
-            payload=parallel_task_assign_payload,
-        )
+        # ── Step 3: Fan-out 到多台设备 ───────────────────────────────────
+        fanout_summary: Dict[str, Any] = {"fanout": 0, "failed": 0, "device_ids": [], "errors": []}
+        if target_device_ids:
+            fanout_summary = await self._fan_out_task_assign(
+                task_id=task_id,
+                task_type="parallel_subtask",
+                goal=response_text if response_text else goal,
+                device_ids=target_device_ids,
+                session_id=session_id,
+                trace_id=trace_id,
+                max_steps=max_steps,
+                constraints=constraints,
+                group_id=group_id,
+                require_local_agent=True,
+            )
+        else:
+            logger.info(
+                "PARALLEL_SUBTASK: 无其他在线设备，fallback 到单设备执行 | task_id=%s",
+                task_id,
+            )
+
+        # ── Step 4: 返回结果给调用方（fire-and-forget，不等待执行）───────
+        if fanout_summary["fanout"] > 0:
+            # 成功 fan-out，返回汇总（不阻塞等待设备执行）
+            logger.info(
+                "PARALLEL_SUBTASK → fan-out 成功: task_id=%s fanout=%s devices=%s",
+                task_id, fanout_summary["fanout"], fanout_summary["device_ids"],
+            )
+            return MessageBuilder.goal_execution_result(
+                device_id=device_id,
+                payload={
+                    "status": "dispatched",
+                    "task_id": task_id,
+                    "correlation_id": task_id,
+                    "group_id": group_id,
+                    "fanout_count": fanout_summary["fanout"],
+                    "dispatched_to": fanout_summary["device_ids"],
+                    "dispatch_failed": fanout_summary["failed"],
+                    "runtime_session_id": runtime_session_id,
+                    "message": f"Parallel task dispatched to {fanout_summary['fanout']} device(s)",
+                },
+                correlation_id=task_id,
+                trace_id=trace_id,
+            )
+        else:
+            # 无 fan-out 结果（无设备或 UCM 异常），fallback 到本地单设备执行
+            parallel_task_assign_payload: Dict[str, Any] = {
+                "task_id": task_id,
+                "goal": response_text if response_text else goal,
+                "constraints": constraints,
+                "max_steps": max_steps,
+                "require_local_agent": True,
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "runtime_session_id": runtime_session_id,
+                "success": True,
+                "group_id": group_id,
+                "subtask_index": 0,
+            }
+
+            logger.info(
+                "PARALLEL_SUBTASK → task_assign(fallback): task_id=%s goal=%r",
+                task_id, response_text[:80] if response_text else goal[:80],
+            )
+
+            return MessageBuilder.task_assign(
+                device_id=device_id,
+                task_id=task_id,
+                task_type="parallel_subtask",
+                payload=parallel_task_assign_payload,
+            )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  GOAL_EXECUTION_RESULT — 结果回传（Android → Gateway）
 
     # ─────────────────────────────────────────────────────────────────────────
     #  GOAL_EXECUTION_RESULT — 结果回传（Android → Gateway）
