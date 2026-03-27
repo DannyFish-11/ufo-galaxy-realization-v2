@@ -96,6 +96,15 @@ TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY: str = (
     "contracts.desktop_status_projection.DesktopTopologyProjection"
 )
 
+#: PR-7: Sentinel string identifying the topology projection quality/readiness
+#: block as a PR-7 canonical contract artefact.  Mirrors
+#: :data:`contracts.desktop_status_projection.TOPOLOGY_READINESS_CONTRACT_AUTHORITY`
+#: so that the projection compiler can reference the same authority from within
+#: the ``core.projection`` namespace.
+TOPOLOGY_READINESS_CONTRACT_AUTHORITY: str = (
+    "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
+)
+
 
 # ---------------------------------------------------------------------------
 # ExecutionSummary — lightweight placeholder for device/execution context

@@ -235,6 +235,14 @@ ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
   routing truth from legacy keys or assembling dashboard-era summaries.
   `canonical_source_present == true` confirms canonical sourcing;
   `legacy_fallback_active == true` signals a degraded projection.
+- **PR-7**: `topology_ready` now carries a structured `projection_quality` block
+  (`TopologyProjectionQualityBlock`) with explicit readiness/quality semantics.
+  Desktop/constellation consumers **must** inspect `projection_quality.readiness`
+  and `projection_quality.authoritative` before treating topology data as ground
+  truth.  `readiness == "canonical"` and `authoritative == true` are required for
+  fully authoritative routing truth.  `readiness == "degraded"` signals legacy
+  fallback; `readiness == "partial"` signals missing/unavailable components;
+  `readiness == "unavailable"` means no topology data is available.
 
 ---
 
