@@ -327,3 +327,44 @@ necessary and must not be used.**
 `topo.oneapi_integration` is always present and is a **lower-horizon-only**
 block.  It must never be promoted to a top-layer provider peer in the topology
 display.  See [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md).
+
+---
+
+## 12. PR-7 Readiness / Quality Semantics
+
+PR-7 hardens the consumer contract for `DesktopTopologyProjection` by attaching
+a structured `projection_quality` block (`TopologyProjectionQualityBlock`) to
+every topology-ready projection.
+
+### Consumer-facing readiness states
+
+| `readiness` | `authoritative` | Meaning |
+|-------------|-----------------|---------|
+| `canonical` | `true` | Fully canonical — sourced from canonical `TopologyRoutePlan`. Treat as full routing truth. |
+| `degraded` | `false` | Legacy fallback — sourced from UCP legacy keys. Must **not** treat as full routing truth. |
+| `partial` | `false` | Canonical source but key components missing/unavailable. Topology present but not healthy. |
+| `unavailable` | `false` | No routing data. Do not render constellation topology from this block. |
+
+### Consuming `projection_quality`
+
+```python
+topo = proj.topology_ready  # DesktopTopologyProjection (PR-6)
+pq   = topo.projection_quality  # TopologyProjectionQualityBlock (PR-7)
+
+if pq is None or not pq.authoritative:
+    # Do not treat topology data as ground truth.
+    # Surface pq.readiness and pq.quality_note to the operator.
+    show_degraded_indicator(pq.readiness, pq.quality_note)
+else:
+    # readiness == "canonical" — safe to render full constellation topology
+    render_topology(topo)
+```
+
+### Separation of concerns
+
+- `projection_quality` describes the **authority and trustworthiness** of the
+  topology routing data within `DesktopTopologyProjection`.
+- `oneapi_integration` (within `DesktopTopologyProjection`) remains a
+  **lower-horizon** integration block — never promoted to top-layer peer.
+- The quality block does **not** affect the OneAPI lower-horizon block.  One
+  may be canonical while the other is in any state.

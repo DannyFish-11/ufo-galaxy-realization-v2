@@ -140,6 +140,16 @@ TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY: str = (
     "contracts.desktop_status_projection.DesktopTopologyProjection"
 )
 
+#: PR-7: Sentinel string identifying the topology projection quality/readiness
+#: block as a PR-7 canonical contract artefact.  Downstream desktop/constellation
+#: consumers should verify this sentinel to confirm the quality block was
+#: produced by the canonical builder.  The quality block provides structured
+#: readiness semantics so consumers can distinguish canonical, degraded,
+#: partial, and unavailable projection states without relying on ad-hoc booleans.
+TOPOLOGY_READINESS_CONTRACT_AUTHORITY: str = (
+    "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
+)
+
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -224,6 +234,38 @@ class ExecutionPathKind(str, Enum):
     cross_device = "cross_device"
     hybrid = "hybrid"
     none = "none"
+
+
+class TopologyProjectionReadiness(str, Enum):
+    """PR-7: Structured readiness / quality state for a desktop topology projection block.
+
+    Consumers should use this enum to determine how to interpret and display
+    topology projection data, and whether to treat it as fully authoritative.
+
+    canonical
+        Fully canonical and authoritative.  Sourced from a canonical
+        ``TopologyRoutePlan`` produced by the canonical topology router.
+        Consumers **may** treat this data as fully authoritative routing truth.
+    degraded
+        Available but degraded.  Routing data was assembled from legacy UCP
+        keys (fallback path) rather than a canonical ``TopologyRoutePlan``.
+        Consumers **must not** treat degraded data as fully authoritative
+        routing truth.  Clearly surface the degraded state to operators.
+    partial
+        Partially available.  A canonical source was used but important
+        components are missing or unavailable (e.g. primary provider
+        unavailable, or primary model identity absent from the route plan).
+        Consumers should surface that routing is available but not healthy.
+    unavailable
+        No routing data is available at all.  The topology block cannot
+        provide any routing truth.  Consumers should not render constellation
+        topology from this block.
+    """
+
+    canonical = "canonical"
+    degraded = "degraded"
+    partial = "partial"
+    unavailable = "unavailable"
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +663,100 @@ class ExplainabilityProjection(BaseModel):
 
 # ---------------------------------------------------------------------------
 # PR-6: DesktopTopologyProjection — topology-ready block
+# PR-7: TopologyProjectionQualityBlock — structured readiness/quality semantics
 # ---------------------------------------------------------------------------
+
+
+class TopologyProjectionQualityBlock(BaseModel):
+    """PR-7: Structured quality and readiness block for :class:`DesktopTopologyProjection`.
+
+    Provides explicit machine-readable semantics about topology projection
+    quality so desktop/constellation consumers can determine:
+
+    - whether topology data is canonical and authoritative
+    - whether it is degraded (legacy fallback)
+    - whether it is only partially available
+    - whether it is completely unavailable
+
+    Desktop consumers **must** inspect this block before treating topology
+    projection data as fully authoritative.  ``authoritative == False``
+    signals that the projection data **must not** be used as ground truth.
+
+    Fields
+    ------
+    readiness
+        Structured readiness state: ``canonical``, ``degraded``, ``partial``,
+        or ``unavailable``.  See :class:`TopologyProjectionReadiness` for
+        per-value semantics.
+    authoritative
+        ``True`` only when ``readiness == "canonical"`` — i.e. data was
+        sourced from a canonical ``TopologyRoutePlan`` and all key components
+        are healthy.  ``False`` for degraded, partial, or unavailable states.
+        Consumers **must not** treat the topology block as fully authoritative
+        routing truth when this is ``False``.
+    degraded
+        ``True`` when routing was assembled from legacy/compat UCP keys rather
+        than a canonical ``TopologyRoutePlan``.  Mirrors
+        ``legacy_fallback_active`` on the parent block but within the quality
+        contract so it is harder to overlook.
+    partial
+        ``True`` when a canonical source was present but important components
+        are missing or unavailable (provider unavailable, primary model
+        identity absent, etc.).
+    quality_note
+        Human-readable note explaining the current quality state.  Suitable
+        for operator-facing display or diagnostic logs.
+    quality_authority
+        Machine-checkable sentinel identifying this block as a PR-7
+        topology quality/readiness contract artefact.
+    """
+
+    readiness: TopologyProjectionReadiness = Field(
+        default=TopologyProjectionReadiness.unavailable,
+        description=(
+            "Structured readiness state for this topology projection block. "
+            "'canonical' = fully authoritative (canonical TopologyRoutePlan path); "
+            "'degraded' = available but assembled from legacy fallback keys; "
+            "'partial' = canonical source but missing/unavailable key components; "
+            "'unavailable' = no routing data at all."
+        ),
+    )
+    authoritative: bool = Field(
+        default=False,
+        description=(
+            "True only when readiness == 'canonical'. "
+            "Consumers must not treat topology data as fully authoritative "
+            "routing truth when this is False."
+        ),
+    )
+    degraded: bool = Field(
+        default=False,
+        description=(
+            "True when routing was assembled from legacy UCP keys (fallback path). "
+            "Mirrors legacy_fallback_active on the parent block within the quality contract."
+        ),
+    )
+    partial: bool = Field(
+        default=False,
+        description=(
+            "True when canonical source was present but important components "
+            "are missing or unavailable."
+        ),
+    )
+    quality_note: Optional[str] = Field(
+        default=None,
+        description="Human-readable note explaining the current quality state.",
+    )
+    quality_authority: str = Field(
+        default=TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
+        description=(
+            "Machine-checkable sentinel identifying this block as a PR-7 "
+            "topology quality/readiness contract artefact."
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return json.loads(self.model_dump_json())
 
 
 class DesktopTopologyProjection(BaseModel):
@@ -693,6 +828,13 @@ class DesktopTopologyProjection(BaseModel):
         ``base_url_hint``, ``model_count``, ``gateway_identity``.
     health_severity
         Aggregated health severity for this topology block.
+    projection_quality
+        PR-7 structured quality/readiness block.  Provides explicit
+        machine-readable semantics (``readiness``, ``authoritative``,
+        ``degraded``, ``partial``) so consumers can determine whether
+        to treat this topology block as canonical, degraded, partial, or
+        unavailable.  Desktop/constellation consumers **must** inspect this
+        block before treating topology data as authoritative routing truth.
     contract_authority
         Machine-checkable sentinel identifying this block as a PR-6
         topology-ready contract artefact produced by
@@ -772,6 +914,15 @@ class DesktopTopologyProjection(BaseModel):
     health_severity: ProjectionHealthSeverity = Field(
         default=ProjectionHealthSeverity.unknown,
         description="Aggregated health severity for this topology block.",
+    )
+    projection_quality: Optional["TopologyProjectionQualityBlock"] = Field(
+        default=None,
+        description=(
+            "PR-7 structured quality/readiness block providing explicit machine-readable "
+            "semantics about projection authority.  Inspect 'readiness' and 'authoritative' "
+            "before treating this topology block as canonical routing truth.  "
+            "'authoritative == False' means consumers must not use this data as ground truth."
+        ),
     )
     contract_authority: str = Field(
         default=TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
@@ -1657,6 +1808,60 @@ def _build_topology_ready_projection(
     else:
         sev = ProjectionHealthSeverity.ok
 
+    # ------------------------------------------------------------------
+    # PR-7: Compute structured quality/readiness block
+    # ------------------------------------------------------------------
+    no_data = routing_authority_source == "none"
+    is_partial = (
+        canonical_source_present
+        and not legacy_fallback
+        and (not primary_model_id or not primary_provider_available)
+    )
+
+    if no_data:
+        readiness = TopologyProjectionReadiness.unavailable
+        authoritative = False
+        is_degraded = False
+        quality_note = (
+            "No routing data is available. Topology block cannot provide routing truth. "
+            "Consumers must not render constellation topology from this block."
+        )
+    elif legacy_fallback:
+        readiness = TopologyProjectionReadiness.degraded
+        authoritative = False
+        is_degraded = True
+        quality_note = (
+            "Routing data was assembled from legacy UCP keys (fallback path), not from "
+            "a canonical TopologyRoutePlan. This block must not be treated as authoritative "
+            "routing truth. Surface the degraded state to operators."
+        )
+    elif is_partial:
+        readiness = TopologyProjectionReadiness.partial
+        authoritative = False
+        is_degraded = False
+        quality_note = (
+            "Canonical TopologyRoutePlan was used but important components are missing "
+            "or unavailable (e.g. primary provider unavailable or primary model absent). "
+            "Topology is available but not fully healthy."
+        )
+    else:
+        readiness = TopologyProjectionReadiness.canonical
+        authoritative = True
+        is_degraded = False
+        quality_note = (
+            "Topology projection is fully canonical and authoritative. "
+            "Sourced from a canonical TopologyRoutePlan. "
+            "Consumers may treat this data as fully authoritative routing truth."
+        )
+
+    projection_quality = TopologyProjectionQualityBlock(
+        readiness=readiness,
+        authoritative=authoritative,
+        degraded=is_degraded,
+        partial=is_partial,
+        quality_note=quality_note,
+    )
+
     return DesktopTopologyProjection(
         primary_model_id=primary_model_id,
         primary_provider_id=primary_provider_id,
@@ -1672,6 +1877,7 @@ def _build_topology_ready_projection(
         legacy_fallback_active=legacy_fallback,
         oneapi_integration=oneapi_integration_block,
         health_severity=sev,
+        projection_quality=projection_quality,
         contract_authority=TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
     )
 

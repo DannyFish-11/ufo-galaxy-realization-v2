@@ -1618,15 +1618,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         return JSONResponse(content=payload)
 
     # ------------------------------------------------------------------
-    # GET /api/v1/projection/desktop-topology  (PR-6)
+    # GET /api/v1/projection/desktop-topology  (PR-6, hardened PR-7)
     # ------------------------------------------------------------------
 
     @router.get("/api/v1/projection/desktop-topology")
     async def get_desktop_topology_projection() -> JSONResponse:
-        """Return the PR-6 topology-ready projection block for desktop surfaces.
+        """Return the topology-ready projection block for desktop surfaces.
 
-        This endpoint is **read-only** and **additive** (PR-6).  It does not
-        modify any existing projection, router, or model supply module.
+        This endpoint is **read-only** and **additive** (PR-6, PR-7).  It does
+        not modify any existing projection, router, or model supply module.
 
         Returns the :class:`~contracts.desktop_status_projection.DesktopTopologyProjection`
         block derived from the canonical ``TopologyRoutePlan`` (when available),
@@ -1637,13 +1637,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         topology-ready projection without reconstructing routing truth from
         legacy keys or dashboard-era summaries.
 
-        Key semantics
-        -------------
+        PR-7 readiness / quality semantics
+        -----------------------------------
+        The ``projection_quality`` block provides structured machine-readable
+        semantics about whether the topology data is authoritative.  Consumers
+        **must** inspect this block before treating topology data as ground truth:
+
+        - ``projection_quality.readiness`` — one of ``"canonical"``,
+          ``"degraded"``, ``"partial"``, ``"unavailable"``.
+        - ``projection_quality.authoritative`` — ``true`` only when
+          ``readiness == "canonical"``.  **Never treat data as authoritative
+          routing truth when this is ``false``.**
+        - ``projection_quality.degraded`` — ``true`` when routing was
+          assembled from legacy UCP keys; the block must not be used as full truth.
+        - ``projection_quality.quality_note`` — human-readable explanation for
+          operators / diagnostic logs.
+
+        Additional semantics
+        --------------------
         - ``canonical_source_present`` — ``true`` when sourced from
           ``TopologyRoutePlan``; ``false`` on legacy/fallback path.
         - ``legacy_fallback_active`` — ``true`` when routing data was
           assembled from legacy UCP keys; signals degraded projection.
-        - ``oneapi_integration`` — always present as a lower-horizon block;
+        - ``oneapi_integration`` — always present as a **lower-horizon** block;
           never promoted to top-layer peer.
         - ``contract_authority`` — machine-checkable PR-6 sentinel.
 
@@ -1666,6 +1682,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
               "legacy_fallback_active": false,
               "oneapi_integration": { "system_layer": "aggregator_integration", ... },
               "health_severity": "ok",
+              "projection_quality": {
+                "readiness": "canonical",
+                "authoritative": true,
+                "degraded": false,
+                "partial": false,
+                "quality_note": "Topology projection is fully canonical and authoritative...",
+                "quality_authority": "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
+              },
               "contract_authority": "contracts.desktop_status_projection.DesktopTopologyProjection"
             }
         """
@@ -2817,6 +2841,19 @@ def _minimal_desktop_topology_fallback() -> Dict[str, Any]:
         "legacy_fallback_active": False,
         "oneapi_integration": None,
         "health_severity": "unknown",
+        "projection_quality": {
+            "readiness": "unavailable",
+            "authoritative": False,
+            "degraded": False,
+            "partial": False,
+            "quality_note": (
+                "No routing data is available. Topology block cannot provide routing truth. "
+                "Consumers must not render constellation topology from this block."
+            ),
+            "quality_authority": (
+                "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
+            ),
+        },
         "contract_authority": (
             "contracts.desktop_status_projection.DesktopTopologyProjection"
         ),

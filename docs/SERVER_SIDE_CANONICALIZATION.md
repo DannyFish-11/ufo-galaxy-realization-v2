@@ -250,3 +250,74 @@ the PR-5 canonicalization foundation.
 | `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
 | `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
 | `GET /api/v1/projection/desktop-topology` | **PR-6** | Topology-ready projection block for desktop surfaces |
+
+---
+
+## 9. PR-7 Desktop Constellation Consumption Hardening
+
+PR-7 hardens the consumer-facing robustness of the topology projection layer
+by adding explicit readiness/quality semantics to `DesktopTopologyProjection`.
+Downstream desktop/constellation consumers can now determine — in a structured,
+machine-readable way — whether topology projection data is canonical,
+degraded, partial, or unavailable.
+
+### What PR-7 adds
+
+| Addition | Location | Purpose |
+|----------|----------|---------|
+| `TOPOLOGY_READINESS_CONTRACT_AUTHORITY` | `contracts.desktop_status_projection` | Machine-checkable sentinel for PR-7 quality/readiness block |
+| `TOPOLOGY_READINESS_CONTRACT_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in compiler namespace |
+| `TopologyProjectionReadiness` | `contracts.desktop_status_projection` | Enum: `canonical` / `degraded` / `partial` / `unavailable` |
+| `TopologyProjectionQualityBlock` | `contracts.desktop_status_projection` | Structured quality/readiness Pydantic model |
+| `projection_quality` field | `DesktopTopologyProjection` | PR-7 quality block attached to the topology-ready projection |
+
+### Readiness / quality states
+
+| State | Meaning | `authoritative` | Consumer guidance |
+|-------|---------|-----------------|-------------------|
+| `canonical` | Sourced from canonical `TopologyRoutePlan`; all components healthy | `true` | May treat data as full routing truth |
+| `degraded` | Sourced from legacy UCP keys (fallback path) | `false` | Must **not** treat as full routing truth; surface degraded state to operator |
+| `partial` | Canonical source used but key components missing/unavailable | `false` | Topology available but not fully healthy; indicate partial state to operator |
+| `unavailable` | No routing data at all | `false` | Must not render constellation topology from this block |
+
+### Consumer guidance (post-PR-7)
+
+1. **Always inspect `projection_quality` before treating topology data as
+   authoritative.**  `projection_quality.authoritative == false` means the
+   data **must not** be used as ground truth.
+
+2. **`projection_quality.readiness`** is the primary discriminator:
+   - `"canonical"` → fully authoritative; all systems go.
+   - `"degraded"` → legacy fallback active; surface warning to operator.
+   - `"partial"` → canonical source but components missing; surface partial state.
+   - `"unavailable"` → no data; do not render topology.
+
+3. **`projection_quality.degraded == true`** explicitly mirrors
+   `legacy_fallback_active` inside the quality contract so it cannot be
+   overlooked by consumers inspecting only the quality block.
+
+4. **`projection_quality.quality_note`** provides a human-readable explanation
+   suitable for diagnostic logs and operator-facing surfaces.
+
+5. **OneAPI** (`oneapi_integration`) remains a lower-horizon block only — it
+   is present within `DesktopTopologyProjection` and at the top-level
+   `DesktopStatusProjection`, but must never be promoted to a top-layer
+   provider peer.
+
+### Machine-Checkable Exports (PR-7)
+
+| Symbol | Module | Type | Description |
+|--------|--------|------|-------------|
+| `TOPOLOGY_READINESS_CONTRACT_AUTHORITY` | `contracts.desktop_status_projection` | `str` | PR-7 quality/readiness block sentinel |
+| `TOPOLOGY_READINESS_CONTRACT_AUTHORITY` | `core.projection.projection_compiler` | `str` | Mirror sentinel in compiler namespace |
+| `TopologyProjectionReadiness` | `contracts.desktop_status_projection` | `StrEnum` | Readiness state enum |
+| `TopologyProjectionQualityBlock` | `contracts.desktop_status_projection` | Pydantic model | Structured quality/readiness block |
+
+### API Endpoints (post-PR-7)
+
+| Endpoint | PR | Description |
+|----------|-----|-------------|
+| `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
+| `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
+| `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
+| `GET /api/v1/projection/desktop-topology` | PR-6 / **PR-7** | Topology-ready block with readiness/quality semantics |
