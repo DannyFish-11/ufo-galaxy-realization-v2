@@ -105,6 +105,15 @@ TOPOLOGY_READINESS_CONTRACT_AUTHORITY: str = (
     "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
 )
 
+#: PR-8: Sentinel string identifying the final desktop status board integration
+#: payload as a PR-8 canonical contract artefact.  Mirrors
+#: :data:`contracts.desktop_status_projection.DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY`
+#: so that the projection compiler can reference the same canonical authority
+#: from within the ``core.projection`` namespace.
+DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY: str = (
+    "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload"
+)
+
 
 # ---------------------------------------------------------------------------
 # ExecutionSummary — lightweight placeholder for device/execution context
