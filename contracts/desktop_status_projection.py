@@ -97,6 +97,42 @@ _logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# PR-5: Server-side canonicalization — legacy field demotion registry
+# ---------------------------------------------------------------------------
+
+#: Frozenset of top-level UCP keys that are retained as **legacy/compatibility
+#: bridges only**.  Downstream consumers **must not** rely on these keys when a
+#: ``topology_route_plan`` block is present in the UCP.
+#:
+#: Background (PR-5):
+#: - PR-2 established ``TopologyRoutePlan`` as the sole canonical routing output.
+#: - PR-3 added ``vendor_source``/``oneapi_source`` to ``ModelRoutingProjection``.
+#: - PR-4 completed OneAPI lower-horizon cleanup (``oneapi_integration`` block).
+#: - PR-5 (this PR) formalises the demotion of these scattered keys so that
+#:   machine-checkable guardrails can enforce canonical-first consumption.
+#:
+#: The canonical routing authority is always
+#: ``core.model_topology.topology_router.CANONICAL_ROUTING_AUTHORITY``.
+#: See ``docs/MODEL_ROUTING_AUTHORITY.md`` and
+#: ``docs/SERVER_SIDE_CANONICALIZATION.md`` for the full demotion policy.
+LEGACY_UCP_ROUTING_KEYS: frozenset = frozenset(
+    {
+        "chosen_model",
+        "chosen_provider",
+        "is_native_multimodal",
+        "support_model_ids",
+        "route_reason",
+        "multimodal_route",
+    }
+)
+
+#: Sentinel string placed in serialised projection outputs to identify this
+#: module as the canonical projection contract authority (PR-5).
+PROJECTION_CONTRACT_AUTHORITY: str = (
+    "contracts.desktop_status_projection.DesktopStatusProjection"
+)
+
+# ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
 
@@ -319,6 +355,14 @@ class ModelRoutingProjection(BaseModel):
         keys (``chosen_model``, ``chosen_provider``, ``multimodal_route``).
         ``"none"`` — no routing data was available.
         Consumers should prefer ``"topology_router"`` as the canonical source.
+    legacy_routing_fallback_active
+        PR-5 canonicalization flag.  ``True`` when routing fields were
+        assembled from legacy/compat UCP keys (``routing_authority_source
+        == "legacy_ucp_keys"``).  Downstream consumers should treat such a
+        projection as degraded and prefer canonical ``TopologyRoutePlan``
+        data when available.  ``False`` on the canonical topology-router
+        path.  See :data:`LEGACY_UCP_ROUTING_KEYS` and
+        ``docs/SERVER_SIDE_CANONICALIZATION.md``.
     """
 
     selected_provider: Optional[str] = Field(
@@ -377,6 +421,18 @@ class ModelRoutingProjection(BaseModel):
             "'topology_router' = canonical TopologyRoutePlan path; "
             "'legacy_ucp_keys' = legacy/compat UCP keys; "
             "'none' = no routing data available."
+        ),
+    )
+    legacy_routing_fallback_active: bool = Field(
+        default=False,
+        description=(
+            "PR-5 canonicalization flag.  True when routing fields were "
+            "assembled from legacy/compat UCP keys (routing_authority_source "
+            "== 'legacy_ucp_keys') rather than the canonical "
+            "TopologyRoutePlan.  Downstream consumers should treat this "
+            "projection as degraded and prefer to source routing data from "
+            "a canonical TopologyRoutePlan when possible.  "
+            "See LEGACY_UCP_ROUTING_KEYS and docs/SERVER_SIDE_CANONICALIZATION.md."
         ),
     )
 
@@ -910,14 +966,21 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
        Extracts ``vendor_source`` and ``provider_id`` from the primary
        model node dict (PR-2 fields).  When ``vendor_source == "oneapi"``,
        populates ``oneapi_source`` with the canonical integration summary.
+       ``legacy_routing_fallback_active`` is ``False`` on this path.
 
-    2. **LEGACY COMPAT** — top-level UCP keys (``chosen_model``,
+    2. **LEGACY COMPAT ONLY** — top-level UCP keys (``chosen_model``,
        ``chosen_provider``, ``is_native_multimodal``, ``support_model_ids``,
        ``route_reason``) and the ``multimodal_route`` block (PR-20).
-       ``routing_authority_source`` is set to ``"legacy_ucp_keys"``.
+       ``routing_authority_source`` is set to ``"legacy_ucp_keys"`` and
+       ``legacy_routing_fallback_active`` is set to ``True`` (PR-5).
+       These keys are listed in :data:`LEGACY_UCP_ROUTING_KEYS`.
+       Downstream consumers **must not** treat these as canonical truth.
 
     Consumers should inspect ``routing_authority_source`` to understand which
-    path was taken.  The canonical path (``"topology_router"``) is preferred.
+    path was taken.  The canonical path (``"topology_router"``) is **always**
+    preferred.  ``legacy_routing_fallback_active == True`` indicates the
+    projection is in degraded / compatibility mode for routing fields.
+    See ``docs/SERVER_SIDE_CANONICALIZATION.md`` for the PR-5 policy.
     """
     routing_authority_source = "none"
     chosen_model: Optional[str] = None
@@ -1034,6 +1097,8 @@ def _build_model_routing_projection(ucp: Dict[str, Any]) -> ModelRoutingProjecti
         provider_available=provider_available,
         health_severity=sev,
         routing_authority_source=routing_authority_source,
+        # PR-5: flag legacy path for downstream consumers to detect degraded routing.
+        legacy_routing_fallback_active=(routing_authority_source == "legacy_ucp_keys"),
     )
 
 

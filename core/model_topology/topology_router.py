@@ -76,6 +76,21 @@ logger = logging.getLogger("Galaxy.ModelTopology.TopologyRouter")
 #: See ``docs/MODEL_ROUTING_AUTHORITY.md`` for the full routing authority policy.
 CANONICAL_ROUTING_AUTHORITY: str = "core.model_topology.topology_router.TopologyRouter"
 
+#: Tuple of routing-related identifiers that are **legacy/compatibility bridges**
+#: only.  These must not be used as primary routing truth when a
+#: :class:`TopologyRoutePlan` is available.
+#:
+#: Formalised in PR-5 (server-side canonicalization) to make the demotion
+#: machine-checkable and expose it to downstream guardrail tooling.
+#: See ``docs/SERVER_SIDE_CANONICALIZATION.md``.
+LEGACY_ROUTING_FIELDS: tuple = (
+    "chosen_model",
+    "chosen_provider",
+    "chosen_provider_category",
+    "MultiLLMRouter",
+    "dashboard_provider_endpoint",
+)
+
 
 # ---------------------------------------------------------------------------
 # TopologyRoutePlan — output of the router

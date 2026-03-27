@@ -55,6 +55,41 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# PR-5: Post-canonical server projection policy
+# ---------------------------------------------------------------------------
+
+#: Tuple of top-level UCP keys that are **legacy/compatibility-only** in the
+#: projection layer.  When a ``route_plan`` (:class:`TopologyRoutePlan`) is
+#: available, projection consumers must source all routing truth from the
+#: canonical route plan rather than these scattered keys.
+#:
+#: History:
+#: - PR-2 established ``TopologyRoutePlan`` as the sole canonical routing
+#:   output contract.
+#: - PR-3 added ``vendor_source``/``oneapi_source`` to the projection layer.
+#: - PR-4 completed OneAPI lower-horizon cleanup (``oneapi_integration``
+#:   block in ``DesktopStatusProjection``).
+#: - PR-5 (this module) formalises the demotion of these scattered UCP keys
+#:   so that machine-checkable guardrails can enforce canonical-first
+#:   consumption.  See ``docs/SERVER_SIDE_CANONICALIZATION.md``.
+LEGACY_PROJECTION_UCP_KEYS: tuple = (
+    "chosen_model",
+    "chosen_provider",
+    "is_native_multimodal",
+    "support_model_ids",
+    "route_reason",
+    "multimodal_route",
+)
+
+#: Sentinel string that marks the canonical projection compiler as the sole
+#: assembly authority for :class:`RuntimeProjection`.  Downstream surfaces
+#: must not assemble a ``RuntimeProjection`` outside of this function.
+PROJECTION_COMPILER_AUTHORITY: str = (
+    "core.projection.projection_compiler.build_runtime_projection"
+)
+
+
+# ---------------------------------------------------------------------------
 # ExecutionSummary — lightweight placeholder for device/execution context
 # ---------------------------------------------------------------------------
 
