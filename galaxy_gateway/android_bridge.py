@@ -672,6 +672,7 @@ class AndroidBridge:
 
         # AgentMessageHandler.kt 对齐类型
         self._message_handlers[MessageType.TASK_EXECUTE] = self._handle_task_execute
+        self._message_handlers[MessageType.TASK_SUBMIT] = self._handle_task_submit
         self._message_handlers[MessageType.TASK_CANCEL] = self._handle_generic_forward
         self._message_handlers[MessageType.TASK_STATUS] = self._handle_generic_forward
         self._message_handlers[MessageType.AGENT_PING] = self._handle_agent_ping
@@ -1047,6 +1048,112 @@ class AndroidBridge:
             task_id=task_id,
             task_type=task_type,
             payload=payload
+        )
+
+    async def _handle_task_submit(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """处理 TASK_SUBMIT — Android → Gateway 的自然语言任务提交。
+
+        AIP v3 链路：Step 3 (Android → Gateway) — Android 发送 task_submit，
+        Gateway 内部通过 DesktopPresenceRuntime → OpenClawd 处理，
+        然后返回 task_assign（Step 6: Gateway → Android）。
+
+        Android payload 格式（TaskSubmitPayload）:
+            task_text: str       — 自然语言任务描述
+            device_id: str       — 设备标识
+            session_id: str      — 会话标识
+            task_id: str         — 任务 ID（可选）
+            context: dict        — 额外上下文
+
+        返回 task_assign 消息，Android 端据此执行本地闭环自动化
+        或将 goal 继续用于后续 command_result 上报。
+        """
+        payload = message.get("payload", {})
+        device_id = message.get("device_id") or payload.get("device_id", "unknown")
+        session_id = payload.get("session_id") or message.get("session_id") or "android_default"
+        trace_id = message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+        task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
+        task_text = payload.get("task_text", "").strip()
+
+        if not task_text:
+            return MessageBuilder.error(
+                device_id,
+                "INVALID_TASK_SUBMIT",
+                "task_submit missing or empty 'task_text' field",
+                correlation_id=task_id,
+            )
+
+        logger.info(
+            "TASK_SUBMIT received: task_id=%s device_id=%s session_id=%s text=%r",
+            task_id, device_id, session_id, task_text[:80],
+        )
+
+        # ── 通过 DesktopPresenceRuntime（runtime shell）→ OpenClawd（subject core）处理 ──
+        result: Dict[str, Any] = {
+            "success": False,
+            "response": "Processing failed",
+        }
+
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            runtime = get_desktop_presence_runtime()
+            result = await runtime.handle_request(
+                message=task_text,
+                source="chat",
+                device_id=device_id,
+                session_id=session_id,
+                runtime_session_id=trace_id,
+                entry_mode="local",  # TASK_SUBMIT 来自本地 Android，优先本地执行
+            )
+        except Exception as runtime_err:
+            logger.error(
+                "TASK_SUBMIT: DesktopPresenceRuntime 处理失败 | task_id=%s error=%s",
+                task_id, runtime_err, exc_info=True,
+            )
+            return MessageBuilder.error(
+                device_id,
+                "RUNTIME_ERROR",
+                f"Subject core processing error: {runtime_err}",
+                correlation_id=task_id,
+            )
+
+        # ── 从 OpenClawd 结果中提取字段，构建 task_assign 返回 ──
+        success = result.get("success", False)
+        response_text = result.get("response", "") or str(result.get("reply", ""))
+        runtime_session_id = result.get("runtime_session_id", "")
+
+        # 决定是否需要 Android 本地执行（当响应为空或需要本地闭环时）
+        require_local_agent = not success or response_text == ""
+
+        # 将 OpenClawd 返回的自然语言响应作为 goal 传给 Android
+        goal = response_text if response_text else task_text
+        constraints: List[str] = []
+        if not success:
+            constraints.append(f"Processing failed: {result.get('error', 'unknown error')}")
+        if runtime_session_id:
+            constraints.append(f"session: {runtime_session_id}")
+
+        task_assign_payload: Dict[str, Any] = {
+            "task_id": task_id,
+            "goal": goal,
+            "constraints": constraints,
+            "max_steps": 10,
+            "require_local_agent": require_local_agent,
+            "trace_id": trace_id,
+            "session_id": session_id,
+            "runtime_session_id": runtime_session_id,
+            "success": success,
+        }
+
+        logger.info(
+            "TASK_SUBMIT → task_assign: task_id=%s require_local_agent=%s goal=%r",
+            task_id, require_local_agent, goal[:80],
+        )
+
+        return MessageBuilder.task_assign(
+            device_id=device_id,
+            task_id=task_id,
+            task_type="task_submit",
+            payload=task_assign_payload,
         )
 
     async def _handle_agent_ping(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
