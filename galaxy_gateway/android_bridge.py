@@ -338,6 +338,37 @@ class MessageBuilder:
         msg["priority"] = priority
         msg["timeout"] = timeout
         return msg
+
+    @classmethod
+    def goal_execution_result(cls, device_id: str, payload: Dict[str, Any],
+                              correlation_id: Optional[str] = None,
+                              trace_id: Optional[str] = None) -> Dict[str, Any]:
+        """goal_execution / parallel_subtask 结果回传（Android → Gateway）
+
+        对应 Android GoalResultPayload，字段：
+            task_id, correlation_id, status, result, details,
+            group_id, subtask_index, latency_ms, device_id, device_role, steps
+        """
+        msg = cls._base_message(MessageType.GOAL_EXECUTION_RESULT, device_id)
+        msg["payload"] = payload
+        if correlation_id:
+            msg["correlation_id"] = correlation_id
+        if trace_id:
+            msg["trace_id"] = trace_id
+        return msg
+
+    @classmethod
+    def task_progress(cls, device_id: str, task_id: str,
+                      progress: float, step: int = 0,
+                      message: str = "") -> Dict[str, Any]:
+        """任务进度上报"""
+        msg = cls._base_message(MessageType.TASK_PROGRESS, device_id)
+        msg["task_id"] = task_id
+        msg["progress"] = progress
+        msg["step"] = step
+        if message:
+            msg["message"] = message
+        return msg
     
     @classmethod
     def gui_click(cls, device_id: str, x: int, y: int,
@@ -673,6 +704,9 @@ class AndroidBridge:
         # AgentMessageHandler.kt 对齐类型
         self._message_handlers[MessageType.TASK_EXECUTE] = self._handle_task_execute
         self._message_handlers[MessageType.TASK_SUBMIT] = self._handle_task_submit
+        self._message_handlers[MessageType.GOAL_EXECUTION] = self._handle_goal_execution
+        self._message_handlers[MessageType.PARALLEL_SUBTASK] = self._handle_parallel_subtask
+        self._message_handlers[MessageType.GOAL_EXECUTION_RESULT] = self._handle_goal_execution_result
         self._message_handlers[MessageType.TASK_CANCEL] = self._handle_generic_forward
         self._message_handlers[MessageType.TASK_STATUS] = self._handle_generic_forward
         self._message_handlers[MessageType.AGENT_PING] = self._handle_agent_ping
@@ -1093,6 +1127,12 @@ class AndroidBridge:
             "response": "Processing failed",
         }
 
+        # entry_mode 决定是否允许 Android 桥接到远程 Agent Runtime
+        # "local" → require_local_agent=True（Android 本地执行闭环）
+        # "cross_device" → require_local_agent=False（Android 尝试 AgentRuntimeBridge 远程执行）
+        entry_mode = str(message.get("entry_mode", "local")).lower()
+        require_local_agent = (entry_mode == "local")
+
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
             runtime = get_desktop_presence_runtime()
@@ -1102,7 +1142,7 @@ class AndroidBridge:
                 device_id=device_id,
                 session_id=session_id,
                 runtime_session_id=trace_id,
-                entry_mode="local",  # TASK_SUBMIT 来自本地 Android，优先本地执行
+                entry_mode=entry_mode,
             )
         except Exception as runtime_err:
             logger.error(
@@ -1121,8 +1161,9 @@ class AndroidBridge:
         response_text = result.get("response", "") or str(result.get("reply", ""))
         runtime_session_id = result.get("runtime_session_id", "")
 
-        # 决定是否需要 Android 本地执行（当响应为空或需要本地闭环时）
-        require_local_agent = not success or response_text == ""
+        # 当本地执行失败或 OpenClawd 无响应时，fallback 到 Android 本地执行
+        if not success or response_text == "":
+            require_local_agent = True
 
         # 将 OpenClawd 返回的自然语言响应作为 goal 传给 Android
         goal = response_text if response_text else task_text
@@ -1155,6 +1196,298 @@ class AndroidBridge:
             task_type="task_submit",
             payload=task_assign_payload,
         )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  GOAL_EXECUTION — 高层自主目标执行（AIP v3 Phase 3）
+    #  链路: Android → Gateway → DesktopPresenceRuntime → TASK_ASSIGN → Android
+    #        Android 执行 → GOAL_EXECUTION_RESULT → Gateway
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _handle_goal_execution(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """处理 GOAL_EXECUTION — Android 高层自治目标下发。
+
+        与 _handle_task_submit 类似，但专用于 goal_execution 类型：
+        1. 解析 GoalExecutionPayload（goal / task_id / group_id / subtask_index 等）
+        2. 通过 DesktopPresenceRuntime 处理
+        3. 返回 task_assign（Android 据此执行本地 goal）
+
+        Android → Python payload 字段（GoalExecutionPayload）：
+            goal: str              自然语言目标描述
+            task_id: str           任务 ID
+            group_id: str?         分组 ID（多设备并行时使用）
+            subtask_index: int?    组内序号（多设备并行时使用）
+            max_steps: int         最大步数（默认 10）
+            timeout_ms: int?       超时毫秒
+            constraints: List[str] 约束条件
+            metadata: Dict         额外元数据
+        """
+        payload = message.get("payload", {})
+        device_id = message.get("device_id") or payload.get("device_id", "unknown")
+        session_id = payload.get("session_id") or message.get("session_id") or "android_default"
+        trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+        task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
+        goal = payload.get("goal", "").strip()
+
+        if not goal:
+            return MessageBuilder.error(
+                device_id,
+                "INVALID_GOAL_EXECUTION",
+                "goal_execution missing or empty 'goal' field",
+                correlation_id=task_id,
+            )
+
+        logger.info(
+            "GOAL_EXECUTION received: task_id=%s device_id=%s group_id=%s goal=%r",
+            task_id, device_id, payload.get("group_id"), goal[:80],
+        )
+
+        # 通过 DesktopPresenceRuntime 处理
+        result: Dict[str, Any] = {"success": False, "response": ""}
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            runtime = get_desktop_presence_runtime()
+            result = await runtime.handle_request(
+                message=goal,
+                source="chat",
+                device_id=device_id,
+                session_id=session_id,
+                runtime_session_id=trace_id,
+                entry_mode="local",
+            )
+        except Exception as runtime_err:
+            logger.error(
+                "GOAL_EXECUTION: DesktopPresenceRuntime 处理失败 | task_id=%s error=%s",
+                task_id, runtime_err, exc_info=True,
+            )
+            return MessageBuilder.error(
+                device_id,
+                "RUNTIME_ERROR",
+                f"Subject core processing error: {runtime_err}",
+                correlation_id=task_id,
+            )
+
+        # 从结果中提取字段，构建 task_assign 下发 Android
+        success = result.get("success", False)
+        response_text = result.get("response", "") or str(result.get("reply", ""))
+        runtime_session_id = result.get("runtime_session_id", "")
+
+        goal_task_assign_payload: Dict[str, Any] = {
+            "task_id": task_id,
+            "goal": response_text if response_text else goal,
+            "constraints": payload.get("constraints", []),
+            "max_steps": payload.get("max_steps", 10),
+            "require_local_agent": True,  # goal_execution 强制本地执行
+            "trace_id": trace_id,
+            "session_id": session_id,
+            "runtime_session_id": runtime_session_id,
+            "success": success,
+            "group_id": payload.get("group_id"),
+            "subtask_index": payload.get("subtask_index"),
+        }
+
+        logger.info(
+            "GOAL_EXECUTION → task_assign: task_id=%s goal=%r",
+            task_id, response_text[:80] if response_text else goal[:80],
+        )
+
+        return MessageBuilder.task_assign(
+            device_id=device_id,
+            task_id=task_id,
+            task_type="goal_execution",
+            payload=goal_task_assign_payload,
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  PARALLEL_SUBTASK — 多设备并行任务子项（AIP v3 Phase 3）
+    #  链路: Android → Gateway → (分发到多设备) → GOAL_EXECUTION_RESULT → Gateway
+    #  注意: Android GalaxyConnectionService 直接在设备端执行 parallel_subtask，
+    #  Gateway 此处负责协调分发（实际分发逻辑由 Node_71 处理）
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _handle_parallel_subtask(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """处理 PARALLEL_SUBTASK — 多设备并行任务协调。
+
+        Android 收到 parallel_subtask 后，在本设备执行子任务并上报结果。
+        Gateway 此处收到后：
+        1. 记录协调上下文（group_id / subtask_index）
+        2. 将子任务分发到对应设备执行（通过 Node_71 MultiDeviceCoordinator）
+        3. 返回 task_assign 让该设备执行（实际执行在 Android 端）
+
+        与 goal_execution 的区别：
+        - parallel_subtask 有 group_id + subtask_index，用于结果汇聚
+        - parallel_subtask 可并发分发到多设备（fan-out）
+        """
+        payload = message.get("payload", {})
+        device_id = message.get("device_id") or payload.get("device_id", "unknown")
+        session_id = payload.get("session_id") or message.get("session_id") or "android_default"
+        trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+        task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
+        goal = payload.get("goal", "").strip()
+        group_id = payload.get("group_id") or "unknown"
+        subtask_index = payload.get("subtask_index", 0)
+
+        if not goal:
+            return MessageBuilder.error(
+                device_id,
+                "INVALID_PARALLEL_SUBTASK",
+                "parallel_subtask missing or empty 'goal' field",
+                correlation_id=task_id,
+            )
+
+        logger.info(
+            "PARALLEL_SUBTASK received: task_id=%s device_id=%s group_id=%s subtask_index=%s goal=%r",
+            task_id, device_id, group_id, subtask_index, goal[:80],
+        )
+
+        # 通过 DesktopPresenceRuntime 处理
+        result: Dict[str, Any] = {"success": False, "response": ""}
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            runtime = get_desktop_presence_runtime()
+            result = await runtime.handle_request(
+                message=goal,
+                source="chat",
+                device_id=device_id,
+                session_id=session_id,
+                runtime_session_id=trace_id,
+                entry_mode="local",
+            )
+        except Exception as runtime_err:
+            logger.error(
+                "PARALLEL_SUBTASK: DesktopPresenceRuntime 处理失败 | task_id=%s error=%s",
+                task_id, runtime_err, exc_info=True,
+            )
+            return MessageBuilder.error(
+                device_id,
+                "RUNTIME_ERROR",
+                f"Subject core processing error: {runtime_err}",
+                correlation_id=task_id,
+            )
+
+        success = result.get("success", False)
+        response_text = result.get("response", "") or str(result.get("reply", ""))
+        runtime_session_id = result.get("runtime_session_id", "")
+
+        parallel_task_assign_payload: Dict[str, Any] = {
+            "task_id": task_id,
+            "goal": response_text if response_text else goal,
+            "constraints": payload.get("constraints", []),
+            "max_steps": payload.get("max_steps", 10),
+            "require_local_agent": True,
+            "trace_id": trace_id,
+            "session_id": session_id,
+            "runtime_session_id": runtime_session_id,
+            "success": success,
+            "group_id": group_id,
+            "subtask_index": subtask_index,
+        }
+
+        logger.info(
+            "PARALLEL_SUBTASK → task_assign: task_id=%s subtask_index=%s goal=%r",
+            task_id, subtask_index, response_text[:80] if response_text else goal[:80],
+        )
+
+        return MessageBuilder.task_assign(
+            device_id=device_id,
+            task_id=task_id,
+            task_type="parallel_subtask",
+            payload=parallel_task_assign_payload,
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  GOAL_EXECUTION_RESULT — 结果回传（Android → Gateway）
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _handle_goal_execution_result(self, websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """处理 GOAL_EXECUTION_RESULT — Android/设备执行结果回传。
+
+        Android 执行完 goal_execution 或 parallel_subtask 后发送此消息。
+        对应 Android: GoalResultPayload（见 AipModels.kt）
+
+        Android payload 字段（GoalResultPayload）：
+            task_id: str
+            correlation_id: str (= task_id)
+            status: str (success / failure / error / disabled)
+            result: str?  成功时的结果摘要
+            details: str? 错误详情
+            group_id: str?
+            subtask_index: int?
+            latency_ms: int
+            device_id: str
+            device_role: str?
+            steps: List[StepResult]
+
+        处理策略：
+        - 记录到 TaskMemory（供 LLM 上下文注入）
+        - 记录到 cross_device_execution_chain（PR-7 规范链）
+        - 触发 OpenClawd 反馈（如果有对话反馈路径）
+        """
+        payload = message.get("payload", {})
+        device_id = message.get("device_id") or payload.get("device_id", "unknown")
+        task_id = payload.get("task_id") or message.get("correlation_id") or "unknown"
+        correlation_id = payload.get("correlation_id") or task_id
+        trace_id = payload.get("trace_id") or message.get("trace_id") or ""
+        status = payload.get("status", "unknown")
+        result_text = payload.get("result") or payload.get("details", "")
+        latency_ms = payload.get("latency_ms", 0)
+        group_id = payload.get("group_id")
+        subtask_index = payload.get("subtask_index")
+
+        logger.info(
+            "GOAL_EXECUTION_RESULT received: task_id=%s device_id=%s status=%s "
+            "group_id=%s subtask_index=%s latency=%sms",
+            task_id, device_id, status, group_id, subtask_index, latency_ms,
+        )
+
+        # ── 持久化到 TaskMemory（容错保护）─────────────────────────────
+        if store_task_result is not None:
+            try:
+                await store_task_result(
+                    task_id=task_id,
+                    device_id=device_id,
+                    status=status,
+                    result=result_text,
+                    trace_id=trace_id,
+                    latency_ms=latency_ms,
+                    route_mode=payload.get("route_mode", "cross_device"),
+                    steps=payload.get("steps", []),
+                )
+                logger.debug(
+                    "GOAL_EXECUTION_RESULT: task_memory 写入成功 task_id=%s",
+                    task_id,
+                )
+            except Exception as mem_err:
+                logger.warning(
+                    "GOAL_EXECUTION_RESULT: task_memory 写入失败（非致命）task_id=%s error=%s",
+                    task_id, mem_err,
+                )
+        else:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: store_task_result 不可用，跳过内存回流 task_id=%s",
+                task_id,
+            )
+
+        # ── 触发 OpenClawd 反馈（如果有对应会话）────────────────────────
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            runtime = get_desktop_presence_runtime()
+            if hasattr(runtime, "on_goal_execution_result"):
+                await runtime.on_goal_execution_result(
+                    task_id=task_id,
+                    device_id=device_id,
+                    status=status,
+                    result=result_text,
+                    trace_id=trace_id,
+                )
+        except Exception as feedback_err:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: OpenClawd 反馈失败（非致命）task_id=%s error=%s",
+                task_id, feedback_err,
+            )
+
+        # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
+        # Android 不等待响应，结果已通过 store_task_result 持久化
+        return None
 
     async def _handle_agent_ping(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         """处理 agent_ping 请求，返回 heartbeat_ack"""
