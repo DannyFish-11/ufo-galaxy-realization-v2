@@ -761,6 +761,8 @@ class AndroidBridge:
                     "success": True,
                     "group_id": group_id,
                     "subtask_index": idx,  # 每台设备分配不同 subtask_index
+                    # 告诉目标设备：还有哪些同伴设备也在参与本次并行任务
+                    "device_ids": target_device_ids,
                 }
 
                 msg = MessageBuilder.task_assign(
@@ -1483,14 +1485,13 @@ class AndroidBridge:
         try:
             from core.unified.connection_manager import get_unified_connection_manager
             ucm = get_unified_connection_manager()
-            # 过滤 Android 设备（ANDROID 类型）
             # get_all_devices() 返回 Dict[device_id, device_info]
             all_device_ids = [
                 device_id
                 for device_id, d in ucm.get_all_devices().items()
                 if d.get("device_type", "").upper() in ("ANDROID", "MOBILE", "PHONE")
                 or device_id.startswith("android_")
-                or d.get("online")  # 只要在线的都考虑
+                or d.get("online")
             ]
             logger.debug(
                 "PARALLEL_SUBTASK: 发现 %d 台 Android 设备",
@@ -1501,9 +1502,10 @@ class AndroidBridge:
                 "PARALLEL_SUBTASK: UCM 查询失败，使用空设备列表 | error=%s",
                 ucm_err,
             )
+            all_device_ids = []
 
         # 排除当前发送者设备（避免重复执行）
-        target_device_ids = [d for d in all_device_ids if d != device_id]
+        target_device_ids: List[str] = [d for d in all_device_ids if d != device_id]
 
         # ── Step 3: Fan-out 到多台设备 ───────────────────────────────────
         fanout_summary: Dict[str, Any] = {"fanout": 0, "failed": 0, "device_ids": [], "errors": []}
@@ -1563,6 +1565,7 @@ class AndroidBridge:
                 "success": True,
                 "group_id": group_id,
                 "subtask_index": 0,
+                "device_ids": target_device_ids,
             }
 
             logger.info(
