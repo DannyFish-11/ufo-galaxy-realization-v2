@@ -198,3 +198,55 @@ Downstream consumers of server projection outputs should:
 | `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
 | `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
 | `GET /api/v1/projection/server-canonicalization-status` | **PR-5** | Server-side canonicalization summary |
+
+---
+
+## 8. PR-6 Desktop Topology Projection Delivery
+
+PR-6 delivers the final desktop topology-oriented projection layer on top of
+the PR-5 canonicalization foundation.
+
+### What PR-6 adds
+
+| Addition | Location | Purpose |
+|----------|----------|---------|
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `contracts.desktop_status_projection` | Machine-checkable sentinel for PR-6 topology-ready block |
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in the projection compiler namespace |
+| `DesktopTopologyProjection` | `contracts.desktop_status_projection` | Renderer-agnostic structured block for desktop topology surfaces |
+| `topology_ready` field | `DesktopStatusProjection` | PR-6 topology-ready block attached to the top-level projection |
+| `GET /api/v1/projection/desktop-topology` | `core/routes/projection.py` | Dedicated endpoint returning the topology-ready block |
+
+### Consumer guidance (post-PR-6)
+
+1. **Desktop topology surfaces** should consume the `topology_ready` block from
+   `DesktopStatusProjection` (or from `GET /api/v1/projection/desktop-topology`)
+   as the single canonical topology-ready projection.  Legacy/dashboard-era
+   assembly is no longer necessary when this block is present.
+
+2. **`canonical_source_present == true`** confirms the block was derived from a
+   canonical `TopologyRoutePlan`.  `legacy_fallback_active == true` signals a
+   degraded projection (assembled from legacy UCP keys).
+
+3. **`oneapi_integration`** inside `topology_ready` remains a lower-horizon
+   integration block only — it must never be promoted to a top-layer provider peer.
+
+4. **`contract_authority`** is the machine-checkable sentinel
+   `"contracts.desktop_status_projection.DesktopTopologyProjection"` confirming
+   the block was produced by the canonical builder.
+
+### Machine-Checkable Exports (PR-6)
+
+| Symbol | Module | Type | Description |
+|--------|--------|------|-------------|
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `contracts.desktop_status_projection` | `str` | PR-6 topology-ready delivery sentinel |
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `core.projection.projection_compiler` | `str` | Mirror sentinel in compiler namespace |
+| `DesktopTopologyProjection` | `contracts.desktop_status_projection` | Pydantic model | Topology-ready projection block |
+
+### API Endpoints (post-PR-6)
+
+| Endpoint | PR | Description |
+|----------|-----|-------------|
+| `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
+| `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
+| `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
+| `GET /api/v1/projection/desktop-topology` | **PR-6** | Topology-ready projection block for desktop surfaces |

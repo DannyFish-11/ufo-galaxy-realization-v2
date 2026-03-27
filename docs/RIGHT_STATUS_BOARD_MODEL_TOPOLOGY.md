@@ -271,3 +271,59 @@ dashboard-style card grids is architecturally incorrect.
   scope here — see [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md).
 - This document does **not** define the dashboard as a topology surface; the
   dashboard is in retirement and is not a valid target for new topology work.
+
+---
+
+## 11. PR-6 Topology-Ready Projection Contract
+
+PR-6 completes the canonical desktop topology projection delivery.  The
+`DesktopTopologyProjection` block (available as `DesktopStatusProjection.topology_ready`)
+is the **single canonical integration point** for desktop topology surfaces from
+PR-6 onwards.
+
+### What desktop topology surfaces should consume
+
+```python
+from contracts.desktop_status_projection import build_desktop_status_projection
+
+proj = build_desktop_status_projection(unified_control_plan=ucp_dict)
+topo = proj.topology_ready  # DesktopTopologyProjection
+
+# Topology semantics
+primary_model  = topo.primary_model_id
+primary_vendor = topo.primary_vendor_source
+support_models = topo.support_model_ids
+route_reason   = topo.route_reason
+route_phase    = topo.route_phase
+route_domain   = topo.route_domain
+
+# Authority check
+is_canonical   = topo.canonical_source_present
+is_degraded    = topo.legacy_fallback_active
+
+# OneAPI (always separate, lower-horizon only)
+oneapi_block   = topo.oneapi_integration
+```
+
+Or via the dedicated API endpoint:
+
+```
+GET /api/v1/projection/desktop-topology
+```
+
+### Why this replaces dashboard-era assembly
+
+Before PR-6, a desktop topology surface had to reconstruct routing truth from a
+combination of: raw UCP `chosen_model`/`chosen_provider` keys, dashboard-era
+summaries, or ad-hoc multi-field inspection.  The `topology_ready` block
+replaces all of this with a single, canonically assembled, renderer-agnostic
+structure.
+
+**When `topology_ready` is present, dashboard-era truth assembly is no longer
+necessary and must not be used.**
+
+### OneAPI as lower-horizon integration block
+
+`topo.oneapi_integration` is always present and is a **lower-horizon-only**
+block.  It must never be promoted to a top-layer provider peer in the topology
+display.  See [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md).

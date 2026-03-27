@@ -229,6 +229,12 @@ ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
   instead.
 - When `routing_authority` is not `topology_router`, the surface must highlight
   the degraded authority state rather than silently accepting it.
+- **PR-6**: the `topology_ready` block in `DesktopStatusProjection` is the
+  **single canonical topology-ready projection** for desktop topology surfaces.
+  Desktop consumers should use `topology_ready` rather than reconstructing
+  routing truth from legacy keys or assembling dashboard-era summaries.
+  `canonical_source_present == true` confirms canonical sourcing;
+  `legacy_fallback_active == true` signals a degraded projection.
 
 ---
 

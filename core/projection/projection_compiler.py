@@ -88,6 +88,14 @@ PROJECTION_COMPILER_AUTHORITY: str = (
     "core.projection.projection_compiler.build_runtime_projection"
 )
 
+#: PR-6: Sentinel string identifying the topology-ready projection delivery
+#: layer.  Mirrors :data:`contracts.desktop_status_projection.TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY`
+#: so that the projection compiler can reference the same canonical authority
+#: from within the ``core.projection`` namespace.
+TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY: str = (
+    "contracts.desktop_status_projection.DesktopTopologyProjection"
+)
+
 
 # ---------------------------------------------------------------------------
 # ExecutionSummary — lightweight placeholder for device/execution context
