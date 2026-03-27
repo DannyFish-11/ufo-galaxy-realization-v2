@@ -246,6 +246,92 @@ ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
 
 ---
 
+## PR-8: Final Desktop Status Board Integration Contract
+
+PR-8 delivers the final integration-oriented contract for the desktop status
+board / topology consumer boundary, building on PR-4 through PR-7.  After
+PR-8, desktop clients can consume **one stable server-provided payload** without
+re-deriving state from multiple endpoints or legacy/dashboard-era assembly
+logic.
+
+### What PR-8 adds
+
+| Addition | Location | Purpose |
+|----------|----------|---------|
+| `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `contracts.desktop_status_projection` | Machine-checkable PR-8 integration sentinel |
+| `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in compiler namespace |
+| `DesktopStatusBoardIntegrationPayload` | `contracts.desktop_status_projection` | Final integration-oriented composed payload |
+| `build_desktop_status_board_integration_payload()` | `contracts.desktop_status_projection` | Builder for the integration payload |
+| `GET /api/v1/projection/desktop-status-board` | `core.routes.projection` | Single stable endpoint for desktop status board consumption |
+
+### Integration payload fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `topology_projection` | `DesktopTopologyProjection` | PR-6/7 topology block with quality/readiness semantics |
+| `model_routing_summary` | `dict` | Compact routing summary (provider, model, authority source, legacy flag) |
+| `provider_health_summary` | `dict \| null` | Provider health/availability when relevant |
+| `oneapi_integration` | `dict \| null` | PR-4 lower-horizon OneAPI block (never a top-layer peer) |
+| `authority_indicators` | `dict` | All canonical-vs-legacy authority signals in one place |
+| `integration_authority` | `str` | PR-8 sentinel confirming canonical builder provenance |
+| `integration_health` | `str` | Rolled-up integration health |
+
+### Canonical authority layering (preserved)
+
+- `TopologyRoutePlan` / canonical projection structures remain authoritative.
+- Legacy compatibility fields remain secondary/fallback-only.
+- OneAPI remains a lower-horizon integration block only.
+- `authority_indicators.topology_authoritative == true` confirms topology data
+  is fully authoritative routing truth.
+
+### Consumer guidance (post-PR-8)
+
+1. **Consume `GET /api/v1/projection/desktop-status-board`** to obtain the
+   final integrated payload.  Do **not** assemble state by combining
+   `/runtime`, `/desktop-topology`, and other legacy endpoint outputs.
+
+2. **Inspect `authority_indicators`** for a single machine-checkable view of
+   all canonical-vs-legacy authority signals without traversing sub-blocks.
+
+3. **`topology_projection.projection_quality`** remains the primary readiness
+   discriminator (PR-7 semantics preserved):
+   - `"canonical"` → fully authoritative
+   - `"degraded"` → legacy fallback active; surface warning to operator
+   - `"partial"` → components missing; surface partial state
+   - `"unavailable"` → no data; do not render topology
+
+4. **`oneapi_integration`** is always a lower-horizon block; never promote it
+   to a top-layer provider peer.
+
+5. **`integration_authority`** equals
+   `"contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload"` —
+   verify this sentinel to confirm canonical builder provenance.
+
+### Machine-Checkable Exports (PR-8)
+
+| Symbol | Module | Type | Description |
+|--------|--------|------|-------------|
+| `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `contracts.desktop_status_projection` | `str` | PR-8 integration sentinel |
+| `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection.projection_compiler` | `str` | Mirror sentinel |
+| `DesktopStatusBoardIntegrationPayload` | `contracts.desktop_status_projection` | Pydantic model | Final integration payload |
+
+### API Endpoints (post-PR-8)
+
+| Endpoint | PR | Description |
+|----------|-----|-------------|
+| `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
+| `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
+| `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
+| `GET /api/v1/projection/desktop-topology` | PR-6/7 | Topology-ready block with readiness/quality semantics |
+| `GET /api/v1/projection/desktop-status-board` | **PR-8** | **Final integrated desktop status board payload** |
+
+> **Desktop clients should prefer `/api/v1/projection/desktop-status-board`
+> after PR-8.**  The lower-level endpoints remain available for diagnostic
+> and integration-layer use, but the integration payload provides everything
+> a status board client needs in one stable contract.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**

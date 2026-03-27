@@ -150,6 +150,18 @@ TOPOLOGY_READINESS_CONTRACT_AUTHORITY: str = (
     "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
 )
 
+#: PR-8: Sentinel string identifying the final desktop status board integration
+#: payload as a PR-8 canonical contract artefact.  Downstream desktop status
+#: board clients should verify this sentinel to confirm the integrated payload
+#: was produced by :func:`build_desktop_status_board_integration_payload` rather
+#: than assembled ad-hoc from scattered legacy/dashboard-era sources.
+#:
+#: See ``docs/STATUS_BOARD_V2.md`` (PR-8 section) and
+#: ``docs/SERVER_SIDE_CANONICALIZATION.md`` for consumer guidance.
+DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY: str = (
+    "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload"
+)
+
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -2001,3 +2013,318 @@ def desktop_status_projection_summary(
         "fallback_kinds": projection.explainability.fallback_kinds,
         "degradation_summary": projection.explainability.degradation_summary,
     }
+
+
+# ---------------------------------------------------------------------------
+# PR-8: Final desktop status board integration payload
+# ---------------------------------------------------------------------------
+
+
+class DesktopStatusBoardIntegrationPayload(BaseModel):
+    """PR-8: Final integration-oriented payload for desktop status board consumption.
+
+    Composes the canonical sub-structures established by PR-4 through PR-7 into
+    a single stable payload.  Desktop status board clients should consume this
+    payload rather than assembling state from scattered legacy/dashboard-era
+    sources.
+
+    Design principles
+    -----------------
+    - **Composition over duplication** — sub-structures are referenced from the
+      established canonical contracts rather than flattened or re-defined.
+    - **Canonical authority preserved** — ``TopologyRoutePlan`` / canonical
+      projection structures remain authoritative; legacy fields remain
+      secondary; OneAPI remains lower-horizon only.
+    - **One stable integration contract** — clients obtain topology projection,
+      readiness/quality semantics, model routing summary, provider health,
+      and OneAPI horizon in a single payload.
+
+    Fields
+    ------
+    payload_id
+        Unique identifier for this integration payload instance.
+    integrated_at
+        Unix epoch seconds when this payload was assembled.
+    topology_projection
+        PR-6/7 topology-ready projection block (``DesktopTopologyProjection``).
+        Contains routing fields, ``projection_quality`` readiness semantics,
+        and the OneAPI lower-horizon block.  ``None`` only on total assembly
+        failure.
+    model_routing_summary
+        Compact routing summary dict extracted from ``ModelRoutingProjection``.
+        Includes selected provider/model, vendor source, routing authority
+        source, and legacy fallback flag.
+    provider_health_summary
+        Optional provider health/availability summary dict.  ``None`` when
+        provider health information is not available from the current UCP.
+    oneapi_integration
+        PR-4 lower-horizon OneAPI aggregator integration block (always present,
+        always ``system_layer == "aggregator_integration"``).  Must never be
+        promoted to a top-layer provider peer.
+    authority_indicators
+        Machine-checkable authority block.  Aggregates all canonical-vs-legacy
+        authority signals in one place so clients do not need to inspect
+        individual sub-blocks to determine source of truth.
+    integration_authority
+        PR-8 sentinel confirming this payload was produced by the canonical
+        builder.  Equals ``DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY``.
+    integration_health
+        Rolled-up overall integration health derived from topology and routing
+        sub-blocks.
+    """
+
+    payload_id: str = Field(
+        default_factory=lambda: f"dsbip_{uuid.uuid4().hex[:12]}",
+        description="Unique identifier for this integration payload instance.",
+    )
+    integrated_at: float = Field(
+        default_factory=time.time,
+        description="Unix epoch seconds when this payload was assembled.",
+    )
+    topology_projection: Optional["DesktopTopologyProjection"] = Field(
+        default=None,
+        description=(
+            "PR-6/7 topology-ready projection block with readiness/quality semantics. "
+            "Contains routing fields, projection_quality, and the OneAPI lower-horizon "
+            "block.  Canonical source when available; legacy fallback explicitly marked."
+        ),
+    )
+    model_routing_summary: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Compact routing summary dict from ModelRoutingProjection. "
+            "Includes selected_provider, selected_model, vendor_source, "
+            "routing_authority_source, legacy_routing_fallback_active, "
+            "and health_severity."
+        ),
+    )
+    provider_health_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Provider health/availability summary dict. "
+            "None when not derivable from the current UCP."
+        ),
+    )
+    oneapi_integration: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "PR-4 lower-horizon OneAPI aggregator integration block. "
+            "Always system_layer='aggregator_integration'. "
+            "Must never be promoted to a top-layer provider peer."
+        ),
+    )
+    authority_indicators: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Machine-checkable authority indicators aggregating canonical-vs-legacy "
+            "signals from all sub-blocks.  Clients can inspect this single block "
+            "rather than traversing each sub-structure."
+        ),
+    )
+    integration_authority: str = Field(
+        default=DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+        description="PR-8 sentinel confirming canonical builder provenance.",
+    )
+    integration_health: ProjectionHealthSeverity = Field(
+        default=ProjectionHealthSeverity.unknown,
+        description="Rolled-up overall integration health.",
+    )
+
+    class Config:
+        use_enum_values = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serialisable dict representation."""
+        return json.loads(self.model_dump_json())
+
+    def to_json(self, **kwargs: Any) -> str:
+        """Return a JSON string representation."""
+        return json.dumps(self.to_dict(), **kwargs)
+
+
+def build_desktop_status_board_integration_payload(
+    desktop_status_projection: Optional[DesktopStatusProjection] = None,
+    *,
+    unified_control_plan: Optional[Dict[str, Any]] = None,
+    source_registry_snapshot: Optional[Dict[str, Any]] = None,
+    tristate: Optional[str] = None,
+    runtime_session_id: Optional[str] = None,
+) -> DesktopStatusBoardIntegrationPayload:
+    """Build the PR-8 final desktop status board integration payload.
+
+    Composes the canonical sub-structures (topology projection, model routing,
+    provider health, OneAPI integration) into a single stable payload for
+    desktop status board clients.
+
+    Clients should consume this payload rather than assembling state from
+    scattered legacy/dashboard-era sources.
+
+    Parameters
+    ----------
+    desktop_status_projection:
+        A pre-built :class:`DesktopStatusProjection` instance.  When provided,
+        this is used as the source of truth for all sub-blocks.  When ``None``,
+        a fresh projection is assembled from the remaining keyword arguments.
+    unified_control_plan:
+        Serialised ``UnifiedControlPlan`` dict used when building a fresh
+        projection.  Ignored when *desktop_status_projection* is provided.
+    source_registry_snapshot:
+        Source registry snapshot dict used when building a fresh projection.
+        Ignored when *desktop_status_projection* is provided.
+    tristate:
+        Current subject tri-state value used when building a fresh projection.
+        Ignored when *desktop_status_projection* is provided.
+    runtime_session_id:
+        Correlation ID for the active runtime session.
+
+    Returns
+    -------
+    DesktopStatusBoardIntegrationPayload
+        A fully populated, serialisable integration payload.  Never raises;
+        degrades gracefully on any internal error.
+    """
+    try:
+        if desktop_status_projection is None:
+            desktop_status_projection = build_desktop_status_projection(
+                unified_control_plan=unified_control_plan,
+                source_registry_snapshot=source_registry_snapshot,
+                tristate=tristate,
+                runtime_session_id=runtime_session_id,
+            )
+
+        proj = desktop_status_projection
+        topo = proj.topology_ready
+
+        # --- Model routing summary -----------------------------------------
+        mr = proj.model_routing
+        model_routing_summary: Dict[str, Any] = {
+            "selected_provider": mr.selected_provider,
+            "selected_model": mr.selected_model,
+            "is_native_multimodal": mr.is_native_multimodal,
+            "vendor_source": mr.vendor_source,
+            "route_reason": mr.route_reason,
+            "routing_authority_source": mr.routing_authority_source,
+            "legacy_routing_fallback_active": mr.legacy_routing_fallback_active,
+            "health_severity": (
+                mr.health_severity.value
+                if hasattr(mr.health_severity, "value")
+                else str(mr.health_severity)
+            ),
+            "support_model_hints": list(mr.support_model_hints or []),
+            "provider_available": mr.provider_available,
+        }
+
+        # --- Provider health summary ----------------------------------------
+        provider_health_summary: Optional[Dict[str, Any]] = None
+        if mr.selected_provider is not None:
+            provider_health_summary = {
+                "selected_provider": mr.selected_provider,
+                "provider_available": mr.provider_available,
+                "primary_provider_available": (
+                    topo.primary_provider_available if topo is not None else None
+                ),
+                "health_severity": (
+                    mr.health_severity.value
+                    if hasattr(mr.health_severity, "value")
+                    else str(mr.health_severity)
+                ),
+            }
+
+        # --- OneAPI lower-horizon block -------------------------------------
+        # Always source from the top-level oneapi_integration field (PR-4).
+        # This block is distinct from the topology-embedded block.
+        oneapi_integration = proj.oneapi_integration
+
+        # --- Authority indicators ------------------------------------------
+        topology_readiness = "unavailable"
+        topology_authoritative = False
+        topology_canonical_source_present = False
+        topology_legacy_fallback_active = False
+        topology_contract_authority: Optional[str] = None
+
+        if topo is not None:
+            topology_canonical_source_present = topo.canonical_source_present
+            topology_legacy_fallback_active = topo.legacy_fallback_active
+            topology_contract_authority = topo.contract_authority
+            pq = topo.projection_quality
+            if pq is not None:
+                readiness_val = pq.readiness
+                topology_readiness = (
+                    readiness_val.value
+                    if hasattr(readiness_val, "value")
+                    else str(readiness_val)
+                )
+                topology_authoritative = pq.authoritative
+
+        authority_indicators: Dict[str, Any] = {
+            # Topology canonical authority signals
+            "topology_canonical_source_present": topology_canonical_source_present,
+            "topology_legacy_fallback_active": topology_legacy_fallback_active,
+            "topology_readiness": topology_readiness,
+            "topology_authoritative": topology_authoritative,
+            "topology_contract_authority": topology_contract_authority,
+            # Model routing authority signals
+            "model_routing_authority_source": mr.routing_authority_source,
+            "model_routing_legacy_fallback_active": mr.legacy_routing_fallback_active,
+            # OneAPI lower-horizon guarantee
+            "oneapi_is_lower_horizon_only": True,
+            # Integration contract authority sentinels
+            "integration_contract_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+            "topology_delivery_contract_authority": TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+            "topology_readiness_contract_authority": TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
+            "projection_contract_authority": PROJECTION_CONTRACT_AUTHORITY,
+        }
+
+        # --- Integration health rollup ------------------------------------
+        # Derive from topology health and model routing health.
+        health_values = []
+        if topo is not None:
+            _topo_sev = topo.health_severity
+            health_values.append(
+                _topo_sev.value if hasattr(_topo_sev, "value") else str(_topo_sev)
+            )
+        _mr_sev = mr.health_severity
+        health_values.append(
+            _mr_sev.value if hasattr(_mr_sev, "value") else str(_mr_sev)
+        )
+
+        _severity_order = ["critical", "degraded", "advisory", "unknown", "ok"]
+        integration_health_str = "unknown"
+        for sev_candidate in _severity_order:
+            if sev_candidate in health_values:
+                integration_health_str = sev_candidate
+                break
+        if not health_values:
+            integration_health_str = "unknown"
+        elif all(v == "ok" for v in health_values):
+            integration_health_str = "ok"
+
+        try:
+            integration_health = ProjectionHealthSeverity(integration_health_str)
+        except ValueError:
+            integration_health = ProjectionHealthSeverity.unknown
+
+        return DesktopStatusBoardIntegrationPayload(
+            topology_projection=topo,
+            model_routing_summary=model_routing_summary,
+            provider_health_summary=provider_health_summary,
+            oneapi_integration=oneapi_integration,
+            authority_indicators=authority_indicators,
+            integration_authority=DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+            integration_health=integration_health,
+        )
+
+    except Exception as _err:
+        _logger.warning(
+            "build_desktop_status_board_integration_payload failed, returning minimal: %s",
+            _err,
+        )
+        return DesktopStatusBoardIntegrationPayload(
+            model_routing_summary={},
+            authority_indicators={
+                "integration_contract_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+                "oneapi_is_lower_horizon_only": True,
+            },
+            integration_authority=DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+            integration_health=ProjectionHealthSeverity.unknown,
+        )

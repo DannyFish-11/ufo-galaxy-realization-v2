@@ -368,3 +368,58 @@ else:
   **lower-horizon** integration block — never promoted to top-layer peer.
 - The quality block does **not** affect the OneAPI lower-horizon block.  One
   may be canonical while the other is in any state.
+
+---
+
+## PR-8: Final Integration Contract for Desktop Status Board Consumption
+
+PR-8 completes the right-side status board contract by providing a single integration
+endpoint that composes topology projection, model routing, provider health, and OneAPI
+horizon into one stable payload.
+
+### Preferred consumption pattern (post-PR-8)
+
+Desktop status board clients should use the PR-8 integration payload rather than
+combining the topology and routing endpoints separately:
+
+```python
+# Preferred (PR-8): single integration payload
+payload = GET /api/v1/projection/desktop-status-board
+
+topo_proj   = payload["topology_projection"]  # DesktopTopologyProjection (PR-6/7)
+pq          = topo_proj["projection_quality"]  # quality/readiness semantics (PR-7)
+routing     = payload["model_routing_summary"]  # compact routing summary
+oneapi      = payload["oneapi_integration"]  # lower-horizon only (PR-4)
+authority   = payload["authority_indicators"]  # machine-checkable authority block
+
+# Check authority before rendering
+if not authority["topology_authoritative"]:
+    show_degraded_indicator(pq["readiness"], pq["quality_note"])
+else:
+    render_topology(topo_proj)
+```
+
+### Authority indicators block
+
+The `authority_indicators` block in `DesktopStatusBoardIntegrationPayload` aggregates
+all canonical-vs-legacy signals in one place:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `topology_canonical_source_present` | `bool` | Topology sourced from canonical `TopologyRoutePlan` |
+| `topology_legacy_fallback_active` | `bool` | Topology assembled from legacy keys (degraded) |
+| `topology_readiness` | `str` | One of: `canonical`, `degraded`, `partial`, `unavailable` |
+| `topology_authoritative` | `bool` | `true` only when `topology_readiness == "canonical"` |
+| `model_routing_authority_source` | `str` | `"topology_router"`, `"legacy_ucp_keys"`, or `"none"` |
+| `model_routing_legacy_fallback_active` | `bool` | PR-5 legacy routing fallback flag |
+| `oneapi_is_lower_horizon_only` | `bool` | Always `true` — OneAPI must never be a top-layer peer |
+| `integration_contract_authority` | `str` | PR-8 sentinel |
+| `topology_delivery_contract_authority` | `str` | PR-6 sentinel |
+| `topology_readiness_contract_authority` | `str` | PR-7 sentinel |
+
+### Canonical authority layering (unchanged by PR-8)
+
+- `TopologyRoutePlan` remains the sole authoritative routing contract.
+- Legacy fields remain secondary/fallback-only.
+- OneAPI remains lower-horizon only.
+- PR-8 composes these structures without changing their authority.

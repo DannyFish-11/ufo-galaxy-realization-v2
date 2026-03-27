@@ -1696,6 +1696,105 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_desktop_topology_payload()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/desktop-status-board  (PR-8)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/desktop-status-board")
+    async def get_desktop_status_board_integration() -> JSONResponse:
+        """Return the final integrated desktop status board payload (PR-8).
+
+        This endpoint is **read-only** and **additive** (PR-8).  It does not
+        modify any existing projection, router, or model supply module.
+
+        Provides a single stable server-provided payload that desktop status
+        board clients can consume without re-deriving state from multiple
+        endpoints or legacy/dashboard-era assembly logic.
+
+        The payload composes the already-established canonical structures from
+        PR-4 through PR-7:
+
+        - ``topology_projection`` — PR-6/7 topology-ready block with
+          readiness/quality semantics.
+        - ``model_routing_summary`` — compact routing summary derived from
+          ``ModelRoutingProjection``.
+        - ``provider_health_summary`` — provider health/availability summary
+          when relevant.
+        - ``oneapi_integration`` — PR-4 lower-horizon OneAPI aggregator block
+          (always ``system_layer == "aggregator_integration"``; never a
+          top-layer provider peer).
+        - ``authority_indicators`` — machine-checkable authority block
+          aggregating all canonical-vs-legacy authority signals.
+        - ``integration_authority`` — PR-8 sentinel confirming canonical
+          builder provenance.
+        - ``integration_health`` — rolled-up integration health.
+
+        Canonical authority layering
+        ----------------------------
+        - ``TopologyRoutePlan`` / canonical projection structures remain
+          authoritative.
+        - Legacy compatibility fields remain secondary/fallback-only.
+        - OneAPI remains a lower-horizon integration block only.
+        - ``authority_indicators.topology_authoritative == true`` confirms
+          the topology block is fully authoritative routing truth.
+
+        Consumer guidance
+        -----------------
+        Desktop clients should consume this endpoint rather than assembling
+        state from:
+        - ``/api/v1/projection/runtime`` (lower-level runtime projection)
+        - ``/api/v1/projection/desktop-topology`` (topology block only)
+        - Legacy/dashboard-era endpoint combinations
+
+        Response schema
+        ---------------
+        .. code-block:: json
+
+            {
+              "payload_id": "dsbip_...",
+              "integrated_at": 1234567890.0,
+              "topology_projection": {
+                "primary_model_id": "gpt-4o",
+                "projection_quality": {
+                  "readiness": "canonical",
+                  "authoritative": true,
+                  ...
+                },
+                "contract_authority": "contracts.desktop_status_projection.DesktopTopologyProjection",
+                ...
+              },
+              "model_routing_summary": {
+                "selected_provider": "openai",
+                "selected_model": "gpt-4o",
+                "routing_authority_source": "topology_router",
+                "legacy_routing_fallback_active": false,
+                ...
+              },
+              "provider_health_summary": {
+                "selected_provider": "openai",
+                "provider_available": true,
+                ...
+              },
+              "oneapi_integration": {
+                "system_layer": "aggregator_integration",
+                "configured": false,
+                ...
+              },
+              "authority_indicators": {
+                "topology_canonical_source_present": true,
+                "topology_authoritative": true,
+                "topology_readiness": "canonical",
+                "oneapi_is_lower_horizon_only": true,
+                "integration_contract_authority": "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload",
+                ...
+              },
+              "integration_authority": "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload",
+              "integration_health": "ok"
+            }
+        """
+        payload = _assemble_desktop_status_board_payload()
+        return JSONResponse(content=payload)
+
     return router
 
 
@@ -2857,5 +2956,101 @@ def _minimal_desktop_topology_fallback() -> Dict[str, Any]:
         "contract_authority": (
             "contracts.desktop_status_projection.DesktopTopologyProjection"
         ),
+        "_assembled_at": time.time(),
+    }
+
+
+def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
+    """PR-8: Assemble the final integrated desktop status board payload.
+
+    Builds a :class:`~contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload`
+    from live runtime state, composing topology projection, model routing
+    summary, provider health, and OneAPI horizon into one stable payload.
+
+    Always returns a valid dict.  All sub-components are optional and degrade
+    gracefully when the relevant sub-systems are unavailable.
+    """
+    try:
+        from contracts.desktop_status_projection import (
+            build_desktop_status_board_integration_payload,
+            build_desktop_status_projection,
+        )
+    except Exception as exc:
+        logger.warning(
+            "_assemble_desktop_status_board_payload: import failed: %s", exc
+        )
+        return _minimal_desktop_status_board_fallback()
+
+    # Build a UCP dict from the live topology route plan so that the
+    # integration payload is sourced from canonical data.
+    ucp: Dict[str, Any] = {}
+    try:
+        continuum_state = _get_continuum_state()
+        route_plan = _get_route_plan(continuum_state)
+        if route_plan is not None:
+            ucp["topology_route_plan"] = route_plan.to_dict()
+    except Exception as exc:
+        logger.debug(
+            "_assemble_desktop_status_board_payload: route_plan derivation skipped: %s",
+            exc,
+        )
+
+    try:
+        proj = build_desktop_status_projection(unified_control_plan=ucp)
+        payload_obj = build_desktop_status_board_integration_payload(
+            desktop_status_projection=proj,
+        )
+        result = payload_obj.to_dict()
+        result["_assembled_at"] = time.time()
+        return result
+    except Exception as exc:
+        logger.warning(
+            "_assemble_desktop_status_board_payload: assembly failed: %s", exc
+        )
+        return _minimal_desktop_status_board_fallback()
+
+
+def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
+    """Return a minimal valid desktop status board integration payload for failure cases."""
+    from contracts.desktop_status_projection import (
+        DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+        TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+        TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
+        PROJECTION_CONTRACT_AUTHORITY,
+    )
+    return {
+        "payload_id": f"dsbip_fallback_{int(time.time())}",
+        "integrated_at": time.time(),
+        "topology_projection": None,
+        "model_routing_summary": {
+            "selected_provider": None,
+            "selected_model": None,
+            "is_native_multimodal": False,
+            "vendor_source": None,
+            "route_reason": None,
+            "routing_authority_source": "none",
+            "legacy_routing_fallback_active": False,
+            "health_severity": "unknown",
+            "support_model_hints": [],
+            "provider_available": True,
+        },
+        "provider_health_summary": None,
+        "oneapi_integration": None,
+        "authority_indicators": {
+            "topology_canonical_source_present": False,
+            "topology_legacy_fallback_active": False,
+            "topology_readiness": "unavailable",
+            "topology_authoritative": False,
+            "topology_contract_authority": TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+            "model_routing_authority_source": "none",
+            "model_routing_legacy_fallback_active": False,
+            "oneapi_is_lower_horizon_only": True,
+            "integration_contract_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+            "topology_delivery_contract_authority": TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+            "topology_readiness_contract_authority": TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
+            "projection_contract_authority": PROJECTION_CONTRACT_AUTHORITY,
+        },
+        "integration_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+        "integration_health": "unknown",
         "_assembled_at": time.time(),
     }
