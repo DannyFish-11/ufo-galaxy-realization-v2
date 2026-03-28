@@ -290,6 +290,125 @@ ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
 
 ---
 
+## PR-5: Server-Side Canonicalization
+
+PR-5 completes the server-side canonicalization phase that follows PR-4 (OneAPI
+lower-horizon cleanup).  It removes remaining ambiguous and non-canonical
+projection/routing outputs so that the backend emits a cleaner, single source of
+truth for downstream desktop topology work.
+
+### What PR-5 adds
+
+| Addition | Location | Purpose |
+|----------|----------|---------|
+| `LEGACY_UCP_ROUTING_KEYS` | `contracts.desktop_status_projection` | Frozen registry of top-level UCP keys that are legacy/compatibility-only |
+| `PROJECTION_CONTRACT_AUTHORITY` | `contracts.desktop_status_projection` | Machine-checkable sentinel for the canonical projection contract |
+| `LEGACY_ROUTING_FIELDS` | `core.model_topology.topology_router` | Tuple of legacy routing field names demoted by PR-5 |
+| `LEGACY_PROJECTION_UCP_KEYS` | `core.projection.projection_compiler` | Tuple of legacy UCP projection keys (mirrors contract registry) |
+| `PROJECTION_COMPILER_AUTHORITY` | `core.projection.projection_compiler` | Machine-checkable sentinel for the canonical projection compiler |
+| `legacy_routing_fallback_active` | `ModelRoutingProjection` | `bool` field — `True` when routing was derived from legacy UCP keys |
+| `GET /api/v1/projection/server-canonicalization-status` | `core/routes/projection.py` | Read-only endpoint returning PR-5 canonicalization summary |
+
+### PR-4 guarantees preserved
+
+PR-5 does not undo any PR-4 guarantees:
+
+- `DesktopStatusProjection.oneapi_integration` is always present (lower-horizon only).
+- `model_routing.oneapi_source` is `None` when `vendor_source != "oneapi"`.
+- OneAPI is never merged into the top-layer provider list.
+
+### Machine-checkable exports (PR-5)
+
+```python
+# Contract-layer sentinels (contracts.desktop_status_projection)
+from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS  # frozenset
+from contracts.desktop_status_projection import PROJECTION_CONTRACT_AUTHORITY  # str
+
+# Topology-router legacy registry (core.model_topology.topology_router)
+from core.model_topology.topology_router import LEGACY_ROUTING_FIELDS  # tuple
+
+# Compiler-layer sentinels — also accessible via core.projection package
+from core.projection import LEGACY_PROJECTION_UCP_KEYS   # tuple (mirrors LEGACY_UCP_ROUTING_KEYS)
+from core.projection import PROJECTION_COMPILER_AUTHORITY  # str (compiler assembly sentinel)
+
+# Check legacy routing key registry (contract layer)
+assert "chosen_model" in LEGACY_UCP_ROUTING_KEYS
+assert "chosen_provider" in LEGACY_UCP_ROUTING_KEYS
+
+# Check fallback state in projection
+from contracts.desktop_status_projection import build_desktop_status_projection
+proj = build_desktop_status_projection(unified_control_plan={"chosen_model": "gpt-4o"})
+assert proj.model_routing.legacy_routing_fallback_active is True  # degraded path
+```
+
+See [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md) for the
+full PR-5 policy and consumer guidance.
+
+---
+
+## PR-6: Desktop Topology Projection
+
+PR-6 delivers the final desktop topology-oriented projection layer on top of the
+PR-5 canonicalization foundation.  Desktop surfaces can now consume a single
+server-assembled topology-ready block rather than reconstructing topology from
+scattered routing data.
+
+### What PR-6 adds
+
+| Addition | Location | Purpose |
+|----------|----------|---------|
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `contracts.desktop_status_projection` | Machine-checkable sentinel for the PR-6 topology-ready block |
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in compiler namespace |
+| `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `core.projection` (package) | Convenience re-export for downstream consumers |
+| `DesktopTopologyProjection` | `contracts.desktop_status_projection` | Renderer-agnostic structured block for desktop topology surfaces |
+| `topology_ready` field | `DesktopStatusProjection` | PR-6 topology-ready block attached to the top-level projection |
+| `GET /api/v1/projection/desktop-topology` | `core/routes/projection.py` | Dedicated read-only endpoint returning the topology-ready block |
+
+### Consumer guidance (PR-6)
+
+- Desktop topology surfaces should consume the `topology_ready` block from
+  `DesktopStatusProjection` (or from `GET /api/v1/projection/desktop-topology`)
+  as the single canonical topology-ready projection.
+- `canonical_source_present == true` confirms the block was derived from a
+  canonical `TopologyRoutePlan`.  `legacy_fallback_active == true` signals a
+  degraded projection (assembled from legacy UCP keys).
+- The `oneapi_integration` block inside `topology_ready` remains a lower-horizon
+  integration block only — it must never be promoted to a top-layer provider peer.
+- `contract_authority` is the machine-checkable sentinel
+  `"contracts.desktop_status_projection.DesktopTopologyProjection"` confirming
+  the block was produced by the canonical builder.
+
+### Machine-checkable exports (PR-6)
+
+```python
+from contracts.desktop_status_projection import (
+    TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+    DesktopTopologyProjection,
+)
+from core.projection import TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY
+
+# Verify topology-ready block in a projection
+from contracts.desktop_status_projection import build_desktop_status_projection
+ucp = {
+    "topology_route_plan": {
+        "primary_model": {"model_id": "gpt-4o", "provider_id": "openai",
+                          "vendor_source": "direct", "native_multimodal": False},
+        "support_models": [],
+        "route_reason": "test",
+    }
+}
+proj = build_desktop_status_projection(unified_control_plan=ucp)
+assert proj.topology_ready is not None
+assert proj.topology_ready.canonical_source_present is True
+assert proj.topology_ready.legacy_fallback_active is False
+assert proj.topology_ready.contract_authority == TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY
+```
+
+See [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md) §8 for
+the full PR-6 policy and topology-ready block structure.
+
+---
+
 ## PR-8: Final Desktop Status Board Integration Contract
 
 PR-8 delivers the final integration-oriented contract for the desktop status

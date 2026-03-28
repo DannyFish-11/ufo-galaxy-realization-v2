@@ -12,6 +12,25 @@ Quick start::
     projection = build_runtime_projection(state)
     payload = projection.to_dict()
 
+PR-5 exposes server-side canonicalization sentinels::
+
+    from core.projection import LEGACY_PROJECTION_UCP_KEYS, PROJECTION_COMPILER_AUTHORITY
+
+    # Machine-checkable: these keys are legacy/compatibility-only in projection
+    print(LEGACY_PROJECTION_UCP_KEYS)   # ("chosen_model", "chosen_provider", ...)
+    print(PROJECTION_COMPILER_AUTHORITY)  # "core.projection.projection_compiler.build_runtime_projection"
+
+See ``docs/SERVER_SIDE_CANONICALIZATION.md`` for the PR-5 canonicalization policy.
+
+PR-6 exposes the topology-ready projection delivery sentinel::
+
+    from core.projection import TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY
+
+    # Machine-checkable: confirms topology-ready block was produced by the canonical builder
+    print(TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY)  # "contracts.desktop_status_projection.DesktopTopologyProjection"
+
+See ``docs/SERVER_SIDE_CANONICALIZATION.md`` §8 for the PR-6 topology delivery policy.
+
 PR-26 adds a governance-aware assembly layer::
 
     from core.projection import assemble_projection_governance
@@ -69,6 +88,11 @@ from .assembly_governance import (
 from .projection_compiler import (
     DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
     ExecutionSummary,
+    # PR-5: server-side canonicalization sentinels
+    LEGACY_PROJECTION_UCP_KEYS,
+    PROJECTION_COMPILER_AUTHORITY,
+    # PR-6: topology-ready projection delivery sentinel
+    TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
     build_desktop_status_board_integration_from_runtime,
     build_runtime_projection,
 )
@@ -86,6 +110,11 @@ __all__ = [
     "RuntimeProjection",
     "ExecutionSummary",
     "build_runtime_projection",
+    # PR-5: server-side canonicalization sentinels
+    "LEGACY_PROJECTION_UCP_KEYS",
+    "PROJECTION_COMPILER_AUTHORITY",
+    # PR-6: topology-ready projection delivery sentinel
+    "TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY",
     # PR-8: final desktop status board integration bridge
     "build_desktop_status_board_integration_from_runtime",
     "DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY",
