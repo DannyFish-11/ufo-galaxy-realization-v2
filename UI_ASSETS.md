@@ -5,24 +5,23 @@
 
 ---
 
-## 1. Web Dashboard UI（浏览器访问，9000 端口）
+## ~~1. Web Dashboard UI（浏览器访问，9000 端口）~~ — RETIRED (PR-1)
+
+> **⚠️ RETIRED — `dashboard/frontend/` 已在 PR-1 中完全删除。**
+> 不再存在任何面向运维人员的 Web 管理界面。
+> `dashboard/backend/main.py` 以无头（headless）模式保留用于兼容性迁移，不提供任何 UI。
+>
+> 运维入口请使用：`windows_client/status_board_v2/`
+
+---
+
+## 1. Desktop Status Board（桌面状态板，唯一运维界面）
 
 | 属性 | 详情 |
-| ---- | ---- | | `dashboard/frontend/public/index.html` |
-| **类型** | 纯 HTML/CSS/JS（Vue 3 + TailwindCSS） |
-| **后端** | `dashboard/backend/main.py`（FastAPI，通过 `unified_launcher` 提供服务，访问端口 **9000**） |
-| **启动方式** | `python unified_launcher.py` 或 `python start_galaxy.py` |
-| **UI 风格** | **Galaxy 深空科幻控制台（Sci-fi Console）** — 自主设计 |
-| **主要设计元素** | 纯黑背景 + 径向星空渐变、灵动岛（Dynamic Island）交互组件、霓虹蓝紫描边、磨砂玻璃卡片、流畅过渡动画 |
-| **字体** | Inter（正文）+ Orbitron（标题/数字，科技感） |
-| **配色** | 黑 `#000000` 背景 + 蓝 `#0a84ff` / 紫 `#7c5cfc` 渐变主色 |
-| **TypeScript 类型层** | `dashboard/frontend/ts/` |
-
-**访问地址：**
-
-```
-http://localhost:9000
-```
+| ---- | ---- |
+| **模块路径** | `windows_client/status_board_v2/` |
+| **类型** | 桌面原生拓扑状态板 |
+| **定位** | **唯一支持的运维人员操作界面** |
 
 ---
 
@@ -57,11 +56,12 @@ windows_client/START_CLIENT.bat
 
 | 入口 | 状态 | 正确目标 |
 | ---- | ---- | -------- |
-| `python unified_launcher.py` | ✅ **推荐** | Web Dashboard（9000） |
+| `python unified_launcher.py` | ✅ 兼容（无头 API 服务） | 仅提供 API，不再提供 Web UI |
 | `python start_galaxy.py` | ✅ 兼容 | 委托到 `unified_launcher.py` |
 | `python windows_client/main.py` | ✅ **推荐** | 桌面原生 UI（OPPO 光场） |
 | `python enhancements/clients/windows_client/run_ui.py` | ⚠️ **已废弃** | 自动重定向到 `windows_client/main.py` |
 | `python start_galaxy.py --desktop` | ✅ | 启动桌面原生客户端 |
+| `http://localhost:9000` (Web Dashboard) | ❌ **已停用** | Dashboard 前端已删除 |
 
 > **注意**：旧路径 `enhancements/clients/windows_client/run_ui.py` 
 > 仅作兼容跳转，不应直接依赖。新代码请使用 `windows_client/main.py`。
@@ -69,8 +69,6 @@ windows_client/START_CLIENT.bat
 ---
 
 ## 4. 风格来源声明
-
-- **Web Dashboard UI**：由项目团队自主设计，灵感来源于科幻控制台美学（Sci-fi HUD），未引用任何第三方 UI 框架商业授权内容。TailwindCSS 和 Vue 3 均为开源 MIT 许可。
 
 - **Windows 客户端 UI（OPPO 光场）**：设计灵感来源于 OPPO ColorOS 光场美学（公开设计语言），代码为项目团队基于 PyQt5 自主实现，未使用 OPPO 官方代码或专有资源。字体、图标均来自系统自带或开源资源。
 

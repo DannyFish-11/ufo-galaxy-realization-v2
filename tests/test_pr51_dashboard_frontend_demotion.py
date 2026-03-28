@@ -93,19 +93,26 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         content = _read("dashboard/LEGACY_SURFACE.md")
         self.assertIn("NON-PRIMARY", content)
 
-    def test_04_dashboard_frontend_legacy_surface_md_exists(self):
-        self.assertTrue(
-            _exists("dashboard/frontend/LEGACY_SURFACE.md"),
-            "dashboard/frontend/LEGACY_SURFACE.md must exist as a demotion marker",
+    def test_04_dashboard_frontend_directory_fully_deleted(self):
+        """PR-1 — dashboard/frontend/ must be fully deleted (not just demoted)."""
+        self.assertFalse(
+            _exists("dashboard/frontend"),
+            "dashboard/frontend/ must not exist — it was fully deleted in PR-1",
         )
 
-    def test_05_dashboard_frontend_legacy_surface_md_contains_legacy(self):
-        content = _read("dashboard/frontend/LEGACY_SURFACE.md")
-        self.assertIn("LEGACY", content)
+    def test_05_dashboard_frontend_legacy_surface_md_does_not_exist(self):
+        """PR-1 — dashboard/frontend/LEGACY_SURFACE.md should not exist (directory deleted)."""
+        self.assertFalse(
+            _exists("dashboard/frontend/LEGACY_SURFACE.md"),
+            "dashboard/frontend/LEGACY_SURFACE.md must not exist — directory deleted in PR-1",
+        )
 
-    def test_06_dashboard_frontend_legacy_surface_md_contains_non_primary(self):
-        content = _read("dashboard/frontend/LEGACY_SURFACE.md")
-        self.assertIn("NON-PRIMARY", content)
+    def test_06_dashboard_frontend_public_index_html_does_not_exist(self):
+        """PR-1 — dashboard/frontend/public/index.html must not exist."""
+        self.assertFalse(
+            _exists("dashboard/frontend/public/index.html"),
+            "dashboard/frontend/public/index.html must not exist — frontend deleted in PR-1",
+        )
 
     # ------------------------------------------------------------------
     # Group 2: unified_launcher.py messaging demotions
@@ -208,11 +215,13 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_17_dashboard_init_preserves_legacy_ui_surface_marker(self):
+        """PR-1 retains the 'LEGACY UI SURFACE' marker from PR-8 for compatibility."""
         content = _read("dashboard/__init__.py")
         self.assertIn(
             "LEGACY UI SURFACE",
             content,
-            "dashboard/__init__.py must retain the PR-8 LEGACY UI SURFACE marker",
+            "dashboard/__init__.py must retain the 'LEGACY UI SURFACE' marker "
+            "(PR-8 compatibility; PR-1 additionally marks frontend as deleted)",
         )
 
     def test_18_dashboard_backend_main_preserves_legacy_ui_surface_marker(self):
@@ -302,12 +311,11 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # Group 11: legacy marker files direction content
     # ------------------------------------------------------------------
 
-    def test_26_dashboard_frontend_legacy_md_mentions_tristate(self):
-        content = _read("dashboard/frontend/LEGACY_SURFACE.md")
-        self.assertIn(
-            "tri-state",
-            content,
-            "dashboard/frontend/LEGACY_SURFACE.md should point to desktop tri-state runtime",
+    def test_26_dashboard_frontend_directory_deleted_not_just_demoted(self):
+        """PR-1 — dashboard/frontend/ must be fully deleted."""
+        self.assertFalse(
+            _exists("dashboard/frontend"),
+            "dashboard/frontend/ directory must be fully deleted in PR-1 (not just demoted)",
         )
 
     def test_27_dashboard_legacy_md_mentions_tristate(self):

@@ -141,9 +141,10 @@ The following items must not be carried forward into the replacement surface.
 ## 5. Migration Sequence (High Level)
 
 Migration proceeds in five phases.  **PR-1 froze Phase A.  PR-0 strengthens
-the direction and makes the full migration target explicit.**
+the direction and makes the full migration target explicit.  Phase E (frontend
+deletion) has been executed in PR-1.**
 
-### Phase A — Architecture freeze (PR-1 / PR-0)
+### Phase A — Architecture freeze (PR-1 / PR-0) ✅ COMPLETE
 - Mark dashboard as entering retirement in documentation.
 - Establish `TopologyRouter` / `TopologyRoutePlan` as the sole canonical
   routing authority in all documentation.
@@ -165,7 +166,7 @@ the direction and makes the full migration target explicit.**
 - Extract provider status, route summary, OneAPI status, and orchestration
   summary data semantics from dashboard backend into canonical projection
   contracts (`core/projection/`, `contracts/`).
-- Do not delete dashboard frontend or backend yet.
+- Dashboard backend remains headless; do not delete backend yet.
 - Target: all routing/model-topology data available via
   `GET /api/v1/projection/runtime` without needing the dashboard.
 
@@ -187,26 +188,30 @@ the direction and makes the full migration target explicit.**
   entry surface only modifies inputs to the routing pipeline, not the
   routing logic itself.
 
-### Phase E — Dashboard retirement and cleanup
-- Deprecate and remove dashboard frontend code.
+### Phase E — Dashboard frontend retirement and cleanup ✅ COMPLETE (PR-1)
+- **`dashboard/frontend/` has been fully deleted.**  No web operator-facing UI
+  surface remains.
+- `dashboard/backend/main.py` continues headless for migration compatibility
+  only.  No static files are served.
 - Retain any dashboard backend API endpoints that have active callers outside
   the dashboard as compatibility bridges, registering them in
   `core/orchestration_authority/legacy_paths.py`.
-- Remove remaining dashboard-local routing truth / model state derivation.
+- Remove remaining dashboard-local routing truth / model state derivation
+  (deferred to Phase B).
 
 ---
 
 ## 6. What Must Not Happen During the Migration Window
 
-While Phases B–E are pending:
+While Phases B–D are pending:
 
-1. **Do not add new features to the dashboard frontend.**  The dashboard is
-   frozen at its current state.
+1. **Do not recreate the dashboard frontend.**  `dashboard/frontend/` has been
+   permanently deleted.  No web operator-facing UI must be rebuilt here.
 2. **Do not establish new routing-truth sources in the dashboard.**  All
    routing decisions must flow through `TopologyRouter`.
 3. **Do not treat the dashboard as authoritative** for any operator-facing
-   topology or routing data.  The dashboard may display data, but it is not
-   the source of truth.
+   topology or routing data.  The dashboard backend may provide data, but it
+   is not the source of truth.
 4. **Do not render OneAPI at the same visual level as direct providers** in any
    new surface, even temporarily.
 5. **Do not add new operator-facing UI work targeting dashboard.**  All new
