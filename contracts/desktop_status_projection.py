@@ -91,7 +91,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse as _urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 _logger = logging.getLogger(__name__)
 
@@ -2130,8 +2130,31 @@ class DesktopStatusBoardIntegrationPayload(BaseModel):
         description="Rolled-up overall integration health.",
     )
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
+
+    @property
+    def readiness(self) -> str:
+        """Canonical readiness state of the integration payload.
+
+        Convenience shorthand over
+        ``authority_indicators["topology_readiness"]`` so clients do not need
+        to drill into the authority block for the most common check.
+
+        Returns one of ``"canonical"``, ``"degraded"``, ``"partial"``,
+        ``"unavailable"``, or ``"unknown"``.
+        """
+        return self.authority_indicators.get("topology_readiness", "unknown")
+
+    @property
+    def is_canonical(self) -> bool:
+        """``True`` when topology data is fully authoritative routing truth.
+
+        Convenience shorthand over
+        ``authority_indicators["topology_authoritative"]``.  Desktop status
+        board clients should check this flag before treating topology data as
+        the source of truth.
+        """
+        return bool(self.authority_indicators.get("topology_authoritative", False))
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict representation."""

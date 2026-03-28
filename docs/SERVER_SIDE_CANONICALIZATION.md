@@ -338,7 +338,10 @@ multiple endpoints or legacy/dashboard-era assembly logic.
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `contracts.desktop_status_projection` | Machine-checkable PR-8 sentinel |
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in compiler namespace |
 | `DesktopStatusBoardIntegrationPayload` | `contracts.desktop_status_projection` | Final composed integration payload |
+| `.readiness` property | `DesktopStatusBoardIntegrationPayload` | Shorthand for `authority_indicators["topology_readiness"]` |
+| `.is_canonical` property | `DesktopStatusBoardIntegrationPayload` | Shorthand for `authority_indicators["topology_authoritative"]` |
 | `build_desktop_status_board_integration_payload()` | `contracts.desktop_status_projection` | Builder composing PR-4 through PR-7 structures |
+| `build_desktop_status_board_integration_from_runtime()` | `core.projection.projection_compiler` | Bridge: low-level runtime state → integration payload |
 | `GET /api/v1/projection/desktop-status-board` | `core.routes.projection` | Single stable integration endpoint |
 
 ### Canonical authority layering (unchanged)
@@ -360,10 +363,11 @@ replace or duplicate them.
 Desktop clients should:
 
 1. Consume `GET /api/v1/projection/desktop-status-board` as the single integration endpoint.
-2. Inspect `authority_indicators` for a consolidated view of all canonical-vs-legacy signals.
-3. Check `authority_indicators.topology_authoritative` before treating topology data as truth.
-4. Verify `integration_authority == "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload"`.
-5. Stop assembling status board state from scattered legacy/dashboard-era sources.
+2. Use `.readiness` or `.is_canonical` for single-flag checks (no sub-block drilling required).
+3. Inspect `authority_indicators` for a consolidated view of all canonical-vs-legacy signals.
+4. Check `authority_indicators.topology_authoritative` before treating topology data as truth.
+5. Verify `integration_authority == "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload"`.
+6. Stop assembling status board state from scattered legacy/dashboard-era sources.
 
 ### Machine-Checkable Exports (PR-8)
 
@@ -371,7 +375,10 @@ Desktop clients should:
 |--------|--------|------|-------------|
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `contracts.desktop_status_projection` | `str` | PR-8 integration payload sentinel |
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection.projection_compiler` | `str` | Mirror sentinel in compiler namespace |
+| `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection` (package `__all__`) | `str` | Re-exported from package |
 | `DesktopStatusBoardIntegrationPayload` | `contracts.desktop_status_projection` | Pydantic model | Final integration-oriented payload |
+| `build_desktop_status_board_integration_from_runtime` | `core.projection.projection_compiler` | function | Bridge: runtime state → integration payload |
+| `build_desktop_status_board_integration_from_runtime` | `core.projection` (package `__all__`) | function | Re-exported from package |
 
 ### API Endpoints (post-PR-8)
 

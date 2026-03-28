@@ -63,6 +63,22 @@ Test index:
   48. PR-6 topology_ready contract_authority still set in topology_projection.
   49. PR-5 legacy_routing_fallback_active preserved in model_routing_summary.
   50. _minimal_desktop_status_board_fallback payload includes required keys.
+  51. DesktopStatusBoardIntegrationPayload has 'readiness' convenience property.
+  52. readiness property returns 'canonical' on canonical path.
+  53. readiness property returns 'degraded' on legacy fallback path.
+  54. readiness property returns 'unknown' on minimal payload with empty authority_indicators.
+  55. DesktopStatusBoardIntegrationPayload has 'is_canonical' convenience property.
+  56. is_canonical returns True on canonical path.
+  57. is_canonical returns False on legacy fallback path.
+  58. is_canonical returns False on minimal payload.
+  59. build_desktop_status_board_integration_from_runtime importable from core.projection.projection_compiler.
+  60. build_desktop_status_board_integration_from_runtime importable from core.projection package.
+  61. DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY importable from core.projection package __all__.
+  62. build_desktop_status_board_integration_from_runtime returns DesktopStatusBoardIntegrationPayload on canonical path.
+  63. build_desktop_status_board_integration_from_runtime returns payload with correct integration_authority.
+  64. build_desktop_status_board_integration_from_runtime returns non-None on empty/None inputs.
+  65. DesktopStatusBoardIntegrationPayload uses ConfigDict (not deprecated class Config).
+  66. to_dict() serialises readiness inside authority_indicators correctly.
 """
 
 from __future__ import annotations
@@ -630,3 +646,171 @@ def test_50_minimal_fallback_payload_includes_required_keys():
     assert ai.get("oneapi_is_lower_horizon_only") is True
     assert ai.get("topology_readiness") == "unavailable"
     assert ai.get("topology_authoritative") is False
+
+
+# ===========================================================================
+# 51-58: readiness and is_canonical convenience properties (PR-8 final)
+# ===========================================================================
+
+
+def test_51_payload_has_readiness_property():
+    from contracts.desktop_status_projection import DesktopStatusBoardIntegrationPayload
+    payload = DesktopStatusBoardIntegrationPayload(
+        model_routing_summary={},
+        authority_indicators={"topology_readiness": "canonical"},
+    )
+    assert hasattr(payload, "readiness"), "DesktopStatusBoardIntegrationPayload missing 'readiness' property"
+
+
+def test_52_readiness_property_canonical_on_canonical_path():
+    from contracts.desktop_status_projection import build_desktop_status_board_integration_payload
+    result = build_desktop_status_board_integration_payload(
+        unified_control_plan=_canonical_ucp()
+    )
+    assert result.readiness == "canonical"
+
+
+def test_53_readiness_property_degraded_on_legacy_path():
+    from contracts.desktop_status_projection import build_desktop_status_board_integration_payload
+    result = build_desktop_status_board_integration_payload(
+        unified_control_plan=_legacy_ucp()
+    )
+    assert result.readiness == "degraded"
+
+
+def test_54_readiness_property_unknown_on_empty_authority_indicators():
+    from contracts.desktop_status_projection import DesktopStatusBoardIntegrationPayload
+    payload = DesktopStatusBoardIntegrationPayload(
+        model_routing_summary={},
+        authority_indicators={},
+    )
+    assert payload.readiness == "unknown"
+
+
+def test_55_payload_has_is_canonical_property():
+    from contracts.desktop_status_projection import DesktopStatusBoardIntegrationPayload
+    payload = DesktopStatusBoardIntegrationPayload(
+        model_routing_summary={},
+        authority_indicators={"topology_authoritative": True},
+    )
+    assert hasattr(payload, "is_canonical"), "DesktopStatusBoardIntegrationPayload missing 'is_canonical' property"
+
+
+def test_56_is_canonical_true_on_canonical_path():
+    from contracts.desktop_status_projection import build_desktop_status_board_integration_payload
+    result = build_desktop_status_board_integration_payload(
+        unified_control_plan=_canonical_ucp()
+    )
+    assert result.is_canonical is True
+
+
+def test_57_is_canonical_false_on_legacy_path():
+    from contracts.desktop_status_projection import build_desktop_status_board_integration_payload
+    result = build_desktop_status_board_integration_payload(
+        unified_control_plan=_legacy_ucp()
+    )
+    assert result.is_canonical is False
+
+
+def test_58_is_canonical_false_on_minimal_payload():
+    from contracts.desktop_status_projection import DesktopStatusBoardIntegrationPayload
+    payload = DesktopStatusBoardIntegrationPayload(
+        model_routing_summary={},
+        authority_indicators={},
+    )
+    assert payload.is_canonical is False
+
+
+# ===========================================================================
+# 59-65: build_desktop_status_board_integration_from_runtime bridge (PR-8)
+# ===========================================================================
+
+
+def test_59_bridge_importable_from_projection_compiler():
+    from core.projection.projection_compiler import (  # noqa: F401
+        build_desktop_status_board_integration_from_runtime,
+    )
+
+
+def test_60_bridge_importable_from_core_projection_package():
+    from core.projection import (  # noqa: F401
+        build_desktop_status_board_integration_from_runtime,
+    )
+
+
+def test_61_desktop_status_board_integration_authority_in_package_all():
+    import core.projection as pkg
+    assert "DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY" in pkg.__all__, (
+        "DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY should be in core.projection.__all__"
+    )
+    assert "build_desktop_status_board_integration_from_runtime" in pkg.__all__, (
+        "build_desktop_status_board_integration_from_runtime should be in core.projection.__all__"
+    )
+
+
+def test_62_bridge_returns_integration_payload_on_canonical_path():
+    from core.projection.projection_compiler import build_desktop_status_board_integration_from_runtime
+    from contracts.desktop_status_projection import DesktopStatusBoardIntegrationPayload
+    try:
+        from core.continuum.types import ContinuumState, ContinuumPhase
+        state = ContinuumState(phase=ContinuumPhase.MANIFEST)
+        result = build_desktop_status_board_integration_from_runtime(continuum_state=state)
+        assert isinstance(result, DesktopStatusBoardIntegrationPayload), (
+            f"Expected DesktopStatusBoardIntegrationPayload, got {type(result)}"
+        )
+    except ImportError:
+        pytest.skip("ContinuumState not available in this environment")
+
+
+def test_63_bridge_returns_payload_with_correct_integration_authority():
+    from core.projection.projection_compiler import build_desktop_status_board_integration_from_runtime
+    from contracts.desktop_status_projection import (
+        DesktopStatusBoardIntegrationPayload,
+        DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+    )
+    try:
+        from core.continuum.types import ContinuumState, ContinuumPhase
+        state = ContinuumState(phase=ContinuumPhase.MANIFEST)
+        result = build_desktop_status_board_integration_from_runtime(continuum_state=state)
+        assert isinstance(result, DesktopStatusBoardIntegrationPayload)
+        assert result.integration_authority == DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY
+    except ImportError:
+        pytest.skip("ContinuumState not available in this environment")
+
+
+def test_64_bridge_returns_non_none_on_empty_inputs():
+    from core.projection.projection_compiler import build_desktop_status_board_integration_from_runtime
+    try:
+        from core.continuum.types import ContinuumState, ContinuumPhase
+        state = ContinuumState(phase=ContinuumPhase.LIMINAL)
+        result = build_desktop_status_board_integration_from_runtime(continuum_state=state)
+        assert result is not None, "bridge must never return None"
+    except ImportError:
+        pytest.skip("ContinuumState not available in this environment")
+
+
+def test_65_payload_uses_config_dict_not_deprecated_class_config():
+    """DesktopStatusBoardIntegrationPayload must use model_config = ConfigDict() not class Config."""
+    from contracts.desktop_status_projection import DesktopStatusBoardIntegrationPayload
+    # model_config should be a dict (ConfigDict instance) on the class
+    model_cfg = getattr(DesktopStatusBoardIntegrationPayload, "model_config", None)
+    assert model_cfg is not None, "model_config attribute missing — class Config may still be in use"
+    assert isinstance(model_cfg, dict), (
+        f"model_config should be a dict (ConfigDict), got {type(model_cfg)}"
+    )
+    # Confirm the old class-based Config is gone
+    inner_config = DesktopStatusBoardIntegrationPayload.__dict__.get("Config")
+    assert inner_config is None, (
+        "Deprecated 'class Config' inner class still present in DesktopStatusBoardIntegrationPayload"
+    )
+
+
+def test_66_to_dict_serialises_readiness_in_authority_indicators():
+    from contracts.desktop_status_projection import build_desktop_status_board_integration_payload
+    result = build_desktop_status_board_integration_payload(
+        unified_control_plan=_canonical_ucp()
+    )
+    d = result.to_dict()
+    ai = d.get("authority_indicators", {})
+    assert "topology_readiness" in ai, "authority_indicators missing 'topology_readiness' in to_dict()"
+    assert ai["topology_readiness"] == "canonical"

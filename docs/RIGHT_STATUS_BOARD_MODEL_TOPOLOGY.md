@@ -392,9 +392,9 @@ routing     = payload["model_routing_summary"]  # compact routing summary
 oneapi      = payload["oneapi_integration"]  # lower-horizon only (PR-4)
 authority   = payload["authority_indicators"]  # machine-checkable authority block
 
-# Check authority before rendering
-if not authority["topology_authoritative"]:
-    show_degraded_indicator(pq["readiness"], pq["quality_note"])
+# Quick single-flag check (convenience properties on the Pydantic object)
+if not payload_obj.is_canonical:          # shorthand for topology_authoritative
+    show_degraded_indicator(payload_obj.readiness)   # shorthand for topology_readiness
 else:
     render_topology(topo_proj)
 ```
@@ -416,6 +416,17 @@ all canonical-vs-legacy signals in one place:
 | `integration_contract_authority` | `str` | PR-8 sentinel |
 | `topology_delivery_contract_authority` | `str` | PR-6 sentinel |
 | `topology_readiness_contract_authority` | `str` | PR-7 sentinel |
+
+### Convenience properties (final PR-8 polish)
+
+`DesktopStatusBoardIntegrationPayload` exposes two read-only properties so
+consumers do not need to traverse the `authority_indicators` dict for the most
+common checks:
+
+| Property | Equivalent dict lookup | Returns |
+|----------|------------------------|---------|
+| `.readiness` | `authority_indicators["topology_readiness"]` | `"canonical"` / `"degraded"` / `"partial"` / `"unavailable"` / `"unknown"` |
+| `.is_canonical` | `bool(authority_indicators["topology_authoritative"])` | `True` when topology is fully authoritative routing truth |
 
 ### Canonical authority layering (unchanged by PR-8)
 
