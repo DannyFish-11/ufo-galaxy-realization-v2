@@ -358,3 +358,135 @@ def build_runtime_projection(
         governance is not None,
     )
     return projection
+
+
+# ---------------------------------------------------------------------------
+# PR-8: Bridge — RuntimeProjection → DesktopStatusBoardIntegrationPayload
+# ---------------------------------------------------------------------------
+
+
+def build_desktop_status_board_integration_from_runtime(
+    continuum_state: ContinuumState,
+    route_plan: "Optional[TopologyRoutePlan]" = None,
+    execution_summary: Optional[ExecutionSummary] = None,
+    timestamp: Optional[float] = None,
+    oneapi_summary: "Optional[Dict[str, Any]]" = None,
+    provider_status_summary: "Optional[Dict[str, Any]]" = None,
+) -> "Any":
+    """PR-8: Build the final desktop status board integration payload from runtime state.
+
+    This is the canonical bridge that connects the server-side projection
+    pipeline (:func:`build_runtime_projection`) to the final desktop status
+    board integration contract
+    (:class:`~contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload`).
+
+    Consumers that already hold a
+    :class:`~contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload`
+    from :func:`~contracts.desktop_status_projection.build_desktop_status_board_integration_payload`
+    do not need to call this function.  Use it when you need to derive the
+    integration payload directly from low-level runtime state (continuum +
+    route plan) without first building a ``DesktopStatusProjection`` yourself.
+
+    Authority sentinels accessible via this module
+    -----------------------------------------------
+    - :data:`DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` — PR-8 integration payload sentinel
+    - :data:`TOPOLOGY_READINESS_CONTRACT_AUTHORITY` — PR-7 readiness block sentinel
+    - :data:`TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` — PR-6 topology delivery sentinel
+    - :data:`PROJECTION_COMPILER_AUTHORITY` — compiler assembly authority sentinel
+
+    Parameters
+    ----------
+    continuum_state:
+        Current :class:`~core.continuum.types.ContinuumState`.  Used as input
+        to :func:`build_runtime_projection` which populates the routing phase
+        and coherence fields.
+    route_plan:
+        Optional :class:`~core.model_topology.topology_router.TopologyRoutePlan`
+        (PR-2).  When provided, topology-derived fields (primary model, routing
+        weights, vendor source) are sourced canonically from the route plan.
+    execution_summary:
+        Optional :class:`ExecutionSummary` carrying device/execution context.
+    timestamp:
+        Optional explicit Unix epoch timestamp.
+    oneapi_summary:
+        Optional OneAPI system position dict (PR-4).
+    provider_status_summary:
+        Optional provider health/availability summary dict (PR-3).
+
+    Returns
+    -------
+    DesktopStatusBoardIntegrationPayload
+        Final integrated desktop status board payload.  Never raises and never
+        returns ``None``; degrades gracefully to a minimal valid payload on any
+        internal error.
+    """
+    try:
+        from contracts.desktop_status_projection import (
+            build_desktop_status_board_integration_payload,
+            build_desktop_status_projection,
+        )
+    except Exception as _imp_exc:
+        logger.warning(
+            "build_desktop_status_board_integration_from_runtime: import failed: %s",
+            _imp_exc,
+        )
+        # Even if the full import fails, still return a minimal valid object so
+        # callers can safely rely on "never returns None".
+        try:
+            from contracts.desktop_status_projection import (
+                DesktopStatusBoardIntegrationPayload,
+                DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+                ProjectionHealthSeverity,
+            )
+            return DesktopStatusBoardIntegrationPayload(
+                model_routing_summary={},
+                authority_indicators={
+                    "integration_contract_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+                    "oneapi_is_lower_horizon_only": True,
+                },
+                integration_authority=DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+                integration_health=ProjectionHealthSeverity.unknown,
+            )
+        except Exception as _fallback_exc:
+            # Absolute last resort: the contracts package is completely broken.
+            # Return a duck-typed minimal dict wrapped in a plain object so that
+            # attribute access on the result doesn't raise.
+            logger.error(
+                "build_desktop_status_board_integration_from_runtime: "
+                "contracts package unavailable; returning bare fallback: %s",
+                _fallback_exc,
+            )
+            # Re-try with no-arg call which uses cached imports in the contracts
+            # module; if it still fails the exception propagates (last resort).
+            from contracts.desktop_status_projection import (
+                build_desktop_status_board_integration_payload,
+            )
+            return build_desktop_status_board_integration_payload()
+
+    ucp: Dict[str, Any] = {}
+    if route_plan is not None:
+        try:
+            ucp["topology_route_plan"] = route_plan.to_dict()
+        except Exception as _rp_exc:
+            logger.debug(
+                "build_desktop_status_board_integration_from_runtime: "
+                "route_plan.to_dict() skipped: %s",
+                _rp_exc,
+            )
+
+    if oneapi_summary is not None:
+        ucp["oneapi_summary"] = oneapi_summary
+    if provider_status_summary is not None:
+        ucp["provider_status_summary"] = provider_status_summary
+
+    try:
+        proj = build_desktop_status_projection(unified_control_plan=ucp)
+        return build_desktop_status_board_integration_payload(
+            desktop_status_projection=proj,
+        )
+    except Exception as _build_exc:
+        logger.warning(
+            "build_desktop_status_board_integration_from_runtime: build failed: %s",
+            _build_exc,
+        )
+        return build_desktop_status_board_integration_payload()

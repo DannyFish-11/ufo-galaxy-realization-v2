@@ -262,6 +262,7 @@ logic.
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in compiler namespace |
 | `DesktopStatusBoardIntegrationPayload` | `contracts.desktop_status_projection` | Final integration-oriented composed payload |
 | `build_desktop_status_board_integration_payload()` | `contracts.desktop_status_projection` | Builder for the integration payload |
+| `build_desktop_status_board_integration_from_runtime()` | `core.projection.projection_compiler` | Bridge: RuntimeProjection → integration payload |
 | `GET /api/v1/projection/desktop-status-board` | `core.routes.projection` | Single stable endpoint for desktop status board consumption |
 
 ### Integration payload fields
@@ -275,6 +276,16 @@ logic.
 | `authority_indicators` | `dict` | All canonical-vs-legacy authority signals in one place |
 | `integration_authority` | `str` | PR-8 sentinel confirming canonical builder provenance |
 | `integration_health` | `str` | Rolled-up integration health |
+
+### Convenience properties on `DesktopStatusBoardIntegrationPayload`
+
+Two convenience properties are available so desktop clients do not need to
+drill into sub-blocks for the most common checks:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `.readiness` | `str` | Shorthand for `authority_indicators["topology_readiness"]` — `"canonical"` / `"degraded"` / `"partial"` / `"unavailable"` |
+| `.is_canonical` | `bool` | Shorthand for `authority_indicators["topology_authoritative"]` — `True` when topology is fully authoritative routing truth |
 
 ### Canonical authority layering (preserved)
 
@@ -290,20 +301,23 @@ logic.
    final integrated payload.  Do **not** assemble state by combining
    `/runtime`, `/desktop-topology`, and other legacy endpoint outputs.
 
-2. **Inspect `authority_indicators`** for a single machine-checkable view of
-   all canonical-vs-legacy authority signals without traversing sub-blocks.
+2. **Check `.readiness` or `.is_canonical`** for the most common single-flag
+   checks without drilling into sub-blocks.
 
-3. **`topology_projection.projection_quality`** remains the primary readiness
+3. **Inspect `authority_indicators`** for a complete machine-checkable view of
+   all canonical-vs-legacy authority signals.
+
+4. **`topology_projection.projection_quality`** remains the primary readiness
    discriminator (PR-7 semantics preserved):
    - `"canonical"` → fully authoritative
    - `"degraded"` → legacy fallback active; surface warning to operator
    - `"partial"` → components missing; surface partial state
    - `"unavailable"` → no data; do not render topology
 
-4. **`oneapi_integration`** is always a lower-horizon block; never promote it
+5. **`oneapi_integration`** is always a lower-horizon block; never promote it
    to a top-layer provider peer.
 
-5. **`integration_authority`** equals
+6. **`integration_authority`** equals
    `"contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload"` —
    verify this sentinel to confirm canonical builder provenance.
 
@@ -313,7 +327,10 @@ logic.
 |--------|--------|------|-------------|
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `contracts.desktop_status_projection` | `str` | PR-8 integration sentinel |
 | `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection.projection_compiler` | `str` | Mirror sentinel |
+| `DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY` | `core.projection` (package `__all__`) | `str` | Re-exported from package |
 | `DesktopStatusBoardIntegrationPayload` | `contracts.desktop_status_projection` | Pydantic model | Final integration payload |
+| `build_desktop_status_board_integration_from_runtime` | `core.projection.projection_compiler` | function | Bridge to build payload from runtime state |
+| `build_desktop_status_board_integration_from_runtime` | `core.projection` (package `__all__`) | function | Re-exported from package |
 
 ### API Endpoints (post-PR-8)
 
@@ -330,7 +347,6 @@ logic.
 > and integration-layer use, but the integration payload provides everything
 > a status board client needs in one stable contract.
 
----
 
 ## Display Boundary
 
