@@ -6,7 +6,7 @@ Tests for the Steps 3 / 5 / 6 completion:
 
   Step 3 — Legacy Windows paths are hard-disabled (RuntimeError on import).
   Step 5 — RuntimeDomain enum exists and ContinuumState exposes runtime_domain.
-  Step 6 — status_board.py is importable, read-only, and has CLI entry point.
+  Step 6 — status_board.py is retired (hard-disabled); status_board_v2 is the canonical surface.
 """
 
 from __future__ import annotations

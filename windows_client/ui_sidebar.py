@@ -24,8 +24,8 @@ warnings.warn(
 raise RuntimeError(
     "windows_client/ui_sidebar.py is hard-disabled.  "
     "The legacy Tk chat sidebar has been retired.  "
-    "For a read-only desktop status board use:\n"
-    "  python windows_client/status_board.py\n"
+    "For the canonical desktop status board use:\n"
+    "  python -m windows_client.status_board_v2\n"
     "For command execution use:\n"
     "  windows_aip_client.py → WindowsExecutionArbiter.route_command()\n"
     "See docs/WINDOWS_STATUS_BOARD.md and docs/WINDOWS_EXECUTION_PIPELINE.md."
