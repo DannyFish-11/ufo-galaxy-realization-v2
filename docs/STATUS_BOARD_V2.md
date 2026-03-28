@@ -579,6 +579,88 @@ for the full PR-13 guide.
 
 ---
 
+## PR-14: Observability and History Layer
+
+PR-14 adds the **topology observability and history layer** — making it
+possible to understand not only the current state, but also recent changes,
+transitions, and stability over time, while preserving all semantic guarantees
+around canonical authority, fallback/degraded states, and OneAPI lower-horizon
+separation.
+
+### What PR-14 adds
+
+| Symbol | Module | Description |
+|--------|--------|-------------|
+| `TopologyHistoryRecorder` | `windows_client.status_board_v2.topology_history` | PR-14 main history/observability surface |
+| `TOPOLOGY_HISTORY_AUTHORITY` | `windows_client.status_board_v2.topology_history` | PR-14 history authority sentinel |
+| `TopologyChangeKind` | `windows_client.status_board_v2.topology_history` | Enumeration of observable change event types |
+| `ReadinessTransitionRecord` | `windows_client.status_board_v2.topology_history` | Records a readiness state transition |
+| `AuthorityChangeRecord` | `windows_client.status_board_v2.topology_history` | Records an authority change |
+| `RoutingChangeRecord` | `windows_client.status_board_v2.topology_history` | Records a provider/routing change |
+| `OneAPIHistorySummary` | `windows_client.status_board_v2.topology_history` | OneAPI lower-horizon historical summary (always `is_lower_horizon_only=True`) |
+| `TopologyHistoryEntry` | `windows_client.status_board_v2.topology_history` | Single timestamped change record |
+| `TopologySnapshot` | `windows_client.status_board_v2.topology_history` | Point-in-time topology state snapshot |
+| `TopologyHistoryBuffer` | `windows_client.status_board_v2.topology_history` | Bounded in-memory buffer for history entries |
+
+### Semantic guarantees (PR-14)
+
+- `OneAPIHistorySummary.is_lower_horizon_only` is **always `True`** —
+  OneAPI is never a canonical routing peer in any historical view.
+- `TopologySnapshot.oneapi_is_lower_horizon_only` is **always `True`**.
+- Degraded/fallback entries always have `is_authoritative = False`.  They are
+  never re-promoted to authoritative truth.
+- `ReadinessTransitionRecord.transition_note` explicitly states the
+  non-authoritative constraint when transitioning into a degraded/fallback state.
+- The recorder builds exclusively on the PR-9/PR-11/PR-12/PR-13 pipeline and
+  never bypasses it to reconstruct truth from raw nested dicts.
+- `snapshot_from_*` always returns a `TopologySnapshot`; `None` input yields
+  an unavailable snapshot (`is_unavailable=True`, `is_authoritative=False`).
+
+### Consumer guidance (post-PR-14)
+
+```python
+from windows_client.status_board_v2.topology_history import (
+    TopologyHistoryRecorder, TopologyHistoryBuffer,
+)
+from windows_client.status_board_v2.topology_inspector import TopologyInspector
+from core.desktop_consumption_adapter import adapt_integration_payload
+
+vm = adapt_integration_payload(payload)
+inspector = TopologyInspector()
+report = inspector.inspect_from_view_model(vm)
+
+recorder = TopologyHistoryRecorder()
+buf = TopologyHistoryBuffer(max_size=50)
+
+# Record a history entry from the current inspection report
+entry = recorder.record_from_inspection_report(report)
+if entry:
+    buf.add_entry(entry)
+
+# Take a point-in-time snapshot
+snap = recorder.snapshot_from_inspection_report(report)
+print(snap.readiness_label)          # "canonical"
+print(snap.stability_indicator)      # "stable"
+print(snap.oneapi_is_lower_horizon_only)   # always True
+
+# Compare two snapshots to detect transitions
+diff = recorder.compare_snapshots(snap_before, snap_after)
+if diff["readiness_changed"]:
+    tr = diff["readiness_transition"]
+    print(f"Readiness: {tr.from_readiness} → {tr.to_readiness}")
+    print(tr.transition_note)        # explicitly notes non-authoritative transitions
+
+# Stability summary over a buffer
+summary = recorder.stability_summary(buf)
+print(summary["overall_stability"])  # "stable" / "mostly_stable" / "unstable"
+print(summary["stability_ratio"])    # 0.0–1.0
+```
+
+See [`docs/OBSERVABILITY_HISTORY.md`](OBSERVABILITY_HISTORY.md)
+for the full PR-14 guide.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
@@ -601,6 +683,7 @@ Key rules enforced there:
 
 ## Related Documents
 
+- [`docs/OBSERVABILITY_HISTORY.md`](OBSERVABILITY_HISTORY.md) — PR-14 observability and history layer
 - [`docs/DIAGNOSTICS_INSPECTION_INTERACTION.md`](DIAGNOSTICS_INSPECTION_INTERACTION.md) — PR-13 diagnostics and inspection interaction layer
 - [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md) — PR-12 topology rendering and visual semantics polish
 - [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md) — PR-11 topology / constellation layout foundation

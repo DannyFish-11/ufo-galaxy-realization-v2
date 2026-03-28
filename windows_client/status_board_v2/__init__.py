@@ -47,6 +47,19 @@ PR-13 adds the diagnostics and inspection interaction layer:
 - OneAPI inspection detail (PR-13)                    → OneAPIInspectionDetail
 - Inspection report (PR-13)                           → InspectionReport
 
+PR-14 adds the observability and history layer:
+
+- Topology history recorder (PR-14)                   → TopologyHistoryRecorder
+- History authority sentinel (PR-14)                  → TOPOLOGY_HISTORY_AUTHORITY
+- Change kind enumeration (PR-14)                     → TopologyChangeKind
+- Readiness transition record (PR-14)                 → ReadinessTransitionRecord
+- Authority change record (PR-14)                     → AuthorityChangeRecord
+- Routing change record (PR-14)                       → RoutingChangeRecord
+- OneAPI historical summary (PR-14)                   → OneAPIHistorySummary
+- History entry (PR-14)                               → TopologyHistoryEntry
+- Point-in-time snapshot (PR-14)                      → TopologySnapshot
+- Bounded history buffer (PR-14)                      → TopologyHistoryBuffer
+
 READ-ONLY GUARANTEE
 -------------------
 This package NEVER:
@@ -90,6 +103,18 @@ from .topology_inspector import (
     OneAPIInspectionDetail,
     InspectionReport,
 )
+from .topology_history import (
+    TopologyHistoryRecorder,
+    TOPOLOGY_HISTORY_AUTHORITY,
+    TopologyChangeKind,
+    ReadinessTransitionRecord,
+    AuthorityChangeRecord,
+    RoutingChangeRecord,
+    OneAPIHistorySummary,
+    TopologyHistoryEntry,
+    TopologySnapshot,
+    TopologyHistoryBuffer,
+)
 
 __all__ = [
     "main",
@@ -123,4 +148,15 @@ __all__ = [
     "RoutingInspectionDetail",
     "OneAPIInspectionDetail",
     "InspectionReport",
+    # PR-14: observability and history layer
+    "TopologyHistoryRecorder",
+    "TOPOLOGY_HISTORY_AUTHORITY",
+    "TopologyChangeKind",
+    "ReadinessTransitionRecord",
+    "AuthorityChangeRecord",
+    "RoutingChangeRecord",
+    "OneAPIHistorySummary",
+    "TopologyHistoryEntry",
+    "TopologySnapshot",
+    "TopologyHistoryBuffer",
 ]
