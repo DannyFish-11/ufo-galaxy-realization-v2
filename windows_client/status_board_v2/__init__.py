@@ -31,6 +31,11 @@ PR-11 adds the topology / constellation layout foundation:
                                                          TopologyRelationKind,
                                                          TopologyLayerKind
 
+PR-12 adds the topology rendering and visual semantics polish:
+
+- Topology constellation renderer (PR-12)             → TopologyRenderer
+- Renderer authority sentinel (PR-12)                 → TOPOLOGY_RENDERER_AUTHORITY
+
 READ-ONLY GUARANTEE
 -------------------
 This package NEVER:
@@ -60,6 +65,10 @@ from .topology_layout import (
     TopologyLayerKind,
     TOPOLOGY_LAYOUT_AUTHORITY,
 )
+from .topology_renderer import (
+    TopologyRenderer,
+    TOPOLOGY_RENDERER_AUTHORITY,
+)
 
 __all__ = [
     "main",
@@ -81,4 +90,7 @@ __all__ = [
     "TopologyRelationKind",
     "TopologyLayerKind",
     "TOPOLOGY_LAYOUT_AUTHORITY",
+    # PR-12: topology rendering and visual semantics polish
+    "TopologyRenderer",
+    "TOPOLOGY_RENDERER_AUTHORITY",
 ]
