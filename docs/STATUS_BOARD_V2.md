@@ -516,6 +516,69 @@ for the full PR-12 guide.
 
 ---
 
+## PR-13: Diagnostics and Inspection Interaction Layer
+
+PR-13 adds the **topology diagnostics/inspection layer** — an investigable
+surface that lets operators and client code drill into topology nodes,
+relations, readiness/authority state, routing summary details, and lower-
+horizon OneAPI details without breaking the semantic guarantees established by
+PR-4 through PR-12.
+
+### What PR-13 adds
+
+| Symbol | Module | Description |
+|--------|--------|-------------|
+| `TopologyInspector` | `windows_client.status_board_v2.topology_inspector` | PR-13 main inspection surface |
+| `TOPOLOGY_INSPECTOR_AUTHORITY` | `windows_client.status_board_v2.topology_inspector` | PR-13 inspector authority sentinel |
+| `NodeInspectionDetail` | `windows_client.status_board_v2.topology_inspector` | Single-node diagnostic view |
+| `RelationInspectionDetail` | `windows_client.status_board_v2.topology_inspector` | Single-relation diagnostic view |
+| `ReadinessInspectionDetail` | `windows_client.status_board_v2.topology_inspector` | Readiness/authority interpretation |
+| `RoutingInspectionDetail` | `windows_client.status_board_v2.topology_inspector` | Routing/provider summary diagnostics |
+| `OneAPIInspectionDetail` | `windows_client.status_board_v2.topology_inspector` | OneAPI lower-horizon diagnostic (always `is_lower_horizon_only=True`) |
+| `InspectionReport` | `windows_client.status_board_v2.topology_inspector` | Complete diagnostics report |
+
+### Semantic guarantees (PR-13)
+
+- `OneAPIInspectionDetail.is_lower_horizon_only` is **always `True`** —
+  OneAPI is never a canonical routing peer during inspection.
+- Nodes in degraded layouts have `is_authoritative = False`.
+- `fallback_path` relations are always `is_fallback = True` and
+  `is_authoritative = False`.
+- `canonical_route` relations are always `is_authoritative = True`.
+- Every `NodeInspectionDetail` has an explicit `authority_note` that
+  distinguishes canonical from non-canonical/fallback data.
+- The inspector builds exclusively on the PR-9/PR-11 adapter + layout pipeline
+  and never bypasses it to reconstruct truth from raw nested dicts.
+
+### Consumer guidance (post-PR-13)
+
+```python
+from windows_client.status_board_v2.topology_inspector import TopologyInspector
+from core.desktop_consumption_adapter import adapt_integration_payload
+
+vm = adapt_integration_payload(payload)
+inspector = TopologyInspector()
+
+# One-step inspection from adapter output
+report = inspector.inspect_from_view_model(vm)
+print(report.readiness.readiness_label)       # "canonical"
+print(report.readiness.is_authoritative)      # True / False
+print(report.readiness.degraded_reason)       # None or explanation
+
+# Inspect OneAPI — always lower-horizon only
+oneapi = inspector.inspect_oneapi(layout)
+print(oneapi.is_lower_horizon_only)           # always True
+
+# Serialise for logging / persistence
+d = report.to_dict()
+j = report.to_json()
+```
+
+See [`docs/DIAGNOSTICS_INSPECTION_INTERACTION.md`](DIAGNOSTICS_INSPECTION_INTERACTION.md)
+for the full PR-13 guide.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
@@ -538,6 +601,7 @@ Key rules enforced there:
 
 ## Related Documents
 
+- [`docs/DIAGNOSTICS_INSPECTION_INTERACTION.md`](DIAGNOSTICS_INSPECTION_INTERACTION.md) — PR-13 diagnostics and inspection interaction layer
 - [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md) — PR-12 topology rendering and visual semantics polish
 - [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md) — PR-11 topology / constellation layout foundation
 - [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) — PR-10 first usable adapter-driven status board UI surface
