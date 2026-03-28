@@ -41,6 +41,17 @@ PR-8 adds a final desktop status board integration bridge::
 See ``docs/RUNTIME_PROJECTION.md`` for the base projection design rationale.
 See ``docs/PROJECTION_ASSEMBLY_GOVERNANCE.md`` for the PR-26 governance layer.
 See ``docs/STATUS_BOARD_V2.md`` (PR-8 section) for the final integration contract.
+
+PR-9 adds the desktop client consumption adapter::
+
+    from core.projection import adapt_integration_payload, DesktopClientViewModel
+
+    vm = adapt_integration_payload(integration_payload)
+    print(vm.is_canonical)       # True / False
+    print(vm.readiness_state)    # DesktopReadinessState.canonical / ...
+    print(vm.integration_health) # "ok" / "degraded" / ...
+
+See ``docs/DESKTOP_CONSUMPTION_ADAPTER.md`` for the post-PR-9 consumption guide.
 """
 
 from .assembly_governance import (
@@ -62,6 +73,14 @@ from .projection_compiler import (
     build_runtime_projection,
 )
 from .runtime_projection import RuntimeProjection
+from core.desktop_consumption_adapter import (
+    DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY,
+    DesktopClientViewModel,
+    DesktopOneAPIHorizonSummary,
+    DesktopProviderRoutingSummary,
+    DesktopReadinessState,
+    adapt_integration_payload,
+)
 
 __all__ = [
     "RuntimeProjection",
@@ -70,6 +89,13 @@ __all__ = [
     # PR-8: final desktop status board integration bridge
     "build_desktop_status_board_integration_from_runtime",
     "DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY",
+    # PR-9: desktop client consumption adapter
+    "adapt_integration_payload",
+    "DesktopClientViewModel",
+    "DesktopReadinessState",
+    "DesktopProviderRoutingSummary",
+    "DesktopOneAPIHorizonSummary",
+    "DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY",
     # PR-26 governance assembly
     "ProjectionGovernanceSummary",
     "ProjectionExecutionSummary",
