@@ -1,17 +1,33 @@
 # windows_client/status_board_v2/ — ACTIVE DESKTOP STATUS SURFACE
 
-> **Status: ACTIVE / CANONICAL** (established PR-8; confirmed PR-1 architecture freeze)
+> **Status: ACTIVE / CANONICAL / SOLE DESKTOP SURFACE** (established PR-8;
+> confirmed PR-1 architecture freeze; formally declared sole operator surface
+> in PR-0)
 >
-> Role: `ACTIVE_DESKTOP_STATUS`
+> Role: `ACTIVE_DESKTOP_STATUS` · `SOLE_DESKTOP_OPERATOR_SURFACE`
 
-`windows_client/status_board_v2/` is the **canonical read-only desktop status
-board and the sole canonical operator-visible model topology surface** for the
-Galaxy system.
+`windows_client/status_board_v2/` is the **sole canonical operator-facing
+desktop surface** and the **canonical read-only status board** for the Galaxy
+system.
+
+## PR-0 architecture freeze — key declarations
+
+| Declaration | Detail |
+|-------------|--------|
+| **Sole desktop surface** | This is the only canonical operator-facing desktop surface.  All legacy desktop/operator surfaces are retired. |
+| **Dashboard frontend retired** | `dashboard/frontend/` is no longer part of the active target architecture.  No new operator-facing UI work must target the dashboard. |
+| **Future config entry surface** | This surface will become the sole desktop configuration entry point (Phase D of dashboard migration).  Config entry UI is **not implemented yet**. |
+| **Config authority constraint** | When config entry is implemented, written configuration must target `runtime/config.json` (non-secret) and `runtime/secrets.env` (secrets) and must have system-wide effect.  It must not be stored as per-surface local state. |
+| **Routing authority unchanged** | `TopologyRouter` remains sole canonical routing authority.  `TopologyRoutePlan` remains sole canonical routing output contract.  This surface never derives routing truth independently. |
+| **Native-multimodal-first unchanged** | The Sky-Grown Constellation Topology remains the governing visual and semantic model.  Native multimodal paths anchor the primary layer. |
 
 The dashboard (`dashboard/`) is in retirement and is no longer the target
 primary UI surface.  See
 [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](../../docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md)
-for the retirement and migration plan.
+for the retirement and migration plan.  See
+[`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](../../docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
+for the architecture decision record freezing this surface as the future
+configuration entry point.
 
 The target visual grammar for the model topology display is the
 **Native-Multimodal-First Sky-Grown Constellation Topology**
@@ -36,7 +52,7 @@ tri-state value.
 See [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](../../docs/DESKTOP_SEMANTIC_CLOSURE.md)
 for the authoritative definition of all three states and their invariants.
 
-## What this surface does
+## What this surface does (current state)
 
 Consumes the canonical runtime projection endpoint and renders the current
 tri-state phase (silent / liminal / manifest) along with system health metrics:
@@ -46,9 +62,28 @@ Source:   GET /api/v1/projection/runtime
 Contract: contracts.desktop_status_projection.DesktopStatusProjection
 ```
 
-This surface is **projection-driven and read-only** — it does not maintain its
-own system state, does not write to the authority model, and does not define
-system structure.
+This surface is currently **projection-driven and read-only** — it does not
+maintain its own system state, does not write to the authority model, and does
+not define system structure.
+
+## What this surface will do (future Phase D)
+
+A future PR (Phase D of the dashboard migration) will add an interactive
+configuration entry mode to this surface.  At that point:
+
+- Operators will be able to enter provider API keys, provider enable/disable
+  settings, and model preferences directly through this surface.
+- Written configuration will be persisted to the local unified configuration
+  authority: `runtime/config.json` (non-secret) and `runtime/secrets.env`
+  (secrets).
+- Configuration changes must have system-wide effect — affecting provider
+  inventory, routing candidate pool, projection, and topology.
+- `TopologyRouter` will remain the sole canonical routing decision-maker.
+  Config entry modifies the inputs (provider inventory, preferences) that
+  `TopologyRouter` consumes; it does not bypass the routing authority.
+
+**This interactive mode is not implemented in this PR.**  The current surface
+remains read-only.
 
 ## Active sub-surfaces
 
@@ -127,6 +162,7 @@ panels, full metrics/status-board panels, generic operator information blocks.
 - `contracts/desktop_status_projection.py` — canonical projection contract
 - `core/routes/` — `GET /api/v1/projection/runtime` endpoint
 - `core/liminal_space_mapping.py` — canonical liminal-facing structures
+- `docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md` — ADR freezing this surface as sole desktop config entry surface
 - `docs/LIMINAL_SPACE_MAPPING.md` — canonical liminal space mapping definition
 - `docs/SANDBOX_SIMULATION_PROJECTION.md` — sandbox/simulation field semantics
 - `docs/DESKTOP_SEMANTIC_CLOSURE.md` — canonical tri-state semantic closure

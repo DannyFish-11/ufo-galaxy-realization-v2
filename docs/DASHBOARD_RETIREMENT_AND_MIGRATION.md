@@ -1,6 +1,8 @@
 # Dashboard Retirement and Migration
 
-> **Status:** Architecture-freeze canonical — established in PR-1.
+> **Status:** Architecture-freeze canonical — established in PR-1; direction
+> strengthened in PR-0 (unified native-multimodal-first status-board-centred
+> architecture freeze).
 > **Scope:** States the retirement intent for the dashboard UI surface, defines
 > what migrates to the canonical desktop operator surface, and establishes the
 > high-level migration sequence.
@@ -8,7 +10,9 @@
 > Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
-> [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md)
+> [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
+> [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) ·
+> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
 
 ---
 
@@ -17,14 +21,19 @@
 **The dashboard (`dashboard/`) is no longer the target primary UI surface for
 the Galaxy system.**
 
-As of this architecture-freeze baseline:
+As of this architecture-freeze baseline (PR-0):
 
 - No new operator-facing features will be added to the dashboard frontend.
+- **`dashboard/frontend/` is retired as an operator UI target.**  No new
+  operator-facing UI work must target the dashboard frontend.
 - No new routing-truth or model-topology semantics will be established in the
   dashboard backend.
-- The desktop status board (`windows_client/status_board_v2/`) is the canonical
-  operator-visible surface for model topology, routing state, and provider
-  status.
+- The desktop status board (`windows_client/status_board_v2/`) is the **sole
+  canonical operator-facing desktop surface** for model topology, routing state,
+  provider status, and — in the future — configuration entry.
+- Dashboard backend functionality may be retained temporarily **only** as a
+  headless compatibility / capability source during migration.  It is not an
+  authoritative surface.
 - Dashboard code is retained only for backward compatibility during the
   migration window; it is not authoritative.
 
@@ -85,18 +94,33 @@ and into canonical replacement surfaces.
 | Dashboard orchestration summary | `DesktopStatusProjection` orchestration fields |
 | Dashboard execution overview panel | `status_board_v2/device_surface.py` and `metrics_surface.py` |
 
-### 3.5 Config entry responsibilities → system-wide config surface
+### 3.5 Config entry responsibilities → local unified configuration authority
 
 | Migrates from | Migrates to |
 |---|---|
-| Dashboard OneAPI base URL / API key forms | System-wide config entry (to be defined in a later PR) |
-| Dashboard provider enable/disable controls | System-wide config entry |
+| Dashboard OneAPI base URL / API key forms | Local unified configuration authority — `runtime/secrets.env` (keys) and `runtime/config.json` (non-secret settings) |
+| Dashboard provider enable/disable controls | Local unified configuration authority |
 | Dashboard model preference profiles | Operator override layer (`core/operator_override.py`) |
 
-Config entry migration (§3.5) is **explicitly out of scope** for this PR.
-A subsequent PR will define and implement the system-wide config surface.
-Until that PR lands, existing dashboard config forms remain the only entry
-point for those settings.
+**Architecture-freeze direction (PR-0):**  Configuration entry is moving to a
+**local unified configuration authority** with canonical persistence targets:
+
+- `runtime/config.json` — non-secret system configuration (provider profiles,
+  routing preferences, topology overrides).
+- `runtime/secrets.env` — secrets such as provider API keys.
+
+These are the canonical system-wide persistence targets.  Configuration changes
+entered here must affect provider inventory, routing candidate pool, projection,
+and status-board topology system-wide.
+
+The **future operator-facing entry surface** for this configuration is
+`windows_client/status_board_v2/`.  See
+[`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
+and [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md).
+
+Config entry UI implementation is **explicitly deferred** to a subsequent PR.
+Until that PR lands, existing dashboard config forms remain the only interactive
+entry point for those settings (headless compatibility use only).
 
 ---
 
@@ -116,14 +140,26 @@ The following items must not be carried forward into the replacement surface.
 
 ## 5. Migration Sequence (High Level)
 
-Migration proceeds in five phases.  **This PR freezes Phase A.**
+Migration proceeds in five phases.  **PR-1 froze Phase A.  PR-0 strengthens
+the direction and makes the full migration target explicit.**
 
-### Phase A — Architecture freeze (this PR)
+### Phase A — Architecture freeze (PR-1 / PR-0)
 - Mark dashboard as entering retirement in documentation.
 - Establish `TopologyRouter` / `TopologyRoutePlan` as the sole canonical
   routing authority in all documentation.
 - Define the Sky-Grown Constellation Topology as the target visual grammar.
 - Prohibit new feature additions to the dashboard frontend.
+- **PR-0 additions:**
+  - Formally retire `dashboard/frontend/` as an operator UI target.
+  - Establish `windows_client/status_board_v2/` as the sole canonical desktop
+    operator surface and the future configuration-entry surface.
+  - Establish local unified configuration authority
+    (`runtime/config.json` / `runtime/secrets.env`) as the canonical
+    persistence targets for system configuration.
+  - Document that status-board-entered configuration must have system-wide
+    effect (implementation deferred to Phase D).
+  - Confirm that `TopologyRouter` and `TopologyRoutePlan` remain the sole
+    routing authority and output contract — this is unchanged.
 
 ### Phase B — Data semantics extraction
 - Extract provider status, route summary, OneAPI status, and orchestration
@@ -140,9 +176,16 @@ Migration proceeds in five phases.  **This PR freezes Phase A.**
 - OneAPI Aggregator Horizon unconditionally present.
 
 ### Phase D — System-wide config entry
-- Define and implement a system-wide config surface for OneAPI / provider
-  configuration that does not depend on the dashboard frontend.
+- Implement the **local unified configuration authority** surface inside
+  `windows_client/status_board_v2/`, reading and writing
+  `runtime/config.json` and `runtime/secrets.env`.
+- Status-board-entered configuration must have system-wide effect: provider
+  inventory, routing candidate pool, projection, and status-board topology
+  must all reflect config changes without restart where possible.
 - Decouple config entry from dashboard entirely.
+- `TopologyRouter` continues to be the sole routing authority; the config
+  entry surface only modifies inputs to the routing pipeline, not the
+  routing logic itself.
 
 ### Phase E — Dashboard retirement and cleanup
 - Deprecate and remove dashboard frontend code.
@@ -166,6 +209,12 @@ While Phases B–E are pending:
    the source of truth.
 4. **Do not render OneAPI at the same visual level as direct providers** in any
    new surface, even temporarily.
+5. **Do not add new operator-facing UI work targeting dashboard.**  All new
+   operator UI work must target `windows_client/status_board_v2/`.
+6. **Do not write system-level configuration through ad-hoc paths.**  All
+   system configuration must target `runtime/config.json` (non-secret) or
+   `runtime/secrets.env` (secrets).  Surface-local config must remain
+   surface-local and must not affect system state.
 
 ---
 
@@ -175,6 +224,8 @@ While Phases B–E are pending:
 |---|---|
 | [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) | Defines `TopologyRouter` as the sole canonical routing authority; dashboard is explicitly not a routing-truth authority |
 | [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) | Defines the target visual grammar of the replacement topology surface |
-| [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) | Canonical desktop status board; the primary migration target for operator-visible model topology |
+| [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) | Canonical desktop status board; the primary migration target for operator-visible model topology and future config entry |
 | [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) | Defines OneAPI's position; migration must not regress this position |
+| [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) | Canonical configuration entry unification contract; local unified config authority and persistence targets |
+| [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md) | ADR freezing `status_board_v2` as sole desktop config entry surface and local unified config authority model |
 | [`core/orchestration_authority/legacy_paths.py`](../core/orchestration_authority/legacy_paths.py) | Registry of legacy compatibility paths; dashboard-era paths registered here |

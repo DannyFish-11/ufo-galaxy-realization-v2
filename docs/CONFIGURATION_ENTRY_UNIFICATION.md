@@ -4,6 +4,11 @@
 > of configuration entry points across the Galaxy runtime.  All docs, surfaces,
 > and node contracts must reference configuration using the vocabulary and
 > ownership boundaries defined here.
+>
+> **PR-0 update:** The system is moving to a **local unified configuration
+> authority** model.  The canonical persistence targets and future entry surface
+> are defined in §2A below.  See also
+> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).
 
 ---
 
@@ -22,6 +27,41 @@ No tier may claim authority over another tier's canonical keys.
 ---
 
 ## 2. Canonical Entry Points
+
+### 2A. Local unified configuration authority (PR-0 direction)
+
+The system is moving to a **local unified configuration authority** with two
+canonical persistence targets:
+
+| Target | Purpose |
+|--------|---------|
+| `runtime/config.json` | Non-secret system configuration — provider profiles, routing preferences, topology overrides, feature flags |
+| `runtime/secrets.env` | Secrets — provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, OneAPI token, etc.) |
+
+**Invariants:**
+
+- `runtime/config.json` must be machine-readable structured JSON loaded by
+  `core/unified_config.py`.
+- `runtime/secrets.env` must follow the same naming conventions as the root
+  `.env` / environment (see §3).
+- Changes to `runtime/config.json` or `runtime/secrets.env` are
+  **system-wide inputs** — they affect provider inventory, routing candidate
+  pool, projection output, and status-board topology.  They are not surface-
+  local state.
+- The `.env` file at the repository root continues to be accepted for
+  deployment-mode overrides and CI.  The `runtime/` targets are the canonical
+  operator-entry persistence layer during active operation.
+
+**Future operator-facing entry surface:**  Configuration entry through an
+interactive UI will be provided by `windows_client/status_board_v2/` in a
+future PR (Phase D of the dashboard migration).  Status-board-entered
+configuration must write to `runtime/config.json` / `runtime/secrets.env`
+and must have system-wide effect.  It must not be stored as surface-local
+state.  See [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).
+
+> **Implementation note:** The config entry UI inside `status_board_v2` is
+> **not implemented in this PR**.  This section documents the architectural
+> direction so that future implementation PRs have a clear contract to target.
 
 ### 2.1 Primary runtime configuration
 
@@ -57,8 +97,8 @@ duplicate this logic.
 
 ### 2.3 Status-board-facing configuration
 
-The status board (`windows_client/status_board_v2/`) accepts only **read-only
-display parameters**:
+The status board (`windows_client/status_board_v2/`) currently accepts only
+**read-only display parameters**:
 
 | Parameter | Source | Description |
 |-----------|--------|-------------|
@@ -70,7 +110,15 @@ display parameters**:
 | `--no-color` | CLI arg | Disable ANSI colour output |
 
 These parameters do **not** affect system state.  They are surface-local
-tuning values and must not be stored in `config.json`.
+tuning values and must not be stored in `config.json` or `runtime/config.json`.
+
+**Future direction (Phase D):**  `windows_client/status_board_v2/` will
+become the **sole desktop configuration entry surface**, providing an
+interactive UI for writing to the local unified configuration authority
+(`runtime/config.json` / `runtime/secrets.env`).  When that UI is
+implemented, configuration entered through the status board must have
+system-wide effect — it must not be stored as per-surface local state.
+See [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).
 
 ### 2.4 OneAPI-facing configuration
 
@@ -101,12 +149,20 @@ canonical position of OneAPI in the routing hierarchy.
   system-level keys without explicit namespace isolation.
 - Do not describe configuration entry points inside surface documentation as
   if they are system-level authorities.
-- Do not mix secret keys (`*_API_KEY`, `GALAXY_API_TOKEN`) into `config.json`.
-  Secrets belong in the environment / `.env` file only.
+- Do not mix secret keys (`*_API_KEY`, `GALAXY_API_TOKEN`) into `config.json`
+  or `runtime/config.json`.  Secrets belong in the environment / `.env` /
+  `runtime/secrets.env` only.
 - Do not add `--config` flags to surface CLIs that read system-level config.
   Surface CLIs accept only surface-local parameters (see §2.3).
 - Do not introduce a new configuration authority without registering it in
   `core/unified_config.py` and documenting it here.
+- Do not implement a new operator-facing configuration UI that targets any
+  surface other than `windows_client/status_board_v2/`.  The dashboard
+  frontend is retired as a configuration entry surface.
+- Do not store system configuration written through the status board as
+  per-surface local state.  Status-board-entered configuration must write to
+  the local unified configuration authority targets (`runtime/config.json` /
+  `runtime/secrets.env`) and have system-wide effect.
 
 ---
 
@@ -123,9 +179,11 @@ The following legacy configuration paths are retained for compatibility only:
 
 ## 6. Cross-References
 
+- [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md) — ADR freezing `status_board_v2` as sole desktop config entry surface
 - [`docs/CONFIG_GOVERNANCE.md`](CONFIG_GOVERNANCE.md) — full configuration variable matrix
 - [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](DESKTOP_SEMANTIC_CLOSURE.md) — tri-state desktop semantics
 - [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) — OneAPI position in routing hierarchy
 - [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) — routing authority documentation
+- [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) — dashboard retirement plan
 - [`core/unified_config.py`](../core/unified_config.py) — unified configuration manager
 - [`core/config_preflight.py`](../core/config_preflight.py) — pre-flight validation
