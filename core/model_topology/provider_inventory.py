@@ -41,11 +41,38 @@ logger = logging.getLogger("Galaxy.ModelTopology.ProviderInventory")
 class ProviderInventoryEntry:
     """One slot in the inventory: a normalized topology entry plus an optional
     live health snapshot (populated later by the routing telemetry layer).
+
+    PR-4 adds config-authority-driven fields:
+
+    config_enabled
+        Set by the unified config authority (``runtime/config.json``
+        ``providers.<id>.enabled``).  When ``False`` the provider must not
+        appear in the routing candidate pool regardless of key presence.
+
+    config_has_key
+        ``True`` when the required secret(s) for this provider are present
+        according to the unified config authority (env-var or
+        ``runtime/secrets.env``).
+
+    config_source
+        Informational: records which authority layer produced these flags.
+        Expected values: ``"config_authority"`` (set by
+        ``inventory_from_config``), ``"env"`` (legacy env-probing path),
+        ``"unknown"`` (not yet determined).
+
+    is_candidate_eligible
+        Derived: ``True`` only when ``config_enabled`` **and**
+        ``config_has_key`` are both ``True``.  Routing candidate-pool
+        formation uses this flag as the primary gate.
     """
     entry: NormalizedTopologyEntry
     health_status: str = "unknown"   # "healthy" | "degraded" | "down" | "unknown"
     latency_avg_ms: float = 0.0
     error_rate: float = 0.0
+    # PR-4: config-authority-driven participation flags
+    config_enabled: bool = True
+    config_has_key: bool = True
+    config_source: str = "unknown"
 
     @property
     def provider_id(self) -> str:
@@ -54,6 +81,11 @@ class ProviderInventoryEntry:
     @property
     def model_id(self) -> str:
         return self.entry.model.model_id
+
+    @property
+    def is_candidate_eligible(self) -> bool:
+        """True when this provider may participate in routing candidate pool."""
+        return self.config_enabled and self.config_has_key
 
     def to_dict(self) -> dict:
         return {
@@ -74,6 +106,11 @@ class ProviderInventoryEntry:
             "health_status": self.health_status,
             "latency_avg_ms": self.latency_avg_ms,
             "error_rate": self.error_rate,
+            # PR-4 config-authority fields
+            "config_enabled": self.config_enabled,
+            "config_has_key": self.config_has_key,
+            "config_source": self.config_source,
+            "is_candidate_eligible": self.is_candidate_eligible,
         }
 
 
@@ -140,11 +177,61 @@ class ProviderInventory:
     # ------------------------------------------------------------------
 
     def available_entries(self) -> List[ProviderInventoryEntry]:
-        """Entries where the required API key is present."""
+        """Entries where the required API key is present (env-probing path)."""
         return [e for e in self._entries.values() if e.entry.is_available]
 
     def unavailable_entries(self) -> List[ProviderInventoryEntry]:
         return [e for e in self._entries.values() if not e.entry.is_available]
+
+    # ------------------------------------------------------------------
+    # PR-4: Config-authority-driven candidate pool views
+    # ------------------------------------------------------------------
+
+    def candidate_pool_entries(self) -> List[ProviderInventoryEntry]:
+        """Entries eligible to participate in routing candidate-pool selection.
+
+        A provider is eligible when **both** of the following hold:
+
+        - ``config_enabled`` is ``True`` (the provider is enabled in the
+          unified config authority)
+        - ``config_has_key`` is ``True`` (required secret(s) are present
+          according to the config authority)
+
+        Disabled providers and providers missing required secrets do **not**
+        appear in the candidate pool regardless of their env-probing
+        availability status.
+
+        This is the primary gate used by routing candidate-pool formation
+        (PR-4).  Downstream routing (``TopologyRouter``) consumes this view
+        instead of the raw ``available_entries()`` list when the config
+        authority has been applied.
+        """
+        return [e for e in self._entries.values() if e.is_candidate_eligible]
+
+    def enabled_entries(self) -> List[ProviderInventoryEntry]:
+        """Entries whose provider is enabled in the unified config authority.
+
+        Note: enabled does **not** imply the key is present.  For the routing
+        candidate pool use :meth:`candidate_pool_entries` instead.
+        """
+        return [e for e in self._entries.values() if e.config_enabled]
+
+    def disabled_entries(self) -> List[ProviderInventoryEntry]:
+        """Entries whose provider is explicitly disabled in the config authority."""
+        return [e for e in self._entries.values() if not e.config_enabled]
+
+    def unconfigured_entries(self) -> List[ProviderInventoryEntry]:
+        """Entries that are enabled in config but are missing required secrets.
+
+        These providers are enabled by operator intent but cannot participate
+        in the routing candidate pool until the required key is supplied.
+        They may appear in diagnostic / inventory views as *enabled but
+        unconfigured*.
+        """
+        return [
+            e for e in self._entries.values()
+            if e.config_enabled and not e.config_has_key
+        ]
 
     def multimodal_entries(self) -> List[ProviderInventoryEntry]:
         """Entries whose provider natively supports multimodal input."""
@@ -194,6 +281,11 @@ class ProviderInventory:
                 "total": len(self._entries),
                 "available": len(self.available_entries()),
                 "multimodal": len(self.multimodal_entries()),
+                # PR-4: config-authority-driven stats
+                "candidate_eligible": len(self.candidate_pool_entries()),
+                "enabled": len(self.enabled_entries()),
+                "disabled": len(self.disabled_entries()),
+                "unconfigured": len(self.unconfigured_entries()),
                 "categories": {
                     cat.value: len(self.by_category(cat))
                     for cat in ProviderCategory
@@ -205,5 +297,6 @@ class ProviderInventory:
         return (
             f"<ProviderInventory total={len(self)} "
             f"available={len(self.available_entries())} "
+            f"candidate_eligible={len(self.candidate_pool_entries())} "
             f"multimodal={len(self.multimodal_entries())}>"
         )
