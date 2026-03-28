@@ -1,8 +1,11 @@
-# Galaxy — Configuration Governance (PR-G3)
+# Galaxy — Configuration Governance (PR-G3 / PR-3)
 
 > **Scope** — this document covers the full configuration surface for the
 > Galaxy runtime, including the Galaxy Gateway, Android / WebSocket bridge,
 > core LLM runtime, and the SecretVault secrets back-end.
+>
+> **PR-3 update:** The local unified configuration authority is now
+> implemented.  See §10 for the runtime config file model.
 
 ---
 
@@ -17,6 +20,7 @@
 7. [Pre-flight check](#7-pre-flight-check)
 8. [Migrating secrets to SecretVault](#8-migrating-secrets-to-secretvault)
 9. [Environment variable reference (all)](#9-environment-variable-reference-all)
+10. [Local unified configuration authority (runtime/)](#10-local-unified-configuration-authority-runtime)
 
 ---
 
@@ -336,3 +340,81 @@ The table below consolidates the variables most commonly needed:
 | `GALAXY_ENABLE_SCRCPY` | gateway | INFO | `0` |
 | `KB_VECTOR_BACKEND` | core | INFO | `local` |
 | `GITHUB_TOKEN` | core | INFO | — |
+
+---
+
+## 10. Local unified configuration authority (runtime/)
+
+> **Implemented in PR-3.**
+
+The canonical local persistence targets for operator-entered configuration are:
+
+| File | Contains | Module |
+|------|----------|--------|
+| `runtime/config.json` | Non-secret system configuration | `core/config_store.py` |
+| `runtime/secrets.env` | Secret values (API keys, tokens) | `core/config_store.py` |
+
+Both files are **`.gitignore`d**.  Commit only the `*.example.*` templates.
+
+### Quick start
+
+```bash
+# 1. Copy the templates
+cp runtime/config.example.json runtime/config.json
+cp runtime/secrets.example.env runtime/secrets.env
+
+# 2. Edit runtime/config.json — enable/disable providers, set routing policy
+# 3. Edit runtime/secrets.env — fill in your API keys
+
+# 4. Validate
+python -m core.config_preflight --mode all
+```
+
+### Core module reference
+
+| Module | Role |
+|--------|------|
+| `core/config_schema.py` | Schema constants, key classification (`classify_key`), defaults (`ConfigDefaults`) |
+| `core/config_store.py` | Low-level I/O; `read_config()`, `read_secrets()`, `write_config()`, `write_secret()`, `get_effective_config()` |
+| `core/config_service.py` | High-level API: `set_provider_api_key()`, `set_toggle()`, `set_native_mm_policy()`, `set_oneapi()`, `validate()`, `describe_missing()` |
+
+### Non-secret config fields (`runtime/config.json`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `providers.<id>.enabled` | bool | varies | Enable/disable a provider |
+| `providers.oneapi.base_url` | string | `""` | OneAPI aggregator HTTP URL (non-secret) |
+| `routing.native_multimodal_policy` | string | `"prefer"` | `"strict"` \| `"prefer"` \| `"allow_fallback"` |
+| `routing.default_provider` | string | `"openai"` | Default routing target |
+
+### Secret fields (`runtime/secrets.env`)
+
+| Key | Provider |
+|-----|----------|
+| `OPENAI_API_KEY` | OpenAI |
+| `ANTHROPIC_API_KEY` | Anthropic |
+| `GEMINI_API_KEY` | Google Gemini |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `GROQ_API_KEY` | Groq |
+| `OPENROUTER_API_KEY` | OpenRouter |
+| `ONEAPI_API_KEY` | OneAPI aggregator |
+| `GALAXY_API_TOKEN` | Galaxy REST / WS auth |
+
+### Merge priority (highest → lowest)
+
+1. Process environment variables (`os.environ`) — deployment / CI overrides
+2. `runtime/secrets.env` — persisted local secrets
+3. `runtime/config.json` — persisted non-secret config
+
+### Invariants
+
+- Secrets must **not** appear in `runtime/config.json`.  `ConfigStore.write_config()` enforces this.
+- Non-secret config values must **not** appear in `runtime/secrets.env`.  `ConfigStore.write_secret()` enforces this.
+- `core/config_preflight.py` automatically loads `runtime/secrets.env` before running checks.
+
+### Future direction
+
+Interactive configuration entry via `windows_client/status_board_v2` is planned for Phase D.
+When that UI is implemented, all writes must target `runtime/config.json` / `runtime/secrets.env`
+through `core/config_service.ConfigService`.  This PR provides the store/service foundation;
+the UI surface is out of scope for PR-3.

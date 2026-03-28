@@ -96,3 +96,9 @@ dashboard/frontend/dist/
 unified_kb/
 knowledge_db/
 data/rag_memory/
+
+# Local unified configuration authority (PR-3)
+# Real operator config and secrets must not be committed.
+# Commit only the *.example.* templates in runtime/.
+runtime/config.json
+runtime/secrets.env
