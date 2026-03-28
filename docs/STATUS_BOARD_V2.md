@@ -472,6 +472,50 @@ for the full PR-11 guide.
 
 ---
 
+## PR-12: Topology Rendering and Visual Semantics Polish
+
+PR-12 adds the **topology constellation renderer** layered on top of the PR-11
+layout model.  It transforms a `TopologyConstellationLayout` into a polished,
+operator-visible terminal surface with clear visual semantics.
+
+### What PR-12 adds
+
+| Symbol | Module | Role |
+|--------|--------|------|
+| `TopologyRenderer` | `windows_client.status_board_v2.topology_renderer` | Main renderer — produces a polished string from a `TopologyConstellationLayout` |
+| `TOPOLOGY_RENDERER_AUTHORITY` | `windows_client.status_board_v2.topology_renderer` | PR-12 renderer authority sentinel |
+
+### Visual semantic guarantees (PR-12)
+
+- **Canonical** (`●`, green) — fully authoritative topology; `[auth]` tag on
+  primary node; `━━▶` edge on canonical route relation.
+- **Degraded** (`◑`, yellow) — legacy fallback active; `⚠ DEGRADED` banner;
+  `[NOT-auth]` tag on all nodes; `╌╌▷` fallback edge; never appears canonical.
+- **Partial** (`◔`, cyan) — canonical source present but incomplete; `⚠ PARTIAL`
+  banner; `[not-auth]` tag; never appears fully authoritative.
+- **Unavailable** (`○`, red) — no topology data; `✗ UNAVAILABLE` line; no node
+  symbols for absent layers.
+- **OneAPI** (`⬡`, magenta) — always in `LOWER-HORIZON · OneAPI · not a routing
+  peer` section; always `[lower-horizon]` tag; never `[auth]`; never `━━▶` edge.
+
+### Consumer guidance (post-PR-12)
+
+```python
+from windows_client.status_board_v2 import TopologyRenderer
+from windows_client.status_board_v2 import build_constellation_layout
+from core.desktop_consumption_adapter import adapt_integration_payload
+
+vm = adapt_integration_payload(payload)         # PR-9 adapter
+layout = build_constellation_layout(vm)         # PR-11 topology layout
+renderer = TopologyRenderer()                   # PR-12 renderer
+print(renderer.render_layout(layout))           # polished output
+```
+
+See [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md)
+for the full PR-12 guide.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
@@ -494,6 +538,7 @@ Key rules enforced there:
 
 ## Related Documents
 
+- [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md) — PR-12 topology rendering and visual semantics polish
 - [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md) — PR-11 topology / constellation layout foundation
 - [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) — PR-10 first usable adapter-driven status board UI surface
 - [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](DESKTOP_SEMANTIC_CLOSURE.md) — **canonical tri-state semantic closure contract** (manifest / active / liminal)
