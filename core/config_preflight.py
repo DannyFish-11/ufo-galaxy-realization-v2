@@ -26,6 +26,17 @@ run_preflight(dry_run=False, fail_fast=True, mode="auto") -> PreflightReport
 ConfigPreflightError
     Raised on critical failure when fail_fast=True.
 
+Local configuration authority integration  (PR-3)
+-------------------------------------------------
+Preflight automatically loads ``runtime/secrets.env`` into the process
+environment (without overwriting already-set env vars) before running checks.
+This means secrets configured via the local unified authority are visible to
+the preflight check exactly as if they had been exported in the shell.
+
+The canonical local persistence targets are:
+  - ``runtime/config.json``  — non-secret system configuration
+  - ``runtime/secrets.env``  — secret values (API keys, tokens)
+
 Environment variables that influence this module
 ------------------------------------------------
 GALAXY_PREFLIGHT_MODE      Override the mode when running as __main__.
@@ -41,7 +52,48 @@ import sys
 import textwrap
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence
+
+
+# ---------------------------------------------------------------------------
+# Local configuration authority loader  (PR-3)
+# ---------------------------------------------------------------------------
+
+def _load_runtime_secrets_into_env() -> List[str]:
+    """
+    Load ``runtime/secrets.env`` into ``os.environ`` (without overwriting).
+
+    Returns the list of key names that were loaded from the file so that the
+    preflight report can indicate their source.
+
+    This function is called once at the start of ``run_preflight``.  It is
+    idempotent and never raises — errors are logged/printed but do not block
+    startup.
+    """
+    _secrets_path = Path(__file__).parent.parent / "runtime" / "secrets.env"
+    loaded: List[str] = []
+    if not _secrets_path.exists():
+        return loaded
+    try:
+        with open(_secrets_path, encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip()
+                if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                    val = val[1:-1]
+                if key and val and key not in os.environ:
+                    os.environ[key] = val
+                    loaded.append(key)
+    except OSError:
+        pass  # non-fatal; the env-check below will report missing vars
+    return loaded
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +419,9 @@ def run_preflight(
     """
     _checks = list(checks) if checks is not None else _CHECKS
     groups = _groups_for_mode(mode)
+
+    # Load runtime/secrets.env into env before checking (PR-3: local config authority)
+    _load_runtime_secrets_into_env()
 
     findings: List[Finding] = []
     for check in _checks:

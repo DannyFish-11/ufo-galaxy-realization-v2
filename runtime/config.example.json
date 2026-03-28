@@ -1,0 +1,34 @@
+{
+  "_comment": "runtime/config.example.json — copy to runtime/config.json and edit for your deployment.",
+  "_note": "This file stores NON-SECRET operator configuration only. Secrets (API keys) belong in runtime/secrets.env.",
+
+  "providers": {
+    "openai": {
+      "enabled": true
+    },
+    "anthropic": {
+      "enabled": false
+    },
+    "gemini": {
+      "enabled": false
+    },
+    "deepseek": {
+      "enabled": false
+    },
+    "groq": {
+      "enabled": false
+    },
+    "openrouter": {
+      "enabled": false
+    },
+    "oneapi": {
+      "enabled": false,
+      "base_url": ""
+    }
+  },
+
+  "routing": {
+    "native_multimodal_policy": "prefer",
+    "default_provider": "openai"
+  }
+}

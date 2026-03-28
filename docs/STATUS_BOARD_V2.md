@@ -5,12 +5,19 @@
 > Legacy desktop surfaces are retired.  Dashboard frontend is retired.
 > No new operator-facing UI work must target any other desktop surface.
 >
+> **PR-3 (landed):** The local unified configuration authority is now
+> implemented.  `runtime/config.json` (non-secrets) and `runtime/secrets.env`
+> (secrets) are the canonical persistence targets.  Core modules:
+> `core/config_store.py`, `core/config_service.py`, `core/config_schema.py`.
+> See [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md)
+> and [`docs/CONFIG_GOVERNANCE.md`](CONFIG_GOVERNANCE.md) §10.
+>
 > **Future direction:**  `status_board_v2` will become the **sole desktop
 > configuration entry surface** (Phase D of dashboard migration).  Config
 > entry UI implementation is deferred to a later PR.  When implemented,
 > configuration entered here must write to the local unified configuration
-> authority (`runtime/config.json` / `runtime/secrets.env`) and have
-> system-wide effect.
+> authority (`runtime/config.json` / `runtime/secrets.env`) via
+> `core/config_service.ConfigService` and have system-wide effect.
 >
 > **Current state — READ-ONLY.**  The Status Board V2 currently never accepts
 > system configuration input, never sends commands, and never triggers any

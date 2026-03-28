@@ -5,9 +5,9 @@
 > and node contracts must reference configuration using the vocabulary and
 > ownership boundaries defined here.
 >
-> **PR-0 update:** The system is moving to a **local unified configuration
-> authority** model.  The canonical persistence targets and future entry surface
-> are defined in §2A below.  See also
+> **PR-3 update:** The unified local configuration authority is now
+> **implemented**.  The canonical persistence targets, core modules, and entry
+> surface are defined in §2A below.  See also
 > [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).
 
 ---
@@ -28,15 +28,31 @@ No tier may claim authority over another tier's canonical keys.
 
 ## 2. Canonical Entry Points
 
-### 2A. Local unified configuration authority (PR-0 direction)
+### 2A. Local unified configuration authority (PR-3 — implemented)
 
-The system is moving to a **local unified configuration authority** with two
-canonical persistence targets:
+The unified local configuration authority is implemented.  The two canonical
+persistence targets are:
 
 | Target | Purpose |
 |--------|---------|
 | `runtime/config.json` | Non-secret system configuration — provider profiles, routing preferences, topology overrides, feature flags |
 | `runtime/secrets.env` | Secrets — provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, OneAPI token, etc.) |
+
+**Core modules (PR-3):**
+
+| Module | Role |
+|--------|------|
+| `core/config_schema.py` | Schema constants, known keys, secret/non-secret classification, defaults |
+| `core/config_store.py` | Low-level I/O — reads/writes `runtime/config.json` + `runtime/secrets.env`, produces the effective merged view |
+| `core/config_service.py` | High-level API — `set_provider_api_key`, `set_toggle`, `set_native_mm_policy`, `set_oneapi`, `validate`, `describe_missing` |
+
+**Example templates** (safe to commit):
+
+- `runtime/config.example.json` — non-secret config template
+- `runtime/secrets.example.env` — secret key template
+
+Copy these to `runtime/config.json` and `runtime/secrets.env` and fill in
+your values.  The real files are `.gitignore`d.
 
 **Invariants:**
 
@@ -185,5 +201,8 @@ The following legacy configuration paths are retained for compatibility only:
 - [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) — OneAPI position in routing hierarchy
 - [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) — routing authority documentation
 - [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) — dashboard retirement plan
-- [`core/unified_config.py`](../core/unified_config.py) — unified configuration manager
-- [`core/config_preflight.py`](../core/config_preflight.py) — pre-flight validation
+- [`core/config_schema.py`](../core/config_schema.py) — schema constants, key classification, defaults
+- [`core/config_store.py`](../core/config_store.py) — low-level I/O for runtime/config.json + runtime/secrets.env
+- [`core/config_service.py`](../core/config_service.py) — high-level configuration service API
+- [`core/unified_config.py`](../core/unified_config.py) — unified configuration manager (legacy layer)
+- [`core/config_preflight.py`](../core/config_preflight.py) — pre-flight validation (loads runtime/secrets.env)
