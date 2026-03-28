@@ -88,21 +88,24 @@ def _read_file(*parts: str) -> str:
 
 
 def _canonical_ucp():
-    """Minimal canonical UCP with a topology_route_plan block."""
+    """Minimal canonical UCP with a topology_route_plan block.
+
+    Keys match the stable serialisation produced by
+    ``TopologyRoutePlan.to_dict()`` (PR-2) and consumed by
+    ``_build_topology_ready_projection`` (PR-6).
+    """
     return {
         "topology_route_plan": {
-            "primary": {
-                "node_id": "gpt-4o",
+            "primary_model": {
+                "model_id": "gpt-4o",
                 "provider_id": "openai",
                 "vendor_source": "direct",
-                "is_native_multimodal": False,
-                "category": "direct",
-                "authority": "core.model_topology.topology_router.CANONICAL_ROUTING_AUTHORITY",
+                "native_multimodal": False,
             },
-            "support": [],
+            "support_models": [],
             "route_reason": "canonical test route",
-            "tri_state_phase": "manifest",
-            "runtime_domain": "local",
+            "phase": "manifest",
+            "domain": "local",
             "active_weights": {},
             "authority": "core.model_topology.topology_router.CANONICAL_ROUTING_AUTHORITY",
         }
