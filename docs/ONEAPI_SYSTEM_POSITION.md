@@ -1,15 +1,20 @@
 # OneAPI System Position
 
 > **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze);
-> further enforced in PR-4 (OneAPI horizon and global integration cleanup).
+> further enforced in PR-4 (OneAPI horizon and global integration cleanup);
+> canonicalization authority made machine-readable in PR-5 (server-side canonicalization).
 > **PR-4 note:** This document supersedes prior PR-4 attempts, including PR #408 and
 > any earlier replacement attempt related to OneAPI horizon cleanup.
+> **PR-5 note:** PR-5 demotes the legacy UCP routing keys that previously could ambiguously
+> represent OneAPI state and introduces the `legacy_routing_fallback_active` flag.  See
+> [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md).
 > **Scope:** Defines what OneAPI is, what it is not, and how its configuration
 > and state must influence the broader Galaxy system.
 >
 > Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
-> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
+> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
+> [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md)
 
 ---
 
@@ -35,6 +40,40 @@ the following additional architectural rules:
 5. **Absence of OneAPI data** (not configured) must not cause fallback to
    top-layer rendering — the lower-horizon block simply shows the unconfigured
    state.
+
+---
+
+## PR-5: Server-Side Canonicalization Cross-Reference
+
+PR-5 follows PR-4 and completes the server-side canonicalization of routing and
+projection outputs.  The changes most relevant to the OneAPI system position are:
+
+1. **Legacy UCP routing keys demoted** — the flat UCP keys `chosen_model`,
+   `chosen_provider`, `is_native_multimodal`, `support_model_ids`,
+   `route_reason`, and `multimodal_route` are now registered in
+   `LEGACY_UCP_ROUTING_KEYS` (contracts module) and `LEGACY_PROJECTION_UCP_KEYS`
+   (projection compiler) as compatibility-only fields.  They must not be used
+   by downstream consumers to infer OneAPI state.
+
+2. **`legacy_routing_fallback_active` flag** — `ModelRoutingProjection` gains
+   a `legacy_routing_fallback_active: bool` field that is `True` when the
+   projection was assembled from the legacy UCP keys rather than from a
+   canonical `TopologyRoutePlan`.  Downstream consumers observing
+   `legacy_routing_fallback_active == True` must not draw conclusions about
+   the OneAPI integration state from the routing fields; instead they must
+   consult the top-level `oneapi_integration` block.
+
+3. **`server-canonicalization-status` endpoint** — a new read-only endpoint
+   `GET /api/v1/projection/server-canonicalization-status` exposes a
+   machine-readable summary of which fields are canonical and which are
+   compatibility bridges.  It confirms `oneapi_lower_horizon_guaranteed: true`
+   and `pr4_guarantees_intact: true` so monitoring tools can verify PR-4
+   invariants in production.
+
+4. **PR-4 guarantees remain intact** — PR-5 makes no changes to the
+   `oneapi_integration` block shape or the lower-horizon rendering rule.
+   See `docs/SERVER_SIDE_CANONICALIZATION.md §4` for the explicit guarantee
+   table.
 
 ---
 
