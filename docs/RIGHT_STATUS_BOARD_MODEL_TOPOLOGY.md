@@ -2,39 +2,47 @@
 
 > **Canonical reference** for how the right-side desktop status board structures
 > and displays model routing/topology information.  Extended in PR-1 to include
-> the Sky-Grown Constellation Topology visual identity.
+> the Sky-Grown Constellation Topology visual identity.  Confirmed in PR-0
+> architecture freeze as the sole canonical operator-facing surface.
 >
 > Related: [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) ·
 > [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
 > [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
-> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
+> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
+> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
 
 ---
 
 ## 1. Why the Right-Side Status Board Is the Canonical Model-Display Layer
 
 The right-side desktop status board (`windows_client/status_board_v2/`) is the
-**sole canonical structured-information display surface** for the Galaxy system.
-It is the authoritative view of:
+**sole canonical operator-facing desktop surface** for the Galaxy system (PR-0
+architecture freeze).  It is the authoritative view of:
 
 - which model is currently active and why;
 - how models are structured (primary, support/auxiliary, source/vendor);
 - the health and availability of the provider layer;
 - the OneAPI aggregator integration status.
 
-This surface is **projection-driven and read-only** — it consumes the canonical
-`RuntimeProjection` from `GET /api/v1/projection/runtime` and renders it as
-structured text.  It does not maintain its own state, does not issue commands,
-and does not participate in routing decisions.
+It is also the **designated future configuration entry surface** (Phase D).
+When the interactive configuration UI is implemented, it will be added here —
+not to the dashboard and not to any other desktop surface.
+
+This surface is currently **projection-driven and read-only** — it consumes the
+canonical `RuntimeProjection` from `GET /api/v1/projection/runtime` and renders
+it as structured text.  It does not maintain its own state, does not issue
+commands, and does not participate in routing decisions.  When the config entry
+phase lands, write operations must go through the local unified configuration
+authority (`runtime/config.json` / `runtime/secrets.env`), never bypass
+`TopologyRouter` as routing-truth authority.
 
 The liminal space (`liminal_surface.py`) is deliberately **excluded** from model
 topology display.  All model/routing/topology cards belong here, not in liminal.
 
 **The dashboard is not this surface and is not a routing-truth authority.**
-The dashboard is in retirement per
-[`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md).
+`dashboard/frontend/` is retired as an operator UI target (PR-0).
 Any operator-visible model topology work must target `status_board_v2`, not the
 dashboard.
 

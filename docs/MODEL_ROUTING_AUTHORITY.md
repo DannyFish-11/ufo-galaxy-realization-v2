@@ -1,11 +1,20 @@
 # Model Routing Authority
 
-> **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze).
+> **Status:** Canonical — formalised in this PR; strengthened in PR-1 (architecture freeze);
+> confirmed unchanged in PR-0 (unified native-multimodal-first architecture freeze).
 > **Scope:** Routing authority for projection-facing model/provider selection semantics.
+>
+> **PR-0 confirmation:** `TopologyRouter` remains the **sole** canonical routing
+> authority.  `TopologyRoutePlan` remains the **sole** canonical routing output
+> contract.  This is unchanged.  The addition of a configuration entry surface
+> inside `status_board_v2` (Phase D) does **not** alter this invariant —
+> configuration entry modifies routing inputs (provider inventory, preferences);
+> it never bypasses or replaces `TopologyRouter` as the decision-making authority.
 >
 > Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
-> [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md)
+> [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
+> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
 
 ---
 

@@ -1,6 +1,8 @@
 # Sky-Grown Constellation Topology
 
-> **Status:** Architecture-freeze canonical — established in PR-1.
+> **Status:** Architecture-freeze canonical — established in PR-1; governing
+> principle confirmed in PR-0 (unified native-multimodal-first architecture
+> freeze).
 > **Scope:** Defines the target visual grammar and semantic identity of the
 > desktop model-topology display surface for the Galaxy system.
 >
@@ -8,7 +10,8 @@
 > [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
 > [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
-> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
+> [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
+> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
 
 ---
 
@@ -251,7 +254,8 @@ structural and semantic elements must be present.
 | Document | Relationship |
 |---|---|
 | [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md) | Foundational topology semantics document; this document extends it with constellation/sky-grown visual identity |
-| [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) | `status_board_v2` is the canonical implementation surface for this topology |
-| [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) | Defines `TopologyRouter` / `TopologyRoutePlan` as the canonical routing truth source |
+| [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) | `status_board_v2` is the sole canonical desktop surface and the canonical implementation surface for this topology (PR-0) |
+| [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) | Defines `TopologyRouter` / `TopologyRoutePlan` as the canonical routing truth source; unchanged in PR-0 |
 | [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) | Defines OneAPI's position as a lower aggregator horizon; this document operationalises that in the topology visual grammar |
-| [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) | Dashboard is in retirement; the topology defined here is the replacement operator-visible surface |
+| [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) | Dashboard frontend is retired (PR-0); the topology defined here is the canonical replacement operator-visible surface |
+| [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md) | ADR freezing `status_board_v2` as sole desktop config entry surface; native-multimodal-first remains governing routing/display principle |

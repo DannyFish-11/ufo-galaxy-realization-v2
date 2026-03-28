@@ -1,12 +1,38 @@
 # Status Board V2 — Design & Usage Guide
 
-> **READ-ONLY.**  The Status Board V2 never accepts chat input, never sends
-> commands, and never triggers any actions.  It is a pure display surface.
+> **PR-0 architecture freeze:**  `windows_client/status_board_v2/` is the
+> **sole canonical desktop operator-facing surface** for the Galaxy system.
+> Legacy desktop surfaces are retired.  Dashboard frontend is retired.
+> No new operator-facing UI work must target any other desktop surface.
 >
-> **Canonical desktop operator-visible surface** for model topology, routing state,
-> and provider status in the Galaxy system.  The dashboard is in retirement; this
-> board is the target surface for all operator-facing model topology work.
-> See [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md).
+> **Future direction:**  `status_board_v2` will become the **sole desktop
+> configuration entry surface** (Phase D of dashboard migration).  Config
+> entry UI implementation is deferred to a later PR.  When implemented,
+> configuration entered here must write to the local unified configuration
+> authority (`runtime/config.json` / `runtime/secrets.env`) and have
+> system-wide effect.
+>
+> **Current state — READ-ONLY.**  The Status Board V2 currently never accepts
+> system configuration input, never sends commands, and never triggers any
+> actions.  It is a pure display surface until the config entry phase lands.
+>
+> See [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
+> and [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).
+
+---
+
+## Architecture freeze — sole desktop surface (PR-0)
+
+`windows_client/status_board_v2/` is formally declared the **sole canonical
+desktop operator-facing surface** for the Galaxy system as of PR-0.
+
+| Declaration | Detail |
+|-------------|--------|
+| **Sole desktop surface** | This is the only canonical operator-facing desktop surface going forward |
+| **Legacy surfaces retired** | `windows_client/status_board.py` (root-level legacy) and any other non-`status_board_v2` desktop operator surfaces are retired |
+| **Dashboard frontend retired** | `dashboard/frontend/` is no longer part of the active target architecture |
+| **Future config entry surface** | Phase D will add interactive configuration entry to this surface (deferred, not in this PR) |
+| **Routing authority unchanged** | `TopologyRouter` / `TopologyRoutePlan` remain sole canonical routing authority; this surface consumes, never derives, routing truth |
 
 ---
 
