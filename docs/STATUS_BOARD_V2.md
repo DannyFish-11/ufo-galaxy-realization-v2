@@ -424,6 +424,54 @@ See [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) for the full
 
 ---
 
+## PR-11: Topology / Constellation Layout Foundation
+
+PR-11 adds the **topology/constellation layout foundation** layered on top of
+the PR-9/PR-10 adapter-driven surface.  The status board moves beyond flat
+textual sections into a topology-aware layout of **layers**, **nodes**, and
+**relations**.
+
+### What PR-11 adds
+
+| Symbol | Module | Role |
+|--------|--------|------|
+| `build_constellation_layout` | `windows_client.status_board_v2.topology_layout` | Main builder — produces a `TopologyConstellationLayout` from a `DesktopClientViewModel` |
+| `TopologyConstellationLayout` | `windows_client.status_board_v2.topology_layout` | Top-level layout structure |
+| `TopologyLayoutLayer` | `windows_client.status_board_v2.topology_layout` | Layer (primary / support / lower-horizon) |
+| `TopologyLayoutNode` | `windows_client.status_board_v2.topology_layout` | Individual topology/provider/routing/OneAPI node |
+| `TopologyLayoutRelation` | `windows_client.status_board_v2.topology_layout` | Directed relation between nodes |
+| `TopologyNodeKind` | `windows_client.status_board_v2.topology_layout` | Node kind enum |
+| `TopologyRelationKind` | `windows_client.status_board_v2.topology_layout` | Relation kind enum |
+| `TopologyLayerKind` | `windows_client.status_board_v2.topology_layout` | Layer kind enum |
+| `TOPOLOGY_LAYOUT_AUTHORITY` | `windows_client.status_board_v2.topology_layout` | PR-11 builder authority sentinel |
+
+### Consumer guidance (post-PR-11)
+
+`build_constellation_layout` consumes a `DesktopClientViewModel` from the PR-9
+adapter and produces a `TopologyConstellationLayout` with three fixed layers:
+**primary** (canonical provider), **support** (routing peers), and
+**lower-horizon** (OneAPI — always structurally separate, never authoritative).
+
+```python
+from windows_client.status_board_v2.topology_layout import build_constellation_layout
+from core.desktop_consumption_adapter import adapt_integration_payload
+
+vm = adapt_integration_payload(payload)         # PR-9 adapter
+layout = build_constellation_layout(vm)         # PR-11 topology layout
+
+print(layout.readiness_label)                   # "canonical" / "degraded" / ...
+print(layout.is_authoritative)                  # True only for canonical
+for node in layout.primary_layer.nodes:
+    print(node.provider_id, node.is_authoritative)
+for node in layout.lower_horizon_layer.nodes:
+    print(node.kind.value, node.is_authoritative)  # always False
+```
+
+See [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md)
+for the full PR-11 guide.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
@@ -446,6 +494,7 @@ Key rules enforced there:
 
 ## Related Documents
 
+- [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md) — PR-11 topology / constellation layout foundation
 - [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) — PR-10 first usable adapter-driven status board UI surface
 - [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](DESKTOP_SEMANTIC_CLOSURE.md) — **canonical tri-state semantic closure contract** (manifest / active / liminal)
 - [`docs/STATUS_AND_STATISTICS_OWNERSHIP.md`](STATUS_AND_STATISTICS_OWNERSHIP.md) — statistics / summary ownership across surfaces

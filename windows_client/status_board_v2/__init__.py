@@ -20,6 +20,17 @@ PR-10 adds the first usable adapter-driven status board surface:
 
 - Desktop status board (adapter-driven, PR-10)        → AdapterSurface
 
+PR-11 adds the topology / constellation layout foundation:
+
+- Topology layout builder (PR-11)                     → build_constellation_layout
+- Topology layout structures (PR-11)                  → TopologyConstellationLayout,
+                                                         TopologyLayoutLayer,
+                                                         TopologyLayoutNode,
+                                                         TopologyLayoutRelation
+- Topology enumerations (PR-11)                       → TopologyNodeKind,
+                                                         TopologyRelationKind,
+                                                         TopologyLayerKind
+
 READ-ONLY GUARANTEE
 -------------------
 This package NEVER:
@@ -38,6 +49,17 @@ from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
 from .adapter_surface import AdapterSurface
+from .topology_layout import (
+    build_constellation_layout,
+    TopologyConstellationLayout,
+    TopologyLayoutLayer,
+    TopologyLayoutNode,
+    TopologyLayoutRelation,
+    TopologyNodeKind,
+    TopologyRelationKind,
+    TopologyLayerKind,
+    TOPOLOGY_LAYOUT_AUTHORITY,
+)
 
 __all__ = [
     "main",
@@ -49,4 +71,14 @@ __all__ = [
     "ReturnSurface",
     # PR-10: first usable adapter-driven status board surface
     "AdapterSurface",
+    # PR-11: topology / constellation layout foundation
+    "build_constellation_layout",
+    "TopologyConstellationLayout",
+    "TopologyLayoutLayer",
+    "TopologyLayoutNode",
+    "TopologyLayoutRelation",
+    "TopologyNodeKind",
+    "TopologyRelationKind",
+    "TopologyLayerKind",
+    "TOPOLOGY_LAYOUT_AUTHORITY",
 ]
