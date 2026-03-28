@@ -2,24 +2,32 @@
 
 > **READ-ONLY REFERENCE.**  This document describes the PR-9 desktop
 > consumption adapter layer.  The adapter converts the PR-8 integrated payload
-> into a stable client-consumable view-model so desktop status board consumers
-> no longer reconstruct truth from multiple sources.
+> (delivered in PR #436) into a stable client-consumable view-model so desktop
+> status board consumers no longer reconstruct truth from multiple sources.
 
 ---
 
 ## Overview
 
-After PR-8, the Galaxy server exposes one stable integrated payload through
-`GET /api/v1/projection/desktop-status-board`.  Before PR-9, desktop consumers
-still needed to know how to navigate nested sub-structures within that payload
-or, worse, reconstruct state from multiple lower-level endpoints.
+PR-9 builds directly on PR-8 (PR #436), which delivers the final integrated
+desktop status-board payload through `GET /api/v1/projection/desktop-status-board`.
+PR-8 introduces `DesktopStatusBoardIntegrationPayload` with convenient
+shorthand properties — `.readiness` (maps to `authority_indicators["topology_readiness"]`)
+and `.is_canonical` (maps to `authority_indicators["topology_authoritative"]`).
+
+Before PR-9, desktop consumers still needed to know how to navigate nested
+sub-structures within that payload or, worse, reconstruct state from multiple
+lower-level endpoints.
 
 PR-9 introduces the **desktop consumption adapter** (`core/desktop_consumption_adapter.py`),
 a thin layer that:
 
-1. Accepts the PR-8 `DesktopStatusBoardIntegrationPayload`.
+1. Accepts the PR-8 `DesktopStatusBoardIntegrationPayload` (PR #436).
 2. Returns a flat, easy-to-use `DesktopClientViewModel`.
 3. Eliminates the need for ad-hoc field inspection or multi-endpoint assembly.
+4. Leverages the PR-8 shorthand `.readiness` / `.is_canonical` properties when
+   present to derive `DesktopReadinessState` without requiring callers to know
+   the internal `authority_indicators` key names.
 
 ---
 

@@ -4,14 +4,16 @@
 tests/test_pr9_desktop_consumption_adapter.py
 ==============================================
 
-PR-9 — Desktop client consumption adapter after PR-8 merge.
+PR-9 — Desktop client consumption adapter after PR-8 merge (PR #436).
 
 Validates that the desktop consumption adapter correctly converts the PR-8
-integrated payload into a stable, flat client view-model; that canonical /
-degraded / partial / unavailable readiness states map correctly; that OneAPI
-remains lower-horizon only; that legacy fallback remains explicitly
-non-authoritative; and that the adapter eliminates the need for ad-hoc field
-inspection and reassembly.
+integrated payload (DesktopStatusBoardIntegrationPayload from PR #436) into a
+stable, flat client view-model; that canonical / degraded / partial /
+unavailable readiness states map correctly; that OneAPI remains lower-horizon
+only; that legacy fallback remains explicitly non-authoritative; that the PR-8
+shorthand properties (.readiness / .is_canonical introduced in PR #436) are
+correctly consumed by the adapter; and that the adapter eliminates the need
+for ad-hoc field inspection and reassembly.
 
 Test index:
   1.  DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY importable from core.desktop_consumption_adapter.
@@ -104,6 +106,16 @@ Test index:
   88. to_dict()['readiness_state'] is a string (enum value, not object).
   89. Canonical path: authority_indicators['topology_authoritative'] is True.
   90. Degraded path: authority_indicators['topology_authoritative'] is False.
+  91. PR-8 shorthand .readiness used when authority_indicators lacks topology_readiness.
+  92. PR-8 shorthand .is_canonical used when authority_indicators lacks topology_authoritative.
+  93. PR-8 shorthand degraded readiness via shorthand only payload.
+  94. PR-8 shorthand partial readiness via shorthand only payload.
+  95. PR-8 shorthand unavailable readiness via shorthand only payload.
+  96. authority_indicators['topology_readiness'] wins over .readiness shorthand when both present.
+  97. authority_indicators['topology_authoritative'] wins over .is_canonical shorthand when both present.
+  98. Real PR-8 DesktopStatusBoardIntegrationPayload exposes .readiness shorthand.
+  99. Real PR-8 DesktopStatusBoardIntegrationPayload exposes .is_canonical shorthand.
+  100. Adapter applied to real PR-8 payload: vm.is_canonical matches payload.is_canonical.
 """
 
 import json
@@ -915,3 +927,121 @@ def test_90_degraded_path_authority_indicators_topology_authoritative_false():
     from core.desktop_consumption_adapter import adapt_integration_payload
     vm = adapt_integration_payload(_build_legacy_fallback_payload())
     assert vm.authority_indicators.get("topology_authoritative") is False
+
+
+# ===========================================================================
+# 91–100: PR #436 shorthand property integration tests
+# (validates that the adapter correctly consumes the .readiness and
+# .is_canonical shorthand properties introduced in PR-8 / PR #436)
+# ===========================================================================
+
+def _build_shorthand_payload(readiness: str, is_canonical: bool):
+    """Build a minimal object exposing only the PR-8 shorthand properties."""
+    class _ShorthandPayload:
+        def __init__(self, r, c):
+            self.readiness = r
+            self.is_canonical = c
+            # No authority_indicators — adapter must fall back to shorthands
+    return _ShorthandPayload(readiness, is_canonical)
+
+
+def test_91_pr8_shorthand_readiness_used_when_authority_indicators_absent():
+    """Adapter uses payload.readiness when authority_indicators has no topology_readiness."""
+    from core.desktop_consumption_adapter import adapt_integration_payload, DesktopReadinessState
+    p = _build_shorthand_payload("canonical", True)
+    vm = adapt_integration_payload(p)
+    assert vm.readiness_state == DesktopReadinessState.canonical
+
+
+def test_92_pr8_shorthand_is_canonical_used_when_absent_in_authority_indicators():
+    """Adapter uses payload.is_canonical to set topology_authoritative in authority_indicators."""
+    from core.desktop_consumption_adapter import adapt_integration_payload
+    p = _build_shorthand_payload("canonical", True)
+    vm = adapt_integration_payload(p)
+    assert vm.is_canonical is True
+
+
+def test_93_pr8_shorthand_degraded_readiness_via_shorthand():
+    """Shorthand payload with readiness='degraded' produces degraded view-model."""
+    from core.desktop_consumption_adapter import adapt_integration_payload, DesktopReadinessState
+    p = _build_shorthand_payload("degraded", False)
+    vm = adapt_integration_payload(p)
+    assert vm.readiness_state == DesktopReadinessState.degraded
+    assert vm.is_degraded is True
+    assert vm.is_canonical is False
+
+
+def test_94_pr8_shorthand_partial_readiness_via_shorthand():
+    """Shorthand payload with readiness='partial' produces partial view-model."""
+    from core.desktop_consumption_adapter import adapt_integration_payload, DesktopReadinessState
+    p = _build_shorthand_payload("partial", False)
+    vm = adapt_integration_payload(p)
+    assert vm.readiness_state == DesktopReadinessState.partial
+    assert vm.is_partial is True
+
+
+def test_95_pr8_shorthand_unavailable_readiness_via_shorthand():
+    """Shorthand payload with readiness='unavailable' produces unavailable view-model."""
+    from core.desktop_consumption_adapter import adapt_integration_payload, DesktopReadinessState
+    p = _build_shorthand_payload("unavailable", False)
+    vm = adapt_integration_payload(p)
+    assert vm.readiness_state == DesktopReadinessState.unavailable
+    assert vm.is_unavailable is True
+
+
+def test_96_pr8_shorthand_authority_indicators_wins_over_shorthand():
+    """authority_indicators takes precedence over shorthand if both present."""
+    from core.desktop_consumption_adapter import adapt_integration_payload, DesktopReadinessState
+
+    class _FullPayload:
+        # authority_indicators already has topology_readiness — shorthand must not override
+        authority_indicators = {
+            "topology_readiness": "canonical",
+            "topology_authoritative": True,
+        }
+        readiness = "degraded"  # shorthand disagrees — authority_indicators wins
+        is_canonical = False
+
+    vm = adapt_integration_payload(_FullPayload())
+    assert vm.readiness_state == DesktopReadinessState.canonical
+    assert vm.is_canonical is True
+
+
+def test_97_authority_indicators_wins_over_is_canonical_shorthand():
+    """When authority_indicators already has topology_authoritative, shorthand is ignored."""
+    from core.desktop_consumption_adapter import adapt_integration_payload
+
+    class _ConflictPayload:
+        authority_indicators = {
+            "topology_readiness": "canonical",
+            "topology_authoritative": True,  # already present
+        }
+        readiness = "canonical"
+        is_canonical = False  # shorthand disagrees — must NOT override
+
+    vm = adapt_integration_payload(_ConflictPayload())
+    # authority_indicators said True — shorthand False should not overwrite
+    assert vm.authority_indicators.get("topology_authoritative") is True
+
+
+def test_98_pr8_real_payload_readiness_shorthand_accessible():
+    """Real PR-8 DesktopStatusBoardIntegrationPayload exposes .readiness shorthand."""
+    payload = _build_canonical_payload()
+    assert hasattr(payload, "readiness"), "PR-8 contract must expose .readiness shorthand"
+    assert isinstance(payload.readiness, str)
+
+
+def test_99_pr8_real_payload_is_canonical_shorthand_accessible():
+    """Real PR-8 DesktopStatusBoardIntegrationPayload exposes .is_canonical shorthand."""
+    payload = _build_canonical_payload()
+    assert hasattr(payload, "is_canonical"), "PR-8 contract must expose .is_canonical shorthand"
+    assert isinstance(payload.is_canonical, bool)
+
+
+def test_100_adapt_real_pr8_payload_uses_shorthand_consistently():
+    """Adapter applied to real PR-8 payload: is_canonical matches payload.is_canonical."""
+    from core.desktop_consumption_adapter import adapt_integration_payload
+    payload = _build_canonical_payload()
+    vm = adapt_integration_payload(payload)
+    # The view-model is_canonical should match the PR-8 shorthand
+    assert vm.is_canonical == payload.is_canonical
