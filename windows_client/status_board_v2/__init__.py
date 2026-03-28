@@ -36,6 +36,17 @@ PR-12 adds the topology rendering and visual semantics polish:
 - Topology constellation renderer (PR-12)             → TopologyRenderer
 - Renderer authority sentinel (PR-12)                 → TOPOLOGY_RENDERER_AUTHORITY
 
+PR-13 adds the diagnostics and inspection interaction layer:
+
+- Topology inspector (PR-13)                          → TopologyInspector
+- Inspector authority sentinel (PR-13)                → TOPOLOGY_INSPECTOR_AUTHORITY
+- Node inspection detail (PR-13)                      → NodeInspectionDetail
+- Relation inspection detail (PR-13)                  → RelationInspectionDetail
+- Readiness inspection detail (PR-13)                 → ReadinessInspectionDetail
+- Routing inspection detail (PR-13)                   → RoutingInspectionDetail
+- OneAPI inspection detail (PR-13)                    → OneAPIInspectionDetail
+- Inspection report (PR-13)                           → InspectionReport
+
 READ-ONLY GUARANTEE
 -------------------
 This package NEVER:
@@ -69,6 +80,16 @@ from .topology_renderer import (
     TopologyRenderer,
     TOPOLOGY_RENDERER_AUTHORITY,
 )
+from .topology_inspector import (
+    TopologyInspector,
+    TOPOLOGY_INSPECTOR_AUTHORITY,
+    NodeInspectionDetail,
+    RelationInspectionDetail,
+    ReadinessInspectionDetail,
+    RoutingInspectionDetail,
+    OneAPIInspectionDetail,
+    InspectionReport,
+)
 
 __all__ = [
     "main",
@@ -93,4 +114,13 @@ __all__ = [
     # PR-12: topology rendering and visual semantics polish
     "TopologyRenderer",
     "TOPOLOGY_RENDERER_AUTHORITY",
+    # PR-13: diagnostics and inspection interaction layer
+    "TopologyInspector",
+    "TOPOLOGY_INSPECTOR_AUTHORITY",
+    "NodeInspectionDetail",
+    "RelationInspectionDetail",
+    "ReadinessInspectionDetail",
+    "RoutingInspectionDetail",
+    "OneAPIInspectionDetail",
+    "InspectionReport",
 ]
