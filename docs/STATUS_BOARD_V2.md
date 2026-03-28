@@ -348,6 +348,47 @@ drill into sub-blocks for the most common checks:
 > a status board client needs in one stable contract.
 
 
+## PR-9: Desktop Client Consumption Adapter
+
+PR-9 adds the **desktop client consumption adapter** (`core/desktop_consumption_adapter.py`)
+so desktop status board consumers can work with one flat, easy-to-use view-model
+rather than navigating nested sub-structures in the PR-8 payload.
+
+### What PR-9 adds
+
+| Addition | Location | Purpose |
+|----------|----------|---------|
+| `DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY` | `core.desktop_consumption_adapter` | PR-9 adapter sentinel |
+| `DesktopReadinessState` | `core.desktop_consumption_adapter` | Client-facing readiness enum (`canonical` / `degraded` / `partial` / `unavailable` / `unknown`) |
+| `DesktopClientViewModel` | `core.desktop_consumption_adapter` | Flat, stable client view-model |
+| `DesktopProviderRoutingSummary` | `core.desktop_consumption_adapter` | Flattened provider/routing summary |
+| `DesktopOneAPIHorizonSummary` | `core.desktop_consumption_adapter` | Flattened OneAPI lower-horizon summary |
+| `adapt_integration_payload()` | `core.desktop_consumption_adapter` | Adapter function: `DesktopStatusBoardIntegrationPayload` → `DesktopClientViewModel` |
+| All of the above | `core.projection` (package `__all__`) | Re-exported from the projection package |
+
+### Consumer guidance (post-PR-9)
+
+```python
+from core.projection import adapt_integration_payload, build_desktop_status_board_integration_from_runtime
+
+payload = build_desktop_status_board_integration_from_runtime(continuum_state=state)
+vm = adapt_integration_payload(payload)
+
+# Top-level readiness — no nested dict inspection needed
+if vm.is_canonical:
+    render_canonical_state(vm.topology_provider_id)
+elif vm.is_degraded:
+    render_degraded_warning()
+elif vm.is_partial:
+    render_partial_indicator()
+else:
+    render_unavailable_state()
+```
+
+See [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) for the full post-PR-9 guide.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
