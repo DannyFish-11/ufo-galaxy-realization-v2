@@ -5,15 +5,17 @@ PR-9: Desktop client consumption adapter layer.
 
 Provides the adapter/view-model that converts the PR-8
 :class:`~contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload`
-into a stable, flat, easy-to-consume client model for desktop status board
-consumers.
+(delivered in PR #436) into a stable, flat, easy-to-consume client model for
+desktop status board consumers.
 
 Design
 ------
-After PR-8 the server exposes one stable integrated payload.  Desktop
-consumers previously needed to reconstruct truth by combining outputs from
-multiple endpoints or legacy/dashboard-era assembly logic.  This adapter
-layer eliminates that need:
+After PR-8 (PR #436) the server exposes one stable integrated payload through
+``GET /api/v1/projection/desktop-status-board`` including the
+``DesktopStatusBoardIntegrationPayload`` with convenience shorthand properties
+``.readiness`` and ``.is_canonical``.  Desktop consumers previously needed to
+reconstruct truth by combining outputs from multiple endpoints or legacy/
+dashboard-era assembly logic.  This adapter layer eliminates that need:
 
 - Consume the integrated payload from
   ``GET /api/v1/projection/desktop-status-board`` (or build it via
@@ -537,6 +539,20 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
             integration_health_str = (
                 _ih.value if hasattr(_ih, "value") else str(_ih)
             ) if _ih is not None else "unknown"
+
+            # PR-436/PR-8 shorthand properties: supplement authority_indicators
+            # when the compact shorthand is present on the payload (introduced
+            # in PR-8 final contract).  This covers both the full
+            # DesktopStatusBoardIntegrationPayload model and any minimal dict-
+            # or dataclass-based payload that exposes the same surface.
+            if "topology_readiness" not in authority_indicators:
+                _pr8_readiness = getattr(payload, "readiness", None)
+                if _pr8_readiness is not None and isinstance(_pr8_readiness, str):
+                    authority_indicators["topology_readiness"] = _pr8_readiness
+            if "topology_authoritative" not in authority_indicators:
+                _pr8_is_canonical = getattr(payload, "is_canonical", None)
+                if isinstance(_pr8_is_canonical, bool):
+                    authority_indicators["topology_authoritative"] = _pr8_is_canonical
 
         # --- Readiness state -----------------------------------------------
         readiness_state = _resolve_readiness_state(
