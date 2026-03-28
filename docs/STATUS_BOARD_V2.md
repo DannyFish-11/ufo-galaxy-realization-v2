@@ -389,6 +389,41 @@ See [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) for 
 
 ---
 
+## PR-10: First Usable Desktop Status Board UI
+
+PR-10 adds the **first usable adapter-driven desktop status board UI surface**
+(`windows_client/status_board_v2/adapter_surface.py`).
+
+### What PR-10 adds
+
+| Symbol | Module | Description |
+|--------|--------|-------------|
+| `AdapterSurface` | `windows_client.status_board_v2.adapter_surface` | First usable adapter-driven status board UI surface |
+
+### Consumer guidance (post-PR-10)
+
+`AdapterSurface` consumes a `DesktopClientViewModel` from the PR-9 adapter
+and renders a clear, operator-visible status board covering:
+
+- Readiness / quality state (canonical / degraded / partial / unavailable / unknown)
+- Canonical-vs-fallback authority state with ⚠ banner when legacy fallback active
+- Primary topology / provider identity when available
+- Provider and routing summary
+- OneAPI lower-horizon block (always visually distinct, always labelled as lower-horizon)
+
+```python
+from windows_client.status_board_v2.adapter_surface import AdapterSurface
+from core.desktop_consumption_adapter import adapt_integration_payload
+
+surface = AdapterSurface()
+vm = adapt_integration_payload(payload)   # PR-9 adapter
+print(surface.render_view_model(vm))      # PR-10 UI surface
+```
+
+See [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) for the full PR-10 guide.
+
+---
+
 ## Display Boundary
 
 > **Status Board V2 is the right-side structured information display layer.**
@@ -411,6 +446,7 @@ Key rules enforced there:
 
 ## Related Documents
 
+- [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) — PR-10 first usable adapter-driven status board UI surface
 - [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](DESKTOP_SEMANTIC_CLOSURE.md) — **canonical tri-state semantic closure contract** (manifest / active / liminal)
 - [`docs/STATUS_AND_STATISTICS_OWNERSHIP.md`](STATUS_AND_STATISTICS_OWNERSHIP.md) — statistics / summary ownership across surfaces
 - [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) — unified configuration entry semantics
