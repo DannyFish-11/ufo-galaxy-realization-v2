@@ -256,6 +256,17 @@ ONEAPI AGGREGATOR HORIZON  (lower-layer / not a direct provider)
   is **always present** in the projection.  The OneAPI row must therefore always
   be rendered — when not configured it shows `not configured`.  Omitting the
   row entirely is not permitted.
+- **PR-4 (inventory layer)**: The provider inventory consumed by `TopologyRouter`
+  is now driven by the unified config authority (`runtime/config.json` /
+  `runtime/secrets.env`).  `ProviderInventoryEntry` carries
+  `config_enabled` / `config_has_key` / `is_candidate_eligible` flags.
+  The routing candidate pool (`candidate_pool_entries()`) excludes:
+  - disabled providers (`config_enabled == False`)
+  - providers missing required secrets (`config_has_key == False`)
+  - unconfigured OneAPI (treated as **absent**, not merely disabled)
+  Status-board diagnostics may surface these via `disabled_entries()` and
+  `unconfigured_entries()` for operator visibility without polluting the
+  active candidate pool.
 - The `oneapi_source` field in `ModelRoutingProjection` is `None` unless the
   active route actually goes *through* OneAPI.  Do not use it as the data
   source for the horizon row; use `DesktopStatusProjection.oneapi_integration`

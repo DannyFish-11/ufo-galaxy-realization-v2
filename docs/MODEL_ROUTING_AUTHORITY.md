@@ -11,10 +11,20 @@
 > configuration entry modifies routing inputs (provider inventory, preferences);
 > it never bypasses or replaces `TopologyRouter` as the decision-making authority.
 >
+> **PR-4 update:** The provider inventory consumed by `TopologyRouter` is now
+> driven by the unified config authority.  `ProviderInventory` entries carry
+> `config_enabled` / `config_has_key` / `is_candidate_eligible` flags set by
+> `core.model_topology.inventory_from_config`.  The routing candidate pool
+> (`ProviderInventory.candidate_pool_entries()`) excludes disabled providers
+> and providers missing required secrets.  Unconfigured OneAPI is treated as
+> **absent** from the candidate pool (not merely disabled).  See
+> [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) §2B.
+>
 > Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
 > [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
-> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md)
+> [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md) ·
+> [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md)
 
 ---
 

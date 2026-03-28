@@ -9,6 +9,12 @@
 > **implemented**.  The canonical persistence targets, core modules, and entry
 > surface are defined in §2A below.  See also
 > [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).
+>
+> **PR-4 update:** Persisted configuration now **drives runtime provider
+> availability**.  The unified config authority is wired into the provider
+> inventory and routing candidate-pool formation path.  Configuration changes
+> materially affect which providers are considered present, enabled, or absent.
+> See §2B below.
 
 ---
 
@@ -78,6 +84,67 @@ state.  See [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFI
 > **Implementation note:** The config entry UI inside `status_board_v2` is
 > **not implemented in this PR**.  This section documents the architectural
 > direction so that future implementation PRs have a clear contract to target.
+
+---
+
+### 2B. Config-authority-driven provider inventory (PR-4 — implemented)
+
+The unified config authority is now **wired into the runtime provider
+inventory and routing candidate-pool formation path**.  Persisted
+configuration materially changes which providers are considered present,
+enabled, or absent in the system.
+
+**New module (PR-4):**
+
+| Module | Role |
+|--------|------|
+| `core/model_topology/inventory_from_config.py` | Builds `ProviderInventory` from `ConfigService` state; applies config-authority flags to entries |
+
+**New inventory entry fields (PR-4):**
+
+Each `ProviderInventoryEntry` now carries config-authority-driven participation
+flags:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `config_enabled` | `bool` | Provider is enabled in `runtime/config.json` |
+| `config_has_key` | `bool` | Required secret(s) present (env-var or `runtime/secrets.env`) |
+| `config_source` | `str` | Authority layer that set these flags (`"config_authority"`, `"env"`, `"unknown"`) |
+| `is_candidate_eligible` | `bool` (property) | `config_enabled AND config_has_key` — routing gate |
+
+**New inventory filtering methods (PR-4):**
+
+| Method | Returns |
+|--------|---------|
+| `ProviderInventory.candidate_pool_entries()` | Entries eligible for routing (enabled + has key) |
+| `ProviderInventory.enabled_entries()` | Entries that are enabled (key may be absent) |
+| `ProviderInventory.disabled_entries()` | Entries that are explicitly disabled |
+| `ProviderInventory.unconfigured_entries()` | Entries enabled but missing required key |
+
+**Candidate-pool semantics (PR-4):**
+
+- **Enabled + key present** → appears in candidate pool (`candidate_pool_entries()`)
+- **Disabled** → excluded from candidate pool; visible in diagnostic view
+- **Enabled, key absent** → excluded from candidate pool; visible as *unconfigured*
+
+**OneAPI absent/configured semantics (PR-4):**
+
+- `oneapi_state == "absent"` → OneAPI is treated as **absent** from the
+  candidate pool.  It is still visible in diagnostic/inventory views.
+  This is the default when no OneAPI configuration is present.
+- `oneapi_state == "configured"` → OneAPI may enter the candidate pool
+  according to existing lower-horizon semantics.
+- `oneapi_state == "partial"` → OneAPI is enabled in config but missing
+  key or `base_url`; treated as unconfigured (not in candidate pool).
+
+**Key invariants after PR-4:**
+
+- Filling in `runtime/config.json` / `runtime/secrets.env` now has immediate
+  effect on provider availability at the inventory layer.
+- `TopologyRouter` continues to be the sole routing decision-maker; it
+  consumes the config-authority-driven `ProviderInventory` as input.
+- OneAPI is not promoted to a top-layer direct peer even when configured.
+  Its lower-horizon position is preserved.
 
 ### 2.1 Primary runtime configuration
 

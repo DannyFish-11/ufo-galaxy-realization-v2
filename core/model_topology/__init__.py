@@ -88,6 +88,15 @@ from .model_selection_policy import (
     build_model_selection_policy_from_perception,
 )
 
+# --- Config-authority-driven inventory (PR-4) ---
+from .inventory_from_config import (
+    INVENTORY_CONFIG_AUTHORITY,
+    build_inventory_from_config_authority,
+    build_candidate_pool,
+    get_oneapi_candidate_state,
+    merge_config_authority_into_inventory,
+)
+
 __all__ = [
     # Bridge
     "ConfigBridge",
@@ -141,4 +150,10 @@ __all__ = [
     "SelectionReason",
     "SelectionReasonCode",
     "build_model_selection_policy_from_perception",
+    # Config-authority-driven inventory (PR-4)
+    "INVENTORY_CONFIG_AUTHORITY",
+    "build_inventory_from_config_authority",
+    "build_candidate_pool",
+    "get_oneapi_candidate_state",
+    "merge_config_authority_into_inventory",
 ]
