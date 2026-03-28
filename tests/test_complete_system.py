@@ -62,20 +62,19 @@ def test_all_modules():
             print(f"  ❌ {node}: 文件不存在")
             results["failed"].append(f"节点: {node}")
     
-    # 测试 3: UI 文件完整性
+    # 测试 3: UI 文件完整性（dashboard/frontend/ 已在 PR-1 中删除）
     print("\n[测试 3] UI 文件完整性")
-    ui_files = [
+    ui_files_must_not_exist = [
         'dashboard/frontend/public/index.html',
     ]
-    
-    for ui_file in ui_files:
-        if os.path.exists(ui_file):
-            size = os.path.getsize(ui_file)
-            print(f"  ✅ {ui_file}: {size} bytes")
-            results["passed"].append(f"UI: {ui_file}")
+
+    for ui_file in ui_files_must_not_exist:
+        if not os.path.exists(ui_file):
+            print(f"  ✅ {ui_file}: 已删除（PR-1 正确退役）")
+            results["passed"].append(f"UI retired: {ui_file}")
         else:
-            print(f"  ❌ {ui_file}: 文件不存在")
-            results["failed"].append(f"UI: {ui_file}")
+            print(f"  ❌ {ui_file}: 文件仍存在（应已在 PR-1 中删除）")
+            results["failed"].append(f"UI should be deleted: {ui_file}")
     
     # 总结
     print("\n" + "=" * 60)

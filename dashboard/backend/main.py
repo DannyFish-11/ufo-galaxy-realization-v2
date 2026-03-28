@@ -70,8 +70,7 @@ from nodes.common.cors_config import get_cors_origins
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # 导入 ASCII 艺术字 & 打印助手
@@ -454,23 +453,18 @@ if OBSERVABILITY_ROUTES_AVAILABLE and observability_routes:
     except Exception as _e:
         logger.warning(f"可观测性路由注册失败: {_e}")
 
-# 静态文件
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")
-
-# 挂载静态文件目录（CSS/JS/图片等资源）
-if os.path.isdir(FRONTEND_DIR):
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+# dashboard/frontend/ has been fully retired (PR-1).
+# Static file serving and web operator surface have been removed.
+# This backend remains headless for migration/compatibility only.
 
 # ============================================================================
-# 静态文件路由
+# Root endpoint (headless — no frontend served)
 # ============================================================================
 
 @app.get("/")
 async def root():
-    index_path = os.path.join(FRONTEND_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "Galaxy Dashboard API", "version": "2.3.23"}
+    """Headless root endpoint — no frontend is served (frontend retired in PR-1)."""
+    return {"message": "Galaxy Dashboard API (headless — frontend retired)", "version": "2.3.23"}
 
 # ============================================================================
 # ASCII 艺术字 API

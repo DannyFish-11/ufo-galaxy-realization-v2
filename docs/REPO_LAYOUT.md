@@ -75,8 +75,8 @@ and must not define system structure.
 
 | Directory | Role | Status | Canonical Replacement |
 |-----------|------|--------|-----------------------|
-| `dashboard/` | **LEGACY_SURFACE** | Demoted PR-8, isolated PR-4 | `core/api_routes.py` |
-| `dashboard/frontend/` | **LEGACY_SURFACE** | Non-primary static assets | `core/api_routes.py` |
+| `dashboard/` | **LEGACY_HEADLESS_BACKEND** | Frontend deleted PR-1; backend headless | `core/api_routes.py` |
+| ~~`dashboard/frontend/`~~ | ~~**LEGACY_SURFACE**~~ | **DELETED PR-1** — directory no longer exists | `windows_client/status_board_v2/` |
 | `windows_client/` (root modules) | **LEGACY_SHELL** | Hard-disabled stubs (PR-3) | `windows_client/status_board_v2/` |
 | `enhancements/` | **TRANSITIONAL** | Overlays; `clients/` hard-disabled (PR-3) | `core/` |
 
@@ -105,8 +105,7 @@ The following enhancement launcher is hard-disabled:
   `windows_client/` as `LEGACY_SHELL`
 - `core/orchestration_authority/legacy_paths.py` — PR-8 legacy path entries
 - `core/repo_layout_registry.py` — full directory classification registry
-- `dashboard/LEGACY_SURFACE.md` — legacy marker for `dashboard/`
-- `dashboard/frontend/LEGACY_SURFACE.md` — legacy marker for `dashboard/frontend/`
+- `dashboard/LEGACY_SURFACE.md` — legacy marker for `dashboard/` (headless backend)
 - `windows_client/status_board_v2/ACTIVE_SURFACE.md` — active marker for status board
 - `enhancements/LEGACY_TRANSITION.md` — transitional marker for `enhancements/`
 

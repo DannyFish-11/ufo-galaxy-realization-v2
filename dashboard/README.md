@@ -1,18 +1,18 @@
 # Galaxy Dashboard
 
-> **⚠️ LEGACY UI SURFACE (PR-8)**
-> `dashboard/` is a **legacy UI surface**.  It is retained for
-> compatibility (static-file service, management convenience panel) but is
-> **not** the architectural source of truth for system state.
+> **⚠️ LEGACY HEADLESS BACKEND (PR-1 — frontend fully retired)**
+> `dashboard/frontend/` has been **permanently deleted** as of PR-1.
+> There is no longer any web operator-facing UI surface here.
+> `dashboard/backend/main.py` is retained **headless** for migration/compatibility only.
 >
+> - **Active operator surface**: `windows_client/status_board_v2/`
 > - Canonical REST API: `core/api_routes.py`, `core/routes/`
 > - Canonical status truth: `GET /api/v1/projection/runtime` (RuntimeProjection / DesktopStatusProjection)
-> - Canonical status board: `windows_client/status_board_v2/`
 >
 > Do not add new status-authority endpoints here.  See `core/ui_surface_authority.py`
 > for the canonical UI surface authority registry.
 
-可视化管理界面 - 监控、管理和控制整个 Galaxy 系统 (legacy compatibility surface)
+legacy headless backend — API compatibility surface only (frontend retired PR-1)
 
 ## 功能特性
 
@@ -198,49 +198,25 @@ pip install -r requirements.txt
 python main.py
 ```
 
-后端将在 `http://localhost:8085` 启动。
+后端将在 `http://localhost:8085` 启动（**无头模式** — 不提供任何前端 UI）。
 
-### 2. 访问前端
+### ~~2. 访问前端~~ — RETIRED
 
-直接在浏览器中打开：
-```
-http://localhost:8085/
-```
+> **⚠️ `dashboard/frontend/` 已在 PR-1 中完全删除。**
+> 不再有任何面向运维人员的 Web UI 可访问。
+> 运维界面请使用 `windows_client/status_board_v2/`。
 
-前端 `index.html` 由后端静态文件路由直接提供服务，无需单独的 HTTP 服务器。
+### ~~3. 构建 TypeScript 前端（可选）~~ — RETIRED
 
-> 如果仅需本地预览，也可通过简单 HTTP 服务器：
-> ```bash
-> cd dashboard/frontend/public
-> python -m http.server 8081
-> ```
-> 然后访问 `http://localhost:8081`（此模式下 API 调用需后端同时运行）。
-
-### 3. 构建 TypeScript 前端（可选）
-
-TypeScript 源码位于 `dashboard/frontend/ts/`，编译产物输出到 `dist/`。
-
-```bash
-cd dashboard/frontend
-npm install       # 安装依赖（vue、axios、typescript 等）
-npm run build     # 编译 TypeScript
-```
+> **⚠️ TypeScript 前端代码（`dashboard/frontend/ts/`）已在 PR-1 中完全删除。**
+> 请勿尝试执行 `npm install` 或 `npm run build`。
 
 ## WebSocket 实时连接
 
 后端 WebSocket 端点：`ws://localhost:8085/ws`
 
-前端 TypeScript 客户端示例（`dashboard/frontend/ts/api.ts`）：
-
-```typescript
-import { GalaxyAPI } from './api';
-
-const api = new GalaxyAPI('http://localhost:8085');
-api.connectWebSocket((msg) => {
-  console.log('WS message:', msg);
-});
-api.sendWSMessage({ type: 'ping' });
-```
+> **⚠️ 前端 TypeScript 客户端（`dashboard/frontend/ts/api.ts`）已在 PR-1 中删除。**
+> 如需通过 WebSocket 连接，请直接使用标准 WebSocket 客户端或从 `core/` 层调用。
 
 ## 配置
 
@@ -378,25 +354,20 @@ WS /ws
 ## 技术栈
 
 ### 后端
-- FastAPI - Web 框架（端口 8085）
+- FastAPI - Web 框架（端口 8085，无头运行）
 - httpx - HTTP 客户端
 - WebSocket - 实时通信
 
-### 前端
-- Vue 3 - 前端框架（CDN 加载）
-- Tailwind CSS - UI 样式（CDN 加载）
-- Axios - HTTP 客户端（CDN 加载）
-- TypeScript - 类型安全客户端（`ts/` 目录）
+### ~~前端~~ — RETIRED (PR-1)
+
+> `dashboard/frontend/` 已完全删除。不再有任何面向运维人员的 Web 前端。
 
 ## 开发
 
 ### 添加新功能
 
-1. 在 `backend/main.py` 添加 API 端点
-2. 在 `frontend/ts/types.ts` 更新类型定义
-3. 在 `frontend/ts/api.ts` 更新客户端方法
-4. 在 `frontend/public/index.html` 添加 UI 组件
-5. 测试并提交
+1. 在 `backend/main.py` 添加 API 端点（仅限迁移兼容性用途）
+2. 新的运维界面功能请在 `windows_client/status_board_v2/` 中实现
 
 ### 调试
 
