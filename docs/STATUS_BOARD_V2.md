@@ -681,8 +681,51 @@ Key rules enforced there:
 
 ---
 
+## PR-15: Final End-to-End Hardening and Closure
+
+PR-15 closes the multi-PR initiative by consolidating all PR-8 through PR-14
+work into a fully hardened, regression-protected, documentation-complete state.
+
+### What PR-15 adds
+
+| Artifact | Description |
+|----------|-------------|
+| `tests/test_pr15_e2e_hardening.py` | 100 end-to-end regression tests covering the full pipeline |
+| `docs/DESKTOP_PIPELINE_ARCHITECTURE.md` | Authoritative post-PR-15 architecture reference |
+
+### End-to-end regression protection
+
+`tests/test_pr15_e2e_hardening.py` proves that the full pipeline works
+coherently for all four semantic states and that the following invariants
+hold end-to-end:
+
+- Canonical / degraded / partial / unavailable semantics are **consistent
+  across all layers** (adapter → layout → renderer → inspector → history).
+- Degraded / fallback data is **never** silently promoted to authoritative
+  truth at any layer.
+- OneAPI is **lower-horizon only** across every layer (layout, renderer,
+  inspector, history).
+- Historical / inspection / rendering outputs remain **semantically aligned**.
+- `None` / empty / unavailable paths are **safe and serialisable** at every
+  layer.
+
+### Consumer guidance (post-PR-15)
+
+See [`docs/DESKTOP_PIPELINE_ARCHITECTURE.md`](DESKTOP_PIPELINE_ARCHITECTURE.md)
+for the authoritative post-PR-15 consumption guide, including:
+
+- The full seven-layer architecture diagram.
+- Layer-by-layer symbol reference and invariants.
+- The intended primary consumption path (code example).
+- Semantic state reference (canonical / degraded / partial / unavailable).
+- OneAPI lower-horizon enforcement table.
+- Contributor guidance on how to avoid bypassing the pipeline.
+
+---
+
 ## Related Documents
 
+- [`docs/DESKTOP_PIPELINE_ARCHITECTURE.md`](DESKTOP_PIPELINE_ARCHITECTURE.md) — **PR-15 authoritative post-closure architecture reference**
 - [`docs/OBSERVABILITY_HISTORY.md`](OBSERVABILITY_HISTORY.md) — PR-14 observability and history layer
 - [`docs/DIAGNOSTICS_INSPECTION_INTERACTION.md`](DIAGNOSTICS_INSPECTION_INTERACTION.md) — PR-13 diagnostics and inspection interaction layer
 - [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md) — PR-12 topology rendering and visual semantics polish

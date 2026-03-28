@@ -60,6 +60,13 @@ PR-14 adds the observability and history layer:
 - Point-in-time snapshot (PR-14)                      → TopologySnapshot
 - Bounded history buffer (PR-14)                      → TopologyHistoryBuffer
 
+PR-15 completes the initiative with end-to-end hardening and closure:
+
+- Full pipeline regression tests (PR-15)              → tests/test_pr15_e2e_hardening.py
+- Architecture reference doc (PR-15)                  → docs/DESKTOP_PIPELINE_ARCHITECTURE.md
+- All PR-9 through PR-14 exports verified present
+  and re-exportable from this package __all__ (PR-15)
+
 READ-ONLY GUARANTEE
 -------------------
 This package NEVER:
