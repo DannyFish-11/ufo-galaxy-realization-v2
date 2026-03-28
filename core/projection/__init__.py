@@ -31,6 +31,15 @@ PR-6 exposes the topology-ready projection delivery sentinel::
 
 See ``docs/SERVER_SIDE_CANONICALIZATION.md`` §8 for the PR-6 topology delivery policy.
 
+PR-7 exposes the projection readiness / quality contract sentinel::
+
+    from core.projection import TOPOLOGY_READINESS_CONTRACT_AUTHORITY
+
+    # Machine-checkable: identifies the PR-7 quality/readiness block artefact
+    print(TOPOLOGY_READINESS_CONTRACT_AUTHORITY)  # "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
+
+See ``docs/SERVER_SIDE_CANONICALIZATION.md`` §9 for the PR-7 readiness/quality policy.
+
 PR-26 adds a governance-aware assembly layer::
 
     from core.projection import assemble_projection_governance
@@ -93,6 +102,8 @@ from .projection_compiler import (
     PROJECTION_COMPILER_AUTHORITY,
     # PR-6: topology-ready projection delivery sentinel
     TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+    # PR-7: projection readiness / quality contract sentinel
+    TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
     build_desktop_status_board_integration_from_runtime,
     build_runtime_projection,
 )
@@ -115,6 +126,8 @@ __all__ = [
     "PROJECTION_COMPILER_AUTHORITY",
     # PR-6: topology-ready projection delivery sentinel
     "TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY",
+    # PR-7: projection readiness / quality contract sentinel
+    "TOPOLOGY_READINESS_CONTRACT_AUTHORITY",
     # PR-8: final desktop status board integration bridge
     "build_desktop_status_board_integration_from_runtime",
     "DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY",
