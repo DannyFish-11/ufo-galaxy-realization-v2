@@ -16,6 +16,10 @@ visualises:
 - Manifest stage (显现台) execution surface           → ManifestSurface
 - Return intelligence summary                         → ReturnSurface
 
+PR-10 adds the first usable adapter-driven status board surface:
+
+- Desktop status board (adapter-driven, PR-10)        → AdapterSurface
+
 READ-ONLY GUARANTEE
 -------------------
 This package NEVER:
@@ -33,6 +37,7 @@ from .projection_reader import ProjectionReader
 from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
+from .adapter_surface import AdapterSurface
 
 __all__ = [
     "main",
@@ -42,4 +47,6 @@ __all__ = [
     "LiminalSurface",
     "ManifestSurface",
     "ReturnSurface",
+    # PR-10: first usable adapter-driven status board surface
+    "AdapterSurface",
 ]
