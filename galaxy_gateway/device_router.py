@@ -68,6 +68,23 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# PR-4: Delegate routing concerns to specialised sub-modules under
+# galaxy_gateway/routing/.  DeviceRouter remains the canonical public API;
+# internal logic is now implemented in the sub-modules and called from here.
+# ---------------------------------------------------------------------------
+from galaxy_gateway.routing.policy import analyze_command as _routing_analyze_command  # noqa: E402
+from galaxy_gateway.routing.device_selection import select_devices as _routing_select_devices  # noqa: E402
+from galaxy_gateway.routing.dispatch import (  # noqa: E402
+    build_aip_message as _routing_build_aip_message,
+    dispatch_to_websocket as _routing_dispatch_to_websocket,
+)
+from galaxy_gateway.routing.health_policy import (  # noqa: E402
+    is_device_available as _routing_is_device_available,
+    is_device_online as _routing_is_device_online,
+    filter_eligible_devices as _routing_filter_eligible_devices,
+)
+
 # Cross-device feature-flag (Round 4) — checked before any cross-device path.
 from galaxy_gateway.cross_device_switch import (  # noqa: E402
     is_cross_device_enabled,
@@ -818,66 +835,21 @@ class DeviceRouter:
             }
     
     async def _analyze_command(self, command: str, context: Dict = None) -> Dict:
+        """分析命令，确定目标设备和任务类型。
+
+        Delegates to :func:`galaxy_gateway.routing.policy.analyze_command`
+        (PR-4: routing policy separation).
         """
-        分析命令，确定目标设备和任务类型
-        
-        这里使用简单的关键词匹配
-        实际应该调用 NLU 引擎进行深度分析
-        """
-        analysis = {
-            "command": command,
-            "target_device_type": DeviceType.UNKNOWN,
-            "task_type": TaskType.UI_AUTOMATION,
-            "actions": [],
-            "requires_cross_device": False
-        }
-        
-        command_lower = command.lower()
-        
-        # 判断目标设备
-        if any(keyword in command_lower for keyword in ["手机", "android", "移动端", "app"]):
-            analysis["target_device_type"] = DeviceType.ANDROID
-        elif any(keyword in command_lower for keyword in ["电脑", "pc", "windows", "桌面"]):
-            analysis["target_device_type"] = DeviceType.WINDOWS
-        elif any(keyword in command_lower for keyword in ["平板", "ipad", "tablet"]):
-            analysis["target_device_type"] = DeviceType.IOS
-        
-        # 判断任务类型
-        if any(keyword in command_lower for keyword in ["打开", "启动", "运行"]):
-            analysis["task_type"] = TaskType.APP_CONTROL
-            analysis["actions"].append("open")
-        elif any(keyword in command_lower for keyword in ["点击", "按", "选择"]):
-            analysis["task_type"] = TaskType.UI_AUTOMATION
-            analysis["actions"].append("click")
-        elif any(keyword in command_lower for keyword in ["输入", "填写", "写入"]):
-            analysis["task_type"] = TaskType.UI_AUTOMATION
-            analysis["actions"].append("input")
-        elif any(keyword in command_lower for keyword in ["查询", "查看", "显示"]):
-            analysis["task_type"] = TaskType.QUERY
-            analysis["actions"].append("query")
-        elif any(keyword in command_lower for keyword in ["音量", "亮度", "wifi", "蓝牙"]):
-            analysis["task_type"] = TaskType.SYSTEM_CONTROL
-        
-        # 判断是否需要跨设备协同
-        if any(keyword in command_lower for keyword in ["复制到", "发送到", "传输到", "同步"]):
-            analysis["requires_cross_device"] = True
-        
-        return analysis
+        return _routing_analyze_command(command, context)
     
     def _select_devices(self, analysis: Dict) -> List[Device]:
         """选择合适的设备（优先选择自主执行能力的设备），并尊重 exec_mode。
 
-        exec_mode 路由语义（Round 3）
-        ------------------------------
-        ``analysis["exec_mode"]`` 可由调用方（如编排器、NLU）设置：
-
-        - ``"local"``  — 只选择注册了对应动作且 exec_mode=local/both 的设备。
-        - ``"remote"`` — 只选择注册了对应动作且 exec_mode=remote/both 的设备。
-        - ``"both"``   — 不按 exec_mode 额外过滤（默认行为）。
-        - 缺失         — 等同于 "both"（向后兼容）。
-
-        若 GatewayCapabilityRegistry 不可用或设备尚未上报 capability_report，
-        则退回到原有逻辑，保证向后兼容。
+        PR-4: Delegates to :func:`galaxy_gateway.routing.device_selection.select_devices`
+        for the exec_mode filtering, autonomous preference, and pool-manager
+        selection steps.  This method retains responsibility for resolving
+        ``target_device_type`` and obtaining the candidate list from the
+        local session cache.
         """
         target_device_type = analysis["target_device_type"]
 
@@ -885,119 +857,18 @@ class DeviceRouter:
             # 如果未指定设备，默认选择 Windows
             target_device_type = DeviceType.WINDOWS
 
-        # 获取该类型的所有设备
-        devices = self.get_devices_by_type(target_device_type)
+        # Obtain candidate devices of the required type from the session cache.
+        candidates = self.get_devices_by_type(target_device_type)
 
-        # ── exec_mode-aware filtering via GatewayCapabilityRegistry ─────────
-        desired_exec_mode_str: Optional[str] = analysis.get("exec_mode")
-        _actions = analysis.get("actions") or []
-        desired_action: Optional[str] = _actions[0] if _actions else None
-
-        if desired_exec_mode_str or desired_action:
-            try:
-                from galaxy_gateway.capability_registry import ExecMode
-                gw_reg = get_gateway_capability_registry()
-                desired_exec_mode = ExecMode.from_str(desired_exec_mode_str)
-
-                filtered: List[Device] = []
-                unregistered: List[Device] = []
-                for device in devices:
-                    schemas = gw_reg.query(
-                        action=desired_action,
-                        exec_mode=desired_exec_mode if desired_exec_mode != ExecMode.BOTH else None,
-                        device_id=device.device_id,
-                    )
-                    if schemas:
-                        filtered.append(device)
-                    else:
-                        # Device has no schema record — could be legacy client
-                        all_caps = gw_reg.get_by_device(device.device_id)
-                        if not all_caps:
-                            # Legacy device: no capability_report yet → keep it
-                            unregistered.append(device)
-                        # else: device has caps but none match → exclude
-
-                if filtered:
-                    devices = filtered
-                    logger.debug(
-                        "_select_devices: exec_mode=%s action=%s → %d matching device(s)",
-                        desired_exec_mode_str,
-                        desired_action,
-                        len(filtered),
-                    )
-                elif unregistered:
-                    # Fall back to legacy devices that haven't reported capabilities yet
-                    devices = unregistered
-                    logger.debug(
-                        "_select_devices: no schema matches; falling back to %d legacy device(s)",
-                        len(unregistered),
-                    )
-                else:
-                    logger.debug(
-                        "_select_devices: no devices match exec_mode=%s action=%s; using all",
-                        desired_exec_mode_str,
-                        desired_action,
-                    )
-                    # devices already holds the full list — no further filtering
-
-            except Exception as _reg_err:
-                logger.warning(
-                    "_select_devices: capability registry unavailable, skipping exec_mode filter: %s",
-                    _reg_err,
-                )
-
-        # 使用自主优先过滤器（有 fallback 保证）
-        try:
-            from galaxy_gateway.autonomous_filter import filter_autonomous_devices
-            require_cross = analysis.get("requires_cross_device", False)
-            task_role = analysis.get("task_role")
-            preferred = filter_autonomous_devices(
-                devices,
-                get_metadata=lambda d: d.metadata,
-                get_status=lambda d: d.status,
-                require_cross_device=require_cross,
-                task_role=task_role,
-            )
-        except Exception as _filter_err:
-            logger.warning("autonomous_filter unavailable, using online-only fallback: %s", _filter_err)
-            preferred = [d for d in devices if d.status == "online"]
-
-        if not preferred:
-            logger.warning(f"⚠️ 没有在线的 {target_device_type} 设备")
+        if not candidates:
+            logger.warning("⚠️ 没有在线的 %s 设备", target_device_type)
             return []
 
-        # PR-3: Delegate final device selection to DevicePoolManager so that all
-        # scheduling decisions (health scoring, circuit-breaker, strategy) pass
-        # through the single unified pool entry point.  The candidate list built
-        # above (exec_mode / autonomous filtering) is registered into the pool
-        # on-the-fly so the pool can apply its scoring logic.  When the pool is
-        # unavailable we fall back to the first preferred candidate.
-        required_caps: List[str] = analysis.get("required_capabilities", [])
-        try:
-            from core.device_pool_manager import get_device_pool_manager
-            pool = get_device_pool_manager()
-            preferred_ids = {d.device_id for d in preferred}
-            selected_id = pool.select_device(
-                required_capabilities=required_caps or None,
-                device_type=target_device_type.value if hasattr(target_device_type, "value") else str(target_device_type),
-                exclude=[d.device_id for d in devices if d.device_id not in preferred_ids],
-            )
-            if selected_id:
-                matched = next((d for d in preferred if d.device_id == selected_id), None)
-                if matched:
-                    logger.debug(
-                        "_select_devices: DevicePoolManager selected %s", selected_id
-                    )
-                    return [matched]
-            # Pool returned no match (e.g. devices not registered in pool yet) –
-            # fall through to first-preferred fallback below.
-        except Exception as _pool_err:
-            logger.warning(
-                "_select_devices: DevicePoolManager unavailable, using first-preferred fallback: %s",
-                _pool_err,
-            )
+        # Ensure target_device_type is reflected in the analysis passed down.
+        effective_analysis = dict(analysis)
+        effective_analysis["target_device_type"] = target_device_type
 
-        return [preferred[0]]
+        return _routing_select_devices(effective_analysis, candidates)
     
     def _create_task(self, command: str, analysis: Dict, target_devices: List[Device]) -> Dict:
         """创建任务"""
@@ -1105,27 +976,11 @@ class DeviceRouter:
             except Exception as route_err:
                 logger.debug(f"route_envelope 路由失败，回退 WebSocket: {route_err}")
 
-            # 回退：直接通过 WebSocket 发送 AIP v3.0 消息
+            # PR-4: WebSocket fallback — delegate send/wait to routing.dispatch.
             if device.websocket:
-                message = {
-                    "version": "3.0",
-                    "message_id": str(uuid.uuid4()),
-                    "type": "command",
-                    "device_id": device.device_id,
-                    "task_id": task["task_id"],
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "payload": task["payload"],
-                }
-                await device.websocket.send(json.dumps(message))
-                
-                # 等待结果，使用 asyncio.Event 避免阻塞轮询
                 task_id = task["task_id"]
-                event = asyncio.Event()
-                self._task_events[task_id] = event
 
                 # PR-S5: use envelope timeout if available; fall back to 30 s.
-                # The timeout is read from the TaskEnvelope created earlier in
-                # dispatch_task so that all paths respect the same value.
                 _ws_timeout = 30.0
                 try:
                     if _task_envelope is not None:
@@ -1133,61 +988,24 @@ class DeviceRouter:
                 except Exception:
                     pass
 
-                # PR-S5: register with canonical lifecycle registry so that
-                # reconnect/resume and ownership tracking are unified.
-                try:
-                    from core.task_envelope_lifecycle_registry import (
-                        get_lifecycle_registry as _get_lcr,
-                        LifecycleOwner as _LCOwner,
-                    )
-                    class _EnvProxy:
-                        pass
-                    _ep = _EnvProxy()
-                    _ep.task_id = task_id
-                    _ep.trace_id = task.get("trace_id", "")
-                    _ep.target = device.device_id
-                    _ep.tool_name = task.get("command", "")
-                    _ep.timeout = _ws_timeout
-                    _get_lcr().register(
-                        _ep,
-                        owner=_LCOwner.DEVICE_DISPATCH,
-                        metadata={"source": "device_router.dispatch_task.ws_fallback"},
-                    )
-                except Exception as _lcr_err:
-                    logger.debug(
-                        "DeviceRouter.dispatch_task: lifecycle registry register "
-                        "skipped — %s", _lcr_err
-                    )
-
-                try:
-                    await asyncio.wait_for(event.wait(), timeout=_ws_timeout)
-                    if task_id in self.task_results:
-                        result = self.task_results.pop(task_id)
-                        # PR-S5: complete via canonical registry on success.
-                        try:
-                            from core.task_envelope_lifecycle_registry import (
-                                get_lifecycle_registry as _get_lcr2,
-                            )
-                            _get_lcr2().complete(task_id, result)
-                        except Exception:
-                            pass
-                        return result
-                except asyncio.TimeoutError:
-                    # PR-S5: record timeout via canonical registry.
-                    try:
-                        from core.task_envelope_lifecycle_registry import (
-                            get_lifecycle_registry as _get_lcr3,
-                        )
-                        _get_lcr3().fail(task_id, "dispatch_task ws_fallback timeout")
-                    except Exception:
-                        pass
-                finally:
-                    self._task_events.pop(task_id, None)
-                
-                return {
-                    "success": False,
-                    "error": "任务执行超时"
-                }
+                _ws_message = _routing_build_aip_message(
+                    device_id=device.device_id,
+                    task_id=task_id,
+                    trace_id=task.get("trace_id", ""),
+                    command=task.get("command", ""),
+                    payload=task.get("payload"),
+                )
+                ws_result = await _routing_dispatch_to_websocket(
+                    device=device,
+                    message=_ws_message,
+                    task_id=task_id,
+                    task_events=self._task_events,
+                    task_results=self.task_results,
+                    timeout=_ws_timeout,
+                )
+                if not ws_result.get("success") and ws_result.get("error") == "timeout":
+                    return {"success": False, "error": "任务执行超时"}
+                return ws_result
             else:
                 return {"success": False, "error": "设备未连接"}
 
@@ -1246,7 +1064,6 @@ class DeviceRouter:
 
         _task_id = task_id or str(uuid.uuid4())
         _trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
-        _msg_id = str(uuid.uuid4())
 
         if not device.websocket:
             logger.debug(
@@ -1262,72 +1079,22 @@ class DeviceRouter:
                 "via": "device_router",
             }
 
-        # Build AIP v3 message envelope.
-        message = {
-            "version": "3.0",
-            "message_id": _msg_id,
-            "type": "command",
-            "device_id": device_id,
-            "task_id": _task_id,
-            "trace_id": _trace_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "payload": {
-                "command": command,
-                **(payload or {}),
-            },
-        }
-
-        try:
-            await device.websocket.send(json.dumps(message))
-            logger.debug(
-                "DeviceRouter.send_command_to_device sent | device=%s task_id=%s "
-                "trace_id=%s command=%s",
-                device_id, _task_id, _trace_id, command,
-            )
-        except Exception as _send_exc:
-            logger.warning(
-                "DeviceRouter.send_command_to_device send failed | device=%s error=%s",
-                device_id, _send_exc,
-            )
-            return {
-                "success": False,
-                "result": None,
-                "error": str(_send_exc),
-                "task_id": _task_id,
-                "trace_id": _trace_id,
-                "via": "device_router",
-            }
-
-        # Wait for the result event.
-        event = asyncio.Event()
-        self._task_events[_task_id] = event
-        try:
-            await asyncio.wait_for(event.wait(), timeout=timeout)
-            if _task_id in self.task_results:
-                result = self.task_results.pop(_task_id)
-                result.setdefault("via", "device_router")
-                result.setdefault("trace_id", _trace_id)
-                return result
-            return {
-                "success": True,
-                "result": f"command sent to {device_id}",
-                "task_id": _task_id,
-                "trace_id": _trace_id,
-                "via": "device_router",
-            }
-        except asyncio.TimeoutError:
-            logger.warning(
-                "DeviceRouter.send_command_to_device timeout | device=%s task_id=%s",
-                device_id, _task_id,
-            )
-            return {
-                "success": False,
-                "result": None,
-                "error": "timeout",
-                "task_id": _task_id,
-                "trace_id": _trace_id,
-                "via": "device_router",
-            }
+        # PR-4: delegate AIP message construction and send/wait to routing.dispatch.
+        message = _routing_build_aip_message(
+            device_id=device_id,
+            task_id=_task_id,
+            trace_id=_trace_id,
+            command=command,
+            payload=payload,
+        )
+        return await _routing_dispatch_to_websocket(
+            device=device,
+            message=message,
+            task_id=_task_id,
+            task_events=self._task_events,
+            task_results=self.task_results,
+            timeout=timeout,
+        )
 
     async def _dispatch_cross_device_task(self, task: Dict, devices: List[Device]) -> Dict:
         """分发跨设备协同任务 (gated by cross-device switch — Round 4).
