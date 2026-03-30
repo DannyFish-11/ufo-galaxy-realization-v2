@@ -4,6 +4,19 @@
 
 ---
 
+## 🗂️ Engineering Reference
+
+| Document | Purpose |
+|----------|---------|
+| [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) | Test layout, markers, and CI jobs |
+| [tests/README.md](tests/README.md) | Running tests — quick reference |
+| [docs/DEPLOYMENT_SURFACES.md](docs/DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
+| [docs/MAINTAINER_RUNBOOK.md](docs/MAINTAINER_RUNBOOK.md) | Maintainer reference |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
+| [QUICKSTART.md](QUICKSTART.md) | Five-minute local setup |
+
+---
+
 ## ✅ 快速验证 / Quick Validation (PR-9)
 
 After the PR-1 through PR-8 structural cleanup, use these commands to confirm

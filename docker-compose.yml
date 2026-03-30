@@ -1,5 +1,8 @@
 # ============================================================
 # Galaxy — Development Docker Compose
+#
+# SURFACE ROLE: Canonical development surface
+# See docs/DEPLOYMENT_SURFACES.md for the full surface catalogue.
 # ============================================================
 #
 # Usage:

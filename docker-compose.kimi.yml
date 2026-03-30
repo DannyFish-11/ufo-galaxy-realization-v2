@@ -1,6 +1,10 @@
 # ============================================================
 # Galaxy System - Docker Compose Configuration
 # 数据库和中间件服务部署配置
+#
+# STATUS: Legacy / special-purpose (Kimi integration infrastructure)
+# CANONICAL SURFACE: Use docker-compose.yml for standard development.
+# See docs/DEPLOYMENT_SURFACES.md for the full surface catalogue.
 # ============================================================
 
 version: '3.8'

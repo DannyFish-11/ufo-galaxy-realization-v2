@@ -296,4 +296,45 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
-        run: python -m pytest tests/ -v -m "not slow"
+        run: python -m pytest tests/ -v -m "not slow and not manual"
+
+  test-placement-guard:
+    # Structural guardrail: test files must live under tests/, not inside
+    # source packages (core/, galaxy_gateway/, nodes/, enhancements/, etc.).
+    # Stub redirect files (single-line raise ImportError) are the only allowed
+    # exception and must not accumulate new test logic.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for in-source test files outside tests/
+        run: |
+          # Find any test_*.py or *_test.py in source directories.
+          # ALLOWED PATTERNS:
+          #   - Stub redirect files (raise ImportError, no real test logic).
+          #   - Files inside a dedicated */tests/ subdirectory within a node or
+          #     enhancement (e.g. nodes/Node_71_.../tests/test_*.py).
+          # FORBIDDEN:
+          #   - Test files with real test logic placed directly in source
+          #     packages (e.g. galaxy_gateway/test_foo.py, core/test_bar.py).
+          FORBIDDEN=$(
+            find core/ galaxy_gateway/ nodes/ enhancements/ dashboard/ launcher/ \
+              -name "test_*.py" -o -name "*_test.py" 2>/dev/null \
+            | grep -v "/tests/" \
+            | xargs grep -l \
+                -e "^def test_" \
+                -e "^class Test" \
+                -e "^import pytest" \
+                -e "^from pytest" \
+              2>/dev/null || true
+          )
+          if [ -n "$FORBIDDEN" ]; then
+            echo "❌ In-source test files with real test logic detected:"
+            echo "$FORBIDDEN"
+            echo ""
+            echo "Move these files to tests/integration/ (or tests/unit/)."
+            echo "See tests/README.md for the test layout policy."
+            exit 1
+          fi
+          echo "✅ No in-source test files with real test logic found."
