@@ -35,3 +35,9 @@ per-file-ignores = ["__init__.py:F401"]
 testpaths = ["tests"]
 addopts = "-v"
 asyncio_mode = "auto"
+markers = [
+    "s6_smoke: PR-S6 regression & compatibility guardrail smoke suite",
+    "g7_smoke: PR-G7 developer-experience quick-verify smoke suite",
+    "slow: slow tests (skipped by default in fast CI runs)",
+    "manual: manual integration tests that require live services (always skipped in CI)",
+]

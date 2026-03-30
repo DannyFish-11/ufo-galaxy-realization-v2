@@ -1,6 +1,10 @@
 # ============================================================
 # Galaxy — Full System Docker Compose
 # Single-source-of-truth: config/unified_ports.yaml
+#
+# SURFACE ROLE: Full system / integration testing
+# Use this when you need all 130 nodes or a complete system demo.
+# See docs/DEPLOYMENT_SURFACES.md for the full surface catalogue.
 # ============================================================
 #
 # Profiles:

@@ -2,6 +2,9 @@
 # Galaxy — Production Docker Compose
 # 24/7 continuous operation with monitoring stack
 #
+# SURFACE ROLE: Canonical production surface
+# See docs/DEPLOYMENT_SURFACES.md for the full surface catalogue.
+#
 # Usage:
 #   docker compose -f docker-compose.production.yml up -d
 #   docker compose -f docker-compose.production.yml logs -f galaxy
