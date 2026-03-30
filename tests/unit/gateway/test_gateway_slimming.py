@@ -1,5 +1,5 @@
 """
-tests/test_pr2_gateway_slimming.py
+tests/unit/gateway/test_gateway_slimming.py
 ===================================
 PR-2: Gateway entry slimming and service wiring cleanup.
 
@@ -27,7 +27,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-ROOT = pathlib.Path(__file__).parent.parent
+ROOT = pathlib.Path(__file__).parent.parent.parent.parent
 GW = ROOT / "galaxy_gateway"
 
 

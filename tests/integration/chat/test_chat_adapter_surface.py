@@ -1,4 +1,4 @@
-"""tests/test_pr2_chat_adapter_surface.py
+"""tests/integration/chat/test_chat_adapter_surface.py
 ==========================================
 
 PR-2 — /api/v1/chat Compatibility Adapter Surface
@@ -33,7 +33,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-REPO_ROOT = pathlib.Path(__file__).parent.parent
+REPO_ROOT = pathlib.Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 

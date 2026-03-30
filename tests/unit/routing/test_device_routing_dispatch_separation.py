@@ -1,4 +1,4 @@
-"""tests/test_pr4_device_routing_dispatch_separation.py
+"""tests/unit/routing/test_device_routing_dispatch_separation.py
 =========================================================
 PR-4: Device routing and dispatch authority separation.
 
