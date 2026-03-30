@@ -1,11 +1,13 @@
 """
 galaxy_gateway/android/bridge.py — Android Bridge (package entry point).
 
-The canonical implementation lives in ``galaxy_gateway.android_bridge``.
-This module re-exports the bridge for the package-based import path.
+After PR-3 modularization, this module re-exports the key components
+from their canonical locations for backward compatibility.
 """
-from galaxy_gateway.android_bridge import *  # noqa: F401, F403
-try:
-    from galaxy_gateway.android_bridge import __all__
-except ImportError:
-    pass
+# Core components now live in dedicated sub-modules.
+from galaxy_gateway.android.capabilities import DeviceCapability  # noqa: F401
+from galaxy_gateway.android.models import Rect, UIElement, AndroidDevice  # noqa: F401
+from galaxy_gateway.android.message_builder import MessageBuilder  # noqa: F401
+
+# AndroidBridge is still in the top-level android_bridge module.
+from galaxy_gateway.android_bridge import AndroidBridge, android_bridge  # noqa: F401
