@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-core.architecture_live_status — Live Architecture Status Surface
+tools.architecture.architecture_live_status — Live Architecture Status Surface
 ================================================================
 
 PR-011 — Add live architecture status surface for runtime readiness.
@@ -45,14 +45,14 @@ A structured :class:`ArchitectureLiveStatus` payload that aggregates:
 
 ## Relationship to ArchitectureCompletionScorecard
 
-The :class:`~core.architecture_completion.ArchitectureCompletionScorecard`
+The :class:`~tools.architecture.architecture_completion.ArchitectureCompletionScorecard`
 (PR-9) measures **design maturity** across ten dimensions.  This module
 produces a **runtime readiness** view: it consumes the scorecard and other
 live signals to classify operational posture.
 
 Usage::
 
-    from core.architecture_live_status import (
+    from tools.architecture.architecture_live_status import (
         get_architecture_live_status,
         build_architecture_live_status,
         RuntimeReadiness,
@@ -247,7 +247,7 @@ class ArchitectureLiveStatus:
         operating in legacy or compatibility mode.
     scorecard_summary:
         Compact scorecard summary dict derived from
-        :class:`~core.architecture_completion.ArchitectureCompletionScorecard`.
+        :class:`~tools.architecture.architecture_completion.ArchitectureCompletionScorecard`.
     active_blockers:
         List of :class:`ActiveBlocker` entries for issues preventing
         advancement to ``ready`` posture.
@@ -379,7 +379,7 @@ def _collect_canonical_paths() -> List[CanonicalPathEntry]:
             pr_introduced="PR-8",
         ),
         CanonicalPathEntry(
-            path="core.architecture_completion",
+            path="tools.architecture.architecture_completion",
             role="architecture completion scorecard — 10-dimension maturity registry",
             pr_introduced="PR-9",
         ),
@@ -464,7 +464,7 @@ def _collect_legacy_zones() -> List[LegacyZoneEntry]:
 def _collect_scorecard_summary() -> Dict[str, Any]:
     """Return a compact scorecard summary dict."""
     try:
-        from core.architecture_completion import get_architecture_completion_scorecard
+        from tools.architecture.architecture_completion import get_architecture_completion_scorecard
 
         scorecard = get_architecture_completion_scorecard()
         blocking = [
@@ -584,7 +584,7 @@ def _collect_authority_chain_status() -> Dict[str, Any]:
 
     # Fallback: check architecture diagnostics
     try:
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         # Minimal probe — pass an empty snapshot to check if the module loads
         report = run_architecture_diagnostics({})
@@ -624,7 +624,7 @@ def _collect_capability_catalog_status() -> Dict[str, Any]:
 
     # Scorecard-based fallback
     try:
-        from core.architecture_completion import (
+        from tools.architecture.architecture_completion import (
             get_architecture_completion_scorecard,
             CompletionDimension,
         )
@@ -647,7 +647,7 @@ def _collect_capability_catalog_status() -> Dict[str, Any]:
 def _collect_addon_ecosystem_status() -> Dict[str, Any]:
     """Return addon (MCP/Skill installability) ecosystem status."""
     try:
-        from core.architecture_completion import (
+        from tools.architecture.architecture_completion import (
             get_architecture_completion_scorecard,
             CompletionDimension,
         )
@@ -921,3 +921,6 @@ def reset_architecture_live_status() -> None:
     """
     global _CACHED_LIVE_STATUS
     _CACHED_LIVE_STATUS = None
+
+
+

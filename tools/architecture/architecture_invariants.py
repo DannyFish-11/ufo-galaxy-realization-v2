@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-core.architecture_invariants — Shared Architectural Constants and Cross-Cutting Invariants
+tools.architecture.architecture_invariants — Shared Architectural Constants and Cross-Cutting Invariants
 ===========================================================================================
 
 PR-10 (Consolidation) — Unify architecture invariants after PR-001 through PR-009.
@@ -25,8 +25,8 @@ module:
 2. Exposes lightweight, **pure-function** cross-cutting invariant checks that
    operate on plain dicts returned by the existing module APIs.  These
    functions complement (but do not replace) the per-module checks already
-   present in :mod:`core.architecture_diagnostics` and
-   :mod:`core.architecture_truth_guards`.
+   present in :mod:`tools.architecture.architecture_diagnostics` and
+   :mod:`tools.architecture.architecture_truth_guards`.
 
 3. Provides :func:`run_consolidation_invariants` as a single entry point that
    aggregates all cross-cutting checks into one :class:`ConsolidationReport`.
@@ -91,7 +91,7 @@ Main API
 
 Usage::
 
-    from core.architecture_invariants import (
+    from tools.architecture.architecture_invariants import (
         CANONICAL_AUTHORITY_LABELS,
         LEGACY_BOUNDARY_LABELS,
         AUTHORITY_CHAIN,
@@ -685,3 +685,6 @@ def run_consolidation_invariants(
         )
 
     return report
+
+
+

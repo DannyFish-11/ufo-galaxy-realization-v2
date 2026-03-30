@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-core.architecture_truth_guards — Architecture Guards for Canonical Truth Ownership
+tools.architecture.architecture_truth_guards — Architecture Guards for Canonical Truth Ownership
 ===================================================================================
 
 PR-28 — Add architecture guards for canonical truth ownership and boundary invariants.
@@ -77,7 +77,7 @@ caught automatically rather than during human code review.
 
 Usage in tests::
 
-    from core.architecture_truth_guards import run_all_architecture_guards
+    from tools.architecture.architecture_truth_guards import run_all_architecture_guards
 
     snapshot = {
         "runtime_shell": {
@@ -1188,3 +1188,4 @@ def build_architecture_snapshot_from_response(
                 snapshot[meta_layer] = dict(meta)
 
     return snapshot
+

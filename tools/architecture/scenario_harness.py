@@ -1,4 +1,4 @@
-"""core/scenario_harness.py — Scenario Stress Harness and Control-Loop Simulation
+"""tools/architecture/scenario_harness.py — Scenario Stress Harness and Control-Loop Simulation
 Infrastructure (PR-35)
 
 **Architectural Intent**
@@ -50,7 +50,7 @@ The harness is a *consumer* of canonical artifacts.  It:
 
 Usage::
 
-    from core.scenario_harness import (
+    from tools.architecture.scenario_harness import (
         ScenarioFixture,
         ScenarioSimulator,
         ScenarioAssertions,

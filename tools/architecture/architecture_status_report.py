@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-core.architecture_status_report — Architecture Status Reporting
+tools.architecture.architecture_status_report — Architecture Status Reporting
 ================================================================
 
 PR-14 — Runtime Introspection and Architecture/Execution Status Reporting
@@ -9,7 +9,7 @@ PR-14 — Runtime Introspection and Architecture/Execution Status Reporting
 Provides a structured, developer-oriented summary of the **architecture
 invariants and authority chain** for a given request snapshot.
 
-This module works directly with :mod:`core.architecture_diagnostics`
+This module works directly with :mod:`tools.architecture.architecture_diagnostics`
 (PR-10) and the authority-contract schemas from PR-9 to produce a single
 :class:`ArchitectureStatusReport` that answers:
 
@@ -22,7 +22,7 @@ Design goals
 ------------
 * **Additive and non-breaking** — never alters execution logic.
 * **Developer/test-oriented** — structured, serialisable, easy to assert on.
-* **Builds on existing diagnostics** — wraps :func:`~core.architecture_diagnostics.run_architecture_diagnostics`
+* **Builds on existing diagnostics** — wraps :func:`~tools.architecture.architecture_diagnostics.run_architecture_diagnostics`
   with a friendlier, opinionated summary layer.
 
 Main API
@@ -40,7 +40,7 @@ Main API
 
 Usage::
 
-    from core.architecture_status_report import build_architecture_status_report
+    from tools.architecture.architecture_status_report import build_architecture_status_report
 
     report = build_architecture_status_report(
         runtime_shell_result=runtime_result,
@@ -101,14 +101,14 @@ class ArchitectureStatusReport:
         distinct roles; ``None`` when the check was not applicable.
     diagnostics_findings:
         List of finding dicts from
-        :class:`~core.architecture_diagnostics.DiagnosticsReport`.
+        :class:`~tools.architecture.architecture_diagnostics.DiagnosticsReport`.
     overall_valid:
         Aggregate validity flag: ``True`` only when all applicable checks
         passed with no errors.
     notes:
         Human-readable list of notes / explanations for any issues found.
     raw_diagnostics_report:
-        The full serialised :class:`~core.architecture_diagnostics.DiagnosticsReport`
+        The full serialised :class:`~tools.architecture.architecture_diagnostics.DiagnosticsReport`
         dict, when available.
     """
 
@@ -230,7 +230,7 @@ def _run_diagnostics(
 ) -> Optional[Dict[str, Any]]:
     """Run architecture diagnostics if possible."""
     try:
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
@@ -388,3 +388,5 @@ def architecture_status_from_snapshot(
         substrate_result=sub_result,
         orchestration_meta=orch_meta,
     )
+
+

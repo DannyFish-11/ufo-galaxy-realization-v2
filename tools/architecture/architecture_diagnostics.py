@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-core.architecture_diagnostics — Architecture Diagnostics and Validation
+tools.architecture.architecture_diagnostics — Architecture Diagnostics and Validation
 ========================================================================
 
 PR-10 — Architecture Diagnostics and Validation Layer
@@ -51,7 +51,7 @@ Main API
 
 Usage (in tests)::
 
-    from core.architecture_diagnostics import (
+    from tools.architecture.architecture_diagnostics import (
         run_architecture_diagnostics,
         validate_authority_chain,
         validate_layer_boundaries,
@@ -912,3 +912,4 @@ def build_diagnostics_snapshot_from_layers(
         if layer_id and isinstance(layer_id, str):
             snap[layer_id] = layer_result
     return snap
+

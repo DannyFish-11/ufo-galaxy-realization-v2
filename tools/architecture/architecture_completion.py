@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-core.architecture_completion — Architecture Completion Evaluation Framework
+tools.architecture.architecture_completion — Architecture Completion Evaluation Framework
 ============================================================================
 
 PR-9 — Formalize architecture completion evaluation dimensions and scorecard.
@@ -77,7 +77,7 @@ Ten canonical dimensions are defined:
 
 Usage::
 
-    from core.architecture_completion import (
+    from tools.architecture.architecture_completion import (
         get_architecture_completion_scorecard,
         build_architecture_completion_scorecard,
         MaturityLevel,
@@ -112,8 +112,9 @@ __all__ = [
     # Builders
     "build_dimension_scorecard",
     "build_architecture_completion_scorecard",
-    # Entry point
+    # Entry points
     "get_architecture_completion_scorecard",
+    "reset_architecture_completion_scorecard",
     # Constants
     "ALL_DIMENSIONS",
     "DIMENSION_DESCRIPTIONS",
@@ -558,8 +559,8 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "core.openclawd",
                 "core.agent.kernel",
                 "core.command_router",
-                "core.architecture_diagnostics",
-                "core.architecture_truth_guards",
+                "tools.architecture.architecture_diagnostics",
+                "tools.architecture.architecture_truth_guards",
             ],
             pr_last_updated="PR-9",
         )
@@ -684,7 +685,7 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
             evidence_modules=[
                 "core.ui_surface_authority",
                 "contracts.desktop_status_projection",
-                "core.architecture_truth_guards",
+                "tools.architecture.architecture_truth_guards",
                 "enhancements.clients.windows_client.status_board_v2",
             ],
             pr_last_updated="PR-8",
@@ -766,11 +767,11 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "and completion status in structured JSON."
             ),
             evidence_modules=[
-                "core.architecture_diagnostics",
-                "core.architecture_truth_guards",
-                "core.architecture_completion",
-                "core.architecture_invariants",
-                "core.architecture_status_report",
+                "tools.architecture.architecture_diagnostics",
+                "tools.architecture.architecture_truth_guards",
+                "tools.architecture.architecture_completion",
+                "tools.architecture.architecture_invariants",
+                "tools.architecture.architecture_status_report",
                 "core.decision_timeline",
                 "core.routing_observability",
             ],
@@ -893,3 +894,8 @@ def reset_architecture_completion_scorecard() -> None:
     """
     global _CACHED_SCORECARD
     _CACHED_SCORECARD = None
+
+
+
+
+
