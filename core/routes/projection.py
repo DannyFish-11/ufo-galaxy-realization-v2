@@ -1795,12 +1795,128 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = _assemble_desktop_status_board_payload()
         return JSONResponse(content=payload)
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/projection/runtime-truth  (canonical runtime truth)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/projection/runtime-truth")
+    async def get_runtime_truth() -> JSONResponse:
+        """Return the compiled canonical runtime truth snapshot.
+
+        This is the **single canonical read-only endpoint** for runtime-facing
+        output state.  It compiles truth once from all canonical subsystem
+        sources and returns a stable, unified snapshot.
+
+        Design
+        ------
+        All other status/observability routes that surface overlapping runtime
+        state (``/api/v1/system/status``, ``/api/v1/observability/model-route``,
+        etc.) are **compatibility/management endpoints**.  This endpoint is the
+        canonical projection truth surface.  Desktop consumers, dashboard
+        adapters, and any output-facing layer should prefer this endpoint over
+        independently sourcing subsystem state.
+
+        Sources compiled into the snapshot
+        ------------------------------------
+        - **continuum** — tri-state lifecycle phase + posture from the
+          cognitive field engine or a silent fallback.
+        - **topology** — canonical routing from ``TopologyRouter`` (model ID,
+          provider ID, weights, reason).
+        - **oneapi** — OneAPI aggregator lower-horizon integration status.
+          ``system_layer`` is always ``"aggregator_integration"``; OneAPI is
+          never promoted to a top-layer peer.
+        - **system_resource** — lightweight system resource health summary.
+        - **device_presence** — registered/online device counts.
+
+        Authority confirmation
+        ----------------------
+        The response always contains::
+
+            "compiler_authority": "core.projection.runtime_truth_compiler.compile_runtime_truth"
+
+        Consumers can assert this value to confirm canonical provenance.  See
+        :data:`~core.projection.RUNTIME_TRUTH_COMPILER_AUTHORITY`.
+
+        Response schema (top-level keys)
+        ---------------------------------
+        .. code-block:: json
+
+            {
+              "compiled_at": 1234567890.0,
+              "compiler_authority": "core.projection.runtime_truth_compiler.compile_runtime_truth",
+              "continuum": {
+                "tri_state_phase": "silent",
+                "runtime_domain": "local",
+                "coherence": 0.9,
+                ...
+              },
+              "topology": {
+                "primary_model": "gpt-4o",
+                "primary_provider": "openai",
+                "routing_authority_source": "topology_router",
+                "routing_authority": "core.model_topology.topology_router.TopologyRouter.route",
+                ...
+              },
+              "oneapi": {
+                "system_layer": "aggregator_integration",
+                "configured": false,
+                ...
+              },
+              "system_resource": { ... },
+              "device_presence": {"registered": 0, "online": 0},
+              "has_canonical_topology": true,
+              "tri_state_phase": "silent",
+              "primary_model_id": "gpt-4o",
+              "primary_provider_id": "openai",
+              "oneapi_is_lower_horizon_only": true
+            }
+
+        See ``docs/PROJECTION_OUTPUT_AUTHORITY.md`` for the full output
+        authority model and endpoint directory.
+        """
+        return JSONResponse(content=_assemble_runtime_truth_payload())
+
     return router
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _assemble_runtime_truth_payload() -> Dict[str, Any]:
+    """Assemble the canonical runtime truth snapshot dict.
+
+    Delegates exclusively to
+    :func:`~core.projection.runtime_truth_compiler.compile_runtime_truth`
+    — the single canonical compilation function.  This helper is the only
+    place inside ``core/routes/projection.py`` that calls that function; all
+    other route handlers that need runtime truth should call this helper or
+    import :func:`~core.projection.compile_runtime_truth` directly.
+    """
+    try:
+        from core.projection.runtime_truth_compiler import compile_runtime_truth
+
+        snapshot = compile_runtime_truth()
+        return snapshot.to_dict()
+    except Exception as exc:
+        logger.warning("_assemble_runtime_truth_payload: failed: %s", exc)
+        from core.projection.runtime_truth_compiler import RUNTIME_TRUTH_COMPILER_AUTHORITY
+        return {
+            "compiled_at": time.time(),
+            "compiler_authority": RUNTIME_TRUTH_COMPILER_AUTHORITY,
+            "continuum": None,
+            "topology": None,
+            "oneapi": {"system_layer": "aggregator_integration", "configured": False},
+            "system_resource": None,
+            "device_presence": {"registered": 0, "online": 0},
+            "has_canonical_topology": False,
+            "tri_state_phase": None,
+            "primary_model_id": None,
+            "primary_provider_id": None,
+            "oneapi_is_lower_horizon_only": True,
+            "_fallback": True,
+        }
+
 
 def _assemble_projection() -> Dict[str, Any]:
     """Assemble a projection dict from live runtime state.

@@ -80,8 +80,27 @@ PR-9 adds the desktop client consumption adapter::
     print(vm.integration_health) # "ok" / "degraded" / ...
 
 See ``docs/DESKTOP_CONSUMPTION_ADAPTER.md`` for the post-PR-9 consumption guide.
+
+Runtime truth compiler — single compilation authority::
+
+    from core.projection import compile_runtime_truth, RUNTIME_TRUTH_COMPILER_AUTHORITY
+
+    snapshot = compile_runtime_truth()
+    # All route handlers and consumers should use this instead of
+    # sourcing directly from subsystem modules.
+    print(snapshot.tri_state_phase)       # e.g. "silent"
+    print(snapshot.primary_model_id)      # e.g. "gpt-4o" or None
+    print(snapshot.compiler_authority)    # == RUNTIME_TRUTH_COMPILER_AUTHORITY
+
+See ``docs/PROJECTION_OUTPUT_AUTHORITY.md`` for the full canonical output
+authority model including the endpoint directory.
 """
 
+from .runtime_truth_compiler import (
+    RUNTIME_TRUTH_COMPILER_AUTHORITY,
+    RuntimeTruthSnapshot,
+    compile_runtime_truth,
+)
 from .assembly_governance import (
     ProjectionExecutionSummary,
     ProjectionExecutionTraceSummary,
@@ -121,6 +140,10 @@ __all__ = [
     "RuntimeProjection",
     "ExecutionSummary",
     "build_runtime_projection",
+    # Runtime truth compiler — canonical output authority
+    "RUNTIME_TRUTH_COMPILER_AUTHORITY",
+    "RuntimeTruthSnapshot",
+    "compile_runtime_truth",
     # PR-5: server-side canonicalization sentinels
     "LEGACY_PROJECTION_UCP_KEYS",
     "PROJECTION_COMPILER_AUTHORITY",

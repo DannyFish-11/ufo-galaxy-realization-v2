@@ -2,14 +2,35 @@
 Galaxy - System & Config Routes
 =====================================
 
-Routes:
-  GET  /api/v1/system/status       - 系统完整状态（含子系统详情）
+**Output authority notice**
+----------------------------
+The endpoints in this module are **operational / management endpoints**.  They
+expose service lifecycle, node registration, task queue state, and
+configuration — information that is useful for operators but is NOT the
+canonical projection truth for desktop consumers or status boards.
+
+Canonical runtime truth (topology, routing, OneAPI, continuum posture) is
+assembled in one place and exposed through a dedicated projection endpoint:
+
+    GET /api/v1/projection/runtime-truth
+        ← core.projection.runtime_truth_compiler.compile_runtime_truth()
+        ← RUNTIME_TRUTH_COMPILER_AUTHORITY sentinel
+
+Desktop status board consumers should prefer:
+    GET /api/v1/projection/desktop-status-board   (PR-8 integrated payload)
+    GET /api/v1/projection/runtime-truth          (canonical truth snapshot)
+
+Routes in this module:
+  GET  /api/v1/system/status       - 服务运行状态（管理用途）
   GET  /api/v1/system/health       - 健康检查
   GET  /api/v1/system/config       - 系统配置(脱敏)
   GET  /api/v1/agents/status       - 所有活跃 Agent 状态
   GET  /api/v1/nodes/status        - 所有节点注册状态
   GET  /api/config                 - 前端配置
   POST /api/config/update          - 更新 API Key 配置
+
+See ``docs/PROJECTION_OUTPUT_AUTHORITY.md`` for the full canonical output
+authority model and endpoint directory.
 """
 
 import logging
