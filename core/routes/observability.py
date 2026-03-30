@@ -2,8 +2,32 @@
 Galaxy - Observability Routes (PR-C / Phase E / PR-7)
 ======================================================
 
+**Output authority notice**
+----------------------------
+The endpoints in this module are **operational observability endpoints**.
+They surface live diagnostic information about routing, gateway, NATS bus,
+and trace state for dashboard/debugging consumers.
+
+For canonical projection truth (topology, routing, OneAPI, continuum posture),
+use the dedicated projection endpoints instead:
+
+    GET /api/v1/projection/runtime-truth
+        ← core.projection.runtime_truth_compiler.compile_runtime_truth()
+        ← RUNTIME_TRUTH_COMPILER_AUTHORITY sentinel (canonical)
+
+    GET /api/v1/projection/desktop-status-board
+        ← canonical integrated desktop status board payload (PR-8)
+
+The ``/api/v1/observability/model-route`` endpoint in this module exposes
+live routing diagnostics sourced directly from ``MultiLLMRouter`` (legacy/
+compatibility diagnostic surface).  For canonical routing truth, prefer
+the ``topology`` block in ``GET /api/v1/projection/runtime-truth``.
+
+See ``docs/PROJECTION_OUTPUT_AUTHORITY.md`` for the full canonical output
+authority model and endpoint directory.
+
 Dashboard 可观测性端点，提供：
-  - 活跃模型路由及 Fallback 状态
+  - 活跃模型路由及 Fallback 状态 (兼容性/诊断用途)
   - 网关 / 设备在线状态
   - 近期工具 / 设备调用记录
   - 按 task_id 或 command_id 查询 trace
@@ -11,7 +35,7 @@ Dashboard 可观测性端点，提供：
   - 统一执行观测模式 schema (PR-7, read-only, additive)
 
 Routes:
-  GET /api/v1/observability/model-route              - 活跃 LLM 路由 + Fallback 列表
+  GET /api/v1/observability/model-route              - 活跃 LLM 路由 + Fallback（兼容诊断）
   GET /api/v1/observability/gateway                  - 网关 & 设备在线状态汇总
   GET /api/v1/observability/recent-calls             - 近期工具 / 设备调用（最多 50 条）
   GET /api/v1/observability/trace/{id}               - 按 task_id 或 command_id 查 trace
@@ -46,7 +70,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     @router.get("/api/v1/observability/model-route")
     async def model_route_status():
         """
-        活跃模型路由及 Fallback 状态。
+        活跃模型路由及 Fallback 状态（兼容性诊断端点）。
+
+        **Compatibility notice**: This endpoint sources routing data directly
+        from ``MultiLLMRouter`` for diagnostic/legacy dashboard consumers.
+        For canonical routing truth assembled through the single projection
+        path, prefer ``GET /api/v1/projection/runtime-truth`` (topology block)
+        or ``GET /api/v1/projection/desktop-status-board`` (integrated payload).
 
         返回当前 MultiLLMRouter 的默认模型、所有提供商状态（含 fallback 列表）
         以及最近一次路由决策。
