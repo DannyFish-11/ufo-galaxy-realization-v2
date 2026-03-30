@@ -7,6 +7,18 @@
 # See docs/DEPLOYMENT_SURFACES.md for the full surface catalogue.
 # ============================================================
 #
+# SECURITY — Infrastructure Secrets
+# All infrastructure passwords and secrets are sourced from environment
+# variables. Before starting, copy .env.example to .env and set every
+# variable marked "REQUIRED FOR PRODUCTION" to a strong, unique value.
+#
+#   cp .env.example .env
+#   # edit .env — fill in all credential variables
+#   docker compose -f docker-compose.full.yml --env-file .env up -d
+#
+# NEVER commit a populated .env file or embed real passwords in this file.
+# ============================================================
+#
 # Profiles:
 #   (none / default)  – Infrastructure only
 #   core              – Infrastructure + critical nodes
@@ -69,7 +81,7 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      - NEO4J_AUTH=neo4j/galaxy_neo4j_password
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set — see .env.example}
       - NEO4J_PLUGINS=["apoc","graph-data-science"]
       - NEO4J_apoc_export_file_enabled=true
       - NEO4J_apoc_import_file_enabled=true
@@ -91,8 +103,8 @@ services:
     ports:
       - "27017:27017"
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
-      - MONGO_INITDB_ROOT_PASSWORD=mongoadmin123
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME:-mongoadmin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD must be set — see .env.example}
     volumes:
       - mongodb-data:/data/db
     networks:
@@ -126,8 +138,8 @@ services:
     image: postgres:15-alpine
     container_name: galaxy-temporal-db
     environment:
-      - POSTGRES_USER=temporal
-      - POSTGRES_PASSWORD=temporal_password
+      - POSTGRES_USER=${TEMPORAL_DB_USER:-temporal}
+      - POSTGRES_PASSWORD=${TEMPORAL_DB_PASSWORD:?TEMPORAL_DB_PASSWORD must be set — see .env.example}
       - POSTGRES_DB=temporal
     volumes:
       - temporal-db-data:/var/lib/postgresql/data
@@ -148,8 +160,8 @@ services:
     environment:
       - DB=postgresql
       - DB_PORT=5432
-      - POSTGRES_USER=temporal
-      - POSTGRES_PWD=temporal_password
+      - POSTGRES_USER=${TEMPORAL_DB_USER:-temporal}
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD:?TEMPORAL_DB_PASSWORD must be set — see .env.example}
       - POSTGRES_SEEDS=temporal-db
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
     depends_on:
@@ -199,7 +211,7 @@ services:
       - "3001:3000"
     environment:
       - SQL_DSN=
-      - SESSION_SECRET=galaxy_oneapi_secret
+      - SESSION_SECRET=${ONEAPI_SESSION_SECRET:?ONEAPI_SESSION_SECRET must be set — see .env.example}
       - REDIS_CONN_STRING=redis://redis:6379
     depends_on:
       redis:
@@ -219,8 +231,8 @@ services:
       - "9002:9000"
       - "9001:9001"
     environment:
-      - MINIO_ROOT_USER=galaxy_admin
-      - MINIO_ROOT_PASSWORD=galaxy_admin_secret
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-galaxy_admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set — see .env.example}
     volumes:
       - minio-data:/data
     networks:
