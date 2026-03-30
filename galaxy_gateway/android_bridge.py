@@ -302,8 +302,6 @@ class AndroidBridge:
             )
             return {"fanout": 0, "failed": len(device_ids), "device_ids": [], "errors": [str(ucm_err)]}
 
-        target_device_ids = device_ids
-
         for idx, did in enumerate(device_ids):
             try:
                 task_assign_payload: Dict[str, Any] = {
@@ -318,7 +316,7 @@ class AndroidBridge:
                     "success": True,
                     "group_id": group_id,
                     "subtask_index": idx,
-                    "device_ids": target_device_ids,
+                    "device_ids": device_ids,
                 }
 
                 msg = MessageBuilder.task_assign(
@@ -363,9 +361,9 @@ class AndroidBridge:
 
         def _wrap(fn):
             """Wrap a standalone handler function as a bound-style coroutine."""
-            async def _bound(websocket, message):
+            async def _wrapped_handler(websocket, message):
                 return await fn(self, websocket, message)
-            return _bound
+            return _wrapped_handler
 
         self._message_handlers[MessageType.DEVICE_REGISTER] = _wrap(handle_device_register)
         self._message_handlers[MessageType.DEVICE_HEARTBEAT] = _wrap(handle_heartbeat)
