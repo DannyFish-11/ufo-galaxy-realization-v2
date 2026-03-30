@@ -1,5 +1,5 @@
 """
-tests/test_pr3_unified_local_config.py — PR-3 Unified Local Config Authority
+tests/unit/config/test_unified_local_config.py — PR-3 Unified Local Config Authority
 =============================================================================
 
 Tests for the unified local configuration authority introduced in PR-3:

@@ -1,5 +1,5 @@
 """
-tests/test_pr3_android_bridge_modularization.py
+tests/integration/android_bridge/test_android_bridge_modularization.py
 ================================================
 Tests for PR-3: Android Bridge modularization.
 

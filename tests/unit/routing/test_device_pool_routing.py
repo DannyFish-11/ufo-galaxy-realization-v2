@@ -1,5 +1,5 @@
 """
-tests/test_pr3_device_pool_routing.py
+tests/unit/routing/test_device_pool_routing.py
 ======================================
 
 PR-3 — Enforce DevicePoolManager as the single device scheduling entry point.
@@ -245,7 +245,7 @@ class TestNode71StrategyProviderGuard:
         import os
         path = os.path.join(
             os.path.dirname(__file__),
-            "..",
+            "../../..",
             "nodes",
             "Node_71_MultiDeviceCoordination",
             "core",

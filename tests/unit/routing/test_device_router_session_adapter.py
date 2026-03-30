@@ -1,4 +1,4 @@
-"""tests/test_pr3_device_router_session_adapter.py
+"""tests/unit/routing/test_device_router_session_adapter.py
 =====================================================
 Tests for PR-3: DeviceRouter formalised as runtime session adapter over
 canonical device state.

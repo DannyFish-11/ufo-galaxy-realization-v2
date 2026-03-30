@@ -1,5 +1,5 @@
 """
-tests/test_pr3_openclawd_subject_core.py
+tests/unit/runtime/test_openclawd_subject_core.py
 =========================================
 
 PR-3: Refine OpenClawd as the Subject Decision Core.

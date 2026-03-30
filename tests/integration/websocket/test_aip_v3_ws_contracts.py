@@ -1,5 +1,5 @@
 """
-tests/test_aip_v3_ws_contracts.py
+tests/integration/websocket/test_aip_v3_ws_contracts.py
 Snapshot / contract tests for AIP v3 message flows on Android WS entrypoints.
 
 PR-G1 "协议契约与回归守护"
