@@ -1,10 +1,31 @@
 """
 core/unified/config_manager.py
 ================================
-Galaxy 系统统一配置管理器（单例）。
+Galaxy 系统统一配置管理器（单例）—  [COMPATIBILITY FACADE]
 
-委托 core.unified_config.UnifiedConfig 处理实际的配置读写，
-提供强类型接口和结构化日志。
+This module is a **compatibility facade**.  It is NOT a configuration authority.
+
+Delegation chain
+----------------
+    UnifiedConfigManager
+        └── _load_backend() → UnifiedConfig (core.unified_config)
+                └── _load_config()            → config.json (static app config)
+                └── _load_from_config_store() → runtime/config.json (canonical, via ConfigStore)
+                                              → runtime/secrets.env  (canonical, via ConfigStore)
+                └── _load_env()               → .env (legacy), then os.environ (highest priority)
+
+Config source precedence (high → low)
+--------------------------------------
+1. os.environ                       — CLI / Docker / CI overrides
+2. runtime/secrets.env              — written by ConfigService (canonical secrets)
+3. runtime/config.json              — written by ConfigService (canonical non-secret config)
+4. .env                             — legacy user-managed secrets file
+5. config.json (root)               — static application defaults
+
+The canonical config stack is:
+    core.config_schema → core.config_store → core.config_service → core.config_preflight
+
+See docs/CONFIGURATION_AUTHORITY.md for the full authority model.
 """
 
 from __future__ import annotations
@@ -18,10 +39,19 @@ from .exceptions import ConfigError, ConfigKeyNotFoundError
 
 logger = logging.getLogger("Galaxy.Unified.ConfigManager")
 
+# ---------------------------------------------------------------------------
+# Authority sentinel — this module is a COMPATIBILITY FACADE, not an authority
+# ---------------------------------------------------------------------------
+UNIFIED_CONFIG_MANAGER_AUTHORITY: str = "UnifiedConfigManager.CompatibilityFacade"
+
 
 class UnifiedConfigManager:
     """
-    统一配置管理器（进程级单例）。
+    统一配置管理器（进程级单例）— [COMPATIBILITY FACADE].
+
+    Delegates all reads/writes to UnifiedConfig (core.unified_config), which
+    now merges config from the canonical ConfigStore (runtime/config.json +
+    runtime/secrets.env) on top of the legacy config.json and .env sources.
 
     公开 API：
         get(key, default) -> Any

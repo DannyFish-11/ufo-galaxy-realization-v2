@@ -3,6 +3,20 @@
 Galaxy 系统管理器 v2.0 (修复版)
 =================================
 
+[NODE ORCHESTRATION HELPER — not a configuration authority]
+
+This script is a node lifecycle manager.  It reads node metadata from
+``config/unified_config.json`` but defers port resolution to the canonical
+port authority: ``config/unified_ports.yaml`` via ``core.port_config``.
+
+Port precedence applied by ConfigManager
+-----------------------------------------
+1. config/unified_ports.yaml (via core.port_config)  — canonical source
+2. config/unified_config.json                         — fallback if port_config unavailable
+3. Hardcoded defaults in _get_default_nodes()         — last resort
+
+For the full configuration authority model see docs/CONFIGURATION_AUTHORITY.md.
+
 修复内容:
 - 使用 unified_config.json 统一配置
 - 完整支持所有102个节点
@@ -26,11 +40,12 @@ import os
 import sys
 import time
 import json
+import logging
 import signal
 import subprocess
 import asyncio
 import httpx
-from typing import Dict, List, Set, Optional
+from typing import Any, Dict, List, Set, Optional
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict
@@ -44,8 +59,11 @@ BLUE = "\033[94m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
 
+logger = logging.getLogger("Galaxy.SystemManager")
+
 # =============================================================================
 # Configuration - 从 unified_config.json 加载
+# Port resolution defers to config/unified_ports.yaml via core.port_config
 # =============================================================================
 
 @dataclass
@@ -66,23 +84,55 @@ class NodeConfig:
             self.dependencies = []
 
 class ConfigManager:
-    """配置管理器"""
-    
+    """节点编排配置管理器 [NODE ORCHESTRATION HELPER — not a config authority]
+
+    Reads node metadata from ``config/unified_config.json``.
+    Port resolution defers to ``core.port_config`` (canonical source:
+    ``config/unified_ports.yaml``) with the JSON file as fallback.
+    """
+
     CONFIG_FILE = Path(__file__).parent / "config" / "unified_config.json"
-    
+
+    # Lazy-loaded canonical port resolver; False = unavailable (not just uninitialised)
+    _port_config: Any = None  # PortConfig instance | False
+
+    @classmethod
+    def _get_canonical_port(cls, node_key: str, json_port: int) -> int:
+        """Resolve port via core.port_config (canonical); fall back to json_port."""
+        if cls._port_config is None:
+            try:
+                from core.port_config import PortConfig  # noqa: PLC0415
+                cls._port_config = PortConfig.instance()
+            except Exception as exc:
+                logger.debug("core.port_config unavailable, using JSON ports: %s", exc)
+                cls._port_config = False  # mark as unavailable
+
+        if cls._port_config is not False:
+            try:
+                canon = cls._port_config.get_node_port(node_key)
+                if canon and canon != json_port:
+                    logger.debug(
+                        "Port for %s: using canonical %d (config had %d)",
+                        node_key, canon, json_port,
+                    )
+                return canon or json_port
+            except Exception as exc:
+                logger.debug("port_config lookup failed for %s: %s", node_key, exc)
+        return json_port
+
     @classmethod
     def load_nodes(cls) -> Dict[str, List[NodeConfig]]:
-        """从配置文件加载节点"""
+        """从配置文件加载节点（端口优先从 core.port_config 解析）"""
         if not cls.CONFIG_FILE.exists():
             print(f"{YELLOW}⚠️  Config file not found, using defaults{RESET}")
             return cls._get_default_nodes()
-        
+
         try:
             with open(cls.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            
+
             nodes_by_group = {}
-            
+
             for node_key, node_info in config.get("nodes", {}).items():
                 # 解析节点ID
                 parts = node_key.split('_')
@@ -91,45 +141,51 @@ class ConfigManager:
                     node_name = parts[-1]
                 else:
                     continue
-                
+
                 group = node_info.get("group", "core")
-                
+
                 if group not in nodes_by_group:
                     nodes_by_group[group] = []
-                
+
+                json_port = node_info.get("port", 8000 + int(node_id) if node_id.isdigit() else 8000)
+                canon_port = cls._get_canonical_port(node_key, json_port)
+
                 nodes_by_group[group].append(NodeConfig(
                     id=node_id,
                     name=node_name,
-                    port=node_info["port"],
+                    port=canon_port,
                     group=group,
                     auto_start=node_info.get("critical", False),
                     dependencies=node_info.get("dependencies", []),
                     critical=node_info.get("critical", False),
                     description=node_info.get("description", "")
                 ))
-            
+
             return nodes_by_group
-            
+
         except Exception as e:
             print(f"{RED}❌ Error loading config: {e}{RESET}")
             return cls._get_default_nodes()
     
     @classmethod
     def _get_default_nodes(cls) -> Dict[str, List[NodeConfig]]:
-        """默认节点配置"""
+        """默认节点配置（端口从 core.port_config 解析，回退到硬编码值）"""
+        def _p(key: str, fallback: int) -> int:
+            return cls._get_canonical_port(key, fallback)
+
         return {
             "core": [
-                NodeConfig("00", "StateMachine", 8000, "core", True, critical=True),
-                NodeConfig("01", "OneAPI", 8001, "core", True, critical=True),
-                NodeConfig("02", "Tasker", 8002, "core", True, critical=True),
-                NodeConfig("03", "SecretVault", 8003, "core", True, critical=True),
-                NodeConfig("04", "Router", 8004, "core", True, critical=True),
-                NodeConfig("05", "Auth", 8005, "core", True, critical=True),
-                NodeConfig("06", "Filesystem", 8006, "core", True, critical=True),
+                NodeConfig("00", "StateMachine", _p("Node_00_StateMachine", 8000), "core", True, critical=True),
+                NodeConfig("01", "OneAPI", _p("Node_01_OneAPI", 7995), "core", True, critical=True),
+                NodeConfig("02", "Tasker", _p("Node_02_Tasker", 8002), "core", True, critical=True),
+                NodeConfig("03", "SecretVault", _p("Node_03_SecretVault", 8003), "core", True, critical=True),
+                NodeConfig("04", "Router", _p("Node_04_Router", 8004), "core", True, critical=True),
+                NodeConfig("05", "Auth", _p("Node_05_Auth", 8005), "core", True, critical=True),
+                NodeConfig("06", "Filesystem", _p("Node_06_Filesystem", 8006), "core", True, critical=True),
             ],
             "monitoring": [
-                NodeConfig("65", "LoggerCentral", 8065, "monitoring", True, critical=True),
-                NodeConfig("67", "HealthMonitor", 8067, "monitoring", True, critical=True),
+                NodeConfig("65", "LoggerCentral", _p("Node_65_LoggerCentral", 8065), "monitoring", True, critical=True),
+                NodeConfig("67", "HealthMonitor", _p("Node_67_HealthMonitor", 8067), "monitoring", True, critical=True),
             ]
         }
 

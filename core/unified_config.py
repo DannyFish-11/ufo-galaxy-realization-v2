@@ -1,38 +1,42 @@
 """
-Galaxy - 统一配置管理器  [LEGACY — delegates to UnifiedConfigManager]
-======================================================================
+Galaxy - 统一配置管理器  [COMPATIBILITY FACADE — not a config authority]
+========================================================================
 
-确保 WebUI 配置和主 UI 配置的一致性
+This module is a **compatibility facade**.  It is NOT a configuration
+authority.  All authoritative reads flow through the canonical config stack:
 
-3-layer config convergence status (2026-03-14):
-  This module handles API keys, LLM config, and general app settings.
-  It does NOT manage port assignments (use core.port_config for that).
+    core.config_schema   → key classification + defaults
+    core.config_store    → low-level I/O (runtime/config.json, runtime/secrets.env)
+    core.config_service  → high-level provider/routing API
+    core.config_preflight→ pre-flight validation
+    core.config_hot_reload → live reload
 
-  - System-level ports : config/unified_ports.yaml -> core.port_config
-  - App/LLM config     : this module (delegates to core.unified.config_manager)
-  - Secrets/API keys   : .env -> this module
+Config source precedence (high → low)
+--------------------------------------
+1. Process environment variables (os.environ)  — CLI / Docker / CI overrides
+2. runtime/secrets.env (canonical secrets)      — written by ConfigService
+3. runtime/config.json (canonical non-secret)   — written by ConfigService
+4. .env (legacy secrets file)                   — user-managed legacy file
+5. config.json (root, static app config)        — static defaults
 
-  The global ``config`` singleton at module bottom prefers
-  core.unified.config_manager.UnifiedConfigManager when available,
-  falling back to the local UnifiedConfig class.
+Port assignments
+----------------
+All ports come from ``config/unified_ports.yaml`` via ``core.port_config``.
+This module does NOT manage ports.
 
-功能：
-1. 统一的配置存储
-2. 配置热更新
-3. 配置验证
-4. 配置持久化
+Startup authority
+-----------------
+``unified_launcher.py`` is the canonical startup orchestration entrypoint.
+``main.py`` is the process entrypoint that bootstraps and delegates to it.
+Shell scripts (``start.sh``, ``start_unified.sh``, ``start.bat``) and
+``deploy.sh`` are bootstrap wrappers that ultimately invoke ``unified_launcher.py``.
 
-使用方法：
-    from core.unified_config import config
-
-    # 获取配置
-    api_key = config.get("openai_api_key")
-
-    # 设置配置
-    config.set("openai_api_key", "sk-xxx")
-
-    # 保存配置
-    config.save()
+Exported names for backward compatibility
+-----------------------------------------
+    config                — module-level singleton (UnifiedConfigManager instance)
+    get_config()          — returns the config singleton
+    UnifiedConfig         — legacy class (reads from canonical + static sources)
+    UnifiedConfigManager  — re-exported from core.unified.config_manager
 """
 
 import os
@@ -86,9 +90,10 @@ class UnifiedConfig:
         self.config_file = self.project_root / "config.json"
         self.env_file = self.project_root / ".env"
         
-        # 加载配置
-        self._load_config()
-        self._load_env()
+        # Load configuration (precedence: lowest first, each step overrides previous)
+        self._load_config()            # Step 1: config.json (root) — static app config (lowest)
+        self._load_from_config_store() # Step 2: runtime/config.json + runtime/secrets.env (canonical)
+        self._load_env()               # Step 3: .env (legacy), then system env vars (highest)
         
         # 回调列表
         self._callbacks: Dict[str, list] = {}
@@ -119,6 +124,43 @@ class UnifiedConfig:
                 logger.info(f"加载配置文件: {self.config_file}")
             except Exception as e:
                 logger.error(f"加载配置文件失败: {e}")
+
+    def _load_from_config_store(self) -> None:
+        """[CANONICAL AUTHORITY] Load runtime/config.json and runtime/secrets.env via ConfigStore.
+
+        These canonical files (written by ConfigService) take precedence over
+        the static config.json loaded by _load_config().  Errors are logged at
+        debug level so that the legacy config path remains a valid fallback when
+        runtime/ files do not yet exist (e.g. first-run before setup wizard).
+        """
+        try:
+            from core.config_store import get_config_store  # noqa: PLC0415
+            store = get_config_store()
+
+            # Non-secret runtime config (providers.*, routing.*) — higher than config.json
+            try:
+                runtime_cfg = store.read_config()
+                flat_runtime = self._flatten_dict(runtime_cfg)
+                for k, v in flat_runtime.items():
+                    if not self._is_placeholder(v):
+                        self._config[k] = v
+            except Exception as exc:
+                logger.debug("Could not load runtime/config.json via ConfigStore: %s", exc)
+
+            # Canonical secrets — higher than .env, lower than os.environ
+            try:
+                runtime_secrets = store.read_secrets()
+                for k, v in runtime_secrets.items():
+                    if v and not self._is_placeholder(v):
+                        self._config[k] = v
+                        self._config[k.lower()] = v
+            except Exception as exc:
+                logger.debug("Could not load runtime/secrets.env via ConfigStore: %s", exc)
+
+        except Exception as exc:
+            logger.debug(
+                "ConfigStore not available; using config.json + .env only: %s", exc
+            )
     
     def _load_env(self):
         """加载 .env 文件"""
@@ -345,6 +387,7 @@ class UnifiedConfig:
         """重新加载配置"""
         self._config.clear()
         self._load_config()
+        self._load_from_config_store()
         self._load_env()
         logger.info("配置已重新加载")
 
@@ -376,3 +419,28 @@ def _create_config_singleton() -> "Union[Any, UnifiedConfig]":
 
 
 config: Any = _create_config_singleton()
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatibility exports
+# ---------------------------------------------------------------------------
+
+def get_config() -> Any:
+    """Return the process-level config singleton (UnifiedConfigManager or UnifiedConfig).
+
+    Exported for backward compatibility with callers that use::
+
+        from core.unified_config import get_config
+        cfg = get_config()
+        api_key = cfg.get("openai_api_key")
+    """
+    return config
+
+
+# Re-export UnifiedConfigManager so callers can do:
+#   from core.unified_config import UnifiedConfigManager
+try:
+    from core.unified.config_manager import UnifiedConfigManager  # noqa: F401
+except Exception:
+    # Graceful degradation: UnifiedConfigManager unavailable (e.g. partial install)
+    pass
