@@ -4,10 +4,34 @@
 能力管理器 (Capability Manager)
 ================================
 
-OpenClaw 风格的能力注册、发现和调用系统
-与现有 node_registry 集成，提供统一的能力索引
+.. deprecated::
+    **This module is a legacy compatibility facade.**
 
-功能：
+    The canonical capability authority is ``core.capability_bus.CapabilityBus``
+    (accessed via :func:`core.capability_bus.get_capability_bus`).
+
+    New code that needs to register or discover capabilities **must** use
+    the canonical path::
+
+        from core.capability_bus import get_capability_bus, CapabilityBusEntry, CapabilityBusRole
+
+        bus = get_capability_bus()
+        bus.register_device_capability(device_id, action, description)
+
+    For capability consumption (e.g. OpenClawd tool collection), use the
+    resolver::
+
+        from core.unified.capability_resolver import get_capability_resolver
+        contracts = get_capability_resolver().resolve_all()
+
+    ``CapabilityManager`` is retained as a compatibility layer for code
+    that has not yet migrated to the canonical bus.  It is **not** a peer
+    authority — entries registered here are NOT visible through
+    ``CapabilityBus`` unless explicitly bridged.
+
+OpenClaw 风格的能力注册、发现和调用系统（兼容层）。
+
+功能（兼容层保留）：
 1. 能力注册和注销
 2. 能力发现和查询
 3. 能力状态跟踪（在线/离线）

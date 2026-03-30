@@ -4,15 +4,31 @@
 Galaxy — Unified Device Pool Manager
 ======================================
 
-Single scheduling / health / weight entry point for all device operations.
+**Architecture role: Scheduling / health / weight layer over UDM SSOT.**
+
+``DevicePoolManager`` is a *scheduling and health-tracking layer* that sits
+on top of the canonical device authority chain.  It is **not** a parallel
+device truth source.
+
+Canonical authority chain::
+
+    UnifiedDeviceManager (UDM) — canonical SSOT for device state
+    ↑
+    DevicePoolManager           — scheduling, health scoring, capacity tracking
+                                  (delegates canonical writes to UDM first)
+
+All ``register_device`` and ``unregister_device`` calls write to UDM **first**
+before updating the local pool records.  The pool records carry
+scheduling-specific metadata (weight, capacity, active connections,
+circuit-breaker state) that UDM does not track, and are therefore maintained
+locally as a scheduling projection.
 
 Design principles
 -----------------
-* **Single source of truth** – all device registration, health tracking,
-  capacity management and scheduling decisions go through this class.
-* **Delegating architecture** – internally delegates health tracking to
-  :class:`core.control_plane.device_health_registry.DeviceHealthRegistry`
-  so the existing circuit-breaker / quarantine logic is reused unchanged.
+* **Delegating writes** – canonical device state (registration / online /
+  offline) is written to UDM before the pool record is updated.
+* **Scheduling layer** – health tracking, circuit-breaking, and scheduling
+  decisions are pool-local concerns that do not need to be in UDM.
 * **Strategy pattern** – supports three built-in scheduling strategies:
   ``round_robin``, ``least_conn``, and ``adaptive`` (score-weighted).
 * **Backward compatible** – ``DeviceOrchestrator`` and other callers keep
@@ -197,8 +213,22 @@ class DevicePoolManager:
     ) -> PoolDevice:
         """Register a new device or update an existing one.
 
+        **UDM write-through**: The canonical device state is written to
+        ``UnifiedDeviceManager`` (SSOT) **before** the local pool record is
+        updated.  If the UDM write fails, a warning is logged but the local
+        pool record is still updated so that scheduling can continue
+        (best-effort degraded mode).
+
         Returns the :class:`PoolDevice` record after upsert.
         """
+        # --- Canonical write to UDM SSOT first ---
+        self._udm_write_register(
+            device_id=device_id,
+            capabilities=capabilities or [],
+            device_type=device_type,
+            metadata=metadata or {},
+        )
+
         with self._lock:
             if device_id in self._devices:
                 dev = self._devices[device_id]
@@ -227,7 +257,14 @@ class DevicePoolManager:
             return dev
 
     def unregister_device(self, device_id: str) -> bool:
-        """Remove a device from the pool. Returns True if it existed."""
+        """Remove a device from the pool. Returns True if it existed.
+
+        **UDM write-through**: The canonical offline state is written to
+        ``UnifiedDeviceManager`` (SSOT) before removing from the local pool.
+        """
+        # --- Canonical write to UDM SSOT first ---
+        self._udm_write_unregister(device_id)
+
         with self._lock:
             if device_id not in self._devices:
                 return False
@@ -235,6 +272,50 @@ class DevicePoolManager:
             self._rebuild_rr_cycle()
             logger.info("设备已注销: %s", device_id)
             return True
+
+    # ------------------------------------------------------------------
+    # UDM write-through helpers (private)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _udm_write_register(
+        device_id: str,
+        capabilities: List[str],
+        device_type: str,
+        metadata: Dict[str, Any],
+    ) -> None:
+        """Write device registration to UDM SSOT (best-effort, never raises)."""
+        try:
+            from galaxy_gateway.ssot import udm_write_register  # noqa: PLC0415
+            udm_write_register(
+                device_id=device_id,
+                device_name=metadata.get("device_name", device_id),
+                device_type_raw=device_type or "unknown",
+                capabilities=capabilities,
+                metadata=metadata,
+                source="device_pool_manager",
+            )
+        except Exception as exc:
+            logger.warning(
+                "DevicePoolManager: UDM write failed for device %s — "
+                "pool record updated in degraded mode. error=%s",
+                device_id,
+                exc,
+            )
+
+    @staticmethod
+    def _udm_write_unregister(device_id: str) -> None:
+        """Write device unregister to UDM SSOT (best-effort, never raises)."""
+        try:
+            from galaxy_gateway.ssot import udm_write_unregister  # noqa: PLC0415
+            udm_write_unregister(device_id)
+        except Exception as exc:
+            logger.warning(
+                "DevicePoolManager: UDM unregister write failed for device %s — "
+                "pool record removed in degraded mode. error=%s",
+                device_id,
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # Query API

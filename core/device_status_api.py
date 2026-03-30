@@ -3,15 +3,34 @@
 Galaxy - 设备状态统一管理层 API
 ====================================
 
+**Architecture role: Presentation / projection layer (NOT a canonical truth source).**
+
+``DeviceStatusManager`` is a *UI-facing presentation layer* that maintains
+a rich hardware-state view (camera, Bluetooth, GPS, battery, …) for the
+WebSocket push / REST endpoints consumed by the dashboard UI.
+
+Canonical authority chain::
+
+    UnifiedDeviceManager (UDM) — canonical SSOT for device registration / status
+    ↑
+    DeviceStatusManager         — UI presentation layer; writes canonical state
+                                  to UDM first, then updates the local rich view
+
+All ``register_device`` and ``unregister_device`` mutations write to UDM
+**first** via the ``galaxy_gateway.ssot`` helpers before updating the local
+``DeviceState`` cache.  ``DeviceState`` carries presentation-only fields
+(hardware sensors, node counts, …) that UDM does not model, so the local
+cache is kept as a projection supplement.
+
 功能：
-1. 统一管理所有设备的状态信息
+1. 统一管理所有设备的状态信息（UI 展示层）
 2. 提供 RESTful API 供 UI 调用
 3. 支持 WebSocket 实时推送状态更新
 4. 与节点系统和 Device Agent 集成
 
 作者：Manus AI
 日期：2026-02-06
-版本：2.0
+版本：2.0 (authority model clarified)
 """
 
 import asyncio
@@ -151,7 +170,14 @@ class DeviceStatusManager:
         logger.info("DeviceStatusManager initialized")
     
     def register_device(self, device_state: DeviceState) -> bool:
-        """注册设备"""
+        """注册设备。
+
+        Writes canonical state to UDM SSOT first, then updates the local
+        rich ``DeviceState`` cache used for UI presentation.
+        """
+        # --- Canonical write to UDM SSOT ---
+        self._udm_write_register(device_state)
+
         self._devices[device_state.device_id] = device_state
         self._status_history[device_state.device_id] = []
         logger.info(f"Device registered: {device_state.device_id} ({device_state.device_name})")
@@ -160,7 +186,14 @@ class DeviceStatusManager:
         return True
     
     def unregister_device(self, device_id: str) -> bool:
-        """注销设备"""
+        """注销设备。
+
+        Writes canonical offline state to UDM SSOT first, then removes from
+        the local rich cache.
+        """
+        # --- Canonical write to UDM SSOT ---
+        self._udm_write_unregister(device_id)
+
         if device_id in self._devices:
             device = self._devices.pop(device_id)
             self._status_history.pop(device_id, None)
@@ -169,6 +202,65 @@ class DeviceStatusManager:
             create_tracked_task(self._broadcast_update("device_unregistered", {"device_id": device_id}), name="broadcast_device_unregistered")
             return True
         return False
+
+    # ------------------------------------------------------------------
+    # UDM write-through helpers (private)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _udm_write_register(device_state: "DeviceState") -> None:
+        """Write device registration to UDM SSOT (best-effort, never raises)."""
+        try:
+            from galaxy_gateway.ssot import udm_write_register  # noqa: PLC0415
+            # Extract capability list from hardware fields where available.
+            hw = device_state.hardware
+            caps: list = []
+            if getattr(hw, "camera_available", False):
+                caps.append("camera")
+            if getattr(hw, "microphone_available", False):
+                caps.append("microphone")
+            if getattr(hw, "bluetooth_supported", False):
+                caps.append("bluetooth")
+            if getattr(hw, "nfc_supported", False):
+                caps.append("nfc")
+            if getattr(hw, "has_gps", False):
+                caps.append("gps")
+            udm_write_register(
+                device_id=device_state.device_id,
+                device_name=device_state.device_name,
+                device_type_raw=device_state.device_type,
+                capabilities=caps,
+                metadata={
+                    "ip_address": device_state.ip_address,
+                    "os_version": device_state.os_version,
+                    "app_version": device_state.app_version,
+                    "category": device_state.category.value
+                    if hasattr(device_state.category, "value")
+                    else str(device_state.category),
+                },
+                source="device_status_api",
+            )
+        except Exception as exc:
+            logger.warning(
+                "DeviceStatusManager: UDM write failed for device %s — "
+                "local status cache updated in degraded mode. error=%s",
+                device_state.device_id,
+                exc,
+            )
+
+    @staticmethod
+    def _udm_write_unregister(device_id: str) -> None:
+        """Write device offline/unregister to UDM SSOT (best-effort, never raises)."""
+        try:
+            from galaxy_gateway.ssot import udm_write_unregister  # noqa: PLC0415
+            udm_write_unregister(device_id)
+        except Exception as exc:
+            logger.warning(
+                "DeviceStatusManager: UDM unregister write failed for device %s — "
+                "local cache removed in degraded mode. error=%s",
+                device_id,
+                exc,
+            )
     
     def update_device_status(self, device_id: str, status_update: Dict[str, Any]) -> bool:
         """更新设备状态"""
