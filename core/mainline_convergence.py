@@ -125,13 +125,38 @@ class MainlineChainStage(str, Enum):
     path maps to one of these stages.  Logging and tracing should use these
     labels (rather than ad-hoc strings) so that cross-subsystem comparisons
     are unambiguous.
+
+    Canonical execution chain order (device-dispatch path)::
+
+        REQUEST_INGRESS → OPENCLAWD_AUTHORITY
+            → COMMAND_ROUTER_ORCHESTRATION → DEVICE_ROUTER_DISPATCH
+            → EXECUTION → RESPONSE_EMISSION
     """
 
     REQUEST_INGRESS = "request_ingress"
     """External request arrives at OpenClawd (entry point)."""
 
     OPENCLAWD_AUTHORITY = "openclawd_authority"
-    """OpenClawd acts as the top-level orchestration authority."""
+    """OpenClawd acts as the subject/execution core and top-level orchestration
+    authority.  It owns intent resolution and execution-path branching."""
+
+    COMMAND_ROUTER_ORCHESTRATION = "command_router_orchestration"
+    """CommandRouter acts as the canonical command orchestration authority.
+    It owns ACL enforcement, HITL gating, lifecycle state transitions,
+    retry / circuit-breaker, and TaskEnvelope propagation.
+
+    This stage is entered when OpenClawd branches to the cross-device /
+    device-dispatch path (``send_gateway_command`` → ``route_envelope``).
+    """
+
+    DEVICE_ROUTER_DISPATCH = "device_router_dispatch"
+    """DeviceRouter acts as the canonical device dispatch authority.
+    It owns WebSocket / transport session handles and all device-level
+    routing.  CommandRouter delegates transport to this stage.
+
+    Side-path modules (AgentBridge, TaskRouter, CrossDeviceCoordinator)
+    may feed into this stage but MUST NOT own separate dispatch truth.
+    """
 
     CAPABILITY_DISPATCH = "capability_dispatch"
     """CapabilityBus resolves which registered capability will handle the request."""
@@ -164,7 +189,15 @@ class MainlineChainAuthority(str, Enum):
     """
 
     OPENCLAWD = "openclawd"
-    """OpenClawd is the top-level orchestration authority."""
+    """OpenClawd is the subject/execution core and top-level orchestration authority."""
+
+    COMMAND_ROUTER = "command_router"
+    """CommandRouter is the canonical command orchestration authority.
+    Owns ACL, HITL, lifecycle, retry, and TaskEnvelope plumbing."""
+
+    DEVICE_ROUTER = "device_router"
+    """DeviceRouter is the canonical device dispatch authority.
+    Owns WebSocket / transport session handles and device-level routing."""
 
     CAPABILITY_BUS = "capability_bus"
     """CapabilityBus is the canonical capability directory."""
@@ -195,6 +228,8 @@ class MainlineChainAuthority(str, Enum):
 STAGE_AUTHORITY: Dict[MainlineChainStage, MainlineChainAuthority] = {
     MainlineChainStage.REQUEST_INGRESS: MainlineChainAuthority.OPENCLAWD,
     MainlineChainStage.OPENCLAWD_AUTHORITY: MainlineChainAuthority.OPENCLAWD,
+    MainlineChainStage.COMMAND_ROUTER_ORCHESTRATION: MainlineChainAuthority.COMMAND_ROUTER,
+    MainlineChainStage.DEVICE_ROUTER_DISPATCH: MainlineChainAuthority.DEVICE_ROUTER,
     MainlineChainStage.CAPABILITY_DISPATCH: MainlineChainAuthority.CAPABILITY_BUS,
     MainlineChainStage.RESOURCE_RESOLUTION: MainlineChainAuthority.SYSTEM_RESOURCE_REGISTRY,
     MainlineChainStage.EXECUTION: MainlineChainAuthority.CANONICAL_DISPATCHER,

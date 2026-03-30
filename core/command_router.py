@@ -201,6 +201,30 @@ def validate_command_envelope(
 # 命令模型
 # ============================================================================
 
+# ---------------------------------------------------------------------------
+# PR (Canonical Execution Chain): Orchestration authority sentinel.
+#
+# CommandRouter is the canonical command orchestration authority for the
+# Galaxy runtime.  After OpenClawd (the subject/execution core) accepts a
+# request and branches to the device-dispatch path, ALL command orchestration
+# decisions — ACL enforcement, HITL gating, lifecycle state transitions,
+# retry / circuit-breaker, and TaskEnvelope propagation — MUST pass through
+# this module.
+#
+# Authority chain:
+#   route layer → OpenClawd → CommandRouter (here) → DeviceRouter → device
+#
+# Side-path orchestrators (e2e_orchestrator, capability_orchestrator, etc.)
+# must delegate to CommandRouter.route_envelope() or act only as facades
+# over it.  They MUST NOT own independent dispatch authority.
+# ---------------------------------------------------------------------------
+COMMAND_ROUTER_ORCHESTRATION_AUTHORITY: str = "core.command_router.CommandRouter"
+"""Sentinel: CommandRouter is the canonical command orchestration authority.
+
+Import this symbol to assert that a call site is within the canonical
+execution chain (OpenClawd → CommandRouter → DeviceRouter → device).
+"""
+
 class CommandMode(str, Enum):
     """命令执行模式"""
     SYNC = "sync"          # 同步：等待结果返回
@@ -702,6 +726,31 @@ class CommandRouter:
 
         PR-5: ACL check + lifecycle state transitions applied here.
         """
+        # ── Canonical chain: stamp COMMAND_ROUTER_ORCHESTRATION stage ────────
+        # Emit a MainlineChainStage.COMMAND_ROUTER_ORCHESTRATION event so
+        # observability and tests can verify the canonical chain is traversed.
+        try:
+            from core.mainline_convergence import (
+                build_mainline_trace,
+                get_mainline_convergence_registry,
+                MainlineChainStage,
+            )
+            _trace = build_mainline_trace(
+                trace_id=envelope.trace_id or "",
+                task_id=envelope.task_id,
+                session_id=(envelope.metadata or {}).get("session_id", ""),
+                device_id=envelope.target or "",
+                entry_stage=MainlineChainStage.COMMAND_ROUTER_ORCHESTRATION,
+                authority_role=COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
+                source="command_router.route_envelope",
+            )
+            get_mainline_convergence_registry().record(_trace)
+        except Exception as _mc_exc:
+            logger.debug(
+                "route_envelope: mainline_convergence stamp skipped (non-fatal): %s",
+                _mc_exc,
+            )
+
         # ── PR-5 Cap 5: ACL check before anything else ──────────────────────
         try:
             from core.acl_enforcer import get_acl_enforcer
@@ -945,6 +994,77 @@ class CommandRouter:
             },
         )
         return await self.route_envelope(envelope)
+
+    # ------------------------------------------------------------------
+    # Canonical device-transport delegation (canonical chain step:
+    # CommandRouter → DeviceRouter)
+    # ------------------------------------------------------------------
+
+    async def _dispatch_via_device_router(
+        self,
+        device_id: str,
+        command: str,
+        payload: Dict[str, Any],
+        task_id: str,
+        trace_id: str,
+        command_id: str,
+        timeout: float = 30.0,
+    ) -> Optional[Dict[str, Any]]:
+        """Delegate transport dispatch to ``DeviceRouter`` (canonical chain).
+
+        This method implements the ``CommandRouter → DeviceRouter`` hop in
+        the canonical execution chain::
+
+            OpenClawd → CommandRouter (orchestration)
+                → _dispatch_via_device_router()
+                    → DeviceRouter.send_command_to_device() (transport)
+                        → WebSocket / device
+
+        It attempts to look up the target device in ``DeviceRouter``'s live
+        session table and delegates the actual send to
+        :meth:`galaxy_gateway.device_router.DeviceRouter.send_command_to_device`.
+        When ``DeviceRouter`` is unavailable or the device is not registered
+        in its table the caller falls back to ``connection_manager`` directly.
+
+        Returns:
+            Result dict on success (keys: ``success``, ``result``,
+            ``error_message``, ``task_id``, ``trace_id``, ``via``), or
+            ``None`` when DeviceRouter is unavailable / device not found.
+
+        Note:
+            This method **must not** call :meth:`route_envelope` — doing so
+            would create an infinite recursion.  It is intended as the
+            terminal transport step after all orchestration decisions are
+            complete.
+        """
+        try:
+            from galaxy_gateway.device_router import device_router as _dr  # lazy import
+            device = _dr.get_device(device_id)
+            if device is None:
+                return None  # device not in DeviceRouter — caller will fall back
+
+            # Build a minimal task dict compatible with DeviceRouter.dispatch_task.
+            # We deliberately do NOT route back through route_envelope to avoid
+            # recursion; we call send_command_to_device which is the terminal
+            # WebSocket sender on DeviceRouter.
+            result = await _dr.send_command_to_device(
+                device_id=device_id,
+                command=command,
+                payload=payload,
+                task_id=task_id,
+                trace_id=trace_id,
+                timeout=timeout,
+            )
+            if result is not None:
+                result.setdefault("command_id", command_id)
+                result.setdefault("via", "command_router->device_router")
+            return result
+        except Exception as _dr_exc:
+            logger.debug(
+                "CommandRouter._dispatch_via_device_router unavailable "
+                "(will fall back): %s", _dr_exc,
+            )
+            return None
 
     async def _execute_command(
         self,
@@ -1399,7 +1519,36 @@ class CommandRouter:
                 )
                 return result
 
-        # ── No executor: use WebSocket connection manager ────────────────
+        # ── Canonical chain: delegate to DeviceRouter (preferred transport path)
+        # This implements the CommandRouter → DeviceRouter hop in the canonical
+        # execution chain.  DeviceRouter.send_command_to_device() is the terminal
+        # transport step that owns the WebSocket session handles.
+        # Falls through to connection_manager when DeviceRouter is unavailable.
+        _dr_result = await self._dispatch_via_device_router(
+            device_id=device_id,
+            command=command,
+            payload=payload,
+            task_id=task_id,
+            trace_id=trace_id,
+            command_id=command_id,
+            timeout=timeout,
+        )
+        if _dr_result is not None:
+            latency_ms = (time.monotonic() - t0) * 1000
+            result = {
+                **trace_base,
+                "success": _dr_result.get("success", False),
+                "result": _dr_result.get("result"),
+                "error_code": GatewayErrorCode.DEVICE_OFFLINE.value
+                if not _dr_result.get("success") and "timeout" in str(_dr_result.get("error", ""))
+                else (None if _dr_result.get("success") else GatewayErrorCode.EXECUTOR_ERROR.value),
+                "error_message": _dr_result.get("error"),
+                "latency_ms": round(latency_ms, 1),
+            }
+            _get_gateway_trace_store().record(result)
+            return result
+
+        # ── Fallback: use WebSocket connection manager ────────────────
         try:
             from core.routes._shared import connection_manager
             if device_id not in connection_manager.active_devices:

@@ -2,6 +2,29 @@
 HybridExecutionArbiter — 混合执行仲裁器
 ========================================
 
+**Architecture role: FALLBACK EXECUTION HELPER — not a parallel authority**
+----------------------------------------------------------------------------
+``HybridExecutionArbiter`` is an **internal fallback execution helper**.
+It implements a three-level degradation chain (A2A → GUI → VLM) for
+*local* task execution.  It is NOT a parallel top-level dispatch authority
+and MUST NOT bypass the canonical execution chain::
+
+    OpenClawd (subject/execution core)
+        └─ local execution path
+              └─ HybridExecutionArbiter  ← internal helper (this module)
+                   Level 1: A2A (direct API/MCP call)
+                   Level 2: GUI Automation
+                   Level 3: VLM (screenshot + reasoning)
+
+For *cross-device* dispatch, the canonical chain is::
+
+    OpenClawd → CommandRouter → DeviceRouter → device
+
+``HybridExecutionArbiter`` MUST NOT be used as a substitute for
+``CommandRouter`` in the cross-device path.
+
+HYBRID_EXECUTOR_ROLE sentinel: "fallback_execution_helper"
+
 Phase 3 Matrix OS 核心组件。
 
 三级降级执行链:
@@ -37,6 +60,15 @@ from enum import Enum
 
 logger = logging.getLogger("Galaxy.HybridExecutor")
 
+# ---------------------------------------------------------------------------
+# Architecture role declaration
+# ---------------------------------------------------------------------------
+
+HYBRID_EXECUTOR_ROLE: str = "fallback_execution_helper"
+"""Role sentinel: HybridExecutionArbiter is an internal fallback execution
+helper within OpenClawd's local execution path.  It MUST NOT act as a
+parallel top-level dispatch authority or bypass the canonical execution chain
+(OpenClawd → CommandRouter → DeviceRouter) for cross-device tasks."""
 
 class ExecutionLevel(str, Enum):
     A2A = "a2a"          # Agent-to-Agent (API/MCP direct call)

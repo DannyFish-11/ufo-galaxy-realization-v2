@@ -2,6 +2,24 @@
 Galaxy - 端到端编排器（便捷接口）
 ================================
 
+**Architecture role: CONVENIENCE FACADE over the canonical execution chain**
+------------------------------------------------------------------------------
+``e2e_orchestrator`` is a **convenience facade** — it is NOT a parallel
+top-level orchestration authority.  All actual execution passes through the
+canonical chain::
+
+    process_user_input()          ← facade entry (this module)
+        → DesktopPresenceRuntime  ← runtime shell
+            → OpenClawd           ← subject/execution core (authority)
+                → CommandRouter   ← canonical orchestration authority
+                    → DeviceRouter ← canonical device dispatch authority
+
+This module MUST NOT hold independent dispatch authority or bypass OpenClawd.
+Any new orchestration feature should be added to OpenClawd / CommandRouter,
+with this facade simply delegating to those components.
+
+E2E_ORCHESTRATOR_ROLE sentinel: "convenience_facade"
+
 提供 process_user_input() 函数作为统一入口，
 内部委托给 DesktopPresenceRuntime（控制面）再流转到
 ConstellationRuntime.run() / EndToEndPipeline.execute()。
@@ -35,6 +53,17 @@ import uuid as _uuid_mod
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.E2EOrchestrator")
+
+# ---------------------------------------------------------------------------
+# Architecture role declaration
+# ---------------------------------------------------------------------------
+
+E2E_ORCHESTRATOR_ROLE: str = "convenience_facade"
+"""Role sentinel: e2e_orchestrator is a convenience facade over the canonical
+execution chain (OpenClawd → CommandRouter → DeviceRouter).  It MUST NOT act
+as an independent orchestration authority."""
+
+
 
 
 # ---------------------------------------------------------------------------
