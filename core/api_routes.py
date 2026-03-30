@@ -45,8 +45,14 @@ from core.unified_response import UnifiedChatResponse
 try:
     from .auth import require_auth
 except ImportError:
+    import logging as _auth_logging
+    _auth_logging.getLogger("Galaxy.API").warning(
+        "core.auth 模块未找到，所有需要鉴权的路由将拒绝访问（HTTP 401）。"
+        "请确保 core/auth.py 存在。"
+    )
+
     async def require_auth():
-        return {"authenticated": True, "dev_mode": True}
+        raise HTTPException(status_code=401, detail="鉴权模块不可用，拒绝访问")
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -161,31 +167,31 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import audit as audit_routes
         router.include_router(audit_routes.create_router())
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("审计路由加载失败（可选）: %s", _e)
     try:
         from core.routes import approvals as approvals_routes
         router.include_router(approvals_routes.create_router())
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("审批路由加载失败（可选）: %s", _e)
     # Control Plane Phase 4: security policy routes
     try:
         from core.routes import security_policy as security_policy_routes
         router.include_router(security_policy_routes.create_router())
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("安全策略路由加载失败（可选）: %s", _e)
     # Control Plane Phase 5: device health & circuit-breaker routes
     try:
         from core.routes.device_health import router as device_health_router
         router.include_router(device_health_router)
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("设备健康路由加载失败（可选）: %s", _e)
     # PR-4 Status Board V2: read-only RuntimeProjection endpoint
     try:
         from core.routes import projection as projection_routes
         router.include_router(projection_routes.create_router())
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("投影路由加载失败（可选）: %s", _e)
 
     # PR-16: Cross-Plane Contract Map — read-only contract introspection endpoints
     # PR-19: Reliability Contract — GET /api/v1/contracts/reliability is also
@@ -193,8 +199,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import contracts as contracts_routes
         router.include_router(contracts_routes.create_router())
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("合约路由加载失败（可选）: %s", _e)
 
     # PR-20: Capability Runtime State — read-only capability runtime summaries.
     #        GET /api/v1/capabilities/runtime
@@ -202,8 +208,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import capabilities_runtime as cap_runtime_routes
         router.include_router(cap_runtime_routes.create_router())
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("能力运行时路由加载失败（可选）: %s", _e)
 
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream

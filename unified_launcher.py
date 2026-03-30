@@ -56,9 +56,17 @@ from datetime import datetime
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
-from nodes.common.cors_config import get_cors_origins
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    import logging as _cors_logging
+    _cors_logging.getLogger("Galaxy").warning(
+        "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
+    )
 
-# 配置日志
+    def get_cors_origins():  # type: ignore[misc]
+        return ["http://localhost:3000", "http://localhost:8080"]
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',

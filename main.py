@@ -28,7 +28,6 @@ This script's sole role: bootstrap the process, then yield to
     python start_l4.py          → 兼容性包装器（已弃用，请使用 main.py）
 """
 
-import os
 import sys
 import subprocess
 import logging

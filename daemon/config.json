@@ -15,7 +15,7 @@
       "command": ["python", "unified_launcher.py"],
       "restart_policy": "always",
       "max_restarts": 10,
-      "health_check_url": "http://localhost:8080/health"
+      "health_check_url": "http://localhost:8299/health"
     },
     "health_monitor": {
       "command": ["python", "-m", "health_monitor", "--watchdog", "--interval", "30"],
