@@ -45,8 +45,7 @@ from core.unified_response import UnifiedChatResponse
 try:
     from .auth import require_auth
 except ImportError:
-    import logging as _auth_logging
-    _auth_logging.getLogger("Galaxy.API").warning(
+    logging.getLogger("Galaxy.API").warning(
         "core.auth 模块未找到，所有需要鉴权的路由将拒绝访问（HTTP 401）。"
         "请确保 core/auth.py 存在。"
     )

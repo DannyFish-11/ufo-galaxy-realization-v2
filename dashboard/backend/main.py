@@ -70,8 +70,9 @@ except ImportError:
 try:
     from nodes.common.cors_config import get_cors_origins
 except ImportError:
-    import logging as _cors_logging
-    _cors_logging.getLogger("Galaxy.Dashboard").warning(
+    import logging as _logging
+
+    _logging.getLogger("Galaxy.Dashboard").warning(
         "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
     )
 
