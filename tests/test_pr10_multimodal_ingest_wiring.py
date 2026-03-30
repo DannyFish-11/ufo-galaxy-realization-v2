@@ -406,32 +406,37 @@ class TestRunContinuumUsesSingletonBus:
 
 
 class TestGatewayChatRequestSchema:
-    """galaxy_gateway.app.ChatRequest must have multimodal_context field.
+    """galaxy_gateway ChatRequest must have multimodal_context field.
 
     We inspect the source directly rather than importing the full module,
-    because gateway/app.py has optional heavy dependencies (websockets, aiortc)
+    because the gateway has optional heavy dependencies (websockets, aiortc)
     that may not be present in the test environment.
+
+    After PR-2 gateway slimming, ChatRequest and the chat endpoint live in
+    ``galaxy_gateway/routes/chat.py``; this test checks that file.
+    ``galaxy_gateway/app.py`` re-exports ``ChatRequest`` for backward compat.
     """
 
-    _APP_PATH = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "app.py"
+    # PR-2: ChatRequest moved to galaxy_gateway/routes/chat.py
+    _CHAT_PATH = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "routes" / "chat.py"
 
-    def _app_source(self) -> str:
-        return self._APP_PATH.read_text()
+    def _chat_source(self) -> str:
+        return self._CHAT_PATH.read_text()
 
     def test_multimodal_context_field_exists_in_source(self):
-        src = self._app_source()
+        src = self._chat_source()
         assert "multimodal_context" in src, (
-            "galaxy_gateway/app.py ChatRequest must declare multimodal_context field"
+            "galaxy_gateway/routes/chat.py ChatRequest must declare multimodal_context field"
         )
 
     def test_multimodal_context_passed_to_process_in_source(self):
-        src = self._app_source()
+        src = self._chat_source()
         assert "multimodal_context=request.multimodal_context" in src, (
-            "gateway chat_endpoint must pass multimodal_context to openclawd_instance.process()"
+            "gateway chat_endpoint must pass multimodal_context to runtime.handle_request()"
         )
 
     def test_multimodal_context_optional_annotation_in_source(self):
-        src = self._app_source()
+        src = self._chat_source()
         # The field must have a None default (making it optional for callers)
         assert "multimodal_context" in src and "= None" in src, (
             "multimodal_context field should be declared with a None default"
