@@ -426,7 +426,7 @@ class TestGalaxyMainLoopL4:
 
     def test_task_history_capping(self):
         """验证 task_history 不会无限增长"""
-        from galaxy_main_loop_l4 import GalaxyMainLoopL4
+        from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
 
         loop = GalaxyMainLoopL4({"cycle_interval": 1.0})
         loop._max_task_history = 10

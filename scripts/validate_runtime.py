@@ -361,46 +361,33 @@ def check_purge_hardening() -> None:
     """PR-10: Verify final legacy purge and baseline hardening decisions."""
     _section("6. PR-10 Legacy Purge Hardening")
 
-    # 6a. start_galaxy.py must not contain the dead _start_desktop() function
-    start_galaxy = PROJECT_ROOT / "start_galaxy.py"
-    if start_galaxy.exists():
-        text = start_galaxy.read_text(encoding="utf-8")
+    # 6a. start_galaxy.py and start_l4.py must be fully removed
+    for fname in ("start_galaxy.py", "start_l4.py"):
+        removed = not (PROJECT_ROOT / fname).exists()
         r = _record(
-            "start_galaxy.py: _start_desktop() removed",
-            "def _start_desktop(" not in text,
-            "Dead reference to hard-disabled run_ui.py must be removed (PR-10)",
+            f"{fname}: fully removed",
+            removed,
+            f"{fname} must be deleted — use main.py or unified_launcher.py instead (post-PR-10 cleanup)",
         )
         _print_result(r)
 
+    # 6b. Canonical L4 runtime module must be importable
+    try:
+        from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4  # type: ignore[import]
         r = _record(
-            "start_galaxy.py: run_ui.py os.system call removed",
-            "os.system" not in text,
-            "os.system() call to hard-disabled run_ui.py must be removed (PR-10)",
+            "core.galaxy_main_loop_l4_enhanced: canonical L4 module importable",
+            True,
+            "GalaxyMainLoopL4 is now the canonical class in core.galaxy_main_loop_l4_enhanced",
         )
-        _print_result(r)
-
+    except Exception as exc:
         r = _record(
-            "start_galaxy.py: desktop_proc launch block removed",
-            "desktop_proc" not in text,
-            "multiprocessing desktop_proc launch block must be removed (PR-10)",
-        )
-        _print_result(r)
-
-        r = _record(
-            "start_galaxy.py: PR-10 LEGACY WRAPPER guard present",
-            "PR-10 LEGACY WRAPPER" in text,
-            "Wrapper guard comment must be present to block future additions",
-        )
-        _print_result(r)
-
-    else:
-        _print_result(_record(
-            "start_galaxy.py exists",
+            "core.galaxy_main_loop_l4_enhanced: canonical L4 module importable",
             False,
-            "start_galaxy.py not found",
-        ))
+            str(exc),
+        )
+    _print_result(r)
 
-    # 6b. Legacy purge registry importable
+    # 6c. Legacy purge registry importable
     try:
         from core.legacy_purge_registry import (  # type: ignore[import]
             PURGE_REGISTRY,

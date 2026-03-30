@@ -173,9 +173,9 @@ class TestLegacyPurgeRegistry:
     def test_get_entries_by_status_wrapper_hardened(self):
         from core.legacy_purge_registry import get_entries_by_status, PurgeStatus
         entries = get_entries_by_status(PurgeStatus.WRAPPER_HARDENED)
-        paths = [e.asset_path for e in entries]
-        assert "start_galaxy.py" in paths
-        assert "start_l4.py" in paths
+        # start_galaxy.py and start_l4.py have been fully removed (PERMANENTLY_ISOLATED).
+        # Other wrapper-hardened entries (e.g. gateway, task-router) must still be present.
+        assert len(entries) >= 1, "Expected at least 1 WRAPPER_HARDENED entry"
 
     def test_run_ui_entry_hard_disabled(self):
         from core.legacy_purge_registry import get_purge_entry, PurgeStatus
@@ -193,114 +193,67 @@ class TestLegacyPurgeRegistry:
 
 
 # ===========================================================================
-# 2. TestStartGalaxyHardening
+# 2. TestStartGalaxyFullyRemoved
 # ===========================================================================
 
 
-class TestStartGalaxyHardening:
-    """start_galaxy.py no longer contains the dead _start_desktop() path."""
+class TestStartGalaxyFullyRemoved:
+    """start_galaxy.py has been fully removed; canonical entry is main.py."""
 
-    def _text(self) -> str:
-        return _file_text("start_galaxy.py")
-
-    def test_no_start_desktop_function(self):
-        text = self._text()
-        # The function definition must be gone; it may appear in doc comments
-        assert "def _start_desktop(" not in text, (
-            "start_galaxy.py must not define _start_desktop() — "
-            "the dead path to run_ui.py was removed in PR-10"
+    def test_file_does_not_exist(self):
+        assert not (_ROOT / "start_galaxy.py").exists(), (
+            "start_galaxy.py must not exist — it has been permanently removed. "
+            "Use 'python main.py' or 'python unified_launcher.py' instead."
         )
 
-    def test_no_run_ui_reference(self):
-        text = self._text()
-        # os.system call to run_ui.py must be gone; docstring/warning references ok
-        assert "os.system" not in text, (
-            "start_galaxy.py must not contain os.system() — "
-            "the dead os.system call targeting run_ui.py was removed in PR-10"
+    def test_canonical_entry_main_py_exists(self):
+        assert (_ROOT / "main.py").exists(), (
+            "main.py (authoritative startup entry) must still exist"
         )
 
-    def test_no_multiprocessing_process_start_desktop(self):
-        # Ensure the block that launched the desktop process is gone.
-        assert "multiprocessing.Process(target=_start_desktop)" not in self._text()
-
-    def test_legacy_wrapper_guard_comment(self):
-        assert "PR-10 LEGACY WRAPPER" in self._text(), (
-            "start_galaxy.py must carry the PR-10 LEGACY WRAPPER guard comment"
+    def test_canonical_entry_unified_launcher_exists(self):
+        assert (_ROOT / "unified_launcher.py").exists(), (
+            "unified_launcher.py (authoritative startup entry) must still exist"
         )
 
-    def test_deprecation_message_updated(self):
-        text = self._text()
-        # Must mention PR-10 hardening or the purge
-        assert "PR-10" in text or "final purge" in text.lower() or "legacy wrapper" in text.lower(), (
-            "start_galaxy.py deprecation message should reference PR-10 hardening"
-        )
+    def test_purge_registry_has_start_galaxy_entry(self):
+        """start_galaxy.py::_start_desktop() must still appear in the purge registry."""
+        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        entry = get_purge_entry("start_galaxy.py::_start_desktop()")
+        assert entry is not None
+        assert entry.status == PurgeStatus.DEAD_REFERENCE_REMOVED
 
-    def test_desktop_flag_still_accepted_gracefully(self):
-        # --desktop / --all must still be accepted (no argparse error) but
-        # must NOT call any live startup path.
-        text = self._text()
-        assert "--desktop" in text, (
-            "--desktop flag should still be present (no-op stub) for backward compat"
-        )
-        assert "--all" in text, (
-            "--all flag should still be present (no-op stub) for backward compat"
-        )
-
-    def test_desktop_flag_warns_not_starts(self):
-        # The --desktop branch should warn, not start a process.
-        text = self._text()
-        # After PR-10 the _start_desktop call is gone; the branch should only warn.
-        assert "DeprecationWarning" in text or "warnings.warn" in text, (
-            "start_galaxy.py should still issue DeprecationWarning for --desktop/--all"
-        )
-        # Crucially, there must be no multiprocessing.Process(target=_start_desktop)
-        assert "desktop_proc" not in text, (
-            "The desktop process launch block must be gone in PR-10"
-        )
-
-    def test_delegates_to_unified_launcher(self):
-        assert "from unified_launcher import main as unified_main" in self._text()
-
-    def test_no_import_os_for_system_call(self):
-        # After removing _start_desktop, 'import os' should no longer be needed.
-        # This is a soft check — if os is used for something else that's fine.
-        # We just verify os.system(run_ui) isn't there.
-        text = self._text()
-        assert "os.system" not in text, (
-            "os.system() call targeting run_ui.py should have been removed"
+    def test_purge_registry_start_galaxy_classified_isolated(self):
+        """start_galaxy.py wrapper entry must now be PERMANENTLY_ISOLATED."""
+        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        entry = get_purge_entry("start_galaxy.py")
+        assert entry is not None
+        assert entry.status == PurgeStatus.PERMANENTLY_ISOLATED, (
+            f"start_galaxy.py must be PERMANENTLY_ISOLATED, got {entry.status}"
         )
 
 
 # ===========================================================================
-# 3. TestStartL4Hardening
+# 3. TestStartL4FullyRemoved
 # ===========================================================================
 
 
-class TestStartL4Hardening:
-    """start_l4.py carries the expected deprecation and delegates properly."""
+class TestStartL4FullyRemoved:
+    """start_l4.py has been fully removed; canonical entry is main.py."""
 
-    def _text(self) -> str:
-        return _file_text("start_l4.py")
-
-    def test_file_exists(self):
-        assert (_ROOT / "start_l4.py").exists()
-
-    def test_has_deprecation_warning(self):
-        text = self._text()
-        assert "deprecated" in text.lower() or "DeprecationWarning" in text, (
-            "start_l4.py must carry a deprecation notice (PR-6 frozen)"
+    def test_file_does_not_exist(self):
+        assert not (_ROOT / "start_l4.py").exists(), (
+            "start_l4.py must not exist — it has been permanently removed. "
+            "Use 'python main.py' or 'python unified_launcher.py' instead."
         )
 
-    def test_delegates_to_unified_launcher(self):
-        text = self._text()
-        assert "unified_launcher" in text, (
-            "start_l4.py must delegate to unified_launcher.py"
-        )
-
-    def test_no_direct_l4_loop_instantiation(self):
-        text = self._text()
-        assert "GalaxyMainLoopL4()" not in text, (
-            "start_l4.py must not instantiate GalaxyMainLoopL4 directly"
+    def test_purge_registry_start_l4_classified_isolated(self):
+        """start_l4.py wrapper entry must now be PERMANENTLY_ISOLATED."""
+        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        entry = get_purge_entry("start_l4.py")
+        assert entry is not None
+        assert entry.status == PurgeStatus.PERMANENTLY_ISOLATED, (
+            f"start_l4.py must be PERMANENTLY_ISOLATED, got {entry.status}"
         )
 
 

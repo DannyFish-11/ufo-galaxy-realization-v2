@@ -56,15 +56,17 @@ windows_client/START_CLIENT.bat
 
 | 入口 | 状态 | 正确目标 |
 | ---- | ---- | -------- |
-| `python unified_launcher.py` | ✅ 兼容（无头 API 服务） | 仅提供 API，不再提供 Web UI |
-| `python start_galaxy.py` | ✅ 兼容 | 委托到 `unified_launcher.py` |
-| `python windows_client/main.py` | ✅ **推荐** | 桌面原生 UI（OPPO 光场） |
-| `python enhancements/clients/windows_client/run_ui.py` | ⚠️ **已废弃** | 自动重定向到 `windows_client/main.py` |
-| `python start_galaxy.py --desktop` | ✅ | 启动桌面原生客户端 |
+| `python main.py` | ✅ **推荐** | 委托到 `unified_launcher.py`（权威启动路径） |
+| `python unified_launcher.py` | ✅ 权威入口 | 完整系统启动，含 L4 模块 |
+| `python windows_client/main.py` | ⚠️ **已停用** | 原桌面原生 UI — hard-disabled；使用 `windows_client/status_board_v2/` |
+| `python enhancements/clients/windows_client/run_ui.py` | ❌ **已停用** | hard-disabled；使用 `unified_launcher.py` |
+| `python start_galaxy.py` | ❌ **已删除** | 已从仓库中移除；使用 `main.py` |
+| `python start_l4.py` | ❌ **已删除** | 已从仓库中移除；使用 `main.py` |
 | `http://localhost:9000` (Web Dashboard) | ❌ **已停用** | Dashboard 前端已删除 |
 
-> **注意**：旧路径 `enhancements/clients/windows_client/run_ui.py` 
-> 仅作兼容跳转，不应直接依赖。新代码请使用 `windows_client/main.py`。
+> **注意**：`start_galaxy.py` 和 `start_l4.py` 已在 post-PR-10 清理中完全删除。
+> 任何现有脚本中对这两个文件的调用都需要改为 `python main.py` 或
+> `python unified_launcher.py`。
 
 ---
 
