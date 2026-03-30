@@ -102,7 +102,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ) as _mock_reg,
             patch(
@@ -129,7 +129,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["screenshot"], exec_mode="local")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
@@ -158,7 +158,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["swipe"], exec_mode="remote")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
@@ -187,7 +187,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["tap"], exec_mode="both")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
@@ -215,7 +215,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
@@ -244,7 +244,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
@@ -271,7 +271,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=[], exec_mode=None)
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
@@ -291,7 +291,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 side_effect=RuntimeError("registry unavailable"),
             ),
             patch(
@@ -313,7 +313,7 @@ class TestExecModeRouting(unittest.TestCase):
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
             patch(
-                "galaxy_gateway.device_router.get_gateway_capability_registry",
+                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
                 return_value=registry,
             ),
             patch(
