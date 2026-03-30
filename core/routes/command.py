@@ -2,6 +2,23 @@
 Galaxy - Command Routes
 =============================
 
+**Architecture role: ROUTE ADAPTER SURFACE — no orchestration authority**
+--------------------------------------------------------------------------
+This module is a **route adapter surface**.  Its responsibility is to
+validate and translate HTTP requests, then forward them into the canonical
+execution chain via ``CommandRouter.route_envelope()``.
+
+Canonical chain for command dispatch::
+
+    POST /api/v1/command/*   ← you are here (route adapter — no authority)
+        → CommandRouter.route_envelope()  ← canonical orchestration authority
+            → DeviceRouter.send_command_to_device()  ← canonical dispatch authority
+                → device / transport
+
+This module MUST NOT contain orchestration logic, device selection, or
+dispatch decisions.  Any new command feature should be added to
+``CommandRouter`` (orchestration) or ``DeviceRouter`` (dispatch).
+
 Routes:
   POST /api/v1/command/unified                      - 统一命令端点 (多目标 sync/async)
   GET  /api/v1/command/unified/{request_id}/status  - 查询统一命令状态

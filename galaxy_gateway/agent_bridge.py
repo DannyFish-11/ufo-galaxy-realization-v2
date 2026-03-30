@@ -2,6 +2,25 @@
 Agent Bridge — Runtime Handoff Layer (Round 5)
 ===============================================
 
+**Architecture role: RUNTIME HANDOFF ADAPTER — not a parallel authority**
+--------------------------------------------------------------------------
+``AgentBridge`` is a **runtime handoff adapter** within the gateway's
+cross-device execution substrate.  It is NOT a top-level dispatch authority.
+
+Authority model::
+
+    Canonical chain: OpenClawd → CommandRouter → DeviceRouter → device
+                                                       ↓
+                                             AgentBridge.handoff()
+                                              (optional handoff only)
+
+``AgentBridge`` is called BY ``DeviceRouter`` (or its internal substrate)
+as an *optional* runtime handoff step — it does NOT originate dispatch
+decisions.  When the runtime is unreachable or disabled, the bridge
+transparently falls back to the caller-supplied local executor.
+
+AGENT_BRIDGE_ROLE sentinel: "runtime_handoff_adapter"
+
 Mediates between the gateway / DeviceRouter and a downstream Agent Runtime
 (e.g. OpenClawd) for cross-device task flows.
 
@@ -61,6 +80,16 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Architecture role declaration
+# ---------------------------------------------------------------------------
+
+AGENT_BRIDGE_ROLE: str = "runtime_handoff_adapter"
+"""Role sentinel: AgentBridge is a runtime handoff adapter within the
+gateway's cross-device execution substrate.  It is NOT a top-level dispatch
+authority.  It is called by DeviceRouter as an optional handoff step only,
+and MUST NOT originate or own cross-device dispatch decisions."""
 
 # Import observability helpers (lazy-safe: importable at module level).
 from galaxy_gateway.observability import (  # noqa: E402

@@ -2,6 +2,19 @@
 Galaxy - Task Routes
 ==========================
 
+**Architecture role: ROUTE ADAPTER SURFACE — no orchestration authority**
+--------------------------------------------------------------------------
+This module is a **route adapter surface** for task management endpoints.
+Task creation stamps a ``task_id`` and forwards device-targeted tasks to the
+canonical execution chain via ``CommandRouter`` / ``DeviceRouter``::
+
+    POST /api/v1/tasks   ← you are here (route adapter — no authority)
+        → connection_manager.send_to_device()   (simple fire-and-forget)
+           (for full orchestration: use POST /api/v1/command/unified which
+            routes through CommandRouter → DeviceRouter canonically)
+
+This module MUST NOT contain orchestration or dispatch logic.
+
 Routes:
   POST /api/v1/tasks                      - 创建任务
   GET  /api/v1/tasks/{task_id}            - 任务状态

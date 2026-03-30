@@ -161,11 +161,17 @@ class EntrypointRouter:
             "trace_id": effective_trace_id,
             "source": source,
             "routed_at": time.time(),
+            # Canonical execution chain metadata — non-breaking additive fields.
+            # These fields make it observable that the request is entering the
+            # canonical chain: route → OpenClawd → CommandRouter → DeviceRouter.
+            "canonical_chain_stage": "route_ingress",
+            "canonical_chain_authority": "route_adapter",
+            "canonical_chain_next": "openclawd_subject",
         }
 
         logger.debug(
             "EntrypointRouter.route_request | entry_path=%s via_legacy=%s "
-            "source=%s trace_id=%s",
+            "source=%s trace_id=%s canonical_chain_stage=route_ingress",
             entry_path,
             via_legacy_adapter,
             source,

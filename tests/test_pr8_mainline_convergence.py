@@ -94,7 +94,10 @@ class TestMainlineChainStage:
     def test_stage_count(self):
         from core.mainline_convergence import MainlineChainStage
 
-        assert len(MainlineChainStage) == 9
+        # Two new stages were added for the canonical chain:
+        # COMMAND_ROUTER_ORCHESTRATION and DEVICE_ROUTER_DISPATCH.
+        # Previous count: 9 (PR-8). New count: 11 (canonical chain consolidation).
+        assert len(MainlineChainStage) == 11
 
     def test_stages_are_strings(self):
         from core.mainline_convergence import MainlineChainStage

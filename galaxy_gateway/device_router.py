@@ -1194,7 +1194,141 @@ class DeviceRouter:
         except Exception as e:
             logger.error(f"❌ 任务分发失败: {e}")
             return {"success": False, "error": f"任务分发失败: {str(e)}"}
-    
+
+    # ------------------------------------------------------------------
+    # Canonical transport method — called by CommandRouter (canonical chain)
+    # ------------------------------------------------------------------
+
+    async def send_command_to_device(
+        self,
+        device_id: str,
+        command: str,
+        payload: Dict,
+        task_id: str = "",
+        trace_id: str = "",
+        timeout: float = 30.0,
+    ) -> Optional[Dict]:
+        """Send a command directly to a device via its live WebSocket session.
+
+        **Canonical chain role**: This is the terminal transport step in the
+        canonical execution chain::
+
+            CommandRouter._dispatch_via_device_router()
+                → DeviceRouter.send_command_to_device()  ← here
+                    → device.websocket.send()
+
+        This method is the single point where ``DeviceRouter`` performs
+        device-targeted WebSocket dispatch on behalf of ``CommandRouter``.
+        It intentionally does **not** call back into ``CommandRouter`` to
+        avoid circular invocation.
+
+        Args:
+            device_id: Target device identifier.
+            command:   Command name / action.
+            payload:   Command parameters dict.
+            task_id:   Task identifier (propagated for tracing).
+            trace_id:  Distributed trace identifier.
+            timeout:   WebSocket send / wait timeout in seconds.
+
+        Returns:
+            ``{"success": True/False, "result": ..., "task_id": ...,
+               "trace_id": ..., "via": "device_router"}``
+            or ``None`` when the device is not found in the live session
+            table (caller should fall back to ``connection_manager``).
+        """
+        device = self.get_device(device_id)
+        if device is None:
+            logger.debug(
+                "DeviceRouter.send_command_to_device: device %s not in session table",
+                device_id,
+            )
+            return None
+
+        _task_id = task_id or str(uuid.uuid4())
+        _trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
+        _msg_id = str(uuid.uuid4())
+
+        if not device.websocket:
+            logger.debug(
+                "DeviceRouter.send_command_to_device: device %s has no websocket",
+                device_id,
+            )
+            return {
+                "success": False,
+                "result": None,
+                "error": f"device {device_id} has no active websocket",
+                "task_id": _task_id,
+                "trace_id": _trace_id,
+                "via": "device_router",
+            }
+
+        # Build AIP v3 message envelope.
+        message = {
+            "version": "3.0",
+            "message_id": _msg_id,
+            "type": "command",
+            "device_id": device_id,
+            "task_id": _task_id,
+            "trace_id": _trace_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": {
+                "command": command,
+                **(payload or {}),
+            },
+        }
+
+        try:
+            await device.websocket.send(json.dumps(message))
+            logger.debug(
+                "DeviceRouter.send_command_to_device sent | device=%s task_id=%s "
+                "trace_id=%s command=%s",
+                device_id, _task_id, _trace_id, command,
+            )
+        except Exception as _send_exc:
+            logger.warning(
+                "DeviceRouter.send_command_to_device send failed | device=%s error=%s",
+                device_id, _send_exc,
+            )
+            return {
+                "success": False,
+                "result": None,
+                "error": str(_send_exc),
+                "task_id": _task_id,
+                "trace_id": _trace_id,
+                "via": "device_router",
+            }
+
+        # Wait for the result event.
+        event = asyncio.Event()
+        self._task_events[_task_id] = event
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+            if _task_id in self.task_results:
+                result = self.task_results.pop(_task_id)
+                result.setdefault("via", "device_router")
+                result.setdefault("trace_id", _trace_id)
+                return result
+            return {
+                "success": True,
+                "result": f"command sent to {device_id}",
+                "task_id": _task_id,
+                "trace_id": _trace_id,
+                "via": "device_router",
+            }
+        except asyncio.TimeoutError:
+            logger.warning(
+                "DeviceRouter.send_command_to_device timeout | device=%s task_id=%s",
+                device_id, _task_id,
+            )
+            return {
+                "success": False,
+                "result": None,
+                "error": "timeout",
+                "task_id": _task_id,
+                "trace_id": _trace_id,
+                "via": "device_router",
+            }
+
     async def _dispatch_cross_device_task(self, task: Dict, devices: List[Device]) -> Dict:
         """分发跨设备协同任务 (gated by cross-device switch — Round 4).
 
