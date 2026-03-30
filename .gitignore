@@ -102,3 +102,4 @@ data/rag_memory/
 # Commit only the *.example.* templates in runtime/.
 runtime/config.json
 runtime/secrets.env
+learning_data.db

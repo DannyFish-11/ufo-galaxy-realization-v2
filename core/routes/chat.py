@@ -69,6 +69,35 @@ from core.unified_response import UnifiedChatResponse
 
 logger = logging.getLogger("Galaxy.API")
 
+# ── 动作意图判断关键词集合 ──────────────────────────────────────────────────────
+_ACTION_KEYWORDS = frozenset([
+    # 操作动词
+    "打开", "关闭", "启动", "停止", "运行", "执行", "发送", "发出", "拍摄",
+    "截图", "录制", "下载", "上传", "安装", "卸载", "设置", "调整", "切换",
+    "搜索", "查找", "浏览", "播放", "暂停", "跳转", "跳过", "重启", "关机",
+    "帮我", "帮助我", "请帮", "请你帮",
+    # 英文动词
+    "open", "close", "start", "stop", "run", "execute", "send", "take",
+    "screenshot", "record", "download", "upload", "install", "uninstall",
+    "set", "adjust", "switch", "search", "find", "browse", "play", "pause",
+    "restart", "shutdown", "launch", "help me", "please",
+])
+
+
+def _is_action_intent(message: str) -> bool:
+    """判断消息是否为动作意图（而非纯聊天）。
+
+    基于关键词的轻量启发式判断，用于在无意图解析器时作为后备。
+
+    Args:
+        message: 用户输入的消息文本
+
+    Returns:
+        True 表示动作意图（如"帮我打开微信"），False 表示纯聊天（如"你好"）
+    """
+    lower = message.lower()
+    return any(kw in lower for kw in _ACTION_KEYWORDS)
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create chat routes router."""

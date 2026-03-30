@@ -66,7 +66,18 @@ except ImportError:
 
         def to_json_response(self) -> dict:
             return self.model_dump()
-from nodes.common.cors_config import get_cors_origins
+
+try:
+    from nodes.common.cors_config import get_cors_origins
+except ImportError:
+    import logging as _logging
+
+    _logging.getLogger("Galaxy.Dashboard").warning(
+        "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
+    )
+
+    def get_cors_origins():  # type: ignore[misc]
+        return ["http://localhost:3000", "http://localhost:8080"]
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
