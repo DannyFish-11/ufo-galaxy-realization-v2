@@ -1,22 +1,43 @@
 """
-Galaxy - 能力编排器
-=======================
+Galaxy - 能力编排器 (Capability Orchestrator)
+==============================================
 
-统一管理 MCP 工具和 Skill，提供智能的能力发现和调用
+.. deprecated::
+    **This module is a legacy compatibility facade.**
 
-功能：
-1. 统一的能力注册表
+    The canonical capability authority is ``core.capability_bus.CapabilityBus``
+    (accessed via :func:`core.capability_bus.get_capability_bus`).
+
+    New code **must** use the canonical capability bus::
+
+        from core.capability_bus import get_capability_bus
+        bus = get_capability_bus()
+        # Register: bus.register_device_capability(device_id, action, description)
+        # Discover: bus.list_all() / bus.list_by_role(CapabilityBusRole.MCP)
+
+    For capability resolution and tool-schema building, use::
+
+        from core.unified.capability_resolver import get_capability_resolver
+        resolver = get_capability_resolver()
+        schemas = resolver.collect_tool_schemas()
+
+    ``CapabilityOrchestrator`` is retained as a compatibility shim and is NOT
+    a parallel canonical capability truth source.  It will not see capabilities
+    registered through ``CapabilityBus`` unless explicitly bridged.
+
+统一管理 MCP 工具和 Skill（兼容层），提供智能的能力发现和调用。
+
+功能（兼容层保留）：
+1. 统一的能力注册表（兼容层）
 2. 智能能力发现
 3. 自动选择最佳能力
 4. 能力组合和编排
 
-使用方法：
+使用方法（已废弃，仅作兼容）::
+
     from core.capability_orchestrator import capability_orchestrator
-    
-    # 发现能力
+
     capabilities = await capability_orchestrator.discover("搜索网页")
-    
-    # 执行能力
     result = await capability_orchestrator.execute("搜索网页", query="Python")
 """
 

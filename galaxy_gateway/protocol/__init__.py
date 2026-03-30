@@ -1,7 +1,25 @@
 """
-AIP v3.0 协议模块
+AIP v3.0 协议模块 — 规范协议路径
+====================================
 
-导出所有协议相关的类和函数
+**Canonical protocol path**: ``galaxy_gateway.protocol`` (this package).
+
+The single authoritative protocol definition for the Galaxy system is
+``galaxy_gateway.protocol.aip_v3`` (AIP v3.0).  All platform clients
+(Android, Windows, Linux, iOS, cloud) must use this protocol definition.
+
+Protocol authority chain::
+
+    galaxy_gateway.protocol.aip_v3     — CANONICAL (AIP v3.0 types + helpers)
+    galaxy_gateway.protocol.compat     — Shim: legacy → v3 conversion only
+    galaxy_gateway.aip_protocol_v2     — HARD DISABLED (raises ImportError)
+
+Do **not** import ``galaxy_gateway.aip_protocol_v2`` directly — it will raise
+:class:`ImportError`.  Legacy message payloads can be normalized to v3 via::
+
+    from galaxy_gateway.protocol.compat import parse_message_compat
+
+导出所有协议相关的类和函数。
 """
 
 from .compat import parse_message_compat, normalize_action_in_payload

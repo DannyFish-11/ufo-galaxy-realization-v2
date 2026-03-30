@@ -1,6 +1,12 @@
 """
 SSOT (Single Source of Truth) helpers for UDM write-through operations.
 
+**Canonical device mutation path**::
+
+    caller → udm_write_*()              (this module — gateway SSOT entry point)
+           → UnifiedDeviceManager       (core.unified.device_manager — SSOT)
+               └→ CapabilityBus         (core.capability_bus — capability visibility)
+
 All device state mutations — register, heartbeat, unregister — must go
 through :func:`udm_write_register`, :func:`udm_write_heartbeat`, and
 :func:`udm_write_unregister` **before** any local cache is touched.
@@ -12,6 +18,10 @@ local-cache updates on the return value:
 
     if not udm_write_heartbeat(device_id):
         return   # do NOT update local state
+
+Capability visibility is handled automatically inside
+:class:`~core.unified.device_manager.UnifiedDeviceManager` — callers of
+``udm_write_register`` do **not** need to call the CapabilityBus separately.
 
 Structured event tags (stable, machine-queryable):
     ssot_udm_write_failed      — register write failed

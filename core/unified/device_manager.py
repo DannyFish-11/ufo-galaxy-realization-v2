@@ -3,10 +3,29 @@ core/unified/device_manager.py
 ================================
 Galaxy 系统统一设备管理器（单例）。
 
+**Authority role (SSOT)**
+--------------------------
+This class is the *single canonical authority* for all device state mutations
+in the Galaxy system.  Every module that needs to register, update, or
+unregister a device **must** do so through this class (or the SSOT helper
+functions in ``galaxy_gateway.ssot``).
+
+Canonical mutation path::
+
+    caller → galaxy_gateway.ssot.udm_write_*()
+            → UnifiedDeviceManager  ← THIS CLASS (SSOT write point)
+            → CapabilityBus          (device capabilities propagated automatically)
+
+Downstream modules that maintain their own per-device records (e.g.
+``core.device_registry``, ``core.device_pool_manager``,
+``core.device_status_api``) are **compatibility / scheduling layers**;
+they must not act as parallel canonical truth sources.
+
 职责：
   - 设备注册 / 注销 / 状态更新
   - 设备查询（按 ID / 类型 / 在线状态）
   - 向统一连接管理器注册/注销 WebSocket 连接
+  - 设备注册后自动向 CapabilityBus 传播设备能力（capability visibility integration）
 
 所有旧 DeviceManager 实现（galaxy_gateway/handlers/device_manager.py、
 enhancements/multidevice/device_manager.py、core/device_agent_manager.py）
@@ -127,6 +146,13 @@ class UnifiedDeviceManager:
                 },
             )
 
+        # Capability visibility integration (Requirement 4):
+        # Propagate device capabilities into the canonical CapabilityBus so
+        # that consumers of the bus always have an up-to-date view of what
+        # each registered device can do.  This is a best-effort, non-blocking
+        # call — failure to propagate never prevents device registration.
+        self._propagate_capabilities_to_bus(device)
+
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
         从字典构建并注册 UnifiedDevice（向后兼容旧注册路径使用）。
@@ -172,11 +198,103 @@ class UnifiedDeviceManager:
             )
             return
 
+        # Remove device capabilities from the canonical CapabilityBus before
+        # dropping the device record so the bus stays consistent.
+        self._remove_capabilities_from_bus(device_id)
+
         self._devices.pop(device_id)
         logger.info(
             "Device unregistered",
             extra={"event": "unregister_device", "device_id": device_id},
         )
+
+    # ------------------------------------------------------------------
+    # Capability-bus integration helpers (private)
+    # ------------------------------------------------------------------
+
+    def _propagate_capabilities_to_bus(self, device: UnifiedDevice) -> None:
+        """Propagate *device* capabilities into the canonical CapabilityBus.
+
+        This is the automatic bridge that ensures capability visibility is
+        updated whenever a device is registered or re-registered through the
+        SSOT path.  Each string capability declared by the device is surfaced
+        as a ``device__<device_id>__<capability>`` entry in the bus with role
+        ``CapabilityBusRole.DEVICE``.
+
+        Failure is logged at DEBUG level and never raises — device registration
+        must succeed even if the bus is unavailable.
+        """
+        caps = list(device.capabilities or [])
+        if not caps:
+            return
+        try:
+            from core.capability_bus import get_capability_bus  # noqa: PLC0415
+            bus = get_capability_bus()
+            for cap in caps:
+                cap_str = str(cap).strip()
+                if not cap_str:
+                    continue
+                bus.register_device_capability(
+                    device_id=device.device_id,
+                    action=cap_str,
+                    description=(
+                        f"Capability '{cap_str}' provided by device "
+                        f"{device.device_name or device.device_id} "
+                        f"(type: {device.device_type})"
+                    ),
+                    metadata={
+                        "device_name": device.device_name or device.device_id,
+                        "device_type": str(device.device_type),
+                        "source": device.source or "udm",
+                    },
+                )
+            logger.debug(
+                "Propagated %d capability/capabilities to CapabilityBus for device %s",
+                len(caps),
+                device.device_id,
+                extra={"event": "capability_bus_propagate", "device_id": device.device_id},
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityBus propagation skipped for device %s: %s",
+                device.device_id,
+                exc,
+                extra={"event": "capability_bus_propagate_skip", "device_id": device.device_id},
+            )
+
+    def _remove_capabilities_from_bus(self, device_id: str) -> None:
+        """Remove all capabilities for *device_id* from the canonical CapabilityBus.
+
+        Called automatically before a device is unregistered.  Failure is
+        logged at DEBUG level and never raises.
+        """
+        device = self._devices.get(device_id)
+        if device is None:
+            return
+        caps = list(device.capabilities or [])
+        if not caps:
+            return
+        try:
+            from core.capability_bus import get_capability_bus  # noqa: PLC0415
+            bus = get_capability_bus()
+            for cap in caps:
+                cap_str = str(cap).strip()
+                if not cap_str:
+                    continue
+                bus.unregister(f"device__{device_id}__{cap_str}")
+            logger.debug(
+                "Removed %d capability/capabilities from CapabilityBus for device %s",
+                len(caps),
+                device_id,
+                extra={"event": "capability_bus_remove", "device_id": device_id},
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityBus removal skipped for device %s: %s",
+                device_id,
+                exc,
+                extra={"event": "capability_bus_remove_skip", "device_id": device_id},
+            )
 
     # ------------------------------------------------------------------
     # 状态更新
