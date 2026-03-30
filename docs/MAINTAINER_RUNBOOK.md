@@ -27,23 +27,19 @@ launcher/                   ← authoritative startup package (PR-5)
   └── shutdown.py           — async_shutdown (graceful NATS + subsystem teardown)
 ```
 
-### Compatibility wrappers (not authoritative)
+### Convenience startup scripts
 
-| Script | Status | Authority |
-|--------|--------|-----------|
-| `start_galaxy.py` | **PR-10 hardened** legacy wrapper | Delegates to `unified_launcher.py`; `_start_desktop()` dead path removed |
-| `start_l4.py` | **PR-10 confirmed** legacy wrapper | Delegates to `unified_launcher.py`; frozen since PR-6 |
-| `start.sh` | Shell convenience | Calls `main.py` |
-| `start.bat` | Windows convenience | Calls `main.py` |
+| Script | Status | Notes |
+|--------|--------|-------|
+| `start.sh` | Active convenience | Calls `main.py` |
+| `start.bat` | Active convenience (Windows) | Calls `main.py` |
 
-**Never extend `start_galaxy.py` or `start_l4.py` with new logic.**  
-New startup functionality belongs in `launcher/`.
-
-> **PR-10 note**: `start_galaxy.py --desktop` / `--all` are accepted as no-op
-> stubs for backward compatibility but do **not** start any UI.  The legacy
-> `run_ui.py` launcher they targeted has been permanently retired.  Active
-> Windows direction: `windows_client/status_board_v2/`.
-> See `docs/LEGACY_PURGE_HARDENING.md` for the complete purge audit.
+> **Post-PR-10 cleanup**: `start_galaxy.py` and `start_l4.py` have been fully
+> removed.  They were compatibility wrappers that simply delegated to
+> `unified_launcher.py` with a `DeprecationWarning`.  All startup logic belongs
+> in `launcher/`.  See `docs/LEGACY_PURGE_HARDENING.md` for the complete purge
+> audit.  The L4 runtime classes are now canonical in
+> `core.galaxy_main_loop_l4_enhanced`.
 
 ---
 

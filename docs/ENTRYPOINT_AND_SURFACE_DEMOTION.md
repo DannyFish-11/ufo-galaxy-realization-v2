@@ -55,8 +55,8 @@ not subject lifecycle.
 
 ### 2.3 Launcher Scripts
 
-**Demoted surfaces**: `main.py`, `unified_launcher.py`, `start_galaxy.py`,
-`start_l4.py`, `start.sh`, `start.bat`, `start_unified.sh`  
+**Active authoritative scripts**: `main.py`, `unified_launcher.py`, `start.sh`, `start.bat`, `start_unified.sh`  
+**Removed (post-PR-10 cleanup)**: `start_galaxy.py`, `start_l4.py` — fully deleted; they were compatibility wrappers that delegated to `unified_launcher.py`.  
 **Correct role**: OS-level / process bootstrap scripts  
 **What they should do**: Set up the process environment, initialise supporting
 services, start the HTTP server.  They do NOT drive subject lifecycle.

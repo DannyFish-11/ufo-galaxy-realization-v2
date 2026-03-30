@@ -16,11 +16,12 @@ class TestPhase1ImportProtection:
     """All L4 modules should be importable without crashing."""
 
     def test_galaxy_main_loop_importable(self):
-        import galaxy_main_loop_l4
-        assert hasattr(galaxy_main_loop_l4, "GalaxyMainLoopL4")
+        # Canonical location: core.galaxy_main_loop_l4_enhanced
+        from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
+        assert GalaxyMainLoopL4 is not None
 
     def test_module_availability_flags_exist(self):
-        import galaxy_main_loop_l4 as g
+        import core.galaxy_main_loop_l4_enhanced as g
         flags = [
             "_PERCEPTION_AVAILABLE",
             "_GOAL_DECOMPOSER_AVAILABLE",
@@ -37,7 +38,7 @@ class TestPhase1ImportProtection:
             assert hasattr(g, flag), f"Missing availability flag: {flag}"
 
     def test_module_status_method(self):
-        from galaxy_main_loop_l4 import GalaxyMainLoopL4
+        from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
         loop = GalaxyMainLoopL4()
         status = loop._module_status()
         assert isinstance(status, dict)

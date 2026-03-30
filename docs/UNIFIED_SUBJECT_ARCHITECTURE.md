@@ -184,9 +184,9 @@ subject-core authority:
 | `core/routes/chat.py` | HTTP adapter → `DesktopPresenceRuntime.handle_request()` |
 | `galaxy_gateway/app.py` | WebSocket protocol adapter (internal cross-device substrate) |
 | `main.py` | Bootstrap launcher script only |
-| `unified_launcher.py` | Bootstrap launcher script only |
-| `start_galaxy.py` | Bootstrap launcher script only |
-| `start_l4.py` | Bootstrap launcher script (deprecated, delegates to unified_launcher) |
+| `unified_launcher.py` | Bootstrap launcher script only (authoritative) |
+| ~~`start_galaxy.py`~~ | **Removed** — was a compatibility wrapper; use `main.py` |
+| ~~`start_l4.py`~~ | **Removed** — was a compatibility wrapper; use `main.py` |
 | `start.sh` / `start.bat` / `start_unified.sh` | OS-level bootstrap scripts only |
 | `dashboard/` | Internal monitoring / admin UI (not a subject entrypoint) |
 | `windows_client/` | Desktop UI client (presentation layer; not a subject entrypoint) |

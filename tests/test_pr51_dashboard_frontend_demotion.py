@@ -192,22 +192,22 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     # ------------------------------------------------------------------
-    # Group 5: start_galaxy.py compatibility wrapper
+    # Group 5: start_galaxy.py — fully removed
     # ------------------------------------------------------------------
 
-    def test_15_start_galaxy_no_both_dashboards_merged(self):
-        content = _read("start_galaxy.py")
-        self.assertNotIn(
-            "Both dashboards have been merged",
-            content,
+    def test_15_start_galaxy_fully_removed(self):
+        """start_galaxy.py has been fully removed from the repository."""
+        self.assertFalse(
+            (PROJECT_ROOT / "start_galaxy.py").exists(),
+            "start_galaxy.py must not exist — it has been permanently removed. "
+            "Use 'python main.py' or 'python unified_launcher.py' instead.",
         )
 
-    def test_16_start_galaxy_deprecation_mentions_legacy_surface(self):
-        content = _read("start_galaxy.py")
-        lowered = content.lower()
+    def test_16_unified_launcher_is_sole_startup_entry(self):
+        """unified_launcher.py is now the sole non-main startup entry."""
         self.assertTrue(
-            "demoted" in lowered or "non-primary" in lowered or "legacy surface" in lowered,
-            "start_galaxy.py deprecation messaging should reference demotion/legacy surface status",
+            (PROJECT_ROOT / "unified_launcher.py").exists(),
+            "unified_launcher.py must exist as the authoritative startup entry",
         )
 
     # ------------------------------------------------------------------
@@ -326,16 +326,16 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     # ------------------------------------------------------------------
-    # Group 12: start_galaxy.py direction
+    # Group 12: start_galaxy.py — removed (direction now in MAINTAINER_RUNBOOK)
     # ------------------------------------------------------------------
 
-    def test_28_start_galaxy_mentions_tristate_runtime(self):
-        content = _read("start_galaxy.py")
+    def test_28_maintainer_runbook_mentions_tristate(self):
+        """MAINTAINER_RUNBOOK.md documents the tri-state runtime (replaces start_galaxy.py note)."""
+        content = _read("docs/MAINTAINER_RUNBOOK.md")
         self.assertIn(
             "tri-state",
             content,
-            "start_galaxy.py deprecation message should mention the current direction "
-            "(desktop tri-state runtime)",
+            "MAINTAINER_RUNBOOK.md must mention the desktop tri-state runtime direction",
         )
 
     # ------------------------------------------------------------------

@@ -767,9 +767,9 @@ def main():
     python main.py                          # ← 推荐（委托到 unified_launcher.py）
     python unified_launcher.py              # 等效主入口
 
-已弃用的兼容性包装器（将在未来版本移除）:
-    python start_galaxy.py                  # 兼容性包装器，已弃用
-    python start_l4.py                      # 兼容性包装器，已弃用（PR6 已冻结）
+已删除的兼容性包装器（不可再使用）:
+    start_galaxy.py                         # 已删除（post-PR-10 清理）
+    start_l4.py                             # 已删除（post-PR-10 清理）
 
 示例:
     python unified_launcher.py              # 默认启动（完整模式）

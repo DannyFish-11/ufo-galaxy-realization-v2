@@ -268,26 +268,28 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
     ),
     PurgeDecision(
         asset_path="start_galaxy.py",
-        status=PurgeStatus.WRAPPER_HARDENED,
+        status=PurgeStatus.PERMANENTLY_ISOLATED,
         pr="PR-10",
         rationale=(
-            "start_galaxy.py is a legacy compatibility wrapper that must not "
-            "grow new startup logic.  PR-10 hardened it by: removing the dead "
-            "_start_desktop() function, adding the PR-10 LEGACY WRAPPER comment "
-            "guard, updating the deprecation message to reference the purge, "
-            "and keeping --desktop/--all as no-op stubs with clear warnings."
+            "start_galaxy.py was a legacy compatibility wrapper that delegated "
+            "to unified_launcher.py.  PR-10 hardened it; the post-PR-10 cleanup "
+            "fully removes it.  There is no use case for the wrapper now that "
+            "unified_launcher.py is the sole startup authority.  The file has been "
+            "deleted from the repository.  Use 'python main.py' or "
+            "'python unified_launcher.py' directly."
         ),
         canonical_replacement="python unified_launcher.py  (or python main.py)",
     ),
     PurgeDecision(
         asset_path="start_l4.py",
-        status=PurgeStatus.WRAPPER_HARDENED,
+        status=PurgeStatus.PERMANENTLY_ISOLATED,
         pr="PR-10",
         rationale=(
-            "start_l4.py has been frozen since PR-6 (delegates to "
-            "unified_launcher.py).  PR-10 confirms it carries the required "
-            "DeprecationWarning and that no new L4 logic has been added.  "
-            "It must not be extended."
+            "start_l4.py was frozen since PR-6 (delegates to unified_launcher.py). "
+            "The post-PR-10 cleanup fully removes it.  There is no use case for "
+            "the wrapper now that unified_launcher.py manages L4 lifecycle.  "
+            "The file has been deleted from the repository.  Use 'python main.py' "
+            "or 'python unified_launcher.py' directly."
         ),
         canonical_replacement="python unified_launcher.py  (or python main.py)",
     ),

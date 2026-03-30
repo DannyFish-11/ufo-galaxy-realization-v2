@@ -369,12 +369,14 @@ class TestAuthoritativeEntryPoint:
     def test_unified_launcher_py_exists(self):
         assert (PROJECT_ROOT / "unified_launcher.py").exists()
 
-    def test_start_galaxy_delegates_to_unified_launcher(self):
-        """start_galaxy.py (compat wrapper) must import 'main' from unified_launcher."""
-        sg = (PROJECT_ROOT / "start_galaxy.py").read_text(encoding="utf-8")
-        assert "unified_launcher" in sg
-        assert "main" in sg
+    def test_start_galaxy_not_present(self):
+        """start_galaxy.py has been removed — only main.py / unified_launcher.py are valid."""
+        assert not (PROJECT_ROOT / "start_galaxy.py").exists(), (
+            "start_galaxy.py must not exist; use main.py or unified_launcher.py instead"
+        )
 
-    def test_start_l4_delegates_to_unified_launcher(self):
-        sl4 = (PROJECT_ROOT / "start_l4.py").read_text(encoding="utf-8")
-        assert "unified_launcher" in sl4
+    def test_start_l4_not_present(self):
+        """start_l4.py has been removed — only main.py / unified_launcher.py are valid."""
+        assert not (PROJECT_ROOT / "start_l4.py").exists(), (
+            "start_l4.py must not exist; use main.py or unified_launcher.py instead"
+        )

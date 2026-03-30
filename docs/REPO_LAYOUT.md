@@ -27,7 +27,7 @@ New functionality belongs here.
 ```
 python unified_launcher.py          # canonical startup (Linux/Mac)
 start.bat                            # Windows canonical startup
-python start_l4.py                   # L4 runtime startup
+python main.py                       # thin stub that delegates to unified_launcher.py
 ```
 
 ---
@@ -148,7 +148,6 @@ Supporting directories that are not part of the active runtime code path.
 | `main.py` | Thin stub forwarding to `unified_launcher.py` |
 | `start.bat` | Windows canonical startup script |
 | `start.sh` | Linux/Mac startup script |
-| `start_l4.py` | L4 runtime launcher |
 | `node_dependencies.json` | Canonical node orchestration registry |
 | `config.json` | Runtime configuration |
 | `pyproject.toml` | Python project metadata |

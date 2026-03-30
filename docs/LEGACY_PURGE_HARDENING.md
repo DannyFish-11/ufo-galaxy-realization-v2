@@ -53,34 +53,37 @@ windows_client/autonomy/           ← active Windows automation layer
 core/desktop_presence_runtime.py   ← DesktopPresenceRuntime tri-state shell
 ```
 
-### 2.2 Hardened: `start_galaxy.py`
+### 2.2 Fully removed: `start_galaxy.py`
 
 | Attribute | Value |
 |---|---|
-| Status | **WRAPPER_HARDENED** |
+| Status | **PERMANENTLY_ISOLATED** (file deleted) |
 | Asset | `start_galaxy.py` |
-| PR | PR-10 |
+| PR | PR-10 (hardened), post-PR-10 cleanup (removed) |
 
-**Changes**:
-- Removed `_start_desktop()` dead path (see 2.1).
-- Added `# PR-10 LEGACY WRAPPER` comment guard at module level.
-- Updated deprecation message to reference the purge.
-- Updated docstring to reflect final state.
+**History**:
+- PR-10: Removed `_start_desktop()` dead path; added LEGACY WRAPPER guard; hardened wrapper.
+- Post-PR-10 cleanup: File deleted entirely. There is no remaining use case for the wrapper.
 
-**Invariant**: `start_galaxy.py` must never define `_start_desktop()` or any
-function that invokes `run_ui.py` or any other hard-disabled asset.
+**Migration**: Use `python main.py` or `python unified_launcher.py` directly.
 
-### 2.3 Confirmed hardened: `start_l4.py`
+**Invariant**: `start_galaxy.py` must not exist in the active repository tree.
+
+### 2.3 Fully removed: `start_l4.py`
 
 | Attribute | Value |
 |---|---|
-| Status | **WRAPPER_HARDENED** |
+| Status | **PERMANENTLY_ISOLATED** (file deleted) |
 | Asset | `start_l4.py` |
-| PR | PR-10 (confirmed; frozen since PR-6) |
+| PR | PR-10 (confirmed/frozen), post-PR-10 cleanup (removed) |
 
-`start_l4.py` was frozen in PR-6; it already carries a `DeprecationWarning`
-and delegates unconditionally to `unified_launcher.py`.  PR-10 confirms this
-state and registers it in the purge registry as a hardening checkpoint.
+`start_l4.py` was frozen in PR-6 (delegating to `unified_launcher.py`) and
+confirmed in PR-10.  The post-PR-10 cleanup deletes it entirely.  L4 lifecycle
+is now managed exclusively through `unified_launcher.py`.
+
+**Migration**: Use `python main.py` or `python unified_launcher.py` directly.
+
+**Invariant**: `start_l4.py` must not exist in the active repository tree.
 
 ---
 
@@ -129,6 +132,10 @@ start.bat                   ← Windows canonical startup (calls main.py)
 start.sh                    ← Linux/macOS convenience (calls main.py)
 launcher/                   ← authoritative startup modules (PR-5)
 
+L4 runtime classes (canonical location)
+────────────────────────────────────────
+core/galaxy_main_loop_l4_enhanced.py  ← GalaxyMainLoopL4 base + GalaxyMainLoopL4Enhanced
+
 Authority chain
 ───────────────
 DesktopPresenceRuntime      (core/desktop_presence_runtime.py)
@@ -141,10 +148,10 @@ Active desktop status surface
 windows_client/status_board_v2/  ← PROJECTION_DRIVEN (only canonical UI)
 windows_client/autonomy/         ← ACTIVE_DESKTOP_SHELL
 
-Legacy / compatibility wrappers (DO NOT EXTEND)
+Fully removed (post-PR-10 cleanup)
 ────────────────────────────────────────────────
-start_galaxy.py     ← delegates to unified_launcher.py; no new logic
-start_l4.py         ← delegates to unified_launcher.py; no new logic
+start_galaxy.py     ← deleted; use main.py or unified_launcher.py
+start_l4.py         ← deleted; use main.py or unified_launcher.py
 
 Hard-disabled (raise RuntimeError on import)
 ────────────────────────────────────────────
