@@ -1,0 +1,61 @@
+# Gitleaks configuration — secret scanning
+# Run locally: gitleaks detect --config .gitleaks.toml --source .
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "Galaxy Gitleaks Config"
+
+[extend]
+# Use the upstream default ruleset as a base
+useDefault = true
+
+# ── Allowlist: known-safe false positives ──────────────────────────────────
+
+[[allowlists]]
+description = "Example / placeholder credentials in config examples"
+paths = [
+    "config/services_config.example.json",
+    "runtime/config.example.json",
+    "docs/",
+    "*.example.*",
+    "*.example",
+    "QUICKSTART.md",
+    "README.md",
+    "README_*.md",
+    "DEPLOYMENT_GUIDE.md",
+    "L4_QUICK_START_GUIDE.md",
+]
+
+[[allowlists]]
+description = "Test fixtures — synthetic keys only"
+paths = [
+    "tests/",
+]
+regexes = [
+    # Common fake/placeholder keys used in tests
+    '''sk-test-''',
+    '''FAKE_''',
+    '''PLACEHOLDER_''',
+]
+
+# ── Custom high-risk rules for this codebase ──────────────────────────────
+
+[[rules]]
+id = "galaxy-api-key"
+description = "Galaxy internal API key pattern"
+regex = '''galaxy[_-]api[_-]key\s*[:=]\s*["']?[A-Za-z0-9+/=]{20,}["']?'''
+severity = "HIGH"
+tags = ["secret", "galaxy"]
+
+[[rules]]
+id = "openai-key-inline"
+description = "OpenAI API key hardcoded in source"
+regex = '''sk-[A-Za-z0-9]{48}'''
+severity = "CRITICAL"
+tags = ["secret", "openai"]
+
+[[rules]]
+id = "anthropic-key-inline"
+description = "Anthropic API key hardcoded in source"
+regex = '''sk-ant-[A-Za-z0-9\-]{40,}'''
+severity = "CRITICAL"
+tags = ["secret", "anthropic"]

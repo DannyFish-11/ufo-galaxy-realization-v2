@@ -1,0 +1,140 @@
+name: Engineering Guardrails (PR-6)
+
+# =============================================================================
+# PR-6: Engineering Guardrails & Regression Prevention
+#
+# Jobs:
+#   type-check        — mypy static type analysis (gradual baseline)
+#   secret-scan       — gitleaks secret / credential scanning
+#   import-boundaries — enforce layered import rules (core ↛ gateway)
+#   file-complexity   — flag files that exceed line-count budgets
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # A. Type checking — mypy with a pragmatic gradual baseline
+  # ---------------------------------------------------------------------------
+  type-check:
+    name: Type Check (mypy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Install stub packages
+        # Install type stubs for common libraries so mypy has something to check
+        # against.  Missing stubs are silenced via ignore_missing_imports = true.
+        run: |
+          pip install types-PyYAML types-requests types-python-dateutil || true
+
+      - name: Run mypy (gradual baseline — core & galaxy_gateway)
+        # Uses mypy.ini for per-module configuration.
+        # New modules added to core/ or galaxy_gateway/routing/ are checked
+        # strictly; legacy/large modules are silenced.
+        # The job reports all findings but does NOT fail CI unless mypy itself
+        # exits non-zero (i.e., internal error or a strictly-checked module fails).
+        run: |
+          mypy core/ galaxy_gateway/ \
+            --config-file mypy.ini \
+            --no-error-summary \
+            2>&1 | tee /tmp/mypy-output.txt || true
+
+          # Surface any errors from strictly-checked modules
+          STRICT_ERRORS=$(grep -E "(core/canonical_execution_chain|core/mainline_convergence|galaxy_gateway/routing).*: error:" \
+            /tmp/mypy-output.txt || true)
+          if [ -n "$STRICT_ERRORS" ]; then
+            echo ""
+            echo "❌ mypy errors in strictly-checked modules:"
+            echo "$STRICT_ERRORS"
+            exit 1
+          fi
+          echo "✅ mypy type-check passed (no errors in strict-mode modules)."
+
+  # ---------------------------------------------------------------------------
+  # B. Secret scanning — gitleaks
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history needed for accurate baseline comparison
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: >-
+            detect
+            --config .gitleaks.toml
+            --redact
+            --no-git
+            --exit-code 1
+            --log-opts=""
+
+  # ---------------------------------------------------------------------------
+  # C1. Structural guardrail — import boundary enforcement
+  # ---------------------------------------------------------------------------
+  import-boundaries:
+    name: Import Boundary Guardrail
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check import boundaries (warning mode)
+        # Warning-only: reports violations but does not fail CI.
+        # Switch to --strict once the existing violations are resolved.
+        run: |
+          python scripts/check_import_boundaries.py
+          echo "✅ Import boundary check complete (warning mode)."
+
+  # ---------------------------------------------------------------------------
+  # C2. Structural guardrail — file complexity / size budget
+  # ---------------------------------------------------------------------------
+  file-complexity:
+    name: File Complexity Budget
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check file complexity budget (strict mode)
+        # Fails CI if any NEW file exceeds 2000 lines, or if a grandfathered
+        # file has grown past its recorded limit.
+        run: |
+          python scripts/check_file_complexity.py --strict
