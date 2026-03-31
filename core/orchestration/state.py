@@ -28,6 +28,9 @@ class SessionMemoryManager:
 
     STATE_MANAGER_AUTHORITY = STATE_MANAGER_AUTHORITY
 
+    _MAX_HISTORY_BUFFER: int = 40
+    _ROLLING_WINDOW_SIZE: int = 20
+
     def __init__(self) -> None:
         self._session_memory: Dict[str, List[Dict]] = {}
 
@@ -37,8 +40,10 @@ class SessionMemoryManager:
             self._session_memory[session_id] = []
         self._session_memory[session_id].append({"role": role, "content": content})
         # Keep a rolling window to bound memory growth
-        if len(self._session_memory[session_id]) > 40:
-            self._session_memory[session_id] = self._session_memory[session_id][-20:]
+        if len(self._session_memory[session_id]) > self._MAX_HISTORY_BUFFER:
+            self._session_memory[session_id] = (
+                self._session_memory[session_id][-self._ROLLING_WINDOW_SIZE :]
+            )
 
     async def clear_session(self, session_id: str) -> None:
         """Remove all history for *session_id*."""

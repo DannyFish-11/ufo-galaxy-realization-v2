@@ -93,6 +93,10 @@ logger = logging.getLogger("Galaxy.OpenClawd")
 # ============================================================================
 # PR-7: Extracted to core/orchestration/lifecycle.py. Re-imported here for
 # backward compatibility with any module that imports directly from openclawd.
+# The noqa suppresses E402 (module-level import not at top of file) — this
+# placement is intentional: module-level constants _DEFAULT_SKILL_SCHEMA and
+# the built-in tool lists below depend on these names being in scope and the
+# import must follow the top-of-module stdlib imports already present above.
 from core.orchestration.lifecycle import (  # noqa: E402
     _LOCAL_DEVICE_PREFIXES,
     _LOCAL_HOSTNAME,

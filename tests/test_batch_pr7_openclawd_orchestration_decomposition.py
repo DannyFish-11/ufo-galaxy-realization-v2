@@ -383,9 +383,7 @@ def test_session_memory_manager_instantiates():
 def test_session_memory_manager_record_and_get():
     from core.orchestration.state import SessionMemoryManager
     smm = SessionMemoryManager()
-    asyncio.get_event_loop().run_until_complete(
-        smm.record_turn("sess1", "user", "hello")
-    )
+    asyncio.run(smm.record_turn("sess1", "user", "hello"))
     history = smm.get_history("sess1")
     assert len(history) == 1
     assert history[0]["role"] == "user"
@@ -395,22 +393,16 @@ def test_session_memory_manager_record_and_get():
 def test_session_memory_manager_clear_session():
     from core.orchestration.state import SessionMemoryManager
     smm = SessionMemoryManager()
-    asyncio.get_event_loop().run_until_complete(
-        smm.record_turn("sess1", "user", "hi")
-    )
-    asyncio.get_event_loop().run_until_complete(smm.clear_session("sess1"))
+    asyncio.run(smm.record_turn("sess1", "user", "hi"))
+    asyncio.run(smm.clear_session("sess1"))
     assert smm.get_history("sess1") == []
 
 
 def test_session_memory_manager_list_sessions():
     from core.orchestration.state import SessionMemoryManager
     smm = SessionMemoryManager()
-    asyncio.get_event_loop().run_until_complete(
-        smm.record_turn("s1", "user", "hi")
-    )
-    asyncio.get_event_loop().run_until_complete(
-        smm.record_turn("s2", "assistant", "hello")
-    )
+    asyncio.run(smm.record_turn("s1", "user", "hi"))
+    asyncio.run(smm.record_turn("s2", "assistant", "hello"))
     sessions = smm.list_sessions()
     session_ids = {s["session_id"] for s in sessions}
     assert "s1" in session_ids
@@ -426,7 +418,7 @@ def test_session_memory_manager_rolling_window():
             await smm.record_turn("sess", "user", f"msg {i}")
         return smm
 
-    smm = asyncio.get_event_loop().run_until_complete(_fill())
+    smm = asyncio.run(_fill())
     history = smm.get_history("sess")
     # After 45 inserts, rolling window keeps last 20 after trimming at 40
     assert len(history) <= 20
@@ -441,7 +433,7 @@ def test_session_memory_manager_get_history_max_turns():
             await smm.record_turn("sess", "user", f"msg {i}")
         return smm
 
-    smm = asyncio.get_event_loop().run_until_complete(_fill())
+    smm = asyncio.run(_fill())
     history = smm.get_history("sess", max_turns=3)
     assert len(history) == 3
 
