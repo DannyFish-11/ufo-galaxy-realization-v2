@@ -46,8 +46,8 @@ services:
       - GALAXY_LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
 
-    ports:
-      - "9000:9000"   # Main API + Web UI (灵动岛 Dashboard) — single client entry port
+    expose:
+      - "9000"
 
     volumes:
       - galaxy-data:/app/data
@@ -113,9 +113,10 @@ services:
         max-file: "5"
 
   # ── Dashboard: Secondary Web UI ──
-  # NOTE: Port 8001 is intentional — this secondary management dashboard cannot
-  # use port 9000 because the primary galaxy service already binds that port.
-  # All primary API/client traffic must go through galaxy:9000 (or gateway:9000).
+  # NOTE: Port 8001 is intentional — this secondary management dashboard must not
+  # use port 9000 because the gateway service already binds host port 9000 as the
+  # single public client entry point.
+  # All primary API/client traffic must go through gateway:9000.
   dashboard:
     build:
       context: .
