@@ -1,29 +1,42 @@
 #!/usr/bin/env python3
 """
-Galaxy-Nexus 星枢 — Bootstrap Launcher (Adapter/Launcher Role)
-===============================================================
+Galaxy-Nexus 星枢 — System Orchestrator
+========================================
 
-**Unified-Subject Architecture — Bootstrap Script Only**
----------------------------------------------------------
-This file is a **bootstrap launcher** — it is NOT a primary subject entrypoint
-and does NOT have subject-core authority.  The subject lifecycle is driven by
-:class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` (the outer
-shell) wrapping :class:`~core.openclawd.OpenClawd` (the subject core).
+**SYSTEM_ORCHESTRATOR_AUTHORITY** — ``main.py:SYSTEM_ORCHESTRATOR``
+--------------------------------------------------------------------
+This file is the **canonical system orchestrator** for Galaxy-Nexus.
+``python main.py`` is the official startup path.
 
-This script's sole role: bootstrap the process, then yield to
-``unified_launcher.py`` which initialises the runtime shell.
+Staged bring-up contract (PR-2)
+--------------------------------
+.. code-block:: text
 
-所有启动逻辑统一由 unified_launcher.py 处理。
-本文件仅作为入口委托，不包含业务逻辑。
+    Phase 1 — LOAD_CONFIG           Load unified configuration baseline
+    Phase 2 — RESOLVE_MODE          Resolve current system mode
+    Phase 3 — ENV_CHECKS            Environment / bootstrap checks
+    Phase 4 — BACKGROUND_SUBSYSTEMS Background subsystem bring-up hooks
+    Phase 5 — RUNTIME_SUBJECT       Runtime subject bring-up hooks
+    Phase 6 — DESKTOP_SURFACE       Desktop surface bring-up hooks
+    Phase 7 — READINESS_SUMMARY     Final readiness summary
 
-使用方法:
-    python main.py              → 启动完整 Galaxy-Nexus 系统
-    python main.py --setup      → 运行配置向导
-    python main.py --status     → 查看系统状态
-    python main.py --help       → 查看所有启动选项
+``unified_launcher.py`` is a **subordinate** launcher component invoked during
+Phase 4–6.  It is NOT a competing top-level startup authority.
 
-其他入口（均委托到同一启动器）:
-    python unified_launcher.py  → 直接调用统一启动器（与 main.py 等效）
+Subject lifecycle authority
+---------------------------
+- :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` — outer shell
+- :class:`~core.openclawd.OpenClawd` — subject core
+
+Usage
+-----
+    python main.py              # Start complete Galaxy-Nexus system
+    python main.py --setup      # Run configuration wizard
+    python main.py --status     # Show system status
+    python main.py --help       # Show all startup options
+
+All startup options are forwarded to ``unified_launcher.py`` (subordinate
+component) after the orchestrator completes its staged pre-flight sequence.
 """
 
 import sys
@@ -31,11 +44,17 @@ import subprocess
 import logging
 from pathlib import Path
 
-# 设置项目根目录
+# ---------------------------------------------------------------------------
+# Bootstrap: project root + sys.path
+# ---------------------------------------------------------------------------
+
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# 配置基础日志
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -43,24 +62,83 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Galaxy")
 
+# ---------------------------------------------------------------------------
+# Authority declaration — referenced by validate_runtime.py and CI guardrails
+# ---------------------------------------------------------------------------
+
+SYSTEM_ORCHESTRATOR_AUTHORITY: str = (
+    "main.py:SYSTEM_ORCHESTRATOR — canonical staged bring-up contract (PR-2)"
+)
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator bring-up sequence
+# ---------------------------------------------------------------------------
+
+def _run_orchestrator_preflight() -> bool:
+    """Execute the staged pre-flight bring-up sequence (Phases 1–7).
+
+    Returns ``True`` if the system is ready to proceed to the full async
+    bring-up via ``unified_launcher``, ``False`` on hard failure.
+
+    Logs one line per phase so startup logs reflect clear staged bring-up.
+    """
+    try:
+        from core.system_orchestrator import SystemOrchestrator
+        orch = SystemOrchestrator(continue_on_failure=False)
+        summary = orch.run_startup_sequence()
+        logger.info("Orchestrator bring-up complete:\n%s", summary)
+        return summary.is_ready()
+    except Exception as exc:
+        logger.warning(
+            "Orchestrator pre-flight raised an exception (non-fatal): %s", exc
+        )
+        # Degraded but non-fatal — proceed with bring-up
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Main entry-point
+# ---------------------------------------------------------------------------
 
 def main() -> int:
-    """主入口 — 委托到 unified_launcher.py"""
+    """Canonical system orchestrator entry-point.
 
-    # --setup: 运行配置向导
+    Execution order
+    ~~~~~~~~~~~~~~~
+    1. ``--setup`` shortcut — bypass bring-up and launch config wizard.
+    2. Run staged orchestrator pre-flight (Phases 1–7).
+    3. If pre-flight fails hard, exit immediately.
+    4. Otherwise, hand off to ``unified_launcher.py`` (subordinate component)
+       which performs the full async bring-up of all services and the runtime
+       subject.
+    """
+
+    # --setup: shortcut to configuration wizard (bypasses bring-up)
     if "--setup" in sys.argv:
         wizard_path = PROJECT_ROOT / "setup_wizard.py"
         if wizard_path.exists():
             return subprocess.call([sys.executable, str(wizard_path)])
-        logger.error("配置向导未找到: %s", wizard_path)
+        logger.error("Configuration wizard not found: %s", wizard_path)
         return 1
 
-    # 委托到 unified_launcher
+    logger.info("Galaxy-Nexus starting — %s", SYSTEM_ORCHESTRATOR_AUTHORITY)
+
+    # Phases 1–7: staged orchestrator pre-flight
+    ready = _run_orchestrator_preflight()
+    if not ready:
+        logger.error(
+            "Orchestrator pre-flight failed — system cannot start. "
+            "Check logs above for details."
+        )
+        return 1
+
+    # Hand off to the subordinate launcher for full async bring-up
     launcher_path = PROJECT_ROOT / "unified_launcher.py"
     if not launcher_path.exists():
         logger.error(
-            "统一启动器未找到: %s\n"
-            "请确保 unified_launcher.py 存在于项目根目录。",
+            "Subordinate launcher not found: %s\n"
+            "Ensure unified_launcher.py is present in the project root.",
             launcher_path,
         )
         return 1
@@ -69,10 +147,10 @@ def main() -> int:
     try:
         return subprocess.call(args)
     except KeyboardInterrupt:
-        logger.info("收到中断信号，正在退出...")
+        logger.info("Interrupt received — exiting.")
         return 0
     except Exception as exc:
-        logger.error("启动失败: %s", exc)
+        logger.error("Startup failed: %s", exc)
         return 1
 
 

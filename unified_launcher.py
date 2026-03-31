@@ -1,27 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Galaxy - 统一启动器 (Bootstrap Launcher — Adapter/Launcher Role)
-==================================================================
+Galaxy - 统一启动器 (Subordinate Launcher Component — PR-2)
+===========================================================
 
-**Unified-Subject Architecture — Bootstrap Launcher Only**
------------------------------------------------------------
-This script is a **bootstrap launcher**.  It initialises the process
-environment, starts supporting services, and brings up the HTTP server.
-It does NOT have subject-core authority.
+**Subordinate Launcher Role — NOT a top-level startup authority**
+------------------------------------------------------------------
+This script is a **subordinate launcher component**.  It is invoked by
+``main.py`` (the canonical system orchestrator) **after** the orchestrator's
+staged pre-flight sequence (Phases 1–7) completes successfully.
 
-The subject lifecycle is owned by:
-- :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` — the
-  outer Windows desktop runtime shell (tri-state lifecycle owner).
-- :class:`~core.openclawd.OpenClawd` — the inner subject core.
+``main.py`` runs the full 7-phase pre-flight first.  Once pre-flight reports
+system readiness, ``main.py`` delegates to this file for the full async
+service bring-up (background subsystems, runtime subject, desktop surface).
 
-This launcher's role: process bootstrap → service initialisation →
-HTTP server startup → yield to the runtime shell for request handling.
+``main.py`` is the authoritative startup entrypoint.  Running
+``python main.py`` is the official way to start Galaxy-Nexus.
+
+This file must NOT be treated as a competing top-level startup contract.
+
+Responsibilities (as a subordinate component)
+---------------------------------------------
+1. Full async bring-up of background services (NATS, Redis, L4 modules)
+2. Launch of the core runtime (OpenClawd + DesktopPresenceRuntime)
+3. Start of the unified API gateway (FastAPI / uvicorn)
+4. Write ``runtime/entrypoint.json`` for client discovery
+5. Graceful shutdown handling
+
+Subject lifecycle authority
+---------------------------
+- :class:`~core.desktop_presence_runtime.DesktopPresenceRuntime` — outer shell
+- :class:`~core.openclawd.OpenClawd` — subject core
 
 Internal structure
 ------------------
-Launcher responsibilities are split across focused ``launcher/`` sub-modules
-to reduce monolith surface and improve maintainability:
+Launcher responsibilities are split across focused ``launcher/`` sub-modules:
 
 - ``launcher.bootstrap``        — enums, SystemConfig, entrypoint writer, display helpers
 - ``launcher.service_manager``  — ServiceInfo, ServiceManager
@@ -30,15 +43,15 @@ to reduce monolith surface and improve maintainability:
 - ``launcher.health_checks``    — run_startup_health_check
 - ``launcher.shutdown``         — async_shutdown
 
-This file retains the top-level orchestration surface:
+This file retains the service orchestration surface:
 - ``L4EnhancementLauncher``  — L4 module startup
 - ``UnifiedWebUI``           — HTTP server assembly (FastAPI + uvicorn)
-- ``GalaxyUnified``          — top-level system orchestrator
-- ``_run_check_only`` / ``main`` — CLI entry-points
+- ``GalaxyUnified``          — service bring-up coordinator (Phase 4–6 delegate)
+- ``_run_check_only`` / ``main`` — CLI entry-points (for direct invocation)
 
 作者：Galaxy Team
 日期：2026-02-06
-版本：2.0
+版本：2.1 (demoted to subordinate role — PR-2)
 """
 
 import os
@@ -770,16 +783,17 @@ def main():
         description="Galaxy - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-权威启动路径:
-    python main.py                          # ← 推荐（委托到 unified_launcher.py）
-    python unified_launcher.py              # 等效主入口
+权威启动路径 (PR-2):
+    python main.py                          # ← 官方入口（系统 Orchestrator）
+    python unified_launcher.py              # 从属组件（直接调用，高级用途）
 
 已删除的兼容性包装器（不可再使用）:
     start_galaxy.py                         # 已删除（post-PR-10 清理）
     start_l4.py                             # 已删除（post-PR-10 清理）
 
 示例:
-    python unified_launcher.py              # 默认启动（完整模式）
+    python main.py                          # 默认启动（推荐）
+    python unified_launcher.py              # 直接调用从属启动器（完整模式）
     python unified_launcher.py --minimal    # 最小启动
     python unified_launcher.py --no-l4      # 不启动 L4 模块
     python unified_launcher.py --status     # 查看状态

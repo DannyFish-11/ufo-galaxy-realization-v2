@@ -141,41 +141,57 @@ authoritative port lookups.  Refer to `config/unified_ports.yaml` instead:
 
 ## 4. Startup authority
 
-### Process entrypoint
+### Canonical system orchestrator (PR-2)
 
-**`main.py`** is the canonical process entrypoint.
+**`main.py`** is the canonical system orchestrator and official startup path.
 
-It performs minimal bootstrap (Python path setup, logging) and delegates
-unconditionally to `unified_launcher.py`.  It does **not** contain business
-logic or startup decisions beyond routing to the setup wizard when
-`--setup` is requested.
+Running `python main.py` is the authoritative way to start Galaxy-Nexus.
 
-### Orchestration entrypoint
+`main.py` owns the staged bring-up contract:
 
-**`unified_launcher.py`** is the canonical startup orchestration entrypoint.
+| Phase | Name | Responsibility |
+|-------|------|---------------|
+| 1 | `LOAD_CONFIG` | Load unified configuration baseline |
+| 2 | `RESOLVE_MODE` | Resolve current system mode |
+| 3 | `ENV_CHECKS` | Environment / bootstrap checks |
+| 4 | `BACKGROUND_SUBSYSTEMS` | Background subsystem bring-up hooks |
+| 5 | `RUNTIME_SUBJECT` | Runtime subject bring-up hooks |
+| 6 | `DESKTOP_SURFACE` | Desktop surface bring-up hooks |
+| 7 | `READINESS_SUMMARY` | Final readiness summary |
 
-Its responsibilities:
-1. Load `SystemConfig` (via `launcher/bootstrap.py`) — reads from `UnifiedConfigManager`
-   which merges canonical + legacy sources (see §2)
-2. Run `core.config_preflight` — validate critical env vars before proceeding
-3. Start infrastructure services (NATS, Redis, etc.)
-4. Launch core runtime (`OpenClawd` + `DesktopPresenceRuntime`)
-5. Start the unified API gateway (FastAPI / uvicorn)
-6. Write `runtime/entrypoint.json` — client discovery file
-7. Handle graceful shutdown
+The staged sequencing is defined in `core/system_orchestrator.py`
+(`SystemOrchestrator.run_startup_sequence()`).  The authority sentinel
+`SYSTEM_ORCHESTRATOR_AUTHORITY` in `main.py` is verified by CI guardrails.
+
+After completing Phases 1–7, `main.py` hands off to `unified_launcher.py`
+(a **subordinate** component) for the full async service bring-up.
+
+### Subordinate launcher component
+
+**`unified_launcher.py`** is a **subordinate** launcher component.  It is
+invoked by `main.py` during Phase 4–6 of the staged bring-up sequence.
+
+It is NOT a competing top-level startup authority.
+
+Its responsibilities (as a subordinate):
+1. Full async bring-up of background services (NATS, Redis, L4 modules)
+2. Launch of the core runtime (`OpenClawd` + `DesktopPresenceRuntime`)
+3. Start the unified API gateway (FastAPI / uvicorn)
+4. Write `runtime/entrypoint.json` — client discovery file
+5. Handle graceful shutdown
 
 ### Startup wrapper scripts
 
 The following scripts are **bootstrap wrappers**.  They prepare the process
 environment (Python venv, NATS, dependencies) and then invoke
-`unified_launcher.py`.  They have no startup authority of their own:
+`main.py`.  They have no startup authority of their own:
 
 | Script | Role |
 |--------|------|
-| `start.sh` | Linux/macOS bootstrap → installs deps, starts NATS, invokes `unified_launcher.py` |
+| `start.sh` | Linux/macOS bootstrap → installs deps, starts NATS, invokes `main.py` |
 | `start_unified.sh` | Alternate Linux bootstrap → same as `start.sh` |
 | `start.bat` | Windows bootstrap → same role |
-| `deploy.sh` | Production deployment via Docker Compose, or local mode via `unified_launcher.py` |
+| `deploy.sh` | Production deployment via Docker Compose, or local mode via `main.py` |
 
 ### `system_manager.py`
 
