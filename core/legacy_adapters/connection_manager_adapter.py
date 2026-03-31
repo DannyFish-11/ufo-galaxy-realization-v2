@@ -5,6 +5,17 @@ core/legacy_adapters/connection_manager_adapter.py
 =====================================================
 PR-1 (Block-1) — Legacy Connection Manager Adapter
 
+.. deprecated:: Batch PR-3
+    Deprecation level: D1 (SOFT_DEPRECATED)
+    Canonical replacement: ``core.unified.connection_manager.UnifiedConnectionManager``
+    Canonical accessor: ``core.unified.connection_manager.get_unified_connection_manager()``
+    Removal target: **Batch PR-5**
+
+    This module is a **compatibility shim only**.  New code must not depend on
+    :class:`LegacyConnectionManagerAdapter`.  Call
+    :func:`core.unified.connection_manager.get_unified_connection_manager`
+    directly instead.
+
 Wraps the legacy ``core.connection_manager.ConnectionManager`` API and
 delegates to ``core.unified.connection_manager.UnifiedConnectionManager``.
 

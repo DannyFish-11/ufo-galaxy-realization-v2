@@ -48,49 +48,44 @@ from typing import Dict, List, Optional, Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
-try:
-    from core.unified_response import UnifiedChatResponse
-except ImportError:
-    # Fallback: define a minimal UnifiedChatResponse for standalone mode
-    from pydantic import BaseModel as _BaseModel
-    class UnifiedChatResponse(_BaseModel):
-        success: bool = True
-        response: str = ""
-        intent: str = ""
-        confidence: float = 0.0
-        mode: str = "chat"
-        suggestions: list = []
-        data: dict = {}
-        error: str = ""
-        session_id: str = ""
-
-        def to_json_response(self) -> dict:
-            return self.model_dump()
+# core.unified_response is a core dependency — import must not silently degrade.
+# If it is missing the process cannot serve chat responses and must fail clearly.
+from core.unified_response import UnifiedChatResponse  # noqa: E402
 
 try:
     from nodes.common.cors_config import get_cors_origins
+    _CORS_ORIGINS_AVAILABLE = True
 except ImportError:
-    import logging as _logging
+    _CORS_ORIGINS_AVAILABLE = False
 
-    _logging.getLogger("Galaxy.Dashboard").warning(
-        "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
-    )
-
-    def get_cors_origins():  # type: ignore[misc]
+    def get_cors_origins() -> list[str]:
+        """Minimal CORS fallback — nodes.common.cors_config not available."""
         return ["http://localhost:3000", "http://localhost:8080"]
+
+if not _CORS_ORIGINS_AVAILABLE:
+    import logging as _logging
+    _logging.getLogger("Galaxy.Dashboard").warning(
+        "nodes.common.cors_config not found; using default CORS origins "
+        "['http://localhost:3000', 'http://localhost:8080'].  "
+        "Install nodes package or set CORS_ORIGINS env var for production."
+    )
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-# 导入 ASCII 艺术字 & 打印助手
+# 导入 ASCII 艺术字 & 打印助手 (optional display utility)
 try:
     from core.ascii_art import GALAXY_BANNER, GALAXY_ASCII_MINIMAL, print_banner as _print_banner
+    _ASCII_ART_AVAILABLE = True
 except ImportError:
+    _ASCII_ART_AVAILABLE = False
     GALAXY_BANNER = "GALAXY - L4 Autonomous Intelligence System"
     GALAXY_ASCII_MINIMAL = GALAXY_BANNER
-    def _print_banner():
+
+    def _print_banner() -> None:
+        """Minimal banner fallback — core.ascii_art not available."""
         print(f"\n{GALAXY_BANNER}\n")
 
 # 导入整合核心

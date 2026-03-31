@@ -5,6 +5,17 @@ core/legacy_adapters/device_agent_manager_adapter.py
 ======================================================
 PR-1 (Block-1) — Legacy Device Agent Manager Adapter
 
+.. deprecated:: Batch PR-3
+    Deprecation level: D1 (SOFT_DEPRECATED)
+    Canonical replacement: ``core.unified.device_manager.UnifiedDeviceManager``
+    Canonical accessor: ``core.unified.device_manager.get_unified_device_manager()``
+    Removal target: **Batch PR-5**
+
+    This module is a **compatibility shim only**.  New code must not depend on
+    :class:`LegacyDeviceAgentManagerAdapter`.  Call
+    :func:`core.unified.device_manager.get_unified_device_manager` directly
+    instead.
+
 Wraps the legacy ``core.device_agent_manager.DeviceAgentManager`` API and
 ensures all device state writes go through ``core.unified.device_manager.UnifiedDeviceManager``
 (the SSOT for device state).

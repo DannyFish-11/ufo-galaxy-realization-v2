@@ -39,9 +39,10 @@ input for all Batch cleanup PRs.  Every entry carries a deprecation level
 | `galaxy_gateway/task_router.py` | D1 | `galaxy_gateway/routing/` package | Batch PR-5 | Deprecated docstring |
 | `core/capability_manager.py` | D1 | `core/capability_bus.py` | Batch PR-5 | Deprecated docstring |
 | `core/capability_orchestrator.py` | D1 | `core/capability_bus.py` | Batch PR-5 | Deprecated docstring; compat shim present |
-| `dashboard/backend/main.py` | D2 | `core/routes/*` (canonical REST API) | Batch PR-5 | Legacy headless backend; marked in `dashboard/LEGACY_SURFACE.md` |
+| `dashboard/backend/main.py` | D2 | `core/routes/*` (canonical REST API) | Batch PR-5 | Legacy headless backend; marked in `dashboard/LEGACY_SURFACE.md`; forbidden inline `UnifiedChatResponse` fallback removed in PR-3 |
 | `fusion/unified_orchestrator.py` | D1 | `core/unified/entrypoint_router.py` | Batch PR-5 | Deprecated docstring |
 | `galaxy_gateway/orchestrator/task_orchestrator.py` | D1 | `galaxy_gateway/orchestrator/galaxy_orchestrator.py` | Batch PR-5 | Deprecated docstring |
+| `launcher/config_manager.py` | D2 | `core.unified.config_manager.get_unified_config_manager()` + `core.port_config.get_node_port()` | Batch PR-5 | Runtime `DeprecationWarning` added in PR-3; port data stale vs `config/unified_ports.yaml` |
 
 ---
 
@@ -92,38 +93,38 @@ input for all Batch cleanup PRs.  Every entry carries a deprecation level
 These are locations where an `except ImportError` block defines substitute
 symbols inline.  All are D1 debt — no new cases may be added.
 
-| File | Approx. line | Guarded import | Action |
-|------|-------------|----------------|--------|
-| `unified_launcher.py` | ~60 | `nodes.common.cors_config` | Extract to optional-deps declaration |
-| `core/scheduler.py` | ~323 | (runtime scheduling lib) | Make hard dep or remove fallback |
-| `core/openclawd_heartbeat.py` | ~62 | (heartbeat lib) | Make hard dep or remove fallback |
-| `core/nodes/node_fabric_registry.py` | ~497, ~579 | (fabric libs) | Make hard dep or remove fallback |
-| `core/academic_retrieval.py` | ~78 | (retrieval lib) | Make hard dep or remove fallback |
-| `core/mcp_gateway.py` | ~262 | (MCP lib) | Make hard dep or remove fallback |
-| `core/routes/protocols.py` | 11+ locations | (protocol libs) | Audit and consolidate |
-| `core/routes/ai.py` | 4 locations | (AI provider libs) | Declare as optional extras |
-| `core/routes/devices.py` | ~600 | (device lib) | Make hard dep or remove fallback |
-| `core/routes/vision.py` | ~72 | (vision lib) | Declare as optional extra |
-| `core/routes/command.py` | ~56 | (command lib) | Make hard dep or remove fallback |
-| `core/openclawd_memory_backflow.py` | ~41, ~52 | (memory libs) | Make hard dep or remove fallback |
-| `core/openclawd.py` | 3 locations | (internal modules) | Refactor as part of Batch PR-2 decomposition |
-| `core/monitoring.py` | ~429 | (monitoring lib) | Declare as optional extra |
-| `dashboard/backend/main.py` | 5+ locations | (core modules) | Retire entire file in Batch PR-5 |
+| File | Approx. line | Guarded import | Action | PR-3 Status |
+|------|-------------|----------------|--------|-------------|
+| `unified_launcher.py` | ~60 | `nodes.common.cors_config` | Extract to optional-deps declaration | — |
+| `core/scheduler.py` | ~323 | (runtime scheduling lib) | Make hard dep or remove fallback | — |
+| `core/openclawd_heartbeat.py` | ~62 | (heartbeat lib) | Make hard dep or remove fallback | — |
+| `core/nodes/node_fabric_registry.py` | ~497, ~579 | (fabric libs) | Make hard dep or remove fallback | — |
+| `core/academic_retrieval.py` | ~78 | (retrieval lib) | Make hard dep or remove fallback | — |
+| `core/mcp_gateway.py` | ~262 | (MCP lib) | Make hard dep or remove fallback | — |
+| `core/routes/protocols.py` | 11+ locations | (protocol libs) | Audit and consolidate | — |
+| `core/routes/ai.py` | 4 locations | (AI provider libs) | Declare as optional extras | — |
+| `core/routes/devices.py` | ~600 | (device lib) | Make hard dep or remove fallback | — |
+| `core/routes/vision.py` | ~72 | (vision lib) | Declare as optional extra | — |
+| `core/routes/command.py` | ~56 | (command lib) | Make hard dep or remove fallback | — |
+| `core/openclawd_memory_backflow.py` | ~41, ~52 | (memory libs) | Make hard dep or remove fallback | — |
+| `core/openclawd.py` | 3 locations | (internal modules) | Refactor as part of Batch PR-2 decomposition | — |
+| `core/monitoring.py` | ~429 | (monitoring lib) | Declare as optional extra | — |
+| `dashboard/backend/main.py` | 5+ locations | (core modules) | Retire entire file in Batch PR-5 | ✅ **PR-3**: forbidden `UnifiedChatResponse` inline class removed (hard dep); `get_cors_origins` and `ascii_art` converted to `_AVAILABLE` flag pattern |
 
 ---
 
 ## 6. Compatibility Shims
 
-| Shim | Location | Points to | Level | Target Batch |
-|------|----------|-----------|-------|-------------|
-| `galaxy_main_loop_l4.py` | repo root | `core.galaxy_main_loop_l4_enhanced` | D3 | PR-4 |
-| `galaxy_gateway/aip_protocol_v2.py` | `galaxy_gateway/` | Raises `ImportError` (guard) | D3 | PR-4 (verify no callers first) |
-| `core/legacy_adapters/connection_manager_adapter.py` | `core/legacy_adapters/` | `core/unified/connection_manager.py` | D1 | PR-5 |
-| `core/legacy_adapters/device_agent_manager_adapter.py` | `core/legacy_adapters/` | `core/unified/device_manager.py` | D1 | PR-5 |
-| `core/orchestration_authority/legacy_paths.py` | `core/orchestration_authority/` | Various canonical paths | D1 | PR-5 |
-| `core/routes/compat.py` | `core/routes/` | Canonical route handlers | D1 | PR-5 |
-| `galaxy_gateway/legacy/capability_registry.py` | `galaxy_gateway/legacy/` | `core/capability_bus.py` | D1 | PR-5 |
-| `galaxy_gateway/legacy/task_decomposer.py` | `galaxy_gateway/legacy/` | `galaxy_gateway/orchestrator/` | D1 | PR-5 |
+| Shim | Location | Points to | Level | Target Batch | PR-3 Status |
+|------|----------|-----------|-------|-------------|-------------|
+| `galaxy_main_loop_l4.py` | repo root | `core.galaxy_main_loop_l4_enhanced` | D3 | PR-4 | — |
+| `galaxy_gateway/aip_protocol_v2.py` | `galaxy_gateway/` | Raises `ImportError` (guard) | D3 | PR-4 (verify no callers first) | — |
+| `core/legacy_adapters/connection_manager_adapter.py` | `core/legacy_adapters/` | `core/unified/connection_manager.py` | D1 | PR-5 | ✅ Deprecation metadata added |
+| `core/legacy_adapters/device_agent_manager_adapter.py` | `core/legacy_adapters/` | `core/unified/device_manager.py` | D1 | PR-5 | ✅ Deprecation metadata added |
+| `core/orchestration_authority/legacy_paths.py` | `core/orchestration_authority/` | Various canonical paths | D1 | PR-5 | — |
+| `core/routes/compat.py` | `core/routes/` | Canonical route handlers | D1 | PR-5 | ✅ Deprecation metadata + `DeprecationWarning` in `create_router()` |
+| `galaxy_gateway/legacy/capability_registry.py` | `galaxy_gateway/legacy/` | `core/capability_bus.py` | D1 | PR-5 | ✅ Deprecation metadata + `DeprecationWarning` at import |
+| `galaxy_gateway/legacy/task_decomposer.py` | `galaxy_gateway/legacy/` | `galaxy_gateway/orchestrator/` | D1 | PR-5 | ✅ Deprecation metadata + `DeprecationWarning` at import |
 
 ---
 

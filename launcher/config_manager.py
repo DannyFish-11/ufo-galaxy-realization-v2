@@ -28,10 +28,25 @@ Manages unified configuration from multiple sources:
 import os
 import json
 import logging
+import warnings
 from typing import Dict, List, Optional, Any, Set
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from enum import Enum
+
+# ---------------------------------------------------------------------------
+# Runtime deprecation warning — D2 (HARD_DEPRECATED)
+# Emit once per process so callers notice without flooding logs.
+# Removal target: Batch PR-5.
+# ---------------------------------------------------------------------------
+warnings.warn(
+    "launcher.config_manager is HARD_DEPRECATED (D2) and will be removed in "
+    "Batch PR-5.  Use core.unified.config_manager.get_unified_config_manager() "
+    "for general config and core.port_config.get_node_port() for port lookups.  "
+    "See docs/CONFIGURATION_AUTHORITY.md for the authoritative config stack.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 logger = logging.getLogger(__name__)
 
