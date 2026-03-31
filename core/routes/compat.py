@@ -2,6 +2,19 @@
 Galaxy - Android HTTP Compatibility Shim
 =============================================
 
+.. deprecated:: Batch PR-3
+    Deprecation level: D1 (SOFT_DEPRECATED)
+    Canonical replacement: ``core.routes.devices`` (``/api/v1/devices/*``)
+    Removal target: **Batch PR-5**
+
+    This module is a **compatibility shim only**.  New code must not depend on
+    any routes defined here.  Instead use the canonical ``/api/v1/devices/*``
+    endpoints served by :mod:`core.routes.devices`.
+
+    Active callers: legacy Android clients that have not yet migrated to v1
+    routes.  Do **not** delete this file until all Android callers have been
+    verified to use ``/api/v1/devices/*`` paths.
+
 Backward-compatible REST endpoints that map legacy Android client calls to
 the current ``/api/v1/devices/*`` route handlers.
 
@@ -14,6 +27,7 @@ Routes added
 """
 
 import logging
+import warnings
 from datetime import datetime
 
 from fastapi import APIRouter
@@ -52,7 +66,20 @@ class _LegacyUnregisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 def create_router(service_manager=None, config=None) -> APIRouter:
-    """Create the legacy device API compatibility shim router."""
+    """Create the legacy device API compatibility shim router.
+
+    .. deprecated:: Batch PR-3
+        Use the canonical ``/api/v1/devices/*`` routes from
+        :mod:`core.routes.devices` directly.  This router will be removed in
+        Batch PR-5 once all legacy Android callers have migrated.
+    """
+    warnings.warn(
+        "core.routes.compat.create_router() is deprecated (D1).  "
+        "Use core.routes.devices routes at /api/v1/devices/* instead.  "
+        "This shim will be removed in Batch PR-5.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     router = APIRouter()
 
     @router.post("/api/devices/register")

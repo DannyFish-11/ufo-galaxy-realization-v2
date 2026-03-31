@@ -213,9 +213,34 @@ as described above.
 
 ### `launcher/config_manager.py`
 
-**Status**: **Deprecated** (see module header).  Port data is stale.
-Use `core.port_config.get_node_port()` for port lookups and
-`core.unified.config_manager.get_unified_config_manager()` for general config.
+**Status**: **D2 (HARD_DEPRECATED)**.  Removal target: **Batch PR-5**.
+
+- Port data is stale and conflicts with `config/unified_ports.yaml`.
+- A `DeprecationWarning` is emitted at import time (added in Batch PR-3).
+- Internally, `load_all()` overlays values from `UnifiedConfigManager`; this
+  overlay is a one-way bridge and does not make the file a config authority.
+
+**Migrate to**:
+- `core.port_config.get_node_port()` — for port lookups
+- `core.unified.config_manager.get_unified_config_manager()` — for general config
+
+### `config.json` (repository root)
+
+**Reclassified in Batch PR-3 as: *non-authoritative static defaults artifact*.**
+
+`config.json` is the **lowest-priority** config source (see §2, priority 5).
+It is safe to commit because it contains no secrets.  Placeholder API-key
+values (matching `YOUR_*_KEY_HERE`) are automatically skipped by
+`UnifiedConfig._load_config()`.
+
+Rules:
+- **Do not write secrets into `config.json`**.  Use `ConfigService.set_provider_api_key()`
+  instead; secrets land in `runtime/secrets.env` (git-ignored).
+- **Do not treat `config.json` as a runtime authority**.  Any value it sets can
+  be (and usually is) overridden by `runtime/config.json`, `.env`, or
+  `os.environ`.
+- App-level static settings (log level, feature flags, default model names)
+  *may* be stored here as fallback defaults.
 
 ---
 
