@@ -181,13 +181,58 @@ _CHECKS: List[EnvCheck] = [
         groups=["vault", "all"],
     ),
     # ── Gateway ──────────────────────────────────────────────────────────
+    # ── System mode / fabric baseline (canonical config contract) ────────
+    EnvCheck(
+        var="GALAXY_SYSTEM_MODE",
+        severity=Severity.INFO,
+        description="System startup/fabric mode (default: desktop-local).",
+        hint=(
+            "Set GALAXY_SYSTEM_MODE=desktop-local for first-start / single-machine use.\n"
+            "  Set to desktop-cross-device when the cross-device fabric should be active.\n"
+            "  See docs/SYSTEM_MODE_CONFIG.md for details."
+        ),
+        groups=["core", "gateway", "all"],
+    ),
+    EnvCheck(
+        var="GALAXY_NATS_ENABLED",
+        severity=Severity.INFO,
+        description="Enable the NATS bus (default: derived from GALAXY_SYSTEM_MODE).",
+        hint=(
+            "Set GALAXY_NATS_ENABLED=true to activate NATS regardless of mode.\n"
+            "  Defaults to false in desktop-local mode, true in desktop-cross-device mode."
+        ),
+        groups=["gateway", "all"],
+    ),
+    EnvCheck(
+        var="GALAXY_FABRIC_STRICT",
+        severity=Severity.INFO,
+        description="Treat missing fabric dependencies as hard startup failures (default: false).",
+        hint=(
+            "Set GALAXY_FABRIC_STRICT=true only in desktop-cross-device mode when NATS\n"
+            "  must be available for the system to function.  Leave false (default) for\n"
+            "  graceful degradation."
+        ),
+        groups=["gateway", "all"],
+    ),
+    EnvCheck(
+        var="GALAXY_NETWORK_MODE",
+        severity=Severity.INFO,
+        description="Network topology mode: local | lan | tailscale | relay (default: local).",
+        hint=(
+            "Set GALAXY_NETWORK_MODE=lan for LAN-only deployments.\n"
+            "  Set to tailscale when Tailscale is the primary network fabric.\n"
+            "  Set to relay when using a public relay server."
+        ),
+        groups=["gateway", "all"],
+    ),
     EnvCheck(
         var="GALAXY_CROSS_DEVICE_ENABLED",
         severity=Severity.INFO,
-        description="Enable/disable cross-device routing (default: enabled).",
+        description="Enable/disable cross-device routing (default: derived from GALAXY_SYSTEM_MODE).",
         hint=(
-            "Set GALAXY_CROSS_DEVICE_ENABLED=1 to enable cross-device routing.\n"
-            "  Set to 0 to disable (safe default for single-device deployments)."
+            "Set GALAXY_CROSS_DEVICE_ENABLED=true to enable cross-device routing.\n"
+            "  Set to false to disable (safe default for single-device deployments).\n"
+            "  When GALAXY_SYSTEM_MODE is set, this value is derived automatically."
         ),
         groups=["gateway", "all"],
     ),
