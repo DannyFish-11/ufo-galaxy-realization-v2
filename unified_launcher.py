@@ -798,7 +798,7 @@ def main():
         "--docker-full",
         action="store_true",
         help="通过 Docker Compose 启动完整节点集（130 个节点 + 基础设施），等效于: "
-             "docker compose -f docker-compose.full.yml --profile full up -d",
+             "docker compose -f deploy/compose/full.yml --profile full up -d",
     )
     
     args = parser.parse_args()
@@ -808,10 +808,10 @@ def main():
         print_banner()
         os.environ["GALAXY_BANNER_PRINTED"] = "1"
         print_section("Docker 全量节点启动 (--docker-full)")
-        compose_file = PROJECT_ROOT / "docker-compose.full.yml"
+        compose_file = PROJECT_ROOT / "deploy" / "compose" / "full.yml"
         if not compose_file.exists():
             print_status_row(
-                "docker-compose.full.yml",
+                "deploy/compose/full.yml",
                 "文件不存在，请确认仓库完整",
                 "error",
             )
@@ -853,8 +853,8 @@ def main():
             ret = 130
         if ret == 0:
             print_status_row("Docker 全量节点", "已在后台启动", "success")
-            print_status_row("查看状态", "docker compose -f docker-compose.full.yml --profile full ps", "info")
-            print_status_row("停止服务", "docker compose -f docker-compose.full.yml --profile full down", "info")
+            print_status_row("查看状态", "docker compose -f deploy/compose/full.yml --profile full ps", "info")
+            print_status_row("停止服务", "docker compose -f deploy/compose/full.yml --profile full down", "info")
         else:
             print_status_row("Docker Compose", f"退出码 {ret}，请检查上方输出", "error")
             sys.exit(ret)

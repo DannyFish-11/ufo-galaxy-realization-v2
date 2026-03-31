@@ -7,7 +7,7 @@ Galaxy — Port Registry Validation Script
 Validates:
   1. Port uniqueness across all nodes in unified_ports.yaml
   2. Every node directory in nodes/ is represented in unified_ports.yaml
-  3. Every node in unified_ports.yaml is represented in docker-compose.full.yml
+  3. Every node in unified_ports.yaml is represented in deploy/compose/full.yml
   4. Infrastructure port conflicts with node ports are detected
 
 Usage:
@@ -202,8 +202,8 @@ def main() -> int:
         help="Output results as JSON."
     )
     parser.add_argument(
-        "--compose", default="docker-compose.full.yml",
-        help="Docker Compose file to check against (default: docker-compose.full.yml)."
+        "--compose", default="deploy/compose/full.yml",
+        help="Docker Compose file to check against (default: deploy/compose/full.yml)."
     )
     args = parser.parse_args()
 

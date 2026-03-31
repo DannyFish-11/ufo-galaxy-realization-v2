@@ -16,10 +16,10 @@
 # 3. 启动统一融合系统
 #
 # 使用方法：
-#   ./start_unified.sh              # 完整启动
-#   ./start_unified.sh --minimal    # 最小启动
-#   ./start_unified.sh --status     # 查看状态
-#   ./start_unified.sh --setup      # 配置向导
+#   ./deploy/scripts/start_unified.sh              # 完整启动
+#   ./deploy/scripts/start_unified.sh --minimal    # 最小启动
+#   ./deploy/scripts/start_unified.sh --status     # 查看状态
+#   ./deploy/scripts/start_unified.sh --setup      # 配置向导
 #
 
 set -e
@@ -309,9 +309,10 @@ show_status() {
 # ============================================================================
 
 main() {
-    # 获取脚本所在目录
+    # Resolve script location and navigate to repo root (deploy/scripts/ → ../../)
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-    cd "$SCRIPT_DIR"
+    REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    cd "$REPO_ROOT"
     
     # 解析参数
     case "$1" in
@@ -326,7 +327,7 @@ main() {
             ;;
         --help|-h)
             echo "Galaxy Bootstrap Launcher Script v2.0"
-            echo "权威启动路径: ./start_unified.sh 或 python main.py / python unified_launcher.py"
+            echo "权威启动路径: ./deploy/scripts/start_unified.sh 或 python main.py / python unified_launcher.py"
             echo "start_galaxy.py 和 start_l4.py 是已弃用的兼容性包装器，请勿作为主入口使用。"
             echo ""
             echo "用法: $0 [选项]"
@@ -361,7 +362,7 @@ main() {
     echo ""
 
     # 传递所有参数给 Python
-    export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+    export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
     $PYTHON_CMD unified_launcher.py "$@"
 }
 

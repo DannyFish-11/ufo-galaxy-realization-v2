@@ -15,9 +15,10 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 err()     { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
 
-COMPOSE_FILE="docker-compose.production.yml"
+COMPOSE_FILE="deploy/compose/production.yml"
 
 # ── Pre-flight checks ──
 preflight() {
@@ -58,7 +59,7 @@ setup_env() {
         if [ -f ".env.example" ]; then
             cp .env.example .env
             warn "Created .env from .env.example — edit it with your API keys:"
-            warn "  nano $SCRIPT_DIR/.env"
+            warn "  nano $REPO_ROOT/.env"
             exit 1
         else
             err ".env.example not found"
@@ -202,7 +203,7 @@ install_systemd() {
     # Copy files
     mkdir -p "$INSTALL_DIR"
     rsync -a --exclude='.git' --exclude='venv' --exclude='__pycache__' \
-        "$SCRIPT_DIR/" "$INSTALL_DIR/"
+        "$REPO_ROOT/" "$INSTALL_DIR/"
     chown -R galaxy:galaxy "$INSTALL_DIR"
 
     # Generate service file
@@ -259,8 +260,8 @@ access_info() {
     echo -e "  ${GREEN}Grafana:${NC}         http://localhost:3000"
     echo ""
     echo -e "  ${BLUE}Health:${NC}          curl http://localhost:9000/health/live"
-    echo -e "  ${BLUE}Logs:${NC}            ./deploy.sh logs [service]"
-    echo -e "  ${BLUE}Status:${NC}          ./deploy.sh status"
+    echo -e "  ${BLUE}Logs:${NC}            ./deploy/scripts/deploy.sh logs [service]"
+    echo -e "  ${BLUE}Status:${NC}          ./deploy/scripts/deploy.sh status"
     echo ""
 }
 
@@ -268,7 +269,7 @@ access_info() {
 show_help() {
     echo "Galaxy Deployment Script"
     echo ""
-    echo "Usage: ./deploy.sh <command> [options]"
+    echo "Usage: ./deploy/scripts/deploy.sh <command> [options]"
     echo ""
     echo "Docker commands:"
     echo "  up [target]       Deploy services (all|galaxy|monitoring|gateway)"
@@ -285,10 +286,10 @@ show_help() {
     echo "  install [dir]     Install as systemd service (requires sudo)"
     echo ""
     echo "Examples:"
-    echo "  ./deploy.sh up                # Deploy full stack"
-    echo "  ./deploy.sh up galaxy         # Deploy Galaxy only"
-    echo "  ./deploy.sh local             # Run locally"
-    echo "  sudo ./deploy.sh install      # Install as systemd service"
+    echo "  ./deploy/scripts/deploy.sh up                # Deploy full stack"
+    echo "  ./deploy/scripts/deploy.sh up galaxy         # Deploy Galaxy only"
+    echo "  ./deploy/scripts/deploy.sh local             # Run locally"
+    echo "  sudo ./deploy/scripts/deploy.sh install      # Install as systemd service"
 }
 
 # ── Main ──
