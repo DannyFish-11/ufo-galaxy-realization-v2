@@ -121,10 +121,20 @@ def check_startup_path() -> None:
 
     if main_py.exists():
         content = main_py.read_text()
+        # PR-2: main.py is now the canonical system orchestrator; it must declare
+        # the authority sentinel and still reference unified_launcher as a
+        # subordinate component.
         r = _record(
-            "main.py delegates to unified_launcher",
+            "main.py is canonical system orchestrator (SYSTEM_ORCHESTRATOR_AUTHORITY)",
+            "SYSTEM_ORCHESTRATOR_AUTHORITY" in content,
+            "main.py must declare SYSTEM_ORCHESTRATOR_AUTHORITY (PR-2 orchestrator contract)",
+        )
+        _print_result(r)
+
+        r = _record(
+            "main.py references unified_launcher as subordinate component",
             "unified_launcher" in content,
-            "main.py must reference unified_launcher.py",
+            "main.py must still reference unified_launcher.py as a subordinate component",
         )
         _print_result(r)
 
