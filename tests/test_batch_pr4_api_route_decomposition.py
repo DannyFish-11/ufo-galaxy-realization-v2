@@ -196,12 +196,12 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
 
     def test_23_monitoring_does_not_own_health_unified(self):
         content = _read("core/routes/monitoring.py")
-        self.assertNotIn('/api/v1/health/unified"', content,
+        self.assertNotIn('/api/v1/health/unified', content,
                          "monitoring.py must not define /api/v1/health/unified (moved to health.py)")
 
     def test_24_monitoring_does_not_own_concurrency(self):
         content = _read("core/routes/monitoring.py")
-        self.assertNotIn('/api/v1/concurrency/status"', content,
+        self.assertNotIn('/api/v1/concurrency/status', content,
                          "monitoring.py must not define /api/v1/concurrency/status (moved to diagnostics.py)")
 
     # ------------------------------------------------------------------
