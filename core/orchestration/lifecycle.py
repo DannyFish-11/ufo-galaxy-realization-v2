@@ -218,6 +218,8 @@ class ParallelGroupTracker:
 
         succeeded  = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
         cancelled  = sum(1 for e in entries if e.status == _SubtaskStatus.CANCELLED)
+        # "failed" here includes both FAILED and TIMEOUT statuses (any non-success,
+        # non-cancelled terminal state). Matches the ParallelResult.failed field semantics.
         failed     = len(entries) - succeeded - cancelled
 
         if succeeded == len(entries):

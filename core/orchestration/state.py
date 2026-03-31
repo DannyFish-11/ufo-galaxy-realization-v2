@@ -52,7 +52,7 @@ class SessionMemoryManager:
     def get_history(self, session_id: str, max_turns: int = 20) -> List[Dict]:
         """Return the most recent *max_turns* turns for *session_id*."""
         history = self._session_memory.get(session_id, [])
-        return history[-max_turns:] if len(history) > max_turns else list(history)
+        return history[-max_turns:]
 
     def list_sessions(self) -> List[Dict]:
         """Return a summary list of all active sessions."""

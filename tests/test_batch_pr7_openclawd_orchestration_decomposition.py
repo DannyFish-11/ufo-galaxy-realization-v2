@@ -341,8 +341,19 @@ def test_subtask_status_values():
 
 def test_is_local_device_empty():
     from core.orchestration.lifecycle import _is_local_device
+    # Empty string is treated as local (no device specified)
     assert _is_local_device("") is True
-    assert _is_local_device(None) is True  # type: ignore
+    # None is explicitly handled by `if not device_id` guard — returns True
+    assert _is_local_device(None) is True  # type: ignore[arg-type]
+
+
+def test_is_local_device_none_is_documented_input():
+    """None is an accepted sentinel value meaning 'no device ID provided'.
+    The function's docstring states: 'A device is considered local when … is empty / None.'
+    """
+    from core.orchestration.lifecycle import _is_local_device
+    assert _is_local_device(None) is True  # type: ignore[arg-type]
+    assert _is_local_device("") is True
 
 
 def test_is_local_device_prefix_local():
