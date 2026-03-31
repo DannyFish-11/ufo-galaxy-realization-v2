@@ -179,7 +179,7 @@ Galaxy L4 级物理设备控制测试
 
 ```bash
 # 启动 L4 主循环
-python3 start_l4.py
+python3 main.py
 ```
 
 **预期输出**:

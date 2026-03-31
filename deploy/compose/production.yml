@@ -122,7 +122,7 @@ services:
       dockerfile: Dockerfile
     container_name: galaxy-dashboard
     restart: unless-stopped
-    command: ["python", "start_galaxy.py", "--port", "8001"]
+    command: ["python", "main.py", "--port", "8001"]
 
     deploy:
       resources:

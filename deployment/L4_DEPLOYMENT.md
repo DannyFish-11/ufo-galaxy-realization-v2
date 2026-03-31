@@ -60,7 +60,7 @@ nano config/l4_config.json
 #### 方式一：手动启动
 
 ```bash
-python3 start_l4.py
+python3 main.py
 ```
 
 #### 方式二：systemd 服务（开机自启动）
@@ -282,7 +282,7 @@ pip install -r requirements.txt
 python3 -m json.tool config/l4_config.json
 
 # 查看详细日志
-python3 start_l4.py
+python3 main.py
 ```
 
 ### 问题 2：无法连接安卓端
@@ -306,7 +306,7 @@ wscat -c ws://localhost:8765/android
 
 ```bash
 # 查看资源使用
-top -p $(pgrep -f start_l4.py)
+top -p $(pgrep -f main.py)
 
 # 清理旧日志
 find logs/ -name "*.log" -mtime +7 -delete
