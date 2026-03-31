@@ -1,13 +1,15 @@
-name: Engineering Guardrails (PR-6)
+name: Engineering Guardrails (PR-8)
 
 # =============================================================================
-# PR-6: Engineering Guardrails & Regression Prevention
+# PR-8: Engineering Guardrails & Regression Prevention
 #
 # Jobs:
-#   type-check        — mypy static type analysis (gradual baseline)
-#   secret-scan       — gitleaks secret / credential scanning
-#   import-boundaries — enforce layered import rules (core ↛ gateway)
-#   file-complexity   — flag files that exceed line-count budgets
+#   type-check             — mypy static type analysis (gradual baseline)
+#   secret-scan            — gitleaks secret / credential scanning
+#   import-boundaries      — enforce layered import rules (core ↛ gateway)
+#   file-complexity        — flag files that exceed line-count budgets
+#   debt-freeze            — architecture debt detection (Batch PR-1)
+#   legacy-regression-guard — block reintroduction of deleted legacy paths (PR-8)
 # =============================================================================
 
 on:
@@ -172,3 +174,35 @@ jobs:
         run: |
           python scripts/check_debt_freeze.py
           echo "✅ Debt-freeze guardrail complete (warning mode)."
+
+  # ---------------------------------------------------------------------------
+  # E. Legacy regression guard — PR-8
+  #
+  # Blocks reintroduction of files that were physically deleted in PR-8:
+  #   - windows_client/_legacy/START_CLIENT.bat
+  #   - windows_client/_legacy/start_galaxy_client.bat
+  #
+  # Also rejects new .bat launchers added inside windows_client/ and new
+  # Python source files buried in the windows_client/_legacy/ archive zone.
+  #
+  # Runs in WARNING mode (exit 0 even on violations) so it never blocks a PR
+  # that is unrelated to legacy surfaces.  Violations are reported in the
+  # workflow log for reviewer awareness.
+  # ---------------------------------------------------------------------------
+  legacy-regression-guard:
+    name: Legacy Regression Guard (PR-8)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run legacy regression guard (warning mode)
+        run: |
+          python scripts/check_legacy_regression.py --warn-only
+          echo "✅ Legacy regression guard complete (warning mode)."

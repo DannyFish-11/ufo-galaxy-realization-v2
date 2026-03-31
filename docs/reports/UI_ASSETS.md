@@ -33,21 +33,24 @@
 | **UI 核心实现** | `windows_client/ui/galaxy_client_ui.py` |
 | **侧边栏变体** | `windows_client/ui/sidebar_ui.py`（F12 呼出侧栏模式） |
 | **兼容旧入口** | `enhancements/clients/windows_client/run_ui.py`（已废弃，自动重定向到 `windows_client/main.py`） |
-| **启动方式** | `python windows_client/main.py` 或 `windows_client/START_CLIENT.bat` |
+| **启动方式** | ⚠️ **RETIRED** — `main.py` is hard-disabled; use `python unified_launcher.py` or `start.bat` |
 | **UI 风格** | **OPPO 光场（Light Field）设计风格** |
 | **设计灵感** | OPPO ColorOS 光场美学（ColorOS 14+） |
 | **主要设计元素** | 流光渐变背景 + 径向光晕、磨砂半透明面板、圆角 + 柔阴影、流体动画、F12 快速唤出侧边栏 |
 | **配色方案** | 纯黑/白/灰梯度（`COLORS["bg_dark"]="#000000"`），光场效果色（蓝 `#4FC3F7`、紫 `#B39DDB` 等） |
 | **框架** | PyQt5 |
 
-**启动命令：**
+> ⚠️ **RETIRED (PR-8):** `START_CLIENT.bat` and `start_galaxy_client.bat` have been fully
+> deleted. Use `start.bat` (Windows) or `python unified_launcher.py` as the canonical startup.
+
+**Canonical startup:**
 
 ```bash
-# Windows 命令行
-python windows_client/main.py
+# Windows (canonical)
+start.bat
 
-# 或双击批处理文件
-windows_client/START_CLIENT.bat
+# Cross-platform
+python unified_launcher.py
 ```
 
 ---

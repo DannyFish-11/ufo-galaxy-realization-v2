@@ -1214,6 +1214,68 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-8: Remove retired legacy surfaces, finalize documentation, and enforce
+# non-regression architecture rules.
+#
+# The following paths were fully deleted (not just deprecated) in PR-8:
+#
+#   windows_client._legacy.START_CLIENT.bat
+#       Hard-disabled F12 sidebar launcher — deleted PR-8.
+#       Replacement: ``start.bat`` (Windows) or ``python unified_launcher.py``.
+#
+#   windows_client._legacy.start_galaxy_client.bat
+#       Hard-disabled Gateway WebSocket client launcher — deleted PR-8.
+#       Replacement: ``python unified_launcher.py``.
+#
+# These entries use a new ``DELETED`` status to distinguish true deletion
+# from mere deprecation, and act as an authoritative registry of PR-8
+# cleanup so non-regression checks can verify these paths are not reintroduced.
+# ---------------------------------------------------------------------------
+
+#: Sentinel set of paths that were fully deleted (not just deprecated) in PR-8.
+#: Non-regression scripts check this set to ensure deleted paths are never
+#: reintroduced into the codebase.
+PR8_DELETED_PATHS: frozenset = frozenset([
+    "windows_client/_legacy/START_CLIENT.bat",
+    "windows_client/_legacy/start_galaxy_client.bat",
+])
+
+_register(
+    LegacyPathEntry(
+        module_path="windows_client._legacy.START_CLIENT",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "START_CLIENT.bat was fully deleted in PR-8.  "
+            "Use ``start.bat`` (Windows bootstrap launcher) or "
+            "``python unified_launcher.py`` as the canonical startup path.  "
+            "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
+        ),
+        pr_guardrail_added="PR-8",
+        notes=(
+            "Retired F12 sidebar launcher — hard-disabled since the legacy "
+            "windows_client retirement PR, fully deleted in PR-8.  "
+            "Must not be reintroduced."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="windows_client._legacy.start_galaxy_client",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "start_galaxy_client.bat was fully deleted in PR-8.  "
+            "Use ``python unified_launcher.py`` as the canonical startup path.  "
+            "Configure GALAXY_GATEWAY_URL via .env or environment variable.  "
+            "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
+        ),
+        pr_guardrail_added="PR-8",
+        notes=(
+            "Retired Gateway WebSocket client launcher — hard-disabled since the "
+            "legacy windows_client retirement PR, fully deleted in PR-8.  "
+            "Must not be reintroduced."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL

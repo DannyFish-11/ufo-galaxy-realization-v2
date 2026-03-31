@@ -203,21 +203,29 @@ class TestWindowsClientInitDocumentsActiveDirection:
 
 
 class TestLegacyDirectoryContainsMoved:
-    """Legacy assets should have been moved to windows_client/_legacy/."""
+    """Legacy assets in windows_client/_legacy/ and fully-deleted retired assets."""
 
     _LEGACY = _WC / "_legacy"
 
     def test_legacy_dir_exists(self):
         assert self._LEGACY.is_dir(), "windows_client/_legacy/ directory must exist"
 
-    def test_start_client_bat_in_legacy(self):
-        assert (self._LEGACY / "START_CLIENT.bat").exists(), (
-            "START_CLIENT.bat must be in _legacy/ (retired launcher)"
+    def test_start_client_bat_fully_deleted(self):
+        """START_CLIENT.bat must have been fully deleted in PR-8 (not in _legacy/ either)."""
+        assert not (self._LEGACY / "START_CLIENT.bat").exists(), (
+            "START_CLIENT.bat was fully deleted in PR-8 and must not reappear in _legacy/"
+        )
+        assert not (_WC / "START_CLIENT.bat").exists(), (
+            "START_CLIENT.bat was fully deleted in PR-8 and must not reappear in active root"
         )
 
-    def test_start_galaxy_client_bat_in_legacy(self):
-        assert (self._LEGACY / "start_galaxy_client.bat").exists(), (
-            "start_galaxy_client.bat must be in _legacy/ (retired launcher)"
+    def test_start_galaxy_client_bat_fully_deleted(self):
+        """start_galaxy_client.bat must have been fully deleted in PR-8 (not in _legacy/ either)."""
+        assert not (self._LEGACY / "start_galaxy_client.bat").exists(), (
+            "start_galaxy_client.bat was fully deleted in PR-8 and must not reappear in _legacy/"
+        )
+        assert not (_WC / "start_galaxy_client.bat").exists(), (
+            "start_galaxy_client.bat was fully deleted in PR-8 and must not reappear in active root"
         )
 
     def test_ui_dir_in_legacy(self):
