@@ -14,7 +14,7 @@ COPY main.py .
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:8000/health', timeout=4); sys.exit(0 if r.status == 200 else 1)"
 
 # Run
 EXPOSE 8000

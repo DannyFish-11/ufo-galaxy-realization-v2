@@ -30,8 +30,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: galaxy
-    ports:
-      - "9000:9000"   # Main API + Web UI — single client entry port (gateway also forwards here)
+    expose:
+      - "9000"
     env_file: .env
     environment:
       - GALAXY_MODE=development
