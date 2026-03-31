@@ -6,10 +6,15 @@ modules in this package are part of the active Windows runtime.
 
 **Do not import from this package in production code.**
 
+Retired surfaces — fully deleted (PR-8)
+-----------------------------------------
+- ``START_CLIENT.bat``             — Deleted.  Was: legacy F12 sidebar launcher.
+  Canonical replacement: ``start.bat`` or ``python unified_launcher.py``.
+- ``start_galaxy_client.bat``      — Deleted.  Was: legacy Gateway WebSocket
+  client launcher.  Canonical replacement: ``python unified_launcher.py``.
+
 Retired surfaces archived here
 --------------------------------
-- ``START_CLIENT.bat``             — Legacy launcher (targets retired main.py)
-- ``start_galaxy_client.bat``      — Legacy Gateway WebSocket client launcher
 - ``ui/galaxy_client_ui.py``       — Legacy tkinter/PyQt6 chat UI
 
 Hard-disabled stubs that remain at their original paths

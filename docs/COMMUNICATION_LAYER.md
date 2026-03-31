@@ -101,10 +101,12 @@ AIP v3 是 Galaxy 的消息格式规范，在 `core/schemas/protocol.py` 中定�
    GALAXY_TAILSCALE_ENABLED=true
    GALAXY_TAILSCALE_HOST=100.x.y.z   # 你的 Tailscale IP
    ```
-3. 在 `start_galaxy_client.bat` 中将 `GALAXY_GATEWAY_URL` 改为 Tailscale IP：
-   ```bat
-   set GALAXY_GATEWAY_URL=ws://100.x.y.z:9000
+3. 在 `.env` 中设置 `GALAXY_GATEWAY_URL` 为 Tailscale IP：
+   ```bash
+   GALAXY_GATEWAY_URL=ws://100.x.y.z:9000
    ```
+   > **Note:** `start_galaxy_client.bat` was fully deleted in PR-8.  Set the gateway
+   > URL via the `.env` file or the `GALAXY_GATEWAY_URL` environment variable instead.
 
 ### 可选传输通道
 
@@ -142,14 +144,20 @@ Dashboard 的"实时状态面板"（`/api/v1/observability/live-status`）包含
 
 ## Windows 客户端配置
 
-`windows_client/start_galaxy_client.bat` 默认使用 Gateway：
+> ⚠️ **RETIRED (PR-8):** `windows_client/start_galaxy_client.bat` has been fully deleted.
+> Configure the Gateway URL via the `GALAXY_GATEWAY_URL` environment variable or `.env` file.
 
-```bat
+Set the Gateway URL by exporting the environment variable before starting:
+
+```bash
+# Windows PowerShell
+$env:GALAXY_GATEWAY_URL = "ws://localhost:9000"
+python unified_launcher.py
+
+# Windows Command Prompt
 set GALAXY_GATEWAY_URL=ws://localhost:9000
-python client.py --gateway_url %GALAXY_GATEWAY_URL% --client_id %CLIENT_ID%
+python unified_launcher.py
 ```
-
-如需修改连接地址，只需修改 `GALAXY_GATEWAY_URL`。
 
 ---
 
