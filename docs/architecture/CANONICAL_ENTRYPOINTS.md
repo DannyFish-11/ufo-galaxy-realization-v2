@@ -1,7 +1,7 @@
 # Canonical Entrypoints
 
-**Version:** 1.1
-**Status:** Canonical — Batch PR-4 (updated route decomposition)
+**Version:** 1.2
+**Status:** Canonical — Batch PR-5 (command routing and LLM routing decomposition)
 **Owner:** Architecture / Governance
 
 ---
@@ -128,11 +128,44 @@ Every external request MUST pass through `EntrypointRouter` so that
 `entry_path`, `via_legacy_adapter`, and `trace_id` are stamped before
 any business logic runs.
 
-### 4.2 Internal / direct callers (legacy pattern — do not add new ones)
+### 4.2 Command Routing Layer (★ Batch PR-5)
+
+Command routing is decomposed into explicit submodules under `core/commands/`:
+
+| Module | Authority Sentinel | Responsibility |
+|--------|--------------------|----------------|
+| `core/commands/__init__.py` | `COMMAND_ROUTING_PACKAGE_AUTHORITY` | Package root — backward-compat re-exports |
+| `core/commands/router.py` | `COMMAND_ROUTER_AUTHORITY` | Facade for `CommandRouter` + `get_command_router()` |
+| `core/commands/registry.py` | `COMMAND_REGISTRY_AUTHORITY` | `CommandRegistry` — handler registration |
+| `core/commands/dispatcher.py` | `COMMAND_DISPATCHER_AUTHORITY` | `CommandDispatcher` — low-level dispatch helpers |
+| `core/commands/context.py` | `COMMAND_CONTEXT_AUTHORITY` | `CommandContext` — per-request execution context |
+| `core/commands/middleware.py` | `COMMAND_MIDDLEWARE_AUTHORITY` | `CommandMiddleware` ABC — cross-cutting hooks |
+| `core/commands/validators/` | `COMMAND_VALIDATOR_AUTHORITY` | `CommandValidator`, `EnvelopeValidator`, `RiskClassificationValidator` |
+| `core/commands/handlers/` | `COMMAND_HANDLER_AUTHORITY` | `CommandHandler` ABC, `NoopHandler` |
+
+The canonical implementation remains in `core/command_router.py`.
+The `core/commands/` package provides the decomposed import surface.
+
+### 4.3 Multi-LLM Routing Layer (★ Batch PR-5)
+
+LLM routing is decomposed into explicit submodules under `core/llm/`:
+
+| Module | Authority Sentinel | Responsibility |
+|--------|--------------------|----------------|
+| `core/llm/__init__.py` | `LLM_ROUTING_PACKAGE_AUTHORITY` | Package root — backward-compat re-exports |
+| `core/llm/router.py` | `LLM_ROUTER_AUTHORITY` | Facade for `MultiLLMRouter` + `get_llm_router()` |
+| `core/llm/policies.py` | `LLM_POLICIES_AUTHORITY` | Provider selection policy (`PolicyBasedSelector`, routing tables) |
+| `core/llm/failover.py` | `LLM_FAILOVER_AUTHORITY` | Circuit-breaker + failover strategy (`FailoverStrategy`, `RetryPolicy`) |
+| `core/llm/providers/` | `LLM_PROVIDERS_AUTHORITY` | Provider adapter classes (all `*Adapter` classes) |
+
+The canonical implementation remains in `core/multi_llm_router.py`.
+The `core/llm/` package provides the decomposed import surface.
+
+### 4.4 Internal / direct callers (legacy pattern — do not add new ones)
 
 Direct calls to `core/openclawd.handle_chat()` bypassing `EntrypointRouter`
 are a legacy pattern.  All existing cases are tracked in
-`core/legacy_adapters/` and will be migrated by Batch PR-5.
+`core/legacy_adapters/`.
 
 ---
 
@@ -178,3 +211,5 @@ are a legacy pattern.  All existing cases are tracked in
 2. **No new bypass paths** into `OpenClawd` may be added without an approved adapter in `core/legacy_adapters/`.
 3. **Deprecated entrypoints** listed above may not receive new feature code.
 4. New deployment targets must be based on existing `Dockerfile` / Compose patterns and listed here.
+5. (**Batch PR-5**) New command routing code must import from `core.commands.*` rather than `core.command_router` directly.
+6. (**Batch PR-5**) New LLM routing code must import from `core.llm.*` rather than `core.multi_llm_router` directly.
