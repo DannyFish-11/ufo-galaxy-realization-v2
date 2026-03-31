@@ -304,20 +304,46 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         connected = bus_stats.get("connected", False)
         noop = bus_stats.get("noop_mode", True)
         status = "noop" if noop else ("connected" if connected else "disconnected")
+
+        # Resolve NATS requirements from the canonical system-mode config
+        # rather than hard-coding "required": True regardless of mode.
+        try:
+            from core.system_mode import resolve_fabric_config
+            _fabric = resolve_fabric_config()
+            nats_required = _fabric.nats_required
+            system_mode = _fabric.mode.value
+        except Exception:
+            logger.warning(
+                "Failed to resolve fabric config for /health/nats; defaulting to desktop-local",
+                exc_info=True,
+            )
+            nats_required = False
+            system_mode = "desktop-local"
+
         nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+
+        if connected:
+            message = "NATS is connected and operating as the internal scheduling mainline."
+        elif nats_required:
+            message = (
+                f"[ERROR] NATS is REQUIRED (fabric_strict mode) but not connected to {nats_url}. "
+                "Start NATS: nats-server -p 4222"
+            )
+        else:
+            message = (
+                f"NATS is not connected ({nats_url}). "
+                f"System is running in '{system_mode}' mode — NATS is optional."
+            )
+
         return JSONResponse({
             "status": status,
-            "required": True,
+            "system_mode": system_mode,
+            "required": nats_required,
             "nats_url": nats_url,
             "noop_mode": noop,
             "bus": bus_stats,
             "master_brain": brain_status,
-            "message": (
-                "NATS is connected and operating as the internal scheduling mainline."
-                if connected else
-                f"[ERROR] NATS is REQUIRED but not connected to {nats_url}. "
-                "Start NATS: nats-server -p 4222"
-            ),
+            "message": message,
         })
 
     @router.get("/api/v1/observability/nats")
