@@ -1,7 +1,7 @@
 # Canonical Entrypoints
 
-**Version:** 1.0
-**Status:** Canonical — Batch PR-1
+**Version:** 1.1
+**Status:** Canonical — Batch PR-4 (updated route decomposition)
 **Owner:** Architecture / Governance
 
 ---
@@ -53,14 +53,36 @@ They are tolerated; new platform launchers must follow this delegation pattern.
 All routes served by the FastAPI app assembled in `unified_launcher.py`
 (`UnifiedWebUI`), with route handlers in `core/routes/` sub-modules.
 
-| Route prefix | Module | Notes |
-|--------------|--------|-------|
-| `/api/v1/` | `core/api_routes.py` + `core/routes/*` | **Canonical** |
-| `/api/v1/projection/*` | `core/routes/projection.py` | Desktop status projection |
-| `/api/v1/chat` | `core/routes/chat.py` | Chat ingress → `EntrypointRouter` |
-| `/api/v1/devices/*` | `core/routes/devices.py` | Device management |
-| `/api/v1/commands/*` | `core/routes/command.py` | Command dispatch |
-| `/health` | `core/routes/health.py` (or inline) | Health check |
+Route aggregation authority: `core/api_routes.py` (`CANONICAL_API_ROUTES_AUTHORITY`)
+
+#### Domain → Module Mapping (Batch PR-4)
+
+| Route prefix | Module | Domain | Notes |
+|--------------|--------|--------|-------|
+| `/api/v1/` | `core/api_routes.py` | Aggregation | **Canonical authority** |
+| `/api/v1/system/*` | `core/routes/system.py` | System | 系统状态和管理 |
+| `/api/v1/devices/*` | `core/routes/devices.py` | Devices | 设备注册和管理 |
+| `/api/v1/nodes/*`, `/api/v1/agent/*` | `core/routes/nodes.py` | Agents/Nodes | 节点查询和 Agent 调度 |
+| `/api/v1/command/*` | `core/routes/command.py` | Commands | 命令路由引擎 |
+| `/api/v1/ai/*` | `core/routes/ai.py` | AI | AI 意图理解 |
+| `/api/v1/vision/*` | `core/routes/vision.py` | Vision | 视觉理解 |
+| `/api/v1/tasks/*` | `core/routes/tasks.py` | Tasks | 任务管理 |
+| `/api/v1/chat` | `core/routes/chat.py` | Chat | Chat ingress → EntrypointRouter |
+| **`/api/v1/health/*`** | **`core/routes/health.py`** | **Health** | **统一健康管理 ★ Batch PR-4** |
+| `/api/v1/monitoring/*` | `core/routes/monitoring.py` | Monitoring | 监控仪表盘 & 告警 |
+| **`/api/v1/concurrency/*`** | **`core/routes/diagnostics.py`** | **Diagnostics** | **系统诊断 ★ Batch PR-4** |
+| **`/api/v1/errors/*`** | **`core/routes/diagnostics.py`** | **Diagnostics** | **错误追踪 ★ Batch PR-4** |
+| **`/api/v1/discovery/*`** | **`core/routes/diagnostics.py`** | **Diagnostics** | **节点发现 ★ Batch PR-4** |
+| **`/api/v1/security/*`** | **`core/routes/diagnostics.py`** | **Diagnostics** | **安全审计 ★ Batch PR-4** |
+| **`/api/v1/config/*`** | **`core/routes/diagnostics.py`** | **Diagnostics** | **配置管理 ★ Batch PR-4** |
+| `/api/v1/relay/*` | `core/routes/relay.py` | Relay | 代理转发 |
+| `/api/v1/rag/*`, `/api/v1/mesh/*` | `core/routes/hybrid.py` | Hybrid | RAG & Mesh |
+| `/api/v1/vault/*` | `core/routes/vault.py` | Vault | 凭证管理 |
+| `/api/v1/cost/*` | `core/routes/cost.py` | Cost | 成本追踪 |
+| `/api/v1/channels/*` | `core/routes/channels.py` | Channels | 渠道插件 |
+| `/api/v1/federation/*` | `core/routes/federation.py` | Federation | 多实例联邦 |
+| `/api/v1/projection/*` | `core/routes/projection.py` | Projection | 运行时状态投影 |
+| `/api/v1/stream` | `core/api_routes.py` (inline) | Stream | SSE 实时推送流 |
 
 ### 2.2 Gateway Routes
 
@@ -73,9 +95,13 @@ Served by `galaxy_gateway/app.py` (separate process or sub-app):
 
 ### 2.3 Legacy / Deprecated Routes
 
-| Route | File | Status |
-|-------|------|--------|
-| Dashboard management routes | `dashboard/backend/main.py` | **LEGACY** — headless, retirement pending |
+| Route | File | Status | Notes |
+|-------|------|--------|-------|
+| Dashboard management routes | `dashboard/backend/main.py` | **LEGACY SURFACE** | Non-authoritative; shadowed by canonical API in unified deployment. Authority sentinel: `DASHBOARD_LEGACY_SURFACE_AUTHORITY` |
+
+> **Batch PR-4 note:** `dashboard/backend/main.py` is explicitly demoted.
+> Its `/api/v1/*` routes are non-authoritative compatibility routes.
+> The canonical route authority is declared in `core/api_routes.py`.
 
 ---
 

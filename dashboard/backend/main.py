@@ -48,6 +48,27 @@ from typing import Dict, List, Optional, Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
+# ---------------------------------------------------------------------------
+# Batch PR-4: Dashboard Legacy Surface Authority
+# ---------------------------------------------------------------------------
+# This sentinel declares that ``dashboard/backend/main.py`` is a LEGACY UI
+# SURFACE.  It is a compatibility surface only.  It must NOT be treated as:
+#   - a status authority
+#   - a canonical response schema authority
+#   - an architectural source of truth for system structure
+#
+# Canonical authorities:
+#   Route ownership:    ``core/api_routes.py`` (CANONICAL_API_ROUTES_AUTHORITY)
+#   Status truth:       GET /api/v1/projection/runtime
+#   Schema ownership:   ``core/routes/_models.py``
+#   Status board:       ``windows_client/status_board_v2/``
+#
+# The /api/v1/* routes defined in this file are non-authoritative.  In a
+# unified deployment (unified_launcher.py), they are shadowed by the
+# canonical routes from core/api_routes.py.
+# ---------------------------------------------------------------------------
+DASHBOARD_LEGACY_SURFACE_AUTHORITY = "dashboard.backend.LEGACY_SURFACE"
+
 # core.unified_response is a core dependency — import must not silently degrade.
 # If it is missing the process cannot serve chat responses and must fail clearly.
 from core.unified_response import UnifiedChatResponse  # noqa: E402

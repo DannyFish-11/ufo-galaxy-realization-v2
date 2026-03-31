@@ -1,12 +1,18 @@
 """
-Galaxy - Monitoring & Infrastructure Routes (模块化版本)
-==========================================================
+Galaxy - Monitoring & Infrastructure Routes
+============================================
 
-注意: 这些路由与 core/api_routes.py 中的监控路由功能重复。
-当前 unified_launcher.py 使用 core/api_routes.py 中的版本。
-本模块可用于未来模块化重构，将路由从 api_routes.py 中拆分出来。
+**Domain authority notice**
+----------------------------
+This module owns the ``/api/v1/monitoring/*`` route surface only.
 
-Routes:
+Health and diagnostics routes have been extracted to dedicated domain
+modules as part of Batch PR-4 API decomposition:
+  - Health:      ``core/routes/health.py``      (``/api/v1/health/*``)
+  - Diagnostics: ``core/routes/diagnostics.py`` (concurrency, errors,
+                 discovery, security, config sub-paths)
+
+Routes owned by this module:
   GET /api/v1/monitoring/dashboard    - 监控仪表盘
   GET /api/v1/monitoring/health       - 健康检查聚合
   GET /api/v1/monitoring/alerts       - 告警列表
@@ -14,15 +20,6 @@ Routes:
   GET /metrics                        - Prometheus 指标
   GET /health/metrics                 - Prometheus 指标 (别名)
   GET /api/v1/monitoring/performance  - 性能指标
-  GET /api/v1/health/unified          - 统一健康仪表盘
-  GET /api/v1/health/quick            - 快速健康概览
-  GET /api/v1/concurrency/status      - 并发管理器状态
-  GET /api/v1/errors/summary          - 错误追踪概览
-  GET /api/v1/discovery/status        - 节点发现服务状态
-  GET /api/v1/security/audit          - 审计日志
-  GET /api/v1/security/stats          - 安全统计
-  GET /api/v1/config/status           - 配置管理器状态
-  GET /api/v1/config/versions         - 配置版本历史
 """
 
 import logging
@@ -122,95 +119,5 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         from core.performance import PerformanceMonitor
         perf = PerformanceMonitor.instance()
         return JSONResponse(perf.get_dashboard())
-
-    @router.get("/api/v1/health/unified")
-    async def unified_health_dashboard():
-        """统一健康仪表盘（整合所有健康子系统）"""
-        try:
-            from core.health_integration import get_unified_health_manager
-            uhm = get_unified_health_manager()
-            return JSONResponse(uhm.get_dashboard())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/health/quick")
-    async def unified_health_quick():
-        """快速健康概览"""
-        try:
-            from core.health_integration import get_unified_health_manager
-            uhm = get_unified_health_manager()
-            return JSONResponse(uhm.get_quick_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/concurrency/status")
-    async def concurrency_status():
-        """并发管理器状态"""
-        try:
-            from core.concurrency_manager import get_concurrency_manager
-            mgr = get_concurrency_manager()
-            return JSONResponse(mgr.get_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/errors/summary")
-    async def error_summary():
-        """错误追踪概览"""
-        try:
-            from core.error_framework import get_error_tracker
-            tracker = get_error_tracker()
-            return JSONResponse(tracker.get_summary())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/discovery/status")
-    async def discovery_status():
-        """节点发现服务状态"""
-        try:
-            from core.node_discovery import get_node_discovery
-            disc = get_node_discovery()
-            return JSONResponse(disc.get_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/security/audit")
-    async def security_audit_logs():
-        """审计日志（最近 50 条）"""
-        try:
-            from core.security_middleware import get_security_manager
-            sec = get_security_manager()
-            return JSONResponse(sec.audit.get_recent(50))
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/security/stats")
-    async def security_stats():
-        """安全统计仪表盘"""
-        try:
-            from core.security_middleware import get_security_manager
-            sec = get_security_manager()
-            return JSONResponse(sec.get_dashboard())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/config/status")
-    async def config_manager_status():
-        """配置管理器状态"""
-        try:
-            from core.config_hot_reload import get_config_manager
-            mgr = get_config_manager()
-            return JSONResponse(mgr.get_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @router.get("/api/v1/config/versions")
-    async def config_version_history():
-        """配置版本历史"""
-        try:
-            from core.config_hot_reload import get_config_manager
-            mgr = get_config_manager()
-            return JSONResponse(mgr.versions.get_history(20))
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
 
     return router
