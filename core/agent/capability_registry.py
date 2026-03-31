@@ -56,8 +56,37 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.Agent.CapabilityRegistry")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 数据模型
+# Batch PR-6: Capability Registry authority sentinel
 # ──────────────────────────────────────────────────────────────────────────────
+
+CAPABILITY_REGISTRY_AUTHORITY = "core.agent.capability_registry.CapabilityRegistry"
+"""Sentinel: ``CapabilityRegistry`` is the canonical in-process capability
+catalog (inventory SSOT).
+
+Responsibility (Batch PR-6 clarification)
+-----------------------------------------
+- **Role**: authoritative *inventory* of all registered capabilities.
+- **Writers**: ``mcp_loader``, ``skill_loader``, ``NodeFabricRegistry``,
+  device-registration paths call ``inject_mcp_tool()`` / ``inject_skill()``
+  / ``inject_item()``.
+- **Consumers**: read through ``CapabilityResolver``
+  (``core.unified.capability_resolver``) which applies contract validation
+  before returning entries.
+- **NOT**: a routing authority, a bus, or a runtime health monitor.
+
+Related authorities (Batch PR-6 separation of concerns)
+--------------------------------------------------------
+- ``CAPABILITY_BUS_AUTHORITY``    — ``core.capability_bus.CapabilityBus``
+  (unified registration + discovery across all sources; bus ≠ registry)
+- ``CAPABILITY_RUNTIME_REGISTRY_AUTHORITY`` — ``core.capability_runtime``
+  (live runtime state — health, availability; additive to this registry)
+- ``CAPABILITY_RESOLVER_AUTHORITY`` — ``core.unified.capability_resolver``
+  (read / consumer path — validates + converts before returning to callers)
+- ``CAPABILITY_CONTRACT_AUTHORITY`` — ``core.unified.capability_contract``
+  (schema validation at registration)
+- ``CAPABILITY_MANAGER_LEGACY_SURFACE`` / ``CAPABILITY_ORCHESTRATOR_LEGACY_SURFACE``
+  — deprecated compat facades; do NOT treat as peers to this registry.
+"""
 
 
 @dataclass

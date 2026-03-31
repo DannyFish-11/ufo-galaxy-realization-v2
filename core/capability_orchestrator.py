@@ -53,10 +53,40 @@ from enum import Enum
 
 logger = logging.getLogger("Galaxy.Capability")
 
+# ============================================================================
+# Batch PR-6: Legacy surface sentinel
+# ============================================================================
 
-# ============================================================================
-# 数据模型
-# ============================================================================
+CAPABILITY_ORCHESTRATOR_LEGACY_SURFACE = "core.capability_orchestrator.CapabilityOrchestrator:LEGACY_SURFACE"
+"""Sentinel: ``CapabilityOrchestrator`` is a **legacy compatibility facade** only.
+
+Batch PR-6 status: COMPAT_SECONDARY — retained for existing callers but
+explicitly not a peer authority to ``CapabilityBus`` or ``CapabilityRegistry``.
+
+Canonical replacement (Batch PR-6)
+------------------------------------
+- Registration / discovery → ``core.capability_bus.CapabilityBus``
+  (``get_capability_bus()``)
+- Resolution and tool schema building → ``core.unified.capability_resolver``
+  (``get_capability_resolver()``)
+
+Entries registered through ``CapabilityOrchestrator`` are NOT automatically
+visible through ``CapabilityBus`` unless bridged.  New code must use the
+canonical paths above.
+
+Remove-after: Batch PR-8 (after all callers have been migrated).
+"""
+
+import warnings as _warnings
+_warnings.warn(
+    "core.capability_orchestrator (CapabilityOrchestrator) is a legacy "
+    "compatibility facade (CAPABILITY_ORCHESTRATOR_LEGACY_SURFACE).  "
+    "Use core.capability_bus.get_capability_bus() for registration/discovery "
+    "or core.unified.capability_resolver.get_capability_resolver() for "
+    "consumption.  This module will be removed in Batch PR-8.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 class CapabilityType(str, Enum):
     """能力类型"""

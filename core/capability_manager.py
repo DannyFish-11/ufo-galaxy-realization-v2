@@ -52,10 +52,40 @@ from enum import Enum
 
 logger = logging.getLogger("CapabilityManager")
 
+# ============================================================================
+# Batch PR-6: Legacy surface sentinel
+# ============================================================================
 
-# ============================================================================
-# 能力状态定义
-# ============================================================================
+CAPABILITY_MANAGER_LEGACY_SURFACE = "core.capability_manager.CapabilityManager:LEGACY_SURFACE"
+"""Sentinel: ``CapabilityManager`` is a **legacy compatibility facade** only.
+
+Batch PR-6 status: COMPAT_SECONDARY — retained for existing callers but
+explicitly not a peer authority to ``CapabilityBus`` or ``CapabilityRegistry``.
+
+Canonical replacement (Batch PR-6)
+------------------------------------
+- Registration / discovery → ``core.capability_bus.CapabilityBus``
+  (``get_capability_bus()``)
+- Consumption / tool schema building → ``core.unified.capability_resolver``
+  (``get_capability_resolver()``)
+
+Entries registered through ``CapabilityManager`` are NOT automatically
+visible through ``CapabilityBus`` unless bridged.  New code must use the
+canonical paths above.
+
+Remove-after: Batch PR-8 (after all callers have been migrated).
+"""
+
+import warnings as _warnings
+_warnings.warn(
+    "core.capability_manager (CapabilityManager) is a legacy compatibility "
+    "facade (CAPABILITY_MANAGER_LEGACY_SURFACE).  "
+    "Use core.capability_bus.get_capability_bus() for registration/discovery "
+    "or core.unified.capability_resolver.get_capability_resolver() for "
+    "consumption.  This module will be removed in Batch PR-8.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 class CapabilityStatus(Enum):
     """能力状态"""

@@ -81,8 +81,37 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.CapabilityBus")
 
 # ---------------------------------------------------------------------------
-# Role enum
+# Batch PR-6: Capability Bus authority sentinel
 # ---------------------------------------------------------------------------
+
+CAPABILITY_BUS_AUTHORITY = "core.capability_bus.CapabilityBus"
+"""Sentinel: ``CapabilityBus`` is the canonical unified registration and
+discovery bus for all runtime capabilities.
+
+Responsibility (Batch PR-6 clarification)
+-----------------------------------------
+- **Role**: unified *registration + discovery directory* for all capability
+  sources (MCP tools, Skills, node capabilities, device actions, built-ins).
+- **NOT** a dispatch authority — all dispatch flows through
+  ``core.capabilities.CanonicalDispatcher``.
+- **NOT** a state monitor — live health/availability is tracked by
+  ``core.capability_runtime.CapabilityRuntimeRegistry``.
+
+Relationship to CapabilityRegistry (core.agent.capability_registry)
+--------------------------------------------------------------------
+``CapabilityBus`` and ``CapabilityRegistry`` serve related but distinct roles:
+- ``CapabilityBus`` — multi-source discovery bus with role classification
+  and health metadata; entries registered via loaders and device paths.
+- ``CapabilityRegistry`` — canonical in-process inventory SSOT consumed by
+  ``OpenClawd`` via ``CapabilityResolver``.
+
+See also
+--------
+- ``CAPABILITY_MANAGER_LEGACY_SURFACE``    — deprecated compat facade (not a peer)
+- ``CAPABILITY_ORCHESTRATOR_LEGACY_SURFACE`` — deprecated compat facade (not a peer)
+- ``CAPABILITY_REGISTRY_AUTHORITY``        — in-process inventory SSOT
+- ``CAPABILITY_RESOLVER_AUTHORITY``        — validated consumer read path
+"""
 
 
 class CapabilityBusRole(str, Enum):

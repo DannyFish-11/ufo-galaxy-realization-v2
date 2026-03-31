@@ -56,10 +56,23 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Unified.CapabilityContract")
 
+# ---------------------------------------------------------------------------
+# Batch PR-6: Capability contract authority sentinel
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
+CAPABILITY_CONTRACT_AUTHORITY = "core.unified.capability_contract.CapabilityContract"
+"""Sentinel: ``CapabilityContract`` is the canonical schema/validation layer
+for all capability entries.
+
+Responsibility (Batch PR-6 clarification)
+-----------------------------------------
+- **Role**: defines and validates the required shape of every capability
+  before it can be registered in ``CapabilityRegistry``.
+- Called at registration time by ``CapabilityRegistry.inject_*()`` methods.
+- Re-validated by ``CapabilityResolver`` before entries are returned to
+  consumers (e.g. ``OpenClawd``).
+- **NOT** a registry, bus, runtime monitor, or orchestrator.
+"""
 
 
 class CapabilitySource(str, Enum):

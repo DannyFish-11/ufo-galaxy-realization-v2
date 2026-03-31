@@ -69,6 +69,27 @@ from .capability_summary import (
 
 logger = logging.getLogger("Galaxy.CapabilityRuntime.Registry")
 
+# ---------------------------------------------------------------------------
+# Batch PR-6: Capability runtime registry authority sentinel
+# ---------------------------------------------------------------------------
+
+CAPABILITY_RUNTIME_REGISTRY_AUTHORITY = (
+    "core.capability_runtime.capability_registry_runtime.CapabilityRuntimeRegistry"
+)
+"""Sentinel: ``CapabilityRuntimeRegistry`` is the canonical live runtime state
+store for capability health and availability.
+
+Responsibility (Batch PR-6 clarification)
+-----------------------------------------
+- **Role**: tracks *live runtime state* (availability, health, last-seen) for
+  named capabilities.  Additive alongside the static capability catalog.
+- **NOT** the capability inventory SSOT (that is ``CapabilityRegistry``).
+- **NOT** the capability bus / discovery directory (that is ``CapabilityBus``).
+
+This registry answers "is this capability currently healthy/available?"
+while ``CapabilityRegistry`` answers "what capabilities are registered?"
+"""
+
 
 class CapabilityRuntimeRegistry:
     """Process-level singleton runtime registry for capability states.

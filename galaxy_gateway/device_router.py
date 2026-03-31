@@ -123,6 +123,12 @@ from galaxy_gateway.capability_registry import get_gateway_capability_registry  
 # ---------------------------------------------------------------------------
 CANONICAL_DISPATCH_AUTHORITY = "galaxy_gateway.device_router.DeviceRouter"
 
+# Batch PR-6: explicit canonical-path declaration for device routing.
+# All device dispatch (new code and existing code) must flow through
+# DeviceRouter.  Legacy surfaces such as galaxy_gateway.task_router are
+# compat-only and MUST NOT be treated as a primary dispatch path.
+DEVICE_ROUTING_CANONICAL_PATH = "galaxy_gateway.device_router.DeviceRouter"
+
 
 def _get_udm():
     """Lazily return the UnifiedDeviceManager singleton (avoids circular imports)."""

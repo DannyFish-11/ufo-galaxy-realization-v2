@@ -70,10 +70,25 @@ from .capability_contract import (
 
 logger = logging.getLogger("Galaxy.Unified.CapabilityResolver")
 
+# ---------------------------------------------------------------------------
+# Batch PR-6: Capability resolver authority sentinel
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Resolver
-# ---------------------------------------------------------------------------
+CAPABILITY_RESOLVER_AUTHORITY = "core.unified.capability_resolver.CapabilityResolver"
+"""Sentinel: ``CapabilityResolver`` is the canonical consumer read path for
+capabilities.
+
+Responsibility (Batch PR-6 clarification)
+-----------------------------------------
+- **Role**: validates, converts, and returns ``CapabilityContract`` objects
+  to consumers (e.g. ``OpenClawd``).
+- Wraps ``CapabilityRegistry`` (inventory SSOT) and applies
+  ``CapabilityContract`` validation before returning entries.
+- Consumers (``OpenClawd._collect_tools()``, projections, diagnostics) MUST
+  use this resolver rather than accessing the registry directly.
+- **NOT** a writer path — use ``CapabilityRegistry.inject_*()`` to register.
+- **NOT** a bus, runtime monitor, or orchestrator.
+"""
 
 
 class CapabilityResolver:

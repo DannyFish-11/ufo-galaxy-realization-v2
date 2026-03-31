@@ -99,10 +99,29 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# Batch PR-6: Android Bridge authority sentinels
+# =============================================================================
 
-# =============================================================================
-# Android Bridge 服务
-# =============================================================================
+ANDROID_BRIDGE_IMPL_AUTHORITY = "galaxy_gateway.android_bridge.AndroidBridge"
+"""Sentinel: ``AndroidBridge`` is the canonical Android transport/session
+implementation.  All Android WebSocket connection handling, AIP v3 message
+routing, and memory backflow must flow through this class.
+
+The canonical *import* surface for callers is ``galaxy_gateway.android``
+(the package).  ``galaxy_gateway.android_bridge`` is the implementation
+module — callers should prefer the package surface:
+
+    from galaxy_gateway.android import AndroidBridge  # preferred
+
+or via the package re-export in galaxy_gateway.android.bridge.
+"""
+
+ANDROID_BRIDGE_CANONICAL_PATH = "galaxy_gateway.android_bridge.AndroidBridge"
+"""Batch PR-6 canonical path declaration.  New code must import AndroidBridge
+from the ``galaxy_gateway.android`` package or ``galaxy_gateway.android.bridge``
+rather than directly from ``galaxy_gateway.android_bridge`` where possible.
+``galaxy_gateway.android_bridge`` remains the implementation authority."""
 
 class AndroidBridge:
     """
