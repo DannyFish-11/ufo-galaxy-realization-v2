@@ -36,9 +36,9 @@ so that follow-on PRs can safely retire them.
 
 | Script | Platform | Status |
 |--------|----------|--------|
-| `start.sh` | Linux/macOS | Development convenience |
-| `start_unified.sh` | Linux/macOS | Extended start with env setup |
-| `start.bat` | Windows | Development convenience |
+| `start.sh` | Linux/macOS | Development convenience — **canonical dev launcher** |
+| `start.bat` | Windows | Development convenience — **canonical dev launcher** |
+| `deploy/scripts/start_unified.sh` | Linux/macOS | Extended start with env setup |
 | `installer/start_galaxy.bat` | Windows | Installer-bundled starter |
 
 These scripts ultimately call `python main.py` or `python unified_launcher.py`.
@@ -117,8 +117,8 @@ are a legacy pattern.  All existing cases are tracked in
 | Docker (main) | `Dockerfile` | Builds the primary service image |
 | Docker (gateway) | `Dockerfile.gateway` | Builds the gateway sub-service image |
 | Docker Compose (dev) | `docker-compose.yml` | Single-host development stack |
-| Docker Compose (production) | `docker-compose.production.yml` | Production-grade overrides |
-| Docker Compose (full) | `docker-compose.full.yml` | **OVERSIZED** (144 KB) — decomposition targeted in Batch PR-3 |
+| Docker Compose (production) | `deploy/compose/production.yml` | Production-grade overrides |
+| Docker Compose (full) | `deploy/compose/full.yml` | 130-node complete system |
 | Makefile | `Makefile` | Developer shortcuts |
 | systemd unit | `systemd/` | Linux daemon deployment |
 

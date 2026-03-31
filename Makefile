@@ -12,6 +12,9 @@
 #   audit-regen    — regenerate docs/node_audit_report.json + docs/NODE_SYSTEM_AUDIT.md
 #   manifest-regen — regenerate docs/NODE_ACTIVE_MANIFEST.md from canonical sources
 #   regen-all      — run audit-regen then manifest-regen (full governance doc refresh)
+#   deploy-up      — deploy production stack (deploy/compose/production.yml)
+#   deploy-full    — bring up full-system stack (deploy/compose/full.yml)
+#   deploy-down    — stop production stack
 #   help           — show this help
 #
 # Usage:
@@ -24,6 +27,9 @@
 #   make audit-regen
 #   make manifest-regen
 #   make regen-all
+#   make deploy-up
+#   make deploy-full
+#   make deploy-down
 #
 # Cross-platform notes:
 #   Linux / macOS: works as-is with make >= 3.81.
@@ -43,6 +49,11 @@ PIP      ?= pip
 SRC_DIRS  = core tests galaxy_gateway enhancements scripts
 PYTEST    = $(PYTHON) -m pytest
 
+# Deployment compose files (under deploy/)
+COMPOSE_PROD  = deploy/compose/production.yml
+COMPOSE_FULL  = deploy/compose/full.yml
+COMPOSE_DEV   = docker-compose.yml
+
 # ── Help ──────────────────────────────────────────────────────────────────
 .PHONY: help
 help:
@@ -59,6 +70,10 @@ help:
 	@echo "  audit-regen    Regenerate audit report + NODE_SYSTEM_AUDIT.md"
 	@echo "  manifest-regen Regenerate NODE_ACTIVE_MANIFEST.md"
 	@echo "  regen-all      Full governance doc refresh (audit + manifest)"
+	@echo "  ─────────────────────────────────────────────────────"
+	@echo "  deploy-up      Deploy production stack (deploy/compose/production.yml)"
+	@echo "  deploy-full    Bring up full-system stack (deploy/compose/full.yml)"
+	@echo "  deploy-down    Stop production stack"
 	@echo "  ─────────────────────────────────────────────────────"
 	@echo ""
 
@@ -153,3 +168,28 @@ manifest-regen:
 .PHONY: regen-all
 regen-all: audit-regen manifest-regen
 	@echo "✓ All governance docs regenerated."
+
+# ── Deployment targets ────────────────────────────────────────────────────
+# These targets wrap the deploy/ compose files for convenience.
+# The root docker-compose.yml remains the canonical development surface.
+
+# Deploy production stack
+.PHONY: deploy-up
+deploy-up:
+	@echo "→ Deploying production stack ($(COMPOSE_PROD))..."
+	docker compose -f $(COMPOSE_PROD) up -d
+	@echo "✓ Production stack started."
+
+# Bring up full-system stack (all 130 nodes)
+.PHONY: deploy-full
+deploy-full:
+	@echo "→ Deploying full-system stack ($(COMPOSE_FULL))..."
+	docker compose -f $(COMPOSE_FULL) --profile full up -d
+	@echo "✓ Full-system stack started."
+
+# Stop production stack
+.PHONY: deploy-down
+deploy-down:
+	@echo "→ Stopping production stack ($(COMPOSE_PROD))..."
+	docker compose -f $(COMPOSE_PROD) down
+	@echo "✓ Production stack stopped."

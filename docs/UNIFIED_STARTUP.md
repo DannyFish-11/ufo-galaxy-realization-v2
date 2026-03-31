@@ -76,16 +76,16 @@ export GALAXY_REDIS_PORT=6380                 # override redis port
 
 ```bash
 # Infrastructure only (Redis, Qdrant, Neo4j, MongoDB, NATS, Temporal, Ollama)
-docker compose -f docker-compose.full.yml up -d
+docker compose -f deploy/compose/full.yml up -d
 
 # Core nodes (critical nodes + infra)
-docker compose -f docker-compose.full.yml --profile core up -d
+docker compose -f deploy/compose/full.yml --profile core up -d
 
 # Full system — all 130 nodes + all infra
-docker compose -f docker-compose.full.yml --profile full up -d
+docker compose -f deploy/compose/full.yml --profile full up -d
 
 # Stop everything
-docker compose -f docker-compose.full.yml --profile full down
+docker compose -f deploy/compose/full.yml --profile full down
 ```
 
 ### Docker — Dev Core (existing docker-compose.yml)
@@ -123,7 +123,7 @@ python unified_launcher.py --status
 Starts: Redis, Qdrant, Neo4j, MongoDB, NATS, Temporal, Ollama, Galaxy Core + Gateway
 
 ```bash
-docker compose -f docker-compose.full.yml up -d
+docker compose -f deploy/compose/full.yml up -d
 ```
 
 ### Mode 2 — Core Profile
@@ -144,7 +144,7 @@ Adds all **critical** nodes to infrastructure:
 - Galaxy Launcher (9000)
 
 ```bash
-docker compose -f docker-compose.full.yml --profile core up -d
+docker compose -f deploy/compose/full.yml --profile core up -d
 ```
 
 ### Mode 3 — Full Profile
@@ -152,7 +152,7 @@ docker compose -f docker-compose.full.yml --profile core up -d
 All 130 nodes + all infrastructure.
 
 ```bash
-docker compose -f docker-compose.full.yml --profile full up -d
+docker compose -f deploy/compose/full.yml --profile full up -d
 ```
 
 > ⚠️ Starting all 130 nodes at once is resource-intensive.
@@ -164,7 +164,7 @@ docker compose -f docker-compose.full.yml --profile full up -d
 Adds the Go edge worker alongside infrastructure.
 
 ```bash
-docker compose -f docker-compose.full.yml --profile worker up -d
+docker compose -f deploy/compose/full.yml --profile worker up -d
 ```
 
 ---
@@ -225,7 +225,7 @@ Add to your workflow:
 
 Profiles can be combined:
 ```bash
-docker compose -f docker-compose.full.yml --profile core --profile worker up -d
+docker compose -f deploy/compose/full.yml --profile core --profile worker up -d
 ```
 
 ---
@@ -318,7 +318,7 @@ If running in Docker, both the Galaxy Core service and the Launcher UI default t
 1. Create `nodes/Node_NNN_NewNode/` with `main.py`, `requirements.txt`, `Dockerfile`.
 2. Add an entry to `config/unified_ports.yaml` (choose an unused port).
 3. Run `python scripts/validate_ports.py` to confirm no conflicts.
-4. Regenerate (or manually add) the node service to `docker-compose.full.yml`.
+4. Regenerate (or manually add) the node service to `deploy/compose/full.yml`.
 5. Register in `node_dependencies.json` for the unified launcher.
 
 ---
@@ -329,7 +329,7 @@ If running in Docker, both the Galaxy Core service and the Launcher UI default t
 |------|---------|
 | `config/unified_ports.yaml` | **Single source of truth** for all ports |
 | `core/port_config.py` | Python API for reading port assignments |
-| `docker-compose.full.yml` | Full system (all 130 nodes + infra) |
+| `deploy/compose/full.yml` | Full system (all 130 nodes + infra) |
 | `docker-compose.yml` | Dev core (infra + galaxy app) |
 | `scripts/validate_ports.py` | Port conflict and coverage validator |
 | `unified_launcher.py` | Non-Docker process launcher |

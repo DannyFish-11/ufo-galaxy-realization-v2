@@ -14,7 +14,7 @@
 #
 #   cp .env.example .env
 #   # edit .env — fill in all credential variables
-#   docker compose -f docker-compose.full.yml --env-file .env up -d
+#   docker compose -f deploy/compose/full.yml --env-file .env up -d
 #
 # NEVER commit a populated .env file or embed real passwords in this file.
 # ============================================================
@@ -26,9 +26,9 @@
 #   worker            – Go edge worker
 #
 # Quick start:
-#   docker compose -f docker-compose.full.yml up -d                   # infra only
-#   docker compose -f docker-compose.full.yml --profile core up -d    # core nodes
-#   docker compose -f docker-compose.full.yml --profile full up -d    # all nodes
+#   docker compose -f deploy/compose/full.yml up -d                   # infra only
+#   docker compose -f deploy/compose/full.yml --profile core up -d    # core nodes
+#   docker compose -f deploy/compose/full.yml --profile full up -d    # all nodes
 #
 # All ports derive from config/unified_ports.yaml.
 # ============================================================
