@@ -76,11 +76,18 @@ class LegacyPathStatus(str, Enum):
 
     ``ACTIVE``
         Path is part of the authoritative entry chain.
+
+    ``DELETED``
+        Path has been physically removed from the repository (PR-8+).
+        Must not be reintroduced.  Entries with this status are kept in the
+        registry purely as authoritative audit records and for non-regression
+        checks.
     """
 
     LEGACY_COMPATIBILITY = "legacy_compatibility"
     DEPRECATED = "deprecated"
     ACTIVE = "active"
+    DELETED = "deleted"
 
 
 # ---------------------------------------------------------------------------
@@ -1243,7 +1250,7 @@ PR8_DELETED_PATHS: frozenset = frozenset([
 _register(
     LegacyPathEntry(
         module_path="windows_client._legacy.START_CLIENT",
-        status=LegacyPathStatus.DEPRECATED,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
             "START_CLIENT.bat was fully deleted in PR-8.  "
             "Use ``start.bat`` (Windows bootstrap launcher) or "
@@ -1259,7 +1266,7 @@ _register(
     ),
     LegacyPathEntry(
         module_path="windows_client._legacy.start_galaxy_client",
-        status=LegacyPathStatus.DEPRECATED,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
             "start_galaxy_client.bat was fully deleted in PR-8.  "
             "Use ``python unified_launcher.py`` as the canonical startup path.  "

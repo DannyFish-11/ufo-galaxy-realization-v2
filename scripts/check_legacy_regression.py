@@ -96,22 +96,30 @@ def _check_no_new_py_sources_in_legacy_archive() -> List[str]:
     """Return violations for new Python source files added inside _legacy/.
 
     The _legacy/ archive package must only contain __init__.py and static
-    archive artefacts (e.g. ui/ with retired UI code).  Adding new .py
-    source modules there indicates a shim is being buried in the archive
-    zone, which is not allowed.
+    archive artefacts under the ``ui/`` subdirectory (legacy chat UI code).
+    Adding new .py source modules anywhere else in the archive zone indicates
+    a shim is being buried there, which is not allowed.
     """
     violations: List[str] = []
     allowed_py = {"__init__.py"}
-    for py in _LEGACY_ARCHIVE_DIR.glob("*.py"):
-        if py.name not in allowed_py:
-            rel = py.relative_to(_REPO_ROOT)
-            violations.append(
-                f"[LEGACY ZONE VIOLATION] New Python source in _legacy/ archive: "
-                f"{rel}\n"
-                f"  windows_client/_legacy/ is a static archive zone.  "
-                f"Do not add new Python source files here; use the canonical "
-                f"module hierarchy instead."
-            )
+    for py in _LEGACY_ARCHIVE_DIR.rglob("*.py"):
+        # Allow __init__.py at any level, and all files under the ui/ subtree
+        # which holds the archived legacy chat UI.
+        if py.name in allowed_py:
+            continue
+        try:
+            py.relative_to(_LEGACY_ARCHIVE_DIR / "ui")
+            continue  # inside the permitted ui/ archive subtree
+        except ValueError:
+            pass
+        rel = py.relative_to(_REPO_ROOT)
+        violations.append(
+            f"[LEGACY ZONE VIOLATION] New Python source in _legacy/ archive: "
+            f"{rel}\n"
+            f"  windows_client/_legacy/ is a static archive zone.  "
+            f"Do not add new Python source files here (outside ui/); use the "
+            f"canonical module hierarchy instead."
+        )
     return violations
 
 

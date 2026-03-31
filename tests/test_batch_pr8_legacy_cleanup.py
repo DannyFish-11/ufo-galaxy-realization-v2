@@ -66,6 +66,13 @@ class TestDeletedFilesAbsent:
             f"Found unexpected .bat file(s) inside windows_client/: {bat_files}"
         )
 
+    def test_canonical_start_bat_exists_at_repo_root(self):
+        """start.bat must exist at the repository root as the canonical Windows bootstrap."""
+        assert (_ROOT / "start.bat").exists(), (
+            "start.bat must exist at the repository root — it is the canonical "
+            "Windows bootstrap launcher that replaced the deleted legacy .bat files"
+        )
+
 
 # ===========================================================================
 # B) windows_client/_legacy/__init__.py acknowledges deletions
@@ -148,7 +155,7 @@ class TestLegacyPathsContainsPR8Entries:
 
     def test_legacy_path_registry_has_pr8_guardrail_entries(self):
         try:
-            from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+            from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY, LegacyPathStatus
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable: {e}")
         pr8_entries = [
@@ -158,6 +165,30 @@ class TestLegacyPathsContainsPR8Entries:
         assert len(pr8_entries) >= 2, (
             f"LEGACY_PATH_REGISTRY must have at least 2 PR-8 entries, got: {pr8_entries}"
         )
+
+    def test_pr8_entries_use_deleted_status(self):
+        """PR-8 deleted file entries (bat launchers) must use LegacyPathStatus.DELETED."""
+        try:
+            from core.orchestration_authority.legacy_paths import (
+                LEGACY_PATH_REGISTRY,
+                LegacyPathStatus,
+            )
+        except ImportError as e:
+            pytest.skip(f"legacy_paths not importable: {e}")
+        # Only the bat-file entries that were physically deleted must carry DELETED status
+        bat_keys = [
+            k for k in LEGACY_PATH_REGISTRY
+            if "START_CLIENT" in k or "start_galaxy_client" in k
+        ]
+        assert len(bat_keys) >= 2, (
+            f"Expected at least 2 bat-file entries in LEGACY_PATH_REGISTRY, got: {bat_keys}"
+        )
+        for key in bat_keys:
+            entry = LEGACY_PATH_REGISTRY[key]
+            assert entry.status == LegacyPathStatus.DELETED, (
+                f"Entry '{key}' must use LegacyPathStatus.DELETED (file was physically "
+                f"removed in PR-8), got {entry.status}"
+            )
 
     def test_source_contains_pr8_deleted_paths_sentinel(self):
         content = _read("core/orchestration_authority/legacy_paths.py")
