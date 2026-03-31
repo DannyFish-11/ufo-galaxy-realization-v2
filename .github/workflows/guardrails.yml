@@ -138,3 +138,37 @@ jobs:
         # file has grown past its recorded limit.
         run: |
           python scripts/check_file_complexity.py --strict
+
+  # ---------------------------------------------------------------------------
+  # D. Architecture debt-freeze — Batch PR-1 guardrail
+  #
+  # Detects patterns that represent NEW technical debt being introduced:
+  #   1. New root-level placeholder Markdown report files
+  #   2. New compatibility shims outside approved legacy zones
+  #   3. New inline ``except ImportError`` fallback definitions
+  #   4. Oversized YAML files (informational only)
+  #
+  # Runs in WARNING mode (does not fail CI) until the baseline is clean.
+  # Switch to --strict once Batch PR-5 closes out the grandfathered list.
+  # ---------------------------------------------------------------------------
+  debt-freeze:
+    name: Architecture Debt Freeze (Batch PR-1)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run debt-freeze guardrail (warning mode)
+        # Warning mode: reports violations but does not fail CI.
+        # The output is visible in the workflow log so reviewers can see
+        # whether a PR is introducing new debt.
+        # Change to --strict in Batch PR-5 after grandfathered list is cleared.
+        run: |
+          python scripts/check_debt_freeze.py
+          echo "✅ Debt-freeze guardrail complete (warning mode)."
