@@ -1,6 +1,21 @@
 """
 GalaxyOrchestrator - Galaxy 统一调度器
 核心调度模块，串联端到端流程
+
+PR-3: Execution Spine Integration
+-----------------------------------
+``GalaxyOrchestrator`` is demoted to an **execution facade / compatibility
+fallback**.  The canonical cross-device execution chain is:
+
+    OpenClawd → CommandRouter → TaskEnvelope → Gateway substrate →
+    Worker/Device/Node → ResultEnvelope → OpenClawd feedback
+
+Do not invoke this class as a primary cross-device entrypoint.  It is
+retained as a compatibility fallback only.  All execution that can be
+migrated should go through :func:`core.execution_spine.route_via_spine`.
+
+Import :data:`GALAXY_ORCHESTRATOR_FACADE_AUTHORITY` to assert that this
+module is used only as a facade / compatibility bridge.
 """
 
 import asyncio
@@ -19,6 +34,15 @@ from core.port_config import get_service_port
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# PR-3: Execution Spine Integration — facade authority sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that GalaxyOrchestrator is an execution facade / compatibility
+#: fallback only.  Primary cross-device dispatch authority belongs to
+#: CommandRouter via the canonical execution spine.
+GALAXY_ORCHESTRATOR_FACADE_AUTHORITY: str = "GALAXY_ORCHESTRATOR_FACADE_V1"
 
 
 class TaskStatus(Enum):

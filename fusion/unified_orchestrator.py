@@ -42,6 +42,16 @@ from .node_executor import ExecutionPool, ExecutionResult
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("UnifiedOrchestrator")
 
+# ---------------------------------------------------------------------------
+# PR-3: Execution Spine Integration — facade authority sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that UnifiedOrchestrator is a deprecated execution facade.
+#: Primary dispatch authority belongs to CommandRouter via the canonical
+#: execution spine (core.execution_spine → CommandRouter.route_envelope).
+#: This module is retained for backward compatibility only.
+UNIFIED_ORCHESTRATOR_FACADE_AUTHORITY: str = "UNIFIED_ORCHESTRATOR_FACADE_V1"
+
 
 class TaskPriority(Enum):
     """任务优先级"""

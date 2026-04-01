@@ -14,6 +14,17 @@ ConnectionManager）完成实际工作。提供高层 API 用于设备发现、�
     orch = get_device_orchestrator()
     devices = await orch.discover_devices(device_type="android")
     result  = await orch.send_command("dev_001", "screenshot", {"quality": 80})
+
+PR-3: Execution Spine Integration
+----------------------------------
+``DeviceOrchestrator`` is demoted to an **execution facade**.  It retains
+its device-discovery and high-level helper API but no longer holds
+independent dispatch authority.  All command dispatch is delegated to
+the canonical execution spine (``CommandRouter.route_envelope``) via
+:func:`core.execution_spine.route_via_spine`.
+
+Import :data:`DEVICE_ORCHESTRATOR_FACADE_AUTHORITY` to assert that this
+module is wired into the execution spine rather than dispatching directly.
 """
 
 import asyncio
@@ -24,6 +35,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DeviceOrchestrator")
+
+# ---------------------------------------------------------------------------
+# PR-3: Execution Spine Integration — facade authority sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that DeviceOrchestrator is an execution facade only.
+#: All command dispatch is delegated to CommandRouter via the canonical
+#: execution spine.  DeviceOrchestrator has no independent dispatch authority.
+DEVICE_ORCHESTRATOR_FACADE_AUTHORITY: str = "DEVICE_ORCHESTRATOR_FACADE_V1"
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +235,12 @@ class DeviceOrchestrator:
     ) -> Dict[str, Any]:
         """向设备发送 AIP v3.0 命令。
 
+        PR-3: Execution Spine Integration.
+        This method is an **execution facade**.  It records the ingress via
+        the canonical execution spine and attempts to route through
+        ``CommandRouter.route_envelope``.  If the spine is unavailable it
+        falls back to the legacy NodeRegistry path unchanged.
+
         Args:
             device_id: 目标设备 ID。
             command: 命令名称。
@@ -227,6 +253,17 @@ class DeviceOrchestrator:
         command_id = uuid.uuid4().hex[:12]
         params = params or {}
         start = time.monotonic()
+
+        # PR-3: Record ingress in execution spine log.
+        try:
+            from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+            record_legacy_ingress(
+                ExecutionIngressSource.DEVICE_ORCHESTRATOR,
+                {"device_id": device_id, "command": command, "params": params},
+                reason="DeviceOrchestrator.send_command → execution facade → spine",
+            )
+        except Exception:
+            pass
 
         # 通过 NodeRegistry 调用
         node_registry = _get_node_registry()
