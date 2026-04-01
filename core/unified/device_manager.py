@@ -34,6 +34,21 @@ enhancements/multidevice/device_manager.py、core/device_agent_manager.py）
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# PR-2 canonical device-state write authority sentinel.
+# UDM is the sole canonical write authority for all device state mutations in
+# the Galaxy system.  All registration, online/offline transitions, heartbeat
+# state updates, and device-state writes MUST pass through this class.
+#
+# Gateway-originated writes should use galaxy_gateway.ssot.udm_write_*()
+# helpers which provide structured error handling and write-through semantics.
+#
+# Downstream structures (device_registry, device_pool_manager, etc.) are
+# compatibility / scheduling layers only and must NOT act as parallel
+# canonical truth sources.
+# ---------------------------------------------------------------------------
+UDM_DEVICE_STATE_AUTHORITY = "UDM::CANONICAL_DEVICE_STATE_WRITE_AUTHORITY"
+
 import asyncio
 import logging
 from datetime import datetime, timezone
