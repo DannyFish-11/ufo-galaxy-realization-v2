@@ -132,6 +132,47 @@ class ConstellationRuntime:
             return None
 
     # ------------------------------------------------------------------
+    # Canonical participation gate (PR-7)
+    # ------------------------------------------------------------------
+
+    def _is_orchestration_ready(self, device_id: str) -> bool:
+        """Return True if *device_id* passes the canonical participation gate.
+
+        Uses :func:`core.device_participation.is_device_orchestration_ready` as
+        the sole source of truth for orchestration eligibility.  Degrades
+        gracefully — returns ``True`` (permissive fallback) when the
+        participation layer is unavailable so that existing behaviour is
+        preserved when the subsystem is not initialised.
+        """
+        if not device_id:
+            # An empty device ID cannot be assessed; reject immediately to
+            # avoid a spurious participation-layer lookup.
+            return False
+        try:
+            from core.device_participation import is_device_orchestration_ready
+            eligible = is_device_orchestration_ready(device_id)
+            if eligible:
+                logger.debug(
+                    "orchestration-gate | PASS | device_id=%s", device_id
+                )
+            else:
+                logger.info(
+                    "orchestration-gate | EXCLUDED | device_id=%s "
+                    "(not orchestration-eligible per canonical participation layer)",
+                    device_id,
+                )
+            return eligible
+        except Exception as exc:
+            logger.debug(
+                "orchestration-gate | participation layer unavailable for %s: %s — allowing",
+                device_id,
+                exc,
+            )
+            # Degrade gracefully: don't block candidate selection if the
+            # participation subsystem is unavailable.
+            return True
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -343,14 +384,16 @@ class ConstellationRuntime:
                 "data": {},
             }
 
-        # Assign devices via DevicePoolManager
+        # Assign devices via DevicePoolManager, gated by canonical participation
+        # readiness (PR-7: orchestration candidates must pass the participation
+        # layer — ad-hoc pool selection alone is not sufficient).
         pool = self._get_device_pool()
         if pool:
             for subtask in decomposition.subtasks:
                 if not subtask.device_id:
                     caps = [subtask.device_type] if subtask.device_type else None
                     selected = pool.select_device(required_capabilities=caps)
-                    if selected:
+                    if selected and self._is_orchestration_ready(selected):
                         subtask.device_id = selected
 
         # Audit: dispatch stage
