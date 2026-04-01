@@ -6,6 +6,15 @@ WebSocket 服务端传输层
 2. 消息的收发
 3. 连接状态管理
 4. 心跳检测
+
+Normalization boundary (PR-5)
+------------------------------
+All accepted messages are normalized to a
+:class:`~galaxy_gateway.protocol.normalized_ingress_event.NormalizedIngressEvent`
+via :func:`~galaxy_gateway.protocol.normalized_ingress_event.to_normalized_ingress_event`
+before entering runtime dispatch.  Internal dispatch branches on
+``event.kind`` (an :class:`~galaxy_gateway.protocol.normalized_ingress_event.IngressEventKind`
+constant) rather than raw type strings.
 """
 
 import asyncio
@@ -19,6 +28,11 @@ from pydantic import BaseModel, ConfigDict
 
 from ..protocol import AIPMessage, MessageType, create_error_message
 from ..protocol.compat import parse_message_compat
+from ..protocol.normalized_ingress_event import (
+    IngressEventKind,
+    NormalizedIngressEvent,
+    to_normalized_ingress_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +180,13 @@ class WebSocketManager:
             await self.disconnect(device_id)
     
     async def _handle_message(self, device_id: str, data: str):
-        """处理接收到的消息"""
+        """处理接收到的消息（PR-5 normalization boundary）。
+
+        All raw ingress is normalized to a :class:`NormalizedIngressEvent`
+        before dispatch.  ``event.kind`` drives the routing decision; legacy
+        raw type strings are only consulted for the mesh pre-dispatch fast-path
+        (mesh types are outside the AIP v3 MessageType vocabulary).
+        """
         try:
             # Pre-dispatch: handle P2P mesh messages before AIP parsing
             # (mesh types may not exist in v3 MessageType enum)
@@ -177,16 +197,22 @@ class WebSocketManager:
                 await self._handle_mesh_message(device_id, msg_type, raw)
                 return
 
-            message = parse_message_compat(data)
+            # Normalize to NormalizedIngressEvent (compat path: v1/v2 → v3)
+            event: NormalizedIngressEvent = to_normalized_ingress_event(data)
 
             # 更新心跳时间
             if device_id in self.connections:
                 self.connections[device_id].last_heartbeat = datetime.utcnow()
 
-            # 处理心跳消息
-            if message.type == MessageType.DEVICE_HEARTBEAT:
+            # Dispatch based on canonical event.kind
+            if event.kind == IngressEventKind.DEVICE_HEARTBEAT:
+                # Reconstruct minimal AIPMessage for legacy heartbeat handler
+                message = parse_message_compat(data)
                 await self._handle_heartbeat(device_id, message)
                 return
+
+            # Reconstruct AIPMessage for the legacy on_message callback
+            message = parse_message_compat(data)
 
             # 调用外部消息处理器
             if self.on_message:
