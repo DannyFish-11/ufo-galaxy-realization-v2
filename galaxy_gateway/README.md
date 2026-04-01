@@ -502,6 +502,72 @@ GATEWAY_PORT=9000
 
 ---
 
+## 🏗️ Architectural Boundaries
+
+> **This section is authoritative for PR-10 and beyond.**
+> It defines what the gateway layer is — and explicitly is not — responsible for.
+
+### ✅ Gateway Responsibilities (Transport & Routing Substrate)
+
+The `galaxy_gateway` package is the **transport and routing substrate** of the Galaxy
+system.  Its responsibilities are strictly confined to:
+
+| Responsibility | Module(s) |
+|---|---|
+| Device ingress / egress (WebSocket accept/close) | `websocket_handler.py` |
+| WebSocket session lifecycle management | `websocket_handler.py`, `device_router.py` |
+| Relay / P2P / WebRTC transport paths | `p2p_connector.py`, `webrtc_proxy.py` |
+| Protocol framing and parsing (AIP v3+) | `protocol/` package, `aip_protocol_v2.py` |
+| Local routing and task dispatch to connected devices | `routing/` package, `device_router.py` |
+| Send-to-device / transport fallback behavior | `routing/dispatch.py`, `smart_transport_router.py` |
+| Canonical device-state write-through to UDM | `ssot.py` |
+| Cross-device convenience coordination (clipboard, file, media sync) | `cross_device_coordinator.py` |
+
+### ❌ Gateway Non-Responsibilities
+
+The gateway is **NOT** the canonical authority for any of the following.
+New logic for these concerns must live in the designated core layers.
+
+| Concern | Canonical Authority |
+|---|---|
+| **Entry-mode decisioning** (which mode a session starts in) | `core/` orchestration layer |
+| **Orchestration eligibility** (whether a device may participate in orchestration) | `core/orchestration/` + `core/device_selection/canonical_device_selector.py` |
+| **Formation / session truth** (the canonical set of participating devices) | `core/unified/device_manager.py` (UDM) |
+| **Global readiness truth** (system-wide "is the stack ready to serve?") | `core/system_orchestrator.py` |
+| **Final canonical capability truth** | `core/capability_bus.py` via UDM |
+
+> **TODO** (for future PRs): Any call site inside `galaxy_gateway/` that currently
+> reads or sets these non-gateway concerns should be migrated to the canonical core
+> layer and replaced with a thin read/delegate call.
+
+### 📐 Boundary Diagram
+
+```
+External Devices
+      │  (WebSocket / HTTP / WebRTC / P2P)
+      ▼
+┌─────────────────────────────────────────────────────┐
+│              galaxy_gateway  (transport substrate)   │
+│  websocket_handler ─► device_router ─► routing/     │
+│  ssot (write-through to UDM)                        │
+│  cross_device_coordinator (convenience layer)        │
+└─────────────────────────────┬───────────────────────┘
+                              │  delegates to
+                              ▼
+┌─────────────────────────────────────────────────────┐
+│               core/  (canonical authority)           │
+│  command_router  ·  orchestration/  ·  UDM           │
+│  system_orchestrator  ·  capability_bus              │
+└─────────────────────────────────────────────────────┘
+```
+
+The gateway **receives** transport events and **delegates** all higher-level
+decisions (readiness, eligibility, formation, entry-mode) to the canonical
+`core/` layer.  It must never become a secondary source of truth for those
+concerns.
+
+---
+
 **项目仓库:** https://github.com/DannyFish-11/galaxy  
 **端口:** 9000  
 **文档:** http://localhost:9000/docs

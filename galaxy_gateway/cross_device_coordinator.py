@@ -33,10 +33,41 @@ through :func:`~contracts.registered_runtime_device.from_router_device` and
 assesses participation via
 :func:`~core.device_selection.canonical_device_selector.assess_device_participation`.
 
+Architectural boundary (PR-10) — convenience coordination layer
+----------------------------------------------------------------
+``CrossDeviceCoordinator`` is a **convenience/legacy coordination layer** for
+gateway-internal multi-device tasks (clipboard sync, file transfer, media
+control, notification broadcast).  It runs *within* the transport layer and
+must not be promoted to a canonical orchestration authority.
+
+NOT responsible for
+~~~~~~~~~~~~~~~~~~~~
+- **Orchestration eligibility** — whether a device may be included in a
+  multi-device orchestration session.  Assessed by
+  :mod:`core.device_selection.canonical_device_selector`.
+- **Formation truth** — the canonical participation set for a session.
+  Owned by :class:`~core.unified.device_manager.UnifiedDeviceManager` (UDM).
+- **Entry-mode decisioning** — resolved by the canonical orchestration layer.
+- **Global readiness truth** — owned by :mod:`core.system_orchestrator`.
+
+Any future logic that needs to gate cross-device tasks on canonical readiness
+or eligibility must call the core layer first, then pass the resolved device
+set to this coordinator for transport execution.
+
 Author: Manus AI
 Version: 1.0
 Date: 2026-01-22
 """
+
+# ---------------------------------------------------------------------------
+# PR-10 transport-layer boundary sentinel
+# Importing this sentinel from outside the gateway package signals that the
+# import site is consuming cross-device transport primitives only — not
+# canonical orchestration eligibility, formation truth, or readiness.
+# ---------------------------------------------------------------------------
+CROSS_DEVICE_COORDINATOR_TRANSPORT_AUTHORITY = (
+    "CROSS_DEVICE_COORDINATOR::CONVENIENCE_TRANSPORT_LAYER_ONLY"
+)
 
 import asyncio
 import logging
