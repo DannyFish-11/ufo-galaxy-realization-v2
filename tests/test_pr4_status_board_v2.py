@@ -436,11 +436,13 @@ class TestStatusBoardV2App:
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "Coherence" in out
 
-    def test_render_once_contains_readonly_title(self):
+    def test_render_once_contains_board_title(self):
+        # PR-8: board is now a desktop control surface, not read-only.
+        # Validates the board title is rendered in each frame.
         from windows_client.status_board_v2.app import StatusBoardV2App
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
-        assert "read-only" in out
+        assert "Status Board V2" in out
 
     def test_render_offline_contains_offline(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
