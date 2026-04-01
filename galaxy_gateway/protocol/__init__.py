@@ -30,6 +30,11 @@ from .normalized_ingress_event import (
     from_aip_message as ingress_event_from_aip_message,
     from_normalized_dict as ingress_event_from_dict,
 )
+from .ingress_classifier import (
+    IngressMessageClass,
+    classify_ingress_kind,
+    INGRESS_CLASSIFIER_AUTHORITY,
+)
 from .actions import (
     ActionType,
     LEGACY_ACTION_MAP,

@@ -7,6 +7,20 @@ WebSocket Handler - WebSocket 连接处理器
 
 强制要求：AIP v3.0+（version >= 3.0）；trace_id 和 route_mode 如缺失会被自动注入。
 
+Normalization boundary (PR-5)
+------------------------------
+After AIP v3+ enforcement, every accepted message is immediately converted to a
+:class:`~galaxy_gateway.protocol.normalized_ingress_event.NormalizedIngressEvent`
+via :func:`~galaxy_gateway.protocol.normalized_ingress_event.to_normalized_ingress_event`.
+Runtime dispatch uses the canonical ``event.kind`` string
+(:class:`~galaxy_gateway.protocol.normalized_ingress_event.IngressEventKind`)
+and the stable semantic class
+(:func:`~galaxy_gateway.protocol.ingress_classifier.classify_ingress_kind`).
+
+Correlation fields ``trace_id``, ``route_mode``, ``correlation_id``, and
+``task_id`` are read from the normalized event and propagated into handler
+payloads so that no downstream handler needs to rediscover them from raw dicts.
+
 Architectural boundary (PR-10)
 -------------------------------
 This module is the **local transport state** handler for the gateway layer.
@@ -17,6 +31,7 @@ Responsibilities
 ~~~~~~~~~~~~~~~~
 - Accept and close WebSocket connections (device ingress/egress).
 - Enforce AIP v3+ protocol framing; auto-inject missing trace_id/route_mode.
+- Normalize accepted messages to NormalizedIngressEvent before dispatch.
 - Dispatch parsed messages to register / heartbeat / command / response handlers.
 - Delegate authoritative online/routable state to
   :class:`~core.unified.connection_manager.UnifiedConnectionManager` (UCM).
@@ -50,6 +65,17 @@ Date: 2026-03-07
 # ---------------------------------------------------------------------------
 WEBSOCKET_HANDLER_TRANSPORT_AUTHORITY = "WEBSOCKET_HANDLER::TRANSPORT_SUBSTRATE_ONLY"
 
+# ---------------------------------------------------------------------------
+# PR-5 ingress normalization authority sentinel
+# This sentinel declares that this module enforces the normalization boundary:
+# every accepted device message is converted to NormalizedIngressEvent before
+# it enters any runtime handler.  Downstream handlers consume the canonical
+# event; they must not re-parse raw type strings or AIP version fields.
+# ---------------------------------------------------------------------------
+INGRESS_NORMALIZATION_AUTHORITY = (
+    "WEBSOCKET_HANDLER::INGRESS_NORMALIZED_TO_AIP_V3_CANONICAL_BEFORE_DISPATCH"
+)
+
 import asyncio
 import json
 import logging
@@ -60,6 +86,15 @@ from fastapi import WebSocket, WebSocketDisconnect
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
 from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
 from galaxy_gateway.protocol.aip_v3 import MessageType
+from galaxy_gateway.protocol.normalized_ingress_event import (
+    IngressEventKind,
+    NormalizedIngressEvent,
+    from_aip_message as _ingress_event_from_aip,
+)
+from galaxy_gateway.protocol.ingress_classifier import (
+    IngressMessageClass,
+    classify_ingress_kind,
+)
 from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
 logger = logging.getLogger(__name__)
@@ -213,15 +248,23 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
 async def handle_message(connection_id: str, message: Dict, websocket: WebSocket):
     """处理接收到的消息。
 
-    使用 :func:`parse_message_strict` 强制要求 AIP v3.0+ 版本。低版本消息
-    会被拒绝并关闭 WebSocket 连接；缺失的 trace_id/route_mode 会被自动注入。
+    Normalization boundary (PR-5):
+    1. :func:`parse_message_strict` enforces AIP v3.0+; rejects lower versions.
+    2. The accepted AIPMessage is immediately converted to a
+       :class:`~galaxy_gateway.protocol.normalized_ingress_event.NormalizedIngressEvent`
+       — this is the canonical internal representation.
+    3. Dispatch uses ``event.kind`` (an :class:`IngressEventKind` constant) and
+       the stable semantic class from :func:`classify_ingress_kind`.
+    4. Correlation fields ``trace_id``, ``route_mode``, ``correlation_id``, and
+       ``task_id`` are read from *event* (always non-empty after normalization)
+       and propagated into ``aip_msg.payload`` for handler access.
     """
     try:
         if "type" not in message:
             logger.warning("⚠️ 收到缺少 type 字段的消息，已忽略")
             return
 
-        # 强制校验 AIP v3；注入 trace_id/route_mode
+        # ── Step 1: enforce AIP v3; inject trace_id/route_mode ──────────────
         try:
             aip_msg = parse_message_strict(message)
         except AIPVersionError as ver_err:
@@ -252,56 +295,65 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
             logger.warning(f"⚠️ 消息解析失败（type={message.get('type')}）: {parse_err}")
             return
 
-        # Propagate trace_id and route_mode from message metadata into payload
-        # so downstream handlers always see them in aip_msg.payload.
-        # inject_trace_metadata() has already set both fields on the raw dict;
-        # read them back and write into aip_msg.payload for handler access.
-        trace_id = message.get("trace_id")
-        if trace_id is None:
-            trace_id = aip_msg.payload.get("trace_id", "")
-        route_mode = message.get("route_mode")
-        if route_mode is None:
-            route_mode = aip_msg.payload.get("route_mode", "")
-        if trace_id:
-            aip_msg.payload.setdefault("trace_id", trace_id)
-        if route_mode:
-            aip_msg.payload.setdefault("route_mode", route_mode)
+        # ── Step 2: normalize to canonical NormalizedIngressEvent ────────────
+        # This is the PR-5 normalization boundary.  All dispatch below uses
+        # event.kind (IngressEventKind) — not raw type strings or MessageType.
+        event: NormalizedIngressEvent = _ingress_event_from_aip(aip_msg)
+
+        # ── Step 3: propagate correlation fields from event into aip_msg ─────
+        # event.trace_id / route_mode / correlation_id are guaranteed non-empty
+        # (or stably defaulted) by the normalization layer.  Write them back
+        # into aip_msg.payload so legacy handler code that reads payload fields
+        # continues to work without modification.
+        aip_msg.payload.setdefault("trace_id", event.trace_id)
+        aip_msg.payload.setdefault("route_mode", event.route_mode)
+        if event.correlation_id:
+            aip_msg.payload.setdefault("correlation_id", event.correlation_id)
+        if event.task_id:
+            aip_msg.payload.setdefault("task_id", event.task_id)
+
+        msg_class = classify_ingress_kind(event.kind)
 
         logger.info(
-            f"📨 收到消息: type={aip_msg.type.value}, "
-            f"device={aip_msg.device_id}, id={aip_msg.message_id}, "
-            f"trace_id={aip_msg.payload.get('trace_id')}, "
-            f"route_mode={aip_msg.payload.get('route_mode')}"
+            f"📨 收到消息: kind={event.kind}, class={msg_class}, "
+            f"device={event.device_id}, id={event.message_id}, "
+            f"trace_id={event.trace_id}, route_mode={event.route_mode}"
         )
 
-        # 根据规范化后的 v3 MessageType 路由
-        if aip_msg.type == MessageType.DEVICE_REGISTER:
+        # ── Step 4: dispatch via canonical IngressEventKind ──────────────────
+        # Branch on event.kind (stable canonical strings), not raw type values.
+        if event.kind == IngressEventKind.DEVICE_REGISTER:
             await handle_register(connection_id, aip_msg, websocket)
-        elif aip_msg.type == MessageType.DEVICE_HEARTBEAT:
+        elif event.kind == IngressEventKind.DEVICE_HEARTBEAT:
             await handle_heartbeat(connection_id, aip_msg)
-        elif aip_msg.type in (MessageType.TASK_RESULT, MessageType.COMMAND_RESULT):
+        elif event.kind in (IngressEventKind.TASK_RESULT, IngressEventKind.COMMAND_RESULT):
             await handle_response(connection_id, aip_msg)
-        elif aip_msg.type == MessageType.COMMAND:
+        elif event.kind == IngressEventKind.COMMAND:
             await handle_command(connection_id, aip_msg)
-        elif aip_msg.type == MessageType.DEVICE_STATUS:
+        elif event.kind == IngressEventKind.DEVICE_STATUS:
             await handle_status(connection_id, aip_msg)
-        elif aip_msg.type == MessageType.WAKE_EVENT:
+        elif event.kind == IngressEventKind.WAKE_EVENT:
             await handle_wake_event(connection_id, aip_msg)
-        elif aip_msg.type == MessageType.SESSION_MIGRATE:
-            await handle_session_migrate(connection_id, aip_msg)
         else:
-            logger.warning(f"⚠️ 未处理的消息类型: {aip_msg.type.value}")
-            error_resp = {
-                "version": "3.0",
-                "type": "error",
-                "device_id": aip_msg.device_id,
-                "correlation_id": aip_msg.message_id,
-                "payload": {
-                    "error": f"Unsupported message type: {aip_msg.type.value}",
-                    "original_type": aip_msg.type.value,
-                },
-            }
-            await websocket.send_json(error_resp)
+            # SESSION_MIGRATE and any future transport-class kinds are handled here
+            # by falling through to per-type checks using MessageType for backward
+            # compat until those handlers are also migrated.
+            if aip_msg.type == MessageType.SESSION_MIGRATE:
+                await handle_session_migrate(connection_id, aip_msg)
+            else:
+                logger.warning(f"⚠️ 未处理的消息类型: kind={event.kind}")
+                error_resp = {
+                    "version": "3.0",
+                    "type": "error",
+                    "device_id": event.device_id,
+                    "correlation_id": event.message_id,
+                    "trace_id": event.trace_id,
+                    "payload": {
+                        "error": f"Unsupported message kind: {event.kind}",
+                        "original_type": event.original_type,
+                    },
+                }
+                await websocket.send_json(error_resp)
 
     except Exception as e:
         logger.error(f"❌ 消息处理失败: {e}")
