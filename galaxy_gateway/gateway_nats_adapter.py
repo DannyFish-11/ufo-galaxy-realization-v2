@@ -46,6 +46,14 @@ logger = logging.getLogger("gateway_nats_adapter")
 # The sentinel below affirms that the interop layer has been applied.
 MESSAGE_INTEROP_APPLIED: str = "GATEWAY_NATS_ADAPTER_MESSAGE_INTEROP_V1"
 
+# PR-4: Gateway substrate authority sentinel.
+# The Gateway / WebSocket adapter is the device-facing transport substrate —
+# it accepts canonical TaskEnvelope/ResultEnvelope contracts from the NATS
+# carrier layer and delivers them to physical/virtual devices.  It does NOT
+# define message semantics or act as an orchestration authority.
+# Layer identity (from core.agent_bus_fabric): GATEWAY::DEVICE_TRANSPORT_SUBSTRATE
+GATEWAY_SUBSTRATE_AUTHORITY: str = "GATEWAY::DEVICE_TRANSPORT_SUBSTRATE_V1"
+
 _TASK_TIMEOUT_S = float(os.getenv("GALAXY_GW_ADAPTER_TIMEOUT", "30"))
 _MAX_RETRIES = int(os.getenv("GALAXY_GW_ADAPTER_RETRIES", "2"))
 _DLQ_SUBJECT = os.getenv("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")

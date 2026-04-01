@@ -247,6 +247,17 @@ Importable to assert that an integration point is aware of the ingress
 governance policy introduced in PR-3.
 """
 
+# PR-4: Agent Bus & Fabric Convergence — transport strategy sentinel.
+# CommandRouter is the transport strategy selection layer: it decides which
+# carrier/substrate (direct / gateway / NATS / relay / mesh) to use for each
+# dispatch, records the decision via core.agent_bus_fabric.record_fabric_event,
+# and enforces the canonical TaskEnvelope/ResultEnvelope contract on every path.
+COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED: str = (
+    "COMMAND_ROUTER::TRANSPORT_STRATEGY_LAYER_V1: CommandRouter selects "
+    "transport strategy via core.agent_bus_fabric.select_transport_strategy() "
+    "and records every dispatch decision for fabric observability."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
