@@ -22,6 +22,9 @@ from pydantic import BaseModel
 
 logger = logging.getLogger("scheduler")
 
+# PR-2: Affirms that this scheduler delegates correlation-field stamping to
+# the canonical message interop layer (core.message_interop.extract_correlation).
+SCHEDULER_MESSAGE_INTEROP_APPLIED: str = "SCHEDULER_MESSAGE_INTEROP_V1"
 
 class ToolDefinition(BaseModel):
     name: str
@@ -673,10 +676,16 @@ CROSS-DEVICE:
         device_id = args.get("device_id", "")
         task_type = args.get("task_type", "")
         payload = args.get("payload", {})
-        # Stamp canonical task_id / trace_id so the dispatch is correlatable
-        # through the canonical trace chain even on this fire-and-forget path.
-        task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
-        trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
+        # PR-2: Use canonical interop layer to extract/stamp correlation fields
+        # so every dispatch carries consistent task_id / trace_id / session_id.
+        try:
+            from core.message_interop import extract_correlation as _extract_corr
+            _corr = _extract_corr(args)
+            task_id = _corr.task_id
+            trace_id = _corr.trace_id
+        except Exception:
+            task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
+            trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
 
         # 通过 WebSocket connection_manager 发送
         ws_sender = context.get("ws_sender") if context else None
