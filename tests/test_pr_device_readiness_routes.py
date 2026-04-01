@@ -102,6 +102,7 @@ class TestRouterStructure(unittest.TestCase):
         paths = {route.path for route in r.routes}
         self.assertIn("/api/v1/devices/readiness", paths)
         self.assertIn("/api/v1/devices/{device_id}/readiness", paths)
+        self.assertIn("/api/v1/devices/cross-device-ready", paths)
         self.assertIn("/api/v1/devices/participation", paths)
         self.assertIn("/api/v1/devices/{device_id}/participation", paths)
 
@@ -505,6 +506,129 @@ class TestGetDeviceParticipation(unittest.TestCase):
         self.assertFalse(data["cross_device_eligible"])
         self.assertFalse(data["orchestration_eligible"])
         self.assertIn("not-runtime-present", data["participation_reason"])
+
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/devices/cross-device-ready
+# ---------------------------------------------------------------------------
+
+
+class TestCrossDeviceReady(unittest.TestCase):
+    def setUp(self):
+        self.app = _build_app()
+        self.client = TestClient(self.app, raise_server_exceptions=False)
+
+    def test_returns_200(self):
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = []
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_response_has_success_devices_authority(self):
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = []
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        data = resp.json()
+        self.assertIn("success", data)
+        self.assertTrue(data["success"])
+        self.assertIn("devices", data)
+        self.assertIn("total", data)
+        self.assertIn("authority", data)
+        self.assertEqual(data["authority"], DEVICE_READINESS_ROUTES_AUTHORITY)
+
+    def test_empty_when_no_ready_devices(self):
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = []
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        data = resp.json()
+        self.assertEqual(data["devices"], [])
+        self.assertEqual(data["total"], 0)
+
+    def test_returns_ready_devices(self):
+        rs1 = _make_readiness_summary("dev-01")
+        rs2 = _make_readiness_summary("dev-02")
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = [rs1, rs2]
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        data = resp.json()
+        self.assertEqual(data["total"], 2)
+        ids = {d["device_id"] for d in data["devices"]}
+        self.assertEqual(ids, {"dev-01", "dev-02"})
+
+    def test_only_ready_devices_returned(self):
+        """Devices returned must all be registered, online, connected, routable."""
+        rs_ready = _make_readiness_summary("dev-ready")
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = [rs_ready]
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        data = resp.json()
+        self.assertEqual(data["total"], 1)
+        device = data["devices"][0]
+        self.assertTrue(device["registered"])
+        self.assertTrue(device["online"])
+        self.assertTrue(device["connected"])
+        self.assertTrue(device["routable"])
+
+    def test_readiness_module_unavailable_returns_empty_with_error(self):
+        with patch("core.routes.device_readiness._get_readiness_module", return_value=None):
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["devices"], [])
+        self.assertIn("error", data)
+
+    def test_subsystem_exception_returns_empty_with_error(self):
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.side_effect = RuntimeError("exploded")
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["devices"], [])
+        self.assertIn("error", data)
+        self.assertIn("exploded", data["error"])
+
+    def test_to_dict_exception_skips_item(self):
+        """Items whose to_dict() raises should be skipped, not crash the endpoint."""
+        bad_rs = MagicMock()
+        bad_rs.to_dict.side_effect = RuntimeError("bad dict")
+        good_rs = _make_readiness_summary("dev-good")
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = [bad_rs, good_rs]
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["devices"][0]["device_id"], "dev-good")
+
+    def test_filtering_is_delegated_to_readiness_module(self):
+        """The endpoint delegates cross-device filtering to get_cross_device_ready_devices()."""
+        rs_ready = _make_readiness_summary("dev-ready")
+        # Simulate the underlying helper having already filtered out non-ready devices
+        with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
+            mod = MagicMock()
+            mod.get_cross_device_ready_devices.return_value = [rs_ready]
+            mock_mod.return_value = mod
+            resp = self.client.get("/api/v1/devices/cross-device-ready")
+        data = resp.json()
+        self.assertEqual(data["total"], 1)
+        mod.get_cross_device_ready_devices.assert_called_once()
 
 
 if __name__ == "__main__":
