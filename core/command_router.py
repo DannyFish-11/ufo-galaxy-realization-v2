@@ -225,6 +225,16 @@ Import this symbol to assert that a call site is within the canonical
 execution chain (OpenClawd → CommandRouter → DeviceRouter → device).
 """
 
+# PR-7: canonical dispatch spine sentinel — aligns with
+# COMMAND_ROUTER_DISPATCH_SPINE_AUTHORITY in cross_device_execution_chain.
+COMMAND_ROUTER_DISPATCH_SPINE_AUTHORITY: str = "COMMAND_ROUTER_DISPATCH_SPINE_V1"
+"""Sentinel: CommandRouter.route_envelope is the *sole* canonical dispatch
+spine for cross-device tasks.  All cross-device dispatch MUST enter through
+route_envelope.  Direct send_to_device shortcuts outside this spine are
+legacy compat paths and must be registered as such.
+"""
+
+
 class CommandMode(str, Enum):
     """命令执行模式"""
     SYNC = "sync"          # 同步：等待结果返回

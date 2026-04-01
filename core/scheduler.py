@@ -669,9 +669,14 @@ CROSS-DEVICE:
 
     async def _exec_send_to_device(self, args: Dict, context: Dict) -> str:
         """发送任务到指定设备"""
+        import uuid as _uuid
         device_id = args.get("device_id", "")
         task_type = args.get("task_type", "")
         payload = args.get("payload", {})
+        # Stamp canonical task_id / trace_id so the dispatch is correlatable
+        # through the canonical trace chain even on this fire-and-forget path.
+        task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
+        trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
 
         # 通过 WebSocket connection_manager 发送
         ws_sender = context.get("ws_sender") if context else None
@@ -679,6 +684,8 @@ CROSS-DEVICE:
             try:
                 result = await ws_sender(device_id, {
                     "type": "task",
+                    "task_id": task_id,
+                    "trace_id": trace_id,
                     "task_type": task_type,
                     "payload": payload,
                 })
@@ -701,6 +708,8 @@ CROSS-DEVICE:
         return json.dumps({
             "status": "queued",
             "device_id": device_id,
+            "task_id": task_id,
+            "trace_id": trace_id,
             "task_type": task_type,
             "note": "Device not connected via WS, command queued",
         })
