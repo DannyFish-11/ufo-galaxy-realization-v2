@@ -35,6 +35,7 @@ __all__ = [
     "validate_target_device",
     "TARGET_DEVICE_VALIDATOR_AUTHORITY",
     "TARGET_DEVICE_VALIDATOR_CHAIN_POSITION",
+    "VALIDATOR_TRUTH_SOURCE",
 ]
 
 TARGET_DEVICE_VALIDATOR_AUTHORITY: str = "TARGET_DEVICE_VALIDATOR_V2"
@@ -42,6 +43,15 @@ TARGET_DEVICE_VALIDATOR_AUTHORITY: str = "TARGET_DEVICE_VALIDATOR_V2"
 # Chain position annotation — this module operates at Layer 3 of the
 # canonical admissibility chain (core.admissibility_chain).
 TARGET_DEVICE_VALIDATOR_CHAIN_POSITION: int = 3
+
+# PR-1: Affirms that this validator reads device truth from
+# core.device_readiness (Layer 1) and core.device_participation (Layer 2),
+# both of which are TIL-aligned (TRUTH_INTEGRATION_LAYER_BACKED=True).
+# The compat cache is NOT consulted by any layer in this chain.
+VALIDATOR_TRUTH_SOURCE: str = (
+    "READINESS(UCM+UDM) + PARTICIPATION via TRUTH_INTEGRATION_LAYER_BACKED=True; "
+    "compat-cache excluded"
+)
 
 
 # ---------------------------------------------------------------------------

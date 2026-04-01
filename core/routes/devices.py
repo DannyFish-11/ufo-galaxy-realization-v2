@@ -39,6 +39,7 @@ from core.routes._shared import (
 )
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 from core.unified.device_manager import get_unified_device_manager
+from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -156,8 +157,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 extra={"event": "rest_register_udm_error", "device_id": req.device_id},
             )
 
-        # ── 兼容缓存：保留 registered_devices 供遗留代码只读使用 ──────────
-        registered_devices[req.device_id] = device_info
+        # ── COMPAT_MIRROR_WRITE: mirror to compat cache AFTER UDM write ─────
+        # PR-1: registered_devices is a read-only compat surface (SSOT=UDM).
+        # This write is explicitly a mirror operation; truth authority is UDM.
+        registered_devices[req.device_id] = device_info  # COMPAT_MIRROR_WRITE
         _save_registered_devices(registered_devices)
 
         logger.info("设备注册: %s (%s)", req.device_id, req.device_type)
@@ -502,10 +505,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:
             logger.warning("UDM heartbeat 同步失败: %s — %s", device_id, exc)
 
-        # 兼容缓存更新
+        # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM heartbeat write
+        # PR-1: registered_devices is a read-only compat surface (SSOT=UDM).
         if device_id in registered_devices:
-            registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
-            registered_devices[device_id]["status"] = "registered"
+            registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
+            registered_devices[device_id]["status"] = "registered"  # COMPAT_MIRROR_WRITE
 
         await connection_manager.broadcast_status({
             "type": "device_heartbeat",
@@ -538,9 +542,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:
             logger.warning("UDM unregister 同步失败: %s — %s", device_id, exc)
 
-        # 兼容缓存清理
+        # COMPAT_MIRROR_WRITE: purge compat cache entry AFTER UDM unregister
+        # PR-1: registered_devices is a read-only compat surface (SSOT=UDM).
         if device_id in registered_devices:
-            del registered_devices[device_id]
+            del registered_devices[device_id]  # COMPAT_MIRROR_WRITE (removal)
             _save_registered_devices(registered_devices)
 
         await connection_manager.broadcast_status({
