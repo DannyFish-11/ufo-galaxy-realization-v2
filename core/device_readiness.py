@@ -62,6 +62,35 @@ Sentinels
     DEVICE_READINESS_COMPAT_EXCLUDED  — affirms compat cache is not a readiness input
     TRANSPORT_HIERARCHY_ENFORCED      — affirms PR-4 transport hierarchy is enforced
     TRUTH_INTEGRATION_LAYER_BACKED    — affirms readiness sources are TIL-aligned (UCM/UDM only)
+    LIVE_ROUTE_TRUTH_INTEGRATED       — affirms PR-5 live route truth (transport_present /
+                                        transport_usable / device_routable / effective_path)
+                                        is computed and exposed in RoutabilitySummary
+
+PR-5 live route truth fields (RoutabilitySummary)
+-------------------------------------------------
+The following explicit fields make the transport-readiness distinction clear:
+
+  ``transport_present``
+      True when any transport mechanism is physically present / connected to
+      the device (WS socket open or UCM connection record exists), regardless
+      of whether messages can currently be delivered.
+
+  ``transport_usable``
+      True when the present transport can actively deliver messages (present
+      AND the connection is routable for send).  Equivalent to the conjunction
+      of transport_present with send-capability.
+
+  ``device_routable``
+      Canonical Boolean indicating whether there is a valid end-to-end route
+      to this device through any canonical path (direct WS, UCM, or relay).
+      Semantically equivalent to the existing ``effective_routable`` and
+      exposed as a clearly-named alias for PR-5 consumers.
+
+  ``effective_path``
+      The name of the canonical path that will be used for delivery.  One of
+      ``"direct_ws"``, ``"ucm"``, ``"relay"``, or ``"none"``.  Semantically
+      equivalent to the existing ``preferred_path`` and exposed as a
+      clearly-named alias for PR-5 consumers.
 """
 
 from __future__ import annotations
@@ -85,6 +114,7 @@ __all__ = [
     "DEVICE_READINESS_COMPAT_EXCLUDED",
     "TRANSPORT_HIERARCHY_ENFORCED",
     "TRUTH_INTEGRATION_LAYER_BACKED",
+    "LIVE_ROUTE_TRUTH_INTEGRATED",
 ]
 
 # Sentinel that identifies this module as the canonical readiness authority (PR-3).
@@ -106,6 +136,12 @@ TRANSPORT_HIERARCHY_ENFORCED: bool = True
 # therefore consistent — both derive registered/online/connected/routable truth
 # exclusively from UCM and UDM, never from the compat cache.
 TRUTH_INTEGRATION_LAYER_BACKED: bool = True
+
+# PR-5: Affirms that live route truth (transport_present / transport_usable /
+# device_routable / effective_path) is computed and exposed in
+# RoutabilitySummary.  These fields make the transport-readiness distinction
+# explicit for downstream consumers (policy convergence, admissibility chain).
+LIVE_ROUTE_TRUTH_INTEGRATED: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +198,25 @@ class RoutabilitySummary:
 
     ``primary_transport`` names the effective canonical path when routable.
     ``transport_role_note`` provides a brief human-readable hierarchy note.
+
+    PR-5 live route truth fields
+    ----------------------------
+    ``transport_present``
+        True when any transport mechanism is physically present/connected
+        (WS socket open or UCM connection record exists), regardless of
+        whether messages can currently be delivered.
+
+    ``transport_usable``
+        True when the present transport can actively deliver messages
+        (present AND connection is routable for send).
+
+    ``device_routable``
+        Canonical Boolean for end-to-end route availability — explicitly
+        named alias for ``effective_routable`` consumed by PR-5 policy layer.
+
+    ``effective_path``
+        Explicitly-named alias for ``preferred_path``; the canonical path
+        name used by PR-5 policy/selection consumers.
     """
 
     device_id: str
@@ -180,6 +235,11 @@ class RoutabilitySummary:
     effective_routable: bool = False
     preferred_path: str = "none"
     transport_role_note: str = ""         # brief hierarchy note for callers
+    # --- PR-5 live route truth fields ---
+    transport_present: bool = False       # any transport physically connected
+    transport_usable: bool = False        # transport present AND can deliver
+    device_routable: bool = False         # explicit alias for effective_routable
+    effective_path: str = "none"          # explicit alias for preferred_path
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
 
@@ -197,6 +257,10 @@ class RoutabilitySummary:
             "effective_routable": self.effective_routable,
             "preferred_path": self.preferred_path,
             "transport_role_note": self.transport_role_note,
+            "transport_present": self.transport_present,
+            "transport_usable": self.transport_usable,
+            "device_routable": self.device_routable,
+            "effective_path": self.effective_path,
             "reasons": list(self.reasons),
             "sources": dict(self.sources),
         }
@@ -481,6 +545,20 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
 
     # PR-4: relay_available mirrors as fallback_available for explicit naming
     summary.fallback_available = summary.relay_available
+
+    # --- PR-5 live route truth fields ---
+    # transport_present: any transport mechanism physically connected
+    summary.transport_present = (
+        summary.direct_ws_available
+        or summary.ucm_send_available
+        or summary.relay_available
+    )
+    # transport_usable: present AND can actually deliver (= any canonical route)
+    summary.transport_usable = summary.effective_routable
+    # device_routable: explicit named alias for effective_routable
+    summary.device_routable = summary.effective_routable
+    # effective_path: explicit named alias for preferred_path
+    summary.effective_path = summary.preferred_path
 
     return summary
 
