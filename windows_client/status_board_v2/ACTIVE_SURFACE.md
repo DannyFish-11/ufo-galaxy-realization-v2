@@ -1,14 +1,40 @@
-# windows_client/status_board_v2/ — ACTIVE DESKTOP STATUS SURFACE
+# windows_client/status_board_v2/ — ACTIVE DESKTOP CONTROL SURFACE
 
 > **Status: ACTIVE / CANONICAL / SOLE DESKTOP SURFACE** (established PR-8;
 > confirmed PR-1 architecture freeze; formally declared sole operator surface
 > in PR-0)
 >
-> Role: `ACTIVE_DESKTOP_STATUS` · `SOLE_DESKTOP_OPERATOR_SURFACE`
+> Role: `ACTIVE_DESKTOP_STATUS` · `SOLE_DESKTOP_OPERATOR_SURFACE` · `DESKTOP_CONTROL_SURFACE`
 
 `windows_client/status_board_v2/` is the **sole canonical operator-facing
-desktop surface** and the **canonical read-only status board** for the Galaxy
-system.
+desktop surface**, the **canonical status board** for the Galaxy system, and
+the **canonical desktop configuration control surface** as of PR-8.
+
+## PR-8 upgrade — desktop control surface
+
+As of PR-8, this surface is no longer read-only.  It provides a bounded,
+safe configuration entry path through the canonical configuration authority:
+
+```
+ConfigControlSurface.apply_toggle(provider, enabled)
+ConfigControlSurface.apply_routing_policy(mode)
+
+All writes: ConfigControlSurface → ConfigService → ConfigStore → runtime/config.json
+Runtime reload: HotReloadConfigManager (when initialised)
+Feedback: ControlApplyResult → render_feedback() → Config Control panel in render_once()
+```
+
+Accepted operations (intentionally narrow first scope):
+
+| Operation | CLI argument | Effect |
+|-----------|-------------|--------|
+| `TOGGLE_PROVIDER` | `--apply-toggle PROVIDER=BOOL` | Enable/disable a provider |
+| `SET_ROUTING_POLICY` | `--apply-routing-policy MODE` | Set routing policy (strict/prefer/allow_fallback) |
+
+CLI usage::
+
+    python -m windows_client.status_board_v2 --apply-toggle openai=true
+    python -m windows_client.status_board_v2 --apply-routing-policy prefer
 
 ## PR-0 architecture freeze — key declarations
 
@@ -62,28 +88,25 @@ Source:   GET /api/v1/projection/runtime
 Contract: contracts.desktop_status_projection.DesktopStatusProjection
 ```
 
-This surface is currently **projection-driven and read-only** — it does not
-maintain its own system state, does not write to the authority model, and does
-not define system structure.
+As of PR-8, this surface also provides a **bounded configuration control path**
+through the canonical configuration authority.  Operators can apply provider
+enable/disable toggles and routing policy changes directly from the board.
+All writes go through ``core.config_service.ConfigService`` and are persisted
+to ``runtime/config.json``.  Runtime hot-reload is triggered via
+``core.config_hot_reload.HotReloadConfigManager`` where available.
+Every apply action returns an explicit ``ControlApplyResult`` feedback object
+that is rendered as a Config Control panel inside the board.
 
-## What this surface will do (future Phase D)
+## What this surface will do (future Phase D+)
 
-A future PR (Phase D of the dashboard migration) will add an interactive
-configuration entry mode to this surface.  At that point:
+Future PRs may expand the control surface with additional bounded operations
+such as:
+- Secret/API-key provisioning (via ``runtime/secrets.env``)
+- Feature flag toggles
+- Model preference changes
 
-- Operators will be able to enter provider API keys, provider enable/disable
-  settings, and model preferences directly through this surface.
-- Written configuration will be persisted to the local unified configuration
-  authority: `runtime/config.json` (non-secret) and `runtime/secrets.env`
-  (secrets).
-- Configuration changes must have system-wide effect — affecting provider
-  inventory, routing candidate pool, projection, and topology.
-- `TopologyRouter` will remain the sole canonical routing decision-maker.
-  Config entry modifies the inputs (provider inventory, preferences) that
-  `TopologyRouter` consumes; it does not bypass the routing authority.
-
-**This interactive mode is not implemented in this PR.**  The current surface
-remains read-only.
+Any future expansion must continue to route all writes through the canonical
+configuration authority and must never bypass ``ConfigService``.
 
 ## Active sub-surfaces
 
@@ -91,6 +114,7 @@ remains read-only.
 |--------|---------|
 | `app.py` | Top-level status board application |
 | `projection_reader.py` | Projection API consumer |
+| `config_control.py` | **Canonical configuration control surface (PR-8)** |
 | `phase_surface.py` | Tri-state phase display (silent / liminal / manifest) |
 | `device_surface.py` | Connected device status |
 | `metrics_surface.py` | Runtime metrics surface |
@@ -162,12 +186,18 @@ panels, full metrics/status-board panels, generic operator information blocks.
 - `contracts/desktop_status_projection.py` — canonical projection contract
 - `core/routes/` — `GET /api/v1/projection/runtime` endpoint
 - `core/liminal_space_mapping.py` — canonical liminal-facing structures
+- `core/config_service.py` — canonical configuration authority (ConfigService)
+- `core/config_store.py` — canonical configuration persistence (ConfigStore)
+- `core/config_hot_reload.py` — hot-reload manager for runtime config refresh
+- `windows_client/status_board_v2/config_control.py` — canonical config control surface
 - `docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md` — ADR freezing this surface as sole desktop config entry surface
 - `docs/LIMINAL_SPACE_MAPPING.md` — canonical liminal space mapping definition
 - `docs/SANDBOX_SIMULATION_PROJECTION.md` — sandbox/simulation field semantics
 - `docs/DESKTOP_SEMANTIC_CLOSURE.md` — canonical tri-state semantic closure
 - `docs/STATUS_AND_STATISTICS_OWNERSHIP.md` — statistics / summary ownership
 - `docs/CONFIGURATION_ENTRY_UNIFICATION.md` — configuration entry semantics
+- `tests/test_pr8_status_board_control_surface.py` — PR-8 acceptance criterion tests
+- `tests/test_pr15_status_board_config_control.py` — comprehensive control surface tests
 
 ## Migration guidance
 
