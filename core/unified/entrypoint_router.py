@@ -57,6 +57,7 @@ Usage (legacy adapter path)::
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Optional
@@ -278,26 +279,29 @@ def resolve_entry_mode(
     Resolution rules (applied in order):
 
     1. If *explicit_entry_mode* is provided by the caller, use it as-is.
-    2. Else, if cross-device routing is **enabled** *and* either:
+    2. Else, if cross-device routing is **disabled**, return ``"local"``.
+    3. Else, if the readiness rollout flag ``GALAXY_ENTRYMODE_USE_READINESS=1``
+       is set, use canonical device readiness for the decision:
 
-       - *target_device* is explicitly specified in the request, **or**
-       - more than one device is currently registered/available (>=2),
+       - If *target_device* is provided, resolve to ``"cross_device"`` only
+         when that device passes all readiness criteria.
+       - Otherwise, resolve to ``"cross_device"`` only when at least 2 devices
+         are canonically cross-device-ready.
 
-       return ``"cross_device"``.
-    3. Else return ``"local"``.
+    4. Else (legacy path), follow the original UDM online-count heuristic:
+
+       - If *target_device* is provided, resolve to ``"cross_device"``.
+       - Otherwise, resolve to ``"cross_device"`` when online count >= 2.
+
+    5. If none of the cross-device conditions are met, return ``"local"``.
 
     The result is always emitted as a :data:`StateEventType.ENTRY_MODE_RESOLVED`
-    event on the state event bus (best-effort, never raises).  When
-    ``"cross_device"`` is selected automatically, an additional INFO-level
-    structured log entry is written that includes *device_count* and *trace_id*
-    so operators can correlate the selection decision.
+    event on the state event bus (best-effort, never raises).
 
     Args:
         explicit_entry_mode: Optional caller-supplied override.  When not
             ``None`` (and not an empty string) it is returned unchanged.
         target_device: Optional explicit target device ID from the request.
-            When provided (and cross-device is enabled), forces
-            ``"cross_device"`` mode regardless of the online device count.
         trace_id: End-to-end correlation ID for the current request.
         source: Human-readable label for the calling module (for observability).
 
@@ -312,7 +316,7 @@ def resolve_entry_mode(
         resolved = explicit_entry_mode
         resolution_source = "caller_explicit"
     else:
-        # Determine mode from cross-device switch + device registry / target
+        # Step 1: check cross-device master switch
         _cross_device_on = False
         try:
             from galaxy_gateway.cross_device_switch import is_cross_device_enabled
@@ -320,35 +324,109 @@ def resolve_entry_mode(
         except Exception:
             pass
 
-        if _cross_device_on:
-            try:
-                from core.unified.device_manager import get_unified_device_manager
-                _device_count = get_unified_device_manager().get_online_count()
-            except Exception:
-                pass
-
         _explicit_target = bool(target_device and target_device.strip())
-        _has_multiple_devices = _device_count >= 2
 
-        if _cross_device_on and (_explicit_target or _has_multiple_devices):
-            resolved = "cross_device"
+        # Step 2: decide between readiness-based path and legacy path
+        _use_readiness = os.environ.get("GALAXY_ENTRYMODE_USE_READINESS", "0") == "1"
+
+        if _cross_device_on and _use_readiness:
+            # ----------------------------------------------------------
+            # Readiness-based path
+            # ----------------------------------------------------------
             if _explicit_target:
-                resolution_source = "auto_target_device"
+                _target_ready = False
+                try:
+                    from core.device_readiness import is_device_cross_device_ready
+                    _target_ready = is_device_cross_device_ready(target_device or "")
+                except Exception:
+                    pass
+
+                _device_count = 1 if _target_ready else 0
+
+                if _target_ready:
+                    resolved = "cross_device"
+                    resolution_source = "readiness_target_device"
+                    logger.info(
+                        "readiness_based_mode_resolution path=readiness result=cross_device "
+                        "source=%s trace_id=%s target_device=%s target_ready=True",
+                        source or "entrypoint_router",
+                        trace_id,
+                        target_device,
+                    )
+                else:
+                    resolved = "local"
+                    resolution_source = "readiness_target_not_ready"
+                    logger.info(
+                        "readiness_based_mode_resolution path=readiness result=local "
+                        "source=%s trace_id=%s target_device=%s target_ready=False "
+                        "(target device present but not ready — fallback to local)",
+                        source or "entrypoint_router",
+                        trace_id,
+                        target_device,
+                    )
             else:
-                resolution_source = "auto_cross_device"
-            # Structured INFO log for observability
-            logger.info(
-                "cross_device_mode_selected source=%s trace_id=%s "
-                "device_count=%d target_device=%s resolution_source=%s",
-                source or "entrypoint_router",
-                trace_id,
-                _device_count,
-                target_device or "",
-                resolution_source,
-            )
+                _ready_devices: list = []
+                try:
+                    from core.device_readiness import get_cross_device_ready_devices
+                    _ready_devices = get_cross_device_ready_devices()
+                except Exception:
+                    pass
+
+                _device_count = len(_ready_devices)
+
+                if _device_count >= 2:
+                    resolved = "cross_device"
+                    resolution_source = "readiness_auto_cross_device"
+                    logger.info(
+                        "readiness_based_mode_resolution path=readiness result=cross_device "
+                        "source=%s trace_id=%s ready_device_count=%d",
+                        source or "entrypoint_router",
+                        trace_id,
+                        _device_count,
+                    )
+                else:
+                    resolved = "local"
+                    resolution_source = "readiness_auto_local"
+                    logger.info(
+                        "readiness_based_mode_resolution path=readiness result=local "
+                        "source=%s trace_id=%s ready_device_count=%d "
+                        "(fewer than 2 ready devices)",
+                        source or "entrypoint_router",
+                        trace_id,
+                        _device_count,
+                    )
         else:
-            resolved = "local"
-            resolution_source = "auto_local"
+            # ----------------------------------------------------------
+            # Legacy path (original UDM online-count heuristic)
+            # ----------------------------------------------------------
+            if _cross_device_on:
+                try:
+                    from core.unified.device_manager import get_unified_device_manager
+                    _device_count = get_unified_device_manager().get_online_count()
+                except Exception:
+                    pass
+
+            _has_multiple_devices = _device_count >= 2
+
+            if _cross_device_on and (_explicit_target or _has_multiple_devices):
+                resolved = "cross_device"
+                if _explicit_target:
+                    resolution_source = "auto_target_device"
+                else:
+                    resolution_source = "auto_cross_device"
+                logger.info(
+                    "entry_mode_resolution path=legacy result=cross_device "
+                    "source=%s trace_id=%s device_count=%d target_device=%s "
+                    "resolution_source=%s",
+                    source or "entrypoint_router",
+                    trace_id,
+                    _device_count,
+                    target_device or "",
+                    resolution_source,
+                )
+            else:
+                resolved = "local"
+                resolution_source = "auto_local"
 
     # Best-effort observability event
     try:
