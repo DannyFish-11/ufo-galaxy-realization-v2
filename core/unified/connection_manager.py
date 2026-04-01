@@ -17,6 +17,24 @@ galaxy_gateway/websocket_handler.py、integration/websocket_server.py）
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# PR-2 canonical connection authority sentinel.
+# UCM is the sole canonical source of connection/presence truth in Galaxy.
+# Importing this sentinel from outside this module signals that the caller
+# is reading or writing connection/presence state through the canonical path.
+#
+# Acceptable roles for external connection maps:
+#   - websocket/socket lookup cache (transport layer)
+#   - compatibility response helper
+#   - transport-layer handle registry
+#
+# NOT acceptable roles after PR-2:
+#   - canonical online/offline truth
+#   - canonical readiness truth
+#   - canonical device-state write source
+# ---------------------------------------------------------------------------
+UCM_CONNECTION_AUTHORITY = "UCM::CANONICAL_CONNECTION_AND_PRESENCE_AUTHORITY"
+
 import asyncio
 import logging
 import time

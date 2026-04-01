@@ -49,6 +49,8 @@ Structured event tags (stable, machine-queryable):
     ssot_udm_upsert_failed     — partial-update (upsert) write failed
 """
 
+from __future__ import annotations
+
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
 # Importing this sentinel from outside the gateway package signals that the
@@ -56,8 +58,6 @@ Structured event tags (stable, machine-queryable):
 # reading or asserting canonical readiness, eligibility, or formation truth.
 # ---------------------------------------------------------------------------
 GATEWAY_SSOT_WRITE_AUTHORITY = "GATEWAY_SSOT::DEVICE_WRITE_PATH_ONLY"
-
-from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
