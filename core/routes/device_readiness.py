@@ -21,6 +21,10 @@ GET /api/v1/devices/readiness
 GET /api/v1/devices/{device_id}/readiness
     Return a single :class:`~core.device_readiness.DeviceReadinessSummary`.
 
+GET /api/v1/devices/cross-device-ready
+    Return the filtered set of canonically cross-device-ready devices
+    (registered + online + connected + routable).
+
 GET /api/v1/devices/participation
     List participation/orchestration summaries for all known devices.
     Optional query parameter: ``only_ready``.
@@ -246,6 +250,68 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         payload = rs.to_dict()
         payload["authority"] = DEVICE_READINESS_ROUTES_AUTHORITY
         return JSONResponse(content=payload)
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/devices/cross-device-ready
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/devices/cross-device-ready")
+    async def list_cross_device_ready() -> JSONResponse:
+        """Return the filtered set of canonically cross-device-ready devices.
+
+        A device is cross-device ready when it is registered, online,
+        connected, **and** routable.  Uses
+        :func:`~core.device_readiness.get_cross_device_ready_devices` when the
+        readiness module is available, and degrades gracefully to an empty list
+        with a diagnostic error key when it is not.
+        """
+        dr_mod = _get_readiness_module()
+        if dr_mod is None:
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "devices": [],
+                    "total": 0,
+                    "authority": DEVICE_READINESS_ROUTES_AUTHORITY,
+                    "error": "device_readiness_module_unavailable",
+                },
+                status_code=200,
+            )
+
+        try:
+            ready_devices = dr_mod.get_cross_device_ready_devices()
+        except Exception as exc:
+            logger.warning(
+                "DeviceReadinessRoutes: get_cross_device_ready_devices failed: %s", exc
+            )
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "devices": [],
+                    "total": 0,
+                    "authority": DEVICE_READINESS_ROUTES_AUTHORITY,
+                    "error": str(exc),
+                },
+                status_code=200,
+            )
+
+        devices: List[Dict[str, Any]] = []
+        for rs in ready_devices:
+            try:
+                devices.append(rs.to_dict())
+            except Exception as exc:
+                logger.warning(
+                    "DeviceReadinessRoutes: to_dict() failed for device in cross-device-ready list: %s",
+                    exc,
+                )
+        return JSONResponse(
+            content={
+                "success": True,
+                "devices": devices,
+                "total": len(devices),
+                "authority": DEVICE_READINESS_ROUTES_AUTHORITY,
+            }
+        )
 
     # ------------------------------------------------------------------
     # GET /api/v1/devices/participation  (list — must be before {device_id})
