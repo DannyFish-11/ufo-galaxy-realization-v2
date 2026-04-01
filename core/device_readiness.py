@@ -1,7 +1,7 @@
 """
 core/device_readiness.py
 ========================
-Canonical device readiness aggregation layer.
+Canonical device readiness aggregation layer (PR-3).
 
 Unifies ``registered``, ``online``, ``connected``, ``routable``, and basic
 capability readiness checks across the existing codebase without changing
@@ -9,6 +9,18 @@ current routing behaviour.
 
 This module is **additive only** — it does not modify any existing module
 and degrades gracefully when optional subsystems are unavailable.
+
+Authority model (PR-3)
+----------------------
+Canonical readiness is assembled **exclusively** from:
+  - ``UnifiedDeviceManager`` (UDM)  — registered/online truth
+  - ``UnifiedConnectionManager`` (UCM) — connection/presence truth
+  - Gateway WebSocket manager — transport enrichment
+  - DeviceRouter — transport enrichment
+
+The ``registered_devices`` compat cache (``core.routes._shared``) is
+**explicitly excluded** from readiness assembly.  Compat-cache truth is
+downstream of canonical readiness, not an input to it.
 
 Public API
 ----------
@@ -23,6 +35,11 @@ Helpers:
     get_device_readiness(device_id) -> DeviceReadinessSummary
     get_cross_device_ready_devices() -> list[DeviceReadinessSummary]
     is_device_cross_device_ready(device_id) -> bool
+
+Sentinels
+---------
+    DEVICE_READINESS_AUTHORITY   — identifies this module as canonical authority
+    DEVICE_READINESS_COMPAT_EXCLUDED — affirms compat cache is not a readiness input
 """
 
 from __future__ import annotations
@@ -43,10 +60,16 @@ __all__ = [
     "get_cross_device_ready_devices",
     "is_device_cross_device_ready",
     "DEVICE_READINESS_AUTHORITY",
+    "DEVICE_READINESS_COMPAT_EXCLUDED",
 ]
 
-# Sentinel that identifies this module as the canonical authority.
-DEVICE_READINESS_AUTHORITY: str = "DEVICE_READINESS_LAYER_V1"
+# Sentinel that identifies this module as the canonical readiness authority (PR-3).
+DEVICE_READINESS_AUTHORITY: str = "DEVICE_READINESS_LAYER_V2"
+
+# Explicit PR-3 annotation: readiness assembly does NOT consume the
+# registered_devices compat cache.  Canonical inputs are UDM and UCM only.
+# Compat-cache truth is downstream of canonical readiness, not an input to it.
+DEVICE_READINESS_COMPAT_EXCLUDED: bool = True
 
 
 # ---------------------------------------------------------------------------

@@ -87,6 +87,30 @@ def _sync_device_to_capability_registry(device_info: Dict) -> int:
     return count
 
 
+# ---------------------------------------------------------------------------
+# PR-3: Canonical device-existence helper
+# ---------------------------------------------------------------------------
+
+def _is_device_registered_canonical(device_id: str) -> bool:
+    """Return True if *device_id* is registered in the canonical UDM (SSOT).
+
+    Falls back to the ``registered_devices`` compat cache only when UDM is
+    unavailable.  This helper replaces bare ``device_id in registered_devices``
+    checks so that canonical decisions are always driven by UDM truth.
+    """
+    try:
+        udm_dev = get_unified_device_manager().get_device(device_id)
+        if udm_dev is not None:
+            return True
+    except Exception as exc:
+        logger.debug(
+            "_is_device_registered_canonical: UDM query failed for %s — %s",
+            device_id, exc,
+        )
+    # Non-authoritative fallback: compat cache (read-only)
+    return device_id in registered_devices
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create device management routes router."""
     router = APIRouter()
@@ -173,21 +197,46 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/devices/status")
     async def update_device_status(req: DeviceStatusUpdate):
-        """更新设备状态"""
+        """更新设备状态
+
+        Canonical existence check: UDM (SSOT) with registered_devices fallback
+        (compat cache, non-authoritative).
+        """
+        # PR-3: Canonical check via UDM first
+        udm = get_unified_device_manager()
+        udm_dev = None
+        try:
+            udm_dev = udm.get_device(req.device_id)
+        except Exception as exc:
+            logger.debug(
+                "update_device_status: UDM query failed for %s — %s",
+                req.device_id, exc,
+            )
+
+        if udm_dev is None and req.device_id not in registered_devices:
+            raise HTTPException(status_code=404, detail="设备未注册")
+
+        # SSOT: propagate status update to UDM
+        if udm_dev is not None:
+            try:
+                udm.patch_device(req.device_id, {"status": req.status})
+            except Exception as exc:
+                logger.debug("UDM status patch failed: %s — %s", req.device_id, exc)
+
+        # Compat cache update (non-authoritative, backward compat only)
         if req.device_id in registered_devices:
             registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()
             registered_devices[req.device_id]["status_detail"] = req.status
 
-            # 广播状态更新
-            await connection_manager.broadcast_status({
-                "type": "device_status_update",
-                "device_id": req.device_id,
-                "status": req.status,
-                "timestamp": datetime.now().isoformat()
-            })
+        # 广播状态更新
+        await connection_manager.broadcast_status({
+            "type": "device_status_update",
+            "device_id": req.device_id,
+            "status": req.status,
+            "timestamp": datetime.now().isoformat()
+        })
 
-            return {"success": True}
-        raise HTTPException(status_code=404, detail="设备未注册")
+        return {"success": True}
 
     @router.get("/api/v1/devices")
     async def list_devices():
@@ -228,23 +277,62 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         capability: Optional[str] = Query(None, description="按能力过滤（如 GUI_SCREENSHOT）"),
         status: Optional[str] = Query(None, description="按状态过滤（registered / online / offline）"),
     ):
-        """发现设备（按类型、能力、状态过滤）"""
+        """发现设备（按类型、能力、状态过滤）
+
+        PR-3: UDM (SSOT) is the primary device source. The registered_devices
+        compat cache supplements only for devices not yet in UDM.
+        """
         devices = []
+        seen: set = set()
+
+        # Primary: UDM canonical device source
+        try:
+            udm_all = get_unified_device_manager().list_devices()
+        except Exception as exc:
+            logger.debug("discover_devices: UDM list_devices failed — %s", exc)
+            udm_all = []
+
+        for udm_dev in (udm_all or []):
+            did = udm_dev.device_id
+            is_online = did in connection_manager.active_devices or udm_dev.is_online()
+            dev_type = str(getattr(udm_dev, "device_type", "") or "")
+            caps = list(udm_dev.capabilities or [])
+
+            if device_type and dev_type != device_type:
+                continue
+            effective_status = "online" if is_online else "registered"
+            if status and effective_status != status:
+                continue
+            if capability and capability not in caps:
+                continue
+
+            devices.append({
+                "device_id": did,
+                "device_name": udm_dev.device_name,
+                "device_type": dev_type,
+                "capabilities": caps,
+                "status": effective_status,
+                "online": is_online,
+            })
+            seen.add(did)
+
+        # Supplement: registered_devices compat cache (non-authoritative, read-only)
+        # Only surfaces devices not already returned by UDM.
         for did, info in registered_devices.items():
+            if did in seen:
+                continue
             is_online = did in connection_manager.active_devices
-            # 类型过滤
             if device_type and info.get("device_type") != device_type:
                 continue
-            # 状态过滤
             effective_status = "online" if is_online else info.get("status", "registered")
             if status and effective_status != status:
                 continue
-            # 能力过滤
             if capability:
                 caps = info.get("capabilities", [])
                 if capability not in caps:
                     continue
             devices.append({**info, "online": is_online})
+
         return JSONResponse({"devices": devices, "total": len(devices)})
 
     # ─────── PR-30: Local Runtime Host summaries (must be before {device_id}) ─────────
@@ -503,8 +591,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/devices/{device_id}/command")
     async def send_device_command(device_id: str, req: DeviceCommandRequest):
-        """发送 AIP v3.0 格式命令到单个设备"""
-        if device_id not in registered_devices:
+        """发送 AIP v3.0 格式命令到单个设备
+
+        PR-3: Device existence is checked via UDM (SSOT) first.
+        The registered_devices compat cache is a non-authoritative fallback.
+        """
+        if not _is_device_registered_canonical(device_id):
             raise HTTPException(status_code=404, detail="设备未注册")
 
         command_id = str(uuid.uuid4())[:8]
@@ -622,19 +714,50 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.get("/api/v1/devices/{device_id}/telemetry")
     async def get_device_telemetry(device_id: str):
-        """获取设备遥测数据（CPU、内存、电量等）"""
-        if device_id not in registered_devices:
+        """获取设备遥测数据（CPU、内存、电量等）
+
+        PR-3: Device existence is checked via UDM (SSOT) first.
+        Telemetry data is assembled from UDM when available; the
+        registered_devices compat cache is a non-authoritative fallback.
+        """
+        # Canonical existence check: UDM first
+        udm_dev = None
+        try:
+            udm_dev = get_unified_device_manager().get_device(device_id)
+        except Exception as exc:
+            logger.debug(
+                "get_device_telemetry: UDM query failed for %s — %s",
+                device_id, exc,
+            )
+
+        if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
-        info = registered_devices[device_id]
-        telemetry = {
-            "device_id": device_id,
-            "online": device_id in connection_manager.active_devices,
-            "last_seen": info.get("last_seen"),
-            "status": info.get("status", "unknown"),
-            "metrics": info.get("metrics", {}),
-            "capabilities": info.get("capabilities", []),
-        }
+        is_online = device_id in connection_manager.active_devices or (
+            udm_dev is not None and udm_dev.is_online()
+        )
+
+        if udm_dev is not None:
+            # Prefer UDM canonical data
+            telemetry = {
+                "device_id": device_id,
+                "online": is_online,
+                "last_seen": udm_dev.last_heartbeat.isoformat() if udm_dev.last_heartbeat else None,
+                "status": str(udm_dev.status or "unknown"),
+                "metrics": {},
+                "capabilities": list(udm_dev.capabilities or []),
+            }
+        else:
+            # Fallback to compat cache (non-authoritative)
+            info = registered_devices.get(device_id, {})
+            telemetry = {
+                "device_id": device_id,
+                "online": is_online,
+                "last_seen": info.get("last_seen"),
+                "status": info.get("status", "unknown"),
+                "metrics": info.get("metrics", {}),
+                "capabilities": info.get("capabilities", []),
+            }
         return JSONResponse(telemetry)
 
     # ─────── 跨设备文件传输 ─────────
@@ -647,9 +770,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/devices/transfer")
     async def transfer_file(req: FileTransferRequest):
-        """跨设备文件传输"""
+        """跨设备文件传输
+
+        PR-3: Device existence is checked via UDM (SSOT) first.
+        The registered_devices compat cache is a non-authoritative fallback.
+        """
         for did in [req.source_device, req.target_device]:
-            if did not in registered_devices:
+            if not _is_device_registered_canonical(did):
                 raise HTTPException(status_code=404, detail=f"设备 {did} 未注册")
 
         transfer_id = str(uuid.uuid4())[:8]
