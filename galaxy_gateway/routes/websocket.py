@@ -1,18 +1,30 @@
 """
 galaxy_gateway/routes/websocket.py — WebSocket endpoint registration.
 
-WebSocket endpoints for the Galaxy Gateway.  Registration order matters:
-more-specific routes MUST appear before generic catch-all routes so that
-``/ws/android/*`` and ``/ws/device/*`` are not shadowed by ``/ws/{device_id}``.
-
-Registration order:
-  1. /ws/android/{device_id}   — primary Android path (android_bridge, AIP v3)
-  2. /ws/android               — Android fallback path
-  3. /ws/ufo3/{device_id}      — legacy UFO3 (disabled by default)
-  4. /ws/device/{device_id}    — compat alias for /ws/android/{device_id}
-  5. /ws/webrtc/{device_id}    — WebRTC signaling proxy
-  6. /ws/{device_id}           — generic catch-all
-  7. /ws                       — generic auto-ID catch-all
+# ============================================================================
+# CANONICAL DEVICE INGRESS AUTHORITY
+# ============================================================================
+# The sole canonical device ingress path for this gateway is:
+#
+#   /ws/device/{device_id}
+#
+# All device connections MUST enter the system through this path for primary
+# production use.  All other device-facing WebSocket paths in this file are
+# explicitly non-canonical and are classified below.
+#
+# Path authority classifications:
+#   /ws/device/{device_id}    — [CANONICAL]        sole canonical device ingress (AIP v3)
+#   /ws/android/{device_id}   — [COMPAT]           Android-legacy compat path; delegates to canonical ingress pipeline
+#   /ws/android               — [COMPAT]           Android fallback compat path; delegates to canonical ingress pipeline
+#   /ws/ufo3/{device_id}      — [LEGACY-DISABLED]  UFO3 legacy path; disabled by default
+#   /ws/webrtc/{device_id}    — [MEDIA]            WebRTC signaling proxy; non-device-mainline, media-specific only
+#   /ws/{device_id}           — [DEPRECATED]       generic catch-all; non-primary, do not use for new clients
+#   /ws                       — [DEBUG]            auto-assign debug path; not for production device ingress
+#
+# Registration order matters: more-specific routes MUST appear before generic
+# catch-all routes so that /ws/device/* and /ws/android/* are not shadowed
+# by /ws/{device_id}.
+# ============================================================================
 """
 
 import logging
@@ -23,9 +35,22 @@ from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# CANONICAL_DEVICE_INGRESS_AUTHORITY
+# ============================================================================
+# This module owns the sole canonical device ingress for the Galaxy Gateway.
+# The canonical path is /ws/device/{device_id} (see route below).
+# All other device-facing WebSocket paths are non-canonical (compat, deprecated,
+# debug, or legacy-disabled) and must not be treated as peer-level ingress.
+# ============================================================================
+CANONICAL_DEVICE_INGRESS_AUTHORITY = (
+    "galaxy_gateway.routes.websocket: CANONICAL device ingress = /ws/device/{device_id} "
+    "(AIP v3). All other device WS paths are compat/deprecated/debug/legacy-disabled."
+)
+
 # Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable legacy WS paths such as
 # /ws/ufo3.  By default these paths are disabled to enforce the unified Gateway
-# entry point (AIP v3 via /ws/device/{id} or /ws/android/{id}).
+# entry point (AIP v3 via /ws/device/{id}).
 _LEGACY_PROTOCOLS_ENABLED = (
     os.environ.get("GALAXY_ENABLE_LEGACY_PROTOCOLS", "false").lower() == "true"
 )
@@ -98,16 +123,38 @@ def register_websocket_routes(app: FastAPI) -> None:
 
     @app.websocket("/ws/android/{device_id}")
     async def websocket_android_primary(websocket: WebSocket, device_id: str):
-        """Primary Android WebSocket path — routed through android_bridge (AIP v3)."""
-        logger.info("Primary path /ws/android/ used for device %s", device_id)
+        """[COMPAT] Android-legacy compatibility path.
+
+        Delegates to the canonical device ingress pipeline (android_bridge, AIP v3).
+        This path exists for backward compatibility with Android clients that have
+        not yet migrated to the canonical ingress at /ws/device/{device_id}.
+
+        NOT the canonical device ingress — use /ws/device/{device_id} instead.
+        """
+        logger.info(
+            "Compat path /ws/android/ used for device %s — "
+            "canonical ingress is /ws/device/{device_id}",
+            device_id,
+        )
         await _handle_android_ws(websocket, device_id)
 
     @app.websocket("/ws/android")
     async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
-        """Android fallback WebSocket path — routed through android_bridge (AIP v3)."""
+        """[COMPAT] Android fallback compatibility path.
+
+        Delegates to the canonical device ingress pipeline (android_bridge, AIP v3).
+        This path exists for backward compatibility with Android clients that have
+        not yet migrated to the canonical ingress at /ws/device/{device_id}.
+
+        NOT the canonical device ingress — use /ws/device/{device_id} instead.
+        """
         if not device_id:
             device_id = str(uuid.uuid4())
-        logger.info("Fallback path /ws/android used, device_id=%s", device_id)
+        logger.info(
+            "Compat path /ws/android used, device_id=%s — "
+            "canonical ingress is /ws/device/{device_id}",
+            device_id,
+        )
         await _handle_android_ws(websocket, device_id)
 
     @app.websocket("/ws/ufo3/{device_id}")
@@ -151,8 +198,17 @@ def register_websocket_routes(app: FastAPI) -> None:
 
     @app.websocket("/ws/device/{device_id}")
     async def websocket_device(websocket: WebSocket, device_id: str):
-        """Android device WebSocket path — compat alias for /ws/android/{device_id}."""
-        logger.info("Compat path /ws/device/ used for device %s", device_id)
+        """[CANONICAL] Sole canonical device ingress for the Galaxy Gateway.
+
+        This is the authoritative entry point for all production device connections.
+        All device traffic MUST use this path.  Messages are routed through the
+        android_bridge (AIP v3) pipeline for protocol normalisation, registration,
+        heartbeat, and task lifecycle.
+
+        All other device-facing WebSocket paths (/ws/android, /ws/{device_id}, /ws,
+        /ws/ufo3) are non-canonical and must not be treated as peer-level ingress.
+        """
+        logger.info("Canonical ingress /ws/device/ accepted device %s", device_id)
         await _handle_android_ws(websocket, device_id)
 
     @app.websocket("/ws/webrtc/{device_id}")
@@ -171,7 +227,14 @@ def register_websocket_routes(app: FastAPI) -> None:
 
     @app.websocket("/ws/{device_id}")
     async def websocket_endpoint(websocket: WebSocket, device_id: str):
-        """Generic device WebSocket endpoint (catch-all for non-Android paths)."""
+        """[DEPRECATED] Generic catch-all WebSocket endpoint.
+
+        This path is non-primary and must not be used for new device clients.
+        Exists solely to prevent connection failures from legacy clients that
+        do not use the canonical ingress at /ws/device/{device_id}.
+
+        New device integrations MUST use /ws/device/{device_id} instead.
+        """
         wsm = websocket.app.state.websocket_manager
         await wsm.handle_connection(websocket, device_id)
 
@@ -179,7 +242,14 @@ def register_websocket_routes(app: FastAPI) -> None:
     async def websocket_endpoint_auto(
         websocket: WebSocket, device_id: str = Query(None)
     ):
-        """Auto-assign device-ID WebSocket endpoint."""
+        """[DEBUG] Auto-assign debug WebSocket endpoint.
+
+        Not for production device ingress.  This path auto-assigns a device ID
+        and is intended for development/debugging only.  It does NOT participate
+        in the canonical ingress pipeline.
+
+        Production devices MUST use /ws/device/{device_id} instead.
+        """
         if not device_id:
             device_id = str(uuid.uuid4())
         wsm = websocket.app.state.websocket_manager

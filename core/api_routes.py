@@ -36,8 +36,15 @@ Domain → 子模块映射：
   /api/v1/federation    → core/routes/federation.py   （多实例联邦）
   /api/v1/projection    → core/routes/projection.py   （运行时状态投影）
   /api/v1/stream        → (inline SSE endpoint below)  （服务端推送流）
-  /ws/device            → (create_websocket_routes)    （设备 WebSocket）
+  /ws/device            → (create_websocket_routes)    （设备 WebSocket — 兼容路径，非规范主入口，见下文）
   /ws/status            → (create_websocket_routes)    （状态推送 WebSocket）
+
+NOTE — Device WebSocket ingress authority:
+  The CANONICAL device ingress is galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
+  The /ws/device/{device_id} route in THIS file (core/api_routes.py) is a
+  COMPATIBILITY-ONLY path retained for legacy/core-direct clients.  It must NOT
+  be treated as a competing primary ingress.  New device clients MUST connect
+  through the gateway canonical path instead.
 """
 
 import asyncio
@@ -401,13 +408,36 @@ async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
 # ============================================================================
 
 def create_websocket_routes(app: FastAPI, service_manager=None):
-    """创建 WebSocket 端点"""
+    """创建 WebSocket 端点 — 兼容层 (非规范设备主入口)
+
+    COMPATIBILITY SURFACE — NOT the canonical device ingress.
+
+    The canonical device ingress is galaxy_gateway/routes/websocket.py
+    /ws/device/{device_id}.  The routes registered here are retained for
+    legacy/core-direct clients only and must not be introduced as a second
+    primary device ingress authority.
+    """
 
     from core.openclawd import get_openclawd as _get_openclawd
 
+    # -----------------------------------------------------------------------
+    # [COMPAT] /ws/device/{device_id}
+    #
+    # Compatibility-only device WebSocket path.  This endpoint is NOT the
+    # canonical device ingress.  The canonical path is:
+    #   galaxy_gateway/routes/websocket.py → /ws/device/{device_id}
+    #
+    # This route is retained for clients that connect directly to the core
+    # layer without going through the gateway.  It must not be extended with
+    # new primary-ingress semantics.
+    # -----------------------------------------------------------------------
     @app.websocket("/ws/device/{device_id}")
     async def device_websocket(websocket: WebSocket, device_id: str):
-        """设备 WebSocket 连接 - 双向通信"""
+        """[COMPAT] 设备 WebSocket 连接 — 兼容路径（非规范主入口）
+
+        Compatibility-only path.  The canonical device ingress is
+        galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
+        """
         await connection_manager.connect_device(websocket, device_id)
 
         if device_id in registered_devices:
