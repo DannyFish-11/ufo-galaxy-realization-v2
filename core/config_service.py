@@ -413,6 +413,15 @@ class ConfigService:
     # Read helpers
     # ------------------------------------------------------------------
 
+    @property
+    def config_path(self) -> str:
+        """Return the canonical ``runtime/config.json`` path as a string.
+
+        Provided so callers do not need to reach into internal store
+        attributes to determine where configuration is persisted.
+        """
+        return str(self._store._config_path)
+
     def get_provider_statuses(self) -> List[ProviderStatus]:
         """Return a list of ``ProviderStatus`` for all known providers."""
         return self.validate().provider_statuses

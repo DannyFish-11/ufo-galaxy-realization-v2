@@ -3,8 +3,8 @@ windows_client/status_board_v2/__init__.py
 ==========================================
 Status Board V2 — public surface.
 
-This package provides a **read-only** desktop status board that consumes
-the :class:`~core.projection.RuntimeProjection` produced by the server and
+This package provides a desktop status board that consumes the
+:class:`~core.projection.RuntimeProjection` produced by the server and
 visualises:
 
 - Tri-state phase (silent / liminal / manifest)       → PhaseSurface
@@ -60,27 +60,56 @@ PR-14 adds the observability and history layer:
 - Point-in-time snapshot (PR-14)                      → TopologySnapshot
 - Bounded history buffer (PR-14)                      → TopologyHistoryBuffer
 
-PR-15 completes the initiative with end-to-end hardening and closure:
+PR-15 upgrades the board to the canonical desktop control surface:
 
+- Config control surface (PR-15)                      → ConfigControlSurface
+- Control authority sentinel (PR-15)                  → STATUS_BOARD_CONFIG_CONTROL_AUTHORITY
+- Allowed control operations (PR-15)                  → ControlOperation
+- Control feedback dataclass (PR-15)                  → ControlApplyResult
 - Full pipeline regression tests (PR-15)              → tests/test_pr15_e2e_hardening.py
+- Control surface tests (PR-15)                       → tests/test_pr15_status_board_config_control.py
 - Architecture reference doc (PR-15)                  → docs/DESKTOP_PIPELINE_ARCHITECTURE.md
 - All PR-9 through PR-14 exports verified present
   and re-exportable from this package __all__ (PR-15)
 
-READ-ONLY GUARANTEE
--------------------
-This package NEVER:
-- Accepts chat input
-- Sends commands to the system
-- Triggers any actions
+CONTROL SURFACE — PR-15
+-----------------------
+As of PR-15 this package includes a bounded configuration entry path:
 
-All command execution remains in::
+    ConfigControlSurface.apply_toggle(provider, enabled)
+    ConfigControlSurface.apply_routing_policy(mode)
+
+All writes go through ``core.config_service.ConfigService`` (canonical
+authority) and are persisted to ``runtime/config.json``.  Runtime hot-reload
+is triggered via ``core.config_hot_reload.HotReloadConfigManager`` where the
+manager is already initialised; otherwise the change takes effect on the next
+process startup.  Every apply action returns an explicit ``ControlApplyResult``
+feedback object.
+
+Accepted operations remain intentionally narrow — provider enable/disable
+toggles and routing policy selection only.
+
+DESIGN INVARIANTS
+-----------------
+This package NEVER:
+- Sends chat input or task commands  (read-only with respect to command execution)
+- Bypasses the canonical configuration authority
+- Leaks secret values into feedback or log output
+- Accepts freeform configuration schema changes
+
+All task execution remains in::
 
     windows_aip_client.py → WindowsExecutionArbiter.route_command()
 """
 
 from .app import main, run, StatusBoardV2App
 from .projection_reader import ProjectionReader
+from .config_control import (
+    ConfigControlSurface,
+    STATUS_BOARD_CONFIG_CONTROL_AUTHORITY,
+    ControlOperation,
+    ControlApplyResult,
+)
 from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
@@ -128,6 +157,11 @@ __all__ = [
     "run",
     "StatusBoardV2App",
     "ProjectionReader",
+    # PR-15: canonical configuration control surface
+    "ConfigControlSurface",
+    "STATUS_BOARD_CONFIG_CONTROL_AUTHORITY",
+    "ControlOperation",
+    "ControlApplyResult",
     "LiminalSurface",
     "ManifestSurface",
     "ReturnSurface",
