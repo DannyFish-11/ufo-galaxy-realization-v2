@@ -226,6 +226,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(projection_routes.create_router())
     except Exception as _e:
         logger.warning("投影路由加载失败（可选）: %s", _e)
+    # Read-only device readiness & participation inspection endpoints
+    try:
+        from core.routes import device_readiness as device_readiness_routes
+        router.include_router(device_readiness_routes.create_router())
+    except Exception as _e:
+        logger.warning("设备就绪路由加载失败（可选）: %s", _e)
 
     # PR-16: Cross-Plane Contract Map — read-only contract introspection endpoints
     # PR-19: Reliability Contract — GET /api/v1/contracts/reliability is also
