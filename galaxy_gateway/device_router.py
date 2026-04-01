@@ -18,6 +18,27 @@ Authority model (PR-3)
   connections, routes live tasks, and **patches canonical runtime state in UDM**
   for every connection lifecycle event (connect / disconnect).
 
+Architectural boundary (PR-10) — routing substrate, NOT orchestration selector
+-------------------------------------------------------------------------------
+``DeviceRouter`` is a **routing and dispatch substrate**.  It selects the
+transport path to a specific device and sends a pre-built task envelope.
+
+NOT responsible for
+~~~~~~~~~~~~~~~~~~~
+- **Entry-mode decisioning** — which execution mode to use for a session.
+  Resolved by the canonical orchestration layer in ``core/``.
+- **Orchestration eligibility** — whether a device may participate in
+  multi-device orchestration.  Assessed by
+  :mod:`core.device_selection.canonical_device_selector`.
+- **Formation / session truth** — the authoritative set of participating devices.
+  Owned by UDM; see :class:`~core.unified.device_manager.UnifiedDeviceManager`.
+- **Global readiness truth** — whether the full stack is ready to serve requests.
+  Owned by :mod:`core.system_orchestrator`.
+
+Any future code that needs to gate dispatch on orchestration eligibility or
+readiness must call the canonical core layer first, then pass the resolved
+target to this module for transport.
+
 Local state policy
 ------------------
 ``DeviceRouter`` maintains a local ``self.devices`` table exclusively as an
@@ -57,6 +78,14 @@ Author: Manus AI
 Version: 2.0 (PR-3: runtime session adapter normalisation)
 Date: 2026-03-07
 """
+
+# ---------------------------------------------------------------------------
+# PR-10 transport-layer boundary sentinel
+# Importing this sentinel from outside the gateway package signals that the
+# import site is consuming routing/transport primitives only — not canonical
+# readiness, orchestration eligibility, or formation truth.
+# ---------------------------------------------------------------------------
+DEVICE_ROUTER_TRANSPORT_AUTHORITY = "DEVICE_ROUTER::ROUTING_SUBSTRATE_ONLY"
 
 import asyncio
 import json

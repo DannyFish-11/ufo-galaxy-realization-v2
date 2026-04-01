@@ -23,12 +23,39 @@ Capability visibility is handled automatically inside
 :class:`~core.unified.device_manager.UnifiedDeviceManager` — callers of
 ``udm_write_register`` do **not** need to call the CapabilityBus separately.
 
+Architectural boundary (PR-10) — gateway write-path for its domain only
+------------------------------------------------------------------------
+This module is the **gateway-side canonical write path** for device
+registration, heartbeat, and connection-lifecycle state mutations.  It
+provides a thin write-through interface to UDM for gateway-originated events.
+
+NOT responsible for (and must not be treated as the authority for)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- **System-wide readiness truth** — whether the full stack is ready to serve.
+  Owned by :mod:`core.system_orchestrator`.
+- **Orchestration eligibility** — whether a device may participate in
+  multi-device orchestration.  Assessed by
+  :mod:`core.device_selection.canonical_device_selector`.
+- **Formation / session truth** — the authoritative set of participating devices.
+  UDM is the truth source; this module is only a write adapter into UDM.
+- **Entry-mode decisioning** — resolved by the canonical orchestration layer.
+- **Final canonical capability truth** — UDM + CapabilityBus own this;
+  ``udm_write_register`` initiates the write but does not own the read contract.
+
 Structured event tags (stable, machine-queryable):
     ssot_udm_write_failed      — register write failed
     ssot_udm_heartbeat_failed  — heartbeat write failed
     ssot_udm_unregister_failed — unregister / offline write failed
     ssot_udm_upsert_failed     — partial-update (upsert) write failed
 """
+
+# ---------------------------------------------------------------------------
+# PR-10 transport-layer boundary sentinel
+# Importing this sentinel from outside the gateway package signals that the
+# import site is performing gateway-domain device-state writes only — not
+# reading or asserting canonical readiness, eligibility, or formation truth.
+# ---------------------------------------------------------------------------
+GATEWAY_SSOT_WRITE_AUTHORITY = "GATEWAY_SSOT::DEVICE_WRITE_PATH_ONLY"
 
 from __future__ import annotations
 

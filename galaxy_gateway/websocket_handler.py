@@ -7,10 +7,48 @@ WebSocket Handler - WebSocket 连接处理器
 
 强制要求：AIP v3.0+（version >= 3.0）；trace_id 和 route_mode 如缺失会被自动注入。
 
+Architectural boundary (PR-10)
+-------------------------------
+This module is the **local transport state** handler for the gateway layer.
+It reflects which WebSocket connections are currently open and routes
+incoming messages to the appropriate in-process handlers.
+
+Responsibilities
+~~~~~~~~~~~~~~~~
+- Accept and close WebSocket connections (device ingress/egress).
+- Enforce AIP v3+ protocol framing; auto-inject missing trace_id/route_mode.
+- Dispatch parsed messages to register / heartbeat / command / response handlers.
+- Delegate authoritative online/routable state to
+  :class:`~core.unified.connection_manager.UnifiedConnectionManager` (UCM).
+
+NOT responsible for
+~~~~~~~~~~~~~~~~~~~~
+- **Global readiness truth** — whether the full stack is ready to serve requests.
+  That is owned by :mod:`core.system_orchestrator`.
+- **Entry-mode decisioning** — which mode a session starts in.
+  Determined by the canonical orchestration layer in ``core/``.
+- **Orchestration eligibility** — whether a device may participate in
+  multi-device orchestration.  Assessed by
+  :mod:`core.device_selection.canonical_device_selector`.
+- **Formation / session truth** — the authoritative set of participating devices.
+  Owned by :class:`~core.unified.device_manager.UnifiedDeviceManager` (UDM).
+
+The local ``active_connections`` / ``device_connections`` maps maintained by
+:class:`GatewayWSManager` are **operational caches** for connection-id → WebSocket
+lookup only.  They do NOT represent canonical device identity or system readiness.
+
 Author: Manus AI
 Version: 2.0
 Date: 2026-03-07
 """
+
+# ---------------------------------------------------------------------------
+# PR-10 transport-layer boundary sentinel
+# Importing this sentinel from outside the gateway package signals that the
+# import site is consuming transport/routing primitives only — not canonical
+# readiness, orchestration eligibility, or formation truth.
+# ---------------------------------------------------------------------------
+WEBSOCKET_HANDLER_TRANSPORT_AUTHORITY = "WEBSOCKET_HANDLER::TRANSPORT_SUBSTRATE_ONLY"
 
 import asyncio
 import json
