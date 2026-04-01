@@ -132,8 +132,124 @@ class ConstellationRuntime:
             return None
 
     # ------------------------------------------------------------------
-    # Canonical participation gate (PR-7)
+    # Canonical participation gate helpers
     # ------------------------------------------------------------------
+
+    def _get_orchestration_candidate_set(self) -> Optional[List[Any]]:
+        """Return orchestration-ready candidates, or None when the layer is unavailable.
+
+        Wraps :func:`core.device_participation.get_orchestration_ready_devices`
+        with a defensive import so that callers receive ``None`` on any failure
+        instead of an exception.  ``None`` signals that the participation layer
+        is unavailable (including when the underlying device registry / UDM is
+        absent) and callers should degrade gracefully.
+
+        Distinguishes between two ``[]`` cases:
+
+        * UDM absent → returns ``None`` (no infrastructure, degrade gracefully).
+        * UDM present but no device is eligible → returns ``[]`` (gate fires).
+        """
+        try:
+            from core.device_participation import get_orchestration_ready_devices, _get_udm
+            if _get_udm() is None:
+                logger.debug(
+                    "_get_orchestration_candidate_set: device registry (UDM) unavailable"
+                    " — degrading gracefully"
+                )
+                return None
+            return get_orchestration_ready_devices()
+        except Exception as exc:
+            logger.debug(
+                "_get_orchestration_candidate_set: participation layer unavailable: %s",
+                exc,
+            )
+            return None
+
+    def _check_scheduling_gate(
+        self,
+        subtasks: List[Any],
+        trace_id: str,
+    ) -> Optional[str]:
+        """Return a structured failure reason, or ``None`` when scheduling may proceed.
+
+        The gate is applied only to subtasks that still need device assignment
+        (``device_id`` is empty).  If every subtask already carries an explicit
+        device ID the gate is a no-op.
+
+        The participation layer is queried via
+        :meth:`_get_orchestration_candidate_set`.  When the layer is
+        unavailable (returns ``None``) the gate degrades gracefully and allows
+        scheduling to continue.
+
+        Failure reasons returned:
+
+        ``no_orchestration_ready_devices``
+            No orchestration-eligible device is available at all.
+
+        ``insufficient_orchestration_ready_devices``
+            A multi-device task needs more devices than are currently
+            orchestration-ready.
+
+        Parameters
+        ----------
+        subtasks:
+            The list of :class:`~core.schemas.orchestration.SubTask` instances
+            from the current decomposition.
+        trace_id:
+            Active trace ID used for structured log messages.
+
+        Returns
+        -------
+        Optional[str]
+            A reason code string on failure, ``None`` on pass.
+        """
+        unassigned = [st for st in subtasks if not getattr(st, "device_id", "")]
+        if not unassigned:
+            logger.debug(
+                "scheduling-gate | PASS (all tasks pre-assigned) | trace_id=%s", trace_id
+            )
+            return None
+
+        needed = len(unassigned)
+
+        candidates = self._get_orchestration_candidate_set()
+        if candidates is None:
+            # Participation layer unavailable — degrade gracefully.
+            logger.debug(
+                "scheduling-gate | PASS (participation layer unavailable) | trace_id=%s",
+                trace_id,
+            )
+            return None
+
+        n_ready = len(candidates)
+
+        if n_ready == 0:
+            logger.warning(
+                "scheduling-gate | BLOCKED | trace_id=%s | reason=no_orchestration_ready_devices"
+                " | needed=%d",
+                trace_id,
+                needed,
+            )
+            return "no_orchestration_ready_devices"
+
+        if needed > 1 and n_ready < needed:
+            logger.warning(
+                "scheduling-gate | BLOCKED | trace_id=%s"
+                " | reason=insufficient_orchestration_ready_devices"
+                " | needed=%d | available=%d",
+                trace_id,
+                needed,
+                n_ready,
+            )
+            return "insufficient_orchestration_ready_devices"
+
+        logger.debug(
+            "scheduling-gate | PASS | trace_id=%s | needed=%d | available=%d",
+            trace_id,
+            needed,
+            n_ready,
+        )
+        return None
 
     def _is_orchestration_ready(self, device_id: str) -> bool:
         """Return True if *device_id* passes the canonical participation gate.
@@ -382,6 +498,26 @@ class ConstellationRuntime:
                 "session_id": session_id,
                 "mode": "dag_error",
                 "data": {},
+            }
+
+        # ── Scheduling gate: require orchestration-ready candidates ──────────
+        # Check canonical orchestration readiness before attempting device
+        # assignment.  Failing early here surfaces structured reasons rather
+        # than failing silently or late during execution.
+        gate_reason = self._check_scheduling_gate(decomposition.subtasks, trace_id)
+        if gate_reason is not None:
+            self._ledger_append(
+                ledger, "TASK_FAILED", trace_id=trace_id, task_id=request_id,
+                source="constellation_runtime",
+                payload={"reason": gate_reason, "failure_type": "scheduling_gate"},
+            )
+            return {
+                "success": False,
+                "reply": f"调度门控: {gate_reason}",
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "mode": "scheduling_gate",
+                "data": {"reason": gate_reason, "failure_type": "scheduling_gate"},
             }
 
         # Assign devices via DevicePoolManager, gated by canonical participation
