@@ -305,6 +305,12 @@ connection_manager = RouteConnectionPool()
 registered_devices: Dict[str, Dict[str, Any]] = _load_registered_devices()
 registered_devices_lock = asyncio.Lock()
 
+# PR-3: Explicit sentinel making the non-authoritative role of registered_devices
+# visible.  This cache is read-only compat surface — not canonical online/readiness
+# truth.  All canonical readiness decisions must go through core.device_readiness,
+# which consults UDM and UCM, never this cache.
+REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY: str = "COMPAT_CACHE_READ_ONLY"
+
 # 任务队列
 task_queue: Dict[str, Dict[str, Any]] = {}
 task_queue_lock = asyncio.Lock()
