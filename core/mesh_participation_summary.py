@@ -72,6 +72,7 @@ from typing import Any, Dict, List, Optional
 
 __all__ = [
     "MESH_PARTICIPATION_SUMMARY_AUTHORITY",
+    "MESH_SUMMARY_SUBORDINATE_TO_READINESS",
     "MeshParticipationSummary",
     "EMPTY_MESH_PARTICIPATION_SUMMARY",
     "get_current_mesh_participation_summary",
@@ -106,6 +107,19 @@ def get_body_mesh_registry() -> Any:  # type: ignore[return]
 MESH_PARTICIPATION_SUMMARY_AUTHORITY = (
     "core.mesh_participation_summary:MESH_PARTICIPATION_SUMMARY_AUTHORITY"
 )
+
+#: Affirms that mesh/session summaries are *subordinate* to Layer-1 canonical
+#: readiness (``core.device_readiness``) and Layer-2 participation
+#: (``core.device_participation``).
+#:
+#: Mesh membership or session visibility does NOT automatically imply:
+#:   - that a device is registered (Layer-1 readiness fact)
+#:   - that a device is routable (Layer-1 readiness fact)
+#:   - that a device is orchestration-eligible (Layer-2 participation fact)
+#:
+#: This summary is enrichment data only.  Callers must consult the canonical
+#: admissibility chain (``core.admissibility_chain``) for authoritative facts.
+MESH_SUMMARY_SUBORDINATE_TO_READINESS: bool = True
 
 _logger = logging.getLogger("Galaxy.MeshParticipationSummary")
 

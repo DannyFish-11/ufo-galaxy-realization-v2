@@ -34,9 +34,14 @@ __all__ = [
     "TargetDeviceValidationResult",
     "validate_target_device",
     "TARGET_DEVICE_VALIDATOR_AUTHORITY",
+    "TARGET_DEVICE_VALIDATOR_CHAIN_POSITION",
 ]
 
-TARGET_DEVICE_VALIDATOR_AUTHORITY: str = "TARGET_DEVICE_VALIDATOR_V1"
+TARGET_DEVICE_VALIDATOR_AUTHORITY: str = "TARGET_DEVICE_VALIDATOR_V2"
+
+# Chain position annotation — this module operates at Layer 3 of the
+# canonical admissibility chain (core.admissibility_chain).
+TARGET_DEVICE_VALIDATOR_CHAIN_POSITION: int = 3
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +171,7 @@ def _check_capabilities(
             return (
                 False,
                 {"device_capabilities": list(device_caps), "required": list(required_set)},
-                [f"missing-capabilities:{','.join(sorted(missing))}"],
+                [f"capability-mismatch:missing={','.join(sorted(missing))}"],
             )
         return (
             True,
@@ -216,10 +221,10 @@ def _check_orchestration(device_id: str) -> tuple[bool, Dict[str, Any], List[str
             src["participation"] = {"orchestration_eligible": eligible}
         reasons: List[str] = []
         if not eligible:
-            reasons.append("orchestration-not-eligible")
+            reasons.append("not-eligible")
         return eligible, src, reasons
     except ImportError:
-        return False, {}, ["orchestration-check-unavailable:import-error"]
+        return False, {}, ["participation-unavailable:import-error"]
     except Exception as exc:
         logger.warning(
             "TargetDeviceValidator: orchestration check failed for %s — %s",
@@ -291,9 +296,9 @@ def validate_target_device(
     result.reasons.extend(readiness_reasons)
 
     if not registered:
-        result.reasons.append("device-not-registered")
+        result.reasons.append("not-registered")
     if registered and not ready:
-        result.reasons.append("device-not-ready")
+        result.reasons.append("not-ready")
 
     # ── 2. Capability check ─────────────────────────────────────────────
     cap_match, cap_src, cap_reasons = _check_capabilities(
