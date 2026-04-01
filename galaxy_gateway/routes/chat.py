@@ -132,13 +132,28 @@ async def chat_endpoint(
     Response includes backward-compatible fields (reply, response, intent)
     plus ``runtime_session_id`` for end-to-end correlation.
     """
+    # ── Target-device validation (additive, non-blocking) ──
+    _target_device = request.target_device or None
+    if _target_device:
+        try:
+            from core.target_device_validator import validate_target_device as _vtd
+            _vr = _vtd(_target_device)
+            if not _vr.valid:
+                logger.warning(
+                    "chat_endpoint: target_device=%s failed validation — reasons=%s",
+                    _target_device,
+                    _vr.reasons,
+                )
+        except Exception as _vtd_exc:
+            logger.debug("target_device validation skipped (non-fatal): %s", _vtd_exc)
+
     # ── PR-5 EntryMode: resolve execution mode ──
     _entry_mode = "local"
     try:
         from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
         _entry_mode = _resolve_em(
             explicit_entry_mode=request.entry_mode or None,
-            target_device=request.target_device or None,
+            target_device=_target_device,
             source="galaxy_gateway.app",
         )
     except Exception as _em_exc:
