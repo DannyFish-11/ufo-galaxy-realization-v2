@@ -183,7 +183,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/mesh/send")
     async def mesh_send(req: MeshSendRequest):
-        """Mesh 发送 — P2P 直连 / Relay 自动选路"""
+        """Mesh 发送 — P2P 直连 / Relay 自动选路
+
+        Transport hierarchy note (PR-4):
+        This endpoint is an overlay / topology-enrichment send path.
+        It is subordinate to the canonical transport hierarchy:
+          direct WS = primary, relay = fallback, mesh = overlay only.
+        Successful delivery via this path does not imply canonical
+        routability or orchestration eligibility.
+        """
         result = await mesh_coordinator.send(
             target_device=req.target_device,
             payload=req.payload,

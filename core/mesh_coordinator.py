@@ -32,6 +32,16 @@ from enum import Enum
 
 logger = logging.getLogger("Galaxy.MeshCoordinator")
 
+# ---------------------------------------------------------------------------
+# PR-4 transport role sentinels
+# Mesh is an overlay / topology enrichment layer only.
+# Mesh MUST NOT act as a parallel orchestration authority or substitute for
+# canonical transport (direct WS = primary, relay = fallback) decisions.
+# Mesh send paths are subordinate to canonical transport/dispatch authority.
+# ---------------------------------------------------------------------------
+MESH_TRANSPORT_ROLE: str = "MESH::OVERLAY_ENRICHMENT_ONLY"
+MESH_ORCHESTRATION_EXCLUDED: bool = True
+
 
 class ConnectionType(str, Enum):
     DIRECT = "direct"       # LAN TCP 直连
@@ -203,7 +213,13 @@ class MeshCoordinator:
         source_device: str = "",
     ) -> MeshSendResult:
         """
-        发送消息到目标设备 — 自动选路
+        发送消息到目标设备 — 自动选路 (overlay / enrichment path)
+
+        Transport hierarchy note (PR-4):
+        This method operates as an overlay send path — it is subordinate to
+        canonical transport (direct WS = primary, relay = fallback).  Callers
+        must not use this path as a substitute for canonical dispatch authority.
+        Successful delivery here does not imply canonical routability.
 
         策略:
         1. 如果目标 peer 标记为 direct reachable → 尝试 P2P

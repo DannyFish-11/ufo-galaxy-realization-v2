@@ -21,6 +21,14 @@ from core.schemas.task_envelope import envelope_from_relay_request
 
 logger = logging.getLogger("Galaxy.API")
 
+# ---------------------------------------------------------------------------
+# PR-4 transport role note
+# Relay routes expose the canonical fallback / mediated transport path.
+# Relay availability contributes to device routability but does NOT substitute
+# for canonical connection truth.  These routes are not a primary dispatch
+# authority — they are a bounded fallback behind direct WebSocket.
+# ---------------------------------------------------------------------------
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create device relay routes router."""

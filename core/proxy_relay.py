@@ -35,6 +35,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Galaxy.ProxyRelay")
 
+# ---------------------------------------------------------------------------
+# PR-4 transport role sentinel
+# Relay is the canonical fallback / mediated transport in the Galaxy hierarchy.
+# Relay availability contributes to device routability but does NOT substitute
+# for canonical connection or orchestration truth.
+# direct WS = primary; relay = fallback; mesh = overlay only.
+# ---------------------------------------------------------------------------
+RELAY_TRANSPORT_ROLE: str = "RELAY::FALLBACK_TRANSPORT"
+
 
 class RelayStatus(str, Enum):
     PENDING = "pending"
@@ -150,7 +159,12 @@ class ProxyRelay:
         """
         start = time.time()
 
-        # Phase 5: 尝试 Mesh P2P 直连 (非 expect_reply 场景)
+        # Phase 5: Mesh P2P delivery optimisation (transport hierarchy note)
+        # This block attempts a mesh P2P shortcut when the target has a known
+        # direct peer entry.  This is a delivery-layer optimisation only —
+        # relay remains the fallback transport authority.  Mesh membership
+        # here does NOT imply canonical routability or orchestration eligibility;
+        # it is subordinate to the relay dispatch path.
         if not request.expect_reply and not request.chain:
             try:
                 from core.mesh_coordinator import get_mesh_coordinator
