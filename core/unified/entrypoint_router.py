@@ -446,6 +446,107 @@ def resolve_entry_mode(
     except Exception:
         pass
 
+    # ------------------------------------------------------------------
+    # Decision-diff telemetry (PR-14) — observability only, no side effects
+    # ------------------------------------------------------------------
+    # When GALAXY_DECISION_DIFF_TELEMETRY=1 and both the legacy and canonical
+    # paths are available, we compute what the *other* path would have decided
+    # and record the comparison.  The final returned value (``resolved``) is
+    # never changed here.
+    # ------------------------------------------------------------------
+    try:
+        from core.decision_diff_telemetry import (
+            is_telemetry_enabled as _diff_enabled,
+            record_entry_mode_diff as _record_entry_mode_diff,
+        )
+        if _diff_enabled() and not explicit_entry_mode:
+            _legacy_decision: Optional[str] = None
+            _canonical_decision: Optional[str] = None
+            _ready_count: Optional[int] = None
+            _online_count: Optional[int] = None
+            _diff_reasons: List[str] = []
+            _has_explicit_target: bool = bool(target_device and target_device.strip())
+
+            if _use_readiness:
+                # We are on the canonical path; compute what the legacy path
+                # would have decided using the UDM online count.
+                _canonical_decision = resolved
+                _legacy_online: int = 0
+                if _cross_device_on:
+                    try:
+                        from core.unified.device_manager import (
+                            get_unified_device_manager,
+                        )
+                        _legacy_online = (
+                            get_unified_device_manager().get_online_count()
+                        )
+                    except Exception:
+                        pass
+                _online_count = _legacy_online
+                if _cross_device_on and (
+                    _has_explicit_target or _legacy_online >= 2
+                ):
+                    _legacy_decision = "cross_device"
+                else:
+                    _legacy_decision = "local"
+                _ready_count = _device_count
+            else:
+                # We are on the legacy path; compute what the canonical path
+                # would have decided using device readiness.
+                _legacy_decision = resolved
+                _online_count = _device_count
+                _canonical_ready: int = 0
+                _canonical_resolved = "local"
+                if _cross_device_on:
+                    if _has_explicit_target:
+                        _tgt_ready = False
+                        try:
+                            from core.device_readiness import (
+                                is_device_cross_device_ready,
+                            )
+                            _tgt_ready = is_device_cross_device_ready(
+                                target_device or ""
+                            )
+                        except Exception:
+                            pass
+                        _canonical_ready = 1 if _tgt_ready else 0
+                        _canonical_resolved = (
+                            "cross_device" if _tgt_ready else "local"
+                        )
+                        if not _tgt_ready:
+                            _diff_reasons.append("target_device_not_ready")
+                    else:
+                        _ready_devs: list = []
+                        try:
+                            from core.device_readiness import (
+                                get_cross_device_ready_devices,
+                            )
+                            _ready_devs = get_cross_device_ready_devices()
+                        except Exception:
+                            pass
+                        _canonical_ready = len(_ready_devs)
+                        _canonical_resolved = (
+                            "cross_device" if _canonical_ready >= 2 else "local"
+                        )
+                        if _canonical_ready < 2:
+                            _diff_reasons.append(
+                                "canonical_requires_readiness"
+                            )
+                _canonical_decision = _canonical_resolved
+                _ready_count = _canonical_ready
+
+            _record_entry_mode_diff(
+                request_id=trace_id or None,
+                target_device=target_device or None,
+                legacy_decision=_legacy_decision,
+                canonical_decision=_canonical_decision,
+                ready_device_count=_ready_count,
+                online_device_count=_online_count,
+                diff_reason_codes=_diff_reasons if _diff_reasons else None,
+            )
+    except Exception:
+        pass
+
     return resolved
 
 
