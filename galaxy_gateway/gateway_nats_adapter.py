@@ -39,6 +39,13 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger("gateway_nats_adapter")
 
+# PR-2: This adapter now delegates all payload normalization to the canonical
+# message interop layer (core.message_interop) so that every incoming NATS
+# message — whether a native TaskEnvelope or a legacy TaskDispatch — is
+# converted to a unified TaskEnvelope before entering the routing path.
+# The sentinel below affirms that the interop layer has been applied.
+MESSAGE_INTEROP_APPLIED: str = "GATEWAY_NATS_ADAPTER_MESSAGE_INTEROP_V1"
+
 _TASK_TIMEOUT_S = float(os.getenv("GALAXY_GW_ADAPTER_TIMEOUT", "30"))
 _MAX_RETRIES = int(os.getenv("GALAXY_GW_ADAPTER_RETRIES", "2"))
 _DLQ_SUBJECT = os.getenv("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
@@ -192,90 +199,59 @@ class GatewayNATSAdapter:
             ``envelope_from_task_dispatch()`` so that the rest of the handler
             always works with a unified envelope object.
         Old TaskDispatch callers remain fully supported through this bridge.
+
+        PR-2: All normalization is now delegated to the canonical message
+        interop layer (core.message_interop.normalize_to_task_envelope).
+        Correlation fields (task_id/trace_id/session_id) are always canonical.
         """
-        nats_schema = data.get("_nats_schema", "")
-
-        if nats_schema == "TaskEnvelope":
-            # ── Parse as TaskEnvelope (primary format) ──────────────────────
-            _envelope_parsed = False
+        # PR-2: delegate to canonical interop layer for envelope normalization.
+        try:
+            from core.message_interop import normalize_to_task_envelope as _normalize
+            _envelope = _normalize(data, source="nats")
+            task_id = _envelope.task_id
+            trace_id = _envelope.trace_id
+            target_device = _envelope.target
+            task_type = _envelope.tool_name
+            payload = _envelope.args
+            route_mode = _envelope.metadata.get("route_mode", "direct")
+            # PR-7: extract remote_execution_mode from the substrate envelope
+            # so that both command_only and agent_runtime dispatches carry the
+            # same substrate metadata through the gateway transport layer.
+            remote_execution_mode = (
+                _envelope.remote_execution_mode.value
+                if _envelope.remote_execution_mode is not None
+                else _envelope.metadata.get("remote_execution_mode", "")
+            )
+            logger.debug(
+                "GatewayNATSAdapter: interop-normalized task_id=%s trace_id=%s mode=%s",
+                task_id,
+                trace_id,
+                remote_execution_mode or "unset",
+            )
+        except Exception as _norm_err:
+            logger.warning(
+                "GatewayNATSAdapter: interop normalization failed, using legacy extraction — %s",
+                _norm_err,
+            )
+            # Legacy field extraction fallback (preserves backward compatibility).
+            # Use extract_correlation for a single source of truth on IDs.
             try:
-                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
-
-                _envelope = _TaskEnvelope.model_validate(data)
-                task_id = _envelope.task_id
-                trace_id = _envelope.trace_id
-                target_device = _envelope.target
-                task_type = _envelope.tool_name
-                payload = _envelope.args
-                route_mode = _envelope.metadata.get("route_mode", "direct")
-                # PR-7: extract remote_execution_mode from the substrate envelope
-                # so that both command_only and agent_runtime dispatches carry the
-                # same substrate metadata through the gateway transport layer.
-                remote_execution_mode = (
-                    _envelope.remote_execution_mode.value
-                    if _envelope.remote_execution_mode is not None
-                    else _envelope.metadata.get("remote_execution_mode", "")
-                )
-                _envelope_parsed = True
-                logger.debug(
-                    "GatewayNATSAdapter: parsed TaskEnvelope task_id=%s trace_id=%s mode=%s",
-                    task_id,
-                    trace_id,
-                    remote_execution_mode or "unset",
-                )
-            except Exception as _parse_err:
-                logger.warning(
-                    "GatewayNATSAdapter: TaskEnvelope parse failed, falling back to legacy — %s",
-                    _parse_err,
-                )
-
-            if not _envelope_parsed:
-                # Fall back to legacy field extraction
+                from core.message_interop import extract_correlation as _extract_corr
+                _fb_corr = _extract_corr(data)
+                task_id = _fb_corr.task_id
+                trace_id = _fb_corr.trace_id
+            except Exception:
                 task_id = data.get("task_id") or str(uuid.uuid4())
-                trace_id = data.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
-                target_device = data.get("target_worker_id") or data.get("target_device_id", "")
-                task_type = data.get("task_type", "command")
-                payload = data.get("payload") or {}
-                route_mode = data.get("route_mode", "direct")
-                remote_execution_mode = data.get("remote_execution_mode", "")
-        else:
-            # ── Legacy TaskDispatch — extract fields and convert to envelope ─
-            task_id = data.get("task_id") or str(uuid.uuid4())
+                trace_id = (
+                    data.get("trace_id")
+                    or (data.get("context") or {}).get("trace_id", "")
+                    or f"trace_{uuid.uuid4().hex[:12]}"
+                )
             target_device = data.get("target_worker_id") or data.get("target_device_id", "")
             task_type = data.get("task_type", "command")
             payload = data.get("payload") or {}
-            trace_id = (
-                data.get("trace_id")
-                or (data.get("context") or {}).get("trace_id", "")
-                or f"trace_{uuid.uuid4().hex[:12]}"
-            )
             route_mode = data.get("route_mode", "direct")
             remote_execution_mode = data.get("remote_execution_mode", "")
-
-            # PR-3: Convert legacy TaskDispatch → TaskEnvelope so that internal
-            # routing always sees a unified envelope; replace task_id/trace_id
-            # with canonical values from the envelope.
-            try:
-                from core.schemas.contracts import (
-                    envelope_from_task_dispatch as _env_from_dispatch,
-                    TaskDispatchModel as _TDM,
-                )
-
-                _legacy = _TDM.model_validate({**data, "task_id": task_id})
-                _envelope = _env_from_dispatch(_legacy)
-                task_id = _envelope.task_id
-                trace_id = _envelope.trace_id
-                logger.debug(
-                    "GatewayNATSAdapter: converted legacy TaskDispatch → TaskEnvelope "
-                    "task_id=%s trace_id=%s",
-                    task_id,
-                    trace_id,
-                )
-            except Exception as _conv_err:
-                logger.debug(
-                    "GatewayNATSAdapter: TaskDispatch→Envelope conversion skipped — %s",
-                    _conv_err,
-                )
 
         logger.info(
             "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s "
