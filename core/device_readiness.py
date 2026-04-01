@@ -1,7 +1,7 @@
 """
 core/device_readiness.py
 ========================
-Canonical device readiness aggregation layer (PR-3).
+Canonical device readiness aggregation layer (PR-3 / PR-4).
 
 Unifies ``registered``, ``online``, ``connected``, ``routable``, and basic
 capability readiness checks across the existing codebase without changing
@@ -22,6 +22,19 @@ The ``registered_devices`` compat cache (``core.routes._shared``) is
 **explicitly excluded** from readiness assembly.  Compat-cache truth is
 downstream of canonical readiness, not an input to it.
 
+Transport hierarchy (PR-4)
+--------------------------
+``RoutabilitySummary`` reflects the canonical transport role hierarchy:
+
+  - **direct WebSocket** (``direct_ws_available``) = primary transport
+  - **relay** (``relay_available``) = canonical fallback / mediated transport
+  - **mesh** (``mesh_overlay_available``) = overlay / topology enrichment only
+
+Mesh presence or membership does **not** imply canonical routability.
+``effective_routable`` is determined solely from direct WS or relay paths.
+Mesh paths are captured in ``mesh_overlay_available`` for topology
+enrichment but must not influence routing or orchestration eligibility.
+
 Public API
 ----------
 Models:
@@ -38,8 +51,9 @@ Helpers:
 
 Sentinels
 ---------
-    DEVICE_READINESS_AUTHORITY   — identifies this module as canonical authority
-    DEVICE_READINESS_COMPAT_EXCLUDED — affirms compat cache is not a readiness input
+    DEVICE_READINESS_AUTHORITY        — identifies this module as canonical authority
+    DEVICE_READINESS_COMPAT_EXCLUDED  — affirms compat cache is not a readiness input
+    TRANSPORT_HIERARCHY_ENFORCED      — affirms PR-4 transport hierarchy is enforced
 """
 
 from __future__ import annotations
@@ -61,6 +75,7 @@ __all__ = [
     "is_device_cross_device_ready",
     "DEVICE_READINESS_AUTHORITY",
     "DEVICE_READINESS_COMPAT_EXCLUDED",
+    "TRANSPORT_HIERARCHY_ENFORCED",
 ]
 
 # Sentinel that identifies this module as the canonical readiness authority (PR-3).
@@ -70,6 +85,11 @@ DEVICE_READINESS_AUTHORITY: str = "DEVICE_READINESS_LAYER_V2"
 # registered_devices compat cache.  Canonical inputs are UDM and UCM only.
 # Compat-cache truth is downstream of canonical readiness, not an input to it.
 DEVICE_READINESS_COMPAT_EXCLUDED: bool = True
+
+# PR-4: Affirms that transport hierarchy is enforced in RoutabilitySummary.
+# direct WS = primary, relay = fallback, mesh = overlay only.
+# Mesh availability does NOT contribute to effective_routable.
+TRANSPORT_HIERARCHY_ENFORCED: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -107,16 +127,43 @@ class ConnectionSummary:
 
 @dataclass
 class RoutabilitySummary:
-    """Aggregated routing / transport availability for a single device."""
+    """Aggregated routing / transport availability for a single device.
+
+    Transport hierarchy (PR-4)
+    --------------------------
+    Fields reflect the canonical transport role hierarchy:
+
+    * ``direct_ws_available`` / ``ucm_send_available`` — **primary** transport.
+      When True these represent the canonical first-choice delivery path.
+    * ``relay_available`` / ``fallback_available`` — **fallback** transport.
+      Relay is a mediated/server-forwarded path.  Relay availability
+      contributes to ``effective_routable`` but does NOT substitute for
+      canonical connection or orchestration truth.
+    * ``mesh_direct_available`` / ``mesh_relay_available`` /
+      ``mesh_overlay_available`` — **overlay** enrichment only.
+      Mesh presence does NOT set ``effective_routable`` and must not be
+      used to infer canonical routability or orchestration eligibility.
+
+    ``primary_transport`` names the effective canonical path when routable.
+    ``transport_role_note`` provides a brief human-readable hierarchy note.
+    """
 
     device_id: str
+    # --- Primary transport (direct WebSocket) ---
     direct_ws_available: bool = False
     ucm_send_available: bool = False
+    # --- Fallback transport (relay) ---
     relay_available: bool = False
+    fallback_available: bool = False      # alias: relay_available (PR-4 explicit field)
+    # --- Mesh paths (overlay / enrichment only — NOT canonical routability) ---
     mesh_direct_available: bool = False
     mesh_relay_available: bool = False
+    mesh_overlay_available: bool = False  # PR-4: consolidates mesh_direct + mesh_relay
+    # --- Derived hierarchy fields (PR-4) ---
+    primary_transport: str = "none"       # "direct_ws" | "ucm" | "relay" | "none"
     effective_routable: bool = False
     preferred_path: str = "none"
+    transport_role_note: str = ""         # brief hierarchy note for callers
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
 
@@ -126,10 +173,14 @@ class RoutabilitySummary:
             "direct_ws_available": self.direct_ws_available,
             "ucm_send_available": self.ucm_send_available,
             "relay_available": self.relay_available,
+            "fallback_available": self.fallback_available,
             "mesh_direct_available": self.mesh_direct_available,
             "mesh_relay_available": self.mesh_relay_available,
+            "mesh_overlay_available": self.mesh_overlay_available,
+            "primary_transport": self.primary_transport,
             "effective_routable": self.effective_routable,
             "preferred_path": self.preferred_path,
+            "transport_role_note": self.transport_role_note,
             "reasons": list(self.reasons),
             "sources": dict(self.sources),
         }
@@ -359,7 +410,9 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
     except Exception:
         summary.reasons.append("relay_unavailable")
 
-    # --- Mesh availability ---
+    # --- Mesh availability (overlay / enrichment only — PR-4) ---
+    # Mesh presence does NOT contribute to effective_routable.
+    # mesh_overlay_available is captured for topology enrichment only.
     try:
         import core.mesh_coordinator as _mc  # noqa: F401  # presence check only
         summary.mesh_direct_available = True
@@ -368,24 +421,50 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
     except Exception:
         summary.reasons.append("mesh_unavailable")
 
-    # --- Derive effective routable & preferred path ---
+    # PR-4: consolidate mesh fields into overlay flag
+    summary.mesh_overlay_available = (
+        summary.mesh_direct_available or summary.mesh_relay_available
+    )
+
+    # --- Derive effective routable & preferred path (PR-4 hierarchy) ---
+    # Only direct WS (primary) and relay (fallback) determine effective_routable.
+    # Mesh paths are overlay-only and must NOT set effective_routable.
     if summary.direct_ws_available:
         summary.effective_routable = True
         summary.preferred_path = "direct_ws"
+        summary.primary_transport = "direct_ws"
+        summary.transport_role_note = (
+            "direct_ws=primary; relay=fallback_available; mesh=overlay_only"
+        )
     elif summary.ucm_send_available:
         summary.effective_routable = True
         summary.preferred_path = "ucm"
+        summary.primary_transport = "ucm"
+        summary.transport_role_note = (
+            "ucm=primary; relay=fallback_available; mesh=overlay_only"
+        )
     elif summary.relay_available:
         summary.effective_routable = True
         summary.preferred_path = "relay"
-    elif summary.mesh_direct_available:
-        summary.effective_routable = True
-        summary.preferred_path = "mesh_direct"
-    elif summary.mesh_relay_available:
-        summary.effective_routable = True
-        summary.preferred_path = "mesh_relay"
+        summary.primary_transport = "relay"
+        summary.transport_role_note = (
+            "relay=fallback_transport (no direct_ws); mesh=overlay_only"
+        )
     else:
+        # No canonical transport available.
+        # Mesh overlay may be present but cannot provide canonical routability.
         summary.preferred_path = "none"
+        summary.primary_transport = "none"
+        if summary.mesh_overlay_available:
+            summary.transport_role_note = (
+                "mesh=overlay_only (not canonical); no direct_ws or relay available"
+            )
+            summary.reasons.append("mesh_overlay_present_but_not_canonical_route")
+        else:
+            summary.transport_role_note = "no_canonical_transport_available"
+
+    # PR-4: relay_available mirrors as fallback_available for explicit naming
+    summary.fallback_available = summary.relay_available
 
     return summary
 
