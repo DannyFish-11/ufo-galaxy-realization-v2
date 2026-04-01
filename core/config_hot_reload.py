@@ -436,3 +436,13 @@ def get_config_manager(config_path: Optional[str] = None,
     if _instance is None:
         _instance = HotReloadConfigManager(config_path=config_path, **kwargs)
     return _instance
+
+
+def get_existing_manager() -> Optional[HotReloadConfigManager]:
+    """Return the HotReloadConfigManager singleton if already initialised, or None.
+
+    Unlike :func:`get_config_manager`, this function never creates a new instance.
+    It is safe to call when you only want to trigger a reload if the manager is
+    already running (e.g., from the status board control surface).
+    """
+    return _instance
