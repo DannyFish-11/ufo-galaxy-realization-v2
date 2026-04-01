@@ -1,7 +1,7 @@
 """
 core/device_readiness.py
 ========================
-Canonical device readiness aggregation layer (PR-3 / PR-4).
+Canonical device readiness aggregation layer (PR-3 / PR-4 / PR-1).
 
 Unifies ``registered``, ``online``, ``connected``, ``routable``, and basic
 capability readiness checks across the existing codebase without changing
@@ -10,8 +10,8 @@ current routing behaviour.
 This module is **additive only** — it does not modify any existing module
 and degrades gracefully when optional subsystems are unavailable.
 
-Authority model (PR-3)
-----------------------
+Authority model (PR-3 / PR-1)
+------------------------------
 Canonical readiness is assembled **exclusively** from:
   - ``UnifiedDeviceManager`` (UDM)  — registered/online truth
   - ``UnifiedConnectionManager`` (UCM) — connection/presence truth
@@ -21,6 +21,13 @@ Canonical readiness is assembled **exclusively** from:
 The ``registered_devices`` compat cache (``core.routes._shared``) is
 **explicitly excluded** from readiness assembly.  Compat-cache truth is
 downstream of canonical readiness, not an input to it.
+
+PR-1 Truth Integration Layer
+----------------------------
+:mod:`core.truth_integration_layer` is the canonical convergence point that
+fuses UCM + UDM with an explicit conflict-resolution policy.  This module
+directly queries UDM and UCM (the same authority sources exposed by TIL) for
+readiness facts.  For richer cross-layer canonical truth use TIL directly.
 
 Transport hierarchy (PR-4)
 --------------------------
@@ -54,6 +61,7 @@ Sentinels
     DEVICE_READINESS_AUTHORITY        — identifies this module as canonical authority
     DEVICE_READINESS_COMPAT_EXCLUDED  — affirms compat cache is not a readiness input
     TRANSPORT_HIERARCHY_ENFORCED      — affirms PR-4 transport hierarchy is enforced
+    TRUTH_INTEGRATION_LAYER_BACKED    — affirms readiness sources are TIL-aligned (UCM/UDM only)
 """
 
 from __future__ import annotations
@@ -76,6 +84,7 @@ __all__ = [
     "DEVICE_READINESS_AUTHORITY",
     "DEVICE_READINESS_COMPAT_EXCLUDED",
     "TRANSPORT_HIERARCHY_ENFORCED",
+    "TRUTH_INTEGRATION_LAYER_BACKED",
 ]
 
 # Sentinel that identifies this module as the canonical readiness authority (PR-3).
@@ -90,6 +99,13 @@ DEVICE_READINESS_COMPAT_EXCLUDED: bool = True
 # direct WS = primary, relay = fallback, mesh = overlay only.
 # Mesh availability does NOT contribute to effective_routable.
 TRANSPORT_HIERARCHY_ENFORCED: bool = True
+
+# PR-1: Affirms that the authority sources consumed by this module (UDM and
+# UCM) are identical to the primary authority sources used by the Truth
+# Integration Layer (core.truth_integration_layer).  This module and TIL are
+# therefore consistent — both derive registered/online/connected/routable truth
+# exclusively from UCM and UDM, never from the compat cache.
+TRUTH_INTEGRATION_LAYER_BACKED: bool = True
 
 
 # ---------------------------------------------------------------------------

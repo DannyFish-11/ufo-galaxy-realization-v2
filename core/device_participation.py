@@ -64,6 +64,7 @@ __all__ = [
     "is_device_orchestration_ready",
     "DEVICE_PARTICIPATION_AUTHORITY",
     "PARTICIPATION_BUILDS_ON_READINESS",
+    "PARTICIPATION_TRUTH_SOURCE",
 ]
 
 # Sentinel that identifies this module as the canonical authority (Layer 2).
@@ -74,6 +75,15 @@ DEVICE_PARTICIPATION_AUTHORITY: str = "DEVICE_PARTICIPATION_LAYER_V2"
 # exclusively from Layer-1 canonical readiness (core.device_readiness),
 # not from the selector or from mesh/session artifacts.
 PARTICIPATION_BUILDS_ON_READINESS: bool = True
+
+# PR-1: Affirms that Layer-1 readiness (core.device_readiness) is itself
+# TIL-aligned — its sources are exclusively UCM and UDM, the same primary
+# authorities as core.truth_integration_layer.  By extension, participation
+# never reads the compat cache.
+PARTICIPATION_TRUTH_SOURCE: str = (
+    "DEVICE_READINESS_LAYER(UCM+UDM) "
+    "via TRUTH_INTEGRATION_LAYER_BACKED=True"
+)
 
 
 # ---------------------------------------------------------------------------
