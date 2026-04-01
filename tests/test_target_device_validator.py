@@ -381,7 +381,7 @@ class TestOrchestrationRequiredValidation(unittest.TestCase):
                    return_value=(True, True, {}, [])):
             with patch(
                 "core.target_device_validator._check_orchestration",
-                return_value=(False, {}, ["orchestration-not-eligible"]),
+                return_value=(False, {}, ["not-eligible"]),
             ):
                 result = validate_target_device(
                     "dev-orch", require_orchestration_eligible=True

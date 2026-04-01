@@ -5,11 +5,13 @@ Galaxy - Task Routes
 **Architecture role: ROUTE ADAPTER SURFACE — no orchestration authority**
 --------------------------------------------------------------------------
 This module is a **route adapter surface** for task management endpoints.
-Task creation stamps a ``task_id`` and forwards device-targeted tasks to the
-canonical execution chain via ``CommandRouter`` / ``DeviceRouter``::
+Task creation stamps a ``task_id`` and ``trace_id`` and forwards
+device-targeted tasks to the canonical execution chain::
 
     POST /api/v1/tasks   ← you are here (route adapter — no authority)
         → connection_manager.send_to_device()   (simple fire-and-forget)
+           task_id and trace_id are stamped on the wire message so that
+           the dispatch is traceable through the canonical correlation chain.
            (for full orchestration: use POST /api/v1/command/unified which
             routes through CommandRouter → DeviceRouter canonically)
 
@@ -43,8 +45,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def create_task(req: TaskRequest):
         """创建任务"""
         task_id = str(uuid.uuid4())
+        trace_id = f"trace_{uuid.uuid4().hex[:12]}"
         task = {
             "task_id": task_id,
+            "trace_id": trace_id,
             "task_type": req.task_type,
             "payload": req.payload,
             "device_id": req.device_id,
@@ -58,6 +62,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             await connection_manager.send_to_device(req.device_id, {
                 "type": "task",
                 "task_id": task_id,
+                "trace_id": trace_id,
                 "task_type": req.task_type,
                 "payload": req.payload
             })
@@ -66,6 +71,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse({
             "success": True,
             "task_id": task_id,
+            "trace_id": trace_id,
             "status": task["status"]
         })
 

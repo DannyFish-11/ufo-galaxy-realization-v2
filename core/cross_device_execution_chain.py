@@ -106,11 +106,18 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.CrossDeviceExecutionChain")
 
 __all__ = [
+    # Dispatch spine authority sentinels (PR-7)
+    "COMMAND_ROUTER_DISPATCH_SPINE_AUTHORITY",
+    "TASK_ENVELOPE_CANONICAL_CONTRACT",
+    # Chain structure
     "CanonicalChainStep",
     "CHAIN_STEP_AUTHORITIES",
+    "CANONICAL_CHAIN_ORDER",
+    # Data models
     "ResultEnvelope",
     "ChainExecutionRecord",
     "CrossDeviceChainSnapshot",
+    # Constructors / helpers
     "build_result_envelope",
     "build_chain_execution_record",
     "record_chain_execution",
@@ -118,6 +125,21 @@ __all__ = [
     "get_cross_device_chain",
     "reset_cross_device_chain",
 ]
+
+# ---------------------------------------------------------------------------
+# PR-7: Canonical dispatch spine sentinels
+# ---------------------------------------------------------------------------
+
+#: Sentinel: ``CommandRouter`` is the *sole* canonical dispatch spine for all
+#: cross-device tasks.  Any code path that dispatches to a device outside
+#: ``CommandRouter.route_envelope`` is a legacy/compat path and must be
+#: annotated as such in :mod:`core.orchestration_authority.legacy_paths`.
+COMMAND_ROUTER_DISPATCH_SPINE_AUTHORITY: str = "COMMAND_ROUTER_DISPATCH_SPINE_V1"
+
+#: Sentinel: ``TaskEnvelope`` (``core.schemas.task_envelope``) is the sole
+#: canonical cross-device task contract.  Raw ad-hoc payload dicts that bypass
+#: the envelope adapter helpers are legacy compat paths only.
+TASK_ENVELOPE_CANONICAL_CONTRACT: str = "TASK_ENVELOPE_CANONICAL_CONTRACT_V1"
 
 
 # ---------------------------------------------------------------------------
