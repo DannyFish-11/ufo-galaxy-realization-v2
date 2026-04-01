@@ -13,9 +13,31 @@ Constraints (see plan 强约束):
   C8  — exposes ``is_connected()`` and ``get_stats()``
   C11 — uses stdlib ``logging`` (matching codebase convention)
   C12 — JSON wire format matching Pydantic model field names (snake_case)
+
+PR-4 — Agent Bus & Fabric Convergence
+--------------------------------------
+NATS is the **distributed carrier / fabric layer** for the Galaxy Agent Bus.
+It carries canonical ``TaskEnvelope`` / ``ResultEnvelope`` contracts across
+cluster boundaries but does NOT define message semantics.
+
+The authority sentinel ``NATS_FABRIC_CARRIER_AUTHORITY`` identifies this
+module as the canonical NATS carrier layer implementation.  All messages
+published via this bus must carry the ``_nats_schema`` discriminator field
+(set automatically by ``publish_task_envelope`` /
+``publish_task_result_envelope``) so that consumers can verify the envelope
+format.
+
+Layer identity (from core.agent_bus_fabric):
+    NATS_CARRIER_LAYER = "NATS::CARRIER_FABRIC_LAYER"
 """
 
 from __future__ import annotations
+
+# PR-4: NATS carrier / fabric layer authority sentinel.
+# Identifies this module as the canonical distributed carrier implementation
+# for the Galaxy Agent Bus.  NATS carries TaskEnvelope/ResultEnvelope
+# contracts but does NOT define message semantics.
+NATS_FABRIC_CARRIER_AUTHORITY: str = "NATS::CARRIER_FABRIC_LAYER_V1"
 
 import asyncio
 import json
