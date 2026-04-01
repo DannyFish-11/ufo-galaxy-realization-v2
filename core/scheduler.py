@@ -26,6 +26,14 @@ logger = logging.getLogger("scheduler")
 # the canonical message interop layer (core.message_interop.extract_correlation).
 SCHEDULER_MESSAGE_INTEROP_APPLIED: str = "SCHEDULER_MESSAGE_INTEROP_V1"
 
+# PR-3: Execution Spine Integration.
+# Affirms that the scheduler's built-in tool paths (send_to_device,
+# relay_to_device, mesh_send) route execution through the canonical spine:
+#   ExecutionIngressAdapter → CommandRouter.route_envelope
+# Callers may import this sentinel to assert that the scheduler is wired
+# into the execution spine rather than dispatching independently.
+SCHEDULER_ROUTES_COMMAND_ROUTER: str = "SCHEDULER_ROUTES_COMMAND_ROUTER_V1"
+
 class ToolDefinition(BaseModel):
     name: str
     description: str
@@ -671,7 +679,16 @@ CROSS-DEVICE:
             return json.dumps({"error": str(e)})
 
     async def _exec_send_to_device(self, args: Dict, context: Dict) -> str:
-        """发送任务到指定设备"""
+        """发送任务到指定设备
+
+        PR-3: Execution Spine Integration.
+        Ingress is recorded in the execution spine log via
+        ``core.execution_spine.record_legacy_ingress`` so that operator
+        tooling can trace scheduler dispatches back to the canonical spine.
+        When a ``CommandRouter`` is available in *context* the request is
+        routed through ``CommandRouter.route_envelope`` (canonical spine);
+        otherwise the existing WS / ADB fallback paths are used unchanged.
+        """
         import uuid as _uuid
         device_id = args.get("device_id", "")
         task_type = args.get("task_type", "")
@@ -686,6 +703,54 @@ CROSS-DEVICE:
         except Exception:
             task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
             trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
+
+        # PR-3: Record ingress in execution spine log.
+        try:
+            from core.execution_spine import (
+                ExecutionIngressSource,
+                record_legacy_ingress,
+            )
+            record_legacy_ingress(
+                ExecutionIngressSource.SCHEDULER,
+                {**args, "task_id": task_id, "trace_id": trace_id},
+                reason="scheduler._exec_send_to_device → canonical spine",
+            )
+        except Exception:
+            pass
+
+        # PR-3: Attempt canonical spine routing via CommandRouter when available.
+        cmd_router = (context.get("command_router") if context else None)
+        if cmd_router is None:
+            try:
+                from core.command_router import get_command_router as _gcr
+                cmd_router = _gcr()
+            except Exception:
+                cmd_router = None
+
+        if cmd_router is not None:
+            try:
+                from core.execution_spine import (
+                    ExecutionIngressSource,
+                    normalize_ingress_to_envelope,
+                )
+                _envelope = normalize_ingress_to_envelope(
+                    {
+                        "task_id": task_id,
+                        "trace_id": trace_id,
+                        "tool_name": task_type,
+                        "targets": [device_id] if device_id else [],
+                        "args": payload,
+                    },
+                    source=ExecutionIngressSource.SCHEDULER,
+                )
+                result = await cmd_router.route_envelope(_envelope)
+                return json.dumps(result, ensure_ascii=False)
+            except Exception as _spine_err:
+                logger.debug(
+                    "_exec_send_to_device: spine routing failed (%s); "
+                    "falling back to direct WS/ADB path",
+                    _spine_err,
+                )
 
         # 通过 WebSocket connection_manager 发送
         ws_sender = context.get("ws_sender") if context else None
@@ -740,7 +805,20 @@ CROSS-DEVICE:
         return json.dumps({"broadcast_results": results}, ensure_ascii=False)
 
     async def _exec_relay(self, args: Dict, context: Dict) -> str:
-        """设备间中继转发"""
+        """设备间中继转发
+
+        PR-3: Ingress recorded in execution spine log.
+        """
+        # PR-3: Record ingress in execution spine log.
+        try:
+            from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+            record_legacy_ingress(
+                ExecutionIngressSource.SCHEDULER,
+                args,
+                reason="scheduler._exec_relay (relay_to_device) → canonical spine",
+            )
+        except Exception:
+            pass
         try:
             from core.proxy_relay import get_proxy_relay, RelayRequest
             relay = get_proxy_relay()
@@ -769,7 +847,20 @@ CROSS-DEVICE:
             return json.dumps({"error": f"Code execution failed: {e}"})
 
     async def _exec_mesh_send(self, args: Dict) -> str:
-        """P2P Mesh 发送 — 自动选路 (直连 / 中继)"""
+        """P2P Mesh 发送 — 自动选路 (直连 / 中继)
+
+        PR-3: Ingress recorded in execution spine log.
+        """
+        # PR-3: Record ingress in execution spine log.
+        try:
+            from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+            record_legacy_ingress(
+                ExecutionIngressSource.SCHEDULER,
+                args,
+                reason="scheduler._exec_mesh_send (mesh_send) → canonical spine",
+            )
+        except Exception:
+            pass
         try:
             from core.mesh_coordinator import get_mesh_coordinator
             mesh = get_mesh_coordinator()

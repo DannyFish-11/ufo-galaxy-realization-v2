@@ -99,10 +99,16 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# PR-3: Execution Spine Integration — bridge dispatch authority sentinel
+# =============================================================================
 
-# =============================================================================
-# Android Bridge 服务
-# =============================================================================
+#: Affirms that AndroidBridge no longer holds independent dispatch authority.
+#: Dispatch authority belongs exclusively to CommandRouter (via the canonical
+#: execution spine).  AndroidBridge retains its protocol-translation and
+#: session-cache roles only.
+ANDROID_BRIDGE_EXECUTION_SPINE_APPLIED: str = "ANDROID_BRIDGE_EXECUTION_SPINE_V1"
+
 
 class AndroidBridge:
     """

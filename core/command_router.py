@@ -234,6 +234,19 @@ route_envelope.  Direct send_to_device shortcuts outside this spine are
 legacy compat paths and must be registered as such.
 """
 
+# PR-3: Execution Spine Integration — legacy ingress governance sentinel.
+COMMAND_ROUTER_LEGACY_INGRESS_POLICY: str = (
+    "LEGACY_INGRESS_NORMALIZE_V1: non-envelope inputs entering CommandRouter "
+    "are normalized to TaskEnvelope via core.execution_spine before dispatch; "
+    "legacy call sources are recorded in the ExecutionSpine ingress log."
+)
+"""Policy sentinel: CommandRouter normalises non-envelope inputs and records
+legacy call sources via the execution spine (core.execution_spine).
+
+Importable to assert that an integration point is aware of the ingress
+governance policy introduced in PR-3.
+"""
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -710,6 +723,70 @@ class CommandRouter:
     def set_executor(self, executor: Callable[..., Coroutine]):
         """设置/更新执行器"""
         self._executor = executor
+
+    # ------------------------------------------------------------------
+    # PR-3: Execution Spine Integration — legacy ingress normalization
+    # ------------------------------------------------------------------
+
+    def normalize_legacy_ingress(
+        self,
+        payload: Any,
+        *,
+        source: str = "unknown",
+    ) -> Any:
+        """Normalize a non-envelope payload to a ``TaskEnvelope`` and record it.
+
+        This method is the CommandRouter-side counterpart of
+        :func:`core.execution_spine.normalize_ingress_to_envelope`.  It is
+        intended for callers that have a reference to the router and want to
+        normalize + record a legacy ingress in a single call before passing
+        the result to :meth:`route_envelope`.
+
+        Parameters
+        ----------
+        payload:
+            Arbitrary execution frame (dict or ``TaskEnvelope``).
+        source:
+            Human-readable label for the call origin (e.g. ``"scheduler"``,
+            ``"bridge"``, ``"galaxy_orchestrator"``).
+
+        Returns
+        -------
+        TaskEnvelope
+            Normalized envelope, ready for :meth:`route_envelope`.
+        """
+        try:
+            from core.execution_spine import (
+                ExecutionIngressSource,
+                normalize_ingress_to_envelope,
+                record_legacy_ingress,
+            )
+            try:
+                src = ExecutionIngressSource(source)
+            except ValueError:
+                src = ExecutionIngressSource.UNKNOWN
+
+            # Record as legacy ingress for observability
+            try:
+                from core.schemas.task_envelope import TaskEnvelope as _TE
+                is_canonical = isinstance(payload, _TE)
+            except Exception:
+                is_canonical = False
+
+            if not is_canonical:
+                record_legacy_ingress(
+                    src,
+                    payload,
+                    reason=f"CommandRouter.normalize_legacy_ingress called from {source}",
+                )
+            return normalize_ingress_to_envelope(payload, source=src)
+        except Exception as exc:
+            logger.debug(
+                "normalize_legacy_ingress: execution_spine unavailable (%s); "
+                "returning payload unchanged",
+                exc,
+            )
+            return payload
 
     # ------------------------------------------------------------------
     # 统一网关命令路径（PR-1: route_envelope 为主入口）
