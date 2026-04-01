@@ -11,6 +11,7 @@ Public API
 ----------
 Models:
     TargetDeviceValidationResult
+    CanonicalValidationInput
 
 Helpers:
     validate_target_device(
@@ -18,8 +19,13 @@ Helpers:
         require_orchestration_eligible=False
     ) -> TargetDeviceValidationResult
 
-Authority sentinel:
+    validate_target_device_from_canonical(
+        canonical_input
+    ) -> TargetDeviceValidationResult
+
+Authority sentinels:
     TARGET_DEVICE_VALIDATOR_AUTHORITY
+    VALIDATOR_CANONICAL_INPUTS_ONLY
 """
 
 from __future__ import annotations
@@ -32,10 +38,13 @@ logger = logging.getLogger("Galaxy.TargetDeviceValidator")
 
 __all__ = [
     "TargetDeviceValidationResult",
+    "CanonicalValidationInput",
     "validate_target_device",
+    "validate_target_device_from_canonical",
     "TARGET_DEVICE_VALIDATOR_AUTHORITY",
     "TARGET_DEVICE_VALIDATOR_CHAIN_POSITION",
     "VALIDATOR_TRUTH_SOURCE",
+    "VALIDATOR_CANONICAL_INPUTS_ONLY",
 ]
 
 TARGET_DEVICE_VALIDATOR_AUTHORITY: str = "TARGET_DEVICE_VALIDATOR_V2"
@@ -52,6 +61,12 @@ VALIDATOR_TRUTH_SOURCE: str = (
     "READINESS(UCM+UDM) + PARTICIPATION via TRUTH_INTEGRATION_LAYER_BACKED=True; "
     "compat-cache excluded"
 )
+
+# PR-5: Affirms that this validator only consumes canonical resolved truth
+# (Layer-1 readiness + Layer-2 participation) and policy output.
+# Legacy or compat inputs must be normalised through CanonicalValidationInput
+# (the adapter/interop path) before being passed to this validator.
+VALIDATOR_CANONICAL_INPUTS_ONLY: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +121,60 @@ class TargetDeviceValidationResult:
             "reasons": list(self.reasons),
             "sources": dict(self.sources),
         }
+
+
+# ---------------------------------------------------------------------------
+# PR-5: Canonical validation input adapter / interop
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CanonicalValidationInput:
+    """Interop adapter for normalising legacy or non-canonical validation inputs.
+
+    PR-5 governance: the validator must only consume canonical resolved truth.
+    Any caller passing raw/legacy data must first normalise it through this
+    adapter.  The adapter records the original source so that observability
+    tools can distinguish canonical from adapted inputs.
+
+    Fields
+    ------
+    device_id
+        The canonical device identifier.
+    required_capabilities
+        Optional list of capability strings.
+    require_orchestration_eligible
+        When True the orchestration-eligibility check is applied.
+    source_label
+        Identifies where the input originated (e.g. ``"canonical"``,
+        ``"legacy_compat"``, ``"api_request"``).  Used for observability.
+    """
+
+    device_id: str
+    required_capabilities: Optional[List[str]] = None
+    require_orchestration_eligible: bool = False
+    source_label: str = "canonical"
+
+    @classmethod
+    def from_legacy(
+        cls,
+        device_id: str,
+        *,
+        capabilities: Optional[List[str]] = None,
+        orchestration_eligible: bool = False,
+        legacy_source: str = "legacy_compat",
+    ) -> "CanonicalValidationInput":
+        """Build a CanonicalValidationInput from legacy/compat caller data.
+
+        This is the interop path required by PR-5: all non-canonical inputs
+        must pass through this factory before being consumed by the validator.
+        """
+        return cls(
+            device_id=device_id,
+            required_capabilities=capabilities,
+            require_orchestration_eligible=orchestration_eligible,
+            source_label=legacy_source,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -362,4 +431,41 @@ def validate_target_device(
             extra={"event": "target_validation_passed", "device_id": device_id},
         )
 
+    return result
+
+
+# ---------------------------------------------------------------------------
+# PR-5: validate_target_device_from_canonical
+# ---------------------------------------------------------------------------
+
+
+def validate_target_device_from_canonical(
+    canonical_input: "CanonicalValidationInput",
+) -> TargetDeviceValidationResult:
+    """Validate a target device from a pre-normalised :class:`CanonicalValidationInput`.
+
+    This is the PR-5 governance entry-point for callers that have already
+    normalised their inputs through the canonical interop adapter.  It
+    delegates to :func:`validate_target_device` and annotates the result
+    sources with the input's ``source_label`` for observability.
+
+    Parameters
+    ----------
+    canonical_input:
+        A :class:`CanonicalValidationInput` produced either by direct
+        construction (canonical callers) or via
+        :meth:`CanonicalValidationInput.from_legacy` (compat callers).
+
+    Returns
+    -------
+    TargetDeviceValidationResult
+        Always returns a result; never raises.
+    """
+    result = validate_target_device(
+        canonical_input.device_id,
+        required_capabilities=canonical_input.required_capabilities,
+        require_orchestration_eligible=canonical_input.require_orchestration_eligible,
+    )
+    # Annotate sources so observability can trace the interop path.
+    result.sources["canonical_input_source"] = canonical_input.source_label
     return result

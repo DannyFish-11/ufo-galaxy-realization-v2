@@ -65,6 +65,8 @@ __all__ = [
     "DEVICE_PARTICIPATION_AUTHORITY",
     "PARTICIPATION_BUILDS_ON_READINESS",
     "PARTICIPATION_TRUTH_SOURCE",
+    "PARTICIPATION_ENRICH_ONLY",
+    "PARTICIPATION_CANNOT_OVERRIDE_CANONICAL_TRUTH",
 ]
 
 # Sentinel that identifies this module as the canonical authority (Layer 2).
@@ -83,6 +85,22 @@ PARTICIPATION_BUILDS_ON_READINESS: bool = True
 PARTICIPATION_TRUTH_SOURCE: str = (
     "DEVICE_READINESS_LAYER(UCM+UDM) "
     "via TRUTH_INTEGRATION_LAYER_BACKED=True"
+)
+
+# PR-5: Affirms that participation is strictly an enrichment layer.
+# session/formation/context data can only add role/session/mesh enrichment;
+# they must not set or override the canonical truth fields:
+#   registered, runtime_present (online), routable.
+# Those fields are populated exclusively from Layer-1 device_readiness.
+PARTICIPATION_ENRICH_ONLY: bool = True
+
+# PR-5: Explicit governance constraint string.  Any code that reads
+# participation output must respect that registered/runtime_present/routable
+# originate from Layer 1 and must not be re-derived from participation alone.
+PARTICIPATION_CANNOT_OVERRIDE_CANONICAL_TRUTH: str = (
+    "PARTICIPATION_ENRICH_ONLY_V1: "
+    "session/formation/context may only enrich; "
+    "registered/present/routable sourced from DEVICE_READINESS_LAYER_V2"
 )
 
 
