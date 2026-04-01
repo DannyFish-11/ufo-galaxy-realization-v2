@@ -97,8 +97,12 @@ class TestAuthoritySentinel(unittest.TestCase):
     def test_sentinel_non_empty(self):
         self.assertTrue(TARGET_DEVICE_VALIDATOR_AUTHORITY)
 
-    def test_sentinel_contains_v1(self):
-        self.assertIn("V1", TARGET_DEVICE_VALIDATOR_AUTHORITY)
+    def test_sentinel_contains_v2(self):
+        self.assertIn("V2", TARGET_DEVICE_VALIDATOR_AUTHORITY)
+
+    def test_chain_position_is_3(self):
+        from core.target_device_validator import TARGET_DEVICE_VALIDATOR_CHAIN_POSITION
+        self.assertEqual(TARGET_DEVICE_VALIDATOR_CHAIN_POSITION, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +209,7 @@ class TestMissingDevice(unittest.TestCase):
         with patch("core.target_device_validator._check_readiness",
                    return_value=(False, False, {}, [])):
             result = validate_target_device("ghost-device")
-        self.assertIn("device-not-registered", result.reasons)
+        self.assertIn("not-registered", result.reasons)
 
     def test_registered_but_not_ready_returns_valid_false(self):
         # registered=True, ready=False
@@ -220,7 +224,7 @@ class TestMissingDevice(unittest.TestCase):
         with patch("core.target_device_validator._check_readiness",
                    return_value=(True, False, {}, [])):
             result = validate_target_device("offline-device")
-        self.assertIn("device-not-ready", result.reasons)
+        self.assertIn("not-ready", result.reasons)
 
     def test_readiness_module_unavailable_returns_valid_false(self):
         """When readiness module is unavailable, result is not valid."""
@@ -384,7 +388,7 @@ class TestOrchestrationRequiredValidation(unittest.TestCase):
                 )
         self.assertFalse(result.valid)
         self.assertFalse(result.orchestration_eligible)
-        self.assertIn("orchestration-not-eligible", result.reasons)
+        self.assertIn("not-eligible", result.reasons)
 
     def test_orchestration_not_required_defaults_eligible(self):
         """When not required, orchestration_eligible is True by default."""

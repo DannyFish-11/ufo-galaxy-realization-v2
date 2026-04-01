@@ -3,11 +3,33 @@
 """
 core/device_participation.py
 =============================
-Canonical Participation and Orchestration Readiness Summary Layer.
+Canonical Participation and Orchestration Readiness Summary Layer (Layer 2).
 
-Unifies device participation assessment across the existing selector, mesh,
-session, and related participation structures without changing current
-orchestration behaviour.
+Layer position in the admissibility chain (``core.admissibility_chain``):
+  **Layer 2 — Participation**
+
+  This layer consumes Layer-1 canonical readiness
+  (``core.device_readiness.get_device_readiness``) as its authoritative
+  source of registered / transport-presence / routable truth.
+
+  The canonical device selector is consulted *only* for
+  ``orchestration_eligible``.  It must not override Layer-1 readiness facts.
+
+  Mesh membership and session artifacts are *enrichment* data only — they
+  influence role/session fields but must not substitute for canonical
+  readiness or orchestration-eligibility truth.
+
+Admissibility chain dependency
+-------------------------------
+  Layer 1 (readiness)  →  Layer 2 (participation)  →  Layer 3 (target-validation)
+
+  ``registered``, ``runtime_present`` (transport presence), and ``routable``
+  are populated **exclusively** from Layer-1 :class:`DeviceReadinessSummary`.
+
+  ``orchestration_eligible`` is derived from the canonical device selector
+  and is additionally gated on Layer-1 readiness being valid:
+    * device must be registered (Layer 1)
+    * device must be routable (Layer 1)
 
 This module is **additive only** — it does not modify any existing module
 and degrades gracefully when optional subsystems are unavailable.
@@ -22,8 +44,9 @@ Helpers:
     get_orchestration_ready_devices() -> list[ParticipationSummary]
     is_device_orchestration_ready(device_id) -> bool
 
-Authority sentinel:
+Authority sentinels:
     DEVICE_PARTICIPATION_AUTHORITY
+    PARTICIPATION_BUILDS_ON_READINESS
 """
 
 from __future__ import annotations
@@ -40,10 +63,17 @@ __all__ = [
     "get_orchestration_ready_devices",
     "is_device_orchestration_ready",
     "DEVICE_PARTICIPATION_AUTHORITY",
+    "PARTICIPATION_BUILDS_ON_READINESS",
 ]
 
-# Sentinel that identifies this module as the canonical authority.
-DEVICE_PARTICIPATION_AUTHORITY: str = "DEVICE_PARTICIPATION_LAYER_V1"
+# Sentinel that identifies this module as the canonical authority (Layer 2).
+# Bumped to V2 to reflect the enforced admissibility chain introduced in PR-6.
+DEVICE_PARTICIPATION_AUTHORITY: str = "DEVICE_PARTICIPATION_LAYER_V2"
+
+# Affirms that this module builds registered/runtime_present/routable truth
+# exclusively from Layer-1 canonical readiness (core.device_readiness),
+# not from the selector or from mesh/session artifacts.
+PARTICIPATION_BUILDS_ON_READINESS: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +134,29 @@ class ParticipationSummary:
 # ---------------------------------------------------------------------------
 # Internal helpers — defensive subsystem accessors
 # ---------------------------------------------------------------------------
+
+
+def _get_canonical_readiness(device_id: str) -> Any:
+    """Return a :class:`~core.device_readiness.DeviceReadinessSummary` from
+    the Layer-1 canonical readiness module, or ``None`` on failure.
+
+    This is the *sole* source of ``registered``, ``runtime_present``
+    (transport presence), and ``routable`` truth for Layer 2.  Mesh/session
+    artifacts must not be used to override this output.
+    """
+    try:
+        from core.device_readiness import get_device_readiness  # type: ignore
+        return get_device_readiness(device_id)
+    except ImportError:
+        logger.debug("_get_canonical_readiness: device_readiness module unavailable")
+        return None
+    except Exception as exc:
+        logger.warning(
+            "get_device_participation: canonical readiness error for %s: %s",
+            device_id,
+            exc,
+        )
+        return None
 
 
 def _get_udm() -> Any:
@@ -254,13 +307,24 @@ def _roles_from_session_participant(session: Any, device_id: str) -> List[str]:
 def get_device_participation(device_id: str) -> ParticipationSummary:
     """Return a :class:`ParticipationSummary` for *device_id*.
 
-    Aggregates from:
-    1. ``core.device_selection.canonical_device_selector`` for registered /
-       runtime_present / routable / orchestration_eligible flags.
-    2. ``contracts.mesh_membership`` / body mesh registry for mesh membership
-       and role information.
-    3. ``contracts.mesh_session`` / session coordinator for active session
-       context.
+    Admissibility chain (Layer 2 of 3)
+    ------------------------------------
+    This function builds on Layer-1 canonical readiness as follows:
+
+    **Step 0 — Canonical readiness (Layer 1, authoritative)**
+        ``registered``, ``runtime_present``, and ``routable`` are populated
+        exclusively from :func:`core.device_readiness.get_device_readiness`.
+        Selector or mesh/session data must not override these values.
+
+    **Step 1 — Orchestration eligibility (selector)**
+        ``orchestration_eligible`` comes from the canonical device selector
+        and is additionally gated on the Layer-1 device being registered and
+        routable.  A device that passes the selector but fails readiness is
+        **not** orchestration-eligible.
+
+    **Steps 2–3 — Mesh membership and session (enrichment only)**
+        Mesh and session data enrich role/session fields but must not
+        substitute for canonical readiness or orchestration-eligibility truth.
 
     All source lookups are wrapped in try/except blocks.  If a subsystem is
     unavailable the corresponding fields remain at their defaults and a reason
@@ -291,23 +355,60 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
     reasons: List[str] = []
 
     # ------------------------------------------------------------------
-    # 1. Canonical selector participation
+    # 0. Layer-1 canonical readiness (authoritative for registered /
+    #    runtime_present / routable) — must be consulted before selector.
+    # ------------------------------------------------------------------
+    try:
+        rs = _get_canonical_readiness(device_id)
+        if rs is not None:
+            summary.registered = bool(getattr(rs, "registered", False))
+            # runtime_present maps to Layer-1 "online" (transport-level presence)
+            summary.runtime_present = bool(getattr(rs, "online", False))
+            summary.routable = bool(getattr(rs, "routable", False))
+            sources["readiness"] = rs.to_dict() if hasattr(rs, "to_dict") else {
+                "registered": summary.registered,
+                "runtime_present": summary.runtime_present,
+                "routable": summary.routable,
+            }
+            if not summary.registered:
+                reasons.append("not-registered")
+            elif not summary.routable:
+                reasons.append("no-route")
+        else:
+            reasons.append("readiness-unavailable")
+    except Exception as exc:
+        logger.warning(
+            "get_device_participation: canonical readiness error for %s: %s",
+            device_id,
+            exc,
+        )
+        reasons.append(f"readiness-error:{exc}")
+
+    # ------------------------------------------------------------------
+    # 1. Orchestration eligibility from canonical selector
+    #    (subordinate to Layer-1 readiness — selector truth does NOT
+    #    override registered/routable facts from Step 0)
     # ------------------------------------------------------------------
     try:
         sel_status = _get_selector_status(device_id)
         if sel_status is not None:
             summary.assessed = True
-            summary.registered = bool(getattr(sel_status, "registered", False))
-            summary.runtime_present = bool(getattr(sel_status, "runtime_present", False))
-            summary.routable = bool(getattr(sel_status, "routable", False))
-            summary.orchestration_eligible = bool(
-                getattr(sel_status, "orchestration_eligible", False)
+            raw_eligible = bool(getattr(sel_status, "orchestration_eligible", False))
+            # Gate eligibility on Layer-1 readiness being valid.
+            # A device that the selector marks eligible but is not registered
+            # or not routable at the transport layer must not be eligible.
+            summary.orchestration_eligible = (
+                raw_eligible
+                and summary.registered
+                and summary.routable
             )
             sources["selector"] = (
                 sel_status.to_dict()
                 if hasattr(sel_status, "to_dict")
                 else {"status": str(sel_status)}
             )
+            if raw_eligible and not summary.orchestration_eligible:
+                reasons.append("not-eligible:readiness-gate-failed")
         else:
             reasons.append("selector-unavailable")
     except Exception as exc:
