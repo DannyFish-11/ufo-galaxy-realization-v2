@@ -35,6 +35,7 @@ Domain → 子模块映射：
   /api/v1/channels      → core/routes/channels.py     （渠道插件）
   /api/v1/federation    → core/routes/federation.py   （多实例联邦）
   /api/v1/projection    → core/routes/projection.py   （运行时状态投影）
+  /api/v1/operator      → core/routes/operator.py     （算子检查面 ★ PR-510）
   /api/v1/stream        → (inline SSE endpoint below)  （服务端推送流）
   /ws/device            → (create_websocket_routes)    （设备 WebSocket — 兼容路径，非规范主入口，见下文）
   /ws/status            → (create_websocket_routes)    （状态推送 WebSocket）
@@ -257,6 +258,19 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(cap_runtime_routes.create_router())
     except Exception as _e:
         logger.warning("能力运行时路由加载失败（可选）: %s", _e)
+
+    # PR-510: Operator Surface API — read-only operator inspection endpoints.
+    #         GET /api/v1/operator/snapshot
+    #         GET /api/v1/operator/inspect/task/{task_id}
+    #         GET /api/v1/operator/inspect/route/{task_id}
+    #         GET /api/v1/operator/inspect/executor/{node_id}
+    #         GET /api/v1/operator/inspect/failure/{task_id}
+    #         GET /api/v1/operator/inspect/lineage/{task_id}
+    try:
+        from core.routes import operator as operator_routes
+        router.include_router(operator_routes.create_router())
+    except Exception as _e:
+        logger.warning("算子路由加载失败（可选）: %s", _e)
 
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream
