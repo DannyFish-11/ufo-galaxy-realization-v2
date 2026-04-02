@@ -54,6 +54,13 @@ MESSAGE_INTEROP_APPLIED: str = "GATEWAY_NATS_ADAPTER_MESSAGE_INTEROP_V1"
 # Layer identity (from core.agent_bus_fabric): GATEWAY::DEVICE_TRANSPORT_SUBSTRATE
 GATEWAY_SUBSTRATE_AUTHORITY: str = "GATEWAY::DEVICE_TRANSPORT_SUBSTRATE_V1"
 
+# PR-8: Network Topology Runtime integration sentinel.
+# Affirms that this module's connectivity state is absorbed into the canonical
+# NetworkTopologyRuntime via assimilate_gateway_state() / absorb_gateway_state().
+NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = (
+    "GATEWAY_NATS_ADAPTER::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
+)
+
 _TASK_TIMEOUT_S = float(os.getenv("GALAXY_GW_ADAPTER_TIMEOUT", "30"))
 _MAX_RETRIES = int(os.getenv("GALAXY_GW_ADAPTER_RETRIES", "2"))
 _DLQ_SUBJECT = os.getenv("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
