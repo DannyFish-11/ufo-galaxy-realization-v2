@@ -737,8 +737,7 @@ def query_routable_executors(
         net_state = topology_states.get(record.node_id, "unknown")
 
         exec_profile = record.execution_profile
-        health = record.fabric_presence.last_heartbeat_at  # use as proxy if needed
-        # Derive health score: use presence_state to set a score
+        # Derive health score from presence_state
         pstate = record.fabric_presence.presence_state
         if pstate == AssimilationPresenceState.DEGRADED:
             h_score = 0.4

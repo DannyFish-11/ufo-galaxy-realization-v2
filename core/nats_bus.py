@@ -664,17 +664,14 @@ def _absorb_nats_state(is_connected: bool, url: str = "") -> None:
         host = ""
         port = 0
         if url:
-            # Parse "nats://host:port" or "host:port"
-            clean = url.replace("nats://", "").replace("tls://", "")
-            if ":" in clean:
-                parts = clean.rsplit(":", 1)
-                host = parts[0]
-                try:
-                    port = int(parts[1])
-                except ValueError:
-                    pass
-            else:
-                host = clean
+            # Use urllib.parse to handle all NATS-supported URL schemes
+            # (nats://, tls://, ws://, wss://) robustly.
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if parsed.hostname:
+                host = parsed.hostname
+            if parsed.port:
+                port = parsed.port
 
         from core.capability_network_runtime_policy import absorb_nats_connectivity_event
         absorb_nats_connectivity_event(is_connected=is_connected, host=host, port=port)
