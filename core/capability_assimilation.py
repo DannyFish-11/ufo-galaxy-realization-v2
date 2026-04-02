@@ -363,12 +363,29 @@ class AssimilationRecord:
     """
 
     node_id: str
-    capability_descriptor: CapabilityDescriptor = field(default_factory=lambda: CapabilityDescriptor(node_id=""))
-    execution_profile: ExecutionProfile = field(default_factory=lambda: ExecutionProfile(node_id=""))
-    fabric_presence: FabricPresence = field(default_factory=lambda: FabricPresence(node_id=""))
+    capability_descriptor: Optional[CapabilityDescriptor] = None
+    execution_profile: Optional[ExecutionProfile] = None
+    fabric_presence: Optional[FabricPresence] = None
     projected_to_task_graph: bool = False
     projected_to_network_graph: bool = False
     assimilation_notes: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Ensure nested sub-records always carry the parent node_id."""
+        if self.capability_descriptor is None:
+            self.capability_descriptor = CapabilityDescriptor(node_id=self.node_id)
+        elif self.capability_descriptor.node_id == "":
+            self.capability_descriptor.node_id = self.node_id
+
+        if self.execution_profile is None:
+            self.execution_profile = ExecutionProfile(node_id=self.node_id)
+        elif self.execution_profile.node_id == "":
+            self.execution_profile.node_id = self.node_id
+
+        if self.fabric_presence is None:
+            self.fabric_presence = FabricPresence(node_id=self.node_id)
+        elif self.fabric_presence.node_id == "":
+            self.fabric_presence.node_id = self.node_id
 
     def to_dict(self) -> Dict[str, Any]:
         return {
