@@ -119,6 +119,9 @@ __all__ = [
     "CapabilityAssimilationLayer",
     # Helpers
     "assimilate_node",
+    "assimilate_device",
+    "assimilate_mcp_provider",
+    "assimilate_skill",
     "get_capability_assimilation_layer",
     "reset_capability_assimilation_layer",
 ]
@@ -128,10 +131,10 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 #: Module authority marker — import this sentinel to assert that the canonical
-#: capability assimilation layer (PR-7) is present and active.
+#: capability assimilation layer (PR-7, extended in PR-D) is present and active.
 CAPABILITY_ASSIMILATION_AUTHORITY: str = (
     "core.capability_assimilation"
-    " — canonical capability & node assimilation layer (PR-7)"
+    " — canonical capability & node assimilation layer (PR-7/PR-D)"
 )
 
 #: Layer position in the canonical control-plane stack.
@@ -179,6 +182,21 @@ class NodeParticipantKind(str, Enum):
     LEGACY_FACADE = "legacy_facade"
     """Former orchestrator node demoted to adapter/facade/local-coordinator.
     Must NOT be treated as a system-execution authority."""
+
+    DEVICE = "device"
+    """Physical or virtual device provider (Android, desktop, IoT, etc.).
+    Registered via device_registry / DeviceCommunication and absorbed into
+    the capability graph so the planner can reason about device capabilities."""
+
+    MCP_PROVIDER = "mcp_provider"
+    """MCP-protocol tool/skill provider absorbed from mcp_bridge / mcp_loader.
+    Surfaces MCP tools as first-class capabilities to the capability selection
+    plane."""
+
+    SKILL = "skill"
+    """Skill-based capability provider registered via skill_loader / skill_registry.
+    Skills are projected into the capability graph so that routing decisions can
+    treat them the same as node-based capabilities."""
 
     UNKNOWN = "unknown"
     """Kind has not been determined; treated as fabric_participant only."""
@@ -984,12 +1002,24 @@ def _arch_class_to_participant_kind(arch_str: str) -> NodeParticipantKind:
         "experimental_node": NodeParticipantKind.FABRIC_PARTICIPANT,
         "archived_node": NodeParticipantKind.FABRIC_PARTICIPANT,
         "worker": NodeParticipantKind.WORKER,
+        "worker_endpoint": NodeParticipantKind.WORKER,
         "agent": NodeParticipantKind.CAPABILITY_PROVIDER,
         "gateway": NodeParticipantKind.FABRIC_PARTICIPANT,
         "scheduler": NodeParticipantKind.FABRIC_PARTICIPANT,
         "storage": NodeParticipantKind.SPECIALIST,
         "tool": NodeParticipantKind.CAPABILITY_PROVIDER,
         "monitor": NodeParticipantKind.FABRIC_PARTICIPANT,
+        # PR-D: extended provider classifications
+        "device": NodeParticipantKind.DEVICE,
+        "android_device": NodeParticipantKind.DEVICE,
+        "iot_device": NodeParticipantKind.DEVICE,
+        "desktop_device": NodeParticipantKind.DEVICE,
+        "mcp_provider": NodeParticipantKind.MCP_PROVIDER,
+        "mcp_server": NodeParticipantKind.MCP_PROVIDER,
+        "mcp_tool": NodeParticipantKind.MCP_PROVIDER,
+        "skill": NodeParticipantKind.SKILL,
+        "skill_provider": NodeParticipantKind.SKILL,
+        "specialist_executor": NodeParticipantKind.SPECIALIST,
     }
     return _MAP.get(arch_str.lower(), NodeParticipantKind.UNKNOWN)
 
@@ -1025,3 +1055,129 @@ def assimilate_node(
     """
     layer = get_capability_assimilation_layer()
     return layer.assimilate_from_node_info(node_info_or_dict)
+
+
+# ---------------------------------------------------------------------------
+# PR-D: Provider-specific assimilation helpers
+# ---------------------------------------------------------------------------
+
+
+def assimilate_device(
+    device_id: str,
+    *,
+    capabilities: Optional[List[str]] = None,
+    host: str = "localhost",
+    port: int = 0,
+    tags: Optional[List[str]] = None,
+    transport_hints: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> "AssimilationRecord":
+    """Absorb a physical/virtual device into the capability assimilation layer.
+
+    Devices are registered as :attr:`NodeParticipantKind.DEVICE` so that the
+    capability selection plane can treat them as first-class capability
+    providers alongside nodes, workers, skills, and MCP providers.
+
+    Args:
+        device_id:       Unique device identifier (e.g. ``"android-pixel7-001"``).
+        capabilities:    Capability names the device exposes (e.g. ``["screen",
+                         "camera", "touch"]``).
+        host:            Device host address.
+        port:            Device port (0 = dynamic / unknown).
+        tags:            Classification labels (e.g. ``["android", "mobile"]``).
+        transport_hints: Route hints (``{"preferred_path": "direct_ws"}``, etc.).
+        metadata:        Arbitrary device metadata.
+
+    Returns:
+        The canonical :class:`AssimilationRecord` for the device.
+    """
+    layer = get_capability_assimilation_layer()
+    return layer.assimilate(
+        device_id,
+        capabilities=capabilities,
+        participant_kind=NodeParticipantKind.DEVICE,
+        host=host,
+        port=port,
+        tags=tags,
+        transport_hints=transport_hints,
+        metadata=metadata,
+    )
+
+
+def assimilate_mcp_provider(
+    provider_id: str,
+    *,
+    tools: Optional[List[str]] = None,
+    host: str = "localhost",
+    port: int = 0,
+    tags: Optional[List[str]] = None,
+    transport_hints: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> "AssimilationRecord":
+    """Absorb an MCP tool/skill provider into the capability assimilation layer.
+
+    MCP providers are registered as :attr:`NodeParticipantKind.MCP_PROVIDER`
+    so the capability graph can surface their tools as first-class capabilities.
+
+    Args:
+        provider_id:     Unique provider identifier (e.g. ``"mcp-filesystem-v1"``).
+        tools:           Tool names exposed by this MCP server.
+        host:            Provider host address.
+        port:            Provider port (0 = dynamic / unknown).
+        tags:            Classification labels (e.g. ``["mcp", "filesystem"]``).
+        transport_hints: Route hints.
+        metadata:        Arbitrary metadata.
+
+    Returns:
+        The canonical :class:`AssimilationRecord` for the MCP provider.
+    """
+    layer = get_capability_assimilation_layer()
+    caps = list(tools or [])
+    meta = dict(metadata or {})
+    meta.setdefault("provider_type", "mcp")
+    return layer.assimilate(
+        provider_id,
+        capabilities=caps,
+        participant_kind=NodeParticipantKind.MCP_PROVIDER,
+        host=host,
+        port=port,
+        tags=tags,
+        transport_hints=transport_hints,
+        metadata=meta,
+    )
+
+
+def assimilate_skill(
+    skill_id: str,
+    *,
+    capabilities: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> "AssimilationRecord":
+    """Absorb a skill-based capability provider into the capability assimilation layer.
+
+    Skills are registered as :attr:`NodeParticipantKind.SKILL` so that the
+    capability selection plane can route to skill executors alongside nodes
+    and devices.
+
+    Args:
+        skill_id:     Unique skill identifier (e.g. ``"skill-web-search-v2"``).
+        capabilities: Capability names the skill exposes.
+        tags:         Classification labels (e.g. ``["search", "web"]``).
+        metadata:     Arbitrary metadata.
+
+    Returns:
+        The canonical :class:`AssimilationRecord` for the skill.
+    """
+    layer = get_capability_assimilation_layer()
+    meta = dict(metadata or {})
+    meta.setdefault("provider_type", "skill")
+    return layer.assimilate(
+        skill_id,
+        capabilities=capabilities,
+        participant_kind=NodeParticipantKind.SKILL,
+        host="localhost",
+        port=0,
+        tags=tags,
+        metadata=meta,
+    )

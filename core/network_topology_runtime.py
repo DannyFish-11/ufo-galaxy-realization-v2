@@ -1047,6 +1047,18 @@ class NetworkTopologyRuntime:
             )
             self.register_edge(edge)
 
+        # Gateway edge — PR-D: absorbed into device transport edges
+        if preferred_path == "gateway" and effective_routable:
+            edge = TopologyEdge(
+                edge_id=f"{device_id}::gateway",
+                source_node_id="galaxy_gateway",
+                target_node_id=device_id,
+                kind=TopologyEdgeKind.GATEWAY,
+                state=TopologyConnectionState.PREFERRED,
+                preferred=True,
+            )
+            self.register_edge(edge)
+
         # Relay fallback edge
         if fallback_available or preferred_path == "relay":
             relay_state = (
