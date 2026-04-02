@@ -103,6 +103,23 @@ DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-520 / GAP-517-004: explicit formation descriptor attachment sentinel.
+#
+# DeviceRouter._dispatch_cross_device_task() now calls resolve_formation()
+# from core.device_formation at the start of every multi-device dispatch to
+# produce an explicit canonical DeviceFormationGroup.  The group is attached
+# to the result payload under the "formation" key so that callers and audit
+# surfaces can inspect source device, primary execution device, participating
+# members, and role assignments.  Resolves GAP-517-004.
+# ---------------------------------------------------------------------------
+DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED = (
+    "DEVICE_ROUTER::FORMATION_DESCRIPTOR_ATTACHED_V1: "
+    "_dispatch_cross_device_task() resolves and attaches a canonical "
+    "DeviceFormationGroup at the start of every cross-device dispatch. "
+    "Resolves GAP-517-004."
+)
+
+# ---------------------------------------------------------------------------
 # PR-519 / GAP-517-007: result surface closure sentinel.
 #
 # DeviceRouter.route_task() now calls surface_cross_device_result() on all
@@ -1265,6 +1282,62 @@ class DeviceRouter:
                     "DeviceRouter._dispatch_cross_device_task: TaskEnvelope skipped — %s", _env_err
                 )
 
+            # PR-520 / GAP-517-004: resolve and attach an explicit canonical
+            # DeviceFormationGroup before dispatching sub-tasks.  The group
+            # captures source device, primary execution device, all participating
+            # members, and their role assignments so that formation truth is
+            # explicit and auditable rather than implicit.
+            _formation_group = None
+            _formation_dict: dict = {}
+            try:
+                from core.device_formation.formation_resolver import resolve_formation
+                _device_ids = [d.device_id for d in devices]
+                _source_device_id = task.get("source_device_id", "")
+                _primary_device_id = _device_ids[0] if _device_ids else ""
+                _formation_group, _formation_policy = resolve_formation(
+                    runtime_domain="cross_device",
+                    source_device_id=_source_device_id,
+                    primary_device_id=_primary_device_id,
+                    target_device_ids=_device_ids,
+                    task_id=task.get("task_id", ""),
+                    trace_id=task.get("trace_id"),
+                    formation_reason="DeviceRouter._dispatch_cross_device_task",
+                )
+                _formation_dict = _formation_group.to_dict()
+                logger.debug(
+                    "DeviceRouter._dispatch_cross_device_task formation | "
+                    "formation_id=%s source=%s primary=%s members=%d",
+                    _formation_group.formation_id,
+                    _formation_group.source_device_id,
+                    _formation_group.primary_execution_device_id,
+                    len(_formation_group.members),
+                )
+                # Record formation truth in integrity runtime
+                try:
+                    from core.multi_device_control_integrity import (
+                        record_integrity_event,
+                        build_formation_truth_record,
+                        FormationTruthConsistency,
+                    )
+                    _frec = build_formation_truth_record(
+                        task_id=task.get("task_id", ""),
+                        trace_id=task.get("trace_id"),
+                        formation_id=_formation_group.formation_id,
+                        consistency=FormationTruthConsistency.CONSISTENT,
+                        member_device_ids=_device_ids,
+                        source_device_id=_source_device_id,
+                        primary_device_id=_primary_device_id,
+                    )
+                    record_integrity_event(formation_record=_frec)
+                except Exception:
+                    pass  # integrity recording is advisory
+            except Exception as _form_err:
+                logger.warning(
+                    "DeviceRouter._dispatch_cross_device_task: formation resolution failed — %s "
+                    "(GAP-517-004: proceeding without explicit formation descriptor)",
+                    _form_err,
+                )
+
             # 将任务分解为多个子任务
             subtasks = self._decompose_task(task, devices)
             
@@ -1277,12 +1350,17 @@ class DeviceRouter:
             
             # 汇总结果
             success = all(r.get("success", False) for r in results if isinstance(r, dict))
-            
-            return {
+
+            _result: dict = {
                 "success": success,
                 "subtask_results": results,
-                "message": "跨设备任务执行完成" if success else "部分子任务执行失败"
+                "message": "跨设备任务执行完成" if success else "部分子任务执行失败",
             }
+            # PR-520 / GAP-517-004: attach the canonical formation descriptor
+            # to the result so that callers and audit surfaces can inspect it.
+            if _formation_dict:
+                _result["formation"] = _formation_dict
+            return _result
             
         except Exception as e:
             logger.error(f"❌ 跨设备任务分发失败: {e}")
