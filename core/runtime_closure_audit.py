@@ -371,7 +371,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
     {
         "gap_id": "GAP-512-009",
         "severity": GAP_SEVERITY_RESIDUAL,
-        "layer": "core/continuum / desktop_projection",
+        "layer": "core/critical_path_harness.py",
         "description": (
             "Multi-model intelligent routing supply (model topology / provider "
             "routing) remains expressed through the ContinuumState/TopologyRoutePlan "
@@ -380,7 +380,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "This is a known accepted gap deferred to a dedicated model-topology PR."
         ),
         "follow_up": "PR-515",
-        "is_residual": True,
+        "is_residual": False,
     },
 ]
 
@@ -703,6 +703,24 @@ class RuntimeClosureAudit:
             "AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED",
             "core.routes.projection",
         ),
+        (
+            "PR-515",
+            "Critical Path Harness Layer (GAP-512-009)",
+            "CRITICAL_PATH_HARNESS_AUTHORITY",
+            "core.critical_path_harness",
+        ),
+        (
+            "PR-515",
+            "OpenClawd Multimodal Ingress Integration (GAP-512-009)",
+            "CRITICAL_PATH_MULTIMODAL_INGRESS_INTEGRATED",
+            "core.openclawd",
+        ),
+        (
+            "PR-515",
+            "MultiLLMRouter Routing Authority Integration (GAP-512-009)",
+            "CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED",
+            "core.multi_llm_router",
+        ),
     ]
 
     def __init__(self) -> None:
@@ -979,6 +997,40 @@ class RuntimeClosureAudit:
                 "make future authority drift detectable.  Full decommission of "
                 "competing paths deferred to PR-515 per GAP-512-009.  "
                 "Resolves GAP-512-008 semantics boundary."
+            ),
+        ))
+
+        # CONFLICT-008: Model routing path authority — ContinuumState/TopologyRoutePlan
+        # vs CriticalPathHarness canonical routing records.
+        # RESOLVED in PR-515: CriticalPathHarness (Layer 15) is the canonical runtime
+        # authority for multi-model routing decisions.  ContinuumState remains a
+        # model-provider routing projection but is NOT the sole runtime authority.
+        conflicts.append(AuthorityConflictEntry(
+            conflict_id="CONFLICT-008",
+            runtime_fact="multi-model routing path / provider selection",
+            layer_a="core.critical_path_harness.CriticalPathHarnessRuntime",
+            layer_b=(
+                "ContinuumState / TopologyRoutePlan projection representations "
+                "in desktop_projection (the only previous path for routing evidence)"
+            ),
+            description=(
+                "Multi-model routing decisions (provider selection, fallback switches, "
+                "tier-1/tier-2 routing) were previously recorded only in "
+                "ContinuumState / TopologyRoutePlan projections, with no canonical "
+                "runtime authority equivalent to NetworkTopologyRuntime for the "
+                "model-routing domain.  This meant routing decisions could not be "
+                "inspected through OperatorSurface or canonical runtime layers."
+            ),
+            is_resolved=True,
+            resolution_note=(
+                "PR-515 adds CriticalPathHarness (Layer 15) as the canonical runtime "
+                "authority for multi-model routing path records.  OpenClawd writes "
+                "IngressHarnessRecord, RouteSelectionRecord, and ProviderSwitchRecord "
+                "to the harness ring buffer at _select_multimodal_route() so routing "
+                "decisions are canonical-runtime-inspectable.  ContinuumState remains "
+                "a model-provider routing projection but is NOT the sole path for "
+                "routing evidence.  NO_COMPETING_ROUTING_AUTHORITY_POLICY prevents "
+                "the harness from becoming a competing router.  Resolves GAP-512-009."
             ),
         ))
 

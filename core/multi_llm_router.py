@@ -582,6 +582,19 @@ ADAPTER_MAP = {
 }
 
 
+# PR-515 / GAP-512-009: MultiLLMRouter is the routing authority for
+# multi-model provider and model selection.  CriticalPathHarness (Layer 15)
+# records routing decisions so they are canonical-runtime-inspectable.
+CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED: str = (
+    "MULTI_LLM_ROUTER::CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED_V1: "
+    "core/multi_llm_router.py is the canonical routing authority for "
+    "multi-model provider selection.  PR-515 CriticalPathHarness records "
+    "routing decisions at the OpenClawd integration point so they are "
+    "operator-inspectable without competing with MultiLLMRouter authority. "
+    "Closes GAP-512-009."
+)
+
+
 class MultiLLMRouter:
     """
     多 LLM 智能路由器
