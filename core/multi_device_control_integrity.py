@@ -1352,17 +1352,22 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "canonical result state rather than only raw transport-layer "
             "registry data."
         ),
-        "is_resolved": False,
+        "is_resolved": True,
         "resolution_note": (
-            "PR-519 (partial): the multi-device runtime projection endpoint "
-            "now includes 'cross_device_chain_snapshot' and "
-            "'task_graph_snapshot' fields in the projection metadata, "
-            "populated from CrossDeviceChainSingleton.snapshot() and "
-            "TaskGraphRuntime.snapshot().  The projection body "
-            "(merged_results field) still reflects raw registry data; "
-            "a full rewrite of the projection contract to consume "
-            "canonical chain state is deferred to a future PR as per "
-            "PR-519 non-goals."
+            "PR-522: core/multi_device_projection_canonicalization.py introduces "
+            "enrich_multi_device_projection() which queries CrossDeviceChainSingleton, "
+            "TaskGraphRuntime, OperatorSurface, and MultiDeviceControlIntegrityRuntime "
+            "to produce a MultiDeviceCanonicalEnrichment.  The enrichment is embedded "
+            "in the projection metadata as 'canonical_enrichment' with a "
+            "'canonical_surfacing_state' field (full/partial/degraded/unavailable) "
+            "and 'canonical_surfacing_gaps' list so that incomplete canonical "
+            "surfacing is explicitly visible rather than hidden.  Raw "
+            "transport/session registry data remains available as lower-level "
+            "supporting input but is no longer the sole authority for the "
+            "projection.  MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED "
+            "sentinel present in core/routes/projection.py; "
+            "MULTI_DEVICE_PROJECTION_GAP008_RESOLVED sentinel importable from "
+            "core/multi_device_projection_canonicalization.py."
         ),
     },
 ]

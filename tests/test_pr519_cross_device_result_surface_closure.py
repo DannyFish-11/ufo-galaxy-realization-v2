@@ -432,11 +432,12 @@ class TestI_GapCatalog(unittest.TestCase):
         self.assertIsNotNone(g)
         self.assertIn("PR-519", g.resolution_note)
 
-    def test_I3_gap008_still_present_with_partial_note(self):
+    def test_I3_gap008_fully_resolved_by_pr522(self):
         g = self._get_gap("GAP-517-008")
         self.assertIsNotNone(g, "GAP-517-008 not found in catalog")
-        # partial resolution note mentions PR-519
-        self.assertIn("PR-519", g.resolution_note)
+        # PR-522 fully resolves GAP-517-008; the resolution note references PR-522
+        self.assertTrue(g.is_resolved, "GAP-517-008 should be resolved by PR-522")
+        self.assertIn("PR-522", g.resolution_note)
 
     def test_I4_gap007_severity_high(self):
         g = self._get_gap("GAP-517-007")
