@@ -272,6 +272,22 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception as _e:
         logger.warning("算子路由加载失败（可选）: %s", _e)
 
+    # PR-512: Runtime Closure Audit — closure gap sweep integration sentinel.
+    #         The audit module is loaded lazily here so that its import errors
+    #         never block API startup.  The sentinel asserts the audit layer is
+    #         present and machine-checkable.
+    try:
+        from core.runtime_closure_audit import (  # noqa: F401
+            RUNTIME_CLOSURE_AUDIT_AUTHORITY as _RCA_AUTHORITY,
+        )
+        RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (
+            "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_V1"
+        )
+    except ImportError:
+        RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (  # type: ignore[no-redef]
+            "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_UNAVAILABLE"
+        )
+
     # -----------------------------------------------------------------------
     # PR4: Server-Sent Events (SSE) streaming endpoint — /api/v1/stream
     # -----------------------------------------------------------------------

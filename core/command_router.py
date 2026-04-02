@@ -298,6 +298,16 @@ EXECUTION_SPINE_WRITE_INTEGRATED: str = (
     "Compat dispatch() paths emit degraded audit markers."
 )
 
+# PR-512: Runtime Closure Audit integration sentinel.
+# The closure audit layer (core/runtime_closure_audit.py) covers all
+# PR-506–511 layers including this module.  This sentinel asserts that
+# CommandRouter participates in the PR-512 closure audit sweep.
+RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (
+    "COMMAND_ROUTER::RUNTIME_CLOSURE_AUDIT_INTEGRATED_V1: "
+    "CommandRouter.route_envelope() is covered by the PR-512 closure audit. "
+    "Sentinel verified by RuntimeClosureAudit.verify_all_layers()."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
