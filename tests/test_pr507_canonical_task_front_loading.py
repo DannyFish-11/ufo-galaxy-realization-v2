@@ -221,8 +221,7 @@ def test_F4_api_dict_canonical_task_trace_id_set():
         {"tool_name": "open_app", "args": {"app": "Camera"}},
         origin=TaskOrigin.API_REQUEST,
     )
-    assert task.identity.trace_id
-    assert "trace_" in task.identity.trace_id or len(task.identity.trace_id) > 0
+    assert task.identity.trace_id and len(task.identity.trace_id) > 0
 
 
 # ===========================================================================
@@ -258,8 +257,9 @@ def test_G3_orchestrator_task_targets_propagated():
         },
         origin=TaskOrigin.ORCHESTRATOR_TASK,
     )
-    # targets may or may not be propagated depending on adapter internals
+    # Verify the adapter always produces a CanonicalTask regardless of targets.
     assert isinstance(task, CanonicalTask)
+    assert task.identity.task_id
 
 
 # ===========================================================================

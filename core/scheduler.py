@@ -736,7 +736,8 @@ CROSS-DEVICE:
             )
         except Exception as _ct_err:
             logger.debug(
-                "_exec_send_to_device: CanonicalTask front-load skipped — %s", _ct_err
+                "_exec_send_to_device: CanonicalTask front-load unavailable "
+                "(graceful degradation — continuing with existing ids): %s", _ct_err
             )
 
         # PR-3: Record ingress in execution spine log.

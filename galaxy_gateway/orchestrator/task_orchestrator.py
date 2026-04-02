@@ -181,8 +181,8 @@ class TaskOrchestrator:
         """
         # PR-507: Front-load CanonicalTask creation — establish task ontology
         # before constructing Task or TaskEnvelope objects.
-        _canonical_task_id: Optional[str] = None
-        _canonical_trace_id: Optional[str] = None
+        canonical_task_id: Optional[str] = None
+        canonical_trace_id: Optional[str] = None
         try:
             from core.task_adapter import adapt_to_canonical_task
             from core.canonical_task import TaskOrigin
@@ -195,20 +195,21 @@ class TaskOrchestrator:
                 },
                 origin=TaskOrigin.ORCHESTRATOR_TASK,
             )
-            _canonical_task_id = _canonical.identity.task_id
-            _canonical_trace_id = _canonical.identity.trace_id
+            canonical_task_id = _canonical.identity.task_id
+            canonical_trace_id = _canonical.identity.trace_id
             logger.debug(
                 "TaskOrchestrator.submit_task: CanonicalTask front-loaded "
                 "task_id=%s trace_id=%s",
-                _canonical_task_id, _canonical_trace_id,
+                canonical_task_id, canonical_trace_id,
             )
         except Exception as _ct_err:
             logger.debug(
-                "TaskOrchestrator.submit_task: CanonicalTask front-load skipped — %s",
+                "TaskOrchestrator.submit_task: CanonicalTask front-load unavailable "
+                "(graceful degradation — envelope will be built directly): %s",
                 _ct_err,
             )
 
-        task_id = _canonical_task_id or str(uuid.uuid4())
+        task_id = canonical_task_id or str(uuid.uuid4())
         task = Task(
             task_id=task_id,
             user_request=user_request,
@@ -231,8 +232,8 @@ class TaskOrchestrator:
             }
             if openclawd_decision:
                 _meta["openclawd_decision"] = openclawd_decision
-            if _canonical_trace_id:
-                _meta["canonical_trace_id"] = _canonical_trace_id
+            if canonical_trace_id:
+                _meta["canonical_trace_id"] = canonical_trace_id
             _envelope = _TaskEnvelope(
                 task_id=task_id,
                 source="task_orchestrator",

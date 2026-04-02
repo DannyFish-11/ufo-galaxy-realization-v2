@@ -33,6 +33,7 @@ Routes:
 import logging
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -61,8 +62,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """创建任务"""
         # PR-507: Front-load canonical task creation — CanonicalTask is the
         # primary ontology object; task_id/trace_id flow from its identity.
-        task_id: str = ""
-        trace_id: str = ""
+        task_id: Optional[str] = None
+        trace_id: Optional[str] = None
         try:
             from core.task_adapter import adapt_to_canonical_task
             from core.canonical_task import TaskOrigin
@@ -84,7 +85,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         except Exception as _ct_err:
             logger.debug("create_task: CanonicalTask front-load skipped — %s", _ct_err)
+
+        if task_id is None:
             task_id = str(uuid.uuid4())
+        if trace_id is None:
             trace_id = f"trace_{uuid.uuid4().hex[:12]}"
 
         task = {
