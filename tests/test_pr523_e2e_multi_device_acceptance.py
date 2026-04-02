@@ -384,7 +384,6 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
             entry_point="core.routes.devices",
         )
         self.assertTrue(record.is_canonical)
-        self.assertFalse(record.is_canonical is False)  # i.e., is_canonical is True means not legacy
 
     def test_D2_dispatch_authority_record_cross_device_canonical(self):
         """D2. Cross-device dispatch via CommandRouter is canonical."""
@@ -824,7 +823,6 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
             entry_kind=EntryUnificationKind.LEGACY_COORDINATOR_BYPASS,
             entry_point="legacy.handler",
         )
-        self.assertFalse(record.is_canonical)
         self.assertFalse(record.is_canonical)
 
 
