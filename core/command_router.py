@@ -258,6 +258,13 @@ COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED: str = (
     "and records every dispatch decision for fabric observability."
 )
 
+CANONICAL_TASK_SPINE_INTEGRATED: str = (
+    "COMMAND_ROUTER::CANONICAL_TASK_SPINE_V1: CommandRouter.route_envelope() "
+    "is the sole system-level dispatch spine for CanonicalTask→TaskEnvelope→"
+    "transport execution. All legacy dispatch shortcuts are registered in "
+    "core.legacy_dispatch_registry."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
