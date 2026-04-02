@@ -80,16 +80,18 @@ class TestIsOrchestrationReadyHelper(unittest.TestCase):
         ):
             assert rt._is_orchestration_ready("dev_online_not_eligible") is False
 
-    # 3 — participation layer unavailable → degrade gracefully (allow)
+    # 3 — participation layer unavailable → deny-by-default (PR-520 / GAP-517-005)
     def test_degrades_gracefully_when_participation_unavailable(self):
         rt = self._make_runtime()
         with patch(
             "core.device_participation.is_device_orchestration_ready",
             side_effect=ImportError("participation layer not loaded"),
         ):
-            # Should not raise; returns True (permissive fallback)
+            # PR-520 / GAP-517-005: deny-by-default — returns False when the
+            # participation gate is unreachable so devices cannot silently
+            # bypass the admissibility chain.
             result = rt._is_orchestration_ready("dev_any")
-        assert result is True
+        assert result is False
 
     # 4 — empty device_id returns False without hitting the participation layer
     def test_empty_device_id_returns_false(self):

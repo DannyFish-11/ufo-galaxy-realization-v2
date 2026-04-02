@@ -1202,8 +1202,18 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "attach it to the execution context and include it in the "
             "result envelope / audit record."
         ),
-        "is_resolved": False,
-        "resolution_note": "",
+        "is_resolved": True,
+        "resolution_note": (
+            "Resolved in PR-520. DeviceRouter._dispatch_cross_device_task() "
+            "and CrossDeviceCoordinator.execute_cross_device_task() now call "
+            "resolve_formation() from core.device_formation at the start of "
+            "every cross-device execution to produce an explicit canonical "
+            "DeviceFormationGroup.  The group is attached to the result payload "
+            "under the 'formation' key and recorded as a FormationTruthRecord "
+            "in the integrity runtime.  Sentinels: "
+            "DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED and "
+            "CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED."
+        ),
     },
     {
         "gap_id": "GAP-517-005",
@@ -1226,8 +1236,15 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "participation-layer unavailability.  Log at WARNING level so "
             "operators can see when the gate is not functioning."
         ),
-        "is_resolved": False,
-        "resolution_note": "",
+        "is_resolved": True,
+        "resolution_note": (
+            "Resolved in PR-520. ConstellationRuntime._is_orchestration_ready() "
+            "now returns False (deny-by-default) when the participation layer "
+            "raises or is not importable, and emits a structured WARNING log "
+            "with device_id and error details so operators can identify when the "
+            "gate is not functioning.  Sentinel: "
+            "CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT."
+        ),
     },
     # -----------------------------------------------------------------------
     # Audit area 4: Control semantics

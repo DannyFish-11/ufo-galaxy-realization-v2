@@ -58,6 +58,23 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ConstellationRuntime")
 
+# ---------------------------------------------------------------------------
+# PR-520 / GAP-517-005: deny-by-default orchestration gate sentinel
+#
+# _is_orchestration_ready() no longer returns True when the participation
+# layer is unavailable.  Instead it returns False and emits a structured
+# WARNING so operators can identify when the participation gate is not
+# reachable.  This closes the permissive fail-open behaviour identified in
+# GAP-517-005 and aligns with the intended admissibility chain:
+#   readiness → participation → target validation → formation.
+# ---------------------------------------------------------------------------
+CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT = (
+    "CONSTELLATION_RUNTIME::ORCHESTRATION_GATE_DENY_BY_DEFAULT_V1: "
+    "_is_orchestration_ready() returns False (deny-by-default) when the "
+    "participation layer is unavailable, removing the permissive True fallback "
+    "that existed prior to PR-520.  Resolves GAP-517-005."
+)
+
 
 # ---------------------------------------------------------------------------
 # ConstellationRuntime
@@ -255,10 +272,16 @@ class ConstellationRuntime:
         """Return True if *device_id* passes the canonical participation gate.
 
         Uses :func:`core.device_participation.is_device_orchestration_ready` as
-        the sole source of truth for orchestration eligibility.  Degrades
-        gracefully — returns ``True`` (permissive fallback) when the
-        participation layer is unavailable so that existing behaviour is
-        preserved when the subsystem is not initialised.
+        the sole source of truth for orchestration eligibility.
+
+        PR-520 / GAP-517-005: deny-by-default when participation layer unavailable
+        ---------------------------------------------------------------------------
+        When the participation layer raises or is not importable the method now
+        returns ``False`` (deny-by-default) and emits a structured ``WARNING``
+        log.  Devices that cannot be assessed through the canonical admissibility
+        chain are excluded from constellation orchestration rather than admitted
+        silently.  This prevents formation truth drift caused by the permissive
+        fallback that was in place previously.
         """
         if not device_id:
             # An empty device ID cannot be assessed; reject immediately to
@@ -279,14 +302,17 @@ class ConstellationRuntime:
                 )
             return eligible
         except Exception as exc:
-            logger.debug(
-                "orchestration-gate | participation layer unavailable for %s: %s — allowing",
+            # PR-520 / GAP-517-005: deny-by-default — do NOT allow devices
+            # when the participation gate is unavailable.  Emit a structured
+            # WARNING so operators can see when the gate is not functioning.
+            logger.warning(
+                "orchestration-gate | EXCLUDED (participation layer unavailable) "
+                "| device_id=%s error=%s "
+                "| GAP-517-005 resolved: deny-by-default when gate is unreachable",
                 device_id,
                 exc,
             )
-            # Degrade gracefully: don't block candidate selection if the
-            # participation subsystem is unavailable.
-            return True
+            return False
 
     # ------------------------------------------------------------------
     # Public entry point

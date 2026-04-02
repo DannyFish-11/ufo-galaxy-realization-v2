@@ -152,31 +152,40 @@ admissibility chain (Layers 1–3).
 | ✅ | `core/target_device_validator.py` | Layer 3 | Per-device validation |
 | ✅ | `core/cross_device_candidates.py` | Layer 6 | Candidate resolution (Layers 1+2+4) |
 | ✅ | `core/device_formation/` | PR-17 | Formation group + resolver |
-| ⚠️ | `galaxy_gateway/device_router.py` | **GAP** | No `DeviceFormationGroup` produced before dispatch — **GAP-517-004** |
-| ⚠️ | `core/constellation_runtime.py` | **GAP** | Permissive fallback `True` when participation unavailable — **GAP-517-005** |
+| ✅ | `galaxy_gateway/device_router.py` | **Resolved** | `resolve_formation()` called before dispatch — **GAP-517-004 closed (PR-520)** |
+| ✅ | `core/constellation_runtime.py` | **Resolved** | Deny-by-default fallback when participation unavailable — **GAP-517-005 closed (PR-520)** |
 
 ### Open Gaps
 
-#### GAP-517-004 · MEDIUM
+#### GAP-517-004 · MEDIUM · ✅ RESOLVED (PR-520)
 **Modules**: `galaxy_gateway/device_router.py`, `galaxy_gateway/cross_device_coordinator.py`  
 **Description**: Cross-device execution proceeds without producing or attaching
 a `DeviceFormationGroup`, making formation truth implicit and
 non-inspectable.
 
-**Recommended action**: At the start of cross-device execution, call
-`resolve_formation()` from `core.device_formation` to produce a
-`DeviceFormationGroup`, then attach it to the execution context and include
-it in the result envelope / audit record.
+**Resolution (PR-520)**: `DeviceRouter._dispatch_cross_device_task()` and
+`CrossDeviceCoordinator.execute_cross_device_task()` now call
+`resolve_formation()` from `core.device_formation` at the start of every
+cross-device dispatch / execution.  The resolved `DeviceFormationGroup`
+captures source device, primary execution device, all participating members,
+and their role assignments.  A `FormationTruthRecord` is emitted to the
+integrity runtime for audit visibility.  The formation descriptor is attached
+to the result payload under the `"formation"` key.  Sentinels:
+`DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED` and
+`CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED`.
 
-#### GAP-517-005 · MEDIUM
+#### GAP-517-005 · MEDIUM · ✅ RESOLVED (PR-520)
 **Module**: `core/constellation_runtime.py`  
 **Description**: `ConstellationRuntime._is_orchestration_ready()` returns
 `True` (permissive fallback) when `device_participation` is unavailable,
 allowing devices that haven't passed the admissibility chain to enter
 constellation orchestration.
 
-**Recommended action**: Change the fallback to `False` (deny-by-default) and
-emit a structured `WARNING` log when the participation gate is unavailable.
+**Resolution (PR-520)**: The fallback is now `False` (deny-by-default).
+When the participation layer raises or is not importable the method returns
+`False` and emits a structured `WARNING` log including `device_id` and the
+error details so operators can identify when the gate is not functioning.
+Sentinel: `CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT`.
 
 ---
 
@@ -275,8 +284,8 @@ consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 | GAP-517-001 | entry_unification | HIGH | Open |
 | GAP-517-002 | entry_unification | MEDIUM | Open |
 | GAP-517-003 | dispatch_authority | HIGH | Open |
-| GAP-517-004 | formation_truth | MEDIUM | Open |
-| GAP-517-005 | formation_truth | MEDIUM | Open |
+| GAP-517-004 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
+| GAP-517-005 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
 | GAP-517-006 | control_semantics | MEDIUM | Open |
 | GAP-517-007 | result_surface | HIGH | ✅ Resolved (PR-519) |
 | GAP-517-008 | result_surface | MEDIUM | ⚠️ Partial (PR-519) |
