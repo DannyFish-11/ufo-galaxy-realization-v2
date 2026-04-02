@@ -38,6 +38,22 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.Routes.Projection")
 
+# PR-511: Projection Surface Bridge integration sentinel.
+# The bridge module is imported lazily inside endpoints to preserve graceful
+# degradation if the bridge layer is unavailable.  This sentinel asserts the
+# integration point is present and machine-checkable.
+try:
+    from core.projection_surface_bridge import (  # noqa: F401
+        PROJECTION_SURFACE_BRIDGE_AUTHORITY as _PSB_AUTHORITY,
+    )
+    PROJECTION_SURFACE_BRIDGE_INTEGRATED: str = (
+        "PROJECTION_ROUTES::PROJECTION_SURFACE_BRIDGE_INTEGRATED_V1"
+    )
+except ImportError:  # pragma: no cover
+    PROJECTION_SURFACE_BRIDGE_INTEGRATED: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::PROJECTION_SURFACE_BRIDGE_INTEGRATED_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
