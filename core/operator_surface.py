@@ -726,58 +726,92 @@ class OperatorSurface:
     def inspect_lineage(self, task_id: str) -> Optional[LineageInspection]:
         """Return a read-only :class:`LineageInspection` for *task_id*.
 
-        Returns ``None`` if the task is not known.
+        PR-508: Falls back to TaskGraphRuntime-backed lineage when the task is
+        not found in CanonicalTaskRuntime, so that lineage is graph-backed for
+        all production tasks regardless of which path registered them.
+
+        Returns ``None`` if the task is not known to any runtime.
         """
+        retry_chain: List[str] = []
+        fallback_chain: List[str] = []
+        timeline: List[Dict[str, Any]] = []
+
+        # ── Attempt to pull retry/fallback lineage from TaskGraphRuntime ──
+        tgr_node = None
+        try:
+            from core.task_graph_runtime import get_task_graph_runtime
+            tgr = get_task_graph_runtime()
+            retry_chain = [
+                r.retry_task_id for r in tgr.get_retry_lineage(task_id)
+            ]
+            fallback_chain = [
+                fb.fallback_task_id for fb in tgr.get_fallback_lineage(task_id)
+            ]
+            tgr_node = tgr.get_node_by_task_id(task_id)
+        except Exception:
+            pass
+
+        # ── Try canonical task for rich timeline/ancestry data ────────────
         try:
             from core.canonical_task import get_canonical_task_runtime
             runtime = get_canonical_task_runtime()
             task = runtime.get_by_task_id(task_id)
-            if task is None:
-                return None
+            if task is not None:
+                # Build timeline from task timestamps
+                for label, ts_val in [
+                    ("created", task.created_at),
+                    ("admitted", task.admitted_at),
+                    ("planned", getattr(task, "planned_at", None)),
+                    ("routed", task.routed_at),
+                    ("dispatched", task.dispatched_at),
+                    ("running", getattr(task, "running_at", None)),
+                    ("completed", task.completed_at),
+                ]:
+                    if ts_val is not None:
+                        timeline.append({"event": label, "ts": ts_val})
+                timeline.sort(key=lambda e: e["ts"])
 
-            retry_chain: List[str] = []
-            fallback_chain: List[str] = []
-            timeline: List[Dict[str, Any]] = []
+                return LineageInspection(
+                    task_id=task.identity.task_id,
+                    trace_id=task.identity.trace_id,
+                    root_task_id=task.identity.root_task_id or task.identity.task_id,
+                    parent_task_id=task.identity.parent_task_id,
+                    children=list(task.graph.children),
+                    retry_chain=retry_chain,
+                    fallback_chain=fallback_chain,
+                    timeline=timeline,
+                )
+        except Exception:
+            pass
 
-            try:
-                from core.task_graph_runtime import get_task_graph_runtime
-                tgr = get_task_graph_runtime()
-                retry_chain = [
-                    r.retry_task_id for r in tgr.get_retry_lineage(task_id)
-                ]
-                fallback_chain = [
-                    fb.fallback_task_id for fb in tgr.get_fallback_lineage(task_id)
-                ]
-            except Exception:
-                pass
-
-            # Build timeline from task timestamps
+        # ── PR-508: Fall back to TaskGraphRuntime-only lineage ────────────
+        if tgr_node is not None:
+            # Build a minimal timeline from graph node timestamps
             for label, ts_val in [
-                ("created", task.created_at),
-                ("admitted", task.admitted_at),
-                ("planned", getattr(task, "planned_at", None)),
-                ("routed", task.routed_at),
-                ("dispatched", task.dispatched_at),
-                ("running", getattr(task, "running_at", None)),
-                ("completed", task.completed_at),
+                ("queued", tgr_node.queued_at),
+                ("dispatch", tgr_node.dispatch_at),
+                ("running", tgr_node.running_at),
+                ("result", tgr_node.result_at),
+                ("completed", tgr_node.completed_at),
             ]:
                 if ts_val is not None:
                     timeline.append({"event": label, "ts": ts_val})
             timeline.sort(key=lambda e: e["ts"])
 
             return LineageInspection(
-                task_id=task.identity.task_id,
-                trace_id=task.identity.trace_id,
-                root_task_id=task.identity.root_task_id or task.identity.task_id,
-                parent_task_id=task.identity.parent_task_id,
-                children=list(task.graph.children),
+                task_id=task_id,
+                trace_id=tgr_node.trace_id,
+                root_task_id=task_id,
+                parent_task_id="",
+                children=[],
                 retry_chain=retry_chain,
                 fallback_chain=fallback_chain,
                 timeline=timeline,
+                _source="task_graph_runtime",
             )
-        except Exception as exc:
-            logger.warning("inspect_lineage(%s) failed: %s", task_id, exc)
-            return None
+
+        logger.warning("inspect_lineage(%s): task not found in any runtime", task_id)
+        return None
 
     # ── Operator Snapshot ────────────────────────────────────────────────
 

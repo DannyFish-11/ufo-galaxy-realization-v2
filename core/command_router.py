@@ -1038,11 +1038,16 @@ class CommandRouter:
             from core.task_graph_runtime import (
                 get_task_graph_runtime,
                 WorkflowContributorKind,
+                GraphNodeState as _GNS,
             )
-            get_task_graph_runtime().register_envelope(
+            _tgr = get_task_graph_runtime()
+            _tgr.register_envelope(
                 envelope,
                 contributor=WorkflowContributorKind.COMMAND_ROUTER,
             )
+            # ── PR-508: Lifecycle transitions: queued → admitted → routed ────
+            _tgr.transition(envelope.task_id, _GNS.ADMITTED)
+            _tgr.transition(envelope.task_id, _GNS.ROUTED)
         except Exception as _tgr_reg_exc:
             logger.debug(
                 "route_envelope: TaskGraphRuntime.register_envelope skipped: %s",
@@ -1655,6 +1660,30 @@ class CommandRouter:
                         )
                     except Exception:
                         pass
+                    # ── PR-508: Register fallback in TaskGraphRuntime ─────────
+                    try:
+                        from core.task_graph_runtime import (
+                            get_task_graph_runtime as _get_tgr_fb,
+                            WorkflowContributorKind as _WCK_fb,
+                            GraphNode as _GN_fb,
+                        )
+                        _fb_task_id = f"{task_id}:cb_fallback:{attempt + 1}"
+                        _tgr_fb = _get_tgr_fb()
+                        _fb_stub = _GN_fb(
+                            task_id=_fb_task_id,
+                            contributor=_WCK_fb.COMMAND_ROUTER,
+                            device_id=next_dev or "",
+                            tool_name=command or "",
+                        )
+                        _tgr_fb.register_node(_fb_stub)
+                        _tgr_fb.register_fallback(
+                            primary_task_id=task_id,
+                            fallback_task_id=_fb_task_id,
+                            reason="circuit_open_or_quarantined",
+                            contributor=_WCK_fb.COMMAND_ROUTER,
+                        )
+                    except Exception:
+                        pass
                     current_device = next_dev
                     attempt += 1
                     continue
@@ -1677,6 +1706,17 @@ class CommandRouter:
 
             # ── Delegate to inner dispatch helper ───────────────────────
             attempt_trace = {**trace_base, "device_id": current_device}
+            # ── PR-508: Lifecycle transitions: routed → dispatch → running ──
+            try:
+                from core.task_graph_runtime import (
+                    get_task_graph_runtime as _get_tgr_exec,
+                    GraphNodeState as _GNS_exec,
+                )
+                _tgr_exec = _get_tgr_exec()
+                _tgr_exec.transition(task_id, _GNS_exec.DISPATCH)
+                _tgr_exec.transition(task_id, _GNS_exec.RUNNING)
+            except Exception:
+                pass
             result = await self._dispatch_to_device(
                 current_device, command, payload, command_id, task_id,
                 timeout, attempt_trace, trace_id, t0,
@@ -1817,6 +1857,33 @@ class CommandRouter:
                     retry_task_id=f"{task_id}:retry:{attempt + 1}",
                     attempt_number=attempt + 1,
                     reason=result.get("error_code", "retryable_failure") or "retryable_failure",
+                )
+            except Exception:
+                pass
+
+            # ── PR-508: Register retry in TaskGraphRuntime ────────────────────
+            try:
+                from core.task_graph_runtime import (
+                    get_task_graph_runtime as _get_tgr_retry,
+                    WorkflowContributorKind as _WCK_retry,
+                )
+                _retry_task_id = f"{task_id}:retry:{attempt + 1}"
+                _tgr_retry = _get_tgr_retry()
+                # Register retry node (stub) so edge can be wired
+                from core.task_graph_runtime import GraphNode as _GN_retry, GraphNodeState as _GNS_retry
+                _retry_stub = _GN_retry(
+                    task_id=_retry_task_id,
+                    contributor=_WCK_retry.COMMAND_ROUTER,
+                    device_id=next_dev or "",
+                    tool_name=command or "",
+                )
+                _tgr_retry.register_node(_retry_stub)
+                _tgr_retry.register_retry(
+                    original_task_id=task_id,
+                    retry_task_id=_retry_task_id,
+                    attempt_number=attempt + 1,
+                    reason=result.get("error_code", "retryable_failure") or "retryable_failure",
+                    contributor=_WCK_retry.COMMAND_ROUTER,
                 )
             except Exception:
                 pass
