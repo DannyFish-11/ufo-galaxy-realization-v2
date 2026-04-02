@@ -53,6 +53,20 @@ GALAXY_ORCHESTRATOR_FACADE_AUTHORITY: str = "GALAXY_ORCHESTRATOR_FACADE_V1"
 #: ``core.task_graph_runtime.project_workflow_to_graph``.
 GALAXY_ORCHESTRATOR_GRAPH_CONTRIBUTOR: str = "GALAXY_ORCHESTRATOR_GRAPH_CONTRIBUTOR_V1"
 
+# ---------------------------------------------------------------------------
+# PR-A: Canonical Task Spine — facade demotion sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that GalaxyOrchestrator is a facade/planner helper under the
+#: PR-A canonical execution spine.  All system-level dispatch MUST go through
+#: CanonicalTask → TaskEnvelope → CommandRouter.route_envelope().
+#: This module is registered in core.legacy_dispatch_registry as FACADE_ONLY.
+GALAXY_ORCHESTRATOR_CANONICAL_TASK_FACADE: str = (
+    "GALAXY_ORCHESTRATOR::CANONICAL_TASK_FACADE_V1: "
+    "This module is a planner/facade helper only. "
+    "System-level dispatch authority belongs to CommandRouter.route_envelope()."
+)
+
 
 class TaskStatus(Enum):
     """任务状态枚举"""
