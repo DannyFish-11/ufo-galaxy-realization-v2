@@ -572,14 +572,57 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         command: str
         context: Dict = Field(default_factory=dict)
 
+    # PR-518/GAP-517-001: canonical entry sentinel — this route now routes
+    # through CommandRouter.route_envelope() instead of calling
+    # CrossDeviceCoordinator.execute_cross_device_task() directly.
+    CROSS_DEVICE_REST_INGRESS_CANONICAL = (
+        "DEVICES_ROUTE::CROSS_DEVICE_CANONICAL_INGRESS_V1: "
+        "/api/v1/devices/cross-device normalises requests to TaskEnvelope "
+        "and routes through CommandRouter.route_envelope(). "
+        "Resolves GAP-517-001."
+    )
+
     @router.post("/api/v1/devices/cross-device")
     async def cross_device_task(req: CrossDeviceRequest):
-        """跨设备协同任务（剪贴板同步、文件传输、媒体控制等）"""
+        """跨设备协同任务（剪贴板同步、文件传输、媒体控制等）
+
+        PR-518/GAP-517-001: Requests are normalised to a canonical TaskEnvelope
+        and routed through CommandRouter.route_envelope() instead of calling
+        CrossDeviceCoordinator directly.  CommandRouter is the sole canonical
+        cross-device dispatcher; CrossDeviceCoordinator and DeviceRouter act as
+        internal substrate plumbing only.
+        """
         try:
-            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
-            result = await cross_device_coordinator.execute_cross_device_task(
-                req.command, req.context
+            import uuid as _uuid
+            from core.schemas.task_envelope import TaskEnvelope
+            from core.command_router import get_command_router
+
+            _ctx = req.context or {}
+            _task_id = _ctx.get("task_id") or str(_uuid.uuid4())
+            _trace_id = _ctx.get("trace_id") or str(_uuid.uuid4())
+            _targets = _ctx.get("targets") or []
+            if isinstance(_targets, str):
+                _targets = [_targets] if _targets else []
+
+            # Build metadata: carry cross_device flag plus any scalar context
+            # fields that downstream substrate can consume.
+            _meta: Dict = {"cross_device": "true"}
+            for _k, _v in _ctx.items():
+                if _k not in ("task_id", "trace_id", "targets") and isinstance(_v, (str, int, float, bool)):
+                    _meta[_k] = str(_v)
+
+            envelope = TaskEnvelope(
+                task_id=_task_id,
+                trace_id=_trace_id,
+                source="api.cross_device",
+                targets=_targets,
+                tool_name=req.command,
+                args=_ctx,
+                metadata=_meta,
             )
+
+            cmd_router = get_command_router()
+            result = await cmd_router.route_envelope(envelope)
             return JSONResponse(result)
         except Exception as e:
             logger.error(f"跨设备任务失败: {e}")

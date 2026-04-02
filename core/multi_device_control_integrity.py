@@ -1096,8 +1096,16 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "directly.  The coordinator remains valid as internal substrate "
             "invoked by CommandRouter; it must not be a primary entry target."
         ),
-        "is_resolved": False,
-        "resolution_note": "",
+        "is_resolved": True,
+        "resolution_note": (
+            "PR-518: /api/v1/devices/cross-device now creates a TaskEnvelope "
+            "with metadata['cross_device']='true' and routes through "
+            "CommandRouter.route_envelope().  CommandRouter detects cross_device "
+            "envelopes and delegates to DeviceRouter.route_task() substrate via "
+            "_route_cross_device_envelope().  Sentinel: "
+            "CROSS_DEVICE_REST_INGRESS_CANONICAL in core/routes/devices.py and "
+            "COMMAND_ROUTER_CROSS_DEVICE_CANONICAL_PATH in core/command_router.py."
+        ),
     },
     {
         "gap_id": "GAP-517-002",
@@ -1121,7 +1129,11 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "as raw dicts."
         ),
         "is_resolved": False,
-        "resolution_note": "",
+        "resolution_note": (
+            "Deferred: opportunistic closure noted in PR-518 but not in scope "
+            "for this PR.  Addressed in a follow-up PR dedicated to parallel "
+            "command canonicalisation."
+        ),
     },
     # -----------------------------------------------------------------------
     # Audit area 2: Dispatch authority
@@ -1150,8 +1162,19 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "through CommandRouter.  Gate the canonical path so that direct "
             "callers log a LEGACY_DISPATCH warning."
         ),
-        "is_resolved": False,
-        "resolution_note": "",
+        "is_resolved": True,
+        "resolution_note": (
+            "PR-518: Both DeviceRouter._dispatch_cross_device_task() and "
+            "CrossDeviceCoordinator.execute_cross_device_task() now accept a "
+            "keyword-only _substrate_caller parameter.  When called without a "
+            "recognised substrate caller, they emit a structured "
+            "LEGACY_DISPATCH warning and record a DispatchAuthorityRecord "
+            "integrity event (fail-open).  Internal callers (DeviceRouter "
+            "calling the coordinator; route_task calling _dispatch_cross_device_task) "
+            "pass _substrate_caller='device_router.route_task'.  "
+            "Sentinels: CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY and "
+            "DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY."
+        ),
     },
     # -----------------------------------------------------------------------
     # Audit area 3: Formation truth
