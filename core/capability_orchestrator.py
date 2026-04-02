@@ -25,6 +25,15 @@ Galaxy - 能力编排器 (Capability Orchestrator)
     a parallel canonical capability truth source.  It will not see capabilities
     registered through ``CapabilityBus`` unless explicitly bridged.
 
+PR-7 governance
+---------------
+This module is a **capability orchestrator facade/adapter only**.
+It must NOT redefine the system execution spine or act as a canonical
+capability authority.  The canonical authority is ``CapabilityBus``.
+
+Import :data:`CAPABILITY_ORCHESTRATOR_FACADE_ONLY` to assert that this
+governance constraint is present and active.
+
 统一管理 MCP 工具和 Skill（兼容层），提供智能的能力发现和调用。
 
 功能（兼容层保留）：
@@ -52,6 +61,19 @@ from pathlib import Path
 from enum import Enum
 
 logger = logging.getLogger("Galaxy.Capability")
+
+# ---------------------------------------------------------------------------
+# PR-7 governance sentinel
+# ---------------------------------------------------------------------------
+
+#: PR-7 governance sentinel — this capability orchestrator is a compatibility
+#: facade/adapter ONLY.  It does NOT define the canonical capability authority
+#: or the system execution spine.  The canonical capability authority is
+#: ``core.capability_bus.CapabilityBus``.
+CAPABILITY_ORCHESTRATOR_FACADE_ONLY: str = (
+    "CAPABILITY_ORCHESTRATOR_FACADE_ONLY_V1"
+    " — compatibility facade; no canonical capability authority"
+)
 
 
 # ============================================================================

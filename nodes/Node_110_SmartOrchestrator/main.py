@@ -5,7 +5,25 @@ Node 110 - SmartOrchestrator (智能编排节点)
 若 LLM 提供商（Node_01/Node_04 等）未就绪，节点以降级（mock）模式启动：
 任务编排、工作流管理功能仍可用，只是无法向 LLM 路由发送推理请求。
 健康检查始终返回 HTTP 200。
+
+PR-7 governance
+---------------
+This module is a **node-level orchestrator facade/adapter only**.
+It must NOT redefine the system execution spine or act as a canonical
+execution authority.  All system-level execution passes through
+``OpenClawd → CommandRouter → TaskGraphRuntime``.
+
+Import :data:`SMART_ORCHESTRATOR_NODE_FACADE_ONLY` to assert that this
+governance constraint is present and active.
 """
+
+#: PR-7 governance sentinel — this node-level orchestrator is an
+#: adapter/facade/local-coordinator ONLY.
+#: It does NOT define the system execution spine or hold canonical authority.
+SMART_ORCHESTRATOR_NODE_FACADE_ONLY: str = (
+    "SMART_ORCHESTRATOR_NODE_FACADE_ONLY_V1"
+    " — local coordinator adapter; no system execution authority"
+)
 # 确保项目根目录在 sys.path 最前面，避免本地 core/ 子目录遮蔽项目级 core 包
 import sys as _sys, os as _os
 _project_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
