@@ -289,42 +289,72 @@ consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 
 | Gap ID | Area | Severity | Status |
 |--------|------|----------|--------|
-| GAP-517-001 | entry_unification | HIGH | Open |
-| GAP-517-002 | entry_unification | MEDIUM | Open |
-| GAP-517-003 | dispatch_authority | HIGH | Open |
+| GAP-517-001 | entry_unification | HIGH | ✅ **Resolved (PR-518)** |
+| GAP-517-002 | entry_unification | MEDIUM | ⚠️ **Open (deferred — see PR-523)** |
+| GAP-517-003 | dispatch_authority | HIGH | ✅ **Resolved (PR-518)** |
 | GAP-517-004 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
 | GAP-517-005 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
 | GAP-517-006 | control_semantics | MEDIUM | ✅ Resolved (PR-521) |
 | GAP-517-007 | result_surface | HIGH | ✅ Resolved (PR-519) |
-| GAP-517-008 | result_surface | MEDIUM | ⚠️ Partial (PR-519) |
+| GAP-517-008 | result_surface | MEDIUM | ✅ **Resolved (PR-522)** |
 
-**Remaining high severity gaps**: GAP-517-001, GAP-517-003 (closed in PR-518)
+**Remaining high severity gaps after PR-523 acceptance pass**: None.  
+**Open gaps after PR-523 acceptance pass**: 1 (GAP-517-002, MEDIUM severity, explicitly deferred).
+
+---
+
+## PR-523 Integrated Acceptance Closure Accounting
+
+> This section was added by PR-523 after the end-to-end acceptance and
+> verification pass.
+
+### What PR-523 verifies
+
+PR-523 established the end-to-end acceptance and verification layer that
+proves the post-PR-517 multi-device control architecture now behaves
+coherently as a whole.  The following closure accounting confirms the state
+of each gap after PR-518 through PR-522:
+
+| Gap ID | Closed by | Resolution summary |
+|--------|-----------|-------------------|
+| GAP-517-001 | **PR-518** | `/api/v1/devices/cross-device` now normalises to `TaskEnvelope` and dispatches through `CommandRouter.route_envelope()`.  Sentinel: `CROSS_DEVICE_REST_INGRESS_CANONICAL`. |
+| GAP-517-002 | **Deferred** | `/api/v1/devices/parallel` still fans out without canonical admission.  Explicitly documented as open; not hidden.  Tracked in `_RESIDUAL_GAPS` with `is_resolved=False`. |
+| GAP-517-003 | **PR-518** | `CrossDeviceCoordinator` and `DeviceRouter` are now substrate-only; `CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY` and `DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY` sentinels enforce the boundary. |
+| GAP-517-004 | **PR-520** | `DeviceFormationGroup` is now resolved and attached at cross-device execution entry.  Sentinel: `DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED`. |
+| GAP-517-005 | **PR-520** | `ConstellationRuntime._is_orchestration_ready()` now returns `False` (deny-by-default) when participation layer is unavailable.  Sentinel: `CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT`. |
+| GAP-517-006 | **PR-521** | `source_device_id` is explicitly extracted and propagated in `DeviceRouter.route_task()` and `dispatch_task()`.  Sentinel: `DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION`. |
+| GAP-517-007 | **PR-519** | `surface_cross_device_result()` is the single canonical exit point; updates `CrossDeviceChainSingleton`, `TaskGraphRuntime`, `ReplayFoundation`, and `OperatorSurface`.  Sentinel: `CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED`. |
+| GAP-517-008 | **PR-522** | `enrich_multi_device_projection()` consumes `CrossDeviceChainSingleton`, `TaskGraphRuntime`, `OperatorSurface`, and `MultiDeviceControlIntegrityRuntime`.  Sentinel: `MULTI_DEVICE_PROJECTION_GAP008_RESOLVED`. |
+
+### Verification artifacts
+
+- **Test harness**: `tests/test_pr523_e2e_multi_device_acceptance.py` — 99 tests, all passing.
+- **Acceptance matrix**: `docs/MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md`
+- **Closure accounting sentinel**: `PR523_RESIDUAL_CLOSURE_ACCOUNTING` in `core/multi_device_control_integrity.py`
+- **Coverage sentinel**: `MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE` in `core/multi_device_control_integrity.py`
+- **Acceptance verified sentinel**: `MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED` in `core/multi_device_control_integrity.py`
 
 ---
 
 ## Recommended Follow-Up PR Order
 
-1. **Close GAP-517-001 and GAP-517-003** (entry unification + dispatch authority)
-   — Highest-impact single change: normalise `/api/v1/devices/cross-device` and
-   add the access-control sentinel to `CrossDeviceCoordinator`.
+> ✅ = completed by PR-518 through PR-522.
 
-2. **Close GAP-517-007** (result surface)
-   — Add `ResultEnvelope` production and `record_chain_execution()` calls to the
-   coordinator and device router result paths.
+1. ✅ **Close GAP-517-001 and GAP-517-003** (PR-518) — entry unification + dispatch authority.
 
-3. **Close GAP-517-005** (formation truth — constellation fallback)
-   — Simple one-line change in `_is_orchestration_ready()`; high reliability
-   improvement for formation truth.
+2. ✅ **Close GAP-517-007** (PR-519) — result surface closure.
 
-4. **Close GAP-517-004** (formation truth — missing formation descriptor)
-   — Add `resolve_formation()` calls at the start of cross-device execution
-   in `DeviceRouter` and `CrossDeviceCoordinator`.
+3. ✅ **Close GAP-517-005** (PR-520) — constellation deny-by-default gate.
 
-5. **Close GAP-517-006** (control semantics — device_id overloading)
-   — Add `source_device_id` and `target_device_id` fields to route context.
+4. ✅ **Close GAP-517-004** (PR-520) — formation truth descriptor.
 
-6. **Close GAP-517-002 and GAP-517-008** (parallel entry + projection enrichment)
-   — Lower urgency; close as part of a broader projection / status board pass.
+5. ✅ **Close GAP-517-006** (PR-521) — source/target control semantic separation.
+
+6. ✅ **Close GAP-517-008** (PR-522) — projection canonicalization.
+
+7. ⚠️ **Close GAP-517-002** (future) — `/api/v1/devices/parallel` canonical admission.
+   Create a `TaskEnvelope` for the top-level parallel request and fan out
+   sub-envelopes through `CommandRouter`.
 
 ---
 
@@ -346,3 +376,10 @@ PR-517 establishes the **integrity governance layer** (`core/multi_device_contro
 - **135 tests** covering all record types, factory helpers, singleton
   management, ring-buffer overflow, counters, and representative
   end-to-end scenarios for all 5 audit areas.
+
+PR-523 adds the **end-to-end acceptance and verification layer** on top of the
+PR-517 governance layer, with 3 new sentinels
+(`MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED`, `MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE`,
+`PR523_RESIDUAL_CLOSURE_ACCOUNTING`), 99 acceptance tests, and this updated
+residual map.  See `docs/MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md` for the full
+acceptance matrix.
