@@ -39,6 +39,13 @@ from __future__ import annotations
 # contracts but does NOT define message semantics.
 NATS_FABRIC_CARRIER_AUTHORITY: str = "NATS::CARRIER_FABRIC_LAYER_V1"
 
+# PR-8: Network Topology Runtime integration sentinel.
+# Affirms that this module's connectivity state is absorbed into the canonical
+# NetworkTopologyRuntime via assimilate_nats_state() / absorb_nats_state().
+NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = (
+    "NATS_BUS::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
+)
+
 import asyncio
 import json
 import logging
