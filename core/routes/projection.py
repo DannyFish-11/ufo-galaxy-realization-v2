@@ -2003,8 +2003,8 @@ def _assemble_projection() -> Dict[str, Any]:
         )
         payload = enrich_projection_with_runtime_authority(payload)
     except Exception as exc:
-        logger.debug(
-            "_assemble_projection: runtime enrichment skipped: %s", exc
+        logger.warning(
+            "_assemble_projection: runtime enrichment failed: %s", exc
         )
 
     return payload
@@ -3184,8 +3184,8 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
         )
         result = enrich_projection_with_runtime_authority(result)
     except Exception as exc:
-        logger.debug(
-            "_assemble_desktop_status_board_payload: runtime enrichment skipped: %s",
+        logger.warning(
+            "_assemble_desktop_status_board_payload: runtime enrichment failed: %s",
             exc,
         )
 

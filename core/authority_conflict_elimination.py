@@ -709,8 +709,8 @@ def enrich_projection_with_runtime_authority(
         return enrich_runtime_projection(projection_dict)
     except Exception as exc:  # pragma: no cover
         logger.debug(
-            "enrich_projection_with_runtime_authority: bridge unavailable, "
-            "returning original dict: %s",
+            "enrich_projection_with_runtime_authority: enrichment unavailable "
+            "(bridge import or enrichment error), returning original dict: %s",
             exc,
         )
         return dict(projection_dict)
