@@ -595,6 +595,19 @@ _RESOURCE_BUILTIN_TOOLS: List[Dict] = [
 ]
 
 
+# PR-515 / GAP-512-009: OpenClawd is the multimodal ingress authority.
+# CriticalPathHarness records are written from _select_multimodal_route()
+# so that routing decisions are canonical-runtime-inspectable, not only
+# available through ContinuumState / TopologyRoutePlan projections.
+CRITICAL_PATH_MULTIMODAL_INGRESS_INTEGRATED: str = (
+    "OPENCLAWD::CRITICAL_PATH_MULTIMODAL_INGRESS_INTEGRATED_V1: "
+    "core/openclawd.py integrates CriticalPathHarness (PR-515) at the "
+    "_select_multimodal_route() boundary to record multimodal ingress "
+    "and routing decisions in the canonical harness layer. "
+    "Closes GAP-512-009."
+)
+
+
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
 
@@ -2802,6 +2815,44 @@ class OpenClawd:
             canonical_perception=_canonical_perception,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
+
+        # ── PR-515 / GAP-512-009: Critical Path Harness — route-selection record ──
+        # Record the routing decision in the canonical CriticalPathHarness layer
+        # so that multi-model routing path is inspectable through operator surfaces,
+        # not only through ContinuumState / TopologyRoutePlan projections.
+        # Per HARNESS_NON_BLOCKING_POLICY, this block never aborts the primary path.
+        try:
+            from core.critical_path_harness import (
+                record_route_selection as _harness_record_route,
+                record_provider_switch as _harness_record_switch,
+            )
+            _harness_record_route(
+                trace_id=trace_id or "",
+                route_type=_multimodal_route.get("route_type", ""),
+                provider=_multimodal_route.get("provider", ""),
+                model=_multimodal_route.get("model", ""),
+                route_reason=_multimodal_route.get("route_reason", ""),
+                fallback_reason=_multimodal_route.get("fallback_reason", ""),
+                active_modalities=list(_multimodal_route.get("active_modalities") or []),
+                source="OpenClawd._select_multimodal_route",
+            )
+            _harness_provider = _multimodal_route.get("provider", "")
+            _harness_model = _multimodal_route.get("model", "")
+            _harness_fallback_reason = _multimodal_route.get("fallback_reason", "")
+            if _harness_provider and _harness_provider != "none":
+                _harness_record_switch(
+                    trace_id=trace_id or "",
+                    from_provider="none",
+                    to_provider=_harness_provider,
+                    to_model=_harness_model,
+                    switch_reason=_harness_fallback_reason or "initial_selection",
+                    is_fallback=bool(_harness_fallback_reason),
+                    source="OpenClawd._select_multimodal_route",
+                )
+        except Exception as _hp_exc:
+            logger.debug(
+                "PR-515 harness route-selection record skipped: %s", _hp_exc
+            )
 
         # ── PR-41: Routing Observability ──────────────────────────────────────
         # Emit a structured RoutingDecisionEvent from the canonical routing
