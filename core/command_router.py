@@ -318,6 +318,26 @@ CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED: str = (
     "(GAP-512-004)."
 )
 
+# PR-518 / GAP-517-001: CommandRouter is the sole canonical cross-device
+# dispatcher.  When route_envelope() receives an envelope with
+# metadata["cross_device"] == "true", it delegates to
+# _route_cross_device_envelope() which invokes the DeviceRouter substrate
+# (DeviceRouter.route_task) for execution plumbing, while all canonical
+# audit/trace/graph work remains in route_envelope().
+# Closes GAP-517-001 (cross-device REST ingress canonicalisation).
+COMMAND_ROUTER_CROSS_DEVICE_CANONICAL_PATH: str = (
+    "COMMAND_ROUTER::CROSS_DEVICE_CANONICAL_PATH_V1: "
+    "route_envelope() is the sole canonical cross-device dispatcher. "
+    "Envelopes with metadata['cross_device']=='true' are routed via "
+    "_route_cross_device_envelope() → DeviceRouter.route_task() substrate. "
+    "Resolves GAP-517-001."
+)
+
+# PR-518: metadata key that identifies the canonical substrate caller when
+# DeviceRouter invokes CrossDeviceCoordinator.  Passed via context dict so
+# that coordinators can detect and warn on non-canonical invocations (GAP-517-003).
+_CROSS_DEVICE_SUBSTRATE_CALLER_KEY: str = "_galaxy_cross_device_substrate_caller"
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -998,52 +1018,59 @@ class CommandRouter:
             pass
 
         if not envelope.targets:
-            # PR-3: When required_capabilities are present but no explicit target is
-            # given, delegate to DevicePoolManager to select a suitable device.
-            # Explicit targets (even empty-string) must NOT be overridden here —
-            # only truly target-less envelopes trigger automatic selection.
-            _caps_for_pool: Optional[List[str]] = None
-            _meta_caps_early = (envelope.metadata or {}).get("required_capabilities")
-            if envelope.required_capabilities:
-                _caps_for_pool = list(envelope.required_capabilities)
-            elif isinstance(_meta_caps_early, list) and _meta_caps_early:
-                _caps_for_pool = [str(c) for c in _meta_caps_early]
-
-            _pool_selected: Optional[str] = None
-            if _caps_for_pool is not None:
-                try:
-                    from core.device_pool_manager import get_device_pool_manager
-                    _pool_selected = get_device_pool_manager().select_device(
-                        required_capabilities=_caps_for_pool,
-                    )
-                    if _pool_selected:
-                        logger.debug(
-                            "PR-3: DevicePoolManager selected %s for caps=%s",
-                            _pool_selected, _caps_for_pool,
-                        )
-                except Exception as _pool_exc:
-                    logger.warning(
-                        "PR-3: DevicePoolManager.select_device failed (fail-open): %s",
-                        _pool_exc,
-                    )
-
-            if _pool_selected:
-                envelope = envelope.model_copy(update={"targets": [_pool_selected]})
+            # PR-518/GAP-517-001: Cross-device envelopes are allowed to have
+            # empty targets — device selection is performed by the DeviceRouter
+            # substrate inside _route_cross_device_envelope().
+            _early_meta = envelope.metadata or {}
+            if _early_meta.get("cross_device") == "true":
+                pass  # targets resolved by substrate; skip pool/error check
             else:
-                return {
-                    "request_id": envelope.task_id,
-                    "task_id": envelope.task_id,
-                    "trace_id": envelope.trace_id,
-                    "command_id": envelope.task_id,
-                    "device_id": "",
-                    "command": envelope.tool_name,
-                    "via": "command_router",
-                    "success": False,
-                    "result": None,
-                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
-                    "error_message": "TaskEnvelope.targets 为空，无法路由",
-                    "latency_ms": 0.0,
-                }
+                # PR-3: When required_capabilities are present but no explicit target is
+                # given, delegate to DevicePoolManager to select a suitable device.
+                # Explicit targets (even empty-string) must NOT be overridden here —
+                # only truly target-less envelopes trigger automatic selection.
+                _caps_for_pool: Optional[List[str]] = None
+                _meta_caps_early = _early_meta.get("required_capabilities")
+                if envelope.required_capabilities:
+                    _caps_for_pool = list(envelope.required_capabilities)
+                elif isinstance(_meta_caps_early, list) and _meta_caps_early:
+                    _caps_for_pool = [str(c) for c in _meta_caps_early]
+
+                _pool_selected: Optional[str] = None
+                if _caps_for_pool is not None:
+                    try:
+                        from core.device_pool_manager import get_device_pool_manager
+                        _pool_selected = get_device_pool_manager().select_device(
+                            required_capabilities=_caps_for_pool,
+                        )
+                        if _pool_selected:
+                            logger.debug(
+                                "PR-3: DevicePoolManager selected %s for caps=%s",
+                                _pool_selected, _caps_for_pool,
+                            )
+                    except Exception as _pool_exc:
+                        logger.warning(
+                            "PR-3: DevicePoolManager.select_device failed (fail-open): %s",
+                            _pool_exc,
+                        )
+
+                if _pool_selected:
+                    envelope = envelope.model_copy(update={"targets": [_pool_selected]})
+                else:
+                    return {
+                        "request_id": envelope.task_id,
+                        "task_id": envelope.task_id,
+                        "trace_id": envelope.trace_id,
+                        "command_id": envelope.task_id,
+                        "device_id": "",
+                        "command": envelope.tool_name,
+                        "via": "command_router",
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                        "error_message": "TaskEnvelope.targets 为空，无法路由",
+                        "latency_ms": 0.0,
+                    }
 
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:
@@ -1177,19 +1204,31 @@ class CommandRouter:
         except (TypeError, ValueError):
             max_retries = 2
 
-        result = await self._execute_command(
-            device_id=envelope.target,
-            command=envelope.tool_name,
-            payload=envelope.args,
-            command_id=command_id,
-            task_id=envelope.task_id,
-            timeout=envelope.timeout,
-            request_id=request_id,
-            trace_id=envelope.trace_id,
-            retry_candidates=retry_candidates,
-            required_capabilities=required_capabilities,
-            max_retries=max_retries,
-        )
+        # ── PR-518/GAP-517-001: Cross-device canonical dispatch path ─────────
+        # When the envelope carries metadata["cross_device"] == "true", delegate
+        # execution to the DeviceRouter substrate via _route_cross_device_envelope().
+        # All canonical audit/trace/graph work above remains in effect; this branch
+        # only replaces the single-device _execute_command() call.
+        if meta.get("cross_device") == "true":
+            result = await self._route_cross_device_envelope(
+                envelope=envelope,
+                command_id=command_id,
+                request_id=request_id,
+            )
+        else:
+            result = await self._execute_command(
+                device_id=envelope.target,
+                command=envelope.tool_name,
+                payload=envelope.args,
+                command_id=command_id,
+                task_id=envelope.task_id,
+                timeout=envelope.timeout,
+                request_id=request_id,
+                trace_id=envelope.trace_id,
+                retry_candidates=retry_candidates,
+                required_capabilities=required_capabilities,
+                max_retries=max_retries,
+            )
 
         # ── PR-506: Close graph / replay / audit from result ─────────────────
         try:
@@ -1395,6 +1434,73 @@ class CommandRouter:
     # Canonical device-transport delegation (canonical chain step:
     # CommandRouter → DeviceRouter)
     # ------------------------------------------------------------------
+
+    async def _route_cross_device_envelope(
+        self,
+        envelope: "TaskEnvelope",
+        command_id: str,
+        request_id: str,
+    ) -> Dict[str, Any]:
+        """PR-518/GAP-517-001: Canonical cross-device dispatch via substrate.
+
+        Called by :meth:`route_envelope` when ``metadata["cross_device"] == "true"``.
+        Delegates execution to :meth:`galaxy_gateway.device_router.DeviceRouter.route_task`
+        (substrate execution plumbing) while all canonical audit/trace/graph
+        work has already been performed in :meth:`route_envelope`.
+
+        The context passed to DeviceRouter includes ``_CROSS_DEVICE_SUBSTRATE_CALLER_KEY``
+        so that CrossDeviceCoordinator can detect canonical invocations and
+        suppress legacy-bypass warnings (GAP-517-003).
+
+        CommandRouter remains the single canonical cross-device dispatcher;
+        DeviceRouter and CrossDeviceCoordinator are substrate plumbing only.
+        """
+        import time as _time_m
+        _t0 = _time_m.monotonic()
+        try:
+            from galaxy_gateway.device_router import device_router as _dr
+            context = dict(envelope.args or {})
+            context["task_id"] = envelope.task_id
+            context["trace_id"] = envelope.trace_id
+            # Substrate-caller sentinel: signals to DeviceRouter / CrossDeviceCoordinator
+            # that this invocation originates from the canonical CommandRouter path.
+            context[_CROSS_DEVICE_SUBSTRATE_CALLER_KEY] = "command_router.route_envelope"
+            raw = await _dr.route_task(envelope.tool_name, context=context)
+            _latency_ms = (_time_m.monotonic() - _t0) * 1000
+            return {
+                "request_id": request_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "device_id": "",
+                "command": envelope.tool_name,
+                "via": "command_router.cross_device_substrate",
+                "success": raw.get("success", False),
+                "result": raw,
+                "error_code": None if raw.get("success") else "CROSS_DEVICE_SUBSTRATE_FAILED",
+                "error_message": raw.get("error"),
+                "latency_ms": round(_latency_ms, 1),
+            }
+        except Exception as _exc:
+            _latency_ms = (_time_m.monotonic() - _t0) * 1000
+            logger.error(
+                "_route_cross_device_envelope failed | task_id=%s error=%s",
+                envelope.task_id, _exc,
+            )
+            return {
+                "request_id": request_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "device_id": "",
+                "command": envelope.tool_name,
+                "via": "command_router.cross_device_substrate",
+                "success": False,
+                "result": None,
+                "error_code": "CROSS_DEVICE_SUBSTRATE_ERROR",
+                "error_message": str(_exc),
+                "latency_ms": round(_latency_ms, 1),
+            }
 
     async def _dispatch_via_device_router(
         self,

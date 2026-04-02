@@ -87,6 +87,21 @@ Date: 2026-03-07
 # ---------------------------------------------------------------------------
 DEVICE_ROUTER_TRANSPORT_AUTHORITY = "DEVICE_ROUTER::ROUTING_SUBSTRATE_ONLY"
 
+# ---------------------------------------------------------------------------
+# PR-518 / GAP-517-003: substrate-only enforcement for cross-device dispatch.
+#
+# DeviceRouter._dispatch_cross_device_task() is internal substrate execution
+# plumbing invoked by route_task().  Direct calls from outside DeviceRouter
+# (i.e. not originating from CommandRouter → DeviceRouter.route_task()) are
+# legacy bypasses and must emit structured LEGACY_DISPATCH warnings.
+# ---------------------------------------------------------------------------
+DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY = (
+    "DEVICE_ROUTER::CROSS_DEVICE_SUBSTRATE_ONLY_V1: "
+    "_dispatch_cross_device_task() is internal substrate called by route_task(). "
+    "External calls are legacy bypasses and emit LEGACY_DISPATCH warnings. "
+    "Resolves GAP-517-003."
+)
+
 import asyncio
 import json
 import logging
@@ -781,6 +796,7 @@ class DeviceRouter:
                             return await coordinator.execute_cross_device_task(
                                 task.get("command", command),
                                 task.get("context", ctx),
+                                _substrate_caller="device_router.route_task",
                             )
 
                         result = await bridge.handoff(
@@ -800,7 +816,10 @@ class DeviceRouter:
 
                 # Use cross-device coordinator (fallback when bridge import failed)
                 coordinator = get_cross_device_coordinator()
-                result = await coordinator.execute_cross_device_task(command, ctx)
+                result = await coordinator.execute_cross_device_task(
+                    command, ctx,
+                    _substrate_caller="device_router.route_task",
+                )
                 _elapsed_ms = (_time.monotonic() - _route_start) * 1000
                 metrics.routing_latency_ms.observe(_elapsed_ms)
                 metrics.inc("routing_success")
@@ -835,8 +854,11 @@ class DeviceRouter:
                 # 单设备任务
                 result = await self.dispatch_task(task, target_devices[0])
             else:
-                # 多设备协同任务
-                result = await self._dispatch_cross_device_task(task, target_devices)
+                # 多设备协同任务 (PR-518: pass substrate-caller sentinel)
+                result = await self._dispatch_cross_device_task(
+                    task, target_devices,
+                    _substrate_caller="device_router.route_task",
+                )
 
             _elapsed_ms = (_time.monotonic() - _route_start) * 1000
             metrics.routing_latency_ms.observe(_elapsed_ms)
@@ -1125,12 +1147,51 @@ class DeviceRouter:
             timeout=timeout,
         )
 
-    async def _dispatch_cross_device_task(self, task: Dict, devices: List[Device]) -> Dict:
+    async def _dispatch_cross_device_task(
+        self,
+        task: Dict,
+        devices: List[Device],
+        *,
+        _substrate_caller: str = "",
+    ) -> Dict:
         """分发跨设备协同任务 (gated by cross-device switch — Round 4).
 
         PR-2：将任务字典转换为 TaskEnvelope 进行子任务分解和结果汇总，
         确保内部唯一任务格式。
+
+        PR-518/GAP-517-003: This method is internal substrate execution
+        plumbing invoked only by :meth:`route_task`.  External calls that
+        arrive without ``_substrate_caller`` set are non-canonical legacy
+        bypasses; they emit a structured ``LEGACY_DISPATCH`` warning and
+        record an integrity event before proceeding (fail-open).
         """
+        # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
+        _is_canonical_call = bool(_substrate_caller)
+        if not _is_canonical_call:
+            logger.warning(
+                "LEGACY_DISPATCH | DeviceRouter._dispatch_cross_device_task "
+                "called without a canonical substrate caller.  "
+                "Callers must route through CommandRouter.route_envelope() → "
+                "DeviceRouter.route_task() → this method. "
+                "task_id=%r  (GAP-517-003 bypass detected)",
+                task.get("task_id", ""),
+            )
+            try:
+                from core.multi_device_control_integrity import (
+                    record_integrity_event,
+                    build_dispatch_authority_record,
+                    DispatchPathKind,
+                )
+                _rec = build_dispatch_authority_record(
+                    task_id=task.get("task_id", ""),
+                    dispatch_path=DispatchPathKind.PARALLEL_LEGACY,
+                    is_canonical=False,
+                    caller_module="unknown",
+                )
+                record_integrity_event(_rec)
+            except Exception:
+                pass  # integrity recording is advisory
+
         # --- Round 4: hard constraint — single dispatcher guard ---
         if not is_cross_device_enabled():
             trace_id = task.get("trace_id")

@@ -69,6 +69,28 @@ CROSS_DEVICE_COORDINATOR_TRANSPORT_AUTHORITY = (
     "CROSS_DEVICE_COORDINATOR::CONVENIENCE_TRANSPORT_LAYER_ONLY"
 )
 
+# ---------------------------------------------------------------------------
+# PR-518 / GAP-517-003: substrate-only enforcement sentinel
+#
+# ``CrossDeviceCoordinator`` is internal substrate called exclusively by
+# ``DeviceRouter`` (which in turn is invoked by ``CommandRouter``).
+# Direct calls from outside the gateway substrate are legacy bypasses and
+# must be made explicitly visible via structured warnings.
+# ---------------------------------------------------------------------------
+CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY = (
+    "CROSS_DEVICE_COORDINATOR::SUBSTRATE_ONLY_V1: "
+    "execute_cross_device_task() must only be called from DeviceRouter "
+    "substrate, which is invoked by CommandRouter.route_envelope(). "
+    "Direct external calls are legacy bypasses — they emit structured "
+    "LEGACY_DISPATCH warnings and are recorded as integrity events. "
+    "Resolves GAP-517-003."
+)
+
+# Module-level key used in the context dict passed by DeviceRouter when it
+# delegates to this coordinator.  Presence of this key signals a canonical
+# invocation; absence triggers a LEGACY_DISPATCH warning.
+_SUBSTRATE_CALLER_CTX_KEY = "_galaxy_cross_device_substrate_caller"
+
 import asyncio
 import logging
 import os
@@ -241,13 +263,32 @@ class CrossDeviceCoordinator:
         )
         return [entry.device for entry in entries]
     
-    async def execute_cross_device_task(self, command: str, context: Dict = None) -> Dict:
+    async def execute_cross_device_task(
+        self,
+        command: str,
+        context: Dict = None,
+        *,
+        _substrate_caller: str = "",
+    ) -> Dict:
         """执行跨设备协同任务 — DeviceRouter-internal coordinator (PR-S3).
 
-        **Called by DeviceRouter only.**  External code must route through
+        **Called by DeviceRouter only (PR-518/GAP-517-003).**
+        External code must route through
         :meth:`~galaxy_gateway.device_router.DeviceRouter.route_task` and let
-        DeviceRouter decide whether to delegate here.  Do not call directly
-        from outside the gateway dispatch substrate.
+        DeviceRouter decide whether to delegate here.
+
+        The canonical call chain is::
+
+            CommandRouter.route_envelope()
+                → DeviceRouter.route_task()        (substrate)
+                    → CrossDeviceCoordinator.execute_cross_device_task()
+                          (internal plumbing, _substrate_caller set)
+
+        Calls that arrive without ``_substrate_caller`` set OR without
+        ``_SUBSTRATE_CALLER_CTX_KEY`` in ``context`` are treated as
+        **non-canonical legacy invocations**.  They are allowed to proceed
+        (fail-open) but emit a ``LEGACY_DISPATCH`` structured warning and
+        record an integrity event so the bypass is observable.
 
         典型场景：
         1. 从手机复制文本到电脑
@@ -255,6 +296,35 @@ class CrossDeviceCoordinator:
         3. 手机和电脑同步播放控制
         4. 跨设备剪贴板共享
         """
+        # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
+        _ctx = context or {}
+        _caller = _substrate_caller or _ctx.get(_SUBSTRATE_CALLER_CTX_KEY, "")
+        _is_canonical = bool(_caller)
+        if not _is_canonical:
+            logger.warning(
+                "LEGACY_DISPATCH | CrossDeviceCoordinator.execute_cross_device_task "
+                "called without a canonical substrate caller.  "
+                "Callers must route through CommandRouter.route_envelope() → "
+                "DeviceRouter.route_task() → this method. "
+                "command=%r  (GAP-517-003 bypass detected)",
+                command,
+            )
+            try:
+                from core.multi_device_control_integrity import (
+                    record_integrity_event,
+                    build_dispatch_authority_record,
+                    DispatchPathKind,
+                )
+                _rec = build_dispatch_authority_record(
+                    task_id=_ctx.get("task_id", ""),
+                    dispatch_path=DispatchPathKind.COORDINATOR_LEGACY,
+                    is_canonical=False,
+                    caller_module="unknown",
+                )
+                record_integrity_event(_rec)
+            except Exception:
+                pass  # integrity recording is advisory, never blocks execution
+
         try:
             logger.info(f"🔄 开始执行跨设备任务: {command}")
             
