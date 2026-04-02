@@ -301,7 +301,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "Bridge is wired but not yet consumed by all projection endpoints."
         ),
         "follow_up": "PR-514",
-        "is_residual": True,
+        "is_residual": False,
     },
     {
         "gap_id": "GAP-512-004",
@@ -328,7 +328,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "reading from the canonical operator surface."
         ),
         "follow_up": "PR-514",
-        "is_residual": True,
+        "is_residual": False,
     },
     {
         "gap_id": "GAP-512-006",
@@ -366,7 +366,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "is out of scope for PR-512 and PR-513."
         ),
         "follow_up": "PR-514",
-        "is_residual": True,
+        "is_residual": False,
     },
     {
         "gap_id": "GAP-512-009",
@@ -691,6 +691,18 @@ class RuntimeClosureAudit:
             "AGENT_KERNEL_AUDIT_ADMITTED_INTEGRATED",
             "core.agent.kernel",
         ),
+        (
+            "PR-514",
+            "Authority Conflict Elimination Layer",
+            "AUTHORITY_CONFLICT_ELIMINATION_AUTHORITY",
+            "core.authority_conflict_elimination",
+        ),
+        (
+            "PR-514",
+            "Projection Routes Authority Conflict Elimination (GAP-512-003, GAP-512-005)",
+            "AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED",
+            "core.routes.projection",
+        ),
     ]
 
     def __init__(self) -> None:
@@ -814,7 +826,7 @@ class RuntimeClosureAudit:
         ))
 
         # CONFLICT-002: Network topology truth — NetworkTopologyRuntime vs projection TopologyRoutePlan
-        # PARTIALLY RESOLVED in PR-511: bridge enriches projection from runtime.
+        # RESOLVED in PR-514: enrich_runtime_projection() wired into status board assembly paths.
         conflicts.append(AuthorityConflictEntry(
             conflict_id="CONFLICT-002",
             runtime_fact="network topology / device reachability",
@@ -827,12 +839,17 @@ class RuntimeClosureAudit:
                 "without reading from NetworkTopologyRuntime.  Status board surfaces "
                 "may display stale or projection-only topology."
             ),
-            is_resolved=False,
+            is_resolved=True,
             resolution_note=(
-                "PR-511 ProjectionSurfaceBridge enriches projection dicts from "
-                "OperatorSurface (which reads NetworkTopologyRuntime), but the "
-                "status board assembly paths do not yet call enrich_runtime_projection(). "
-                "Full resolution deferred to PR-514 (GAP-512-003)."
+                "PR-514 wires enrich_runtime_projection() from ProjectionSurfaceBridge "
+                "into _assemble_projection() and _assemble_desktop_status_board_payload() "
+                "in core/routes/projection.py.  The bridge reads OperatorSurface (which "
+                "reads NetworkTopologyRuntime), adding network_reachable_node_count and "
+                "operator_snapshot_dict to projection payloads without overwriting "
+                "projection-derived fields.  Boundary sentinels "
+                "PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY and "
+                "NO_COMPETING_TOPOLOGY_TRUTH_POLICY prevent reintroduction.  "
+                "Resolves GAP-512-003."
             ),
         ))
 
@@ -901,6 +918,67 @@ class RuntimeClosureAudit:
                 "as the single production write path, ensuring ReplayFoundation "
                 "and AuditEventSemantics are always written together for the same "
                 "task execution event."
+            ),
+        ))
+
+        # CONFLICT-006: Status board operator snapshot — OperatorSurface vs independent assembly
+        # RESOLVED in PR-514: status board now consumes enrich_runtime_projection() which
+        # carries operator_snapshot_dict from OperatorSurface.  Resolves GAP-512-005.
+        conflicts.append(AuthorityConflictEntry(
+            conflict_id="CONFLICT-006",
+            runtime_fact="operator runtime snapshot / executor health in status board",
+            layer_a="core.operator_surface.OperatorSurface",
+            layer_b=(
+                "desktop_projection / status_board_v2 independent assembly paths "
+                "that build runtime view without consuming OperatorSurface"
+            ),
+            description=(
+                "OperatorSurface.operator_snapshot() is exposed via the REST API "
+                "(GET /api/v1/operator/snapshot) but the status board / desktop "
+                "projection assembly did not consume the operator snapshot.  "
+                "The status board assembled its own runtime view without reading "
+                "from the canonical operator surface."
+            ),
+            is_resolved=True,
+            resolution_note=(
+                "PR-514 wires enrich_runtime_projection() from ProjectionSurfaceBridge "
+                "into _assemble_projection() and _assemble_desktop_status_board_payload(). "
+                "ProjectionSurfaceBridge.get_runtime_augmentation() reads OperatorSurface, "
+                "and the resulting operator_snapshot_dict is added to every projection "
+                "payload.  Boundary sentinel OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY and "
+                "drift policy NO_COMPETING_OPERATOR_INSPECTION_POLICY prevent reintroduction. "
+                "Resolves GAP-512-005."
+            ),
+        ))
+
+        # CONFLICT-007: Desktop topology semantics — NetworkTopologyRuntime vs ContinuumState
+        # ANNOTATED in PR-514: boundary sentinels document distinct semantic domains.
+        # Resolves GAP-512-008 semantics boundary.
+        conflicts.append(AuthorityConflictEntry(
+            conflict_id="CONFLICT-007",
+            runtime_fact="desktop projection topology representation",
+            layer_a="core.network_topology_runtime.NetworkTopologyRuntime",
+            layer_b=(
+                "ContinuumState / DesktopStatusProjection topology representations "
+                "in desktop_projection / status_board_v2"
+            ),
+            description=(
+                "Desktop projection surfaces (ContinuumState, DesktopStatusProjection) "
+                "maintain their own topology/route representations independently of "
+                "NetworkTopologyRuntime.  The two serve different semantic domains "
+                "(model-provider routing vs device/network topology) but the boundary "
+                "was not explicitly documented, creating a risk of silent authority drift."
+            ),
+            is_resolved=True,
+            resolution_note=(
+                "PR-514 documents that ContinuumState/TopologyRoutePlan are "
+                "model-provider routing projections (a genuinely distinct semantic "
+                "domain) and MUST NOT be used as device reachability oracles.  "
+                "Boundary sentinel NO_COMPETING_TOPOLOGY_TRUTH_POLICY and the "
+                "STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY sentinel "
+                "make future authority drift detectable.  Full decommission of "
+                "competing paths deferred to PR-515 per GAP-512-009.  "
+                "Resolves GAP-512-008 semantics boundary."
             ),
         ))
 
