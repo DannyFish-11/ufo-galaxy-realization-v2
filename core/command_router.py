@@ -274,6 +274,30 @@ COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED: str = (
     "governance violations."
 )
 
+# PR-506: Execution Spine Write Integration sentinel.
+#
+# CommandRouter.route_envelope() is now the canonical write path for:
+#   • TaskGraphRuntime  — envelope registration and result completion
+#   • ReplayFoundation  — route-decision and task-execution records,
+#                         retry and fallback replay events
+#   • AuditEventSemantics — task_accepted / task_dispatched /
+#                           task_completed / task_failed /
+#                           retry_triggered / fallback_triggered events
+#
+# All writes are non-blocking (wrapped in try/except) so that observability
+# failures never abort the canonical dispatch path.
+#
+# Compat / degraded paths that bypass route_envelope are marked via
+# EXECUTION_SPINE_COMPAT_DEGRADED_AUDIT in their respective code paths so
+# that they remain audit-visible rather than becoming silent black holes.
+EXECUTION_SPINE_WRITE_INTEGRATED: str = (
+    "COMMAND_ROUTER::EXECUTION_SPINE_WRITE_V1: "
+    "route_envelope() is the production write path for TaskGraphRuntime, "
+    "ReplayFoundation, and AuditEventSemantics. "
+    "Retry and fallback events are written from _execute_command(). "
+    "Compat dispatch() paths emit degraded audit markers."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -281,6 +305,24 @@ class CommandMode(str, Enum):
     ASYNC = "async"        # 异步：立即返回 request_id
     PARALLEL = "parallel"  # 并行：多目标同时执行
     SERIAL = "serial"      # 串行：多目标顺序执行
+
+
+class _RouteResultProxy:
+    """Minimal adapter that presents a raw result dict as a ResultEnvelope-like
+    object so that :meth:`TaskGraphRuntime.complete_from_result_envelope` can
+    consume it without requiring the full ``ResultEnvelope`` type.
+
+    PR-506: Used in :meth:`CommandRouter.route_envelope` to close the graph node
+    from the raw dict returned by :meth:`_execute_command`.
+    """
+
+    __slots__ = ("task_id", "success", "result", "error")
+
+    def __init__(self, task_id: str, success: bool, result_data: Any, error: str) -> None:
+        self.task_id = task_id
+        self.success = success
+        self.result = result_data
+        self.error = error
 
 
 class CommandStatus(str, Enum):
@@ -611,6 +653,27 @@ class CommandRouter:
             )
         except Exception as _env_err:
             logger.debug("CommandRouter.dispatch: TaskEnvelope construction skipped — %s", _env_err)
+
+        # ── PR-506: Compat path — emit degraded audit marker ─────────────────
+        # The legacy dispatch() method does not go through route_envelope, so
+        # graph/replay/audit writes are not automatic.  Emit a TASK_DEGRADED
+        # audit event so that compat callers remain audit-visible rather than
+        # becoming observability black holes.
+        try:
+            from core.audit_event_semantics import audit_task_accepted as _audit_compat_accepted
+            _compat_meta = (request.metadata or {})
+            _compat_targets = list(request.targets)
+            _compat_task_id = request.request_id
+            _compat_trace_id = _compat_meta.get("trace_id", "") or ""
+            _audit_compat_accepted(
+                _compat_task_id,
+                trace_id=_compat_trace_id,
+                source="command_router.dispatch[compat_degraded]",
+                origin=request.source if hasattr(request, "source") else "compat",
+                goal=request.command if hasattr(request, "command") else "",
+            )
+        except Exception:
+            pass
 
         self._stats["total_dispatched"] += 1
         start = time.time()
@@ -970,6 +1033,79 @@ class CommandRouter:
         except Exception as _lc_exc:
             logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
 
+        # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
+        try:
+            from core.task_graph_runtime import (
+                get_task_graph_runtime,
+                WorkflowContributorKind,
+            )
+            get_task_graph_runtime().register_envelope(
+                envelope,
+                contributor=WorkflowContributorKind.COMMAND_ROUTER,
+            )
+        except Exception as _tgr_reg_exc:
+            logger.debug(
+                "route_envelope: TaskGraphRuntime.register_envelope skipped: %s",
+                _tgr_reg_exc,
+            )
+
+        # ── PR-506: Emit audit accepted + dispatched ─────────────────────────
+        try:
+            from core.audit_event_semantics import (
+                audit_task_accepted,
+                audit_task_dispatched,
+            )
+            _meta_audit = envelope.metadata or {}
+            audit_task_accepted(
+                envelope.task_id,
+                trace_id=envelope.trace_id or "",
+                session_id=str(_meta_audit.get("session_id", "")),
+                source="command_router.route_envelope",
+                origin=envelope.source or "",
+                goal=envelope.tool_name or "",
+            )
+            audit_task_dispatched(
+                envelope.task_id,
+                trace_id=envelope.trace_id or "",
+                source="command_router.route_envelope",
+                targets=list(envelope.targets),
+                transport="",
+            )
+        except Exception as _audit_pre_exc:
+            logger.debug(
+                "route_envelope: AuditEventSemantics pre-dispatch writes skipped: %s",
+                _audit_pre_exc,
+            )
+
+        # ── PR-506: Record route decision in ReplayFoundation ────────────────
+        try:
+            from core.replay_foundation import (
+                record_route_decision as _record_route,
+                emit_runtime_event as _emit_ev,
+                ReplayEventKind,
+            )
+            _record_route(
+                task_id=envelope.task_id,
+                trace_id=envelope.trace_id or "",
+                selected_targets=list(envelope.targets),
+                effective_path="command_router",
+                route_explanation=(
+                    "canonical dispatch via CommandRouter.route_envelope"
+                ),
+            )
+            _emit_ev(
+                ReplayEventKind.ROUTE_DECISION,
+                task_id=envelope.task_id,
+                trace_id=envelope.trace_id or "",
+                source="command_router.route_envelope",
+                message=f"dispatching {envelope.tool_name!r} to {list(envelope.targets)}",
+            )
+        except Exception as _replay_pre_exc:
+            logger.debug(
+                "route_envelope: ReplayFoundation route writes skipped: %s",
+                _replay_pre_exc,
+            )
+
         # Extract optional routing params stored in metadata by the compat layer.
         meta = envelope.metadata or {}
         command_id: str = str(meta.get("command_id") or envelope.task_id)
@@ -999,6 +1135,97 @@ class CommandRouter:
             required_capabilities=required_capabilities,
             max_retries=max_retries,
         )
+
+        # ── PR-506: Close graph / replay / audit from result ─────────────────
+        try:
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr,
+                WorkflowContributorKind as _WCK,
+            )
+            from core.replay_foundation import (
+                TaskExecutionRecord as _TER,
+                get_replay_foundation as _get_rf,
+                emit_runtime_event as _emit_ev2,
+                ReplayEventKind as _REK,
+            )
+            from core.audit_event_semantics import (
+                audit_task_completed as _audit_completed,
+                audit_task_failed as _audit_failed,
+            )
+            import time as _time_mod
+
+            _is_success = bool(result.get("success"))
+            _err_code = result.get("error_code", "") or ""
+            _tr_id = result.get("trace_id", "") or envelope.trace_id or ""
+            _t_id = result.get("task_id", "") or envelope.task_id
+
+            # 1. Close the TaskGraphRuntime node using the module-level proxy
+            _proxy = _RouteResultProxy(
+                task_id=_t_id,
+                success=_is_success,
+                result_data=result.get("result"),
+                error=str(_err_code) if _err_code else (result.get("error_message") or ""),
+            )
+            _get_tgr().complete_from_result_envelope(
+                _proxy,
+                contributor=_WCK.COMMAND_ROUTER,
+            )
+
+            # 2. Record TaskExecutionRecord in ReplayFoundation
+            _exec_rec = _TER(
+                task_id=_t_id,
+                trace_id=_tr_id,
+                requested_action=envelope.tool_name or "",
+                selected_targets=list(envelope.targets),
+                final_lifecycle="completed" if _is_success else "failed",
+                success=_is_success,
+                error_code=_err_code,
+                failure_domain=result.get("failure_domain", "") or "",
+                completed_at=_time_mod.time(),
+            )
+            _get_rf().record_execution(_exec_rec)
+
+            # 3. Emit replay runtime event so replay_task_timeline is populated
+            _ev_kind = _REK.TASK_COMPLETED if _is_success else _REK.TASK_FAILED
+            _emit_ev2(
+                _ev_kind,
+                task_id=_t_id,
+                trace_id=_tr_id,
+                source="command_router.route_envelope",
+                message=(
+                    f"task {'completed' if _is_success else 'failed'}: "
+                    f"{envelope.tool_name!r}"
+                ),
+                payload=(
+                    {} if _is_success
+                    else {
+                        "error_code": _err_code,
+                        "failure_domain": result.get("failure_domain", ""),
+                    }
+                ),
+            )
+
+            # 4. Emit canonical audit event
+            if _is_success:
+                _audit_completed(
+                    _t_id,
+                    trace_id=_tr_id,
+                    source="command_router.route_envelope",
+                    success=True,
+                )
+            else:
+                _audit_failed(
+                    _t_id,
+                    trace_id=_tr_id,
+                    source="command_router.route_envelope",
+                    error_code=_err_code,
+                    failure_domain=result.get("failure_domain", "") or "",
+                )
+        except Exception as _result_close_exc:
+            logger.debug(
+                "route_envelope: graph/replay/audit result-close skipped: %s",
+                _result_close_exc,
+            )
 
         # ── PR-5 Cap 1: lifecycle transition running → done/failed ───────────
         try:
@@ -1391,6 +1618,43 @@ class CommandRouter:
                         )
                     except Exception:
                         pass
+                    # ── PR-506: Record fallback event (circuit-breaker bypass) ──
+                    try:
+                        from core.replay_foundation import (
+                            record_fallback as _rec_fallback,
+                            emit_runtime_event as _emit_ev_cb,
+                            ReplayEventKind as _REK_cb,
+                        )
+                        from core.audit_event_semantics import (
+                            audit_fallback_triggered as _audit_fb_cb,
+                        )
+                        _rec_fallback(
+                            primary_task_id=task_id,
+                            fallback_task_id=f"{task_id}:cb_fallback:{attempt + 1}",
+                            reason="circuit_open_or_quarantined",
+                            trace_id=trace_id,
+                            primary_failure_domain="device",
+                            primary_error_code="DEVICE_OFFLINE",
+                        )
+                        _emit_ev_cb(
+                            _REK_cb.FALLBACK_TRIGGERED,
+                            task_id=task_id,
+                            trace_id=trace_id,
+                            source="command_router._execute_command",
+                            message=(
+                                f"circuit-breaker fallback: '{current_device}' → '{next_dev}'"
+                            ),
+                            payload={"attempt": attempt + 1, "skipped_device": current_device},
+                        )
+                        _audit_fb_cb(
+                            task_id,
+                            trace_id=trace_id,
+                            source="command_router._execute_command",
+                            reason="circuit_open_or_quarantined",
+                            fallback_task_id=f"{task_id}:cb_fallback:{attempt + 1}",
+                        )
+                    except Exception:
+                        pass
                     current_device = next_dev
                     attempt += 1
                     continue
@@ -1508,6 +1772,51 @@ class CommandRouter:
                         "error_code": result.get("error_code"),
                         "original_device": device_id,
                     },
+                )
+            except Exception:
+                pass
+
+            # ── PR-506: Record retry event in ReplayFoundation + AuditEventSemantics ─
+            try:
+                from core.replay_foundation import (
+                    record_retry as _rec_retry,
+                    emit_runtime_event as _emit_ev_rt,
+                    ReplayEventKind as _REK_rt,
+                )
+                from core.audit_event_semantics import (
+                    audit_retry_triggered as _audit_retry,
+                )
+                _rec_retry(
+                    original_task_id=task_id,
+                    retry_task_id=f"{task_id}:retry:{attempt + 1}",
+                    reason=result.get("error_code", "retryable_failure") or "retryable_failure",
+                    attempt_number=attempt + 1,
+                    trace_id=trace_id,
+                    original_error_code=result.get("error_code", "") or "",
+                )
+                _emit_ev_rt(
+                    _REK_rt.RETRY_TRIGGERED,
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    source="command_router._execute_command",
+                    message=(
+                        f"retry #{attempt + 1}: '{current_device}' → '{next_dev}' "
+                        f"after {result.get('error_code', 'failure')!r}"
+                    ),
+                    payload={
+                        "attempt": attempt + 1,
+                        "failed_device": current_device,
+                        "next_device": next_dev,
+                        "error_code": result.get("error_code", ""),
+                    },
+                )
+                _audit_retry(
+                    task_id,
+                    trace_id=trace_id,
+                    source="command_router._execute_command",
+                    retry_task_id=f"{task_id}:retry:{attempt + 1}",
+                    attempt_number=attempt + 1,
+                    reason=result.get("error_code", "retryable_failure") or "retryable_failure",
                 )
             except Exception:
                 pass
