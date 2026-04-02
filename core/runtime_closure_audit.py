@@ -721,6 +721,18 @@ class RuntimeClosureAudit:
             "CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED",
             "core.multi_llm_router",
         ),
+        (
+            "PR-516",
+            "Legacy System Decommission Layer (CONFLICT-003, -009, -010)",
+            "LEGACY_SYSTEM_DECOMMISSION_AUTHORITY",
+            "core.legacy_system_decommission",
+        ),
+        (
+            "PR-516",
+            "Legacy System Decommission Integrated sentinel",
+            "LEGACY_SYSTEM_DECOMMISSION_INTEGRATED",
+            "core.legacy_system_decommission",
+        ),
     ]
 
     def __init__(self) -> None:
@@ -872,7 +884,8 @@ class RuntimeClosureAudit:
         ))
 
         # CONFLICT-003: Executor readiness — CapabilityAssimilationLayer vs legacy registry
-        # PARTIALLY RESOLVED in PR-509.
+        # RESOLVED in PR-516: LegacySystemDecommission formally retires
+        # GatewayCapabilityRegistry and gates core.capability_registry as parallel authorities.
         conflicts.append(AuthorityConflictEntry(
             conflict_id="CONFLICT-003",
             runtime_fact="executor readiness / capability set",
@@ -884,15 +897,18 @@ class RuntimeClosureAudit:
                 "CapabilityRegistry may still be used by some routing paths, "
                 "creating a competing truth source for executor readiness."
             ),
-            is_resolved=False,
+            is_resolved=True,
             resolution_note=(
                 "PR-509 adds query_routable_executors() and query_network_path() "
                 "helpers that read from canonical layers.  PR-513 wires "
                 "CommandRouter.route_envelope() to call these helpers before "
                 "dispatch selection (GAP-512-004) via the "
                 "CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED sentinel.  "
-                "Legacy CapabilityRegistry may still be used by some paths; "
-                "full decommission deferred to a future PR."
+                "PR-516 formally retires galaxy_gateway.capability_registry."
+                "GatewayCapabilityRegistry and gates core.capability_registry "
+                "as parallel capability authorities via the decommission catalog "
+                "(CANONICAL_CAPABILITY_SOURCE_POLICY).  "
+                "Resolves CONFLICT-003."
             ),
         ))
 
@@ -1031,6 +1047,67 @@ class RuntimeClosureAudit:
                 "a model-provider routing projection but is NOT the sole path for "
                 "routing evidence.  NO_COMPETING_ROUTING_AUTHORITY_POLICY prevents "
                 "the harness from becoming a competing router.  Resolves GAP-512-009."
+            ),
+        ))
+
+        # CONFLICT-009: Task decomposition authority — canonical TaskGraph
+        # vs legacy TaskDecomposer / IntelligentTaskPlanner.
+        # RESOLVED in PR-516: LegacySystemDecommission formally retires both
+        # legacy paths via CANONICAL_DECOMPOSITION_PATH_POLICY.
+        conflicts.append(AuthorityConflictEntry(
+            conflict_id="CONFLICT-009",
+            runtime_fact="task decomposition / sub-task graph creation",
+            layer_a="core.task_graph.TaskGraph",
+            layer_b=(
+                "galaxy_gateway.task_decomposer.TaskDecomposer and "
+                "IntelligentTaskPlanner (legacy parallel decomposition paths)"
+            ),
+            description=(
+                "TaskDecomposer and IntelligentTaskPlanner create sub-tasks "
+                "independently of the canonical TaskGraph (core.task_graph), "
+                "producing sub-task graphs that are not tracked by "
+                "TaskGraphRuntime.  They represent parallel task-graph "
+                "authorities that can silently bypass the canonical pipeline."
+            ),
+            is_resolved=True,
+            resolution_note=(
+                "PR-516 formally retires TaskDecomposer and IntelligentTaskPlanner "
+                "as primary task-decomposition authorities via the decommission "
+                "catalog.  CANONICAL_DECOMPOSITION_PATH_POLICY sentinel documents "
+                "that all new task splitting must use core.task_graph.TaskGraph.  "
+                "Both paths are retained as compatibility shims only; "
+                "no new primary invocations are permitted."
+            ),
+        ))
+
+        # CONFLICT-010: Projection contract — canonical ProjectionSurfaceBridge
+        # vs legacy dashboard-era direct payload contracts.
+        # RESOLVED in PR-516: LegacySystemDecommission gates ProjectionEngine
+        # and retires dashboard-era direct projection contracts.
+        conflicts.append(AuthorityConflictEntry(
+            conflict_id="CONFLICT-010",
+            runtime_fact="projection payload assembly / runtime snapshot in status board",
+            layer_a="core.projection_surface_bridge.ProjectionSurfaceBridge",
+            layer_b=(
+                "desktop_projection.projection_engine.ProjectionEngine and "
+                "dashboard.backend legacy direct projection contracts"
+            ),
+            description=(
+                "ProjectionEngine and dashboard-era direct projection contracts "
+                "assembled runtime snapshots independently of ProjectionSurfaceBridge, "
+                "creating legacy parallel projection authorities.  "
+                "They could produce runtime views that diverge from the canonical "
+                "bridge-enriched projection, introducing silent stale-state risk."
+            ),
+            is_resolved=True,
+            resolution_note=(
+                "PR-514 wired enrich_runtime_projection() into the main projection "
+                "assembly paths in core/routes/projection.py.  "
+                "PR-516 formally gates ProjectionEngine as a GATED compat adapter "
+                "and retires dashboard-era direct projection contracts via the "
+                "decommission catalog.  CANONICAL_PROJECTION_CONTRACT_POLICY sentinel "
+                "documents that all projection enrichment must flow through "
+                "ProjectionSurfaceBridge."
             ),
         ))
 

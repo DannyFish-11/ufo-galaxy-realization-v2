@@ -874,7 +874,10 @@ class TestP_UnresolvedConflictsDiscipline(unittest.TestCase):
             c for c in audit.detect_parallel_truth_paths()
             if c.conflict_id == "CONFLICT-003"
         )
-        self.assertFalse(conflict_003.is_resolved)
+        # PR-516 resolves CONFLICT-003: LegacySystemDecommission formally retires
+        # GatewayCapabilityRegistry and gates core.capability_registry as parallel
+        # capability authorities.  CONFLICT-003 is now resolved.
+        self.assertTrue(conflict_003.is_resolved)
 
     def test_P03_unresolved_conflicts_have_resolution_note_mentioning_deferral(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit

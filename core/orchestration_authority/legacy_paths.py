@@ -1283,6 +1283,102 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-516: Legacy / Parallel System Decommission Sweep
+#
+# The following paths are formally retired or gated in PR-516 as part of the
+# decommission sweep that eliminates the most problematic remaining legacy or
+# parallel system paths.
+#
+# Canonical replacements:
+#   galaxy_gateway.capability_registry  → core.capability_assimilation
+#   galaxy_gateway.task_decomposer      → core.task_graph
+#   dashboard.backend legacy contracts  → core.projection_surface_bridge
+#   galaxy_gateway.task_router          → core.command_router
+#
+# Full decommission catalog: see core/legacy_system_decommission.py and
+# docs/LEGACY_DECOMMISSION_AUDIT.md.
+# ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.capability_registry.GatewayCapabilityRegistry",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "GatewayCapabilityRegistry is formally RETIRED in PR-516 as a parallel "
+            "capability authority.  Canonical replacement: "
+            "core.capability_assimilation.CapabilityAssimilationLayer.  "
+            "Use get_capability_assimilation_layer().query_routable_executors() "
+            "for executor-readiness queries."
+        ),
+        pr_guardrail_added="PR-516",
+        notes=(
+            "GatewayCapabilityRegistry — RETIRED parallel capability store (PR-516).  "
+            "Closes CONFLICT-003.  Canonical authority: CapabilityAssimilationLayer."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_decomposer.TaskDecomposer",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "TaskDecomposer is formally RETIRED in PR-516 as a primary task "
+            "decomposition path.  Canonical replacement: core.task_graph.TaskGraph.  "
+            "New task splitting must go through core.task_graph.TaskGraph directly."
+        ),
+        pr_guardrail_added="PR-516",
+        notes=(
+            "TaskDecomposer — RETIRED parallel task-graph authority (PR-516).  "
+            "Closes CONFLICT-009.  Canonical authority: core.task_graph.TaskGraph."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.task_decomposer.IntelligentTaskPlanner",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "IntelligentTaskPlanner is formally RETIRED in PR-516 as a primary "
+            "LLM-based task planning path.  Canonical replacement: "
+            "core.e2e_orchestrator.process_user_input() or the canonical "
+            "OpenClawd → CommandRouter → TaskGraph pipeline."
+        ),
+        pr_guardrail_added="PR-516",
+        notes=(
+            "IntelligentTaskPlanner — RETIRED parallel planning authority (PR-516).  "
+            "Closes CONFLICT-009.  Must not be invoked as primary server-side planner."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="desktop_projection.projection_engine.ProjectionEngine",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "ProjectionEngine direct payload assembly is GATED in PR-516.  "
+            "Canonical enrichment: core.projection_surface_bridge."
+            "ProjectionSurfaceBridge.enrich_runtime_projection().  "
+            "ProjectionEngine must delegate runtime enrichment to "
+            "ProjectionSurfaceBridge; it may not independently assemble "
+            "runtime snapshots."
+        ),
+        pr_guardrail_added="PR-516",
+        notes=(
+            "ProjectionEngine — GATED legacy projection contract (PR-516).  "
+            "Closes CONFLICT-010.  Must delegate to ProjectionSurfaceBridge."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="dashboard.backend.legacy_projection_contract",
+        status=LegacyPathStatus.DEPRECATED,
+        recommendation=(
+            "Dashboard-era direct projection contracts are RETIRED in PR-516.  "
+            "Dashboard backend should consume /api/v1/operator/snapshot and "
+            "/api/v1/projection endpoints backed by ProjectionSurfaceBridge."
+        ),
+        pr_guardrail_added="PR-516",
+        notes=(
+            "Dashboard legacy projection contract — RETIRED (PR-516).  "
+            "Closes CONFLICT-010.  Use canonical API endpoints instead."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
