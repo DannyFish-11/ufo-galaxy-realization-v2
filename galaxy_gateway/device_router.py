@@ -102,6 +102,21 @@ DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY = (
     "Resolves GAP-517-003."
 )
 
+# ---------------------------------------------------------------------------
+# PR-519 / GAP-517-007: result surface closure sentinel.
+#
+# DeviceRouter.route_task() now calls surface_cross_device_result() on all
+# representative result return paths so that cross-device outcomes are
+# normalised into ResultEnvelope and surfaced through TaskGraphRuntime,
+# ReplayFoundation, and CrossDeviceChainSingleton.  Resolves GAP-517-007.
+# ---------------------------------------------------------------------------
+from core.cross_device_result_surface import (  # noqa: E402
+    CROSS_DEVICE_RESULT_SURFACE_INTEGRATED,
+    surface_cross_device_result,
+)
+
+CROSS_DEVICE_RESULT_SURFACE_INTEGRATED  # re-export / sentinel reference
+
 import asyncio
 import json
 import logging
@@ -866,8 +881,23 @@ class DeviceRouter:
                 metrics.inc("routing_success")
             else:
                 metrics.inc("routing_failure")
+
+            # PR-519 / GAP-517-007: surface result through canonical layers
+            # before returning to caller.
+            _task_id = task.get("task_id", ctx.get("task_id", ""))
+            _target_ids = [getattr(d, "device_id", str(d)) for d in target_devices]
+            surface_cross_device_result(
+                result,
+                task_id=_task_id,
+                device_id=_target_ids[0] if _target_ids else "",
+                trace_id=trace_ctx.trace_id,
+                session_id=ctx.get("session_id"),
+                route_mode=route_mode or ctx.get("route_mode", "cross_device"),
+                source_device_id=ctx.get("source_device_id", ""),
+                target_device_ids=_target_ids,
+            )
             return result
-            
+
         except Exception as e:
             _elapsed_ms = (_time.monotonic() - _route_start) * 1000
             metrics.routing_latency_ms.observe(_elapsed_ms)
@@ -880,11 +910,19 @@ class DeviceRouter:
                 route_mode=(context or {}).get("route_mode", ""),
             )
             logger.error(f"❌ 任务路由失败: {e}")
-            return {
+            _err_result = {
                 "success": False,
                 "error": f"任务路由失败: {str(e)}"
             }
-    
+            # PR-519: surface failure results for audit visibility
+            surface_cross_device_result(
+                _err_result,
+                task_id=ctx.get("task_id", ""),
+                trace_id=trace_ctx.trace_id,
+                route_mode=(context or {}).get("route_mode", "cross_device"),
+            )
+            return _err_result
+
     async def _analyze_command(self, command: str, context: Dict = None) -> Dict:
         """分析命令，确定目标设备和任务类型。
 

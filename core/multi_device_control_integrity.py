@@ -1285,8 +1285,19 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "ReplayFoundation.record_task_execution() to ensure the result "
             "is fully surfaced through the canonical layers."
         ),
-        "is_resolved": False,
-        "resolution_note": "",
+        "is_resolved": True,
+        "resolution_note": (
+            "PR-519: core/cross_device_result_surface.py introduces "
+            "surface_cross_device_result() which normalises raw dict results "
+            "into ResultEnvelope, records ChainExecutionRecord in "
+            "CrossDeviceChainSingleton, calls "
+            "TaskGraphRuntime.complete_from_result_envelope(), and emits a "
+            "ReplayFoundation runtime event.  Wired into "
+            "CrossDeviceCoordinator.execute_cross_device_task() and "
+            "DeviceRouter.route_task() on all representative result paths "
+            "(success and failure).  CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED "
+            "sentinel available in core/cross_device_result_surface.py."
+        ),
     },
     {
         "gap_id": "GAP-517-008",
@@ -1312,7 +1323,17 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "registry data."
         ),
         "is_resolved": False,
-        "resolution_note": "",
+        "resolution_note": (
+            "PR-519 (partial): the multi-device runtime projection endpoint "
+            "now includes 'cross_device_chain_snapshot' and "
+            "'task_graph_snapshot' fields in the projection metadata, "
+            "populated from CrossDeviceChainSingleton.snapshot() and "
+            "TaskGraphRuntime.snapshot().  The projection body "
+            "(merged_results field) still reflects raw registry data; "
+            "a full rewrite of the projection contract to consume "
+            "canonical chain state is deferred to a future PR as per "
+            "PR-519 non-goals."
+        ),
     },
 ]
 

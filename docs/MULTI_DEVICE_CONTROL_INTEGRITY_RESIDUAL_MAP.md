@@ -233,28 +233,38 @@ records.
 
 ### Open Gaps
 
-#### GAP-517-007 · HIGH
+#### GAP-517-007 · HIGH · ✅ RESOLVED (PR-519)
 **Modules**: `galaxy_gateway/cross_device_coordinator.py`, `galaxy_gateway/device_router.py`  
 **Description**: Cross-device results are returned as raw dicts without being
 normalised into `ResultEnvelope` or recorded via `record_chain_execution()`.
 This means outcomes remain in transport-local state without
 `OperatorSurface`, `TaskGraphRuntime`, or `ReplayFoundation` exposure.
 
-**Recommended action**: At the end of every cross-device execution path,
-call `build_result_envelope()` + `record_chain_execution()` from
-`core.cross_device_execution_chain`, then call
-`TaskGraphRuntime.complete_from_result_envelope()` and
-`ReplayFoundation.record_task_execution()`.
+**Resolution (PR-519)**: `core/cross_device_result_surface.py` introduces
+`surface_cross_device_result()` which:
+- Normalises raw dicts into `ResultEnvelope` via `build_result_envelope()`
+- Records a `ChainExecutionRecord` in `CrossDeviceChainSingleton`
+- Calls `TaskGraphRuntime.complete_from_result_envelope()`
+- Emits a `ReplayFoundation` runtime event (`TASK_COMPLETED` / `TASK_FAILED`)
+- Returns a `ResultSurfaceRecord` tracking surface coverage
 
-#### GAP-517-008 · MEDIUM
+Wired into `CrossDeviceCoordinator.execute_cross_device_task()` and
+`DeviceRouter.route_task()` on all representative result paths (success +
+failure).  Sentinel: `CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED`.
+
+#### GAP-517-008 · MEDIUM · ⚠️ PARTIALLY RESOLVED (PR-519)
 **Modules**: `core/routes/projection.py`, `contracts/multi_device_runtime_projection.py`  
 **Description**: The multi-device runtime projection endpoint builds its
 payload from raw registry/session data rather than consuming state from the
 canonical `CrossDeviceChainSingleton` or `TaskGraphRuntime`.
 
-**Recommended action**: Enrich the multi-device runtime projection with data
-from `CrossDeviceChainSingleton.snapshot()` and `TaskGraphRuntime.snapshot()`
-so the projection reflects canonical result state.
+**Partial resolution (PR-519)**: The `/api/v1/projection/runtime/multi-device`
+endpoint now enriches the projection `metadata` with:
+- `cross_device_chain_snapshot`: recent canonical chain records + counts
+- `task_graph_snapshot`: recent task graph runtime records + node count
+
+A full rewrite of the projection body (`merged_results` field) to directly
+consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 
 ---
 
@@ -268,10 +278,10 @@ so the projection reflects canonical result state.
 | GAP-517-004 | formation_truth | MEDIUM | Open |
 | GAP-517-005 | formation_truth | MEDIUM | Open |
 | GAP-517-006 | control_semantics | MEDIUM | Open |
-| GAP-517-007 | result_surface | HIGH | Open |
-| GAP-517-008 | result_surface | MEDIUM | Open |
+| GAP-517-007 | result_surface | HIGH | ✅ Resolved (PR-519) |
+| GAP-517-008 | result_surface | MEDIUM | ⚠️ Partial (PR-519) |
 
-**High severity gaps (require priority follow-up)**: GAP-517-001, GAP-517-003, GAP-517-007
+**Remaining high severity gaps**: GAP-517-001, GAP-517-003 (closed in PR-518)
 
 ---
 
