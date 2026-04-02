@@ -219,6 +219,10 @@ __all__ = [
     "get_residual_integrity_gaps",
     "get_multi_device_integrity_runtime",
     "reset_multi_device_integrity_runtime",
+    # PR-523 end-to-end acceptance sentinels
+    "MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED",
+    "MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE",
+    "PR523_RESIDUAL_CLOSURE_ACCOUNTING",
 ]
 
 # ---------------------------------------------------------------------------
@@ -344,6 +348,64 @@ CROSS_DEVICE_RESULT_SURFACES_CANONICALLY_POLICY: str = (
     "board layers.  Outcomes that remain in transport-local state or "
     "coordinator-internal dicts without canonical surface exposure are "
     "non-canonical."
+)
+
+# ---------------------------------------------------------------------------
+# PR-523 end-to-end acceptance sentinels
+# ---------------------------------------------------------------------------
+
+#: PR-523 sentinel confirming end-to-end acceptance verification is in place.
+#: Covers all 8 representative multi-device scenarios:
+#:   1. Local execution on originating device
+#:   2. Originating device dispatching to a different target device
+#:   3. Multiple candidate devices with canonical selection
+#:   4. Explicit formation membership and role assignment
+#:   5. Remote takeover / delegation scenario
+#:   6. Incomplete / degraded participation / readiness behavior
+#:   7. Result surfacing through canonical runtime / operator / audit layers
+#:   8. Projection / runtime view reflecting canonical state
+MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED: str = (
+    "MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED::PR523: "
+    "End-to-end acceptance verification layer established by PR-523. "
+    "Tests, fixtures, and acceptance matrix cover canonical device entry, "
+    "single dispatch authority, explicit formation truth, source/target "
+    "control semantic separation, canonical result surfacing, canonical "
+    "projection/runtime enrichment, and degraded/incomplete behavior "
+    "visibility.  See tests/test_pr523_e2e_multi_device_acceptance.py "
+    "and docs/MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md."
+)
+
+#: PR-523 acceptance matrix coverage declaration.
+#: Lists the representative scenario identifiers that have acceptance-test
+#: coverage as of PR-523.
+MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE: str = (
+    "MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE::PR523: "
+    "Scenarios covered — "
+    "S1:local_execution, "
+    "S2:cross_device_dispatch, "
+    "S3:multi_candidate_canonical_selection, "
+    "S4:formation_membership_and_roles, "
+    "S5:takeover_delegation, "
+    "S6:degraded_participation, "
+    "S7:canonical_result_surface, "
+    "S8:projection_runtime_view. "
+    "See docs/MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md."
+)
+
+#: PR-523 residual closure accounting sentinel.
+#: Summarises which PR-517 gaps are resolved / partially resolved / open
+#: after the integrated acceptance pass by PR-518 through PR-522.
+PR523_RESIDUAL_CLOSURE_ACCOUNTING: str = (
+    "PR523_RESIDUAL_CLOSURE_ACCOUNTING::PR523: "
+    "GAP-517-001=RESOLVED(PR-518), "
+    "GAP-517-002=OPEN(deferred_parallel_entry), "
+    "GAP-517-003=RESOLVED(PR-518), "
+    "GAP-517-004=RESOLVED(PR-520), "
+    "GAP-517-005=RESOLVED(PR-520), "
+    "GAP-517-006=RESOLVED(PR-521), "
+    "GAP-517-007=RESOLVED(PR-519), "
+    "GAP-517-008=RESOLVED(PR-522). "
+    "7/8 gaps closed; GAP-517-002 explicitly deferred."
 )
 
 # ---------------------------------------------------------------------------
