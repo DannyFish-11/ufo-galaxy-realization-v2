@@ -42,6 +42,15 @@ CANONICAL_TASK_SCHEDULER_FRONT_LOADED: str = (
     "calls adapt_to_canonical_task() before envelope normalization."
 )
 
+# PR-513 / GAP-512-002: Scheduler relay and mesh paths now register the
+# CanonicalTask in TaskGraphRuntime before dispatch so that task-graph
+# realization (PR-508) covers these codepaths.
+SCHEDULER_TASK_GRAPH_RELAY_MESH_INTEGRATED: str = (
+    "SCHEDULER_TASK_GRAPH_RELAY_MESH_V1: core/scheduler.py _exec_relay() "
+    "and _exec_mesh_send() register CanonicalTask in TaskGraphRuntime before "
+    "dispatch (GAP-512-002)."
+)
+
 class ToolDefinition(BaseModel):
     name: str
     description: str
@@ -844,6 +853,7 @@ CROSS-DEVICE:
         """设备间中继转发
 
         PR-3: Ingress recorded in execution spine log.
+        PR-513 / GAP-512-002: CanonicalTask registered in TaskGraphRuntime.
         """
         # PR-3: Record ingress in execution spine log.
         try:
@@ -855,6 +865,34 @@ CROSS-DEVICE:
             )
         except Exception:
             pass
+        # PR-513 / GAP-512-002: Front-load CanonicalTask and register in TaskGraphRuntime
+        # so that relay-path tasks are covered by task-graph realization (PR-508).
+        try:
+            import uuid as _uuid_relay
+            from core.task_adapter import adapt_to_canonical_task as _adapt_relay
+            from core.canonical_task import TaskOrigin as _TO_relay
+            _relay_canonical = _adapt_relay(
+                {
+                    "task_id": args.get("task_id") or f"relay_{_uuid_relay.uuid4().hex[:16]}",
+                    "trace_id": args.get("trace_id") or "",
+                    "tool_name": "relay_to_device",
+                    "targets": [args.get("target_device", "")] if args.get("target_device") else [],
+                    "args": args,
+                },
+                origin=_TO_relay.SCHEDULER,
+            )
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr_relay,
+                WorkflowContributorKind as _WCK_relay,
+            )
+            _get_tgr_relay().register_envelope(
+                _relay_canonical,
+                contributor=_WCK_relay.COMMAND_ROUTER,
+            )
+        except Exception as _relay_tgr_err:
+            logger.debug(
+                "_exec_relay: TaskGraphRuntime registration skipped: %s", _relay_tgr_err
+            )
         try:
             from core.proxy_relay import get_proxy_relay, RelayRequest
             relay = get_proxy_relay()
@@ -886,6 +924,7 @@ CROSS-DEVICE:
         """P2P Mesh 发送 — 自动选路 (直连 / 中继)
 
         PR-3: Ingress recorded in execution spine log.
+        PR-513 / GAP-512-002: CanonicalTask registered in TaskGraphRuntime.
         """
         # PR-3: Record ingress in execution spine log.
         try:
@@ -897,6 +936,33 @@ CROSS-DEVICE:
             )
         except Exception:
             pass
+        # PR-513 / GAP-512-002: Front-load CanonicalTask and register in TaskGraphRuntime.
+        try:
+            import uuid as _uuid_mesh
+            from core.task_adapter import adapt_to_canonical_task as _adapt_mesh
+            from core.canonical_task import TaskOrigin as _TO_mesh
+            _mesh_canonical = _adapt_mesh(
+                {
+                    "task_id": args.get("task_id") or f"mesh_{_uuid_mesh.uuid4().hex[:16]}",
+                    "trace_id": args.get("trace_id") or "",
+                    "tool_name": "mesh_send",
+                    "targets": [args.get("target_device", "")] if args.get("target_device") else [],
+                    "args": args,
+                },
+                origin=_TO_mesh.SCHEDULER,
+            )
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr_mesh,
+                WorkflowContributorKind as _WCK_mesh,
+            )
+            _get_tgr_mesh().register_envelope(
+                _mesh_canonical,
+                contributor=_WCK_mesh.COMMAND_ROUTER,
+            )
+        except Exception as _mesh_tgr_err:
+            logger.debug(
+                "_exec_mesh_send: TaskGraphRuntime registration skipped: %s", _mesh_tgr_err
+            )
         try:
             from core.mesh_coordinator import get_mesh_coordinator
             mesh = get_mesh_coordinator()

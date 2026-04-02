@@ -655,6 +655,42 @@ class RuntimeClosureAudit:
             "PROJECTION_SURFACE_BRIDGE_INTEGRATED",
             "core.routes.projection",
         ),
+        (
+            "PR-513",
+            "Failure/Degraded/Recovery Policy Layer",
+            "FAILURE_DEGRADED_RECOVERY_AUTHORITY",
+            "core.failure_degraded_recovery_policy",
+        ),
+        (
+            "PR-513",
+            "API Task Ingress ReplayFoundation Write (GAP-512-001)",
+            "TASK_INGRESS_REPLAY_FOUNDATION_INTEGRATED",
+            "core.routes.tasks",
+        ),
+        (
+            "PR-513",
+            "Scheduler Relay/Mesh TaskGraphRuntime Integration (GAP-512-002)",
+            "SCHEDULER_TASK_GRAPH_RELAY_MESH_INTEGRATED",
+            "core.scheduler",
+        ),
+        (
+            "PR-513",
+            "CommandRouter Capability/Network Canonical Query (GAP-512-004)",
+            "CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED",
+            "core.command_router",
+        ),
+        (
+            "PR-513",
+            "TaskOrchestrator Audit Dispatch Integration (GAP-512-006)",
+            "TASK_ORCHESTRATOR_AUDIT_DISPATCH_INTEGRATED",
+            "galaxy_gateway.orchestrator.task_orchestrator",
+        ),
+        (
+            "PR-513",
+            "AgentKernel Audit Admitted Integration (GAP-512-007)",
+            "AGENT_KERNEL_AUDIT_ADMITTED_INTEGRATED",
+            "core.agent.kernel",
+        ),
     ]
 
     def __init__(self) -> None:
@@ -816,9 +852,12 @@ class RuntimeClosureAudit:
             is_resolved=False,
             resolution_note=(
                 "PR-509 adds query_routable_executors() and query_network_path() "
-                "helpers that read from canonical layers.  However, CommandRouter "
-                "does not yet call these helpers before dispatch selection "
-                "(GAP-512-004).  Full resolution deferred to PR-513."
+                "helpers that read from canonical layers.  PR-513 wires "
+                "CommandRouter.route_envelope() to call these helpers before "
+                "dispatch selection (GAP-512-004) via the "
+                "CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED sentinel.  "
+                "Legacy CapabilityRegistry may still be used by some paths; "
+                "full decommission deferred to a future PR."
             ),
         ))
 

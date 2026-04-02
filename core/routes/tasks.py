@@ -52,6 +52,14 @@ CANONICAL_TASK_API_INGRESS_FRONT_LOADED: str = (
     "the primary ontology object at API ingress."
 )
 
+# PR-513 / GAP-512-001: API task ingress now records TaskExecutionRecord in
+# ReplayFoundation so that audit lineage is complete for API-ingressed tasks.
+TASK_INGRESS_REPLAY_FOUNDATION_INTEGRATED: str = (
+    "TASK_INGRESS_REPLAY_FOUNDATION_V1: core/routes/tasks.py create_task() "
+    "calls ReplayFoundation.record_task_execution() after CanonicalTask "
+    "front-load so API-ingressed tasks have complete audit lineage (GAP-512-001)."
+)
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create task management routes router."""
@@ -83,6 +91,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "create_task: CanonicalTask front-loaded task_id=%s trace_id=%s",
                 task_id, trace_id,
             )
+            # PR-513 / GAP-512-001: Record TaskExecutionRecord in ReplayFoundation
+            # so API-ingressed tasks have complete audit lineage.
+            try:
+                from core.replay_foundation import record_task_execution
+                record_task_execution(_canonical)
+            except Exception as _rep_err:
+                logger.debug(
+                    "create_task: ReplayFoundation.record_task_execution skipped — %s",
+                    _rep_err,
+                )
         except Exception as _ct_err:
             logger.debug("create_task: CanonicalTask front-load skipped — %s", _ct_err)
 

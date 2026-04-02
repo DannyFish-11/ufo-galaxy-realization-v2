@@ -67,6 +67,14 @@ CANONICAL_TASK_KERNEL_FRONT_LOADED: str = (
     "ExecutionPlan so CanonicalTask is always the primary ontology object."
 )
 
+# PR-513 / GAP-512-007: AgentKernel now emits audit_task_admitted after
+# CanonicalTask front-load so task admission is visible in the audit trail.
+AGENT_KERNEL_AUDIT_ADMITTED_INTEGRATED: str = (
+    "AGENT_KERNEL_AUDIT_ADMITTED_V1: core/agent/kernel.py AgentKernel._process() "
+    "emits AuditEventSemantics.audit_task_admitted after CanonicalTask "
+    "front-load in task_execute/hybrid path (GAP-512-007)."
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -376,6 +384,19 @@ class AgentKernel:
                 "AgentKernel._process: CanonicalTask front-loaded task_id=%s",
                 _kernel_canonical.identity.task_id,
             )
+            # PR-513 / GAP-512-007: Emit audit_task_admitted so task admission
+            # is visible in the canonical audit trail.
+            try:
+                from core.audit_event_semantics import audit_task_admitted as _aud_admitted
+                _aud_admitted(
+                    _kernel_canonical.identity.task_id,
+                    trace_id=_kernel_canonical.identity.trace_id or "",
+                    source="agent_kernel._process",
+                )
+            except Exception as _aud_adm_err:
+                logger.debug(
+                    "AgentKernel._process: audit_task_admitted skipped — %s", _aud_adm_err
+                )
         except Exception as _kt_err:
             logger.debug(
                 "AgentKernel._process: CanonicalTask front-load skipped — %s", _kt_err

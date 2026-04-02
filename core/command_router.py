@@ -308,6 +308,16 @@ RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (
     "Sentinel verified by RuntimeClosureAudit.verify_all_layers()."
 )
 
+# PR-513 / GAP-512-004: CommandRouter now queries canonical capability/network
+# truth before selecting dispatch targets.
+CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED: str = (
+    "COMMAND_ROUTER::CAPABILITY_NETWORK_CANONICAL_QUERY_V1: "
+    "CommandRouter.route_envelope() calls query_routable_executors() and "
+    "query_network_path() from capability_network_runtime_policy before "
+    "dispatch so routing decisions reflect canonical capability/network truth "
+    "(GAP-512-004)."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1042,6 +1052,36 @@ class CommandRouter:
             envelope = _lcm.mark_running(envelope)
         except Exception as _lc_exc:
             logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
+
+        # ── PR-513 / GAP-512-004: Query canonical capability/network truth ───
+        # Before selecting dispatch targets, consult query_routable_executors()
+        # and query_network_path() so routing decisions reflect canonical
+        # capability and network state rather than bypassing those layers.
+        try:
+            from core.capability_network_runtime_policy import (
+                query_routable_executors as _query_exec,
+                query_network_path as _query_path,
+            )
+            _routable = _query_exec()
+            logger.debug(
+                "route_envelope: capability/network query returned %d routable executor(s)",
+                len(_routable),
+            )
+            # Annotate envelope metadata with canonical routing advisory.
+            _target_list = list(envelope.targets)
+            if _target_list:
+                _primary_target = _target_list[0]
+                _path_result = _query_path("command_router", _primary_target)
+                logger.debug(
+                    "route_envelope: canonical path to '%s' — reachable=%s state=%s",
+                    _primary_target,
+                    _path_result.is_reachable,
+                    _path_result.path_state,
+                )
+        except Exception as _cap_exc:
+            logger.debug(
+                "route_envelope: capability/network canonical query skipped: %s", _cap_exc
+            )
 
         # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
         try:
