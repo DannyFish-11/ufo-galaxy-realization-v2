@@ -1318,12 +1318,57 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             except Exception as exc:
                 logger.debug("multi-device projection: coordinator unavailable: %s", exc)
 
+            # PR-519 / GAP-517-008 (partial): enrich projection with
+            # canonical cross-device chain snapshot and task-graph snapshot
+            # so the projection reflects canonical result state, not only
+            # raw transport-layer registry data.
+            _chain_snapshot: Optional[dict] = None
+            try:
+                from core.cross_device_execution_chain import (
+                    build_cross_device_chain_snapshot,
+                )
+                _chain_snap = build_cross_device_chain_snapshot(max_recent=20)
+                _chain_snapshot = {
+                    "total_executions": _chain_snap.total_executions,
+                    "canonical_executions": _chain_snap.canonical_executions,
+                    "legacy_executions": _chain_snap.legacy_executions,
+                    "recent_records": [
+                        r.to_dict() for r in list(_chain_snap.recent_records)[:5]
+                    ],
+                }
+            except Exception as _chain_exc:
+                logger.debug(
+                    "multi-device projection: cross-device chain snapshot unavailable: %s",
+                    _chain_exc,
+                )
+
+            _tgr_snapshot: Optional[dict] = None
+            try:
+                from core.task_graph_runtime import get_task_graph_runtime
+                _tgr = get_task_graph_runtime()
+                _tgr_snap = _tgr.snapshot(max_records=5)
+                _tgr_snapshot = {
+                    "total_nodes": len(_tgr_snap.nodes),
+                    "recent_records": [r.to_dict() for r in _tgr_snap.recent_records],
+                }
+            except Exception as _tgr_exc:
+                logger.debug(
+                    "multi-device projection: task graph snapshot unavailable: %s",
+                    _tgr_exc,
+                )
+
             projection = build_multi_device_runtime_projection(
                 runtime_devices=runtime_devices,
                 runtime_hosts=runtime_hosts,
                 mesh_memberships=mesh_memberships,
                 mesh_sessions=mesh_sessions,
                 coordinator_summaries=coordinator_summaries,
+                metadata={
+                    "cross_device_chain_snapshot": _chain_snapshot,
+                    "task_graph_snapshot": _tgr_snapshot,
+                    "result_surface_enriched": True,
+                    "pr_519_gap_008_partial": True,
+                },
             )
             return JSONResponse(content=projection.to_dict())
 

@@ -86,6 +86,21 @@ CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY = (
     "Resolves GAP-517-003."
 )
 
+# ---------------------------------------------------------------------------
+# PR-519 / GAP-517-007: result surface closure sentinel
+#
+# execute_cross_device_task() now calls surface_cross_device_result() before
+# returning so that every cross-device outcome is normalised into a
+# ResultEnvelope and surfaced through TaskGraphRuntime, ReplayFoundation, and
+# CrossDeviceChainSingleton.  Resolves GAP-517-007.
+# ---------------------------------------------------------------------------
+from core.cross_device_result_surface import (  # noqa: E402
+    CROSS_DEVICE_RESULT_SURFACE_INTEGRATED,
+    surface_cross_device_result,
+)
+
+CROSS_DEVICE_RESULT_SURFACE_INTEGRATED  # re-export / sentinel reference
+
 # Module-level key used in the context dict passed by DeviceRouter when it
 # delegates to this coordinator.  Presence of this key signals a canonical
 # invocation; absence triggers a LEGACY_DISPATCH warning.
@@ -342,15 +357,48 @@ class CrossDeviceCoordinator:
                 result = await self._sync_notification(command, context)
             else:
                 result = await self._execute_generic_cross_device_task(command, context)
-            
+
+            # PR-519 / GAP-517-007: normalise result into canonical surfaces
+            # before returning so that outcomes are visible through
+            # TaskGraphRuntime, ReplayFoundation, and CrossDeviceChainSingleton.
+            _ctx = context or {}
+            surface_cross_device_result(
+                result,
+                task_id=_ctx.get("task_id", ""),
+                device_id=_ctx.get("device_id", ""),
+                trace_id=_ctx.get("trace_id"),
+                session_id=_ctx.get("session_id"),
+                route_mode=_ctx.get("route_mode", "cross_device"),
+                source_device_id=_ctx.get("source_device_id", ""),
+                target_device_ids=_ctx.get("target_device_ids"),
+                legacy_path_used=(
+                    None if _is_canonical
+                    else "cross_device_coordinator.execute_cross_device_task"
+                ),
+            )
+
             return result
-            
+
         except Exception as e:
             logger.error(f"❌ 跨设备任务执行失败: {e}")
-            return {
+            _err_result = {
                 "success": False,
                 "error": f"跨设备任务执行失败: {str(e)}"
             }
+            # PR-519: surface even failure results so they appear in audit logs
+            _ctx = context or {}
+            surface_cross_device_result(
+                _err_result,
+                task_id=_ctx.get("task_id", ""),
+                device_id=_ctx.get("device_id", ""),
+                trace_id=_ctx.get("trace_id"),
+                route_mode=_ctx.get("route_mode", "cross_device"),
+                legacy_path_used=(
+                    None if _is_canonical
+                    else "cross_device_coordinator.execute_cross_device_task"
+                ),
+            )
+            return _err_result
     
     def _analyze_cross_device_task(self, command: str) -> str:
         """分析跨设备任务类型"""
