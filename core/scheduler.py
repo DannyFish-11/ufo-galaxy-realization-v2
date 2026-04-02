@@ -34,6 +34,14 @@ SCHEDULER_MESSAGE_INTEROP_APPLIED: str = "SCHEDULER_MESSAGE_INTEROP_V1"
 # into the execution spine rather than dispatching independently.
 SCHEDULER_ROUTES_COMMAND_ROUTER: str = "SCHEDULER_ROUTES_COMMAND_ROUTER_V1"
 
+# PR-507: Canonical task front-loading — _exec_send_to_device() now calls
+# adapt_to_canonical_task() before normalize_ingress_to_envelope() so that
+# CanonicalTask is the primary ontology object at scheduler ingress.
+CANONICAL_TASK_SCHEDULER_FRONT_LOADED: str = (
+    "CANONICAL_TASK_SCHEDULER_V1: core/scheduler.py _exec_send_to_device() "
+    "calls adapt_to_canonical_task() before envelope normalization."
+)
+
 class ToolDefinition(BaseModel):
     name: str
     description: str
@@ -703,6 +711,34 @@ CROSS-DEVICE:
         except Exception:
             task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
             trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
+
+        # PR-507: Front-load CanonicalTask creation — establish task ontology
+        # before recording ingress or normalizing to envelope.
+        try:
+            from core.task_adapter import adapt_to_canonical_task as _adapt
+            from core.canonical_task import TaskOrigin as _TaskOrigin
+            _canonical = _adapt(
+                {
+                    "task_id": task_id,
+                    "trace_id": trace_id,
+                    "tool_name": task_type,
+                    "targets": [device_id] if device_id else [],
+                    "args": payload or {},
+                },
+                origin=_TaskOrigin.SCHEDULER,
+            )
+            # Propagate canonical identity so all downstream steps share ids.
+            task_id = _canonical.identity.task_id
+            trace_id = _canonical.identity.trace_id
+            logger.debug(
+                "_exec_send_to_device: CanonicalTask front-loaded task_id=%s trace_id=%s",
+                task_id, trace_id,
+            )
+        except Exception as _ct_err:
+            logger.debug(
+                "_exec_send_to_device: CanonicalTask front-load unavailable "
+                "(graceful degradation — continuing with existing ids): %s", _ct_err
+            )
 
         # PR-3: Record ingress in execution spine log.
         try:

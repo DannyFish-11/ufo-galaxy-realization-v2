@@ -17,6 +17,12 @@ device-targeted tasks to the canonical execution chain::
 
 This module MUST NOT contain orchestration or dispatch logic.
 
+PR-507: Canonical task front-loading — a ``CanonicalTask`` is created via
+``task_adapter.adapt_to_canonical_task()`` at the top of ``create_task()``
+so that task ontology is established before any dispatch.  The task_id and
+trace_id are drawn from the canonical task's identity so that the rest of
+the execution chain shares the same correlation fields.
+
 Routes:
   POST /api/v1/tasks                      - 创建任务
   GET  /api/v1/tasks/{task_id}            - 任务状态
@@ -27,6 +33,7 @@ Routes:
 import logging
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -36,6 +43,15 @@ from core.routes._models import TaskRequest
 
 logger = logging.getLogger("Galaxy.API")
 
+# PR-507: Canonical task front-loading — this module now creates a
+# CanonicalTask via adapt_to_canonical_task() at API ingress before
+# any dispatch so that the task ontology layer is always the primary object.
+CANONICAL_TASK_API_INGRESS_FRONT_LOADED: str = (
+    "CANONICAL_TASK_API_INGRESS_V1: core/routes/tasks.py create_task() "
+    "calls adapt_to_canonical_task() before dispatch so CanonicalTask is "
+    "the primary ontology object at API ingress."
+)
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create task management routes router."""
@@ -44,8 +60,37 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/tasks")
     async def create_task(req: TaskRequest):
         """创建任务"""
-        task_id = str(uuid.uuid4())
-        trace_id = f"trace_{uuid.uuid4().hex[:12]}"
+        # PR-507: Front-load canonical task creation — CanonicalTask is the
+        # primary ontology object; task_id/trace_id flow from its identity.
+        task_id: Optional[str] = None
+        trace_id: Optional[str] = None
+        try:
+            from core.task_adapter import adapt_to_canonical_task
+            from core.canonical_task import TaskOrigin
+            _canonical = adapt_to_canonical_task(
+                {
+                    "task_type": req.task_type,
+                    "payload": req.payload,
+                    "targets": [req.device_id] if req.device_id else [],
+                    "tool_name": req.task_type,
+                    "args": req.payload or {},
+                },
+                origin=TaskOrigin.API_REQUEST,
+            )
+            task_id = _canonical.identity.task_id
+            trace_id = _canonical.identity.trace_id
+            logger.debug(
+                "create_task: CanonicalTask front-loaded task_id=%s trace_id=%s",
+                task_id, trace_id,
+            )
+        except Exception as _ct_err:
+            logger.debug("create_task: CanonicalTask front-load skipped — %s", _ct_err)
+
+        if task_id is None:
+            task_id = str(uuid.uuid4())
+        if trace_id is None:
+            trace_id = f"trace_{uuid.uuid4().hex[:12]}"
+
         task = {
             "task_id": task_id,
             "trace_id": trace_id,

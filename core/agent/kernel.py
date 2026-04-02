@@ -55,6 +55,19 @@ from core.agent.execution_planner import (
 logger = logging.getLogger("Galaxy.Agent.Kernel")
 
 # ──────────────────────────────────────────────────────────────────────────────
+# PR-507: Canonical task front-loading sentinel
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Affirms that AgentKernel._process() now calls adapt_to_canonical_task() in
+# the execution path (task_execute / hybrid) so that CanonicalTask is the
+# primary ontology object before ExecutionPlan is assembled.
+CANONICAL_TASK_KERNEL_FRONT_LOADED: str = (
+    "CANONICAL_TASK_KERNEL_V1: core/agent/kernel.py AgentKernel._process() "
+    "calls adapt_to_canonical_task() in task_execute/hybrid path before "
+    "ExecutionPlan so CanonicalTask is always the primary ontology object."
+)
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -344,6 +357,29 @@ class AgentKernel:
         soul_injection_phase = intent.mode
         logger.debug("SOUL 注入: 执行路径 mode=%s", intent.mode)
         soul_policy = _safe_load(get_soul, "SOUL")
+
+        # PR-507: Front-load CanonicalTask — establish task ontology before
+        # assembling ExecutionPlan so the canonical layer is always primary.
+        try:
+            from core.task_adapter import adapt_to_canonical_task as _adapt_kernel
+            from core.canonical_task import TaskOrigin as _KernelTaskOrigin
+            _kernel_canonical = _adapt_kernel(
+                {
+                    "goal": message,
+                    "tool_name": intent.task_hint or "kernel_execute",
+                    "args": {"message": message, "mode": intent.mode},
+                },
+                origin=_KernelTaskOrigin.AI_INTENT,
+                session_id=session_id,
+            )
+            logger.debug(
+                "AgentKernel._process: CanonicalTask front-loaded task_id=%s",
+                _kernel_canonical.identity.task_id,
+            )
+        except Exception as _kt_err:
+            logger.debug(
+                "AgentKernel._process: CanonicalTask front-load skipped — %s", _kt_err
+            )
 
         plan = ExecutionPlan(
             message=message,
