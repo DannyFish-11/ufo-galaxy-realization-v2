@@ -407,7 +407,12 @@ def enrich_multi_device_projection(
         op_surface = get_operator_surface()
         op_snap = op_surface.operator_snapshot()
         enrichment.operator_available = True
-        enrichment.operator_snapshot = op_snap.to_dict() if hasattr(op_snap, "to_dict") else dict(op_snap)
+        if hasattr(op_snap, "to_dict"):
+            enrichment.operator_snapshot = op_snap.to_dict()
+        elif isinstance(op_snap, dict):
+            enrichment.operator_snapshot = op_snap
+        else:
+            enrichment.operator_snapshot = {}
         canonical_sources_available += 1
         logger.debug("enrich_multi_device_projection: operator surface available")
     except Exception as op_exc:

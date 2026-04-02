@@ -97,9 +97,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
-
 
 def _reset_chain():
     try:
@@ -736,7 +733,6 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
     def test_J2_canonical_enrichment_key_in_endpoint_response(self):
         """Projection endpoint metadata contains 'canonical_enrichment' key."""
         try:
-            import asyncio
             from core.routes.projection import create_router
             router = create_router()
 
@@ -765,7 +761,6 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
     def test_J3_canonical_surfacing_state_key_in_endpoint_metadata(self):
         """Projection endpoint metadata contains 'canonical_surfacing_state' key."""
         try:
-            import asyncio
             from core.routes.projection import create_router
             router = create_router()
             handler = None
@@ -785,7 +780,6 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
 
     def test_J4_canonical_surfacing_gaps_key_in_endpoint_metadata(self):
         try:
-            import asyncio
             from core.routes.projection import create_router
             router = create_router()
             handler = None
@@ -805,7 +799,6 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
 
     def test_J5_transport_local_only_key_in_endpoint_metadata(self):
         try:
-            import asyncio
             from core.routes.projection import create_router
             router = create_router()
             handler = None
@@ -825,7 +818,6 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
 
     def test_J6_pr_522_gap_008_resolved_is_true_in_metadata(self):
         try:
-            import asyncio
             from core.routes.projection import create_router
             router = create_router()
             handler = None
@@ -848,7 +840,6 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
 
     def test_J7_canonical_surfacing_state_is_valid_enum_value(self):
         try:
-            import asyncio
             from core.routes.projection import create_router
             from core.multi_device_projection_canonicalization import (
                 CanonicalProjectionSurfacingState,
@@ -894,7 +885,6 @@ class TestK_BackwardCompatKeys(unittest.TestCase):
 
     def _get_metadata(self):
         try:
-            import asyncio
             from core.routes.projection import create_router
             router = create_router()
             handler = None
