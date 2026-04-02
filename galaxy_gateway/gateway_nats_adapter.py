@@ -61,6 +61,15 @@ NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = (
     "GATEWAY_NATS_ADAPTER::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
 )
 
+# PR-509: Capability + Network Runtime Assimilation integration sentinel.
+# Affirms that GatewayNATSAdapter.start() and .stop() now call
+# absorb_gateway_connectivity_event() so that gateway substrate state is
+# reliably populated in the canonical NetworkTopologyRuntime on every
+# lifecycle change.
+CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED: str = (
+    "GATEWAY_NATS_ADAPTER::CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED_V1"
+)
+
 _TASK_TIMEOUT_S = float(os.getenv("GALAXY_GW_ADAPTER_TIMEOUT", "30"))
 _MAX_RETRIES = int(os.getenv("GALAXY_GW_ADAPTER_RETRIES", "2"))
 _DLQ_SUBJECT = os.getenv("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
@@ -144,6 +153,10 @@ class GatewayNATSAdapter:
                     _DURABLE_NAME,
                 )
                 _try_emit_event("GATEWAY_ADAPTER_STARTED", {"subject": _SUBSCRIBE_SUBJECT})
+                # PR-509: Absorb gateway connectivity state into the canonical
+                # NetworkTopologyRuntime so that topology consumers see a live
+                # gateway substrate node.
+                _absorb_gateway_state(is_connected=True)
             else:
                 logger.error("GatewayNATSAdapter: subscription failed — %s", result)
         except Exception as exc:
@@ -152,6 +165,10 @@ class GatewayNATSAdapter:
     async def stop(self) -> None:
         """Cancel all pending tasks and unsubscribe."""
         self._started = False
+        # PR-509: Absorb gateway disconnected state into the canonical
+        # NetworkTopologyRuntime so that topology consumers see the gateway
+        # substrate node as unavailable.
+        _absorb_gateway_state(is_connected=False)
         # PR-S5: cancel via the canonical registry first, then drain compat dict.
         try:
             reg = self._get_lifecycle_registry()
@@ -628,3 +645,28 @@ def _publish_m2_event_safe(event_type: str, device_id: str, payload: dict, **kw)
         publish_m2_event(evt)
     except Exception as _exc:
         logger.debug("GatewayNATSAdapter: M2 发布失败（非致命）: %s", _exc)
+
+
+# ---------------------------------------------------------------------------
+# PR-509: Runtime event absorption helper (non-blocking, failure-isolated)
+# ---------------------------------------------------------------------------
+
+
+def _absorb_gateway_state(is_connected: bool) -> None:
+    """Absorb gateway substrate connectivity state into the canonical NetworkTopologyRuntime.
+
+    PR-509: Called from :meth:`GatewayNATSAdapter.start` and
+    :meth:`GatewayNATSAdapter.stop` to keep the network topology runtime
+    populated with live gateway state.
+
+    All errors are swallowed so that topology absorption never interrupts
+    the gateway adapter lifecycle.
+    """
+    try:
+        from core.capability_network_runtime_policy import absorb_gateway_connectivity_event
+        absorb_gateway_connectivity_event(
+            gateway_id="galaxy_gateway",
+            is_connected=is_connected,
+        )
+    except Exception:
+        pass

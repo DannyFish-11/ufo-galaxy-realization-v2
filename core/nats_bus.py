@@ -46,6 +46,15 @@ NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = (
     "NATS_BUS::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
 )
 
+# PR-509: Capability + Network Runtime Assimilation integration sentinel.
+# Affirms that NATSBus.connect() and .disconnect() now call
+# absorb_nats_connectivity_event() so that NATS fabric state is reliably
+# populated in the canonical NetworkTopologyRuntime on every connection
+# lifecycle change.
+CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED: str = (
+    "NATS_BUS::CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED_V1"
+)
+
 import asyncio
 import json
 import logging
@@ -269,6 +278,10 @@ class NATSBus:
 
             self._connected = True
             _try_emit_event("NATS_CONNECTED", {"url": target})
+            # PR-509: Absorb NATS connectivity state into the canonical
+            # NetworkTopologyRuntime so that topology consumers see a live
+            # NATS fabric node.
+            _absorb_nats_state(is_connected=True, url=target)
             logger.info(f"NATSBus: connected to {target}")
             return {"success": True}
 
@@ -305,6 +318,10 @@ class NATSBus:
             self._subscriptions.clear()
             await self._nc.drain()
             self._connected = False
+            # PR-509: Absorb disconnected state into the canonical
+            # NetworkTopologyRuntime so that topology consumers see the NATS
+            # fabric node as unavailable.
+            _absorb_nats_state(is_connected=False)
             logger.info("NATSBus: disconnected")
             return {"success": True}
         except Exception as exc:
@@ -608,10 +625,15 @@ class NATSBus:
     async def _on_reconnect(self) -> None:
         self._stats["reconnects"] += 1
         _try_emit_event("NATS_RECONNECTING", {"reconnects": self._stats["reconnects"]})
+        # PR-509: Re-absorb connected state on reconnect so topology runtime
+        # reflects the live NATS fabric state after a transient disconnect.
+        _absorb_nats_state(is_connected=True)
         logger.warning(f"NATSBus: reconnected (attempt #{self._stats['reconnects']})")
 
     async def _on_disconnect(self) -> None:
         _try_emit_event("NATS_DISCONNECTED", {})
+        # PR-509: Absorb disconnected state on unexpected disconnect.
+        _absorb_nats_state(is_connected=False)
         logger.warning("NATSBus: disconnected")
 
     async def _on_error(self, exc: Exception) -> None:
@@ -621,3 +643,40 @@ class NATSBus:
 
 # ── Module-level singleton (constraint C1) ─────────────────────────────────
 nats_bus = NATSBus.get_instance()
+
+
+# ---------------------------------------------------------------------------
+# PR-509: Runtime event absorption helper (non-blocking, failure-isolated)
+# ---------------------------------------------------------------------------
+
+
+def _absorb_nats_state(is_connected: bool, url: str = "") -> None:
+    """Absorb NATS connectivity state into the canonical NetworkTopologyRuntime.
+
+    PR-509: Called from :meth:`NATSBus.connect`, :meth:`NATSBus.disconnect`,
+    :meth:`NATSBus._on_reconnect`, and :meth:`NATSBus._on_disconnect` to keep
+    the network topology runtime populated with live NATS fabric state.
+
+    All errors are swallowed so that topology absorption never interrupts
+    the NATS connection lifecycle.
+    """
+    try:
+        host = ""
+        port = 0
+        if url:
+            # Parse "nats://host:port" or "host:port"
+            clean = url.replace("nats://", "").replace("tls://", "")
+            if ":" in clean:
+                parts = clean.rsplit(":", 1)
+                host = parts[0]
+                try:
+                    port = int(parts[1])
+                except ValueError:
+                    pass
+            else:
+                host = clean
+
+        from core.capability_network_runtime_policy import absorb_nats_connectivity_event
+        absorb_nats_connectivity_event(is_connected=is_connected, host=host, port=port)
+    except Exception:
+        pass

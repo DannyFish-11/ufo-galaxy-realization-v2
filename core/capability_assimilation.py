@@ -106,6 +106,7 @@ __all__ = [
     "CAPABILITY_ASSIMILATION_LAYER_POSITION",
     "NODE_ORCHESTRATOR_ASSIMILATION_POLICY",
     "ASSIMILATION_CONTRACT_VERSION",
+    "CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED",
     # Enumerations
     "NodeParticipantKind",
     "AssimilationPresenceState",
@@ -151,6 +152,15 @@ NODE_ORCHESTRATOR_ASSIMILATION_POLICY: str = (
 
 #: Contract version for :class:`AssimilationRecord` serialisation.
 ASSIMILATION_CONTRACT_VERSION: str = "v1"
+
+# PR-509: Capability + Network Runtime Assimilation integration sentinel.
+# Affirms that this layer is now wired into the capability_network_runtime_policy
+# bridge so that runtime events (heartbeat, capability change, device presence)
+# populate this layer via absorb_heartbeat_event() /
+# absorb_capability_change_event() / absorb_device_presence_event().
+CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED: str = (
+    "CAPABILITY_ASSIMILATION::CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED_V1"
+)
 
 # ---------------------------------------------------------------------------
 # Enumerations
