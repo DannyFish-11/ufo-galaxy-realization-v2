@@ -814,6 +814,30 @@ class TestJ_CLIModuleStructure(unittest.TestCase):
         self.assertEqual(_base_url(), "http://custom:9999")
         os.environ.pop("GALAXY_OPERATOR_BASE_URL", None)
 
+    def test_J10_validated_url_rejects_disallowed_scheme(self) -> None:
+        import os
+        os.environ["GALAXY_OPERATOR_BASE_URL"] = "ftp://attacker.example"
+        from cli.operator_inspect import _validated_url
+        with self.assertRaises(ValueError):
+            _validated_url("/api/v1/operator/snapshot")
+        os.environ.pop("GALAXY_OPERATOR_BASE_URL", None)
+
+    def test_J11_validated_url_allows_http(self) -> None:
+        import os
+        os.environ["GALAXY_OPERATOR_BASE_URL"] = "http://localhost:8000"
+        from cli.operator_inspect import _validated_url
+        url = _validated_url("/api/v1/operator/snapshot")
+        self.assertEqual(url, "http://localhost:8000/api/v1/operator/snapshot")
+        os.environ.pop("GALAXY_OPERATOR_BASE_URL", None)
+
+    def test_J12_validated_url_allows_https(self) -> None:
+        import os
+        os.environ["GALAXY_OPERATOR_BASE_URL"] = "https://galaxy.example"
+        from cli.operator_inspect import _validated_url
+        url = _validated_url("/api/v1/operator/snapshot")
+        self.assertEqual(url, "https://galaxy.example/api/v1/operator/snapshot")
+        os.environ.pop("GALAXY_OPERATOR_BASE_URL", None)
+
 
 # ===========================================================================
 # K)  CLI consumer targets operator API paths

@@ -77,15 +77,39 @@ def _base_url() -> str:
 # HTTP helpers — use stdlib only to avoid extra dependencies
 # ---------------------------------------------------------------------------
 
+_ALLOWED_SCHEMES = {"http", "https"}
+
+
+def _validated_url(path: str) -> str:
+    """Construct and validate the request URL.
+
+    Ensures the base URL uses an allowed scheme (http or https) before
+    appending *path*.  Raises ``ValueError`` if the scheme is not allowed.
+    """
+    from urllib.parse import urlparse
+    base = _base_url()
+    parsed = urlparse(base)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        raise ValueError(
+            f"Disallowed scheme '{parsed.scheme}' in base URL '{base}'. "
+            f"Only {_ALLOWED_SCHEMES} are permitted."
+        )
+    return f"{base}{path}"
+
+
 def _get_json(path: str) -> tuple[Optional[Dict[str, Any]], int]:
     """Perform a GET request and return ``(data, status_code)``.
 
     On network errors a ``(None, 0)`` tuple is returned and the error is
     printed to stderr.
     """
-    url = f"{_base_url()}{path}"
     try:
-        with urlopen(url, timeout=10) as resp:  # noqa: S310
+        url = _validated_url(path)
+    except ValueError as exc:
+        print(f"URL validation error: {exc}", file=sys.stderr)
+        return None, 0
+    try:
+        with urlopen(url, timeout=10) as resp:  # noqa: S310 — URL scheme validated above
             status = resp.status
             body = resp.read().decode("utf-8")
             return json.loads(body), status
