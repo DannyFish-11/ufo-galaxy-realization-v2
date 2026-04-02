@@ -160,6 +160,17 @@ class PolicyConvergenceOutput:
     transport_usable: bool = False
     device_routable: bool = False
     effective_path: str = "none"
+    # --- PR-B standardised fields ---
+    degradation_reason: Optional[str] = None
+    """Human-readable reason why this device was degraded or fell back.
+    ``None`` when no degradation occurred."""
+    selected_target_reason: Optional[str] = None
+    """Human-readable reason why this device was (or was not) selected as the
+    preferred target.  Supports operator explanation and debugging."""
+    failure_domain: Optional[str] = None
+    """Canonical :class:`~core.failure_domains.FailureDomain` value string
+    when ``eligibility`` is ``False`` or when a policy failure occurred.
+    ``None`` when the device is fully eligible."""
     # --- Provenance ---
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
@@ -176,6 +187,9 @@ class PolicyConvergenceOutput:
             "transport_usable": self.transport_usable,
             "device_routable": self.device_routable,
             "effective_path": self.effective_path,
+            "degradation_reason": self.degradation_reason,
+            "selected_target_reason": self.selected_target_reason,
+            "failure_domain": self.failure_domain,
             "reasons": list(self.reasons),
             "sources": dict(self.sources),
             "contract_version": self.contract_version,
@@ -286,6 +300,86 @@ def _compute_policy_score(
 
 
 # ---------------------------------------------------------------------------
+# PR-B: Failure domain classification helpers
+# ---------------------------------------------------------------------------
+
+
+def _classify_failure_domain(output: "PolicyConvergenceOutput") -> str:
+    """Classify the primary failure domain for an ineligible device.
+
+    Uses the reason strings and output flags to select the most appropriate
+    PR-B canonical failure domain.  Returns the domain value string.
+    """
+    try:
+        from core.failure_domains import FailureDomain
+    except ImportError:
+        return "unknown_failure"
+
+    reasons_str = " ".join(output.reasons).lower()
+
+    # Empty device ID
+    if "empty-device-id" in reasons_str:
+        return FailureDomain.VALIDATION_FAILURE.value
+
+    # Readiness / registration unavailability
+    if "readiness-unavailable" in reasons_str:
+        return FailureDomain.ROUTING_FAILURE.value
+
+    # Validation unavailability / validation failure
+    if "validation-unavailable" in reasons_str or "not-registered" in reasons_str:
+        return FailureDomain.ROUTING_FAILURE.value
+
+    # Capability mismatch
+    if not output.capability_fit and output.reasons:
+        for r in output.reasons:
+            if "capability" in r.lower() or "mismatch" in r.lower():
+                return FailureDomain.SEMANTIC_FAILURE.value
+
+    # Transport not present / not usable
+    if not output.transport_present:
+        return FailureDomain.TRANSPORT_FAILURE.value
+    if not output.transport_usable:
+        return FailureDomain.TRANSPORT_FAILURE.value
+
+    # Device not routable
+    if not output.device_routable:
+        return FailureDomain.ROUTING_FAILURE.value
+
+    # Policy / eligibility failure (catch-all for validation layer rejection)
+    if output.reasons:
+        return FailureDomain.POLICY_FAILURE.value
+
+    return FailureDomain.UNKNOWN_FAILURE.value
+
+
+def _build_degradation_reason(output: "PolicyConvergenceOutput") -> str:
+    """Build a human-readable degradation reason string for an ineligible device.
+
+    Returns a concise, operator-readable explanation of why the device is
+    not eligible.
+    """
+    if not output.transport_present:
+        return "transport not present"
+    if not output.transport_usable:
+        return "transport not usable"
+    if not output.device_routable:
+        return "device not routable"
+    if not output.capability_fit:
+        return "capability mismatch"
+    if output.reasons:
+        # Return the first non-generic reason
+        for r in output.reasons:
+            if r not in (
+                "readiness-unavailable",
+                "participation-unavailable",
+                "validation-unavailable",
+            ):
+                return r
+        return output.reasons[0]
+    return "ineligible"
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -329,6 +423,9 @@ def evaluate_policy_convergence(
     # ── Guard ──────────────────────────────────────────────────────────
     if not device_id or not device_id.strip():
         output.reasons.append("empty-device-id")
+        output.failure_domain = "validation_failure"
+        output.degradation_reason = "empty device_id"
+        output.selected_target_reason = "device not selected: empty device_id"
         return output
 
     # ── Layer 1: Canonical readiness ───────────────────────────────────
@@ -396,6 +493,10 @@ def evaluate_policy_convergence(
     )
 
     if output.eligibility:
+        output.selected_target_reason = (
+            f"device eligible: score={output.policy_score:.3f} "
+            f"path={output.effective_path}"
+        )
         logger.debug(
             "PolicyConvergence: device=%s eligible=True score=%.3f path=%s",
             device_id,
@@ -408,13 +509,23 @@ def evaluate_policy_convergence(
             },
         )
     else:
+        # Derive failure domain from primary ineligibility reason
+        _fd = _classify_failure_domain(output)
+        output.failure_domain = _fd
+        output.degradation_reason = _build_degradation_reason(output)
+        output.selected_target_reason = (
+            f"device not selected: {output.degradation_reason or 'ineligible'}"
+        )
         logger.debug(
-            "PolicyConvergence: device=%s eligible=False reasons=%s",
+            "PolicyConvergence: device=%s eligible=False "
+            "failure_domain=%s reasons=%s",
             device_id,
+            output.failure_domain,
             output.reasons,
             extra={
                 "event": "policy_convergence_ineligible",
                 "device_id": device_id,
+                "failure_domain": output.failure_domain,
                 "reasons": output.reasons,
             },
         )
