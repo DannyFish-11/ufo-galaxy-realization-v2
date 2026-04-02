@@ -863,7 +863,9 @@ class TestP_UnresolvedConflictsDiscipline(unittest.TestCase):
             c for c in audit.detect_parallel_truth_paths()
             if c.conflict_id == "CONFLICT-002"
         )
-        self.assertFalse(conflict_002.is_resolved)
+        # PR-514 resolves CONFLICT-002: enrich_runtime_projection() is now
+        # wired into _assemble_projection() and _assemble_desktop_status_board_payload().
+        self.assertTrue(conflict_002.is_resolved)
 
     def test_P02_conflict_003_not_resolved(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
@@ -1050,17 +1052,22 @@ class TestS_ResidualAnnotationDiscipline(unittest.TestCase):
         from core.runtime_closure_audit import RuntimeClosureAudit
         audit = RuntimeClosureAudit()
         gap = next(g for g in audit.get_residual_gap_map() if g.gap_id == "GAP-512-008")
-        self.assertTrue(gap.is_residual)
+        # PR-514 resolves GAP-512-008 (semantic boundary annotation).
+        self.assertFalse(gap.is_residual)
 
     def test_S03_all_known_gaps_are_residual(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
         audit = RuntimeClosureAudit()
-        for gap in audit.get_residual_gap_map():
-            self.assertTrue(
-                gap.is_residual,
-                f"Gap '{gap.gap_id}' is marked non-residual but should be residual "
-                "(all PR-512 known gaps are deferred)",
-            )
+        # PR-514 resolves GAP-512-003, GAP-512-005, and GAP-512-008.
+        # Confirm the PR-514 resolved gaps are marked non-residual.
+        pr514_resolved = {"GAP-512-003", "GAP-512-005", "GAP-512-008"}
+        by_id = {g.gap_id: g for g in audit.get_residual_gap_map()}
+        for gap_id in pr514_resolved:
+            if gap_id in by_id:
+                self.assertFalse(
+                    by_id[gap_id].is_residual,
+                    f"Gap '{gap_id}' resolved by PR-514 should be is_residual=False",
+                )
 
 
 # ===========================================================================

@@ -54,6 +54,23 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::PROJECTION_SURFACE_BRIDGE_INTEGRATED_UNAVAILABLE"
     )
 
+# PR-514: Authority Conflict Elimination integration sentinel.
+# Asserts that _assemble_projection() and _assemble_desktop_status_board_payload()
+# now call enrich_runtime_projection() from ProjectionSurfaceBridge, resolving
+# GAP-512-003 (bridge not consumed by status board assembly) and GAP-512-005
+# (status board assembled without reading canonical OperatorSurface).
+try:
+    from core.authority_conflict_elimination import (  # noqa: F401
+        AUTHORITY_CONFLICT_ELIMINATION_AUTHORITY as _ACE_AUTHORITY,
+    )
+    AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED: str = (
+        "PROJECTION_ROUTES::AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED_V1"
+    )
+except ImportError:  # pragma: no cover
+    AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
@@ -1970,10 +1987,27 @@ def _assemble_projection() -> Dict[str, Any]:
             execution_summary=execution_summary,
             timestamp=time.time(),
         )
-        return projection.to_dict()
+        payload = projection.to_dict()
     except Exception as exc:  # pragma: no cover
         logger.warning("Projection assembly failed, returning minimal payload: %s", exc)
         return _minimal_fallback_payload()
+
+    # --- 5. PR-514: Enrich with canonical runtime authority (GAP-512-003, GAP-512-005) ---
+    # ProjectionSurfaceBridge.enrich_runtime_projection() reads OperatorSurface
+    # (canonical operator inspection authority) and other runtime layers, adding
+    # active_task_count, executor_count, operator_snapshot_dict, etc. without
+    # overwriting projection-derived fields.
+    try:
+        from core.authority_conflict_elimination import (
+            enrich_projection_with_runtime_authority,
+        )
+        payload = enrich_projection_with_runtime_authority(payload)
+    except Exception as exc:
+        logger.debug(
+            "_assemble_projection: runtime enrichment skipped: %s", exc
+        )
+
+    return payload
 
 
 def _get_continuum_state():
@@ -3134,12 +3168,28 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
         )
         result = payload_obj.to_dict()
         result["_assembled_at"] = time.time()
-        return result
     except Exception as exc:
         logger.warning(
             "_assemble_desktop_status_board_payload: assembly failed: %s", exc
         )
         return _minimal_desktop_status_board_fallback()
+
+    # PR-514: Enrich with canonical runtime authority (GAP-512-003, GAP-512-005).
+    # ProjectionSurfaceBridge.enrich_runtime_projection() reads OperatorSurface
+    # so the status board receives operator_snapshot_dict and task/executor counts
+    # from the canonical source without overwriting projection-derived fields.
+    try:
+        from core.authority_conflict_elimination import (
+            enrich_projection_with_runtime_authority,
+        )
+        result = enrich_projection_with_runtime_authority(result)
+    except Exception as exc:
+        logger.debug(
+            "_assemble_desktop_status_board_payload: runtime enrichment skipped: %s",
+            exc,
+        )
+
+    return result
 
 
 def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
