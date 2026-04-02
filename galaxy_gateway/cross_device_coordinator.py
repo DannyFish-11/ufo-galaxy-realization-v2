@@ -410,8 +410,12 @@ class CrossDeviceCoordinator:
                         primary_device_id=_primary_device_id,
                     )
                     record_integrity_event(formation_record=_frec)
-                except Exception:
-                    pass  # integrity recording is advisory
+                except Exception as _rec_err:
+                    logger.debug(
+                        "CrossDeviceCoordinator.execute_cross_device_task: "
+                        "integrity recording skipped — %s",
+                        _rec_err,
+                    )  # integrity recording is advisory
             except Exception as _form_err:
                 logger.warning(
                     "CrossDeviceCoordinator.execute_cross_device_task: "
