@@ -161,10 +161,10 @@ def test_C05_skipped_maps_to_failed() -> None:
     assert rt.get_node_by_task_id("n5").state == GraphNodeState.FAILED
 
 
-def test_C06_cancelled_maps_to_failed() -> None:
+def test_C06_cancelled_maps_to_cancelled() -> None:
     rt = _fresh()
     project_workflow_to_graph(_workflow_record(node_statuses={"n6": "cancelled"}), rt)
-    assert rt.get_node_by_task_id("n6").state == GraphNodeState.FAILED
+    assert rt.get_node_by_task_id("n6").state == GraphNodeState.CANCELLED
 
 
 def test_C07_completed_maps_to_completed() -> None:

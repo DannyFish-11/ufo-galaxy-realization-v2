@@ -3,7 +3,7 @@
 """
 core/task_graph_runtime.py
 ===========================
-PR-6: Task Graph Runtime — Unified System-Level Task Execution Chassis.
+PR-6 / PR-C: Task Graph Runtime — Unified System-Level Task Execution Chassis.
 
 Establishes the canonical **Task Graph Runtime** as the single unified chassis
 for all task execution within Galaxy.  The existing DAG / workflow / step /
@@ -11,19 +11,46 @@ plan capabilities are preserved and absorbed as *contributors* to the runtime
 via lightweight projection adapters — none of the legacy orchestration paths
 are removed.
 
+PR-C additions (Graph Runtime Convergence)
+------------------------------------------
+* Extended ``GraphNodeState`` covering the full CanonicalTask lifecycle:
+  admitted, planned, routed, partial_result, cancelled, degraded, replayed.
+* Extended ``GraphEdgeKind`` with retry_edge, fallback_edge, fanout_edge,
+  fanin_edge — providing explicit lineage for all non-happy-path flows.
+* New observability dataclasses: ``RetryRecord``, ``FallbackRecord``,
+  ``FanoutRecord``.
+* New ``TaskGraphRuntime`` methods:
+  - ``register_canonical_task()``   — maps a CanonicalTask entity to a node
+  - ``register_retry()``            — creates a retry edge + RetryRecord
+  - ``register_fallback()``         — creates a fallback edge + FallbackRecord
+  - ``register_fanout()``           — creates fanout edges from one parent
+  - ``register_fanin()``            — creates fanin edges to one aggregator
+  - ``get_retry_lineage()``         — full retry chain for a task_id
+  - ``get_fallback_lineage()``      — full fallback chain for a task_id
+  - ``get_fanout_children()``       — direct fanout children of a task_id
+  - ``get_fanin_parents()``         — direct fanin parents of a task_id
+* Updated ``snapshot()`` to include retry/fallback/fanout/fanin counts and
+  the canonical ``GRAPH_RUNTIME_CONVERGENCE_AUTHORITY`` sentinel.
+
 Architecture
 ------------
 ::
 
     ┌──────────────────────────────────────────────────────────────────────┐
     │  TASK GRAPH RUNTIME  (this module)                                   │
-    │  Unified lifecycle:                                                  │
-    │    queued → dispatch → running → result → completed | failed         │
+    │  Full lifecycle:                                                     │
+    │    queued → admitted → planned → routed → dispatch → running         │
+    │          → result | partial_result → completed | failed              │
+    │          → cancelled | degraded | replayed                           │
     │                                                                      │
     │  Node types:   task_node (unit of work)                              │
     │  Edge types:   dependency_edge  — structural DAG dependency          │
     │                dispatch_edge    — transport/carrier chosen            │
     │                result_edge      — result flows back to requester      │
+    │                retry_edge       — retry attempt lineage               │
+    │                fallback_edge    — degraded path lineage               │
+    │                fanout_edge      — multi-target dispatch child         │
+    │                fanin_edge       — aggregated result from children     │
     └──────────────────────────────────────────────────────────────────────┘
                         ↑ projection adapters
     ┌───────────────────────────────────────────────────────────────────┐
@@ -48,6 +75,8 @@ Invariants
     **graph contributors** that register nodes/edges with the runtime.
 5.  The runtime maintains a 256-entry observability ring buffer that can be
     consumed by ``status_board_v2`` and the operator console.
+6.  retry / fallback / fanout / fanin relations form explicit graph edges —
+    not scattered log entries — so that lineage is always queryable.
 
 Public API
 ----------
@@ -56,6 +85,7 @@ Authority sentinels:
     TASK_GRAPH_RUNTIME_LAYER_POSITION
     TASK_GRAPH_NODE_CONTRACT_VERSION
     WORKFLOW_GRAPH_PROJECTION_POLICY
+    GRAPH_RUNTIME_CONVERGENCE_AUTHORITY
 
 Enumerations:
     GraphNodeState
@@ -68,6 +98,9 @@ Dataclasses:
     GraphRuntimeRecord
     GraphRuntimeSnapshot
     WorkflowProjectionRecord
+    RetryRecord
+    FallbackRecord
+    FanoutRecord
 
 Helpers:
     envelope_to_graph_node(envelope) -> GraphNode
@@ -99,6 +132,7 @@ __all__ = [
     "TASK_GRAPH_RUNTIME_LAYER_POSITION",
     "TASK_GRAPH_NODE_CONTRACT_VERSION",
     "WORKFLOW_GRAPH_PROJECTION_POLICY",
+    "GRAPH_RUNTIME_CONVERGENCE_AUTHORITY",
     # Enumerations
     "GraphNodeState",
     "GraphEdgeKind",
@@ -109,6 +143,9 @@ __all__ = [
     "GraphRuntimeRecord",
     "GraphRuntimeSnapshot",
     "WorkflowProjectionRecord",
+    "RetryRecord",
+    "FallbackRecord",
+    "FanoutRecord",
     # Helpers
     "envelope_to_graph_node",
     "result_envelope_to_node_update",
@@ -151,6 +188,11 @@ WORKFLOW_GRAPH_PROJECTION_POLICY: str = (
     "WORKFLOW_CONTRIBUTORS_PROJECTED_TO_GRAPH_NOT_REMOVED"
 )
 
+#: PR-C convergence authority sentinel.  Signals that retry / fallback /
+#: fanout / fanin edges, the extended lifecycle states, and the CanonicalTask
+#: integration path are all active in this runtime instance.
+GRAPH_RUNTIME_CONVERGENCE_AUTHORITY: str = "GRAPH_RUNTIME_CONVERGENCE_V1"
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -160,17 +202,41 @@ WORKFLOW_GRAPH_PROJECTION_POLICY: str = (
 class GraphNodeState(str, Enum):
     """Canonical lifecycle states for a single task graph node.
 
-    Transition diagram::
+    Transition diagram (PR-C extended)::
 
-        queued ──► dispatch ──► running ──► result ──► completed
-                                                   └──► failed
+        queued -> admitted -> planned -> routed -> dispatch -> running
+                                                                 |
+                                                  +--------------+
+                                                  v              v
+                                                result    partial_result
+                                                  |              |
+                                            +-----+------+       |
+                                            v            v       v
+                                        completed      failed  degraded
+                                                         |
+                                                  cancelled / replayed
+
+    The original 6-state set (queued, dispatch, running, result, completed,
+    failed) is fully preserved for backward compatibility.  The 7 new states
+    (admitted, planned, routed, partial_result, cancelled, degraded, replayed)
+    are additive.
     """
+    # Original PR-6 states (preserved, unchanged)
     QUEUED     = "queued"
     DISPATCH   = "dispatch"
     RUNNING    = "running"
     RESULT     = "result"
     COMPLETED  = "completed"
     FAILED     = "failed"
+
+    # PR-C extended states -- aligned with CanonicalTask.TaskLifecycle
+    ADMITTED       = "admitted"
+    PLANNED        = "planned"
+    ROUTED         = "routed"
+    PARTIAL_RESULT = "partial_result"
+    CANCELLED      = "cancelled"
+    DEGRADED       = "degraded"
+    REPLAYED       = "replayed"
 
 
 class GraphEdgeKind(str, Enum):
@@ -187,10 +253,26 @@ class GraphEdgeKind(str, Enum):
     result_edge
         Records the result flow from a terminal node back to the requester or
         dependent node.
+
+    retry_edge  (PR-C)
+        Links the original failed node to its retry attempt node.
+
+    fallback_edge  (PR-C)
+        Links the primary failed/degraded node to the fallback node.
+
+    fanout_edge  (PR-C)
+        Links a parent dispatch node to one of its parallel child nodes.
+
+    fanin_edge  (PR-C)
+        Links a child node back to the aggregator node collecting results.
     """
     DEPENDENCY = "dependency_edge"
     DISPATCH   = "dispatch_edge"
     RESULT     = "result_edge"
+    RETRY      = "retry_edge"
+    FALLBACK   = "fallback_edge"
+    FANOUT     = "fanout_edge"
+    FANIN      = "fanin_edge"
 
 
 class WorkflowContributorKind(str, Enum):
@@ -411,6 +493,19 @@ class GraphRuntimeSnapshot:
 
     authority: str = TASK_GRAPH_RUNTIME_AUTHORITY
 
+    # PR-C lineage counts
+    total_retry_records: int = 0
+    """Total number of retry relations recorded."""
+
+    total_fallback_records: int = 0
+    """Total number of fallback relations recorded."""
+
+    total_fanout_records: int = 0
+    """Total number of fanout/fanin relations recorded."""
+
+    convergence_authority: str = GRAPH_RUNTIME_CONVERGENCE_AUTHORITY
+    """Signals that PR-C convergence features are active."""
+
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable representation."""
         return {
@@ -423,6 +518,10 @@ class GraphRuntimeSnapshot:
             "edges": list(self.edges),
             "recent_records": list(self.recent_records),
             "authority": self.authority,
+            "total_retry_records": self.total_retry_records,
+            "total_fallback_records": self.total_fallback_records,
+            "total_fanout_records": self.total_fanout_records,
+            "convergence_authority": self.convergence_authority,
         }
 
 
@@ -473,6 +572,121 @@ class WorkflowProjectionRecord:
 
 
 # ---------------------------------------------------------------------------
+# PR-C Observability dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RetryRecord:
+    """Observability record for a retry relation between two graph nodes.
+
+    Created when :meth:`TaskGraphRuntime.register_retry` is called.
+    """
+
+    record_id: str = field(default_factory=lambda: f"retry_{uuid.uuid4().hex[:12]}")
+    """Unique retry record identifier."""
+
+    original_task_id: str = ""
+    """task_id of the original node that failed or was retried."""
+
+    retry_task_id: str = ""
+    """task_id of the new retry attempt node."""
+
+    edge_id: str = ""
+    """edge_id of the retry_edge created for this record."""
+
+    attempt_number: int = 1
+    """Monotonically increasing retry attempt counter (1-based)."""
+
+    reason: str = ""
+    """Human-readable reason for the retry."""
+
+    ts: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "record_id": self.record_id,
+            "original_task_id": self.original_task_id,
+            "retry_task_id": self.retry_task_id,
+            "edge_id": self.edge_id,
+            "attempt_number": self.attempt_number,
+            "reason": self.reason,
+            "ts": self.ts,
+        }
+
+
+@dataclass
+class FallbackRecord:
+    """Observability record for a fallback relation between two graph nodes.
+
+    Created when :meth:`TaskGraphRuntime.register_fallback` is called.
+    """
+
+    record_id: str = field(default_factory=lambda: f"fallback_{uuid.uuid4().hex[:12]}")
+    """Unique fallback record identifier."""
+
+    primary_task_id: str = ""
+    """task_id of the primary node that triggered the fallback."""
+
+    fallback_task_id: str = ""
+    """task_id of the fallback node."""
+
+    edge_id: str = ""
+    """edge_id of the fallback_edge created for this record."""
+
+    reason: str = ""
+    """Human-readable reason for the fallback."""
+
+    ts: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "record_id": self.record_id,
+            "primary_task_id": self.primary_task_id,
+            "fallback_task_id": self.fallback_task_id,
+            "edge_id": self.edge_id,
+            "reason": self.reason,
+            "ts": self.ts,
+        }
+
+
+@dataclass
+class FanoutRecord:
+    """Observability record for a fanout/fanin multi-target dispatch.
+
+    Created when :meth:`TaskGraphRuntime.register_fanout` or
+    :meth:`TaskGraphRuntime.register_fanin` is called.
+    """
+
+    record_id: str = field(default_factory=lambda: f"fanout_{uuid.uuid4().hex[:12]}")
+    """Unique fanout record identifier."""
+
+    parent_task_id: str = ""
+    """task_id of the parent/aggregator node."""
+
+    child_task_ids: List[str] = field(default_factory=list)
+    """task_ids of child nodes in this fanout/fanin group."""
+
+    edge_ids: List[str] = field(default_factory=list)
+    """edge_ids created for this fanout/fanin."""
+
+    direction: str = "fanout"
+    """'fanout' (parent -> children) or 'fanin' (children -> parent)."""
+
+    ts: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "record_id": self.record_id,
+            "parent_task_id": self.parent_task_id,
+            "child_task_ids": list(self.child_task_ids),
+            "edge_ids": list(self.edge_ids),
+            "direction": self.direction,
+            "ts": self.ts,
+        }
+
+
+# ---------------------------------------------------------------------------
 # TaskGraphRuntime
 # ---------------------------------------------------------------------------
 
@@ -505,6 +719,10 @@ class TaskGraphRuntime:
         self._edges: Dict[str, GraphEdge] = {}          # keyed by edge_id
         self._records: Deque[GraphRuntimeRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
         self._projections: Deque[WorkflowProjectionRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
+        # PR-C: retry / fallback / fanout lineage ring buffers
+        self._retry_records: Deque[RetryRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
+        self._fallback_records: Deque[FallbackRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
+        self._fanout_records: Deque[FanoutRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
 
     # ── Node management ──────────────────────────────────────────────────────
 
@@ -601,7 +819,14 @@ class TaskGraphRuntime:
             node.running_at = now
         elif new_state == GraphNodeState.RESULT:
             node.result_at = now
-        elif new_state in (GraphNodeState.COMPLETED, GraphNodeState.FAILED):
+        elif new_state == GraphNodeState.PARTIAL_RESULT:
+            node.result_at = now
+        elif new_state in (
+            GraphNodeState.COMPLETED,
+            GraphNodeState.FAILED,
+            GraphNodeState.CANCELLED,
+            GraphNodeState.DEGRADED,
+        ):
             node.completed_at = now
             node.result_summary = result_summary
             node.error = error
@@ -772,7 +997,379 @@ class TaskGraphRuntime:
             error=str(error_val) if error_val else "",
         )
 
-    # ── Workflow projection adapter ──────────────────────────────────────────
+    # ── PR-C: CanonicalTask integration ─────────────────────────────────────
+
+    def register_canonical_task(
+        self,
+        canonical_task: Any,
+        *,
+        contributor: WorkflowContributorKind = WorkflowContributorKind.UNKNOWN,
+    ) -> GraphNode:
+        """Map a ``CanonicalTask`` entity to a ``GraphNode`` and register it.
+
+        Reads ``task_id``, ``trace_id``, ``session_id``, ``tool_name``,
+        ``lifecycle``, and routing fields from the CanonicalTask using
+        ``getattr`` so that both dataclass and Pydantic forms are supported.
+
+        Args:
+            canonical_task: A ``CanonicalTask`` instance (or compatible object).
+            contributor:    Orchestration layer registering the task.
+
+        Returns:
+            The registered (or pre-existing) ``GraphNode``.
+        """
+        task_id = getattr(canonical_task, "task_id", "") or ""
+        trace_id = getattr(canonical_task, "trace_id", "") or ""
+        session_id = getattr(canonical_task, "session_id", "") or ""
+
+        intent = getattr(canonical_task, "intent", None)
+        tool_name = getattr(intent, "tool_name", "") or "" if intent else ""
+
+        routing = getattr(canonical_task, "routing", None)
+        device_id = getattr(routing, "selected_device_id", "") or "" if routing else ""
+
+        # Map CanonicalTask lifecycle → GraphNodeState
+        lifecycle_val = getattr(canonical_task, "lifecycle", None)
+        lifecycle_str = lifecycle_val.value if hasattr(lifecycle_val, "value") else str(lifecycle_val)
+        _lc_map = {
+            "created":    GraphNodeState.QUEUED,
+            "admitted":   GraphNodeState.ADMITTED,
+            "planned":    GraphNodeState.PLANNED,
+            "routed":     GraphNodeState.ROUTED,
+            "dispatched": GraphNodeState.DISPATCH,
+            "running":    GraphNodeState.RUNNING,
+            "completed":  GraphNodeState.COMPLETED,
+            "failed":     GraphNodeState.FAILED,
+            "cancelled":  GraphNodeState.CANCELLED,
+            "degraded":   GraphNodeState.DEGRADED,
+        }
+        initial_state = _lc_map.get(lifecycle_str, GraphNodeState.QUEUED)
+
+        if not task_id:
+            logger.warning(
+                "register_canonical_task: CanonicalTask has no task_id; skipping."
+            )
+            task_id = f"ctask_{uuid.uuid4().hex[:12]}"
+
+        # Check for existing node first (idempotent)
+        existing = self._nodes.get(task_id)
+        if existing is not None:
+            return existing
+
+        node = GraphNode(
+            task_id=task_id,
+            trace_id=trace_id,
+            session_id=session_id,
+            tool_name=tool_name,
+            device_id=device_id,
+            state=initial_state,
+            contributor=contributor,
+        )
+        return self.register_node(node)
+
+    # ── PR-C: Retry / Fallback / Fanout / Fanin ──────────────────────────────
+
+    def register_retry(
+        self,
+        original_task_id: str,
+        retry_task_id: str,
+        *,
+        attempt_number: int = 1,
+        reason: str = "",
+        contributor: WorkflowContributorKind = WorkflowContributorKind.UNKNOWN,
+    ) -> RetryRecord:
+        """Record a retry relation between an original node and a retry node.
+
+        Creates a ``retry_edge`` from the original node to the retry node and
+        appends a ``RetryRecord`` to the observability ring buffer.  Both nodes
+        must be registered before calling this method; if either is absent a
+        warning is logged and the record is still created (for observability).
+
+        Args:
+            original_task_id: task_id of the node that failed or was retried.
+            retry_task_id:    task_id of the new retry attempt node.
+            attempt_number:   Monotonically increasing retry counter (1-based).
+            reason:           Human-readable retry reason.
+            contributor:      Orchestration layer registering the retry.
+
+        Returns:
+            The created ``RetryRecord``.
+        """
+        original_node = self._nodes.get(original_task_id)
+        retry_node = self._nodes.get(retry_task_id)
+
+        if original_node is None:
+            logger.warning(
+                "task_graph_runtime | register_retry: original_task_id=%s not found",
+                original_task_id,
+            )
+        if retry_node is None:
+            logger.warning(
+                "task_graph_runtime | register_retry: retry_task_id=%s not found",
+                retry_task_id,
+            )
+
+        src_node_id = original_node.node_id if original_node else original_task_id
+        tgt_node_id = retry_node.node_id if retry_node else retry_task_id
+
+        edge = GraphEdge(
+            kind=GraphEdgeKind.RETRY,
+            source_node_id=src_node_id,
+            target_node_id=tgt_node_id,
+            metadata={
+                "original_task_id": original_task_id,
+                "retry_task_id": retry_task_id,
+                "attempt_number": attempt_number,
+                "reason": reason,
+            },
+        )
+        self.register_edge(edge)
+
+        record = RetryRecord(
+            original_task_id=original_task_id,
+            retry_task_id=retry_task_id,
+            edge_id=edge.edge_id,
+            attempt_number=attempt_number,
+            reason=reason,
+        )
+        self._retry_records.append(record)
+        logger.info(
+            "task_graph_runtime | retry_registered original=%s retry=%s attempt=%d",
+            original_task_id, retry_task_id, attempt_number,
+        )
+        return record
+
+    def register_fallback(
+        self,
+        primary_task_id: str,
+        fallback_task_id: str,
+        *,
+        reason: str = "",
+        contributor: WorkflowContributorKind = WorkflowContributorKind.UNKNOWN,
+    ) -> FallbackRecord:
+        """Record a fallback relation between a primary node and a fallback node.
+
+        Creates a ``fallback_edge`` from the primary node to the fallback node
+        and appends a ``FallbackRecord`` to the observability ring buffer.
+
+        Args:
+            primary_task_id:  task_id of the primary node that triggered fallback.
+            fallback_task_id: task_id of the fallback execution node.
+            reason:           Human-readable fallback reason.
+            contributor:      Orchestration layer registering the fallback.
+
+        Returns:
+            The created ``FallbackRecord``.
+        """
+        primary_node = self._nodes.get(primary_task_id)
+        fallback_node = self._nodes.get(fallback_task_id)
+
+        if primary_node is None:
+            logger.warning(
+                "task_graph_runtime | register_fallback: primary_task_id=%s not found",
+                primary_task_id,
+            )
+        if fallback_node is None:
+            logger.warning(
+                "task_graph_runtime | register_fallback: fallback_task_id=%s not found",
+                fallback_task_id,
+            )
+
+        src_node_id = primary_node.node_id if primary_node else primary_task_id
+        tgt_node_id = fallback_node.node_id if fallback_node else fallback_task_id
+
+        edge = GraphEdge(
+            kind=GraphEdgeKind.FALLBACK,
+            source_node_id=src_node_id,
+            target_node_id=tgt_node_id,
+            metadata={
+                "primary_task_id": primary_task_id,
+                "fallback_task_id": fallback_task_id,
+                "reason": reason,
+            },
+        )
+        self.register_edge(edge)
+
+        record = FallbackRecord(
+            primary_task_id=primary_task_id,
+            fallback_task_id=fallback_task_id,
+            edge_id=edge.edge_id,
+            reason=reason,
+        )
+        self._fallback_records.append(record)
+        logger.info(
+            "task_graph_runtime | fallback_registered primary=%s fallback=%s",
+            primary_task_id, fallback_task_id,
+        )
+        return record
+
+    def register_fanout(
+        self,
+        parent_task_id: str,
+        child_task_ids: List[str],
+        *,
+        contributor: WorkflowContributorKind = WorkflowContributorKind.UNKNOWN,
+    ) -> FanoutRecord:
+        """Register a multi-target fanout from one parent to multiple children.
+
+        Creates a ``fanout_edge`` from the parent node to each child node and
+        appends a ``FanoutRecord`` to the observability ring buffer.
+
+        Args:
+            parent_task_id: task_id of the parent (dispatcher) node.
+            child_task_ids: task_ids of the parallel child execution nodes.
+            contributor:    Orchestration layer registering the fanout.
+
+        Returns:
+            The created ``FanoutRecord``.
+        """
+        parent_node = self._nodes.get(parent_task_id)
+        if parent_node is None:
+            logger.warning(
+                "task_graph_runtime | register_fanout: parent_task_id=%s not found",
+                parent_task_id,
+            )
+
+        src_node_id = parent_node.node_id if parent_node else parent_task_id
+        edge_ids: List[str] = []
+
+        for child_task_id in child_task_ids:
+            child_node = self._nodes.get(child_task_id)
+            tgt_node_id = child_node.node_id if child_node else child_task_id
+            edge = GraphEdge(
+                kind=GraphEdgeKind.FANOUT,
+                source_node_id=src_node_id,
+                target_node_id=tgt_node_id,
+                metadata={
+                    "parent_task_id": parent_task_id,
+                    "child_task_id": child_task_id,
+                },
+            )
+            self.register_edge(edge)
+            edge_ids.append(edge.edge_id)
+
+        record = FanoutRecord(
+            parent_task_id=parent_task_id,
+            child_task_ids=list(child_task_ids),
+            edge_ids=edge_ids,
+            direction="fanout",
+        )
+        self._fanout_records.append(record)
+        logger.info(
+            "task_graph_runtime | fanout_registered parent=%s children=%d",
+            parent_task_id, len(child_task_ids),
+        )
+        return record
+
+    def register_fanin(
+        self,
+        child_task_ids: List[str],
+        aggregator_task_id: str,
+        *,
+        contributor: WorkflowContributorKind = WorkflowContributorKind.UNKNOWN,
+    ) -> FanoutRecord:
+        """Register a multi-target fanin from multiple children to one aggregator.
+
+        Creates a ``fanin_edge`` from each child node to the aggregator node
+        and appends a ``FanoutRecord`` (direction='fanin') to the ring buffer.
+
+        Args:
+            child_task_ids:      task_ids of the parallel child nodes.
+            aggregator_task_id:  task_id of the aggregator (collector) node.
+            contributor:         Orchestration layer registering the fanin.
+
+        Returns:
+            The created ``FanoutRecord`` (with direction='fanin').
+        """
+        agg_node = self._nodes.get(aggregator_task_id)
+        if agg_node is None:
+            logger.warning(
+                "task_graph_runtime | register_fanin: aggregator_task_id=%s not found",
+                aggregator_task_id,
+            )
+
+        tgt_node_id = agg_node.node_id if agg_node else aggregator_task_id
+        edge_ids: List[str] = []
+
+        for child_task_id in child_task_ids:
+            child_node = self._nodes.get(child_task_id)
+            src_node_id = child_node.node_id if child_node else child_task_id
+            edge = GraphEdge(
+                kind=GraphEdgeKind.FANIN,
+                source_node_id=src_node_id,
+                target_node_id=tgt_node_id,
+                metadata={
+                    "child_task_id": child_task_id,
+                    "aggregator_task_id": aggregator_task_id,
+                },
+            )
+            self.register_edge(edge)
+            edge_ids.append(edge.edge_id)
+
+        record = FanoutRecord(
+            parent_task_id=aggregator_task_id,
+            child_task_ids=list(child_task_ids),
+            edge_ids=edge_ids,
+            direction="fanin",
+        )
+        self._fanout_records.append(record)
+        logger.info(
+            "task_graph_runtime | fanin_registered aggregator=%s children=%d",
+            aggregator_task_id, len(child_task_ids),
+        )
+        return record
+
+    # ── PR-C: Lineage query helpers ───────────────────────────────────────────
+
+    def get_retry_lineage(self, task_id: str) -> List[RetryRecord]:
+        """Return all retry records involving ``task_id`` (as original or retry).
+
+        Records are returned in insertion order.
+        """
+        return [
+            r for r in self._retry_records
+            if r.original_task_id == task_id or r.retry_task_id == task_id
+        ]
+
+    def get_fallback_lineage(self, task_id: str) -> List[FallbackRecord]:
+        """Return all fallback records involving ``task_id`` (as primary or fallback).
+
+        Records are returned in insertion order.
+        """
+        return [
+            r for r in self._fallback_records
+            if r.primary_task_id == task_id or r.fallback_task_id == task_id
+        ]
+
+    def get_fanout_children(self, parent_task_id: str) -> List[str]:
+        """Return task_ids of all direct fanout children for ``parent_task_id``."""
+        children: List[str] = []
+        for r in self._fanout_records:
+            if r.direction == "fanout" and r.parent_task_id == parent_task_id:
+                children.extend(r.child_task_ids)
+        return children
+
+    def get_fanin_parents(self, aggregator_task_id: str) -> List[str]:
+        """Return task_ids of all fanin children for ``aggregator_task_id``."""
+        parents: List[str] = []
+        for r in self._fanout_records:
+            if r.direction == "fanin" and r.parent_task_id == aggregator_task_id:
+                parents.extend(r.child_task_ids)
+        return parents
+
+    def get_retry_log(self) -> Deque[RetryRecord]:
+        """Return the internal retry ring buffer."""
+        return self._retry_records
+
+    def get_fallback_log(self) -> Deque[FallbackRecord]:
+        """Return the internal fallback ring buffer."""
+        return self._fallback_records
+
+    def get_fanout_log(self) -> Deque[FanoutRecord]:
+        """Return the internal fanout/fanin ring buffer."""
+        return self._fanout_records
+
+    # ── Workflow projection adapter ────────────────────────────────────────── ──────────────────────────────────────────
 
     def project_workflow(
         self,
@@ -857,6 +1454,9 @@ class TaskGraphRuntime:
             nodes=[n.to_dict() for n in self._nodes.values()],
             edges=[e.to_dict() for e in self._edges.values()],
             recent_records=[r.to_dict() for r in recent],
+            total_retry_records=len(self._retry_records),
+            total_fallback_records=len(self._fallback_records),
+            total_fanout_records=len(self._fanout_records),
         )
 
     def get_observability_log(self) -> Deque[GraphRuntimeRecord]:
@@ -1061,17 +1661,24 @@ def project_workflow_to_graph(
 
     # Map legacy NodeStatus → GraphNodeState
     _status_map: Dict[str, GraphNodeState] = {
-        "pending":    GraphNodeState.QUEUED,
-        "queued":     GraphNodeState.QUEUED,
-        "running":    GraphNodeState.RUNNING,
-        "done":       GraphNodeState.COMPLETED,
-        "completed":  GraphNodeState.COMPLETED,
-        "failed":     GraphNodeState.FAILED,
-        "skipped":    GraphNodeState.FAILED,
-        "cancelled":  GraphNodeState.FAILED,
-        "interrupted": GraphNodeState.FAILED,
-        "dispatch":   GraphNodeState.DISPATCH,
-        "result":     GraphNodeState.RESULT,
+        "pending":       GraphNodeState.QUEUED,
+        "queued":        GraphNodeState.QUEUED,
+        "admitted":      GraphNodeState.ADMITTED,
+        "planned":       GraphNodeState.PLANNED,
+        "routed":        GraphNodeState.ROUTED,
+        "running":       GraphNodeState.RUNNING,
+        "done":          GraphNodeState.COMPLETED,
+        "completed":     GraphNodeState.COMPLETED,
+        "failed":        GraphNodeState.FAILED,
+        "skipped":       GraphNodeState.FAILED,
+        "cancelled":     GraphNodeState.CANCELLED,
+        "interrupted":   GraphNodeState.FAILED,
+        "dispatch":      GraphNodeState.DISPATCH,
+        "dispatched":    GraphNodeState.DISPATCH,
+        "result":        GraphNodeState.RESULT,
+        "partial_result": GraphNodeState.PARTIAL_RESULT,
+        "degraded":      GraphNodeState.DEGRADED,
+        "replayed":      GraphNodeState.REPLAYED,
     }
 
     nodes: List[GraphNode] = []
