@@ -44,6 +44,15 @@ logger = logging.getLogger(__name__)
 #: CommandRouter via the canonical execution spine.
 GALAXY_ORCHESTRATOR_FACADE_AUTHORITY: str = "GALAXY_ORCHESTRATOR_FACADE_V1"
 
+# ---------------------------------------------------------------------------
+# PR-6: Task Graph Runtime — contributor sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that GalaxyOrchestrator is a task graph contributor.
+#: Its execution results are projected onto the unified TaskGraphRuntime via
+#: ``core.task_graph_runtime.project_workflow_to_graph``.
+GALAXY_ORCHESTRATOR_GRAPH_CONTRIBUTOR: str = "GALAXY_ORCHESTRATOR_GRAPH_CONTRIBUTOR_V1"
+
 
 class TaskStatus(Enum):
     """任务状态枚举"""

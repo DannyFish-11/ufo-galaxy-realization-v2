@@ -52,6 +52,15 @@ logger = logging.getLogger("UnifiedOrchestrator")
 #: This module is retained for backward compatibility only.
 UNIFIED_ORCHESTRATOR_FACADE_AUTHORITY: str = "UNIFIED_ORCHESTRATOR_FACADE_V1"
 
+# ---------------------------------------------------------------------------
+# PR-6: Task Graph Runtime — contributor sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that UnifiedOrchestrator is a task graph contributor.
+#: Its execution results are projected onto the unified TaskGraphRuntime via
+#: ``core.task_graph_runtime.project_workflow_to_graph``.
+UNIFIED_ORCHESTRATOR_GRAPH_CONTRIBUTOR: str = "UNIFIED_ORCHESTRATOR_GRAPH_CONTRIBUTOR_V1"
+
 
 class TaskPriority(Enum):
     """任务优先级"""
