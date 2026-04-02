@@ -748,7 +748,7 @@ class DeviceRouter:
         # The envelope carries trace_id/task_id/route_mode through the routing chain.
         # PR-521 / GAP-517-006: extract source_device_id before envelope construction
         # so it can be embedded in the envelope metadata for downstream audit.
-        _source_device_id_raw = ctx.get("source_device_id", "") or ctx.get("device_id", "")
+        _entry_source_device_id = ctx.get("source_device_id", "") or ctx.get("device_id", "")
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
@@ -766,7 +766,7 @@ class DeviceRouter:
                     "route_mode": _route_mode,
                     "task_type": ctx.get("task_type", ""),
                     "context": ctx,
-                    "source_device_id": _source_device_id_raw,
+                    "source_device_id": _entry_source_device_id,
                 },
             )
             # Propagate unified task_id and trace_id back into context so the
@@ -775,11 +775,12 @@ class DeviceRouter:
             ctx["task_id"] = _route_envelope.task_id
             ctx["trace_id"] = _route_envelope.trace_id
             logger.debug(
-                "DeviceRouter.route_task envelope | task_id=%s trace_id=%s route_mode=%s source_device_id=%s",
+                "DeviceRouter.route_task envelope | task_id=%s trace_id=%s "
+                "route_mode=%s source_device_id=%s",
                 _route_envelope.task_id,
                 _route_envelope.trace_id,
                 _route_mode,
-                _source_device_id_raw,
+                _entry_source_device_id,
             )
         except Exception as _env_err:
             # Never block routing on envelope construction failure.
@@ -975,7 +976,7 @@ class DeviceRouter:
                     build_control_semantic_record,
                     ControlSemanticKind,
                 )
-                _first_target_id = _target_ids[0] if _target_ids else ""
+                _primary_target_id = _target_ids[0] if _target_ids else ""
                 _is_takeover = bool(ctx.get("is_takeover", False))
                 if _is_takeover:
                     _ctl_kind = ControlSemanticKind.TAKEOVER
@@ -983,11 +984,11 @@ class DeviceRouter:
                     _ctl_kind = ControlSemanticKind.HYBRID
                 elif (
                     source_device_id
-                    and _first_target_id
-                    and source_device_id == _first_target_id
+                    and _primary_target_id
+                    and source_device_id == _primary_target_id
                 ):
                     _ctl_kind = ControlSemanticKind.LOCAL_EXECUTION
-                elif _first_target_id:
+                elif _primary_target_id:
                     _ctl_kind = ControlSemanticKind.REMOTE_DISPATCH
                 else:
                     _ctl_kind = ControlSemanticKind.UNKNOWN
@@ -995,7 +996,7 @@ class DeviceRouter:
                     task_id=_task_id,
                     trace_id=trace_ctx.trace_id,
                     source_device_id=source_device_id,
-                    target_device_id=_first_target_id,
+                    target_device_id=_primary_target_id,
                     control_kind=_ctl_kind,
                     is_takeover=_is_takeover,
                 )
@@ -1005,7 +1006,7 @@ class DeviceRouter:
                     "task_id=%s source=%s target=%s kind=%s clear=%s",
                     _task_id,
                     source_device_id,
-                    _first_target_id,
+                    _primary_target_id,
                     _ctl_kind.value,
                     _crec.is_semantically_clear,
                 )
