@@ -45,6 +45,17 @@ CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED: str = (
     "calls adapt_to_canonical_task() before TaskEnvelope construction."
 )
 
+# PR-513 / GAP-512-006: TaskOrchestrator now emits audit_task_dispatched after
+# successful orchestration handoff so audit lineage is complete for
+# gateway-orchestrated tasks.
+TASK_ORCHESTRATOR_AUDIT_DISPATCH_INTEGRATED: str = (
+    "TASK_ORCHESTRATOR_AUDIT_DISPATCH_V1: "
+    "galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator._process_task() "
+    "emits AuditEventSemantics.audit_task_dispatched after device selection and "
+    "task dispatch so gateway-orchestrated tasks appear in the audit trail "
+    "(GAP-512-006)."
+)
+
 
 class TaskPriority(Enum):
     """任务优先级"""
@@ -330,6 +341,28 @@ class TaskOrchestrator:
 
             # 3. 发送任务到设备
             await self._send_task_to_device(task)
+
+            # PR-513 / GAP-512-006: Emit audit_task_dispatched after successful
+            # orchestration handoff so gateway-orchestrated tasks appear in the
+            # canonical audit trail.
+            try:
+                from core.audit_event_semantics import audit_task_dispatched as _aud_disp
+                _envelope_for_audit = self._task_envelopes.get(task.task_id)
+                _trace_id_audit = (
+                    getattr(_envelope_for_audit, "trace_id", None) or ""
+                )
+                _aud_disp(
+                    task.task_id,
+                    trace_id=_trace_id_audit,
+                    source="task_orchestrator._process_task",
+                    targets=[device_id] if device_id else [],
+                    transport="orchestrator",
+                )
+            except Exception as _aud_exc:
+                logger.debug(
+                    "TaskOrchestrator._process_task: audit_task_dispatched skipped: %s",
+                    _aud_exc,
+                )
 
             # 4. 等待结果（带超时）
             await self._wait_for_completion(task)
