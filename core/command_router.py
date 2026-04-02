@@ -265,6 +265,15 @@ CANONICAL_TASK_SPINE_INTEGRATED: str = (
     "core.legacy_dispatch_registry."
 )
 
+COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED: str = (
+    "COMMAND_ROUTER::DUAL_GRAPH_SELECTION_V1: CommandRouter consumes both "
+    "the capability selection plane (core.capability_graph_selection) and "
+    "the network topology runtime (core.network_topology_runtime) via "
+    "core.capability_network_bridge to make joint provider+path routing "
+    "decisions. Direct capability or topology reads outside the bridge are "
+    "governance violations."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
