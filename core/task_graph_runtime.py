@@ -120,6 +120,16 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
+# Truncation limits (for result_summary and error fields)
+# ---------------------------------------------------------------------------
+
+MAX_RESULT_SUMMARY_LENGTH: int = 200
+"""Maximum length for result_summary string stored on a GraphNode."""
+
+MAX_ERROR_LENGTH: int = 400
+"""Maximum length for error string stored on a GraphNode."""
+
+# ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
 
@@ -750,7 +760,7 @@ class TaskGraphRuntime:
         success = getattr(result_envelope, "success", True)
         error_val = getattr(result_envelope, "error", "") or ""
         result_data = getattr(result_envelope, "result", None)
-        summary = str(result_data)[:200] if result_data else ""
+        summary = str(result_data)[:MAX_RESULT_SUMMARY_LENGTH] if result_data else ""
 
         terminal = GraphNodeState.COMPLETED if success else GraphNodeState.FAILED
         return self.transition(
@@ -952,7 +962,15 @@ def envelope_to_graph_node(
     Returns:
         A new ``GraphNode`` in QUEUED state.
     """
-    task_id = getattr(envelope, "task_id", "") or f"task_{uuid.uuid4().hex[:12]}"
+    raw_task_id = getattr(envelope, "task_id", "") or ""
+    if not raw_task_id:
+        logger.warning(
+            "envelope_to_graph_node: envelope has no task_id; auto-generating one. "
+            "This may indicate an incorrectly constructed TaskEnvelope."
+        )
+        task_id = f"task_{uuid.uuid4().hex[:12]}"
+    else:
+        task_id = raw_task_id
     trace_id = getattr(envelope, "trace_id", "") or ""
     session_id = getattr(envelope, "session_id", "") or ""
     tool_name = getattr(envelope, "tool_name", "") or ""
@@ -999,8 +1017,8 @@ def result_envelope_to_node_update(
     node.result_at = time.time()
     node.completed_at = time.time()
     node.state = GraphNodeState.COMPLETED if success else GraphNodeState.FAILED
-    node.result_summary = str(result_data)[:200] if result_data else ""
-    node.error = str(error_val)[:400] if error_val else ""
+    node.result_summary = str(result_data)[:MAX_RESULT_SUMMARY_LENGTH] if result_data else ""
+    node.error = str(error_val)[:MAX_ERROR_LENGTH] if error_val else ""
     return node
 
 
