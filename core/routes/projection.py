@@ -71,6 +71,23 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED_UNAVAILABLE"
     )
 
+# PR-522: Multi-Device Projection Canonicalization integration sentinel.
+# Asserts that get_multi_device_runtime_projection() now calls
+# enrich_multi_device_projection() from MultiDeviceProjectionCanonicalization,
+# closing GAP-517-008 (projection based on raw registry/session data instead of
+# canonical CrossDeviceChainSingleton / TaskGraphRuntime state).
+try:
+    from core.multi_device_projection_canonicalization import (  # noqa: F401
+        MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY as _MDPC_AUTHORITY,
+    )
+    MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED: str = (
+        "PROJECTION_ROUTES::MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED_V1"
+    )
+except ImportError:  # pragma: no cover
+    MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
@@ -1318,44 +1335,34 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             except Exception as exc:
                 logger.debug("multi-device projection: coordinator unavailable: %s", exc)
 
-            # PR-519 / GAP-517-008 (partial): enrich projection with
-            # canonical cross-device chain snapshot and task-graph snapshot
-            # so the projection reflects canonical result state, not only
-            # raw transport-layer registry data.
-            _chain_snapshot: Optional[dict] = None
+            # PR-522 / GAP-517-008: enrich projection from canonical
+            # multi-device runtime sources (CrossDeviceChainSingleton,
+            # TaskGraphRuntime, OperatorSurface, integrity runtime).
+            # This replaces the partial PR-519 metadata enrichment and ensures
+            # the projection is grounded in canonical chain/runtime truth rather
+            # than raw transport/session registry data alone.
+            _canonical_enrichment: Optional[dict] = None
+            _canonical_surfacing_state: str = "unavailable"
+            _canonical_surfacing_gaps: list = []
             try:
-                from core.cross_device_execution_chain import (
-                    build_cross_device_chain_snapshot,
+                from core.multi_device_projection_canonicalization import (
+                    enrich_multi_device_projection,
                 )
-                _chain_snap = build_cross_device_chain_snapshot(max_recent=20)
-                _chain_snapshot = {
-                    "total_executions": _chain_snap.total_executions,
-                    "canonical_executions": _chain_snap.canonical_executions,
-                    "legacy_executions": _chain_snap.legacy_executions,
-                    "recent_records": [
-                        r.to_dict() for r in _chain_snap.recent_records[:5]
-                    ],
-                }
-            except Exception as _chain_exc:
+                _enrichment = enrich_multi_device_projection(
+                    max_chain_records=10,
+                    max_graph_records=10,
+                )
+                _canonical_enrichment = _enrichment.to_dict()
+                _canonical_surfacing_state = _enrichment.surfacing_state.value
+                _canonical_surfacing_gaps = list(_enrichment.surfacing_gap_reasons)
+            except Exception as _enrich_exc:
                 logger.debug(
-                    "multi-device projection: cross-device chain snapshot unavailable: %s",
-                    _chain_exc,
+                    "multi-device projection: canonical enrichment unavailable: %s",
+                    _enrich_exc,
                 )
-
-            _tgr_snapshot: Optional[dict] = None
-            try:
-                from core.task_graph_runtime import get_task_graph_runtime
-                _tgr = get_task_graph_runtime()
-                _tgr_snap = _tgr.snapshot(max_records=5)
-                _tgr_snapshot = {
-                    "total_nodes": len(_tgr_snap.nodes),
-                    "recent_records": [r.to_dict() for r in _tgr_snap.recent_records],
-                }
-            except Exception as _tgr_exc:
-                logger.debug(
-                    "multi-device projection: task graph snapshot unavailable: %s",
-                    _tgr_exc,
-                )
+                _canonical_surfacing_gaps = [
+                    f"GAP-517-008: canonical enrichment failed: {_enrich_exc}"
+                ]
 
             projection = build_multi_device_runtime_projection(
                 runtime_devices=runtime_devices,
@@ -1364,10 +1371,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 mesh_sessions=mesh_sessions,
                 coordinator_summaries=coordinator_summaries,
                 metadata={
-                    "cross_device_chain_snapshot": _chain_snapshot,
-                    "task_graph_snapshot": _tgr_snapshot,
-                    "result_surface_enriched": True,
-                    "pr_519_gap_008_partial": True,
+                    # PR-522: canonical enrichment (primary authority)
+                    "canonical_enrichment": _canonical_enrichment,
+                    "canonical_surfacing_state": _canonical_surfacing_state,
+                    "canonical_surfacing_gaps": _canonical_surfacing_gaps,
+                    "transport_local_only": (
+                        _canonical_enrichment is None
+                        or _canonical_enrichment.get("transport_local_only", True)
+                    ),
+                    # Backward-compat fields carried forward from PR-519
+                    "cross_device_chain_snapshot": (
+                        _canonical_enrichment.get("chain_snapshot")
+                        if _canonical_enrichment is not None
+                        else None
+                    ),
+                    "task_graph_snapshot": (
+                        _canonical_enrichment.get("graph_snapshot")
+                        if _canonical_enrichment is not None
+                        else None
+                    ),
+                    "result_surface_enriched": _canonical_enrichment is not None,
+                    "pr_522_gap_008_resolved": True,
                 },
             )
             return JSONResponse(content=projection.to_dict())
