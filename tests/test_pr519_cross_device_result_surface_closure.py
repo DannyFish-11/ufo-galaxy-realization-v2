@@ -119,7 +119,7 @@ class TestB_ResultEnvelopeProduction(unittest.TestCase):
     def test_B1_returns_result_surface_record(self):
         from core.multi_device_control_integrity import ResultSurfaceRecord
         sr = self._call({"success": True}, task_id=str(uuid.uuid4()), device_id="dev-1")
-        self.assertTrue(hasattr(sr, "result_envelope_produced"))
+        self.assertIsInstance(sr, ResultSurfaceRecord)
 
     def test_B2_envelope_produced_for_success(self):
         sr = self._call({"success": True}, task_id=str(uuid.uuid4()))
@@ -229,13 +229,13 @@ class TestD_TaskGraphRuntimeUpdate(unittest.TestCase):
         _tid = str(uuid.uuid4())
         self._call({"success": True}, task_id=_tid, device_id="dev-tgr-1")
         tgr = get_task_graph_runtime()
-        self.assertIn(_tid, tgr._nodes)
+        self.assertIsNotNone(tgr.get_node_by_task_id(_tid))
 
     def test_D3_completed_state_for_success(self):
         from core.task_graph_runtime import get_task_graph_runtime, GraphNodeState
         _tid = str(uuid.uuid4())
         self._call({"success": True}, task_id=_tid)
-        node = get_task_graph_runtime()._nodes.get(_tid)
+        node = get_task_graph_runtime().get_node_by_task_id(_tid)
         self.assertIsNotNone(node)
         self.assertEqual(node.state, GraphNodeState.COMPLETED)
 
@@ -243,7 +243,7 @@ class TestD_TaskGraphRuntimeUpdate(unittest.TestCase):
         from core.task_graph_runtime import get_task_graph_runtime, GraphNodeState
         _tid = str(uuid.uuid4())
         self._call({"success": False, "error": "timeout"}, task_id=_tid)
-        node = get_task_graph_runtime()._nodes.get(_tid)
+        node = get_task_graph_runtime().get_node_by_task_id(_tid)
         self.assertIsNotNone(node)
         self.assertEqual(node.state, GraphNodeState.FAILED)
 

@@ -1333,7 +1333,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "canonical_executions": _chain_snap.canonical_executions,
                     "legacy_executions": _chain_snap.legacy_executions,
                     "recent_records": [
-                        r.to_dict() for r in list(_chain_snap.recent_records)[:5]
+                        r.to_dict() for r in _chain_snap.recent_records[:5]
                     ],
                 }
             except Exception as _chain_exc:

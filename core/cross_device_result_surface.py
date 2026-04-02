@@ -122,7 +122,7 @@ def surface_cross_device_result(
     steps_completed: Optional[Any] = None,
     legacy_path_used: Optional[str] = None,
     extra: Optional[Dict[str, Any]] = None,
-) -> "Any":
+) -> Any:
     """Normalise a raw cross-device execution result and surface it canonically.
 
     This is the **single exit-point** that every cross-device execution path
@@ -247,7 +247,7 @@ def surface_cross_device_result(
             tgr = get_task_graph_runtime()
             # If the task is not yet in the graph, register a minimal node so
             # complete_from_result_envelope() can transition it.
-            if tgr._nodes.get(_task_id) is None:
+            if tgr.get_node_by_task_id(_task_id) is None:
                 from core.task_graph_runtime import GraphNode, GraphNodeState
                 _node = GraphNode(
                     node_id=_task_id,
