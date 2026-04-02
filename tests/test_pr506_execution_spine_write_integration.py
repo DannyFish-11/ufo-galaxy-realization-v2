@@ -125,6 +125,26 @@ def _fresh_singletons():
         pass
 
 
+def _make_envelope_with_retries(task_id: str = "", targets=None, candidates=None, max_retries: int = 2):
+    """Build a TaskEnvelope pre-loaded with retry_candidates in metadata."""
+    env = _make_envelope(task_id=task_id, targets=targets)
+    return env.model_copy(update={
+        "metadata": {
+            "retry_candidates": candidates or [_make_candidate("fallback_dev")],
+            "max_retries": max_retries,
+        }
+    })
+
+
+def _make_mock_health_registry(open_devices=None):
+    """Build a minimal mock health registry that marks specific devices as circuit-open."""
+    _open = set(open_devices or [])
+    return type("MockHR", (), {
+        "is_eligible": staticmethod(lambda dev: dev not in _open),
+        "record_success": staticmethod(lambda dev: None),
+        "record_failure": staticmethod(lambda dev, **kw: None),
+    })()
+
 # ===========================================================================
 # A) Sentinel
 # ===========================================================================
@@ -564,31 +584,19 @@ class TestReplayRetryRecord(unittest.TestCase):
     def test_M01_retry_record_written_on_retry(self):
         from core.replay_foundation import get_replay_foundation
         router = self._make_router_retrying(n_failures=1)
-        env = _make_envelope(targets=["primary_dev"])
-        env_with_retries = env.model_copy(update={
-            "metadata": {
-                "retry_candidates": [_make_candidate("fallback_dev")],
-                "max_retries": 2,
-            }
-        })
+        env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
-        retries = get_replay_foundation().get_retry_history(env.task_id)
+        retries = get_replay_foundation().get_retry_history(env_with_retries.task_id)
         self.assertGreater(len(retries), 0, "Retry record should be written")
 
     def test_M02_retry_record_original_task_id_matches(self):
         from core.replay_foundation import get_replay_foundation
         router = self._make_router_retrying(n_failures=1)
-        env = _make_envelope(targets=["primary_dev"])
-        env_with_retries = env.model_copy(update={
-            "metadata": {
-                "retry_candidates": [_make_candidate("fallback_dev")],
-                "max_retries": 2,
-            }
-        })
+        env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
-        retries = get_replay_foundation().get_retry_history(env.task_id)
+        retries = get_replay_foundation().get_retry_history(env_with_retries.task_id)
         if retries:
-            self.assertEqual(retries[0].original_task_id, env.task_id)
+            self.assertEqual(retries[0].original_task_id, env_with_retries.task_id)
 
 
 # ===========================================================================
@@ -620,24 +628,18 @@ class TestAuditRetryTriggered(unittest.TestCase):
     def test_N01_retry_triggered_audit_event_emitted(self):
         from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
         router = self._make_router_retrying()
-        env = _make_envelope(targets=["primary_dev"])
-        env_with_retries = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("fallback_dev")], "max_retries": 2}
-        })
+        env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
-        events = get_audit_event_semantics().get_by_task(env.task_id)
+        events = get_audit_event_semantics().get_by_task(env_with_retries.task_id)
         kinds = [e.kind for e in events]
         self.assertIn(AuditEventKind.RETRY_TRIGGERED, kinds)
 
     def test_N02_retry_triggered_has_attempt_number(self):
         from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
         router = self._make_router_retrying()
-        env = _make_envelope(targets=["primary_dev"])
-        env_with_retries = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("fallback_dev")], "max_retries": 2}
-        })
+        env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
-        events = get_audit_event_semantics().get_by_task(env.task_id)
+        events = get_audit_event_semantics().get_by_task(env_with_retries.task_id)
         retry_events = [e for e in events if e.kind == AuditEventKind.RETRY_TRIGGERED]
         if retry_events:
             self.assertIn("attempt_number", retry_events[0].payload)
@@ -672,12 +674,9 @@ class TestReplayRetryEvent(unittest.TestCase):
     def test_O01_retry_triggered_replay_event_in_timeline(self):
         from core.replay_foundation import get_replay_foundation, ReplayEventKind
         router = self._make_router_retrying()
-        env = _make_envelope(targets=["primary_dev"])
-        env_with_retries = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("fallback_dev")], "max_retries": 2}
-        })
+        env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
-        timeline = get_replay_foundation().replay_task_timeline(env.task_id)
+        timeline = get_replay_foundation().replay_task_timeline(env_with_retries.task_id)
         kinds = [ev.get("kind") for ev in timeline]
         self.assertIn(ReplayEventKind.RETRY_TRIGGERED, kinds)
 
@@ -693,94 +692,55 @@ class TestReplayFallbackRecord(unittest.TestCase):
     def setUp(self):
         _fresh_singletons()
 
-    def _make_router_with_closed_circuit(self):
-        """Router where the primary device has its circuit open (ineligible)."""
+    def _make_router_for_circuit_test(self):
         from core.command_router import CommandRouter
-        from unittest.mock import MagicMock
 
         async def _executor(device_id, command, params):
             return {"data": "ok"}
 
         router = CommandRouter()
         router.set_executor(_executor)
-
-        # Inject a health registry that marks "device_circuit_open" as ineligible
-        mock_hreg = MagicMock()
-        mock_hreg.is_eligible.side_effect = lambda dev: dev != "device_circuit_open"
-
-        original_execute = router._execute_command
-
-        async def patched_execute(*args, **kwargs):
-            # Temporarily replace health registry access
-            return await original_execute(*args, **kwargs)
-
-        # Patch the module-level getter used inside _execute_command
-        import unittest.mock as _mock
-        router._patched_hreg = mock_hreg
-        return router, mock_hreg
+        return router
 
     def test_P01_fallback_record_written_on_circuit_open(self):
         """Verify ReplayFallbackRecord is written when circuit-breaker routes to fallback."""
         from core.replay_foundation import get_replay_foundation
         from unittest.mock import patch
 
-        async def _executor(device_id, command, params):
-            return {"data": "ok"}
-
-        from core.command_router import CommandRouter
-        router = CommandRouter()
-        router.set_executor(_executor)
-
-        # Mock health registry so first device is circuit-open
-        mock_hreg = type("MockHR", (), {
-            "is_eligible": staticmethod(lambda dev: dev != "device_open"),
-            "record_success": staticmethod(lambda dev: None),
-            "record_failure": staticmethod(lambda dev, **kw: None),
-        })()
-
-        env = _make_envelope(targets=["device_open"])
-        env_with_fb = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("device_fallback")], "max_retries": 2}
-        })
+        router = self._make_router_for_circuit_test()
+        mock_hreg = _make_mock_health_registry(open_devices=["device_open"])
+        env_with_fb = _make_envelope_with_retries(
+            targets=["device_open"],
+            candidates=[_make_candidate("device_fallback")],
+        )
         with patch(
             "core.control_plane._globals.get_health_registry",
             return_value=mock_hreg,
         ):
             _run(router.route_envelope(env_with_fb))
 
-        fallbacks = get_replay_foundation().get_fallback_history(env.task_id)
+        fallbacks = get_replay_foundation().get_fallback_history(env_with_fb.task_id)
         self.assertGreater(len(fallbacks), 0, "Fallback record should be written on circuit-open")
 
     def test_P02_fallback_record_primary_task_id_matches(self):
         from core.replay_foundation import get_replay_foundation
         from unittest.mock import patch
 
-        async def _executor(device_id, command, params):
-            return {"data": "ok"}
-
-        from core.command_router import CommandRouter
-        router = CommandRouter()
-        router.set_executor(_executor)
-
-        mock_hreg = type("MockHR", (), {
-            "is_eligible": staticmethod(lambda dev: dev != "device_open"),
-            "record_success": staticmethod(lambda dev: None),
-            "record_failure": staticmethod(lambda dev, **kw: None),
-        })()
-
-        env = _make_envelope(targets=["device_open"])
-        env_with_fb = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("device_fallback")], "max_retries": 2}
-        })
+        router = self._make_router_for_circuit_test()
+        mock_hreg = _make_mock_health_registry(open_devices=["device_open"])
+        env_with_fb = _make_envelope_with_retries(
+            targets=["device_open"],
+            candidates=[_make_candidate("device_fallback")],
+        )
         with patch(
             "core.control_plane._globals.get_health_registry",
             return_value=mock_hreg,
         ):
             _run(router.route_envelope(env_with_fb))
 
-        fallbacks = get_replay_foundation().get_fallback_history(env.task_id)
+        fallbacks = get_replay_foundation().get_fallback_history(env_with_fb.task_id)
         if fallbacks:
-            self.assertEqual(fallbacks[0].primary_task_id, env.task_id)
+            self.assertEqual(fallbacks[0].primary_task_id, env_with_fb.task_id)
 
 
 # ===========================================================================
@@ -797,31 +757,25 @@ class TestAuditFallbackTriggered(unittest.TestCase):
     def test_Q01_fallback_triggered_audit_event_emitted(self):
         from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
         from unittest.mock import patch
+        from core.command_router import CommandRouter
 
         async def _executor(device_id, command, params):
             return {"data": "ok"}
 
-        from core.command_router import CommandRouter
         router = CommandRouter()
         router.set_executor(_executor)
-
-        mock_hreg = type("MockHR", (), {
-            "is_eligible": staticmethod(lambda dev: dev != "device_open"),
-            "record_success": staticmethod(lambda dev: None),
-            "record_failure": staticmethod(lambda dev, **kw: None),
-        })()
-
-        env = _make_envelope(targets=["device_open"])
-        env_with_fb = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("device_fallback")], "max_retries": 2}
-        })
+        mock_hreg = _make_mock_health_registry(open_devices=["device_open"])
+        env_with_fb = _make_envelope_with_retries(
+            targets=["device_open"],
+            candidates=[_make_candidate("device_fallback")],
+        )
         with patch(
             "core.control_plane._globals.get_health_registry",
             return_value=mock_hreg,
         ):
             _run(router.route_envelope(env_with_fb))
 
-        events = get_audit_event_semantics().get_by_task(env.task_id)
+        events = get_audit_event_semantics().get_by_task(env_with_fb.task_id)
         kinds = [e.kind for e in events]
         self.assertIn(AuditEventKind.FALLBACK_TRIGGERED, kinds)
 
@@ -840,31 +794,25 @@ class TestReplayFallbackEvent(unittest.TestCase):
     def test_R01_fallback_triggered_replay_event(self):
         from core.replay_foundation import get_replay_foundation, ReplayEventKind
         from unittest.mock import patch
+        from core.command_router import CommandRouter
 
         async def _executor(device_id, command, params):
             return {"data": "ok"}
 
-        from core.command_router import CommandRouter
         router = CommandRouter()
         router.set_executor(_executor)
-
-        mock_hreg = type("MockHR", (), {
-            "is_eligible": staticmethod(lambda dev: dev != "device_open"),
-            "record_success": staticmethod(lambda dev: None),
-            "record_failure": staticmethod(lambda dev, **kw: None),
-        })()
-
-        env = _make_envelope(targets=["device_open"])
-        env_with_fb = env.model_copy(update={
-            "metadata": {"retry_candidates": [_make_candidate("device_fallback")], "max_retries": 2}
-        })
+        mock_hreg = _make_mock_health_registry(open_devices=["device_open"])
+        env_with_fb = _make_envelope_with_retries(
+            targets=["device_open"],
+            candidates=[_make_candidate("device_fallback")],
+        )
         with patch(
             "core.control_plane._globals.get_health_registry",
             return_value=mock_hreg,
         ):
             _run(router.route_envelope(env_with_fb))
 
-        timeline = get_replay_foundation().replay_task_timeline(env.task_id)
+        timeline = get_replay_foundation().replay_task_timeline(env_with_fb.task_id)
         kinds = [ev.get("kind") for ev in timeline]
         self.assertIn(ReplayEventKind.FALLBACK_TRIGGERED, kinds)
 

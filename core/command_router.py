@@ -307,6 +307,24 @@ class CommandMode(str, Enum):
     SERIAL = "serial"      # 串行：多目标顺序执行
 
 
+class _RouteResultProxy:
+    """Minimal adapter that presents a raw result dict as a ResultEnvelope-like
+    object so that :meth:`TaskGraphRuntime.complete_from_result_envelope` can
+    consume it without requiring the full ``ResultEnvelope`` type.
+
+    PR-506: Used in :meth:`CommandRouter.route_envelope` to close the graph node
+    from the raw dict returned by :meth:`_execute_command`.
+    """
+
+    __slots__ = ("task_id", "success", "result", "error")
+
+    def __init__(self, task_id: str, success: bool, result_data: Any, error: str) -> None:
+        self.task_id = task_id
+        self.success = success
+        self.result = result_data
+        self.error = error
+
+
 class CommandStatus(str, Enum):
     """命令状态"""
     PENDING = "pending"
@@ -1141,15 +1159,8 @@ class CommandRouter:
             _tr_id = result.get("trace_id", "") or envelope.trace_id or ""
             _t_id = result.get("task_id", "") or envelope.task_id
 
-            # 1. Close the TaskGraphRuntime node via a minimal proxy object
-            class _ResultProxy:
-                def __init__(self, task_id: str, success: bool, result_data: Any, error: str) -> None:
-                    self.task_id = task_id
-                    self.success = success
-                    self.result = result_data
-                    self.error = error
-
-            _proxy = _ResultProxy(
+            # 1. Close the TaskGraphRuntime node using the module-level proxy
+            _proxy = _RouteResultProxy(
                 task_id=_t_id,
                 success=_is_success,
                 result_data=result.get("result"),
