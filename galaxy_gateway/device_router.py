@@ -134,6 +134,28 @@ from core.cross_device_result_surface import (  # noqa: E402
 
 CROSS_DEVICE_RESULT_SURFACE_INTEGRATED  # re-export / sentinel reference
 
+# ---------------------------------------------------------------------------
+# PR-521 / GAP-517-006: control semantic separation sentinel.
+#
+# DeviceRouter.route_task() now explicitly separates source_device_id
+# (the device that originated the request) from target_device_id (the
+# device that executes it).  The execution mode (local, remote dispatch,
+# takeover, hybrid) is derived and recorded in a ControlSemanticRecord via
+# the multi-device control integrity runtime.
+#
+# Backward-compatibility: callers that only provide device_id (legacy) have
+# it mapped to source_device_id so the semantic gap becomes visible without
+# breaking existing call sites.  Resolves GAP-517-006.
+# ---------------------------------------------------------------------------
+DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION = (
+    "DEVICE_ROUTER::CONTROL_SEMANTIC_SEPARATION_V1: "
+    "route_task() and dispatch_task() now carry explicit source_device_id "
+    "(originating device) and target_device_id (executing device) in task "
+    "context, TaskEnvelope metadata, and ControlSemanticRecord integrity "
+    "records.  Legacy callers providing only device_id are adapted "
+    "transparently.  Resolves GAP-517-006."
+)
+
 import asyncio
 import json
 import logging
@@ -687,9 +709,19 @@ class DeviceRouter:
         用于统一 trace_id/task_id 传播。原有 context 字段与 AIP compat 规则
         保持兼容。
 
+        PR-521 / GAP-517-006: context now explicitly carries ``source_device_id``
+        (the device that originated the request) and ``target_device_id`` is
+        derived from the routing decision.  Legacy callers that only supply
+        ``device_id`` are adapted transparently: ``device_id`` is treated as
+        the originating source.  A :class:`ControlSemanticRecord` is emitted
+        to the integrity runtime after every routing decision so that
+        local-execution, remote-dispatch, takeover, and hybrid paths are
+        distinguishable in audit records.
+
         Args:
             command: 用户命令
-            context: 上下文信息（支持 trace_id, route_mode, device_id 等字段）
+            context: 上下文信息（支持 trace_id, route_mode, device_id,
+                source_device_id, target_device_id, is_takeover 等字段）
 
         Returns:
             任务执行结果
@@ -714,6 +746,9 @@ class DeviceRouter:
 
         # PR-1: build a TaskEnvelope at the entry point for unified trace propagation.
         # The envelope carries trace_id/task_id/route_mode through the routing chain.
+        # PR-521 / GAP-517-006: extract source_device_id before envelope construction
+        # so it can be embedded in the envelope metadata for downstream audit.
+        _entry_source_device_id = ctx.get("source_device_id", "") or ctx.get("device_id", "")
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
@@ -731,6 +766,7 @@ class DeviceRouter:
                     "route_mode": _route_mode,
                     "task_type": ctx.get("task_type", ""),
                     "context": ctx,
+                    "source_device_id": _entry_source_device_id,
                 },
             )
             # Propagate unified task_id and trace_id back into context so the
@@ -739,10 +775,12 @@ class DeviceRouter:
             ctx["task_id"] = _route_envelope.task_id
             ctx["trace_id"] = _route_envelope.trace_id
             logger.debug(
-                "DeviceRouter.route_task envelope | task_id=%s trace_id=%s route_mode=%s",
+                "DeviceRouter.route_task envelope | task_id=%s trace_id=%s "
+                "route_mode=%s source_device_id=%s",
                 _route_envelope.task_id,
                 _route_envelope.trace_id,
                 _route_mode,
+                _entry_source_device_id,
             )
         except Exception as _env_err:
             # Never block routing on envelope construction failure.
@@ -759,6 +797,13 @@ class DeviceRouter:
             capability = analysis.get("task_type", "")
             device_id = ctx.get("device_id", "")
 
+            # PR-521 / GAP-517-006: resolve explicit source/target semantics.
+            # source_device_id = device that originated the request.
+            # If the caller provides source_device_id, prefer it.  For legacy
+            # callers that only supply device_id, adapt it as the source so the
+            # ambiguity is visible and non-preferred without breaking compat.
+            source_device_id = ctx.get("source_device_id", "") or device_id
+
             emit_gateway_log(
                 "dispatcher_selection",
                 trace_ctx=trace_ctx,
@@ -767,6 +812,7 @@ class DeviceRouter:
                 exec_mode=exec_mode,
                 capability=capability,
                 device_id=device_id,
+                source_device_id=source_device_id,
                 requires_cross_device=analysis.get("requires_cross_device", False),
             )
             
@@ -880,6 +926,11 @@ class DeviceRouter:
             task = self._create_task(command, analysis, target_devices)
             # Propagate trace context into the task payload
             task.update(trace_ctx.to_dict())
+            # PR-521 / GAP-517-006: propagate explicit source_device_id into the
+            # task dict so that downstream dispatch and audit surfaces can
+            # distinguish origin from execution target.
+            if source_device_id:
+                task["source_device_id"] = source_device_id
             
             # 4. 分发任务
             if len(target_devices) == 1:
@@ -910,9 +961,61 @@ class DeviceRouter:
                 trace_id=trace_ctx.trace_id,
                 session_id=ctx.get("session_id"),
                 route_mode=route_mode or ctx.get("route_mode", "cross_device"),
-                source_device_id=ctx.get("source_device_id", ""),
+                source_device_id=source_device_id,
                 target_device_ids=_target_ids,
             )
+
+            # PR-521 / GAP-517-006: emit ControlSemanticRecord to the integrity
+            # runtime with explicit source_device_id, target_device_id, and
+            # execution mode.  This makes local-execution, remote-dispatch,
+            # takeover, and hybrid (multi-device) paths distinguishable in audit
+            # records without relying on an overloaded device_id field.
+            try:
+                from core.multi_device_control_integrity import (
+                    record_integrity_event,
+                    build_control_semantic_record,
+                    ControlSemanticKind,
+                )
+                _primary_target_id = _target_ids[0] if _target_ids else ""
+                _is_takeover = bool(ctx.get("is_takeover", False))
+                if _is_takeover:
+                    _ctl_kind = ControlSemanticKind.TAKEOVER
+                elif len(_target_ids) > 1:
+                    _ctl_kind = ControlSemanticKind.HYBRID
+                elif (
+                    source_device_id
+                    and _primary_target_id
+                    and source_device_id == _primary_target_id
+                ):
+                    _ctl_kind = ControlSemanticKind.LOCAL_EXECUTION
+                elif _primary_target_id:
+                    _ctl_kind = ControlSemanticKind.REMOTE_DISPATCH
+                else:
+                    _ctl_kind = ControlSemanticKind.UNKNOWN
+                _crec = build_control_semantic_record(
+                    task_id=_task_id,
+                    trace_id=trace_ctx.trace_id,
+                    source_device_id=source_device_id,
+                    target_device_id=_primary_target_id,
+                    control_kind=_ctl_kind,
+                    is_takeover=_is_takeover,
+                )
+                record_integrity_event(control_record=_crec)
+                logger.debug(
+                    "DeviceRouter.route_task ControlSemanticRecord | "
+                    "task_id=%s source=%s target=%s kind=%s clear=%s",
+                    _task_id,
+                    source_device_id,
+                    _primary_target_id,
+                    _ctl_kind.value,
+                    _crec.is_semantically_clear,
+                )
+            except Exception as _csrec_err:
+                logger.debug(
+                    "DeviceRouter.route_task: ControlSemanticRecord recording skipped — %s",
+                    _csrec_err,
+                )  # integrity recording is advisory
+
             return result
 
         except Exception as e:
@@ -1059,6 +1162,8 @@ class DeviceRouter:
                         metadata={
                             "command": task.get("command", ""),
                             "device_router": "true",
+                            "source_device_id": task.get("source_device_id", ""),
+                            "target_device_id": device.device_id,
                         },
                     )
                     logger.debug(

@@ -1270,8 +1270,21 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "target_device_id from the routing decision.  Include both in the "
             "TaskEnvelope metadata and in cross-device audit records."
         ),
-        "is_resolved": False,
-        "resolution_note": "",
+        "is_resolved": True,
+        "resolution_note": (
+            "PR-521: DeviceRouter.route_task() now explicitly extracts "
+            "source_device_id from the inbound context (preferring the "
+            "dedicated source_device_id key; falling back to device_id for "
+            "legacy callers).  target_device_id is derived from the routing "
+            "decision (_select_devices).  Both are propagated into the task "
+            "dict, the TaskEnvelope metadata, and a ControlSemanticRecord that "
+            "is emitted to the MultiDeviceControlIntegrityRuntime after every "
+            "routing decision.  dispatch_task() also carries source_device_id "
+            "and target_device_id in its TaskEnvelope metadata.  Execution mode "
+            "(LOCAL_EXECUTION / REMOTE_DISPATCH / TAKEOVER / HYBRID) is derived "
+            "automatically and included in every record.  Sentinel: "
+            "DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION."
+        ),
     },
     # -----------------------------------------------------------------------
     # Audit area 5: Result surface

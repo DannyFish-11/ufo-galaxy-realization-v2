@@ -204,20 +204,28 @@ distinguishes `source_device_id`, `target_device_id`, `is_local`,
 | ✅ | `CanonicalTask.TaskIntent.entry_device_id` | Set at entry | Canonical task carries entry device |
 | ✅ | `CrossDeviceExecutionChain.ChainExecutionRecord.device_id` | Tracked | Per-execution device tracking |
 | ✅ | `DeviceFormationGroup.source_device_id` + `primary_execution_device_id` | Explicit | Formation group separates source/primary |
-| ⚠️ | `DeviceRouter.route_task()` context | **GAP** | `device_id` overloaded as both source and target — **GAP-517-006** |
+| ✅ | `DeviceRouter.route_task()` context | **RESOLVED (PR-521)** | Explicit `source_device_id`/`target_device_id` + `ControlSemanticRecord` — **GAP-517-006** |
 
-### Open Gaps
+### Resolved Gaps
 
-#### GAP-517-006 · MEDIUM
+#### GAP-517-006 · MEDIUM · ✅ RESOLVED (PR-521)
 **Module**: `galaxy_gateway/device_router.py`  
-**Description**: The task context in `route_task()` uses `device_id` for both
-the originating device and the target device, causing semantic ambiguity.
+**Description**: The task context in `route_task()` previously used `device_id`
+for both the originating device and the target device, causing semantic
+ambiguity.
 
-**Recommended action**: Add explicit `source_device_id` and
-`target_device_id` fields to the route context.  Populate `source_device_id`
-from the inbound request context and `target_device_id` from the routing
-decision.  Include both in the `TaskEnvelope` metadata and cross-device audit
-records.
+**Resolution (PR-521)**:
+- `route_task()` now extracts an explicit `source_device_id` from the inbound
+  context, preferring the dedicated `source_device_id` key and falling back to
+  `device_id` for legacy callers.
+- `target_device_id` is derived from the routing decision (`_select_devices`).
+- Both fields are propagated into the task dict and the `TaskEnvelope` metadata.
+- A `ControlSemanticRecord` is emitted to the integrity runtime after every
+  routing decision, with execution mode (`LOCAL_EXECUTION`, `REMOTE_DISPATCH`,
+  `TAKEOVER`, `HYBRID`) derived automatically.
+- `dispatch_task()` also carries `source_device_id` and `target_device_id` in
+  its `TaskEnvelope` metadata.
+- Sentinel: `DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION`.
 
 ---
 
@@ -286,7 +294,7 @@ consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 | GAP-517-003 | dispatch_authority | HIGH | Open |
 | GAP-517-004 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
 | GAP-517-005 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
-| GAP-517-006 | control_semantics | MEDIUM | Open |
+| GAP-517-006 | control_semantics | MEDIUM | ✅ Resolved (PR-521) |
 | GAP-517-007 | result_surface | HIGH | ✅ Resolved (PR-519) |
 | GAP-517-008 | result_surface | MEDIUM | ⚠️ Partial (PR-519) |
 
