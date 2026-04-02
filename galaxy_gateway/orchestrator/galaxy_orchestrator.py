@@ -793,6 +793,25 @@ class GalaxyOrchestrator:
             "task_id": task_id, "trace_id": trace_id, "request": request,
         })
 
+        # ── PR-508: Register task in TaskGraphRuntime ────────────────────────
+        try:
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr_go,
+                WorkflowContributorKind as _WCK_go,
+                GraphNode as _GN_go,
+                GraphNodeState as _GNS_go,
+            )
+            _tgr_go = _get_tgr_go()
+            _go_node = _GN_go(
+                task_id=task_id,
+                contributor=_WCK_go.GALAXY_ORCHESTRATOR,
+                tool_name="orchestrate",
+            )
+            _tgr_go.register_node(_go_node)
+            _tgr_go.transition(task_id, _GNS_go.ADMITTED)
+        except Exception:
+            pass
+
         try:
             # ── ConstellationRuntime 路由（默认走 ConstellationRuntime）──────────
             ctx = context or {}

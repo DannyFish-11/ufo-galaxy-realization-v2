@@ -230,7 +230,26 @@ class UnifiedOrchestrator:
         start_time = time.time()
         task.status = "analyzing"
         task.started_at = start_time
-        
+
+        # ── PR-508: Register task in TaskGraphRuntime ────────────────────────
+        try:
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr_uo,
+                WorkflowContributorKind as _WCK_uo,
+                GraphNode as _GN_uo,
+                GraphNodeState as _GNS_uo,
+            )
+            _tgr_uo = _get_tgr_uo()
+            _uo_node = _GN_uo(
+                task_id=task.task_id,
+                contributor=_WCK_uo.UNIFIED_ORCHESTRATOR,
+                tool_name=getattr(task, "task_type", ""),
+            )
+            _tgr_uo.register_node(_uo_node)
+            _tgr_uo.transition(task.task_id, _GNS_uo.ADMITTED)
+        except Exception:
+            pass
+
         try:
             # 1. 任务分解 (Emergent Capability #1)
             logger.info(f"🔍 Analyzing task: {task.task_id}")
@@ -245,11 +264,49 @@ class UnifiedOrchestrator:
                     execution_plans.append((subtask, plan))
                 else:
                     raise Exception(f"No valid execution plan for subtask: {subtask.get('description')}")
+
+            # ── PR-508: Lifecycle: admitted → planned ────────────────────────
+            try:
+                from core.task_graph_runtime import (
+                    get_task_graph_runtime as _get_tgr_uo2,
+                    GraphNodeState as _GNS_uo2,
+                )
+                _get_tgr_uo2().transition(task.task_id, _GNS_uo2.PLANNED)
+            except Exception:
+                pass
             
             # 3. 执行 (Emergent Capability #3)
             task.status = "executing"
             results = []
+
+            # ── PR-508: Fanout for multi-subtask execution ───────────────────
+            _subtask_ids: list = []
             for subtask, plan in execution_plans:
+                _st_id = subtask.get("task_id") or f"{task.task_id}:sub:{len(_subtask_ids)}"
+                _subtask_ids.append(_st_id)
+
+            if len(_subtask_ids) > 1:
+                try:
+                    from core.task_graph_runtime import (
+                        get_task_graph_runtime as _get_tgr_fo,
+                        WorkflowContributorKind as _WCK_fo,
+                        GraphNode as _GN_fo,
+                    )
+                    _tgr_fo = _get_tgr_fo()
+                    for _st_id in _subtask_ids:
+                        _tgr_fo.register_node(_GN_fo(
+                            task_id=_st_id,
+                            contributor=_WCK_fo.UNIFIED_ORCHESTRATOR,
+                        ))
+                    _tgr_fo.register_fanout(
+                        parent_task_id=task.task_id,
+                        child_task_ids=_subtask_ids,
+                        contributor=_WCK_fo.UNIFIED_ORCHESTRATOR,
+                    )
+                except Exception:
+                    pass
+
+            for (subtask, plan), _st_id in zip(execution_plans, _subtask_ids):
                 # 智能选择节点
                 node_id = plan.nodes[0]
                 task.execution_path.append(node_id)
@@ -260,7 +317,7 @@ class UnifiedOrchestrator:
                 self.topology.update_load(node_id, 10)
                 
                 # 真实执行逻辑，包含重试
-                res = await self._execute_with_retry(node_id, subtask)
+                res = await self._execute_with_retry(node_id, subtask, subtask_id=_st_id)
                 
                 # 释放节点负载
                 self.topology.update_load(node_id, -10)
@@ -274,6 +331,18 @@ class UnifiedOrchestrator:
             task.result = await self._aggregate_results(task, results)
             task.status = "completed"
             task.completed_at = time.time()
+
+            # ── PR-508: Lifecycle: planned → running → completed ─────────────
+            try:
+                from core.task_graph_runtime import (
+                    get_task_graph_runtime as _get_tgr_uo3,
+                    GraphNodeState as _GNS_uo3,
+                )
+                _t3 = _get_tgr_uo3()
+                _t3.transition(task.task_id, _GNS_uo3.RUNNING)
+                _t3.transition(task.task_id, _GNS_uo3.COMPLETED)
+            except Exception:
+                pass
             
             # 更新统计
             latency = (task.completed_at - start_time) * 1000
@@ -287,10 +356,20 @@ class UnifiedOrchestrator:
             task.error = str(e)
             self.stats["failed_tasks"] += 1
             logger.error(f"❌ Task failed: {task.task_id} - {e}")
+            # ── PR-508: Lifecycle: failed ────────────────────────────────────
+            try:
+                from core.task_graph_runtime import (
+                    get_task_graph_runtime as _get_tgr_uo4,
+                    GraphNodeState as _GNS_uo4,
+                )
+                _get_tgr_uo4().transition(task.task_id, _GNS_uo4.FAILED)
+            except Exception:
+                pass
             return {"status": "failed", "error": str(e)}
 
-    async def _execute_with_retry(self, node_id: str, subtask: Dict[str, Any], retries: int = 2) -> ExecutionResult:
+    async def _execute_with_retry(self, node_id: str, subtask: Dict[str, Any], retries: int = 2, subtask_id: str = "") -> ExecutionResult:
         """带重试机制的执行逻辑"""
+        _eff_subtask_id = subtask_id or subtask.get("task_id") or f"subtask:{node_id}"
         for attempt in range(retries + 1):
             res = await self.execution_pool.execute_on_node(
                 node_id, 
@@ -301,6 +380,29 @@ class UnifiedOrchestrator:
                 return res
             if attempt < retries:
                 logger.warning(f"⚠️ Attempt {attempt+1} failed on {node_id}, retrying...")
+                # ── PR-508: Register retry in TaskGraphRuntime ───────────────
+                try:
+                    from core.task_graph_runtime import (
+                        get_task_graph_runtime as _get_tgr_rt,
+                        WorkflowContributorKind as _WCK_rt,
+                        GraphNode as _GN_rt,
+                    )
+                    _retry_id = f"{_eff_subtask_id}:retry:{attempt + 1}"
+                    _tgr_rt = _get_tgr_rt()
+                    _tgr_rt.register_node(_GN_rt(
+                        task_id=_retry_id,
+                        contributor=_WCK_rt.UNIFIED_ORCHESTRATOR,
+                        device_id=node_id,
+                    ))
+                    _tgr_rt.register_retry(
+                        original_task_id=_eff_subtask_id,
+                        retry_task_id=_retry_id,
+                        attempt_number=attempt + 1,
+                        reason="subtask_failure",
+                        contributor=_WCK_rt.UNIFIED_ORCHESTRATOR,
+                    )
+                except Exception:
+                    pass
                 await asyncio.sleep(0.5 * (attempt + 1))
         return res
 

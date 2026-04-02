@@ -133,6 +133,7 @@ __all__ = [
     "TASK_GRAPH_NODE_CONTRACT_VERSION",
     "WORKFLOW_GRAPH_PROJECTION_POLICY",
     "GRAPH_RUNTIME_CONVERGENCE_AUTHORITY",
+    "TASK_GRAPH_RUNTIME_REALIZATION_AUTHORITY",
     # Enumerations
     "GraphNodeState",
     "GraphEdgeKind",
@@ -192,6 +193,11 @@ WORKFLOW_GRAPH_PROJECTION_POLICY: str = (
 #: fanout / fanin edges, the extended lifecycle states, and the CanonicalTask
 #: integration path are all active in this runtime instance.
 GRAPH_RUNTIME_CONVERGENCE_AUTHORITY: str = "GRAPH_RUNTIME_CONVERGENCE_V1"
+
+#: PR-508 realization authority sentinel.  Signals that lifecycle transitions,
+#: retry/fallback/fanout/fanin graph writes, workflow/orchestrator graph
+#: contribution, and lineage queries are all backed by real runtime writes.
+TASK_GRAPH_RUNTIME_REALIZATION_AUTHORITY: str = "TASK_GRAPH_RUNTIME_REALIZATION_V1"
 
 
 # ---------------------------------------------------------------------------
@@ -810,7 +816,9 @@ class TaskGraphRuntime:
         now = time.time()
 
         node.state = new_state
-        node.contributor = contributor
+        # Only overwrite contributor when explicitly provided (not default UNKNOWN)
+        if contributor != WorkflowContributorKind.UNKNOWN:
+            node.contributor = contributor
 
         if new_state == GraphNodeState.DISPATCH:
             node.dispatch_at = now
