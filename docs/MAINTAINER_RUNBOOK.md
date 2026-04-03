@@ -265,7 +265,21 @@ python scripts/validate_runtime.py --json
 python scripts/validate_runtime.py --strict
 ```
 
-Expected: **34 checks, all PASS**.
+Expected: **all checks PASS** (Section 7 includes startup-tier model validation).
+
+### Startup tier inspection
+
+```bash
+# The validator (section 7) checks the startup-tier model automatically.
+# For a standalone readiness-baseline report, run:
+python -c "
+from core.startup_tier_model import build_readiness_baseline
+b = build_readiness_baseline()
+import json; print(json.dumps(b.summary(), indent=2))
+"
+```
+
+See `docs/STARTUP_TIER_MODEL.md` for the full startup-tier reference.
 
 ### Pytest integration tests
 
@@ -275,6 +289,9 @@ pytest tests/test_pr9_integration_validation.py -v
 
 # Run launcher structural tests
 pytest tests/test_launcher_refactor.py -v
+
+# Run startup-tier model tests
+pytest tests/test_startup_tier_model.py -v
 ```
 
 ### Full smoke check
@@ -286,6 +303,34 @@ python scripts/smoke_test.py --skip-http --skip-tests
 # Port registry validation
 python scripts/validate_ports.py
 ```
+
+---
+
+## 5a. Startup Tier Model
+
+Galaxy defines a canonical 3-tier startup model grounded in the existing
+`startup_policy` and `group` metadata.  **Tiers are a read-only view — they
+do not replace `startup_policy` governance.**
+
+| Tier | Selection rule | Purpose |
+|------|----------------|---------|
+| **Core** | `startup_policy="active"` AND `group="core"` | Minimum canonical boot |
+| **Standard** | `startup_policy="active"` AND `group` ∈ `{core, development}` | Normal dev/functional boot |
+| **Full** | `startup_policy` ∈ `{active, optional}` | Broad runtime boot |
+
+**Key invariant**: Core ⊂ Standard ⊂ Full.
+
+### Using tiers programmatically
+
+```python
+from launcher import NodeSystemLauncher
+
+core_nodes     = launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_CORE)
+standard_nodes = launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_STANDARD)
+full_nodes     = launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_FULL)
+```
+
+Full reference: `docs/STARTUP_TIER_MODEL.md`.
 
 ---
 

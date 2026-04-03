@@ -1760,5 +1760,38 @@
         "optional -> skip": "Repair attempt abandoned; node archived or deleted"
       }
     }
+  },
+  "_startup_tier_model": {
+    "pr": "PR-startup-tiers",
+    "description": "Defines the canonical 3-tier startup model for the Galaxy runtime. Tiers are derived from existing startup_policy and group metadata — no new governance authority is introduced.",
+    "tiers": {
+      "Core": {
+        "description": "Minimum canonical runtime boot. Starts the essential system foundation.",
+        "selection_rule": "startup_policy == \"active\" AND group == \"core\"",
+        "expected_count": 13,
+        "launcher_method": "NodeSystemLauncher.get_tier_nodes(\"Core\")",
+        "acceptance": "All Core nodes must start successfully. System cannot be considered runnable if any Core node fails."
+      },
+      "Standard": {
+        "description": "Normal development and functional boot. Adds active development/tooling nodes to Core.",
+        "selection_rule": "startup_policy == \"active\" AND group in {\"core\", \"development\"}",
+        "expected_count": 30,
+        "launcher_method": "NodeSystemLauncher.get_tier_nodes(\"Standard\")",
+        "acceptance": "All Standard nodes must start successfully for a full development session. Core failures remain blocking."
+      },
+      "Full": {
+        "description": "Broad runtime boot — all active and optional nodes. Mirrors the full production node surface.",
+        "selection_rule": "startup_policy in {\"active\", \"optional\"}",
+        "expected_count": 124,
+        "launcher_method": "NodeSystemLauncher.get_tier_nodes(\"Full\")",
+        "acceptance": "All active nodes must start. Optional node failures are tolerated (soft-fail). skip nodes are never started."
+      }
+    },
+    "invariants": [
+      "Core ⊂ Standard ⊂ Full (each tier is a strict superset of the previous)",
+      "startup_policy is the canonical governance field — tiers are a read-only view over it",
+      "The \"skip\" policy excludes nodes from all tiers unconditionally",
+      "Tier membership is derived at runtime from node_dependencies.json — no separate tier registry"
+    ]
   }
 }

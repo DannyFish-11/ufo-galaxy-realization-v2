@@ -119,6 +119,136 @@ class NodeSystemLauncher:
 
         return sorted(eligible, key=_sort_key)
 
+    # ── Startup-tier model (PR-startup-tiers) ────────────────────────────────
+    #
+    # Three canonical tiers, derived from existing startup_policy + group
+    # metadata.  No new governance authority is introduced; tiers are a
+    # read-only view over node_dependencies.json.
+    #
+    # Core     — startup_policy="active" AND group="core"       (~13 nodes)
+    # Standard — startup_policy="active" AND group in           (~30 nodes)
+    #            {"core", "development"}
+    # Full     — startup_policy in {"active", "optional"}       (~124 nodes)
+    #            (same as get_active_nodes(); explicit for clarity)
+
+    STARTUP_TIER_CORE = "Core"
+    STARTUP_TIER_STANDARD = "Standard"
+    STARTUP_TIER_FULL = "Full"
+
+    _TIER_GROUPS: Dict[str, Optional[List[str]]] = {
+        "Core": ["core"],
+        "Standard": ["core", "development"],
+        "Full": None,  # None = all non-skip (active + optional)
+    }
+
+    def get_tier_nodes(self, tier: str) -> List[str]:
+        """Return the node list for the named startup tier.
+
+        Tier semantics (derived from existing metadata — no new authority):
+
+        - ``"Core"``     — ``startup_policy="active"`` AND ``group="core"``
+        - ``"Standard"`` — ``startup_policy="active"`` AND
+          ``group`` in ``{"core", "development"}``
+        - ``"Full"``     — ``startup_policy`` in ``{"active", "optional"}``
+          (equivalent to :meth:`get_active_nodes`)
+
+        Args:
+            tier: One of :attr:`STARTUP_TIER_CORE`, :attr:`STARTUP_TIER_STANDARD`,
+                  or :attr:`STARTUP_TIER_FULL`.
+
+        Returns:
+            Sorted node list (by priority then name), filtered to nodes that
+            have a ``main.py`` on disk.
+
+        Raises:
+            ValueError: If *tier* is not one of the three canonical values.
+        """
+        allowed_groups = self._TIER_GROUPS.get(tier)
+        if tier not in self._TIER_GROUPS:
+            raise ValueError(
+                f"Unknown startup tier {tier!r}. "
+                f"Valid tiers: {list(self._TIER_GROUPS)}"
+            )
+
+        result: List[str] = []
+        for name, cfg in self.node_configs.items():
+            if not isinstance(cfg, dict):
+                continue
+            policy = cfg.get("startup_policy", self._POLICY_ACTIVE)
+            group = cfg.get("group")
+            node_path = self.nodes_dir / name / "main.py"
+            if not node_path.exists():
+                continue
+            if tier == self.STARTUP_TIER_FULL:
+                if policy in (self._POLICY_ACTIVE, self._POLICY_OPTIONAL):
+                    result.append(name)
+            else:
+                # Core / Standard: must be active policy AND in allowed group(s)
+                if policy == self._POLICY_ACTIVE and group in allowed_groups:
+                    result.append(name)
+
+        def _sort_key(name: str):
+            cfg = self.node_configs.get(name, {})
+            priority = cfg.get("priority", 99) if isinstance(cfg, dict) else 99
+            return (priority, name)
+
+        return sorted(result, key=_sort_key)
+
+    def get_readiness_baseline(self) -> Dict[str, Any]:
+        """Return a compact active-node runtime-readiness baseline snapshot.
+
+        The baseline distinguishes three node sets:
+        - ``core_tier``     — Core tier nodes (structural runtime baseline)
+        - ``standard_tier`` — Standard tier nodes (development baseline)
+        - ``active_baseline`` — All active nodes that pass the minimum
+          readiness bar (main.py + fusion_entry.py present)
+        - ``optional_governed`` — Optional nodes with main.py and fusion_entry.py
+          (governed; tracked toward active)
+        - ``readiness_gaps`` — Active nodes missing fusion_entry.py
+          (governance gap requiring remediation)
+
+        Returns:
+            dict with the above keys plus ``summary`` counts.
+        """
+        nodes_dir = self.nodes_dir
+        core_tier = self.get_tier_nodes(self.STARTUP_TIER_CORE)
+        standard_tier = self.get_tier_nodes(self.STARTUP_TIER_STANDARD)
+
+        active_baseline: List[str] = []
+        optional_governed: List[str] = []
+        readiness_gaps: List[str] = []
+
+        for name, cfg in self.node_configs.items():
+            if not isinstance(cfg, dict):
+                continue
+            policy = cfg.get("startup_policy", self._POLICY_ACTIVE)
+            node_dir = nodes_dir / name
+            has_main = (node_dir / "main.py").exists()
+            has_fusion = (node_dir / "fusion_entry.py").exists()
+
+            if policy == self._POLICY_ACTIVE and has_main:
+                if has_fusion:
+                    active_baseline.append(name)
+                else:
+                    readiness_gaps.append(name)
+            elif policy == self._POLICY_OPTIONAL and has_main and has_fusion:
+                optional_governed.append(name)
+
+        return {
+            "core_tier": sorted(core_tier),
+            "standard_tier": sorted(standard_tier),
+            "active_baseline": sorted(active_baseline),
+            "optional_governed": sorted(optional_governed),
+            "readiness_gaps": sorted(readiness_gaps),
+            "summary": {
+                "core_tier_count": len(core_tier),
+                "standard_tier_count": len(standard_tier),
+                "active_baseline_count": len(active_baseline),
+                "optional_governed_count": len(optional_governed),
+                "readiness_gap_count": len(readiness_gaps),
+            },
+        }
+
     # ── Node-list accessors ────────────────────────────────────────────────────
 
     def get_core_nodes(self) -> List[str]:
