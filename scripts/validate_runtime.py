@@ -356,6 +356,7 @@ def check_docs() -> None:
         ("docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md", "Surface demotion policy"),
         ("docs/MAINTAINER_RUNBOOK.md", "Maintainer runbook (PR-9)"),
         ("docs/LEGACY_PURGE_HARDENING.md", "Final legacy purge decisions (PR-10)"),
+        ("docs/STARTUP_TIER_MODEL.md", "Canonical startup-tier model and readiness baseline"),
     ]
     for rel_path, description in required_docs:
         path = PROJECT_ROOT / rel_path
@@ -442,8 +443,153 @@ def check_purge_hardening() -> None:
             "File not found; skipping content check",
         ))
 
+# ---------------------------------------------------------------------------
+# 7. Startup tier model
+# ---------------------------------------------------------------------------
 
 
+def check_startup_tier_model() -> None:
+    """Validate the canonical 3-tier startup model and active-node readiness baseline."""
+    _section("7. Startup Tier Model & Readiness Baseline")
+
+    # 7a. core.startup_tier_model is importable
+    try:
+        from core.startup_tier_model import (  # type: ignore[import]
+            STARTUP_TIER_MODEL_AUTHORITY,
+            STARTUP_TIER_MODEL_GROUNDED_IN_EXISTING_GOVERNANCE,
+            ACTIVE_NODE_READINESS_BASELINE_DEFINED,
+            TIER_CORE,
+            TIER_STANDARD,
+            TIER_FULL,
+            build_readiness_baseline,
+            check_tier_model_metadata,
+        )
+        r = _record(
+            "core.startup_tier_model importable",
+            True,
+            f"authority: {STARTUP_TIER_MODEL_AUTHORITY}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "core.startup_tier_model importable",
+            False,
+            str(exc)[:120],
+        ))
+        return
+
+    # 7b. Sentinels set
+    r = _record(
+        "STARTUP_TIER_MODEL_GROUNDED_IN_EXISTING_GOVERNANCE sentinel",
+        bool(STARTUP_TIER_MODEL_GROUNDED_IN_EXISTING_GOVERNANCE),
+    )
+    _print_result(r)
+    r = _record(
+        "ACTIVE_NODE_READINESS_BASELINE_DEFINED sentinel",
+        bool(ACTIVE_NODE_READINESS_BASELINE_DEFINED),
+    )
+    _print_result(r)
+
+    # 7c. node_dependencies.json contains _startup_tier_model metadata
+    try:
+        ndj_path = PROJECT_ROOT / "node_dependencies.json"
+        with ndj_path.open(encoding="utf-8") as f:
+            ndj_data = json.load(f)
+        checks = check_tier_model_metadata(ndj_data)
+        for check_name, ok in checks.items():
+            r = _record(f"tier metadata: {check_name}", ok)
+            _print_result(r)
+    except Exception as exc:
+        _print_result(_record("tier metadata checks", False, str(exc)[:120]))
+
+    # 7d. NodeSystemLauncher exposes tier helpers
+    try:
+        from launcher.node_startup import NodeSystemLauncher  # type: ignore[import]
+        r = _record(
+            "NodeSystemLauncher.STARTUP_TIER_CORE == 'Core'",
+            NodeSystemLauncher.STARTUP_TIER_CORE == TIER_CORE,
+        )
+        _print_result(r)
+        r = _record(
+            "NodeSystemLauncher.STARTUP_TIER_STANDARD == 'Standard'",
+            NodeSystemLauncher.STARTUP_TIER_STANDARD == TIER_STANDARD,
+        )
+        _print_result(r)
+        r = _record(
+            "NodeSystemLauncher.STARTUP_TIER_FULL == 'Full'",
+            NodeSystemLauncher.STARTUP_TIER_FULL == TIER_FULL,
+        )
+        _print_result(r)
+        r = _record(
+            "NodeSystemLauncher.get_tier_nodes method present",
+            callable(getattr(NodeSystemLauncher, "get_tier_nodes", None)),
+        )
+        _print_result(r)
+        r = _record(
+            "NodeSystemLauncher.get_readiness_baseline method present",
+            callable(getattr(NodeSystemLauncher, "get_readiness_baseline", None)),
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "NodeSystemLauncher tier helpers",
+            False,
+            str(exc)[:120],
+        ))
+
+    # 7e. Readiness baseline is coherent
+    try:
+        baseline = build_readiness_baseline()
+        r = _record(
+            f"Core-tier node count ({baseline.core_tier_count})",
+            baseline.core_tier_count >= 1,
+            f"expected ≥ 1, got {baseline.core_tier_count}",
+        )
+        _print_result(r)
+        r = _record(
+            "Standard tier ⊇ Core tier",
+            set(baseline.core_tier).issubset(set(baseline.standard_tier)),
+            "standard_tier must be a superset of core_tier",
+        )
+        _print_result(r)
+        r = _record(
+            f"Active baseline count ({baseline.active_baseline_count})",
+            baseline.active_baseline_count >= 1,
+            f"active nodes meeting readiness bar: {baseline.active_baseline_count}",
+        )
+        _print_result(r)
+        r = _record(
+            "Core-tier nodes have no readiness gaps",
+            baseline.is_core_complete(),
+            (
+                f"Core nodes with gaps: "
+                f"{[n for n in baseline.readiness_gaps if n in baseline.core_tier]}"
+                if not baseline.is_core_complete() else ""
+            ),
+        )
+        _print_result(r)
+        r = _record(
+            f"readiness gap count ({baseline.readiness_gap_count})",
+            baseline.readiness_gap_count <= 30,
+            f"active nodes missing fusion_entry.py: {baseline.readiness_gap_count}",
+            warn_only=baseline.readiness_gap_count > 0,
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "readiness baseline coherence",
+            False,
+            str(exc)[:120],
+        ))
+
+    # 7f. Canonical doc exists
+    tier_doc = PROJECT_ROOT / "docs" / "STARTUP_TIER_MODEL.md"
+    r = _record(
+        "docs/STARTUP_TIER_MODEL.md exists",
+        tier_doc.exists(),
+        "Canonical startup-tier reference doc (PR-startup-tiers)",
+    )
+    _print_result(r)
 
 
 # ---------------------------------------------------------------------------
@@ -509,7 +655,7 @@ def main() -> int:
 
     if not args.json:
         print("=" * 60)
-        print("  Galaxy — Runtime Integration Validator (PR-9 / PR-10)")
+        print("  Galaxy — Runtime Integration Validator")
         print("=" * 60)
 
     check_startup_path()
@@ -518,6 +664,7 @@ def main() -> int:
     check_legacy_isolation()
     check_docs()
     check_purge_hardening()
+    check_startup_tier_model()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
