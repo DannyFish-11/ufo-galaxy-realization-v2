@@ -463,7 +463,6 @@ def test_launcher_tier_core_matches_get_core_nodes(launcher):
     get_core = set(launcher.get_core_nodes())
     # get_core_nodes() may fall back to first-10 if no 'core' group entries found;
     # when core groups exist, the sets should be equal.
-    nodes_dir = launcher.nodes_dir
     has_core_group = any(
         isinstance(cfg, dict) and cfg.get("group") == "core"
         for cfg in launcher.node_configs.values()

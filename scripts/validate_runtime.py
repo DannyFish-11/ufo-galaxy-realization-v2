@@ -655,7 +655,7 @@ def main() -> int:
 
     if not args.json:
         print("=" * 60)
-        print("  Galaxy — Runtime Integration Validator (PR-9 / PR-10 / PR-startup-tiers)")
+        print("  Galaxy — Runtime Integration Validator")
         print("=" * 60)
 
     check_startup_path()
