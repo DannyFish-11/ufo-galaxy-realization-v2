@@ -13,6 +13,10 @@ Architecture contract
 ---------------------
 - **Writers / loaders** (``mcp_loader``, ``skill_loader``, ``NodeFabricRegistry``,
   device-registration paths) populate :class:`~core.agent.capability_registry.CapabilityRegistry`.
+- **Compat bridges** (``CapabilityBus``, ``CapabilityManager``) also forward
+  every registration into ``CapabilityRegistry`` automatically
+  (see ``CAPABILITY_BUS_CANONICAL_BRIDGE_ACTIVE`` and
+  ``CAPABILITY_MANAGER_CANONICAL_BRIDGE_ACTIVE`` sentinels).
 - **Consumers** (``OpenClawd._collect_tools()``, route handlers, downstream
   projections) ask **this resolver** for validated, normalised
   :class:`~core.unified.capability_contract.CapabilityContract` objects.

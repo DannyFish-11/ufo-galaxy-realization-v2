@@ -5,29 +5,43 @@
 ================================
 
 .. deprecated::
-    **This module is a legacy compatibility facade.**
+    **This module is a legacy compatibility facade / bridge.**
 
-    The canonical capability authority is ``core.capability_bus.CapabilityBus``
-    (accessed via :func:`core.capability_bus.get_capability_bus`).
+    The canonical capability write path is
+    :class:`~core.agent.capability_registry.CapabilityRegistry` (writers push
+    here via ``inject_item`` / ``inject_mcp_tool`` / ``inject_skill``).
+
+    The canonical capability read path is
+    :class:`~core.unified.capability_resolver.CapabilityResolver` (consumers
+    call ``resolve_all()`` / ``collect_tool_schemas()``).
 
     New code that needs to register or discover capabilities **must** use
-    the canonical path::
+    the canonical paths::
 
-        from core.capability_bus import get_capability_bus, CapabilityBusEntry, CapabilityBusRole
+        # Write:
+        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        CapabilityRegistry.get_instance().inject_item(CapabilityItem(...))
 
-        bus = get_capability_bus()
-        bus.register_device_capability(device_id, action, description)
-
-    For capability consumption (e.g. OpenClawd tool collection), use the
-    resolver::
-
+        # Read:
         from core.unified.capability_resolver import get_capability_resolver
         contracts = get_capability_resolver().resolve_all()
 
-    ``CapabilityManager`` is retained as a compatibility layer for code
-    that has not yet migrated to the canonical bus.  It is **not** a peer
-    authority — entries registered here are NOT visible through
-    ``CapabilityBus`` unless explicitly bridged.
+    ``CapabilityManager`` is retained as a compatibility bridge **only**.
+    Every call to :meth:`register_capability` is **forwarded** to
+    ``CapabilityRegistry`` so that legacy callers do not create an isolated
+    truth sink.  Do **not** use ``CapabilityManager`` as a standalone authority.
+
+Capability Truth Architecture (canonical)
+-----------------------------------------
+  Writers → core.agent.capability_registry.CapabilityRegistry
+  Readers → core.unified.capability_resolver.CapabilityResolver
+
+This module (CapabilityManager) is a compat bridge:
+  CapabilityManager.register_capability() → CapabilityRegistry  (bridged)
+
+Sentinel: CAPABILITY_MANAGER_CANONICAL_BRIDGE_ACTIVE
+  Signals that this module forwards registrations to CapabilityRegistry
+  and is therefore NOT an isolated truth sink.
 
 OpenClaw 风格的能力注册、发现和调用系统（兼容层）。
 
@@ -51,6 +65,15 @@ from datetime import datetime
 from enum import Enum
 
 logger = logging.getLogger("CapabilityManager")
+
+# ---------------------------------------------------------------------------
+# Governance sentinel
+# ---------------------------------------------------------------------------
+# Presence of this sentinel signals that CapabilityManager forwards every
+# registration into CapabilityRegistry (the canonical truth source).
+# Legacy callers that import CapabilityManager are therefore NOT creating an
+# isolated truth sink — their entries DO reach CapabilityResolver.
+CAPABILITY_MANAGER_CANONICAL_BRIDGE_ACTIVE = True
 
 
 # ============================================================================
@@ -166,7 +189,44 @@ class CapabilityManager:
     # ========================================================================
     # 能力注册
     # ========================================================================
-    
+
+    def _bridge_to_canonical_registry(self, capability: "Capability") -> None:
+        """Bridge a Capability entry to the canonical CapabilityRegistry.
+
+        This ensures that every registration via the legacy CapabilityManager
+        compat facade is also visible through the canonical
+        ``CapabilityResolver`` path consumed by OpenClawd.
+
+        Failures are non-fatal and logged at DEBUG level so that legacy code
+        is not broken if CapabilityRegistry is temporarily unavailable.
+        """
+        try:
+            from core.agent.capability_registry import (  # noqa: PLC0415
+                CapabilityRegistry,
+                CapabilityItem,
+            )
+            item = CapabilityItem(
+                name=capability.name,
+                description=capability.description or f"Capability: {capability.name}",
+                source="node",
+                source_id=capability.node_id or capability.name,
+                parameters=dict(capability.input_schema) if capability.input_schema else {},
+                available=(capability.status == CapabilityStatus.ONLINE),
+                metadata={
+                    "node_name": capability.node_name,
+                    "category": capability.category,
+                    "via_capability_manager": True,
+                },
+            )
+            CapabilityRegistry.get_instance().register(item)
+            logger.debug(
+                "CapabilityManager bridge → CapabilityRegistry: %s", capability.name
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityManager._bridge_to_canonical_registry failed (non-fatal): %s", exc
+            )
+
     async def register_capability(
         self,
         name: str,
@@ -221,7 +281,11 @@ class CapabilityManager:
             
             # 持久化
             await self._save_capabilities()
-            
+
+            # Bridge to canonical CapabilityRegistry so this entry is visible
+            # through CapabilityResolver (canonical read path for OpenClawd).
+            self._bridge_to_canonical_registry(capability)
+
             return True
     
     async def unregister_capability(self, name: str) -> bool:

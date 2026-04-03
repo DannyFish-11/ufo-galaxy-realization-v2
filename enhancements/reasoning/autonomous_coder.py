@@ -769,13 +769,44 @@ if __name__ == '__main__':
         except Exception as e:
             logger.warning(f"NodeFactory 注册失败 (非致命): {e}")
 
-        # Register capability so the new node is discoverable
+        # Register capability so the new node is discoverable.
+        # CANONICAL PATH: write directly to CapabilityRegistry (visible via
+        # CapabilityResolver, consumed by OpenClawd).
+        cap_name = f"{node_name.lower()}_capability"
+        try:
+            from core.agent.capability_registry import (  # noqa: PLC0415
+                CapabilityRegistry,
+                CapabilityItem,
+            )
+            CapabilityRegistry.get_instance().register(
+                CapabilityItem(
+                    name=cap_name,
+                    description=task.requirement or f"Auto-generated node capability: {node_name}",
+                    source="node",
+                    source_id=str(next_node_id),
+                    parameters={},
+                    available=True,
+                    metadata={
+                        "node_name": node_name,
+                        "category": "auto_generated",
+                        "auto_generated": True,
+                    },
+                )
+            )
+            logger.info("能力已注册到 CapabilityRegistry (canonical): %s", node_name)
+        except Exception as e:
+            logger.warning("CapabilityRegistry 注册失败 (非致命): %s", e)
+
+        # COMPAT PATH: also register via CapabilityManager for legacy callers.
+        # CapabilityManager now bridges to CapabilityRegistry automatically
+        # (CAPABILITY_MANAGER_CANONICAL_BRIDGE_ACTIVE), so this is a
+        # belt-and-suspenders write for compat consumers only.
         try:
             import asyncio as _asyncio
             from core.capability_manager import get_capability_manager
             capability_manager = get_capability_manager()
             coro = capability_manager.register_capability(
-                name=f"{node_name.lower()}_capability",
+                name=cap_name,
                 description=task.requirement,
                 node_id=str(next_node_id),
                 node_name=node_name,
@@ -787,9 +818,9 @@ if __name__ == '__main__':
                 loop.create_task(coro)
             except RuntimeError:
                 _asyncio.run(coro)
-            logger.info(f"能力已注册到 CapabilityManager: {node_name}")
+            logger.info("能力已注册到 CapabilityManager (compat): %s", node_name)
         except Exception as e:
-            logger.warning(f"CapabilityManager 注册失败 (非致命): {e}")
+            logger.warning("CapabilityManager 注册失败 (非致命): %s", e)
 
         return node_name, main_file
     

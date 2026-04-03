@@ -26,6 +26,20 @@ decisions.  Its sole job is:
 All dispatch still goes through :class:`~core.capabilities.CanonicalDispatcher`
 — ``CapabilityBus`` is the *directory*, not the *executor*.
 
+Capability Truth Architecture
+------------------------------
+``CapabilityBus`` is a **compat-bridge** layer.  Every call to
+:meth:`CapabilityBus.register` is **forwarded** to the canonical
+:class:`~core.agent.capability_registry.CapabilityRegistry` so that entries
+registered here are visible through
+:class:`~core.unified.capability_resolver.CapabilityResolver` (the canonical
+consumer interface for OpenClawd).
+
+This ensures CapabilityBus does NOT become an isolated parallel truth source.
+
+Sentinel: ``CAPABILITY_BUS_CANONICAL_BRIDGE_ACTIVE``
+  Confirms the bridge to CapabilityRegistry is in effect.
+
 Naming convention (aligns with CanonicalDispatcher prefixes)
 -------------------------------------------------------------
   ``mcp__<server_id>__<tool_name>``    → :attr:`CapabilityBusRole.MCP`
@@ -79,6 +93,14 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.CapabilityBus")
+
+# ---------------------------------------------------------------------------
+# Governance sentinel
+# ---------------------------------------------------------------------------
+# Presence of this sentinel signals that CapabilityBus.register() forwards
+# every registration into CapabilityRegistry (canonical truth source).
+# This ensures CapabilityBus is a compat bridge, not an isolated truth sink.
+CAPABILITY_BUS_CANONICAL_BRIDGE_ACTIVE = True
 
 # ---------------------------------------------------------------------------
 # Role enum
@@ -329,15 +351,68 @@ class CapabilityBus:
         self._lock = threading.Lock()
         self._seeded_from_node_registry: bool = False
 
+    # ── Canonical bridge ─────────────────────────────────────────────────────
+
+    # Mapping from CapabilityBusRole to the source string recognised by
+    # CapabilityRegistry / CapabilitySource.
+    _ROLE_TO_REGISTRY_SOURCE: Dict[str, str] = {
+        "node": "node",
+        "device": "device",
+        "skill": "skill",
+        "mcp": "mcp",
+        "mcp_gw": "gateway",
+    }
+
+    def _bridge_entry_to_canonical_registry(self, entry: "CapabilityBusEntry") -> None:
+        """Forward a newly registered entry into the canonical CapabilityRegistry.
+
+        This bridges CapabilityBus into the canonical truth path so that every
+        entry registered here is also visible through CapabilityResolver
+        (the canonical consumer interface).  Failures are non-fatal.
+        """
+        try:
+            from core.agent.capability_registry import (  # noqa: PLC0415
+                CapabilityRegistry,
+                CapabilityItem,
+            )
+            role_val = entry.role.value if isinstance(entry.role, CapabilityBusRole) else str(entry.role)
+            source = self._ROLE_TO_REGISTRY_SOURCE.get(role_val, "unknown")
+            available = (
+                entry.health != CapabilityHealthStatus.UNAVAILABLE
+            )
+            item = CapabilityItem(
+                name=entry.name,
+                description=entry.description or entry.display_name or f"Capability: {entry.name}",
+                source=source,
+                source_id=entry.source_id,
+                parameters=dict(entry.schema) if entry.schema else {},
+                available=available,
+                metadata=dict(entry.metadata) if entry.metadata else {},
+            )
+            CapabilityRegistry.get_instance().register(item)
+            logger.debug(
+                "CapabilityBus bridge → CapabilityRegistry: %s (source=%s)",
+                entry.name,
+                source,
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityBus._bridge_entry_to_canonical_registry failed (non-fatal): %s", exc
+            )
+
     # ── Registration ─────────────────────────────────────────────────────────
 
     def register(self, entry: CapabilityBusEntry) -> None:
-        """Register *entry* in the bus.
+        """Register *entry* in the bus and forward it to the canonical
+        :class:`~core.agent.capability_registry.CapabilityRegistry`.
 
         If an entry with the same :attr:`~CapabilityBusEntry.name` already
         exists it is silently replaced (last writer wins).  This allows
         runtime re-registration on node reload or device reconnect without
         creating duplicates.
+
+        The canonical bridge ensures that entries registered here are visible
+        through :class:`~core.unified.capability_resolver.CapabilityResolver`.
         """
         if not entry.name:
             raise ValueError("CapabilityBusEntry.name must not be empty")
@@ -349,6 +424,9 @@ class CapabilityBus:
             entry.role.value,
             entry.source_id,
         )
+        # Forward to canonical CapabilityRegistry so this entry is visible
+        # through CapabilityResolver (canonical consumer path for OpenClawd).
+        self._bridge_entry_to_canonical_registry(entry)
 
     def unregister(self, name: str) -> bool:
         """Remove the entry for *name*.

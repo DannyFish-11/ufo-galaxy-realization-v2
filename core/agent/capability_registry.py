@@ -11,10 +11,14 @@ be consumed by ``OpenClawd`` or any other subsystem.
 Architecture contract
 ---------------------
 - **Writers / loaders** push entries in:
-    - MCP tools   → ``mcp_loader`` calls ``inject_mcp_tool()`` after loading a server
-    - Skills       → ``skill_loader`` calls ``inject_skill()`` after loading a skill
-    - Node caps    → ``NodeFabricRegistry`` calls ``inject_item()`` after node sync
-    - Gateway caps → registered via ``_load_gateway()`` / ``inject_item()``
+    - MCP tools     → ``mcp_loader`` calls ``inject_mcp_tool()`` after loading a server
+    - Skills         → ``skill_loader`` calls ``inject_skill()`` after loading a skill
+    - Node caps      → ``NodeFabricRegistry`` calls ``inject_item()`` after node sync
+    - Gateway caps   → registered via ``_load_gateway()`` / ``inject_item()``
+    - Device caps    → ``core.routes.devices._sync_device_to_capability_registry()``
+    - CapabilityBus  → **bridged automatically** (CAPABILITY_BUS_CANONICAL_BRIDGE_ACTIVE)
+    - CapabilityManager → **bridged automatically** (CAPABILITY_MANAGER_CANONICAL_BRIDGE_ACTIVE)
+    - AutonomousCoder → registers directly via ``inject_item()`` (canonical path)
 - **Consumers** (``OpenClawd``, projections, diagnostics) read through
   :class:`~core.unified.capability_resolver.CapabilityResolver`, which applies
   :class:`~core.unified.capability_contract.CapabilityContract` validation
@@ -23,6 +27,10 @@ Architecture contract
 - All entries are validated against
   :class:`~core.unified.capability_contract.CapabilityContract` at
   registration time.  Entries that fail validation are rejected and logged.
+
+Sentinel: ``CAPABILITY_REGISTRY_IS_CANONICAL_TRUTH_SOURCE``
+  Confirms this module is the single canonical truth source.  All compat
+  bridges (CapabilityBus, CapabilityManager) converge here.
 
 Public API
 ----------
@@ -33,7 +41,8 @@ Public API
     CapabilityRegistry.get(name)      -> Optional[CapabilityItem]
     CapabilityRegistry.inject_mcp_tool(...)   — writer entry point (MCP)
     CapabilityRegistry.inject_skill(...)      — writer entry point (Skill)
-    CapabilityRegistry.inject_item(item)      — writer entry point (Node/Gateway)
+    CapabilityRegistry.inject_item(item)      — writer entry point (Node/Gateway/compat)
+    CapabilityRegistry.register(item)         — writer entry point (general)
     CapabilityRegistry.eject(name)            — removal entry point
     get_capability_registry()         -> CapabilityRegistry  (module-level helper)
 
@@ -54,6 +63,14 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Agent.CapabilityRegistry")
+
+# ---------------------------------------------------------------------------
+# Governance sentinel
+# ---------------------------------------------------------------------------
+# Presence of this sentinel confirms that CapabilityRegistry is the canonical
+# in-process truth source for all capabilities.  All compat bridges
+# (CapabilityBus, CapabilityManager) converge here.
+CAPABILITY_REGISTRY_IS_CANONICAL_TRUTH_SOURCE = True
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 数据模型
