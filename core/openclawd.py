@@ -4777,33 +4777,41 @@ class OpenClawd:
         # CapabilityResolver is the preferred read path per the canonical capability catalog
         # architecture.  It validates all CapabilityContract entries before returning them,
         # ensuring only schema-valid capabilities reach the LLM tool list.
+        # Phase-A consolidation: NODE source added here so that node capabilities already
+        # cached in the resolver are included in the primary collection pass, not just the
+        # secondary NodeFabricRegistry sync pass (Layer 2).
         _catalog_loaded = False
         try:
             from core.unified.capability_resolver import get_capability_resolver
             from core.unified.capability_contract import CapabilitySource
             resolver = get_capability_resolver()
             catalog_tools = resolver.collect_tool_schemas(
-                sources=[CapabilitySource.MCP, CapabilitySource.SKILL]
+                sources=[CapabilitySource.MCP, CapabilitySource.SKILL, CapabilitySource.NODE]
             )
             if catalog_tools:
                 tools.extend(catalog_tools)
                 _catalog_loaded = True
                 logger.debug(
-                    "_collect_tools: CapabilityResolver (canonical) returned %d MCP/Skill tools",
+                    "_collect_tools: CapabilityResolver (canonical) returned %d tools "
+                    "(MCP + Skill + Node)",
                     len(catalog_tools),
                 )
         except Exception as e:
             logger.debug("CapabilityResolver unavailable, falling back to CapabilityRegistry: %s", e)
 
-        # ── 层 2: 规范节点工具路径 (NodeFabricRegistry → CapabilityRegistry → Resolver) ──
-        # CANONICAL NODE PATH — preferred over the legacy direct-scan path (Layer 3 below).
+        # ── 层 2: 规范节点工具同步路径 (NodeFabricRegistry → CapabilityRegistry → Resolver) ──
+        # CANONICAL NODE PATH — preferred over the legacy direct-scan path (Layer 4 below).
         # NodeFabricRegistry.sync_capabilities_to_registry() pushes eligible CAPABILITY_NODE
         # entries into CapabilityRegistry with contract-validated naming:
         #   node__<node_id>__<action>
         # Only healthy CAPABILITY_NODE nodes are surfaced; SERVICE_NODE /
         # LEGACY_ORCHESTRATOR_NODE / EXPERIMENTAL_NODE / ARCHIVED_NODE are excluded by
         # NodeFabricRegistry._CAPABILITY_SYNC_ELIGIBLE (architectural classification filter).
-        # The legacy direct-scan path (Layer 3) deduplicates against this set.
+        #
+        # Phase-A consolidation: node tools are now ALWAYS collected from the resolver after
+        # sync, regardless of whether _synced_count > 0.  This ensures that nodes whose
+        # capabilities were synced in a previous call are still included when the registry
+        # already has their entries.  Deduplication against Layer 1 is handled below.
         _node_catalog_tool_names: set = set()
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
@@ -4812,27 +4820,29 @@ class OpenClawd:
 
             _fabric_registry = get_node_fabric_registry()
             _synced_count = _fabric_registry.sync_capabilities_to_registry()
+            _node_resolver = get_capability_resolver()
             if _synced_count > 0:
-                _node_resolver = get_capability_resolver()
+                # New capabilities were just written; invalidate the cache so the
+                # resolver picks them up on the next read.
                 _node_resolver.invalidate_cache()
-                _node_catalog_schemas = _node_resolver.collect_tool_schemas(
-                    sources=[CapabilitySource.NODE]
+            _node_catalog_schemas = _node_resolver.collect_tool_schemas(
+                sources=[CapabilitySource.NODE]
+            )
+            if _node_catalog_schemas:
+                _existing_names = {t["function"]["name"] for t in tools}
+                _new_node_tools = [
+                    t for t in _node_catalog_schemas
+                    if t["function"]["name"] not in _existing_names
+                ]
+                for _t in _new_node_tools:
+                    _node_catalog_tool_names.add(_t["function"]["name"])
+                tools.extend(_new_node_tools)
+                logger.debug(
+                    "_collect_tools: canonical node path (NodeFabricRegistry) "
+                    "returned %d node tools (synced %d registry entries)",
+                    len(_new_node_tools),
+                    _synced_count,
                 )
-                if _node_catalog_schemas:
-                    _existing_names = {t["function"]["name"] for t in tools}
-                    _new_node_tools = [
-                        t for t in _node_catalog_schemas
-                        if t["function"]["name"] not in _existing_names
-                    ]
-                    for _t in _new_node_tools:
-                        _node_catalog_tool_names.add(_t["function"]["name"])
-                    tools.extend(_new_node_tools)
-                    logger.debug(
-                        "_collect_tools: canonical node path (NodeFabricRegistry) "
-                        "returned %d node tools (synced %d registry entries)",
-                        len(_new_node_tools),
-                        _synced_count,
-                    )
         except Exception as e:
             logger.debug("Canonical node tool path (NodeFabricRegistry) unavailable: %s", e)
 

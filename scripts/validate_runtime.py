@@ -593,8 +593,268 @@ def check_startup_tier_model() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Summary and CLI
+# 8. Runtime acceptance checks (Phase-B consolidation)
 # ---------------------------------------------------------------------------
+
+
+def check_runtime_acceptance() -> None:
+    """Phase-B: Minimal runtime acceptance checks for the primary request path.
+
+    Verifies three things without launching any live services:
+    a. Core startup modules are importable (DesktopPresenceRuntime, OpenClawd,
+       CommandRouter).
+    b. ``OpenClawd._collect_tools()`` method is present and callable (structural
+       check; does not require live MCP/Skill/Node backends).
+    c. ``CanonicalDispatcher.classify()`` can route all canonical tool prefixes
+       to the correct :class:`~core.capabilities.canonical_dispatcher.CapabilityLayer`.
+    """
+    _section("8. Runtime Acceptance — Primary Request Path")
+
+    # 8a. Core startup modules importable
+    core_modules = [
+        ("core.desktop_presence_runtime", "DesktopPresenceRuntime"),
+        ("core.openclawd", "OpenClawd"),
+        ("core.command_router", "CommandRouter"),
+    ]
+    for mod_name, cls_name in core_modules:
+        try:
+            mod = importlib.import_module(mod_name)
+            ok = hasattr(mod, cls_name)
+            detail = "" if ok else f"{cls_name} not found in {mod_name}"
+        except Exception as exc:
+            ok = False
+            detail = str(exc)[:120]
+        r = _record(f"acceptance: {mod_name}.{cls_name} importable", ok, detail)
+        _print_result(r)
+
+    # 8b. OpenClawd._collect_tools method is present
+    try:
+        from core.openclawd import OpenClawd  # type: ignore[import]
+        has_method = callable(getattr(OpenClawd, "_collect_tools", None))
+        r = _record(
+            "acceptance: OpenClawd._collect_tools() is present",
+            has_method,
+            "method must exist and be callable for tool collection to work",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "acceptance: OpenClawd._collect_tools() is present",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 8c. CanonicalDispatcher classifies canonical tool prefixes correctly
+    try:
+        from core.capabilities.canonical_dispatcher import (  # type: ignore[import]
+            CanonicalDispatcher,
+            CapabilityLayer,
+        )
+        test_cases = [
+            ("mcp__server__tool", CapabilityLayer.MCP),
+            ("mcp__gateway__tool", CapabilityLayer.MCP_GW),
+            ("skill__my_skill", CapabilityLayer.SKILL),
+            ("node__node_01__ping", CapabilityLayer.NODE),
+        ]
+        all_ok = True
+        for tool_name, expected_layer in test_cases:
+            got = CapabilityLayer.classify(tool_name)
+            if got != expected_layer:
+                all_ok = False
+                _print_result(_record(
+                    f"acceptance: CanonicalDispatcher.classify({tool_name!r})",
+                    False,
+                    f"expected {expected_layer.value!r}, got {got.value!r}",
+                ))
+        if all_ok:
+            r = _record(
+                "acceptance: CanonicalDispatcher classifies all canonical prefixes",
+                True,
+                "mcp__ / mcp__gateway__ / skill__ / node__ all routed correctly",
+            )
+            _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "acceptance: CanonicalDispatcher classifies canonical prefixes",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 8d. Phase-A sentinel: scheduler canonical tool naming
+    try:
+        from core.scheduler import SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY  # type: ignore[import]
+        r = _record(
+            "acceptance: SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY sentinel present",
+            bool(SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY),
+            SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY[:80],
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "acceptance: SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY sentinel present",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 8e. Phase-A sentinel: hybrid executor rename
+    try:
+        from core.hybrid_executor import APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED  # type: ignore[import]
+        r = _record(
+            "acceptance: APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED sentinel present",
+            bool(APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED),
+            APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED[:80],
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "acceptance: APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED sentinel present",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+
+# ---------------------------------------------------------------------------
+# 9. Callable-node baseline (Phase-B consolidation)
+# ---------------------------------------------------------------------------
+
+
+def check_callable_node_baseline() -> None:
+    """Phase-B: Verify the callable-node baseline is encoded and queryable.
+
+    Checks:
+    a. ``core.callable_node_baseline`` is importable and carries the
+       :data:`CALLABLE_NODE_BASELINE_ESTABLISHED` sentinel.
+    b. :data:`CALLABLE_ARCHITECTURAL_CLASSES` is non-empty (at least one class
+       makes a node callable).
+    c. :func:`is_callable_by_openclawd` correctly distinguishes CAPABILITY_NODE
+       (callable) from SERVICE_NODE / LEGACY_ORCHESTRATOR_NODE (not callable).
+    d. :func:`get_callable_node_names` is callable without error.
+    e. ``NodeArchitecturalClass`` enum is accessible from the node fabric
+       registry and carries the expected members.
+    """
+    _section("9. Callable-Node Baseline")
+
+    # 9a. Module importable + sentinel
+    try:
+        from core.callable_node_baseline import (  # type: ignore[import]
+            CALLABLE_NODE_BASELINE_ESTABLISHED,
+            CALLABLE_ARCHITECTURAL_CLASSES,
+            is_callable_by_openclawd,
+            get_callable_node_names,
+        )
+        r = _record(
+            "core.callable_node_baseline importable",
+            True,
+            f"sentinel: {CALLABLE_NODE_BASELINE_ESTABLISHED[:60]}",
+        )
+        _print_result(r)
+        r = _record(
+            "CALLABLE_NODE_BASELINE_ESTABLISHED sentinel",
+            bool(CALLABLE_NODE_BASELINE_ESTABLISHED),
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "core.callable_node_baseline importable",
+            False,
+            str(exc)[:120],
+        ))
+        return
+
+    # 9b. CALLABLE_ARCHITECTURAL_CLASSES is non-empty
+    r = _record(
+        f"CALLABLE_ARCHITECTURAL_CLASSES non-empty ({len(CALLABLE_ARCHITECTURAL_CLASSES)} class(es))",
+        len(CALLABLE_ARCHITECTURAL_CLASSES) >= 1,
+        "at least CAPABILITY_NODE must be callable",
+    )
+    _print_result(r)
+
+    # 9c. is_callable_by_openclawd semantics
+    try:
+        from core.nodes.node_fabric_registry import NodeArchitecturalClass  # type: ignore[import]
+        cases = [
+            (NodeArchitecturalClass.CAPABILITY_NODE, True),
+            (NodeArchitecturalClass.SERVICE_NODE, False),
+            (NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE, False),
+            (NodeArchitecturalClass.EXPERIMENTAL_NODE, False),
+            (NodeArchitecturalClass.ARCHIVED_NODE, False),
+        ]
+        all_ok = True
+        for arch_cls, expected in cases:
+            got = is_callable_by_openclawd(arch_cls)
+            if got != expected:
+                all_ok = False
+                _print_result(_record(
+                    f"is_callable_by_openclawd({arch_cls.value})",
+                    False,
+                    f"expected {expected}, got {got}",
+                ))
+        if all_ok:
+            r = _record(
+                "is_callable_by_openclawd() semantics correct for all 5 classes",
+                True,
+                "CAPABILITY_NODE=callable; SERVICE/LEGACY/EXPERIMENTAL/ARCHIVED=not callable",
+            )
+            _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "is_callable_by_openclawd() semantics",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 9d. get_callable_node_names() returns without error
+    try:
+        node_names = get_callable_node_names()
+        r = _record(
+            f"get_callable_node_names() callable (returned {len(node_names)} names)",
+            True,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "get_callable_node_names() callable",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 9e. NodeArchitecturalClass accessible from node_fabric_registry
+    try:
+        from core.nodes.node_fabric_registry import (  # type: ignore[import]
+            NodeArchitecturalClass,
+            _CAPABILITY_SYNC_ELIGIBLE,
+        )
+        members = {c.value for c in NodeArchitecturalClass}
+        expected_members = {
+            "capability_node", "service_node", "legacy_orchestrator_node",
+            "experimental_node", "archived_node",
+        }
+        ok = expected_members.issubset(members)
+        r = _record(
+            "NodeArchitecturalClass has all expected members",
+            ok,
+            f"members: {sorted(members)}" if not ok else "",
+        )
+        _print_result(r)
+        r = _record(
+            "_CAPABILITY_SYNC_ELIGIBLE non-empty",
+            len(_CAPABILITY_SYNC_ELIGIBLE) >= 1,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "NodeArchitecturalClass accessible",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
 
 def _summarise(strict: bool) -> int:
     passed = sum(1 for r in _results if r.status == "PASS")
@@ -665,6 +925,8 @@ def main() -> int:
     check_docs()
     check_purge_hardening()
     check_startup_tier_model()
+    check_runtime_acceptance()
+    check_callable_node_baseline()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
