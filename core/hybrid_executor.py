@@ -70,6 +70,18 @@ helper within OpenClawd's local execution path.  It MUST NOT act as a
 parallel top-level dispatch authority or bypass the canonical execution chain
 (OpenClawd → CommandRouter → DeviceRouter) for cross-device tasks."""
 
+#: Phase-A consolidation sentinel.  The former ``CapabilityRegistry`` class in
+#: this module has been renamed to :class:`AppExecutionCapabilityRegistry` to
+#: eliminate naming ambiguity with the canonical
+#: :class:`core.agent.capability_registry.CapabilityRegistry` (the system-wide
+#: capability truth source).  This class manages *app-level execution
+#: preferences* (A2A / GUI / VLM level order per app_id) — a concern that is
+#: entirely local to :class:`HybridExecutionArbiter` and has no connection to
+#: the capability bus.
+APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = (
+    "CapabilityRegistry → AppExecutionCapabilityRegistry"
+)
+
 class ExecutionLevel(str, Enum):
     A2A = "a2a"          # Agent-to-Agent (API/MCP direct call)
     GUI = "gui"          # GUI Automation (accessibility, ADB)
@@ -130,8 +142,22 @@ class AppCapability:
     preferred_level: Optional[ExecutionLevel] = None  # 强制首选级别
 
 
-class CapabilityRegistry:
-    """应用能力注册表"""
+class AppExecutionCapabilityRegistry:
+    """Per-app execution-level preference registry for HybridExecutionArbiter.
+
+    .. note::
+        This class is **not** the system-wide capability truth source.  It is a
+        small, module-local helper that records which execution levels (A2A /
+        GUI / VLM) each app supports and in what preferred order.
+
+        The canonical system capability registry is
+        :class:`core.agent.capability_registry.CapabilityRegistry`, which is
+        populated by MCP/Skill/Node loaders and consumed by
+        :class:`core.unified.capability_resolver.CapabilityResolver`.
+
+    Previously named ``CapabilityRegistry`` (renamed in Phase-A consolidation;
+    see :data:`APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED`).
+    """
 
     def __init__(self):
         self._apps: Dict[str, AppCapability] = {}
@@ -234,7 +260,7 @@ class HybridExecutionArbiter:
         self._gui = gui_executor
         self._vlm = vlm_executor
         self._screenshot = screenshot_getter
-        self.registry = CapabilityRegistry()
+        self.registry = AppExecutionCapabilityRegistry()
         self._execution_history: List[Dict] = []
         self._stats = {
             "total": 0,

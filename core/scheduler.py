@@ -51,6 +51,23 @@ SCHEDULER_TASK_GRAPH_RELAY_MESH_INTEGRATED: str = (
     "dispatch (GAP-512-002)."
 )
 
+# Phase-A consolidation: canonical tool naming is now the PRIMARY exposed
+# naming scheme for MCP and Skill tools injected by this scheduler.
+#
+# Canonical prefixes (double-underscore separator):
+#   mcp__<server_id>__<tool_name>   — MCP server tools
+#   skill__<skill_id>               — Skill tools
+#   node__<node_id>__<action>       — Node capability tools
+#
+# Legacy prefixes (single underscore) are retained ONLY as compatibility
+# aliases in the dispatch path (_dispatch_tool_call).  New tools MUST use
+# the canonical double-underscore form.
+SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY: str = (
+    "SCHEDULER_CANONICAL_TOOL_NAMING_V1: inject_mcp_tools() emits "
+    "mcp__<server>__<tool>; inject_skill_tools() emits skill__<id>; "
+    "legacy mcp_/skill_/call_ prefixes are compat aliases only."
+)
+
 class ToolDefinition(BaseModel):
     name: str
     description: str
@@ -365,26 +382,36 @@ class AutonomousScheduler:
             category = "general"
             requires_device = False
 
-            if name.startswith("mcp_") or name.startswith("mcp__"):
+            if name.startswith("mcp__"):
+                # Canonical MCP tool.
                 source = "mcp"
                 category = "mcp"
-            elif name.startswith("skill_") or name.startswith("skill__"):
+            elif name.startswith("skill__"):
+                # Canonical Skill tool.
                 source = "skill"
                 category = "skill"
-            elif name.startswith("call_Node_"):
-                source = "config"
-                # 提取 node_id: call_Node_06_Filesystem → Node_06
-                parts = name.replace("call_", "").split("_")
-                if len(parts) >= 2:
-                    node_id = f"{parts[0]}_{parts[1]}"
-                category = "node"
             elif name.startswith("node__"):
-                source = "hardcoded"
+                # Canonical Node tool.
+                source = "canonical"
                 parts = name.split("__")
                 if len(parts) >= 2:
                     node_id = parts[1]
                 category = "node"
-
+            elif name.startswith("mcp_"):
+                # Legacy compat alias — still recognized for config-loaded tools.
+                source = "mcp"
+                category = "mcp"
+            elif name.startswith("skill_"):
+                # Legacy compat alias — still recognized for config-loaded tools.
+                source = "skill"
+                category = "skill"
+            elif name.startswith("call_Node_"):
+                # Legacy compat alias for node tools.
+                source = "config"
+                parts = name.replace("call_", "").split("_")
+                if len(parts) >= 2:
+                    node_id = f"{parts[0]}_{parts[1]}"
+                category = "node"
             definitions.append(ToolDefinition(
                 name=name,
                 description=desc,
@@ -398,7 +425,13 @@ class AutonomousScheduler:
         return definitions
 
     def inject_mcp_tools(self):
-        """将 mcp_loader 中已加载的所有 MCP 工具注入到工具列表（可在加载新 MCP Server 后调用）"""
+        """将 mcp_loader 中已加载的所有 MCP 工具注入到工具列表（可在加载新 MCP Server 后调用）
+
+        Phase-A: Tools are exposed under the canonical double-underscore prefix:
+            mcp__<server_id>__<tool_name>
+        The legacy single-underscore form (``mcp_<server_id>_<tool_name>``) is no
+        longer injected here; the dispatch path provides a compat alias for it.
+        """
         try:
             from core.mcp_loader import mcp_loader, MCPServerStatus
             injected = 0
@@ -407,7 +440,8 @@ class AutonomousScheduler:
                 if server.status != MCPServerStatus.RUNNING:
                     continue
                 for tool in server.tools:
-                    func_name = f"mcp_{server_id}_{tool.name}"
+                    # Canonical double-underscore form.
+                    func_name = f"mcp__{server_id}__{tool.name}"
                     if func_name in existing_names:
                         continue
                     self.tools_cache.append({
@@ -421,12 +455,18 @@ class AutonomousScheduler:
                     existing_names.add(func_name)
                     injected += 1
             if injected:
-                logger.info(f"注入 {injected} 个 MCP 工具到调度器")
+                logger.info(f"注入 {injected} 个 MCP 工具到调度器 (canonical mcp__ prefix)")
         except Exception as e:
             logger.warning(f"注入 MCP 工具失败: {e}")
 
     def inject_skill_tools(self):
-        """将 skill_loader 中已加载的 Skill 注入为可用工具"""
+        """将 skill_loader 中已加载的 Skill 注入为可用工具
+
+        Phase-A: Skills are exposed under the canonical double-underscore prefix:
+            skill__<skill_id>
+        The legacy single-underscore form (``skill_<name>``) is no longer injected
+        here; the dispatch path provides a compat alias for it.
+        """
         try:
             from core.skill_loader import skill_loader as loader
             if not loader:
@@ -434,8 +474,11 @@ class AutonomousScheduler:
             existing_names = {t["function"]["name"] for t in self.tools_cache}
             injected = 0
             for skill in loader.list_skills():
-                func_name = f"skill_{skill.get('name', '')}"
-                if func_name in existing_names or not skill.get("name"):
+                if not skill.get("name"):
+                    continue
+                # Canonical double-underscore form.
+                func_name = f"skill__{skill['name']}"
+                if func_name in existing_names:
                     continue
                 self.tools_cache.append({
                     "type": "function",
@@ -514,10 +557,15 @@ You operate in a ReAct loop: Think → Act (call tools) → Observe results → 
 
 RULES:
 1. For device operations (open app, click, swipe, type, screenshot): use 'send_to_device' tool with the target device_id.
-2. For system operations (file, web, shell, OCR): use the appropriate 'call_Node_*' tool.
+2. For system operations (file, web, shell, OCR): use the appropriate 'node__<node_id>__<action>' tool.
 3. Always explain what you're doing before calling tools.
 4. After tool execution, interpret the result and decide next steps.
 5. When the task is fully done, provide a clear summary in the user's language.
+
+TOOL NAMING (canonical form):
+- MCP tools:   mcp__<server_id>__<tool_name>
+- Skill tools: skill__<skill_id>
+- Node tools:  node__<node_id>__<action>
 
 DEVICE CONTEXT:
 {device_context}
@@ -672,12 +720,47 @@ CROSS-DEVICE:
             if function_name == "mesh_send":
                 return await self._exec_mesh_send(args)
 
-            # MCP 工具: mcp_{server_id}_{tool_name}
-            if function_name.startswith("mcp_"):
+            # ── CANONICAL tool dispatch (double-underscore prefix) ────────────
+            # Primary path: canonical prefixes (mcp__/skill__/node__).
+
+            # MCP 工具 (canonical): mcp__<server_id>__<tool_name>
+            if function_name.startswith("mcp__"):
                 return await self._exec_mcp_tool(function_name, args)
 
-            # 节点工具: call_Node_xxx
+            # Skill 工具 (canonical): skill__<skill_id>
+            if function_name.startswith("skill__"):
+                return await self._exec_skill_tool(function_name, args)
+
+            # Node 工具 (canonical): node__<node_id>__<action>
+            if function_name.startswith("node__"):
+                parts = function_name.split("__", 2)
+                if len(parts) >= 3:
+                    node_id_part, action_part = parts[1], parts[2]
+                    if executor:
+                        result = await executor(node_id_part, action_part, args)
+                        return json.dumps(result, ensure_ascii=False)
+                return json.dumps({"error": f"node__ tool dispatch unavailable for: {function_name}"})
+
+            # ── COMPAT ALIAS dispatch (legacy single-underscore prefix) ───────
+            # Compatibility aliases only — not the primary exposed form.
+            # New integrations MUST use canonical double-underscore prefixes above.
+
+            # MCP 工具 (legacy compat alias): mcp_<server_id>_<tool_name>
+            if function_name.startswith("mcp_"):
+                logger.debug(
+                    "Scheduler: legacy mcp_ prefix used for '%s'; "
+                    "prefer canonical mcp__<server>__<tool> form.",
+                    function_name,
+                )
+                return await self._exec_mcp_tool(function_name, args)
+
+            # 节点工具 (legacy compat alias): call_Node_xxx
             if function_name.startswith("call_"):
+                logger.debug(
+                    "Scheduler: legacy call_ prefix used for '%s'; "
+                    "prefer canonical node__<id>__<action> form.",
+                    function_name,
+                )
                 node_id = function_name.replace("call_", "")
                 action = args.get("action", "execute")
                 params = args.get("params", {})
@@ -687,8 +770,13 @@ CROSS-DEVICE:
                     return json.dumps(result, ensure_ascii=False)
                 return json.dumps({"error": "No executor available"})
 
-            # Skill 工具: skill_{name}
+            # Skill 工具 (legacy compat alias): skill_<name>
             if function_name.startswith("skill_"):
+                logger.debug(
+                    "Scheduler: legacy skill_ prefix used for '%s'; "
+                    "prefer canonical skill__<id> form.",
+                    function_name,
+                )
                 return await self._exec_skill_tool(function_name, args)
 
             return json.dumps({"error": f"Unknown tool: {function_name}"})
@@ -998,29 +1086,49 @@ CROSS-DEVICE:
         return json.dumps({"error": f"No online device found matching type={device_type} name={device_name}"})
 
     async def _exec_mcp_tool(self, function_name: str, args: Dict) -> str:
-        """调用 MCP 工具 — 格式: mcp_{server_id}_{tool_name}
-        
+        """调用 MCP 工具.
+
+        Accepts both canonical and legacy naming formats:
+          - Canonical: ``mcp__<server_id>__<tool_name>``  (primary, double-underscore)
+          - Legacy compat: ``mcp_<server_id>_<tool_name>``  (single-underscore, alias only)
+
         server_id 由 mcp_loader 生成（8 位不含下划线的十六进制），
-        tool_name 可包含下划线，因此以首个下划线为分隔符切分即可。
+        tool_name 可包含下划线。
         """
         try:
             from core.mcp_loader import mcp_loader
-            # function_name 形如 mcp_<server_id>_<tool_name>
-            # server_id 是 8 位十六进制 UUID 片段，tool_name 可能含下划线
-            parts = function_name[len("mcp_"):].split("_", 1)
-            if len(parts) != 2:
-                return json.dumps({"error": f"Invalid MCP tool name: {function_name}"})
-            server_id, tool_name = parts
+            if function_name.startswith("mcp__"):
+                # Canonical double-underscore form: mcp__<server_id>__<tool_name>
+                parts = function_name[len("mcp__"):].split("__", 1)
+                if len(parts) != 2:
+                    return json.dumps({"error": f"Invalid canonical MCP tool name: {function_name}"})
+                server_id, tool_name = parts
+            else:
+                # Legacy compat: mcp_<server_id>_<tool_name>
+                parts = function_name[len("mcp_"):].split("_", 1)
+                if len(parts) != 2:
+                    return json.dumps({"error": f"Invalid MCP tool name: {function_name}"})
+                server_id, tool_name = parts
             result = await mcp_loader.call_tool(server_id, tool_name, args)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": f"MCP tool failed: {e}"})
 
     async def _exec_skill_tool(self, function_name: str, args: Dict) -> str:
-        """调用已注册的 Skill — 格式: skill_{name}"""
+        """调用已注册的 Skill.
+
+        Accepts both canonical and legacy naming formats:
+          - Canonical: ``skill__<skill_id>``  (primary, double-underscore)
+          - Legacy compat: ``skill_<name>``  (single-underscore, alias only)
+        """
         try:
             from core.skill_loader import skill_loader as loader
-            skill_name = function_name[len("skill_"):]
+            if function_name.startswith("skill__"):
+                # Canonical double-underscore form.
+                skill_name = function_name[len("skill__"):]
+            else:
+                # Legacy compat: strip single "skill_" prefix.
+                skill_name = function_name[len("skill_"):]
             result = await loader.execute(skill_name, **args)
             if isinstance(result, dict):
                 return json.dumps(result, ensure_ascii=False)

@@ -409,6 +409,81 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "and  galaxy_gateway/protocol/compat.py::parse_message_compat"
         ),
     ),
+
+    # ── Phase-A consolidation: capability naming ambiguity removed ────────
+
+    PurgeDecision(
+        asset_path="core/hybrid_executor.py::CapabilityRegistry",
+        status=PurgeStatus.DEAD_REFERENCE_REMOVED,
+        pr="PR-consolidation-A",
+        rationale=(
+            "The class ``CapabilityRegistry`` in core/hybrid_executor.py was "
+            "ambiguously named — it appeared to be a capability registry but was "
+            "only a local per-app execution-level preference store "
+            "(A2A/GUI/VLM priority order per app_id), completely unrelated to the "
+            "system-wide capability bus.  Phase-A renames it to "
+            "``AppExecutionCapabilityRegistry`` to eliminate the naming "
+            "conflict and adds the ``APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED`` "
+            "sentinel."
+        ),
+        canonical_replacement=(
+            "core/hybrid_executor.py::AppExecutionCapabilityRegistry  "
+            "(local app execution preferences)  "
+            "and  core/agent/capability_registry.py::CapabilityRegistry  "
+            "(system-wide canonical capability truth source)"
+        ),
+    ),
+
+    # ── Phase-A consolidation: scheduler legacy tool naming demoted ───────
+
+    PurgeDecision(
+        asset_path="core/scheduler.py::inject_mcp_tools (mcp_ prefix)",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-consolidation-A",
+        rationale=(
+            "Scheduler.inject_mcp_tools() previously emitted tools under the "
+            "legacy single-underscore prefix ``mcp_<server_id>_<tool_name>``.  "
+            "Phase-A changes it to emit the canonical double-underscore form "
+            "``mcp__<server_id>__<tool_name>`` as the primary exposed name.  "
+            "The dispatch path (_exec_mcp_tool / _execute_tool) retains a "
+            "compatibility branch for the legacy ``mcp_`` prefix so existing "
+            "integrations are not broken, but new tools MUST use the canonical form."
+        ),
+        canonical_replacement=(
+            "core/scheduler.py::inject_mcp_tools — now emits mcp__<server>__<tool>"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="core/scheduler.py::inject_skill_tools (skill_ prefix)",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-consolidation-A",
+        rationale=(
+            "Scheduler.inject_skill_tools() previously emitted tools under the "
+            "legacy single-underscore prefix ``skill_<name>``.  Phase-A changes "
+            "it to emit the canonical double-underscore form ``skill__<skill_id>`` "
+            "as the primary exposed name.  The dispatch path retains a compat "
+            "branch for ``skill_`` so existing callers are not immediately broken."
+        ),
+        canonical_replacement=(
+            "core/scheduler.py::inject_skill_tools — now emits skill__<id>"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="core/scheduler.py::_dispatch_tool_call (call_ prefix)",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-consolidation-A",
+        rationale=(
+            "The legacy ``call_Node_*`` (and generic ``call_``) tool naming used "
+            "in scheduler dispatch predates the canonical ``node__<id>__<action>`` "
+            "scheme.  Phase-A demotes these to explicit compat aliases in "
+            "_execute_tool() with a logger.debug warning so callers are "
+            "informed to migrate.  The canonical ``node__`` path is now checked "
+            "first."
+        ),
+        canonical_replacement=(
+            "node__<node_id>__<action>  (canonical node tool naming)"
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------
