@@ -63,6 +63,21 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.CanonicalDispatcher")
 
+# ---------------------------------------------------------------------------
+# PR-530: Spine observability hardening sentinel
+# ---------------------------------------------------------------------------
+
+#: Confirms that :class:`CanonicalDispatcher` propagates ``trace_id`` and
+#: ``request_id`` into every :class:`DispatchResult` so the execution spine
+#: (OpenClawd → CanonicalDispatcher → backend) is fully correlated.
+#: Also confirms that ``DispatchResult.to_dict()`` exposes those fields so
+#: downstream consumers can surface them without importing this module.
+CANONICAL_DISPATCHER_SPINE_HARDENED: str = (
+    "CANONICAL_DISPATCHER_SPINE_HARDENED_V1: "
+    "DispatchResult carries trace_id + request_id; "
+    "CanonicalDispatcher propagates both from call-site into result; "
+    "to_dict() exposes both fields for downstream observability."
+)
 
 # ---------------------------------------------------------------------------
 # Capability layer classification
@@ -128,9 +143,24 @@ class DispatchResult:
     # Optional pass-through fields from legacy paths
     needs_confirmation: bool = False
 
+    # PR-530: spine-observability correlation fields.
+    # ``trace_id`` links this dispatch result back to the originating request
+    # that entered OpenClawd (same value as OpenClawd._current_trace_id /
+    # runtime_session_id when routed through DesktopPresenceRuntime).
+    # ``request_id`` is the per-call dispatch identifier (defaults to
+    # dispatch_id for backward compat, but may be overridden with the
+    # outer request_id when available).
+    trace_id: str = ""
+    request_id: str = ""
+
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable plain dict — backward-compatible with
-        the legacy ``{"success": bool, "result": ..., "error": ...}`` shape."""
+        the legacy ``{"success": bool, "result": ..., "error": ...}`` shape.
+
+        PR-530: ``trace_id`` and ``request_id`` are included so that every
+        level of the execution spine (OpenClawd → CanonicalDispatcher →
+        backend) surfaces the same correlation identifiers.
+        """
         d: Dict[str, Any] = {
             "success": self.success,
             "result": self.result,
@@ -139,6 +169,8 @@ class DispatchResult:
             "layer": self.layer.value,
             "latency_ms": round(self.latency_ms, 2),
             "dispatch_id": self.dispatch_id,
+            "trace_id": self.trace_id,
+            "request_id": self.request_id or self.dispatch_id,
         }
         if self.needs_confirmation:
             d["needs_confirmation"] = True
@@ -281,6 +313,9 @@ class CanonicalDispatcher:
         result.layer = layer
         result.arguments = arguments
         result.latency_ms = (time.time() - t0) * 1000
+        # PR-530: stamp spine-observability correlation fields on every result.
+        result.trace_id = _trace_id
+        result.request_id = _trace_id or result.dispatch_id
         return result
 
     # ------------------------------------------------------------------

@@ -298,6 +298,18 @@ EXECUTION_SPINE_WRITE_INTEGRATED: str = (
     "Compat dispatch() paths emit degraded audit markers."
 )
 
+#: PR-530: Confirms that CommandRouter carries ``trace_id`` from the incoming
+#: TaskEnvelope into every result dict and every audit/replay event it emits.
+#: This closes the spine-observability gap between OpenClawd and CommandRouter:
+#: a request's ``trace_id`` is now visible end-to-end from process() through
+#: route_envelope() through the audit layer.
+COMMAND_ROUTER_CORRELATION_HARDENED: str = (
+    "COMMAND_ROUTER::CORRELATION_HARDENED_V1: "
+    "route_envelope() result dict carries trace_id from TaskEnvelope; "
+    "dispatch() compat path propagates trace_id from metadata; "
+    "full OpenClawd → CommandRouter → audit/replay correlation confirmed."
+)
+
 # PR-512: Runtime Closure Audit integration sentinel.
 # The closure audit layer (core/runtime_closure_audit.py) covers all
 # PR-506–511 layers including this module.  This sentinel asserts that

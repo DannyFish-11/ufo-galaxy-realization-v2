@@ -607,6 +607,21 @@ CRITICAL_PATH_MULTIMODAL_INGRESS_INTEGRATED: str = (
     "Closes GAP-512-009."
 )
 
+#: PR-530: Confirms that OpenClawd propagates ``trace_id`` (== request_id or
+#: runtime_session_id) into every ``_dispatch_tool_call`` invocation so that
+#: the full execution spine (OpenClawd → CanonicalDispatcher → backend layer)
+#: is correlated by a single stable identifier for the lifetime of the request.
+#: The spine observability fields (trace_id, execution_path, runtime_session_id)
+#: are present in both the process() response metadata and each DispatchResult.
+OPENCLAWD_SPINE_OBSERVABILITY_HARDENED: str = (
+    "OPENCLAWD::SPINE_OBSERVABILITY_HARDENED_V1: "
+    "process() stamps _current_trace_id / _current_session_id / "
+    "_current_device_id before every _dispatch_tool_call invocation; "
+    "CanonicalDispatcher.dispatch() propagates trace_id into DispatchResult; "
+    "response metadata carries execution_path + runtime_session_id for "
+    "full OpenClawd → CanonicalDispatcher → result spine correlation."
+)
+
 
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
