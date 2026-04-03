@@ -239,27 +239,30 @@ class TestGetCallableNodeClassificationLogic:
         assert "arch_node_w" not in result["callable_nodes"]
 
     def test_unregistered_startup_nodes_detected(self):
-        """Nodes in startup config but not in NodeFabricRegistry appear as unregistered."""
+        """Nodes in startup config with main.py but not in NodeFabricRegistry appear as unregistered."""
         from core.nodes.node_fabric_registry import reset_node_fabric_registry
         reset_node_fabric_registry()
 
         launcher = self._make_launcher()
-        # Inject a fake startup config entry that references a non-existent node dir.
-        # The launcher checks `(nodes_dir / name / "main.py").exists()` so we need
-        # to use a node that actually has a main.py on disk.  Instead we mock nodes_dir.
+        # Use a real node that exists on disk but is not registered in the
+        # (freshly reset) NodeFabricRegistry.
+        # Node_00_StateMachine always has a main.py on disk.
+        real_node_name = "Node_00_StateMachine"
         launcher.node_configs = {
-            "FakeActiveNode": {
+            real_node_name: {
                 "startup_policy": "active",
                 "group": "core",
             }
         }
-        # Make nodes_dir point somewhere that doesn't contain this node dir so
-        # the exists() check returns False → node is not included in startup set.
-        # The launcher filters by exists(), so with a missing dir the node won't
-        # be in startup_node_names either.  Let's verify graceful handling.
         result = launcher.get_callable_node_classification()
-        # FakeActiveNode has no main.py so it should not appear as unregistered startup.
-        assert "FakeActiveNode" not in result["unregistered_startup_nodes"]
+        # The node has a main.py and is in startup config, but not registered
+        # with NodeFabricRegistry, so it should appear as unregistered.
+        assert real_node_name in result["unregistered_startup_nodes"], (
+            f"{real_node_name} has main.py and is in startup config but not "
+            "in NodeFabricRegistry; it must appear in unregistered_startup_nodes."
+        )
+        assert real_node_name not in result["callable_nodes"]
+        assert real_node_name not in result["service_nodes"]
 
     def test_mixed_classification_counts_match(self):
         """summary counts must equal the lengths of the corresponding lists."""
@@ -328,8 +331,19 @@ class TestValidateRuntimeIntegration:
         import inspect
         mod = self._load_module()
         main_src = inspect.getsource(mod.main)
+        # The call must appear as a direct function call statement, not in a comment.
         assert "check_callable_startup_integration()" in main_src, (
             "main() must call check_callable_startup_integration()"
+        )
+        # The function call must not only appear in commented-out code.
+        uncommented_lines = [
+            line for line in main_src.splitlines()
+            if "check_callable_startup_integration()" in line
+            and not line.lstrip().startswith("#")
+        ]
+        assert uncommented_lines, (
+            "check_callable_startup_integration() must appear as an active "
+            "(non-commented) statement in main()"
         )
 
 
