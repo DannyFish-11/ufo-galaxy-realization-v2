@@ -168,10 +168,16 @@ def _make_openclawd_inline():
 
 def _load_validate_runtime():
     """Load scripts/validate_runtime.py as a module."""
+    script_path = PROJECT_ROOT / "scripts" / "validate_runtime.py"
     spec = importlib.util.spec_from_file_location(
         "validate_runtime",
-        PROJECT_ROOT / "scripts" / "validate_runtime.py",
+        script_path,
     )
+    if spec is None or spec.loader is None:
+        raise ImportError(
+            f"Cannot load validate_runtime module from {script_path} — "
+            "spec_from_file_location returned None"
+        )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -744,7 +750,11 @@ class TestMCPLayerRegression:
 
     @pytest.mark.asyncio
     async def test_mcp_gateway_tool_path(self):
-        """mcp__gateway__<tool> must route through the gateway path."""
+        """mcp__gateway__<tool> is a special MCP sub-namespace that routes
+        through the gateway's built-in capability layer rather than a
+        standard external MCP server.  The prefix ``mcp__gateway__`` triggers
+        CapabilityLayer.MCP_GW classification and dispatches via the gateway
+        adapter instead of the generic ``mcp_loader.call_tool`` path."""
         oc = _make_openclawd_with_dispatcher()
         gateway_result = {"gateway_tool": "ok"}
 
@@ -823,6 +833,17 @@ class TestDispatchResultSpineFields:
         )
         d = dr.to_dict()
         assert d["trace_id"] == "t-fail"
+
+    def test_dispatch_result_empty_trace_id_defaults_to_empty_string(self):
+        """When trace_id is not provided (default ''), to_dict() must still
+        include a 'trace_id' key with an empty string value rather than
+        omitting the field entirely — callers can always count on the key
+        being present for downstream log correlation."""
+        from core.capabilities.canonical_dispatcher import DispatchResult
+        dr = DispatchResult(success=True)
+        d = dr.to_dict()
+        assert "trace_id" in d
+        assert d["trace_id"] == ""
 
 
 class TestCanonicalDispatcherTracePropagation:
