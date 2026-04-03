@@ -98,10 +98,10 @@ Helpers::
 from __future__ import annotations
 
 import logging
-import sys
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -573,11 +573,7 @@ class DeploymentBaselineRuntime:
     _class_lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
-        from collections import deque
-
-        self._reports: "deque[DeploymentBaselineReport]" = __import__(
-            "collections"
-        ).deque(maxlen=32)
+        self._reports: deque[DeploymentBaselineReport] = deque(maxlen=32)
         self._lock = threading.Lock()
 
     @classmethod

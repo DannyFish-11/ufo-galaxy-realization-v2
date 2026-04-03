@@ -121,6 +121,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid as _uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -345,8 +346,6 @@ class NodeLifecycleGovernorSnapshot:
 # ===========================================================================
 # Governor class
 # ===========================================================================
-
-import uuid as _uuid
 
 
 class NodeLifecycleGovernor:

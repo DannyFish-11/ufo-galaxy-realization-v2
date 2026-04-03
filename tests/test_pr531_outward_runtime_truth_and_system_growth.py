@@ -937,7 +937,6 @@ class TestValidateRuntimeSections:
 
     def test_check_outward_runtime_truth_callable(self):
         import importlib.util as ilu
-        import sys as _sys
 
         vr_path = PROJECT_ROOT / "scripts" / "validate_runtime.py"
         spec = ilu.spec_from_file_location("_vr_ort", vr_path)
