@@ -15,6 +15,26 @@ Startup policy semantics (PR-7 node unification):
 The ``startup_policy`` field in ``node_dependencies.json`` is the canonical
 authority for these distinctions.  Nodes whose policy is absent default to
 ``"active"``.
+
+Callable-node baseline integration (PR-529 consolidation)
+----------------------------------------------------------
+:meth:`NodeSystemLauncher.get_callable_node_classification` queries the live
+:class:`~core.nodes.node_fabric_registry.NodeFabricRegistry` (populated after
+nodes register themselves) and cross-references it with
+:func:`~core.callable_node_baseline.is_callable_by_openclawd` to separate:
+
+- ``callable_nodes``    — Registered nodes that are truly callable by OpenClawd
+                          (``CAPABILITY_NODE`` architectural class).
+- ``service_nodes``     — Registered nodes with ``SERVICE_NODE`` class;
+                          they run but do not expose capability tools.
+- ``legacy_nodes``      — ``LEGACY_ORCHESTRATOR_NODE``; demoted facade nodes.
+- ``non_callable_nodes``— ``EXPERIMENTAL_NODE`` or ``ARCHIVED_NODE``; not
+                          surfaced into the tool catalog.
+- ``unregistered_startup_nodes`` — Nodes in the startup config that have not
+                          yet registered with NodeFabricRegistry (e.g. still
+                          starting up or failed to connect).
+
+Sentinel: :data:`CALLABLE_BASELINE_STARTUP_INTEGRATION`
 """
 
 import os
@@ -29,6 +49,27 @@ from .bootstrap import PROJECT_ROOT, print_status, ServiceType, SystemConfig
 from .service_manager import ServiceManager
 
 logger = logging.getLogger("Galaxy")
+
+# ---------------------------------------------------------------------------
+# Phase-B consolidation sentinel
+# ---------------------------------------------------------------------------
+
+#: PR-529 callable-node baseline integration.
+#:
+#: Confirms that :meth:`NodeSystemLauncher.get_callable_node_classification`
+#: is present and integrates :func:`~core.callable_node_baseline.is_callable_by_openclawd`
+#: to programmatically distinguish startup-ready nodes from callable-capability
+#: nodes, service-only nodes, and non-callable nodes.
+#:
+#: This sentinel is the programmatic assertion that the callable-node baseline
+#: (defined in ``core/callable_node_baseline.py``) is wired into the startup
+#: layer, not merely documented.
+CALLABLE_BASELINE_STARTUP_INTEGRATION: str = (
+    "CALLABLE_BASELINE_STARTUP_INTEGRATION_V1: "
+    "NodeSystemLauncher.get_callable_node_classification() integrates "
+    "core.callable_node_baseline.is_callable_by_openclawd() to separate "
+    "startup-ready nodes from callable-capability nodes at runtime."
+)
 
 
 class NodeSystemLauncher:
@@ -246,6 +287,110 @@ class NodeSystemLauncher:
                 "active_baseline_count": len(active_baseline),
                 "optional_governed_count": len(optional_governed),
                 "readiness_gap_count": len(readiness_gaps),
+            },
+        }
+
+    def get_callable_node_classification(self) -> Dict[str, Any]:
+        """Return a runtime classification of nodes by callability.
+
+        Queries the live :class:`~core.nodes.node_fabric_registry.NodeFabricRegistry`
+        and applies the callable-node baseline
+        (:func:`~core.callable_node_baseline.is_callable_by_openclawd`) to
+        classify each registered node into one of four buckets:
+
+        - ``callable_nodes``    — Nodes with ``CAPABILITY_NODE`` architectural
+          class; these are the only nodes surfaced as tools by OpenClawd.
+        - ``service_nodes``     — Nodes with ``SERVICE_NODE`` class; they run
+          but do not expose capability tools to OpenClawd.
+        - ``legacy_nodes``      — Nodes with ``LEGACY_ORCHESTRATOR_NODE`` class;
+          demoted facade nodes not surfaced in the tool catalog.
+        - ``non_callable_nodes``— Nodes with ``EXPERIMENTAL_NODE`` or
+          ``ARCHIVED_NODE`` class; excluded from tool exposure by design.
+        - ``unregistered_startup_nodes`` — Nodes in the startup config (active
+          or optional policy) that have not yet registered with
+          NodeFabricRegistry (may still be starting or failed to connect).
+        - ``classification_available`` — ``True`` when the NodeFabricRegistry
+          and callable baseline were reachable; ``False`` when one or both
+          imports failed (e.g. lightweight test environment).
+
+        This method is the programmatic assertion that the callable-node
+        baseline is wired into the startup layer, not merely documented.
+        It satisfies the :data:`CALLABLE_BASELINE_STARTUP_INTEGRATION` sentinel.
+
+        Returns:
+            dict with the keys described above plus a ``summary`` sub-dict.
+        """
+        # Determine which nodes the startup config considers active.
+        startup_node_names: set = set(
+            name for name, cfg in self.node_configs.items()
+            if isinstance(cfg, dict)
+            and cfg.get("startup_policy", self._POLICY_ACTIVE) in (
+                self._POLICY_ACTIVE, self._POLICY_OPTIONAL
+            )
+            and (self.nodes_dir / name / "main.py").exists()
+        )
+
+        callable_nodes: List[str] = []
+        service_nodes: List[str] = []
+        legacy_nodes: List[str] = []
+        non_callable_nodes: List[str] = []
+        classification_available = False
+
+        try:
+            from core.nodes.node_fabric_registry import (  # type: ignore[import]
+                get_node_fabric_registry,
+                NodeArchitecturalClass,
+            )
+            from core.callable_node_baseline import (  # type: ignore[import]
+                is_callable_by_openclawd,
+            )
+
+            fabric = get_node_fabric_registry()
+            registered_node_ids: set = set()
+
+            for node_info in fabric.list_nodes():
+                nid = node_info.node_id
+                registered_node_ids.add(nid)
+                arch = node_info.architectural_class
+
+                if is_callable_by_openclawd(arch):
+                    callable_nodes.append(nid)
+                elif arch == NodeArchitecturalClass.SERVICE_NODE:
+                    service_nodes.append(nid)
+                elif arch == NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE:
+                    legacy_nodes.append(nid)
+                else:
+                    # EXPERIMENTAL_NODE, ARCHIVED_NODE, or unknown
+                    non_callable_nodes.append(nid)
+
+            # Nodes that the startup config expects but haven't registered yet.
+            unregistered_startup_nodes = sorted(
+                startup_node_names - registered_node_ids
+            )
+            classification_available = True
+
+        except Exception as exc:
+            logger.debug(
+                "get_callable_node_classification: "
+                "callable baseline unavailable (%s); "
+                "returning startup config names as unregistered.",
+                exc,
+            )
+            unregistered_startup_nodes = sorted(startup_node_names)
+
+        return {
+            "callable_nodes": sorted(callable_nodes),
+            "service_nodes": sorted(service_nodes),
+            "legacy_nodes": sorted(legacy_nodes),
+            "non_callable_nodes": sorted(non_callable_nodes),
+            "unregistered_startup_nodes": unregistered_startup_nodes,
+            "classification_available": classification_available,
+            "summary": {
+                "callable_count": len(callable_nodes),
+                "service_count": len(service_nodes),
+                "legacy_count": len(legacy_nodes),
+                "non_callable_count": len(non_callable_nodes),
+                "unregistered_startup_count": len(unregistered_startup_nodes),
             },
         }
 

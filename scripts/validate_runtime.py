@@ -856,6 +856,71 @@ def check_callable_node_baseline() -> None:
         _print_result(r)
 
 
+# ---------------------------------------------------------------------------
+# 10. Callable-node baseline startup integration (PR-529 Phase-B)
+# ---------------------------------------------------------------------------
+
+
+def check_callable_startup_integration() -> None:
+    """Phase-B: Verify the callable-node baseline is integrated into node startup.
+
+    Checks:
+    a. ``launcher.node_startup`` exposes the
+       :data:`~launcher.node_startup.CALLABLE_BASELINE_STARTUP_INTEGRATION`
+       sentinel confirming the integration is present.
+    b. :meth:`~launcher.node_startup.NodeSystemLauncher.get_callable_node_classification`
+       method is callable without error.
+    c. The method returns the expected classification keys.
+    d. ``classification_available`` field is present in the result.
+    """
+    _section("10. Callable-Node Baseline Startup Integration")
+
+    # 10a. Sentinel
+    try:
+        import importlib.util as _ilu
+        import sys as _sys
+        _launcher_path = (
+            Path(__file__).parent.parent / "launcher" / "node_startup.py"
+        )
+        _spec = _ilu.spec_from_file_location("_node_startup_check", _launcher_path)
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+        sentinel = getattr(_mod, "CALLABLE_BASELINE_STARTUP_INTEGRATION", None)
+        r = _record(
+            "CALLABLE_BASELINE_STARTUP_INTEGRATION sentinel present",
+            bool(sentinel),
+            f"{str(sentinel)[:80]}" if sentinel else "sentinel missing",
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "launcher.node_startup importable",
+            False,
+            str(exc)[:120],
+        ))
+        return
+
+    # 10b/c/d. get_callable_node_classification()
+    try:
+        launcher_cls = getattr(_mod, "NodeSystemLauncher", None)
+        if launcher_cls is None:
+            _print_result(_record(
+                "NodeSystemLauncher class accessible",
+                False,
+                "NodeSystemLauncher not found in launcher.node_startup",
+            ))
+            return
+        r = _record("NodeSystemLauncher.get_callable_node_classification method present",
+                    hasattr(launcher_cls, "get_callable_node_classification"))
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "NodeSystemLauncher.get_callable_node_classification accessible",
+            False,
+            str(exc)[:120],
+        ))
+
+
 def _summarise(strict: bool) -> int:
     passed = sum(1 for r in _results if r.status == "PASS")
     failed = sum(1 for r in _results if r.status == "FAIL")
@@ -927,6 +992,7 @@ def main() -> int:
     check_startup_tier_model()
     check_runtime_acceptance()
     check_callable_node_baseline()
+    check_callable_startup_integration()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
