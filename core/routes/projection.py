@@ -88,6 +88,23 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED_UNAVAILABLE"
     )
 
+# PR-531: Outward Runtime Truth integration sentinel.
+# Asserts that the outward runtime truth governance layer (PR-531) is available
+# and wired into the projection routes module, ensuring outward surfaces can
+# source from compile_outward_truth() rather than independently assembling state.
+try:
+    from core.outward_runtime_truth import (  # noqa: F401
+        OUTWARD_RUNTIME_TRUTH_AUTHORITY as _ORT_AUTHORITY,
+        compile_outward_truth as _compile_outward_truth,
+    )
+    OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = (
+        "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_V1"
+    )
+except ImportError:  # pragma: no cover
+    OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
