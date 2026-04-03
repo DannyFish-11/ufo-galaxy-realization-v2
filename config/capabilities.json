@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-03-30T02:29:22.417648",
+  "timestamp": "2026-04-03T01:27:48.130916",
   "capabilities": [
     {
       "name": "Node_00_StateMachine",
@@ -1211,6 +1211,72 @@
       "output_schema": {},
       "status": "online",
       "last_updated": "2026-03-03T15:37:52.431424"
+    },
+    {
+      "name": "auto_node_cap",
+      "description": "Capability from capability manager",
+      "node_id": "node_42",
+      "node_name": "AutoNode42",
+      "category": "auto_generated",
+      "input_schema": {},
+      "output_schema": {},
+      "status": "online",
+      "last_updated": "2026-04-03T01:27:48.103735"
+    },
+    {
+      "name": "resolver_visible_cap",
+      "description": "Capability that should appear in resolver",
+      "node_id": "node_55",
+      "node_name": "Node55",
+      "category": "general",
+      "input_schema": {},
+      "output_schema": {},
+      "status": "online",
+      "last_updated": "2026-04-03T01:27:48.107669"
+    },
+    {
+      "name": "meta_cap",
+      "description": "Capability with metadata check",
+      "node_id": "node_meta",
+      "node_name": "MetaNode",
+      "category": "testing",
+      "input_schema": {},
+      "output_schema": {},
+      "status": "online",
+      "last_updated": "2026-04-03T01:27:48.111466"
+    },
+    {
+      "name": "nodesc_cap",
+      "description": "",
+      "node_id": "node_x",
+      "node_name": "NodeX",
+      "category": "general",
+      "input_schema": {},
+      "output_schema": {},
+      "status": "online",
+      "last_updated": "2026-04-03T01:27:48.115207"
+    },
+    {
+      "name": "local_only_cap",
+      "description": "Stored locally in CapabilityManager",
+      "node_id": "node_local",
+      "node_name": "LocalNode",
+      "category": "general",
+      "input_schema": {},
+      "output_schema": {},
+      "status": "online",
+      "last_updated": "2026-04-03T01:27:48.118965"
+    },
+    {
+      "name": "sink_test_cap",
+      "description": "Capability that must not be a sink",
+      "node_id": "node_sink",
+      "node_name": "SinkNode",
+      "category": "general",
+      "input_schema": {},
+      "output_schema": {},
+      "status": "online",
+      "last_updated": "2026-04-03T01:27:48.130214"
     }
   ]
 }
