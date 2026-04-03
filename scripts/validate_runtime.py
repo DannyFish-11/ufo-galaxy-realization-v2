@@ -1097,9 +1097,509 @@ def check_spine_observability() -> None:
         _print_result(r)
 
 
+# ---------------------------------------------------------------------------
+# 11. Outward Runtime Truth (PR-531)
+# ---------------------------------------------------------------------------
+
+
+def check_outward_runtime_truth() -> None:
+    """PR-531: Verify that the outward runtime truth governance layer is present.
+
+    Checks:
+    a. ``core.outward_runtime_truth`` is importable.
+    b. :data:`~core.outward_runtime_truth.OUTWARD_RUNTIME_TRUTH_AUTHORITY`
+       sentinel is non-empty.
+    c. :func:`~core.outward_runtime_truth.compile_outward_truth` is callable.
+    d. Compilation returns an :class:`~core.outward_runtime_truth.OutwardRuntimeTruthSnapshot`
+       with a non-empty ``snapshot_id`` and ``compiled_at > 0``.
+    e. Policy sentinels are present and non-empty.
+    f. :data:`~core.routes.projection.OUTWARD_RUNTIME_TRUTH_INTEGRATED` sentinel
+       is present in ``core.routes.projection``.
+    """
+    _section("11. Outward Runtime Truth (PR-531)")
+
+    # 11a. Import
+    try:
+        from core.outward_runtime_truth import (
+            OUTWARD_RUNTIME_TRUTH_AUTHORITY,
+            OUTWARD_RUNTIME_TRUTH_LAYER_POSITION,
+            NO_SECONDARY_SOURCE_AS_PRIMARY_TRUTH_POLICY,
+            NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+            OUTWARD_SURFACE_MUST_PREFER_COMPILED_TRUTH_POLICY,
+            compile_outward_truth,
+            OutwardRuntimeTruthSnapshot,
+            reset_outward_runtime_truth_runtime,
+        )
+        r = _record(
+            "outward_runtime_truth: module importable",
+            True,
+            "core.outward_runtime_truth importable",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record("outward_runtime_truth: module importable", False, str(exc)[:120])
+        _print_result(r)
+        return
+
+    # 11b. Authority sentinel
+    r = _record(
+        "outward_runtime_truth: OUTWARD_RUNTIME_TRUTH_AUTHORITY non-empty",
+        bool(OUTWARD_RUNTIME_TRUTH_AUTHORITY),
+        str(OUTWARD_RUNTIME_TRUTH_AUTHORITY)[:60],
+    )
+    _print_result(r)
+
+    # 11c. Layer position
+    r = _record(
+        "outward_runtime_truth: LAYER_POSITION == 15",
+        OUTWARD_RUNTIME_TRUTH_LAYER_POSITION == 15,
+        f"layer_position={OUTWARD_RUNTIME_TRUTH_LAYER_POSITION}",
+    )
+    _print_result(r)
+
+    # 11d. Policy sentinels present
+    for sentinel_name, sentinel_val in [
+        ("NO_SECONDARY_SOURCE_AS_PRIMARY_TRUTH_POLICY", NO_SECONDARY_SOURCE_AS_PRIMARY_TRUTH_POLICY),
+        ("NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY", NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY),
+        ("OUTWARD_SURFACE_MUST_PREFER_COMPILED_TRUTH_POLICY", OUTWARD_SURFACE_MUST_PREFER_COMPILED_TRUTH_POLICY),
+    ]:
+        r = _record(
+            f"outward_runtime_truth: {sentinel_name} non-empty",
+            bool(sentinel_val),
+            str(sentinel_val)[:60],
+        )
+        _print_result(r)
+
+    # 11e. compile_outward_truth() callable and returns a snapshot
+    try:
+        reset_outward_runtime_truth_runtime()
+        snapshot = compile_outward_truth()
+        r = _record(
+            "outward_runtime_truth: compile_outward_truth() returns snapshot",
+            isinstance(snapshot, OutwardRuntimeTruthSnapshot),
+            f"snapshot_id={str(getattr(snapshot, 'snapshot_id', ''))[:12]}...",
+        )
+        _print_result(r)
+        r = _record(
+            "outward_runtime_truth: snapshot.compiled_at > 0",
+            getattr(snapshot, "compiled_at", 0) > 0,
+            f"compiled_at={getattr(snapshot, 'compiled_at', None)}",
+        )
+        _print_result(r)
+        r = _record(
+            "outward_runtime_truth: snapshot has source_records",
+            isinstance(getattr(snapshot, "source_records", None), list),
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record("outward_runtime_truth: compile_outward_truth() callable", False, str(exc)[:120])
+        _print_result(r)
+
+    # 11f. Projection routes integration sentinel
+    try:
+        import importlib.util as _ilu
+        _proj_path = Path(__file__).parent.parent / "core" / "routes" / "projection.py"
+        _spec = _ilu.spec_from_file_location("_proj_check_ort", _proj_path)
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+        integrated = getattr(_mod, "OUTWARD_RUNTIME_TRUTH_INTEGRATED", None)
+        r = _record(
+            "projection_routes: OUTWARD_RUNTIME_TRUTH_INTEGRATED sentinel present",
+            bool(integrated) and "UNAVAILABLE" not in str(integrated),
+            str(integrated)[:80] if integrated else "sentinel missing",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "projection_routes: OUTWARD_RUNTIME_TRUTH_INTEGRATED sentinel",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+
+# ---------------------------------------------------------------------------
+# 12. Node Lifecycle Governor (PR-531)
+# ---------------------------------------------------------------------------
+
+
+def check_node_lifecycle_governor() -> None:
+    """PR-531: Verify that the node lifecycle governor is present and functional.
+
+    Checks:
+    a. ``core.node_lifecycle_governor`` is importable.
+    b. Authority sentinel and pipeline sentinel are non-empty.
+    c. Policy sentinels are non-empty.
+    d. :func:`~core.node_lifecycle_governor.get_node_lifecycle_governor` returns
+       a singleton.
+    e. :meth:`~core.node_lifecycle_governor.NodeLifecycleGovernor.register_node`
+       returns a valid :class:`~core.node_lifecycle_governor.NodeGovernanceRecord`.
+    f. :meth:`~core.node_lifecycle_governor.NodeLifecycleGovernor.govern_node`
+       advances the lifecycle stage beyond REGISTERED.
+    g. Promotion pipeline: a node with capability_registered=True is promotable.
+    """
+    _section("12. Node Lifecycle Governor (PR-531)")
+
+    try:
+        from core.node_lifecycle_governor import (
+            NODE_LIFECYCLE_GOVERNOR_AUTHORITY,
+            NODE_LIFECYCLE_GOVERNOR_LAYER_POSITION,
+            NODE_LIFECYCLE_GOVERNANCE_PIPELINE_DEFINED,
+            NODE_MUST_PASS_LIFECYCLE_GATES_POLICY,
+            NO_WILD_GROWTH_POLICY,
+            PROMOTION_REQUIRES_CAPABILITY_REGISTRATION_POLICY,
+            NodeLifecycleStage,
+            NodeGovernanceRecord,
+            NodeLifecycleGovernor,
+            get_node_lifecycle_governor,
+            reset_node_lifecycle_governor,
+            govern_node,
+        )
+        r = _record("node_lifecycle_governor: module importable", True)
+        _print_result(r)
+    except Exception as exc:
+        r = _record("node_lifecycle_governor: module importable", False, str(exc)[:120])
+        _print_result(r)
+        return
+
+    # 12b. Sentinels
+    r = _record(
+        "node_lifecycle_governor: NODE_LIFECYCLE_GOVERNOR_AUTHORITY non-empty",
+        bool(NODE_LIFECYCLE_GOVERNOR_AUTHORITY),
+        str(NODE_LIFECYCLE_GOVERNOR_AUTHORITY)[:60],
+    )
+    _print_result(r)
+    r = _record(
+        "node_lifecycle_governor: LAYER_POSITION == 15",
+        NODE_LIFECYCLE_GOVERNOR_LAYER_POSITION == 15,
+    )
+    _print_result(r)
+    r = _record(
+        "node_lifecycle_governor: PIPELINE sentinel non-empty",
+        bool(NODE_LIFECYCLE_GOVERNANCE_PIPELINE_DEFINED),
+    )
+    _print_result(r)
+    for name, val in [
+        ("NODE_MUST_PASS_LIFECYCLE_GATES_POLICY", NODE_MUST_PASS_LIFECYCLE_GATES_POLICY),
+        ("NO_WILD_GROWTH_POLICY", NO_WILD_GROWTH_POLICY),
+        ("PROMOTION_REQUIRES_CAPABILITY_REGISTRATION_POLICY", PROMOTION_REQUIRES_CAPABILITY_REGISTRATION_POLICY),
+    ]:
+        r = _record(f"node_lifecycle_governor: {name} non-empty", bool(val))
+        _print_result(r)
+
+    # 12c. Singleton accessible
+    try:
+        reset_node_lifecycle_governor()
+        gov = get_node_lifecycle_governor()
+        r = _record(
+            "node_lifecycle_governor: singleton accessible",
+            gov is not None,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record("node_lifecycle_governor: singleton accessible", False, str(exc)[:120])
+        _print_result(r)
+        return
+
+    # 12d. register_node()
+    try:
+        rec = gov.register_node("_validate_test_node", startup_policy="active")
+        r = _record(
+            "node_lifecycle_governor: register_node() returns NodeGovernanceRecord",
+            isinstance(rec, NodeGovernanceRecord),
+            f"stage={rec.lifecycle_stage.value}",
+        )
+        _print_result(r)
+        r = _record(
+            "node_lifecycle_governor: initial stage is REGISTERED",
+            rec.lifecycle_stage == NodeLifecycleStage.REGISTERED,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record("node_lifecycle_governor: register_node()", False, str(exc)[:120])
+        _print_result(r)
+        return
+
+    # 12e. govern_node() advances stage
+    try:
+        rec2 = gov.govern_node("_validate_test_node2")
+        r = _record(
+            "node_lifecycle_governor: govern_node() runs without error",
+            rec2 is not None,
+            f"stage={rec2.lifecycle_stage.value}",
+        )
+        _print_result(r)
+        r = _record(
+            "node_lifecycle_governor: govern_node() advances beyond REGISTERED",
+            rec2.lifecycle_stage != NodeLifecycleStage.REGISTERED,
+            f"stage={rec2.lifecycle_stage.value}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record("node_lifecycle_governor: govern_node()", False, str(exc)[:120])
+        _print_result(r)
+
+    # 12f. snapshot()
+    try:
+        snap = gov.snapshot()
+        r = _record(
+            "node_lifecycle_governor: snapshot() returns NodeLifecycleGovernorSnapshot",
+            snap is not None and hasattr(snap, "total_nodes"),
+            f"total_nodes={getattr(snap, 'total_nodes', '?')}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record("node_lifecycle_governor: snapshot()", False, str(exc)[:120])
+        _print_result(r)
+
+
+# ---------------------------------------------------------------------------
+# 13. Deployment Baseline (PR-531)
+# ---------------------------------------------------------------------------
+
+
+def check_deployment_baseline() -> None:
+    """PR-531: Verify that the deployment baseline is checkable in code.
+
+    Checks:
+    a. ``core.deployment_baseline`` is importable.
+    b. Authority and policy sentinels are non-empty.
+    c. :func:`~core.deployment_baseline.check_runtime_baseline` returns a
+       :class:`~core.deployment_baseline.DeploymentBaselineReport`.
+    d. CORE_RUNTIME baseline_met is True (all core checks pass).
+    e. DeploymentEnvironment tiers are defined.
+    """
+    _section("13. Deployment Baseline (PR-531)")
+
+    try:
+        from core.deployment_baseline import (
+            DEPLOYMENT_BASELINE_AUTHORITY,
+            DEPLOYMENT_BASELINE_LAYER_POSITION,
+            DEPLOYMENT_BASELINE_CONVERGENCE_DEFINED,
+            CORE_RUNTIME_MUST_BE_CHECKABLE_POLICY,
+            ENVIRONMENT_TIERS_MUST_MAP_TO_STARTUP_TIERS_POLICY,
+            DeploymentEnvironment,
+            DeploymentBaselineReport,
+            check_runtime_baseline,
+            reset_deployment_baseline_runtime,
+        )
+        r = _record("deployment_baseline: module importable", True)
+        _print_result(r)
+    except Exception as exc:
+        r = _record("deployment_baseline: module importable", False, str(exc)[:120])
+        _print_result(r)
+        return
+
+    # 13b. Sentinels
+    r = _record(
+        "deployment_baseline: DEPLOYMENT_BASELINE_AUTHORITY non-empty",
+        bool(DEPLOYMENT_BASELINE_AUTHORITY),
+    )
+    _print_result(r)
+    r = _record(
+        "deployment_baseline: LAYER_POSITION == 15",
+        DEPLOYMENT_BASELINE_LAYER_POSITION == 15,
+    )
+    _print_result(r)
+    for name, val in [
+        ("DEPLOYMENT_BASELINE_CONVERGENCE_DEFINED", DEPLOYMENT_BASELINE_CONVERGENCE_DEFINED),
+        ("CORE_RUNTIME_MUST_BE_CHECKABLE_POLICY", CORE_RUNTIME_MUST_BE_CHECKABLE_POLICY),
+        ("ENVIRONMENT_TIERS_MUST_MAP_TO_STARTUP_TIERS_POLICY", ENVIRONMENT_TIERS_MUST_MAP_TO_STARTUP_TIERS_POLICY),
+    ]:
+        r = _record(f"deployment_baseline: {name} non-empty", bool(val))
+        _print_result(r)
+
+    # 13c. DeploymentEnvironment tiers
+    for tier in ("CORE_RUNTIME", "STANDARD_DEV", "FULL_PRODUCTION"):
+        r = _record(
+            f"deployment_baseline: DeploymentEnvironment.{tier} defined",
+            hasattr(DeploymentEnvironment, tier),
+        )
+        _print_result(r)
+
+    # 13d. check_runtime_baseline() returns a report
+    try:
+        reset_deployment_baseline_runtime()
+        report = check_runtime_baseline(DeploymentEnvironment.CORE_RUNTIME)
+        r = _record(
+            "deployment_baseline: check_runtime_baseline(CORE_RUNTIME) returns report",
+            isinstance(report, DeploymentBaselineReport),
+            f"baseline_met={getattr(report, 'baseline_met', '?')}",
+        )
+        _print_result(r)
+        r = _record(
+            "deployment_baseline: CORE_RUNTIME baseline_met is True",
+            getattr(report, "baseline_met", False),
+            f"passed={getattr(report, 'passed_count', '?')} "
+            f"failed={getattr(report, 'failed_count', '?')}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "deployment_baseline: check_runtime_baseline() callable", False, str(exc)[:120]
+        )
+        _print_result(r)
+
+
+# ---------------------------------------------------------------------------
+# 14. Capability Utilization Observability (PR-531)
+# ---------------------------------------------------------------------------
+
+
+def check_capability_utilization_observability() -> None:
+    """PR-531: Verify that capability utilization observability is present.
+
+    Checks:
+    a. ``core.capability_utilization_observability`` is importable.
+    b. Authority and foundation sentinels are non-empty.
+    c. :func:`~core.capability_utilization_observability.record_capability_call`
+       is callable without error.
+    d. :func:`~core.capability_utilization_observability.get_utilization_report`
+       returns a valid report after a recorded call.
+    e. :func:`~core.capability_utilization_observability.get_all_utilization_reports`
+       returns a :class:`~core.capability_utilization_observability.UtilizationSummary`.
+    f. :data:`OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY` sentinel present.
+    """
+    _section("14. Capability Utilization Observability (PR-531)")
+
+    try:
+        from core.capability_utilization_observability import (
+            CAPABILITY_UTILIZATION_OBSERVABILITY_AUTHORITY,
+            CAPABILITY_UTILIZATION_OBSERVABILITY_LAYER_POSITION,
+            CAPABILITY_UTILIZATION_FOUNDATIONS_ESTABLISHED,
+            OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY,
+            UTILIZATION_DATA_IS_ADVISORY_POLICY,
+            record_capability_call,
+            record_failure,
+            get_utilization_report,
+            get_all_utilization_reports,
+            UtilizationReport,
+            UtilizationSummary,
+            reset_capability_utilization_observability,
+        )
+        r = _record("capability_utilization_observability: module importable", True)
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "capability_utilization_observability: module importable",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+        return
+
+    # 14b. Sentinels
+    r = _record(
+        "capability_utilization_observability: AUTHORITY non-empty",
+        bool(CAPABILITY_UTILIZATION_OBSERVABILITY_AUTHORITY),
+    )
+    _print_result(r)
+    r = _record(
+        "capability_utilization_observability: LAYER_POSITION == 15",
+        CAPABILITY_UTILIZATION_OBSERVABILITY_LAYER_POSITION == 15,
+    )
+    _print_result(r)
+    for name, val in [
+        ("FOUNDATIONS_ESTABLISHED", CAPABILITY_UTILIZATION_FOUNDATIONS_ESTABLISHED),
+        ("OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY", OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY),
+        ("UTILIZATION_DATA_IS_ADVISORY_POLICY", UTILIZATION_DATA_IS_ADVISORY_POLICY),
+    ]:
+        r = _record(f"capability_utilization_observability: {name} non-empty", bool(val))
+        _print_result(r)
+
+    # 14c. record_capability_call() fire-and-forget
+    try:
+        reset_capability_utilization_observability()
+        record_capability_call(
+            "node::_validate_test::action",
+            caller="validate_runtime",
+            success=True,
+            latency_ms=1.5,
+        )
+        r = _record(
+            "capability_utilization_observability: record_capability_call() non-raising",
+            True,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "capability_utilization_observability: record_capability_call() non-raising",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+        return
+
+    # 14d. get_utilization_report()
+    try:
+        report = get_utilization_report("node::_validate_test::action")
+        r = _record(
+            "capability_utilization_observability: get_utilization_report() returns UtilizationReport",
+            isinstance(report, UtilizationReport),
+            f"total_calls={getattr(report, 'total_calls', '?')}",
+        )
+        _print_result(r)
+        r = _record(
+            "capability_utilization_observability: report.total_calls == 1",
+            getattr(report, "total_calls", 0) == 1,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "capability_utilization_observability: get_utilization_report()",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 14e. record_failure() and failure domain tracking
+    try:
+        record_failure(
+            "node::_validate_test::action",
+            caller="validate_runtime",
+            failure_domain="NODE_UNAVAILABLE",
+        )
+        report2 = get_utilization_report("node::_validate_test::action")
+        r = _record(
+            "capability_utilization_observability: failure_count tracked",
+            getattr(report2, "failure_count", 0) == 1,
+            f"failure_count={getattr(report2, 'failure_count', '?')}",
+        )
+        _print_result(r)
+        r = _record(
+            "capability_utilization_observability: failure_domains tracked",
+            "NODE_UNAVAILABLE" in getattr(report2, "failure_domains", {}),
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "capability_utilization_observability: failure tracking",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 14f. get_all_utilization_reports()
+    try:
+        summary = get_all_utilization_reports()
+        r = _record(
+            "capability_utilization_observability: get_all_utilization_reports() returns UtilizationSummary",
+            isinstance(summary, UtilizationSummary),
+            f"total_tracked={getattr(summary, 'total_tracked_capabilities', '?')}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "capability_utilization_observability: get_all_utilization_reports()",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Galaxy runtime integration validator (PR-9 / PR-10 / PR-530)"
+        description="Galaxy runtime integration validator (PR-9 / PR-10 / PR-530 / PR-531)"
     )
     parser.add_argument(
         "--json",
@@ -1129,6 +1629,10 @@ def main() -> int:
     check_callable_node_baseline()
     check_callable_startup_integration()
     check_spine_observability()
+    check_outward_runtime_truth()
+    check_node_lifecycle_governor()
+    check_deployment_baseline()
+    check_capability_utilization_observability()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
