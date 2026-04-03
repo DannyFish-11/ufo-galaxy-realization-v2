@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -28,6 +28,13 @@ def _reset_udm() -> None:
     """Reset the UnifiedDeviceManager singleton between tests."""
     from core.unified import device_manager as _udm_mod
     _udm_mod.UnifiedDeviceManager._instance = None
+
+
+def _reset_device_router() -> None:
+    """Reset the global DeviceRouter live-session cache between tests."""
+    from galaxy_gateway.device_router import device_router
+
+    device_router.devices.clear()
 
 
 def _make_websocket() -> MagicMock:
@@ -67,6 +74,7 @@ class TestRegistrationWritesToUDM:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     @pytest.mark.asyncio
     async def test_registration_creates_device_in_udm(self):
@@ -158,6 +166,7 @@ class TestReRegistrationPreservesIdentity:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     @pytest.mark.asyncio
     async def test_reregistration_does_not_duplicate_udm_entry(self):
@@ -235,6 +244,7 @@ class TestHeartbeatUpdatesUDM:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     @pytest.mark.asyncio
     async def test_heartbeat_updates_last_heartbeat_in_udm(self):
@@ -321,6 +331,7 @@ class TestDisconnectUpdatesUDM:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     @pytest.mark.asyncio
     async def test_disconnect_marks_device_disconnected_in_udm(self):
@@ -385,6 +396,7 @@ class TestReconnectNoDuplicate:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     @pytest.mark.asyncio
     async def test_reconnect_after_disconnect_restores_online_status(self):
@@ -450,7 +462,93 @@ class TestReconnectNoDuplicate:
 
 
 # ---------------------------------------------------------------------------
-# 6. Android-originated state projects into RegisteredRuntimeDevice
+# 6. DeviceRouter live session alignment
+# ---------------------------------------------------------------------------
+
+class TestAndroidBridgeSyncsDeviceRouter:
+    """AndroidBridge lifecycle events must keep DeviceRouter live sessions aligned."""
+
+    def setup_method(self):
+        _reset_udm()
+        _reset_device_router()
+
+    @pytest.mark.asyncio
+    async def test_registration_populates_device_router_live_session(self):
+        """Registration via AndroidBridge also creates a routable DeviceRouter session."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.device_router import device_router
+
+        bridge = AndroidBridge()
+        ws = _make_websocket()
+
+        await bridge._handle_device_register(ws, _make_registration_message("router_reg_01"))
+
+        router_device = device_router.get_device("router_reg_01")
+        assert router_device is not None
+        assert router_device.websocket is ws
+        assert router_device.device_type == "android"
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_repairs_missing_device_router_session(self):
+        """Heartbeat rehydrates DeviceRouter if the live session cache was lost."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.device_router import device_router
+
+        bridge = AndroidBridge()
+        ws = _make_websocket()
+
+        await bridge._handle_device_register(ws, _make_registration_message("router_hb_01"))
+        assert device_router.get_device("router_hb_01") is not None
+        device_router.clear_live_session("router_hb_01")
+
+        hb_msg = {
+            "version": "3.0",
+            "type": "device_heartbeat",
+            "message_id": "hb-router-001",
+            "device_id": "router_hb_01",
+            "timestamp": int(time.time() * 1000),
+        }
+        await bridge._handle_heartbeat(ws, hb_msg)
+
+        router_device = device_router.get_device("router_hb_01")
+        assert router_device is not None
+        assert router_device.websocket is ws
+
+    @pytest.mark.asyncio
+    async def test_disconnect_removes_device_router_live_session(self):
+        """Disconnect clears the DeviceRouter live session while preserving canonical identity."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.device_router import device_router
+
+        bridge = AndroidBridge()
+        ws = _make_websocket()
+
+        await bridge._handle_device_register(ws, _make_registration_message("router_dc_01"))
+        await bridge.disconnect_device("router_dc_01")
+
+        assert device_router.get_device("router_dc_01") is None
+
+    @pytest.mark.asyncio
+    async def test_reconnect_restores_device_router_live_session(self):
+        """Reconnect restores DeviceRouter websocket routing without a second manual register."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.device_router import device_router
+
+        bridge = AndroidBridge()
+        first_ws = _make_websocket()
+        second_ws = _make_websocket()
+
+        await bridge._handle_device_register(first_ws, _make_registration_message("router_rc_01"))
+        await bridge.disconnect_device("router_rc_01")
+        await bridge.reconnect_device("router_rc_01", second_ws)
+
+        router_device = device_router.get_device("router_rc_01")
+        assert router_device is not None
+        assert router_device.websocket is second_ws
+
+
+# ---------------------------------------------------------------------------
+# 7. Android-originated state projects into RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
 class TestAndroidToRegisteredRuntimeDevice:
@@ -458,6 +556,7 @@ class TestAndroidToRegisteredRuntimeDevice:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     def test_from_android_registration_produces_valid_contract(self):
         """from_android_registration builds a valid RegisteredRuntimeDevice."""
@@ -555,7 +654,7 @@ class TestAndroidToRegisteredRuntimeDevice:
 
 
 # ---------------------------------------------------------------------------
-# 7. UDM helper isolation tests (internal helpers)
+# 8. UDM helper isolation tests (internal helpers)
 # ---------------------------------------------------------------------------
 
 class TestUDMHelpers:
@@ -563,6 +662,7 @@ class TestUDMHelpers:
 
     def setup_method(self):
         _reset_udm()
+        _reset_device_router()
 
     def test_write_registration_to_udm_creates_device(self):
         """_write_registration_to_udm creates a UDM entry for the device_id."""

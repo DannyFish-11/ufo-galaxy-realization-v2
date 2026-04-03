@@ -40,6 +40,8 @@ async def handle_device_register(
             device.websocket = websocket
             bridge._devices[device_id] = device
 
+        bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
+
         logger.info(
             "Android device registered: device_id=%s model=%s platform=%s",
             device_id, device.model, device.platform,

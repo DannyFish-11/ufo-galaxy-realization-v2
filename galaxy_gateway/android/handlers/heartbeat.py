@@ -38,6 +38,10 @@ async def handle_heartbeat(
         if device_id in bridge._devices:
             bridge._devices[device_id].last_heartbeat = time.time()
             bridge._devices[device_id].connected = True
+            bridge._sync_device_router_session(
+                device_id,
+                connected=True,
+            )
         else:
             logger.warning(
                 "Heartbeat from unregistered device: device_id=%s; ACK sent",
@@ -71,6 +75,10 @@ async def handle_device_status(
         if device_id in bridge._devices:
             bridge._devices[device_id].last_heartbeat = time.time()
             bridge._devices[device_id].connected = True
+            bridge._sync_device_router_session(
+                device_id,
+                connected=True,
+            )
 
     logger.info(
         "Device status update: device_id=%s status=%s",

@@ -511,6 +511,62 @@ class DeviceRouter:
             device_id, connected=False, transport=transport
         )
         # Remove from local operational cache (session handle gone)
+        self.clear_live_session(device_id)
+
+    def ensure_live_session(
+        self,
+        device_id: str,
+        device_type: str,
+        capabilities: List[str],
+        websocket: Any = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        transport: str = "websocket",
+        session_id: Optional[str] = None,
+    ) -> None:
+        """Ensure the router has a live transport session without rewriting canonical identity.
+
+        Creates a router-local operational cache entry when the device is absent
+        from ``self.devices`` and otherwise updates the existing one in place.
+        This method is intended for transport/session adapters that already
+        wrote canonical identity to UDM and only need DeviceRouter to become
+        live-routable.
+
+        Args:
+            device_id: Canonical device identifier.
+            device_type: Router platform type (for example ``android``).
+            capabilities: Device capabilities for the router-local cache entry.
+            websocket: Active transport handle to attach to the session.
+            metadata: Optional transport/runtime metadata for the cache entry.
+            transport: Transport label propagated into canonical runtime presence.
+            session_id: Optional runtime session identifier for UDM presence sync.
+        """
+        if device_id not in self.devices:
+            self.devices[device_id] = Device(
+                device_id,
+                device_type,
+                capabilities,
+                metadata=metadata,
+            )
+        else:
+            self.devices[device_id].device_type = device_type
+            self.devices[device_id].capabilities = list(capabilities)
+            self.devices[device_id].metadata = dict(metadata or {})
+        if websocket is not None:
+            self.devices[device_id].websocket = websocket
+        self.on_device_connected(
+            device_id,
+            websocket=websocket,
+            transport=transport,
+            session_id=session_id,
+        )
+
+    def clear_live_session(self, device_id: str) -> None:
+        """Remove an in-memory router-local live session cache entry.
+
+        This only mutates ``self.devices`` and does not persist anything to UDM
+        or any external store. Use this when transport/session state must be
+        cleared while canonical device identity remains unchanged elsewhere.
+        """
         self.devices.pop(device_id, None)
 
     # ------------------------------------------------------------------
