@@ -962,9 +962,144 @@ def _to_json() -> Dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# 10. Execution spine observability hardening (PR-530)
+# ---------------------------------------------------------------------------
+
+
+def check_spine_observability() -> None:
+    """PR-530: Verify that the execution spine carries stable correlation IDs.
+
+    Checks:
+    a. ``CANONICAL_DISPATCHER_SPINE_HARDENED`` sentinel is importable from
+       ``core.capabilities.canonical_dispatcher``.
+    b. ``DispatchResult`` carries ``trace_id`` and ``request_id`` fields.
+    c. ``OPENCLAWD_SPINE_OBSERVABILITY_HARDENED`` sentinel is importable from
+       ``core.openclawd``.
+    d. ``COMMAND_ROUTER_CORRELATION_HARDENED`` sentinel is importable from
+       ``core.command_router``.
+    e. ``CapabilityLayer.classify()`` returns deterministic values for all
+       canonical tool prefixes (regression guard).
+    """
+    _section("10. Execution Spine Observability Hardening (PR-530)")
+
+    # 10a. CanonicalDispatcher spine-hardened sentinel
+    try:
+        from core.capabilities.canonical_dispatcher import (  # type: ignore[import]
+            CANONICAL_DISPATCHER_SPINE_HARDENED,
+        )
+        r = _record(
+            "spine: CANONICAL_DISPATCHER_SPINE_HARDENED sentinel present",
+            bool(CANONICAL_DISPATCHER_SPINE_HARDENED),
+            CANONICAL_DISPATCHER_SPINE_HARDENED[:80],
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "spine: CANONICAL_DISPATCHER_SPINE_HARDENED sentinel present",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 10b. DispatchResult carries trace_id + request_id
+    try:
+        from core.capabilities.canonical_dispatcher import DispatchResult  # type: ignore[import]
+        dr = DispatchResult(success=True, trace_id="t1", request_id="r1")
+        has_trace = hasattr(dr, "trace_id") and dr.trace_id == "t1"
+        has_request = hasattr(dr, "request_id") and dr.request_id == "r1"
+        d = dr.to_dict()
+        in_dict = "trace_id" in d and "request_id" in d
+        ok = has_trace and has_request and in_dict
+        detail = "" if ok else (
+            f"trace_id={has_trace} request_id={has_request} in_dict={in_dict}"
+        )
+        r = _record(
+            "spine: DispatchResult carries trace_id + request_id in to_dict()",
+            ok,
+            detail,
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "spine: DispatchResult carries trace_id + request_id in to_dict()",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 10c. OpenClawd spine observability hardened sentinel
+    try:
+        from core.openclawd import OPENCLAWD_SPINE_OBSERVABILITY_HARDENED  # type: ignore[import]
+        r = _record(
+            "spine: OPENCLAWD_SPINE_OBSERVABILITY_HARDENED sentinel present",
+            bool(OPENCLAWD_SPINE_OBSERVABILITY_HARDENED),
+            OPENCLAWD_SPINE_OBSERVABILITY_HARDENED[:80],
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "spine: OPENCLAWD_SPINE_OBSERVABILITY_HARDENED sentinel present",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 10d. CommandRouter correlation hardened sentinel
+    try:
+        from core.command_router import COMMAND_ROUTER_CORRELATION_HARDENED  # type: ignore[import]
+        r = _record(
+            "spine: COMMAND_ROUTER_CORRELATION_HARDENED sentinel present",
+            bool(COMMAND_ROUTER_CORRELATION_HARDENED),
+            COMMAND_ROUTER_CORRELATION_HARDENED[:80],
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "spine: COMMAND_ROUTER_CORRELATION_HARDENED sentinel present",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 10e. CapabilityLayer.classify() regression guard
+    try:
+        from core.capabilities.canonical_dispatcher import (  # type: ignore[import]
+            CapabilityLayer,
+        )
+        cases = [
+            ("mcp__srv__tool",      CapabilityLayer.MCP),
+            ("mcp__gateway__tool",  CapabilityLayer.MCP_GW),
+            ("skill__my_skill",     CapabilityLayer.SKILL),
+            ("node__n1__ping",      CapabilityLayer.NODE),
+            ("device__d1__act",     CapabilityLayer.DEVICE),
+            ("github__install",     CapabilityLayer.GITHUB),
+            ("unknown_prefix",      CapabilityLayer.UNKNOWN),
+        ]
+        failures = []
+        for name, expected in cases:
+            got = CapabilityLayer.classify(name)
+            if got != expected:
+                failures.append(f"{name!r}: expected {expected.value!r} got {got.value!r}")
+        ok = len(failures) == 0
+        r = _record(
+            "spine: CapabilityLayer.classify() deterministic for all prefixes",
+            ok,
+            "; ".join(failures) if failures else "all 7 prefixes classify correctly",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "spine: CapabilityLayer.classify() deterministic for all prefixes",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Galaxy runtime integration validator (PR-9 / PR-10)"
+        description="Galaxy runtime integration validator (PR-9 / PR-10 / PR-530)"
     )
     parser.add_argument(
         "--json",
@@ -993,6 +1128,7 @@ def main() -> int:
     check_runtime_acceptance()
     check_callable_node_baseline()
     check_callable_startup_integration()
+    check_spine_observability()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
