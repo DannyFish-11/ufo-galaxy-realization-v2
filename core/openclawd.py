@@ -4755,13 +4755,21 @@ class OpenClawd:
 
         执行链路（按优先级排序）:
           1. CapabilityResolver (canonical read path, contract-validated) — PREFERRED
+             a. MCP/Skill tools via CapabilityResolver
+             b. Node tools via NodeFabricRegistry.sync_capabilities_to_registry()
+                → CapabilityRegistry → CapabilityResolver (CapabilitySource.NODE)
+                Only healthy CAPABILITY_NODE nodes are surfaced; SERVICE /
+                LEGACY_ORCHESTRATOR / EXPERIMENTAL / ARCHIVED nodes are excluded.
           2. CapabilityRegistry direct read (compatibility fallback when resolver cache is empty)
           3. Direct scan: mcp_loader / skill_loader (legacy compatibility fallback only)
+          4. Node direct scan: node_registry.json + fusion_entry discovery (legacy fallback,
+             deduplicates against canonical node tools already collected in step 1b)
 
         MCP/Skill 工具优先通过 CapabilityResolver 取，这是规范的消费者接口；
         Resolver 在返回前对所有 CapabilityContract 做 schema 校验，确保只有合法条目
         进入 LLM 工具列表。仅当 Resolver 和 Registry 均无结果时才回退直接加载路径。
-        Node 工具沿用直接加载路径（节点工具尚未完全纳入能力总线）。
+        Node 工具通过 NodeFabricRegistry 规范同步路径纳入能力总线，传统直接扫描路径
+        作为兜底回退（对规范路径未覆盖的节点补充）。
         """
         tools: List[Dict] = []
 
@@ -4786,6 +4794,47 @@ class OpenClawd:
                 )
         except Exception as e:
             logger.debug("CapabilityResolver unavailable, falling back to CapabilityRegistry: %s", e)
+
+        # ── 层 2: 规范节点工具路径 (NodeFabricRegistry → CapabilityRegistry → Resolver) ──
+        # CANONICAL NODE PATH — preferred over the legacy direct-scan path (Layer 3 below).
+        # NodeFabricRegistry.sync_capabilities_to_registry() pushes eligible CAPABILITY_NODE
+        # entries into CapabilityRegistry with contract-validated naming:
+        #   node__<node_id>__<action>
+        # Only healthy CAPABILITY_NODE nodes are surfaced; SERVICE_NODE /
+        # LEGACY_ORCHESTRATOR_NODE / EXPERIMENTAL_NODE / ARCHIVED_NODE are excluded by
+        # NodeFabricRegistry._CAPABILITY_SYNC_ELIGIBLE (architectural classification filter).
+        # The legacy direct-scan path (Layer 3) deduplicates against this set.
+        _node_catalog_tool_names: set = set()
+        try:
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
+            from core.unified.capability_resolver import get_capability_resolver
+            from core.unified.capability_contract import CapabilitySource
+
+            _fabric_registry = get_node_fabric_registry()
+            _synced_count = _fabric_registry.sync_capabilities_to_registry()
+            if _synced_count > 0:
+                _node_resolver = get_capability_resolver()
+                _node_resolver.invalidate_cache()
+                _node_catalog_schemas = _node_resolver.collect_tool_schemas(
+                    sources=[CapabilitySource.NODE]
+                )
+                if _node_catalog_schemas:
+                    _existing_names = {t["function"]["name"] for t in tools}
+                    _new_node_tools = [
+                        t for t in _node_catalog_schemas
+                        if t["function"]["name"] not in _existing_names
+                    ]
+                    for _t in _new_node_tools:
+                        _node_catalog_tool_names.add(_t["function"]["name"])
+                    tools.extend(_new_node_tools)
+                    logger.debug(
+                        "_collect_tools: canonical node path (NodeFabricRegistry) "
+                        "returned %d node tools (synced %d registry entries)",
+                        len(_new_node_tools),
+                        _synced_count,
+                    )
+        except Exception as e:
+            logger.debug("Canonical node tool path (NodeFabricRegistry) unavailable: %s", e)
 
         if not _catalog_loaded:
             # ── 兼容回退: CapabilityRegistry 直接读取 ──
@@ -4909,7 +4958,8 @@ class OpenClawd:
                         self._node_id_to_key[nid] = node_key
 
             # 已注册的工具名集合，避免重复添加
-            _registered_tool_names: set = set()
+            # 预置规范路径已收集的节点工具名，防止与 Layer 2 规范路径重复
+            _registered_tool_names: set = set(_node_catalog_tool_names)
 
             # 从静态目录生成工具列表（_CORE_NODE_ACTIONS 作为高优先级回退）
             for node_id, actions_map in self._CORE_NODE_ACTIONS.items():
