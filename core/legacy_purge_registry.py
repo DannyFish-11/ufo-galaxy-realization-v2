@@ -484,6 +484,44 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "node__<node_id>__<action>  (canonical node tool naming)"
         ),
     ),
+
+    # ── Phase-B consolidation: callable-node baseline startup integration ──
+
+    PurgeDecision(
+        asset_path="launcher/node_startup.py::no callable-node classification",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-consolidation-B",
+        rationale=(
+            "NodeSystemLauncher previously only distinguished startup-ready "
+            "nodes (via get_active_nodes / get_tier_nodes / get_readiness_baseline) "
+            "but provided no runtime view of which started nodes are callable "
+            "by OpenClawd.  PR-529 Phase-B adds "
+            "get_callable_node_classification(), which queries "
+            "NodeFabricRegistry and applies is_callable_by_openclawd() to "
+            "separate: callable_nodes (CAPABILITY_NODE), service_nodes, "
+            "legacy_nodes (LEGACY_ORCHESTRATOR_NODE), non_callable_nodes "
+            "(EXPERIMENTAL/ARCHIVED), and unregistered_startup_nodes."
+        ),
+        canonical_replacement=(
+            "launcher/node_startup.py::"
+            "NodeSystemLauncher.get_callable_node_classification()"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="scripts/validate_runtime.py::no callable-startup check",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-consolidation-B",
+        rationale=(
+            "validate_runtime.py previously had no check confirming the "
+            "callable-node baseline was wired into the startup layer. "
+            "PR-529 Phase-B adds check_callable_startup_integration() which "
+            "verifies the CALLABLE_BASELINE_STARTUP_INTEGRATION sentinel and "
+            "the presence of NodeSystemLauncher.get_callable_node_classification."
+        ),
+        canonical_replacement=(
+            "scripts/validate_runtime.py::check_callable_startup_integration()"
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------
