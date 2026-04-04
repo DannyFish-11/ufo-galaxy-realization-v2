@@ -805,3 +805,25 @@ class TestProjectionRoutesPR5Sentinel:
         from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
         assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
         assert "UNAVAILABLE" not in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
+    def test_pr4_and_pr5_sentinels_coexist_independently(self):
+        """PR-4 and PR-5 sentinels coexist in projection routes without conflict.
+
+        Both sentinels must be present, available (not UNAVAILABLE), and carry
+        distinct version strings so that machine-readable tooling can tell them
+        apart.
+        """
+        from core.routes.projection import (
+            CANONICAL_SESSION_TRUTH_ALIGNED_PR4,
+            ANDROID_RUNTIME_HOST_ALIGNED_PR5,
+        )
+        # Both must be non-empty and available.
+        assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert ANDROID_RUNTIME_HOST_ALIGNED_PR5
+        assert "UNAVAILABLE" not in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert "UNAVAILABLE" not in ANDROID_RUNTIME_HOST_ALIGNED_PR5
+        # They must be distinct identifiers.
+        assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4 != ANDROID_RUNTIME_HOST_ALIGNED_PR5
+        # Each carries its own PR marker.
+        assert "PR4" in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert "PR5" in ANDROID_RUNTIME_HOST_ALIGNED_PR5
