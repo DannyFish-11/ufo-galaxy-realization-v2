@@ -65,7 +65,7 @@ class TestA_ParallelRestIngress(unittest.TestCase):
             "result": {"success": True, "total": 2, "results": []},
         })
 
-        with patch("core.command_router.get_command_router", return_value=fake_router):
+        with patch("core.routes.devices.get_command_router", return_value=fake_router):
             response = client.post(
                 "/api/v1/devices/parallel",
                 json={

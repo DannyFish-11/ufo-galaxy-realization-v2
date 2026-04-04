@@ -1543,7 +1543,7 @@ class CommandRouter:
 
     async def _route_parallel_fanout_envelope(
         self,
-        envelope: "TaskEnvelope",
+        envelope: TaskEnvelope,
         command_id: str,
         request_id: str,
     ) -> Dict[str, Any]:

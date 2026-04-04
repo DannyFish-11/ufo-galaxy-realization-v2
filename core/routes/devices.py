@@ -701,13 +701,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def parallel_device_commands(req: ParallelCommandRequest):
         """并行发送命令到多个设备（canonical admission via CommandRouter）"""
         try:
-            import uuid as _uuid
-            from core.schemas.task_envelope import TaskEnvelope
-            from core.command_router import get_command_router
-
             _ctx = req.context or {}
-            _task_id = str(_ctx.get("task_id") or _uuid.uuid4())
-            _trace_id = str(_ctx.get("trace_id") or _uuid.uuid4())
+            _task_id = str(_ctx.get("task_id") or uuid.uuid4())
+            _trace_id = str(_ctx.get("trace_id") or uuid.uuid4())
             _targets = [item.device_id for item in req.commands if item.device_id]
             _commands_payload = [
                 {
