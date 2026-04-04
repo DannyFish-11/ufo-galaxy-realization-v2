@@ -157,11 +157,11 @@ SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL: str = (
 #: NEVER be overloaded to encode participation posture.
 CANONICAL_POSTURE_ADJACENT_FIELDS: frozenset = frozenset(
     {
-        "entry_mode",           # execution-path selection (local/cross_device/hybrid)
-        "cross_device_enabled", # global feature gate — on/off only
-        "formation_role",       # multi-device formation assignment
-        "coordination_role",    # multi-device coordination role (PR-6)
-        "runtime_domain_intent",# high-level domain (cross_device/local)
+        "entry_mode",            # execution-path selection (local/cross_device/hybrid)
+        "cross_device_enabled",  # global feature gate — on/off only
+        "formation_role",        # multi-device formation assignment
+        "coordination_role",     # multi-device coordination role (PR-6)
+        "runtime_domain_intent", # high-level domain (cross_device/local)
     }
 )
 

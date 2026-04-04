@@ -49,6 +49,11 @@ POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL
     Confirms this module is the PR package 1 delivery for the post-533
     dual-repo runtime unification master plan (MAIN repo side).
 
+POSTURE_CONTRACT_LAYER_POSITION
+    Layer position integer (9) for the posture contract layer, consistent
+    with ``core/source_runtime_posture.py`` and
+    ``contracts/source_posture_contract.py``.
+
 Usage::
 
     from core.posture_contract_canonicalization import (
@@ -107,6 +112,9 @@ POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY: str = (
 )
 
 POSTURE_CONTRACT_LAYER_POSITION: int = 9
+"""Layer position (9) matches ``core/source_runtime_posture.py`` and
+``contracts/source_posture_contract.py``.  Used for ordering within the
+layered runtime architecture diagnostics / contract map."""
 
 POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY: str = (
     "POSTURE_CONTRACT_CANONICALIZATION::NO_ENTRY_MODE_CONFLATION_V1: "
