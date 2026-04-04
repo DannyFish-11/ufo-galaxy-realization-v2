@@ -656,7 +656,7 @@ def _build_profile_inner(device: Any) -> RuntimeCapabilityProfile:
             )
             if runtime_enabled or supports_remote_handoff:
                 is_runtime_host = is_runtime_host or True
-        
+
         # Capabilities — may be nested object or list
         raw_caps_attr = getattr(device, "capabilities", None)
         if raw_caps_attr is None:
