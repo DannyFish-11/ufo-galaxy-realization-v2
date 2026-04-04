@@ -99,13 +99,16 @@ __all__ = [
     "resolve_source_posture_value",
     "build_source_posture_field",
     "posture_value_to_str",
+    "normalize_posture_for_ingress",
     # Sentinels / policy markers
     "SOURCE_POSTURE_CONTRACT_AUTHORITY",
     "SOURCE_POSTURE_CONTRACT_LAYER_POSITION",
     "SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY",
     "SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY",
     "SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL",
+    "SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL",
     "SOURCE_POSTURE_VALID_VALUES",
+    "CANONICAL_POSTURE_ADJACENT_FIELDS",
 ]
 
 # ---------------------------------------------------------------------------
@@ -140,6 +143,26 @@ SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL: str = (
     "This file is the main-repo deliverable for PR-1 of the post-533 dual-repo "
     "runtime-host unification track.  Android-repo adoption in PR-1b must "
     "reference the field names and validation rules defined here."
+)
+
+SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL: str = (
+    "SOURCE_POSTURE_CONTRACT::PR_PACKAGE_1_POSTURE_CONTRACT_CANONICALIZATION: "
+    "PR package 1 (MAIN repo side) of the post-533 dual-repo runtime unification "
+    "master plan.  This module is the stable contract-layer source of truth for "
+    "source_runtime_posture.  All ingress validation, model defaults, and "
+    "boundary enforcement MUST use this module, not core/source_runtime_posture.py."
+)
+
+#: Fields that are semantically adjacent to ``source_runtime_posture`` but must
+#: NEVER be overloaded to encode participation posture.
+CANONICAL_POSTURE_ADJACENT_FIELDS: frozenset = frozenset(
+    {
+        "entry_mode",            # execution-path selection (local/cross_device/hybrid)
+        "cross_device_enabled",  # global feature gate — on/off only
+        "formation_role",        # multi-device formation assignment
+        "coordination_role",     # multi-device coordination role (PR-6)
+        "runtime_domain_intent", # high-level domain (cross_device/local)
+    }
 )
 
 
@@ -196,6 +219,33 @@ def posture_value_to_str(posture: SourcePostureValue) -> str:
     keeping contract consumers decoupled from the Enum internals.
     """
     return posture.value
+
+
+def normalize_posture_for_ingress(raw: object) -> str:
+    """Normalise a raw ingress value to a canonical posture string.
+
+    This is the **public, contract-layer API** for normalising
+    ``source_runtime_posture`` values arriving from API payloads, task dicts,
+    or any other external source.  It is the recommended replacement for any
+    direct import of ``core.source_runtime_posture`` for validation purposes.
+
+    Returns ``"control_only"`` for any input that is ``None``, empty, or does
+    not match one of the two canonical values — always choosing the safe,
+    conservative default.
+
+    Parameters
+    ----------
+    raw:
+        The raw value from an ingress source.  May be ``None``, a non-string,
+        or any arbitrary string.
+
+    Returns
+    -------
+    str
+        One of ``"control_only"`` or ``"join_runtime"``.  Never ``None``.
+        Never raises.
+    """
+    return _normalise_posture_hint(raw)
 
 
 def validate_source_posture_value(raw: Optional[str]) -> Tuple[bool, Optional[str]]:

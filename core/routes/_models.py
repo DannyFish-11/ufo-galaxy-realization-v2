@@ -8,7 +8,7 @@ Pydantic models and enums shared across all route modules.
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from core.schemas.multimodal import MultiModalContext
 
@@ -66,6 +66,25 @@ class ChatRequest(BaseModel):
     # When provided (and cross-device routing is enabled), forces cross_device
     # mode regardless of the online device count.
     target_device: Optional[str] = None
+    # Source-device runtime participation posture.  Kept separate from
+    # entry_mode: "control_only" means the source device remains only the
+    # controller; "join_runtime" means the source device is also a runtime
+    # participant.  Validated via the canonical contract layer (PR package 1,
+    # post-533 dual-repo runtime unification).
+    source_runtime_posture: Optional[str] = None
+
+    @field_validator("source_runtime_posture", mode="before")
+    @classmethod
+    def _validate_source_runtime_posture(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        from contracts.source_posture_contract import validate_source_posture_value
+
+        normalized = str(value).strip().lower()
+        ok, err = validate_source_posture_value(normalized)
+        if not ok:
+            raise ValueError(err)
+        return normalized
 
 
 class NodeCallRequest(BaseModel):
