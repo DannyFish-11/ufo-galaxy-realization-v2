@@ -14,6 +14,10 @@ source execution eligibility helpers from
 PR package 1 (post-533 dual-repo runtime unification master plan, MAIN repo
 side): exports posture contract canonicalization enforcement helpers from
 ``core.posture_contract_canonicalization``.
+
+PR-5 (post-533 dual-repo runtime unification, MAIN repo side): exports
+Android first-class runtime host classification and identity helpers from
+``core.android_runtime_host``.
 """
 
 from core.runtime.target_takeover import (
@@ -140,6 +144,20 @@ from core.multi_device_coordination_authority import (  # noqa: E402
     get_source_controller_device_id,
 )
 
+# PR-5 (post-533 dual-repo runtime unification, MAIN repo side): Android
+# first-class runtime host classification and identity.  Re-exported here
+# so callers can reach Android host typing from core.runtime without
+# importing the module directly.
+from core.android_runtime_host import (  # noqa: E402
+    ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL,
+    ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5,
+    ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5,
+    AndroidRuntimeHostRole,
+    AndroidRuntimeHostIdentity,
+    classify_android_runtime_host,
+    build_android_runtime_host_identity,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -231,4 +249,12 @@ __all__ = [
     "get_coordination_role_runtime",
     "reset_coordination_role_runtime",
     "get_source_controller_device_id",
+    # PR-5: Android First-Class Runtime Host (MAIN repo side)
+    "ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL",
+    "ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5",
+    "ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5",
+    "AndroidRuntimeHostRole",
+    "AndroidRuntimeHostIdentity",
+    "classify_android_runtime_host",
+    "build_android_runtime_host_identity",
 ]
