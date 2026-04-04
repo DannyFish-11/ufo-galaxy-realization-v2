@@ -722,6 +722,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             for _k, _v in _ctx.items():
                 if _k not in ("task_id", "trace_id") and isinstance(_v, (str, int, float, bool)):
                     _meta[_k] = str(_v)
+                elif _k not in ("task_id", "trace_id"):
+                    logger.debug(
+                        "parallel_device_commands: skipping non-scalar context metadata %s=%r",
+                        _k,
+                        type(_v).__name__,
+                    )
 
             envelope = TaskEnvelope(
                 task_id=_task_id,

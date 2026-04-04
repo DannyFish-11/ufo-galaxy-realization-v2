@@ -1587,6 +1587,12 @@ class CommandRouter:
             _command = str(_raw.get("command") or "").strip()
             _params = _raw.get("params")
             if not isinstance(_params, dict):
+                logger.debug(
+                    "_route_parallel_fanout_envelope: replacing non-dict params for %s[%d] (%s)",
+                    _device_id or "<missing-device>",
+                    _idx,
+                    type(_params).__name__,
+                )
                 _params = {}
             _sub_task_id = f"{envelope.task_id}__p{_idx:02d}"
 
