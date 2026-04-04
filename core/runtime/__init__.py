@@ -71,6 +71,27 @@ from core.source_execution_eligibility import (  # noqa: E402
     resolve_posture_for_eligibility,
 )
 
+# PR-4 (post-533 dual-repo runtime host unification): canonical session truth
+# and posture-aware result merge.  Re-exported here so callers can reach the
+# session truth API from core.runtime without importing the module directly.
+from core.canonical_session_truth import (  # noqa: E402
+    CANONICAL_SESSION_TRUTH_AUTHORITY,
+    CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY,
+    POSTURE_AWARE_RESULT_FILTER_POLICY,
+    JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY,
+    CANONICAL_SESSION_TRUTH_PR4_SENTINEL,
+    SessionTruthSource,
+    CanonicalSessionTruthRecord,
+    CanonicalSessionTruthRuntime,
+    CanonicalSessionTruthSnapshot,
+    filter_result_units_by_posture,
+    merge_session_truth,
+    record_session_truth,
+    build_canonical_session_truth_snapshot,
+    get_canonical_session_truth_runtime,
+    reset_canonical_session_truth_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -112,4 +133,20 @@ __all__ = [
     "check_source_execution_eligibility",
     "is_source_eligible_for_local_execution",
     "resolve_posture_for_eligibility",
+    # PR-4: Canonical Runtime Session Truth and Result Merge
+    "CANONICAL_SESSION_TRUTH_AUTHORITY",
+    "CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY",
+    "POSTURE_AWARE_RESULT_FILTER_POLICY",
+    "JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY",
+    "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
+    "SessionTruthSource",
+    "CanonicalSessionTruthRecord",
+    "CanonicalSessionTruthRuntime",
+    "CanonicalSessionTruthSnapshot",
+    "filter_result_units_by_posture",
+    "merge_session_truth",
+    "record_session_truth",
+    "build_canonical_session_truth_snapshot",
+    "get_canonical_session_truth_runtime",
+    "reset_canonical_session_truth_runtime",
 ]
