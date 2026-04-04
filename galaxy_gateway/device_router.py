@@ -156,6 +156,26 @@ DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION = (
     "transparently.  Resolves GAP-517-006."
 )
 
+# ---------------------------------------------------------------------------
+# PR-2 (post-533 dual-repo runtime host unification): posture-aware dispatch
+# sentinel.
+#
+# DeviceRouter.route_task() now resolves source_runtime_posture and applies
+# posture-aware source execution eligibility checks using
+# core.source_execution_eligibility.  When the source posture is
+# 'control_only', an ineligibility record is emitted and local execution is
+# gated off for the source device.  When posture is 'join_runtime', the
+# source device may participate as a runtime executor if otherwise eligible.
+# ---------------------------------------------------------------------------
+DEVICE_ROUTER_POSTURE_AWARE_DISPATCH = (
+    "DEVICE_ROUTER::POSTURE_AWARE_DISPATCH_V1: "
+    "route_task() evaluates source_runtime_posture via "
+    "core.source_execution_eligibility.check_source_execution_eligibility(). "
+    "'control_only' gates source-side local execution off. "
+    "'join_runtime' allows source participation if otherwise eligible. "
+    "PR-2, post-533 dual-repo runtime host unification track."
+)
+
 import asyncio
 import json
 import logging
@@ -878,6 +898,40 @@ class DeviceRouter:
                 source_runtime_posture = resolve_source_runtime_posture(ctx.get("source_runtime_posture"))
             except Exception:
                 source_runtime_posture = None
+
+            # PR-2 (post-533 unification): posture-aware source execution
+            # eligibility check.  Evaluate before dispatch decisions so that
+            # ineligibility is observable in structured logs regardless of
+            # which dispatch path is taken below.
+            _posture_hint = (
+                source_runtime_posture.value
+                if source_runtime_posture is not None
+                else ctx.get("source_runtime_posture", "control_only") or "control_only"
+            )
+            try:
+                from core.source_execution_eligibility import (
+                    check_source_execution_eligibility as _check_eligibility,
+                )
+                _eligibility = _check_eligibility(_posture_hint)
+            except Exception:  # noqa: BLE001
+                _eligibility = None
+
+            if _eligibility is not None:
+                emit_gateway_log(
+                    "source_execution_eligibility",
+                    trace_ctx=trace_ctx,
+                    source_device_id=source_device_id,
+                    source_runtime_posture=_posture_hint,
+                    eligible=_eligibility.eligible,
+                    reason=_eligibility.reason[:200],
+                )
+                logger.debug(
+                    "DeviceRouter.route_task posture_check | "
+                    "source_device_id=%s posture=%s eligible=%s",
+                    source_device_id,
+                    _posture_hint,
+                    _eligibility.eligible,
+                )
 
             emit_gateway_log(
                 "dispatcher_selection",
