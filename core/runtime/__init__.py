@@ -158,6 +158,26 @@ from core.android_runtime_host import (  # noqa: E402
     build_android_runtime_host_identity,
 )
 
+# PR package 6 (post-533 dual-repo runtime unification master plan, MAIN
+# repo side): Canonical Device Capability & Scheduling Basis.  Re-exported
+# here so callers can reach the capability/scheduling basis API from
+# core.runtime without importing the module directly.
+from core.canonical_capability_scheduling_basis import (  # noqa: E402
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL,
+    OBSERVER_ONLY_EXCLUDED_FROM_SCHEDULING_POLICY,
+    CONTROL_ONLY_SOURCE_EXCLUDED_FROM_LOCAL_SCHEDULING_POLICY,
+    ANDROID_HOST_REQUIRES_JOIN_RUNTIME_FOR_SCHEDULING_POLICY,
+    CAPABILITY_SCHEDULING_INPUTS_NORMALIZED_POLICY,
+    SCHEDULING_BASIS_IS_POSTURE_AND_ROLE_DRIVEN_POLICY,
+    ExecutionSurface,
+    CapabilitySchedulingInput,
+    CapabilitySchedulingBasis,
+    normalize_scheduling_inputs,
+    build_capability_scheduling_basis,
+    assess_scheduling_eligibility,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -257,4 +277,18 @@ __all__ = [
     "AndroidRuntimeHostIdentity",
     "classify_android_runtime_host",
     "build_android_runtime_host_identity",
+    # PR package 6: Canonical Device Capability & Scheduling Basis (MAIN repo side)
+    "CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY",
+    "CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL",
+    "OBSERVER_ONLY_EXCLUDED_FROM_SCHEDULING_POLICY",
+    "CONTROL_ONLY_SOURCE_EXCLUDED_FROM_LOCAL_SCHEDULING_POLICY",
+    "ANDROID_HOST_REQUIRES_JOIN_RUNTIME_FOR_SCHEDULING_POLICY",
+    "CAPABILITY_SCHEDULING_INPUTS_NORMALIZED_POLICY",
+    "SCHEDULING_BASIS_IS_POSTURE_AND_ROLE_DRIVEN_POLICY",
+    "ExecutionSurface",
+    "CapabilitySchedulingInput",
+    "CapabilitySchedulingBasis",
+    "normalize_scheduling_inputs",
+    "build_capability_scheduling_basis",
+    "assess_scheduling_eligibility",
 ]
