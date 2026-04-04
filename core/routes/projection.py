@@ -149,6 +149,29 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ANDROID_RUNTIME_HOST_ALIGNED_PR5_UNAVAILABLE"
     )
 
+# PR package 6 (post-533 dual-repo runtime unification master plan, MAIN side):
+# canonical capability/scheduling-basis alignment sentinel.
+try:
+    from core.canonical_capability_scheduling_basis import (  # noqa: F401
+        CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL as _CCSB_PR6,
+        CapabilityTier as _CapabilityTier,
+        build_runtime_capability_profile as _build_cap_profile,
+        evaluate_execution_surface_eligibility as _eval_surface_eligibility,
+    )
+
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6: str = (
+        "PROJECTION_ROUTES::CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6_V1: "
+        "Canonical capability/scheduling-basis (core.canonical_capability_scheduling"
+        "_basis) is available and aligned with projection routes.  Projection "
+        "endpoints can represent execution-surface capability tiers and "
+        "scheduling-basis inputs derived from posture, coordination role, and "
+        "declared device capabilities."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

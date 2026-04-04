@@ -18,6 +18,10 @@ side): exports posture contract canonicalization enforcement helpers from
 PR-5 (post-533 dual-repo runtime unification, MAIN repo side): exports
 Android first-class runtime host classification and identity helpers from
 ``core.android_runtime_host``.
+
+PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
+side): exports canonical device capability and scheduling-basis helpers from
+``core.canonical_capability_scheduling_basis``.
 """
 
 from core.runtime.target_takeover import (
@@ -158,6 +162,28 @@ from core.android_runtime_host import (  # noqa: E402
     build_android_runtime_host_identity,
 )
 
+# PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): Canonical Device Capability & Scheduling Basis.  Re-exported here
+# so callers can reach the canonical capability/scheduling-basis API from
+# core.runtime without importing the module directly.
+from core.canonical_capability_scheduling_basis import (  # noqa: E402
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
+    CAPABILITY_TIER_DRIVES_SURFACE_SELECTION_POLICY,
+    POSTURE_GATES_LOCAL_EXECUTION_IN_SCHEDULING_POLICY,
+    COORDINATION_ROLE_GATES_ORCHESTRATION_PARTICIPATION_POLICY,
+    HOST_PRESENCE_REQUIRED_FOR_FULL_RUNTIME_POLICY,
+    OBSERVER_ONLY_EXCLUDED_FROM_EXECUTION_SURFACE_POLICY,
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL,
+    CapabilityTier,
+    RuntimeCapabilityProfile,
+    SchedulingBasisInputs,
+    ExecutionSurfaceEligibility,
+    build_runtime_capability_profile,
+    build_scheduling_basis_inputs,
+    evaluate_execution_surface_eligibility,
+    runtime_capability_profile_from_scheduling_inputs,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -257,4 +283,20 @@ __all__ = [
     "AndroidRuntimeHostIdentity",
     "classify_android_runtime_host",
     "build_android_runtime_host_identity",
+    # PR package 6: Canonical Device Capability & Scheduling Basis (MAIN side)
+    "CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY",
+    "CAPABILITY_TIER_DRIVES_SURFACE_SELECTION_POLICY",
+    "POSTURE_GATES_LOCAL_EXECUTION_IN_SCHEDULING_POLICY",
+    "COORDINATION_ROLE_GATES_ORCHESTRATION_PARTICIPATION_POLICY",
+    "HOST_PRESENCE_REQUIRED_FOR_FULL_RUNTIME_POLICY",
+    "OBSERVER_ONLY_EXCLUDED_FROM_EXECUTION_SURFACE_POLICY",
+    "CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL",
+    "CapabilityTier",
+    "RuntimeCapabilityProfile",
+    "SchedulingBasisInputs",
+    "ExecutionSurfaceEligibility",
+    "build_runtime_capability_profile",
+    "build_scheduling_basis_inputs",
+    "evaluate_execution_surface_eligibility",
+    "runtime_capability_profile_from_scheduling_inputs",
 ]
