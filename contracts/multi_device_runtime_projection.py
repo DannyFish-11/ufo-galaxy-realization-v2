@@ -135,6 +135,20 @@ class RuntimeProjectionDeviceEntry(BaseModel):
     health_score: Optional[float] = Field(
         default=None, ge=0.0, le=1.0, description="Health score [0, 1]."
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture (PR-5 / post-533). "
+            "Canonical values: 'control_only' or 'join_runtime'."
+        ),
+    )
+    is_runtime_host: bool = Field(
+        default=False,
+        description=(
+            "Whether this device is classified as a first-class runtime host (PR-5). "
+            "Distinguishes host-capable devices from connected-device-only presences."
+        ),
+    )
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -165,6 +179,13 @@ class RuntimeProjectionHostEntry(BaseModel):
     )
     can_delegate: bool = Field(
         default=False, description="Whether the host can delegate to other runtimes."
+    )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture propagated from the "
+            "originating LocalRuntimeHost (PR-5 / post-533)."
+        ),
     )
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -613,6 +634,10 @@ def project_runtime_devices(
                 or (_safe_dict(d.get("connection_summary", {})).get("state")),
                 runtime_capable=bool(d.get("runtime_capable", True)),
                 health_score=d.get("health_score"),
+                source_runtime_posture=str(
+                    d.get("source_runtime_posture", "control_only") or "control_only"
+                ),
+                is_runtime_host=bool(d.get("is_runtime_host", False)),
                 metadata=_safe_dict(d.get("metadata", {})),
             )
             result.append(entry)
@@ -684,6 +709,8 @@ def from_registered_runtime_device(device: Any) -> RuntimeProjectionDeviceEntry:
         connection_state=connection_state,
         runtime_capable=bool(d.get("runtime_capable", True)),
         health_score=health_score,
+        source_runtime_posture=str(d.get("source_runtime_posture", "control_only") or "control_only"),
+        is_runtime_host=bool(d.get("is_runtime_host", False)),
         metadata=_safe_dict(d.get("metadata", {})),
     )
 
@@ -719,6 +746,9 @@ def project_runtime_hosts(
                 execution_mode=d.get("execution_mode"),
                 accepts_handoff=bool(caps.get("accepts_handoff", d.get("accepts_handoff", False))),
                 can_delegate=bool(caps.get("can_delegate", d.get("can_delegate", False))),
+                source_runtime_posture=str(
+                    d.get("source_runtime_posture", "control_only") or "control_only"
+                ),
                 metadata=_safe_dict(d.get("metadata", {})),
             )
             result.append(entry)

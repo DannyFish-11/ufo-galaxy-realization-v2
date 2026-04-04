@@ -434,6 +434,16 @@ class LocalRuntimeHost(BaseModel):
         description="Unix timestamp when this host record was created/snapshotted.",
     )
 
+    # -- Runtime-host posture (PR-5 / post-533 dual-repo unification) --
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture carried from the "
+            "originating RegisteredRuntimeDevice (PR-5).  Canonical values: "
+            "'control_only' or 'join_runtime'.  Defaults to 'control_only'."
+        ),
+    )
+
     model_config = {"extra": "allow", "use_enum_values": True}
 
     # ------------------------------------------------------------------
@@ -599,6 +609,9 @@ def from_registered_runtime_device(device: Any) -> LocalRuntimeHost:
             sessions=sessions,
             handoff=handoff,
             execution=execution,
+            source_runtime_posture=str(
+                getattr(device, "source_runtime_posture", "control_only") or "control_only"
+            ),
             metadata=metadata,
         )
     except Exception:
@@ -892,5 +905,15 @@ def summarize_local_runtime_host(host: LocalRuntimeHost) -> Dict[str, Any]:
         "capability_summary": host.capability_summary,
         "max_concurrent_tasks": host.max_concurrent_tasks,
         "current_load": host.current_load,
+        "source_runtime_posture": host.source_runtime_posture,
         "recorded_at": host.recorded_at,
     }
+
+
+# ---------------------------------------------------------------------------
+# PR-5 / post-533 policy sentinels — local runtime host posture
+# ---------------------------------------------------------------------------
+
+# Sentinel confirming that LocalRuntimeHost carries source_runtime_posture
+# propagated from the originating RegisteredRuntimeDevice (PR-5, main-repo half).
+LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5 = "LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5"
