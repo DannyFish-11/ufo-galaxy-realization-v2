@@ -84,6 +84,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from contracts.source_posture_contract import _normalise_posture_hint
+
 
 # ---------------------------------------------------------------------------
 # SourceDispatchMode — canonical dispatch mode enum
@@ -853,11 +855,7 @@ def build_source_dispatch_decision(
     metadata:
         Arbitrary extension metadata.
     """
-    _posture = (
-        str(source_runtime_posture).strip().lower()
-        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
-        else "control_only"
-    )
+    _posture = _normalise_posture_hint(source_runtime_posture)
     try:
         return SourceDispatchDecision(
             trace_id=trace_id,
@@ -928,11 +926,9 @@ def build_source_dispatch_plan(
         d_policy = policy_alignment if policy_alignment is not None else (decision.policy_alignment if decision else None)
         d_gov = governance_snapshot if governance_snapshot is not None else (decision.governance_snapshot if decision else None)
         d_dispatch_id = decision.dispatch_id if decision else None
-        d_posture = (
-            str(source_runtime_posture).strip().lower()
-            if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
-            else (getattr(decision, "source_runtime_posture", "control_only") if decision else "control_only")
-        )
+        # posture: explicit override > decision's posture > default "control_only"
+        _decision_posture = getattr(decision, "source_runtime_posture", "control_only") if decision else "control_only"
+        d_posture = _normalise_posture_hint(source_runtime_posture) if source_runtime_posture is not None else _decision_posture
         return SourceDispatchPlan(
             dispatch_id=d_dispatch_id,
             trace_id=d_trace,
@@ -983,11 +979,7 @@ def build_source_dispatch_result(
     All parameters are optional.  Never raises; construction errors produce a
     minimal failed result.
     """
-    _posture = (
-        str(source_runtime_posture).strip().lower()
-        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
-        else "control_only"
-    )
+    _posture = _normalise_posture_hint(source_runtime_posture)
     try:
         return SourceDispatchResult(
             dispatch_id=dispatch_id,

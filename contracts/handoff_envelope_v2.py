@@ -79,6 +79,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from contracts.source_posture_contract import _normalise_posture_hint
+
 
 # ---------------------------------------------------------------------------
 # Sub-contract: source runtime summary
@@ -779,11 +781,7 @@ def from_bridge_inputs(
     raw_session: Dict[str, Any] = dict(session or {})
     raw_task: Dict[str, Any] = dict(task or {})
 
-    _effective_posture: str = (
-        str(source_runtime_posture).strip().lower()
-        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
-        else "control_only"
-    )
+    _effective_posture: str = _normalise_posture_hint(source_runtime_posture)
 
     task_spec = HandoffTaskSpec(
         task_id=task_id or raw_task.get("task_id"),
@@ -950,11 +948,7 @@ def build_handoff_envelope_v2(
     raw_task: Dict[str, Any] = dict(task or {})
     raw_session: Dict[str, Any] = dict(session or {})
 
-    _effective_posture: str = (
-        str(source_runtime_posture).strip().lower()
-        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
-        else "control_only"
-    )
+    _effective_posture: str = _normalise_posture_hint(source_runtime_posture)
 
     task_spec = HandoffTaskSpec(
         task_id=task_id or raw_task.get("task_id"),

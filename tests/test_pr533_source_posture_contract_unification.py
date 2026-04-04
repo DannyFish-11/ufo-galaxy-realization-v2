@@ -287,6 +287,7 @@ def test_E04_builder_never_raises() -> None:
     for bad in [None, "", "garbage", 42, {}, []]:  # type: ignore[list-item]
         field = build_source_posture_field(bad)  # type: ignore[arg-type]
         assert field is not None
+        assert field.source_runtime_posture == "control_only"
 
 
 # ===========================================================================

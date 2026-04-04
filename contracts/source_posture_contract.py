@@ -175,6 +175,20 @@ SOURCE_POSTURE_VALID_VALUES: frozenset = frozenset(v.value for v in SourcePostur
 # ---------------------------------------------------------------------------
 
 
+def _normalise_posture_hint(raw: object) -> str:
+    """Normalise *raw* to a canonical posture string.
+
+    Returns ``"control_only"`` for any input that is ``None``, empty, or does
+    not match one of the two canonical values.  This helper is intentionally
+    private; callers that need the full :class:`SourcePostureValue` should use
+    :func:`resolve_source_posture_value`.
+    """
+    if raw is None:
+        return SourcePostureValue.CONTROL_ONLY.value
+    normalised = str(raw).strip().lower()
+    return normalised if normalised in SOURCE_POSTURE_VALID_VALUES else SourcePostureValue.CONTROL_ONLY.value
+
+
 def posture_value_to_str(posture: SourcePostureValue) -> str:
     """Return the canonical wire-format string for a :class:`SourcePostureValue`.
 
@@ -357,5 +371,8 @@ def build_source_posture_field(
     resolved = resolve_source_posture_value(posture_hint)
     try:
         return SourcePostureContractField(source_runtime_posture=resolved.value)
-    except Exception:  # noqa: BLE001 — degrade gracefully
+    except (ValueError, TypeError):
+        # resolve_source_posture_value already guarantees a canonical value, so
+        # this branch should never be reached in practice.  Fall back to the
+        # explicit default rather than propagating.
         return SourcePostureContractField(source_runtime_posture=default)
