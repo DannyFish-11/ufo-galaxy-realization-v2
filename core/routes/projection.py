@@ -124,6 +124,31 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_SESSION_TRUTH_ALIGNED_PR4_UNAVAILABLE"
     )
 
+# PR-5 (post-533 dual-repo runtime unification, MAIN repo side): Android
+# first-class runtime host alignment sentinel.  Asserts that the Android
+# runtime host classification module is importable from this module's context,
+# enabling projection endpoints to represent Android host participation
+# distinctly from generic connected-device presence.
+try:
+    from core.android_runtime_host import (  # noqa: F401
+        ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL as _ARHR_PR5,
+        classify_android_runtime_host as _classify_android_host,
+        build_android_runtime_host_identity as _build_android_identity,
+        AndroidRuntimeHostRole as _AndroidRuntimeHostRole,
+    )
+
+    ANDROID_RUNTIME_HOST_ALIGNED_PR5: str = (
+        "PROJECTION_ROUTES::ANDROID_RUNTIME_HOST_ALIGNED_PR5_V1: "
+        "Android runtime-host classification (core.android_runtime_host) is "
+        "available and aligned with projection routes.  Projection endpoints "
+        "can represent Android host participation distinctly from generic "
+        "connected-device presence."
+    )
+except ImportError:  # pragma: no cover
+    ANDROID_RUNTIME_HOST_ALIGNED_PR5: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ANDROID_RUNTIME_HOST_ALIGNED_PR5_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

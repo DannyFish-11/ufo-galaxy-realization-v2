@@ -731,3 +731,77 @@ class TestBackwardsCompatibility:
             assert AndroidRuntimeHostRole.from_string(raw) == expected, (
                 f"from_string({raw!r}) should return {expected!r}"
             )
+
+
+class TestCoreRuntimeModuleExportsPR5:
+    """core.runtime re-exports the Android host classification API (PR-5)."""
+
+    def test_android_runtime_host_role_importable_from_core_runtime(self):
+        from core.runtime import AndroidRuntimeHostRole
+        assert AndroidRuntimeHostRole.FULL_RUNTIME_HOST.value == "full_runtime_host"
+        assert AndroidRuntimeHostRole.PARTIAL_RUNTIME_HOST.value == "partial_runtime_host"
+        assert AndroidRuntimeHostRole.CONNECTED_DEVICE_ONLY.value == "connected_device_only"
+        assert AndroidRuntimeHostRole.UNCLASSIFIED.value == "unclassified"
+
+    def test_android_runtime_host_identity_importable_from_core_runtime(self):
+        from core.runtime import AndroidRuntimeHostIdentity
+        identity = AndroidRuntimeHostIdentity(device_id="test_001")
+        assert identity.device_id == "test_001"
+        assert identity.source_runtime_posture == "control_only"
+
+    def test_classify_android_runtime_host_importable_from_core_runtime(self):
+        from core.runtime import classify_android_runtime_host, AndroidRuntimeHostRole
+        role = classify_android_runtime_host(
+            {"source_runtime_posture": "join_runtime", "online": True}
+        )
+        assert role == AndroidRuntimeHostRole.FULL_RUNTIME_HOST
+
+    def test_build_android_runtime_host_identity_importable_from_core_runtime(self):
+        from core.runtime import build_android_runtime_host_identity, AndroidRuntimeHostRole
+        identity = build_android_runtime_host_identity(
+            {"device_id": "ph_999", "source_runtime_posture": "join_runtime", "online": True}
+        )
+        assert identity.device_id == "ph_999"
+        assert identity.role == AndroidRuntimeHostRole.FULL_RUNTIME_HOST
+        assert identity.formation_eligible is True
+
+    def test_pr5_sentinels_importable_from_core_runtime(self):
+        from core.runtime import (
+            ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL,
+            ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5,
+            ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5,
+        )
+        assert ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL
+        assert ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5
+        assert ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5
+
+    def test_pr5_symbols_in_all_list(self):
+        import core.runtime as cr
+        for sym in (
+            "AndroidRuntimeHostRole",
+            "AndroidRuntimeHostIdentity",
+            "classify_android_runtime_host",
+            "build_android_runtime_host_identity",
+            "ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL",
+        ):
+            assert sym in cr.__all__, f"{sym!r} missing from core.runtime.__all__"
+
+
+class TestProjectionRoutesPR5Sentinel:
+    """core.routes.projection carries the PR-5 Android runtime host sentinel."""
+
+    def test_android_runtime_host_aligned_pr5_sentinel_present(self):
+        from core.routes.projection import ANDROID_RUNTIME_HOST_ALIGNED_PR5
+        assert ANDROID_RUNTIME_HOST_ALIGNED_PR5
+        assert "PR5" in ANDROID_RUNTIME_HOST_ALIGNED_PR5
+
+    def test_sentinel_indicates_availability(self):
+        from core.routes.projection import ANDROID_RUNTIME_HOST_ALIGNED_PR5
+        # Must be the "V1" form (available) rather than the fallback UNAVAILABLE form.
+        assert "UNAVAILABLE" not in ANDROID_RUNTIME_HOST_ALIGNED_PR5
+
+    def test_pr4_sentinel_still_present(self):
+        """Confirm PR-4 sentinel is not disturbed by PR-5 changes."""
+        from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert "UNAVAILABLE" not in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
