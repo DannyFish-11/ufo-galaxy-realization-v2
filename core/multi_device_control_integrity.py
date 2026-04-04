@@ -223,6 +223,8 @@ __all__ = [
     "MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED",
     "MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE",
     "PR523_RESIDUAL_CLOSURE_ACCOUNTING",
+    # PR-6 coordination authority alignment sentinel
+    "MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6",
 ]
 
 # ---------------------------------------------------------------------------
@@ -406,6 +408,22 @@ PR523_RESIDUAL_CLOSURE_ACCOUNTING: str = (
     "GAP-517-007=RESOLVED(PR-519), "
     "GAP-517-008=RESOLVED(PR-522). "
     "8/8 gaps closed."
+)
+
+#: PR-6 (post-533 dual-repo runtime host unification, MAIN repo side).
+#: Coordination authority alignment sentinel — confirms that multi-device
+#: coordination is aligned with canonical OpenClawd runtime authority via
+#: core.multi_device_coordination_authority (CoordinationRole derivation,
+#: CoordinationRoleRuntime, CoordinationRoleSnapshot).
+MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6: str = (
+    "MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED::PR6_V1: "
+    "Multi-device coordination roles (source_controller, "
+    "joined_runtime_participant, target_only_executor, observer_only) are "
+    "now explicitly modelled in core.multi_device_coordination_authority.  "
+    "Coordination role derivation is driven by source_runtime_posture (PR-533 "
+    "/ PR-1 contract) and formation-level role assignments.  Roles are surfaced "
+    "in projection enrichment (PR-522 / PR-6 integration) and recorded in the "
+    "CoordinationRoleRuntime ring-buffer for observability."
 )
 
 # ---------------------------------------------------------------------------

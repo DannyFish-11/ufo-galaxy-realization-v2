@@ -92,6 +92,30 @@ from core.canonical_session_truth import (  # noqa: E402
     reset_canonical_session_truth_runtime,
 )
 
+# PR-6 (post-533 dual-repo runtime host unification): multi-device coordination
+# authority and canonical role modelling.  Re-exported here so callers can
+# reach the coordination role API from core.runtime without importing the
+# module directly.
+from core.multi_device_coordination_authority import (  # noqa: E402
+    MULTI_DEVICE_COORDINATION_AUTHORITY,
+    MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL,
+    SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY,
+    TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY,
+    OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY,
+    COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY,
+    CoordinationRole,
+    CoordinationRoleRecord,
+    CoordinationRoleSnapshot,
+    CoordinationRoleRuntime,
+    derive_coordination_role,
+    build_coordination_role_record,
+    build_coordination_role_snapshot,
+    record_coordination_role,
+    get_coordination_role_runtime,
+    reset_coordination_role_runtime,
+    get_source_controller_device_id,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -149,4 +173,22 @@ __all__ = [
     "build_canonical_session_truth_snapshot",
     "get_canonical_session_truth_runtime",
     "reset_canonical_session_truth_runtime",
+    # PR-6: Multi-Device Coordination Authority and Role Modelling
+    "MULTI_DEVICE_COORDINATION_AUTHORITY",
+    "MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL",
+    "SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY",
+    "TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY",
+    "OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY",
+    "COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY",
+    "CoordinationRole",
+    "CoordinationRoleRecord",
+    "CoordinationRoleSnapshot",
+    "CoordinationRoleRuntime",
+    "derive_coordination_role",
+    "build_coordination_role_record",
+    "build_coordination_role_snapshot",
+    "record_coordination_role",
+    "get_coordination_role_runtime",
+    "reset_coordination_role_runtime",
+    "get_source_controller_device_id",
 ]
