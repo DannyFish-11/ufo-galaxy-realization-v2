@@ -182,6 +182,14 @@ class RuntimeSessionSnapshotIdentity(BaseModel):
         default=None,
         description="Optional device designated as primary for result authority.",
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture for this session. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "PR-4, post-533 dual-repo runtime host unification track."
+        ),
+    )
     created_at: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when the snapshot was first created.",
@@ -252,6 +260,14 @@ class RuntimeSessionSnapshotDispatchState(BaseModel):
     reason: str = Field(
         default="",
         description="Human-readable dispatch outcome description.",
+    )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture at dispatch time. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "PR-4, post-533 dual-repo runtime host unification track."
+        ),
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -436,6 +452,22 @@ class RuntimeSessionSnapshotResultState(BaseModel):
         default=None,
         description="Policy under which results were merged.",
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture at result merge time. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "PR-4, post-533 dual-repo runtime host unification track."
+        ),
+    )
+    excluded_unit_ids: List[str] = Field(
+        default_factory=list,
+        description=(
+            "IDs of result units excluded by posture-aware filtering. "
+            "Units excluded because they were tagged as control_only source "
+            "contributions.  PR-4."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary key-value metadata for extensibility.",
@@ -616,6 +648,14 @@ class RuntimeSessionSnapshot(BaseModel):
     primary_device_id: Optional[str] = Field(
         default=None,
         description="Optional device designated as primary for result authority.",
+    )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture for this session. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "PR-4, post-533 dual-repo runtime host unification track."
+        ),
     )
 
     # Timestamps
