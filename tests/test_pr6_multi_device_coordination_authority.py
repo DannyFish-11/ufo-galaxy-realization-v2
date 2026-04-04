@@ -771,11 +771,10 @@ class TestRecordCoordinationRole:
             reset_coordination_role_runtime,
         )
         reset_coordination_role_runtime()
-        # Even a garbage object should not raise; None should be silently ignored.
-        try:
-            record_coordination_role(None)  # type: ignore[arg-type]
-        except Exception:
-            pass  # allowed to silently fail but must not propagate
+        # record_coordination_role is fire-and-forget: passing a non-record
+        # value (None) should be silently ignored, never raising.
+        record_coordination_role(None)  # type: ignore[arg-type]
+        # If we reach here without an exception, the test passes.
 
 
 # ---------------------------------------------------------------------------
