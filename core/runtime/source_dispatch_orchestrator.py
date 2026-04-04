@@ -256,6 +256,7 @@ def select_dispatch_mode(
     target_device_id: Optional[str] = None,
     force_local: bool = False,
     force_remote: bool = False,
+    source_runtime_posture: Optional[str] = None,
 ) -> tuple[Any, str]:  # (SourceDispatchMode, reason_str)
     """Select a :class:`~contracts.source_dispatch.SourceDispatchMode`.
 
@@ -266,11 +267,16 @@ def select_dispatch_mode(
     3. Policy alignment (PR-28) — if ``blocked`` flag set, choose ``blocked``.
     4. Policy alignment — if ``can_expand_cross_device`` and a
        ``target_device_id`` is available, choose ``remote_handoff``.
-    5. Mesh session (PR-33) with multiple active participants and no explicit
-       target → ``staged_mesh``.
-    6. Governance snapshot (PR-27) — if ``execution_allowed`` is False,
+    5. Governance snapshot (PR-27) — if ``execution_allowed`` is False,
        choose ``blocked``.
-    7. Fallback → ``local``.
+    6. **PR-2 posture gate** — if ``source_runtime_posture`` is
+       ``"control_only"``, the source device is ineligible for local
+       execution.  If a ``target_device_id`` is available, choose
+       ``remote_handoff``; otherwise choose ``blocked``.
+    7. Mesh session (PR-33) with multiple active participants and no explicit
+       target → ``staged_mesh``.
+    8. Explicit target device → ``remote_handoff``.
+    9. Fallback → ``local``.
 
     Parameters
     ----------
@@ -286,10 +292,16 @@ def select_dispatch_mode(
     target_device_id:
         Explicit remote target device ID, if provided by the caller.
     force_local:
-        When ``True``, always return ``local`` mode.
+        When ``True``, always return ``local`` mode (bypasses posture gate).
     force_remote:
         When ``True``, always return ``remote_handoff`` mode (requires
         ``target_device_id``).
+    source_runtime_posture:
+        PR-2: source-device runtime participation posture.  When
+        ``"control_only"``, local execution on the source device is blocked
+        and the decision redirects to remote handoff or blocked.  When
+        ``"join_runtime"`` (or ``None``/unknown), no additional gate is
+        applied and the standard priority chain continues.
 
     Returns
     -------
@@ -324,6 +336,32 @@ def select_dispatch_mode(
         if not governance_snapshot.get("execution_allowed", True):
             return SourceDispatchMode.blocked, "governance_snapshot:execution_not_allowed"
 
+    # PR-2: posture gate — control_only source is ineligible for local execution.
+    # Applied only when source_runtime_posture is explicitly provided (not None).
+    # Callers that do not supply the posture get the pre-PR-2 behaviour so that
+    # the existing dispatch paths remain unaffected (backwards safety).
+    # Evaluated after policy/governance hard blocks but before mesh/default paths
+    # so that posture actively redirects to a remote target when one exists.
+    if source_runtime_posture is not None:
+        try:
+            from core.source_execution_eligibility import (
+                is_source_eligible_for_local_execution as _posture_eligible,
+            )
+        except Exception:  # noqa: BLE001
+            _posture_eligible = lambda h: h != "control_only"  # noqa: E731
+
+        if not _posture_eligible(source_runtime_posture):
+            # Source is control_only — redirect to remote or block.
+            if target_device_id:
+                return (
+                    SourceDispatchMode.remote_handoff,
+                    "posture:control_only:source_ineligible_for_local:remote_handoff",
+                )
+            return (
+                SourceDispatchMode.blocked,
+                "posture:control_only:source_ineligible_for_local:no_remote_target",
+            )
+
     # Mesh session: staged dispatch when multiple participants are active (PR-33)
     if mesh_session and isinstance(mesh_session, dict) and not target_device_id:
         participants = mesh_session.get("participants") or []
@@ -340,7 +378,7 @@ def select_dispatch_mode(
     if target_device_id:
         return SourceDispatchMode.remote_handoff, "target_device_specified"
 
-    # Default: local
+    # Default: local (join_runtime or unknown posture — no posture gate)
     return SourceDispatchMode.local, "default_local"
 
 
@@ -435,6 +473,7 @@ def build_source_dispatch_plan(
     mesh_memberships: Optional[List[Dict[str, Any]]] = None,
     force_local: bool = False,
     force_remote: bool = False,
+    source_runtime_posture: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Any:  # SourceDispatchPlan
     """Build a :class:`~contracts.source_dispatch.SourceDispatchPlan`.
@@ -474,9 +513,14 @@ def build_source_dispatch_plan(
         Serialised mesh membership list (PR-32).  Fetched automatically when
         ``None``.
     force_local:
-        Force local dispatch regardless of policy.
+        Force local dispatch regardless of policy (bypasses posture gate).
     force_remote:
         Force remote handoff regardless of policy.
+    source_runtime_posture:
+        PR-2: source-device participation posture (``"control_only"`` or
+        ``"join_runtime"``).  ``control_only`` gates local execution off on
+        the source device; ``join_runtime`` allows it.  Defaults to
+        ``"control_only"`` (conservative safe default) when ``None``.
     metadata:
         Arbitrary extension metadata.
 
@@ -503,7 +547,8 @@ def build_source_dispatch_plan(
         if mesh_memberships is None:
             mesh_memberships = _try_mesh_memberships()
 
-        # Select mode
+        # Select mode — PR-2: pass source_runtime_posture so the posture gate
+        # is evaluated inside select_dispatch_mode().
         mode, reason = select_dispatch_mode(
             policy_alignment=policy_alignment,
             governance_snapshot=governance_snapshot,
@@ -512,6 +557,7 @@ def build_source_dispatch_plan(
             target_device_id=target_device_id,
             force_local=force_local,
             force_remote=force_remote,
+            source_runtime_posture=source_runtime_posture,
         )
 
         # Select target
@@ -572,7 +618,8 @@ def build_source_dispatch_plan(
             ready = False
             readiness_notes.append("staged_mesh:no_mesh_session_available")
 
-        # Build the canonical decision record
+        # Build the canonical decision record — pass posture through so it is
+        # visible in the plan and any downstream audit surfaces.
         decision = build_source_dispatch_decision(
             trace_id=trace_id,
             task_id=task_id,
@@ -586,6 +633,7 @@ def build_source_dispatch_plan(
             governance_snapshot=governance_snapshot,
             mesh_session=mesh_session,
             handoff_envelope=handoff_envelope_dict,
+            source_runtime_posture=source_runtime_posture,
             metadata=metadata,
         )
 
@@ -636,6 +684,7 @@ def orchestrate_source_runtime_dispatch(
     mesh_memberships: Optional[List[Dict[str, Any]]] = None,
     force_local: bool = False,
     force_remote: bool = False,
+    source_runtime_posture: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Any:  # SourceDispatchResult
     """End-to-end source dispatch orchestration.
@@ -647,12 +696,16 @@ def orchestrate_source_runtime_dispatch(
     2. Executes according to the selected mode:
 
        - **local / fallback_local** — invokes ``OpenClawd._run_execution()``
-         via :func:`_try_run_local_execution`.
+         via :func:`_try_run_local_execution`.  Only executed when
+         ``source_runtime_posture`` is ``"join_runtime"`` (or the posture
+         gate is not triggered by ``force_local``).
        - **remote_handoff** — invokes ``galaxy_gateway.agent_bridge`` via
          :func:`_try_remote_handoff`; falls back to local on failure.
        - **staged_mesh** — returns the plan with a summary (full coordinator
          deferred to PR-37).
-       - **blocked** — returns a failed result with ``mode=blocked``.
+       - **blocked** — returns a failed result with ``mode=blocked``.  Also
+         used when ``source_runtime_posture="control_only"`` and no remote
+         target is available.
        - **unknown** — falls back to local with a warning note.
 
     3. Returns a fully-populated
@@ -686,9 +739,14 @@ def orchestrate_source_runtime_dispatch(
     mesh_memberships:
         Serialised mesh membership list (PR-32).
     force_local:
-        Force local dispatch.
+        Force local dispatch (bypasses posture gate).
     force_remote:
         Force remote handoff.
+    source_runtime_posture:
+        PR-2: source-device participation posture (``"control_only"`` or
+        ``"join_runtime"``).  Passed through to
+        :func:`build_source_dispatch_plan` which feeds it into
+        :func:`select_dispatch_mode` for eligibility gating.
     metadata:
         Arbitrary extension metadata.
 
@@ -723,6 +781,7 @@ def orchestrate_source_runtime_dispatch(
             mesh_memberships=mesh_memberships,
             force_local=force_local,
             force_remote=force_remote,
+            source_runtime_posture=source_runtime_posture,
             metadata=metadata,
         )
 
@@ -748,7 +807,9 @@ def orchestrate_source_runtime_dispatch(
         effective_mode = mode
 
         if mode == SourceDispatchMode.blocked:
-            errors.append("dispatch_blocked_by_policy")
+            # PR-2: blocked includes posture:control_only:no_remote_target case.
+            _blocked_reason = decision_reason or "dispatch_blocked_by_policy"
+            errors.append(_blocked_reason)
             return build_source_dispatch_result(
                 dispatch_id=plan.dispatch_id,
                 trace_id=trace_id,
@@ -760,10 +821,11 @@ def orchestrate_source_runtime_dispatch(
                 selected_target=selected_target,
                 success=False,
                 errors=errors + plan.readiness_notes,
-                decision_reason="dispatch_blocked_by_policy",
+                decision_reason=_blocked_reason,
                 governance_snapshot=plan.governance_snapshot,
                 policy_alignment=plan.policy_alignment,
                 mesh_session=plan.mesh_session,
+                source_runtime_posture=source_runtime_posture,
                 metadata=metadata,
             )
 
@@ -835,6 +897,7 @@ def orchestrate_source_runtime_dispatch(
                 mesh_session=plan.mesh_session,
                 errors=errors,
                 decision_reason=decision_reason,
+                source_runtime_posture=source_runtime_posture,
                 metadata=metadata,
             )
 
@@ -880,6 +943,7 @@ def orchestrate_source_runtime_dispatch(
             mesh_session=plan.mesh_session,
             errors=errors,
             decision_reason=decision_reason,
+            source_runtime_posture=source_runtime_posture,
             metadata=metadata,
         )
 
@@ -975,6 +1039,7 @@ class SourceDispatchOrchestrator:
         mesh_memberships: Optional[List[Dict[str, Any]]] = None,
         force_local: bool = False,
         force_remote: bool = False,
+        source_runtime_posture: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:  # SourceDispatchResult
         """Execute the end-to-end source dispatch orchestration.
@@ -984,7 +1049,9 @@ class SourceDispatchOrchestrator:
         Parameters
         ----------
         See :func:`orchestrate_source_runtime_dispatch` for full parameter
-        documentation.
+        documentation.  ``source_runtime_posture`` is the PR-2 posture gate
+        parameter: ``"control_only"`` blocks local execution; ``"join_runtime"``
+        allows it.
 
         Returns
         -------
@@ -1006,6 +1073,7 @@ class SourceDispatchOrchestrator:
             mesh_memberships=mesh_memberships,
             force_local=force_local,
             force_remote=force_remote,
+            source_runtime_posture=source_runtime_posture,
             metadata=metadata,
         )
 
@@ -1026,6 +1094,7 @@ class SourceDispatchOrchestrator:
         mesh_memberships: Optional[List[Dict[str, Any]]] = None,
         force_local: bool = False,
         force_remote: bool = False,
+        source_runtime_posture: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:  # SourceDispatchPlan
         """Build a dispatch plan without executing.
@@ -1052,5 +1121,6 @@ class SourceDispatchOrchestrator:
             mesh_memberships=mesh_memberships,
             force_local=force_local,
             force_remote=force_remote,
+            source_runtime_posture=source_runtime_posture,
             metadata=metadata,
         )

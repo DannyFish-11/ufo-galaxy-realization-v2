@@ -6,6 +6,10 @@ Exports the target-side local takeover path introduced in PR-34, the
 source-side dispatch orchestrator introduced in PR-35, the cross-runtime
 result merge helpers introduced in PR-36, and the mesh session coordinator
 helpers introduced in PR-37.
+
+PR-2 (post-533 dual-repo runtime host unification): exports posture-aware
+source execution eligibility helpers from
+``core.source_execution_eligibility``.
 """
 
 from core.runtime.target_takeover import (
@@ -52,6 +56,21 @@ from core.mesh.mesh_session_coordinator import (  # noqa: E402
     get_coordinator_summary,
 )
 
+# PR-2 (post-533 dual-repo runtime host unification): posture-aware source
+# execution eligibility.  Re-exported here so callers can reach the
+# eligibility API from core.runtime without importing the module directly.
+from core.source_execution_eligibility import (  # noqa: E402
+    SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY,
+    CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY,
+    JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY,
+    POSTURE_GATED_LOCAL_EXECUTION_POLICY,
+    POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL,
+    SourceExecutionEligibility,
+    check_source_execution_eligibility,
+    is_source_eligible_for_local_execution,
+    resolve_posture_for_eligibility,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -83,4 +102,14 @@ __all__ = [
     "MeshSessionCoordinator",
     "coordinate_mesh_session",
     "get_coordinator_summary",
+    # PR-2: Posture-Aware Source Execution Eligibility
+    "SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY",
+    "CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",
+    "JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",
+    "POSTURE_GATED_LOCAL_EXECUTION_POLICY",
+    "POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL",
+    "SourceExecutionEligibility",
+    "check_source_execution_eligibility",
+    "is_source_eligible_for_local_execution",
+    "resolve_posture_for_eligibility",
 ]
