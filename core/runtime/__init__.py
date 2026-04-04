@@ -10,6 +10,10 @@ helpers introduced in PR-37.
 PR-2 (post-533 dual-repo runtime host unification): exports posture-aware
 source execution eligibility helpers from
 ``core.source_execution_eligibility``.
+
+PR package 1 (post-533 dual-repo runtime unification master plan, MAIN repo
+side): exports posture contract canonicalization enforcement helpers from
+``core.posture_contract_canonicalization``.
 """
 
 from core.runtime.target_takeover import (
@@ -90,6 +94,21 @@ from core.canonical_session_truth import (  # noqa: E402
     build_canonical_session_truth_snapshot,
     get_canonical_session_truth_runtime,
     reset_canonical_session_truth_runtime,
+)
+
+# PR package 1 (post-533 dual-repo runtime unification, MAIN repo side):
+# posture contract canonicalization enforcement layer.
+from core.posture_contract_canonicalization import (  # noqa: E402
+    canonicalize_posture_in_payload,
+    validate_posture_field_consistency,
+    assert_posture_boundary_compliance,
+    get_posture_from_payload,
+    PostureBoundaryViolation,
+    POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY,
+    POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY,
+    POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY,
+    POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY,
+    POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL,
 )
 
 # PR-6 (post-533 dual-repo runtime host unification): multi-device coordination
@@ -173,6 +192,17 @@ __all__ = [
     "build_canonical_session_truth_snapshot",
     "get_canonical_session_truth_runtime",
     "reset_canonical_session_truth_runtime",
+    # PR package 1: Posture Contract Canonicalization (MAIN repo side)
+    "POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY",
+    "POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY",
+    "POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY",
+    "POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY",
+    "POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL",
+    "PostureBoundaryViolation",
+    "canonicalize_posture_in_payload",
+    "validate_posture_field_consistency",
+    "assert_posture_boundary_compliance",
+    "get_posture_from_payload",
     # PR-6: Multi-Device Coordination Authority and Role Modelling
     "MULTI_DEVICE_COORDINATION_AUTHORITY",
     "MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL",

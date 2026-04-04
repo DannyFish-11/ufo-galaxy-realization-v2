@@ -83,14 +83,12 @@ class ChatRequest(BaseModel):
     def _validate_source_runtime_posture(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
-        from core.source_runtime_posture import SourceRuntimePosture
+        from contracts.source_posture_contract import validate_source_posture_value
 
         normalized = str(value).strip().lower()
-        allowed = {posture.value for posture in SourceRuntimePosture}
-        if normalized not in allowed:
-            raise ValueError(
-                "source_runtime_posture must be one of: " + ", ".join(sorted(allowed)) + f". Got: {normalized}"
-            )
+        ok, err = validate_source_posture_value(normalized)
+        if not ok:
+            raise ValueError(err)
         return normalized
 
 
