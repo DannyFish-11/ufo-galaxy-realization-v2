@@ -398,14 +398,14 @@ MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE: str = (
 PR523_RESIDUAL_CLOSURE_ACCOUNTING: str = (
     "PR523_RESIDUAL_CLOSURE_ACCOUNTING::PR523: "
     "GAP-517-001=RESOLVED(PR-518), "
-    "GAP-517-002=OPEN(deferred_parallel_entry), "
+    "GAP-517-002=RESOLVED(PR-532), "
     "GAP-517-003=RESOLVED(PR-518), "
     "GAP-517-004=RESOLVED(PR-520), "
     "GAP-517-005=RESOLVED(PR-520), "
     "GAP-517-006=RESOLVED(PR-521), "
     "GAP-517-007=RESOLVED(PR-519), "
     "GAP-517-008=RESOLVED(PR-522). "
-    "7/8 gaps closed; GAP-517-002 explicitly deferred."
+    "8/8 gaps closed."
 )
 
 # ---------------------------------------------------------------------------
@@ -1190,11 +1190,17 @@ _RESIDUAL_GAPS: List[Dict[str, Any]] = [
             "sub-envelopes, rather than dispatching individual device commands "
             "as raw dicts."
         ),
-        "is_resolved": False,
+        "is_resolved": True,
         "resolution_note": (
-            "Deferred: opportunistic closure noted in PR-518 but not in scope "
-            "for this PR.  Addressed in a follow-up PR dedicated to parallel "
-            "command canonicalisation."
+            "PR-532: /api/v1/devices/parallel now creates a top-level "
+            "TaskEnvelope with metadata['parallel_fanout']='true' and routes "
+            "through CommandRouter.route_envelope().  CommandRouter fans out "
+            "canonical single-device sub-envelopes via "
+            "_route_parallel_fanout_envelope() so each parallel command "
+            "receives canonical admission before reaching the device substrate. "
+            "Sentinels: PARALLEL_DEVICE_REST_INGRESS_CANONICAL in "
+            "core/routes/devices.py and COMMAND_ROUTER_PARALLEL_FANOUT_CANONICAL_PATH "
+            "in core/command_router.py."
         ),
     },
     # -----------------------------------------------------------------------

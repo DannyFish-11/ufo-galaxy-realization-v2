@@ -278,6 +278,74 @@ class AndroidBridge:
                 device_id, exc,
             )
 
+    def _sync_device_router_session(
+        self,
+        device_id: str,
+        *,
+        websocket: Any = None,
+        connected: bool,
+    ) -> None:
+        """Mirror Android live session state into DeviceRouter without creating a new truth source.
+
+        Args:
+            device_id: Canonical Android device identifier.
+            websocket: Optional live websocket handle to attach to the router session.
+            connected: Whether the router session should be marked connected or disconnected.
+        """
+        try:
+            from galaxy_gateway.device_router import device_router as _device_router
+
+            if not connected:
+                _device_router.on_device_disconnected(device_id, transport="websocket")
+                return
+
+            device = self._devices.get(device_id)
+            if device is None:
+                logger.debug(
+                    "android_bridge: device_router sync skipped; no transport cache for device_id=%s",
+                    device_id,
+                )
+                return
+
+            if _device_router.get_device(device_id) is None:
+                from galaxy_gateway.device_router import map_device_type_to_platform
+
+                metadata = {
+                    "name": device.name,
+                    "model": device.model,
+                    "os_version": device.os_version,
+                    "sdk_version": device.sdk_version,
+                    "screen_width": device.screen_width,
+                    "screen_height": device.screen_height,
+                    "platform": device.platform.value,
+                }
+                metadata = {k: v for k, v in metadata.items() if v is not None}
+                _device_router.ensure_live_session(
+                    device_id=device.device_id,
+                    device_type=map_device_type_to_platform(device.device_type.value),
+                    capabilities=DeviceCapability.to_list(device.capabilities),
+                    websocket=websocket if websocket is not None else device.websocket,
+                    metadata=metadata,
+                    transport="websocket",
+                )
+                return
+
+            router_device = _device_router.get_device(device_id)
+            _device_router.ensure_live_session(
+                device_id=device_id,
+                device_type=router_device.device_type,
+                capabilities=list(router_device.capabilities),
+                websocket=websocket if websocket is not None else device.websocket,
+                metadata=router_device.metadata,
+                transport="websocket",
+            )
+        except Exception as exc:
+            logger.debug(
+                "android_bridge: device_router session sync failed (non-fatal): device_id=%s error=%s",
+                device_id,
+                exc,
+            )
+
     # ─────────────────────────────────────────────────────────────────────────
     #  设备 Fan-out 辅助方法（PARALLEL_SUBTASK / 多设备协作）
     # ─────────────────────────────────────────────────────────────────────────
@@ -611,13 +679,13 @@ class AndroidBridge:
 
     async def disconnect_device(self, device_id: str):
         """断开设备连接。"""
-        self._patch_disconnect_to_udm(device_id)
-
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].connected = False
                 self._devices[device_id].websocket = None
                 logger.info("Device disconnected: %s", device_id)
+            self._sync_device_router_session(device_id, connected=False)
+            self._patch_disconnect_to_udm(device_id)
 
     async def cleanup_stale_devices(self, timeout_seconds: float = 120.0):
         """清理超时的设备"""
@@ -645,6 +713,7 @@ class AndroidBridge:
             device.last_heartbeat = time.time()
 
         self._patch_reconnect_to_udm(device_id)
+        self._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
         logger.info("设备重连成功: %s", device_id)
         return True

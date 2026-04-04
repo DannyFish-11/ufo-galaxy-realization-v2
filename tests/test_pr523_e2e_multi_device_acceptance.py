@@ -29,7 +29,7 @@ S8  Projection / runtime view reflecting canonical state.
 Test groups
 -----------
  A)  PR-523 sentinels — acceptance sentinel constants importable and correct.
- B)  Residual gap closure accounting — 7/8 gaps resolved after PR-518–522.
+ B)  Residual gap closure accounting — 8/8 gaps resolved after PR-518–532.
  C)  S1 — Local execution: canonical entry, local routing, result surfaced.
  D)  S2 — Cross-device dispatch: envelope routes to remote target, result surfaced.
  E)  S3 — Multi-candidate canonical selection: formation resolves correct primary.
@@ -39,7 +39,7 @@ Test groups
  I)  S7 — Result surfacing: ResultEnvelope, chain record, graph, replay updated.
  J)  S8 — Projection enrichment: canonical enrichment keys present, state is FULL.
  K)  Operator / audit visibility: integrity snapshot contains representative records.
- L)  GAP-517-002 explicit residual: open gap documented, not hidden.
+ L)  GAP-517-002 closure reflected canonically across accounting surfaces.
  M)  Integrated path: canonical sentinels present in key modules.
 """
 
@@ -182,7 +182,7 @@ class TestA_PR523Sentinels(unittest.TestCase):
 # ===========================================================================
 
 class TestB_ResidualGapClosure(unittest.TestCase):
-    """B) 7/8 GAP-517-* gaps are resolved after PR-518 through PR-522."""
+    """B) 8/8 GAP-517-* gaps are resolved after PR-518 through PR-532."""
 
     def setUp(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
@@ -237,19 +237,20 @@ class TestB_ResidualGapClosure(unittest.TestCase):
         self.assertTrue(g.is_resolved)
         self.assertIn("PR-522", g.resolution_note or "")
 
-    def test_B8_gap002_explicitly_open(self):
-        """B8. GAP-517-002 (parallel entry) is explicitly open (deferred)."""
+    def test_B8_gap002_resolved_by_pr532(self):
+        """B8. GAP-517-002 (parallel entry) resolved by PR-532."""
         g = self.gaps.get("GAP-517-002")
-        self.assertIsNotNone(g, "GAP-517-002 must remain in catalog (explicit deferred)")
-        self.assertFalse(g.is_resolved, "GAP-517-002 should remain open/deferred")
+        self.assertIsNotNone(g)
+        self.assertTrue(g.is_resolved, "GAP-517-002 should now be resolved")
+        self.assertIn("PR-532", g.resolution_note or "")
 
-    def test_B9_seven_of_eight_resolved(self):
-        """B9. Exactly 7 of 8 PR-517 gaps are resolved."""
+    def test_B9_eight_of_eight_resolved(self):
+        """B9. Exactly 8 of 8 PR-517 gaps are resolved."""
         resolved = [g for g in self.gaps.values() if g.is_resolved]
-        self.assertEqual(len(resolved), 7, "Expected exactly 7 resolved gaps")
+        self.assertEqual(len(resolved), 8, "Expected exactly 8 resolved gaps")
 
     def test_B10_no_high_severity_open_gaps(self):
-        """B10. No HIGH-severity gaps remain open after PR-518 through PR-522."""
+        """B10. No HIGH-severity gaps remain open after PR-518 through PR-532."""
         open_high = [
             g for g in self.gaps.values()
             if not g.is_resolved and g.severity == "HIGH"
@@ -1187,11 +1188,11 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
 
 
 # ===========================================================================
-# L) GAP-517-002 explicit residual documentation
+# L) GAP-517-002 closure documentation
 # ===========================================================================
 
-class TestL_GAP002ExplicitResidual(unittest.TestCase):
-    """L) GAP-517-002 is explicitly documented as open — not hidden."""
+class TestL_GAP002ClosureAccounting(unittest.TestCase):
+    """L) GAP-517-002 closure is reflected consistently across accounting surfaces."""
 
     def test_L1_gap002_exists_in_catalog(self):
         """L1. GAP-517-002 exists in the residual gap catalog."""
@@ -1199,11 +1200,11 @@ class TestL_GAP002ExplicitResidual(unittest.TestCase):
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertIn("GAP-517-002", gaps)
 
-    def test_L2_gap002_is_open(self):
-        """L2. GAP-517-002 is marked as open (not resolved)."""
+    def test_L2_gap002_is_resolved(self):
+        """L2. GAP-517-002 is marked as resolved."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
-        self.assertFalse(gaps["GAP-517-002"].is_resolved)
+        self.assertTrue(gaps["GAP-517-002"].is_resolved)
 
     def test_L3_gap002_is_medium_severity(self):
         """L3. GAP-517-002 is MEDIUM severity (lower than the HIGH gaps closed in PR-518)."""
@@ -1217,16 +1218,16 @@ class TestL_GAP002ExplicitResidual(unittest.TestCase):
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertGreater(len(gaps["GAP-517-002"].description or ""), 0)
 
-    def test_L5_closure_accounting_sentinel_marks_gap002_open(self):
-        """L5. PR523_RESIDUAL_CLOSURE_ACCOUNTING explicitly marks GAP-517-002 as OPEN."""
+    def test_L5_closure_accounting_sentinel_marks_gap002_resolved(self):
+        """L5. PR523_RESIDUAL_CLOSURE_ACCOUNTING explicitly marks GAP-517-002 as RESOLVED."""
         from core.multi_device_control_integrity import PR523_RESIDUAL_CLOSURE_ACCOUNTING
-        self.assertIn("GAP-517-002=OPEN", PR523_RESIDUAL_CLOSURE_ACCOUNTING)
+        self.assertIn("GAP-517-002=RESOLVED(PR-532)", PR523_RESIDUAL_CLOSURE_ACCOUNTING)
 
-    def test_L6_open_gaps_list_contains_gap002(self):
-        """L6. snapshot().open_gaps() includes GAP-517-002."""
+    def test_L6_open_gaps_list_excludes_gap002(self):
+        """L6. snapshot().open_gaps() excludes GAP-517-002 once closed."""
         from core.multi_device_control_integrity import get_multi_device_integrity_runtime
         open_gap_ids = {g.gap_id for g in get_multi_device_integrity_runtime().snapshot().open_gaps()}
-        self.assertIn("GAP-517-002", open_gap_ids)
+        self.assertNotIn("GAP-517-002", open_gap_ids)
 
 
 # ===========================================================================

@@ -94,10 +94,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
-if TYPE_CHECKING:
-    from core.schemas.task_envelope import TaskEnvelope
+from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.CommandRouter")
 
@@ -345,6 +344,19 @@ COMMAND_ROUTER_CROSS_DEVICE_CANONICAL_PATH: str = (
     "Resolves GAP-517-001."
 )
 
+# PR-532 / GAP-517-002: CommandRouter is also the sole canonical parallel
+# device-entry dispatcher.  The REST parallel endpoint now submits a top-level
+# TaskEnvelope with metadata["parallel_fanout"] == "true"; route_envelope()
+# delegates to _route_parallel_fanout_envelope() which creates canonical
+# sub-envelopes and admits each through CommandRouter before reaching the
+# device substrate.
+COMMAND_ROUTER_PARALLEL_FANOUT_CANONICAL_PATH: str = (
+    "COMMAND_ROUTER::PARALLEL_FANOUT_CANONICAL_PATH_V1: "
+    "route_envelope() detects metadata['parallel_fanout']=='true' and uses "
+    "_route_parallel_fanout_envelope() to fan out canonical sub-envelopes. "
+    "Resolves GAP-517-002."
+)
+
 # PR-518: metadata key that identifies the canonical substrate caller when
 # DeviceRouter invokes CrossDeviceCoordinator.  Passed via context dict so
 # that coordinators can detect and warn on non-canonical invocations (GAP-517-003).
@@ -375,6 +387,15 @@ class _RouteResultProxy:
         self.success = success
         self.result = result_data
         self.error = error
+
+
+@dataclass
+class _ParallelSubtask:
+    """Internal helper for canonical parallel fan-out bookkeeping."""
+
+    index: int
+    info: Dict[str, Any]
+    envelope: TaskEnvelope
 
 
 class CommandStatus(str, Enum):
@@ -1227,6 +1248,12 @@ class CommandRouter:
                 command_id=command_id,
                 request_id=request_id,
             )
+        elif meta.get("parallel_fanout") == "true":
+            result = await self._route_parallel_fanout_envelope(
+                envelope=envelope,
+                command_id=command_id,
+                request_id=request_id,
+            )
         else:
             result = await self._execute_command(
                 device_id=envelope.target,
@@ -1513,6 +1540,179 @@ class CommandRouter:
                 "error_message": str(_exc),
                 "latency_ms": round(_latency_ms, 1),
             }
+
+    async def _route_parallel_fanout_envelope(
+        self,
+        envelope: TaskEnvelope,
+        command_id: str,
+        request_id: str,
+    ) -> Dict[str, Any]:
+        """PR-532/GAP-517-002: Canonical parallel fan-out via sub-envelopes."""
+        import time as _time_m
+
+        _t0 = _time_m.monotonic()
+        _commands = envelope.args.get("commands")
+        if not isinstance(_commands, list) or not _commands:
+            _latency_ms = (_time_m.monotonic() - _t0) * 1000
+            return {
+                "request_id": request_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "device_id": "",
+                "command": envelope.tool_name,
+                "via": "command_router.parallel_fanout",
+                "success": False,
+                "result": None,
+                "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                "error_message": "Parallel fan-out requires a non-empty commands list",
+                "latency_ms": round(_latency_ms, 1),
+            }
+
+        _subtasks: List[_ParallelSubtask] = []
+        _processed: List[Dict[str, Any]] = []
+        _base_meta = dict(envelope.metadata or {})
+        _base_meta.pop("parallel_fanout", None)
+
+        for _idx, _raw in enumerate(_commands):
+            if not isinstance(_raw, dict):
+                _processed.append({
+                    "index": _idx,
+                    "device_id": "",
+                    "command": "",
+                    "task_id": f"{envelope.task_id}__p{_idx:02d}",
+                    "trace_id": envelope.trace_id,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                    "error_message": "Parallel command entry must be an object",
+                    "via": "command_router.parallel_fanout",
+                })
+                continue
+
+            _device_id = str(_raw.get("device_id") or "").strip()
+            _command = str(_raw.get("command") or "").strip()
+            _params = _raw.get("params")
+            if not isinstance(_params, dict):
+                logger.debug(
+                    "_route_parallel_fanout_envelope: replacing non-dict params for %s[%d] (%s)",
+                    _device_id or "<missing-device>",
+                    _idx,
+                    type(_params).__name__,
+                )
+                _params = {}
+            _sub_task_id = f"{envelope.task_id}__p{_idx:02d}"
+
+            if not _device_id or not _command:
+                _processed.append({
+                    "index": _idx,
+                    "device_id": _device_id,
+                    "command": _command,
+                    "task_id": _sub_task_id,
+                    "trace_id": envelope.trace_id,
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                    "error_message": "Parallel command entries require device_id and command",
+                    "via": "command_router.parallel_fanout",
+                })
+                continue
+
+            _sub_meta = dict(_base_meta)
+            _sub_meta.update({
+                "parallel_parent_task_id": envelope.task_id,
+                "parallel_index": str(_idx),
+                "request_id": f"{request_id}:p{_idx}",
+                "command_id": f"{command_id}:p{_idx}",
+            })
+
+            _subtasks.append(_ParallelSubtask(
+                index=_idx,
+                info={
+                    "device_id": _device_id,
+                    "command": _command,
+                },
+                envelope=TaskEnvelope(
+                    task_id=_sub_task_id,
+                    trace_id=envelope.trace_id,
+                    session_id=envelope.session_id,
+                    source=envelope.source or "command_router.parallel_fanout",
+                    targets=[_device_id],
+                    tool_name=_command,
+                    args=_params,
+                    priority=envelope.priority,
+                    timeout=envelope.timeout,
+                    permission_level=envelope.permission_level,
+                    required_capabilities=list(envelope.required_capabilities),
+                    metadata=_sub_meta,
+                    remote_execution_mode=envelope.remote_execution_mode,
+                ),
+            ))
+
+        _results = await asyncio.gather(
+            *(self.route_envelope(_subtask.envelope) for _subtask in _subtasks),
+            return_exceptions=True,
+        )
+
+        for _subtask, _result in zip(_subtasks, _results):
+            _idx = _subtask.index
+            _info = _subtask.info
+            _env = _subtask.envelope
+            if isinstance(_result, Exception):
+                _processed.append({
+                    "index": _idx,
+                    "device_id": _info["device_id"],
+                    "command": _info["command"],
+                    "task_id": _env.task_id,
+                    "trace_id": _env.trace_id,
+                    "success": False,
+                    "result": None,
+                    "error_code": "PARALLEL_SUBTASK_EXCEPTION",
+                    "error_message": str(_result),
+                    "via": "command_router.parallel_fanout",
+                })
+                continue
+
+            _processed.append({
+                "index": _idx,
+                "device_id": _info["device_id"],
+                "command": _info["command"],
+                "task_id": _result.get("task_id", _env.task_id),
+                "trace_id": _result.get("trace_id", _env.trace_id),
+                "request_id": _result.get("request_id"),
+                "command_id": _result.get("command_id"),
+                "success": bool(_result.get("success")),
+                "result": _result.get("result"),
+                "error_code": _result.get("error_code"),
+                "error_message": _result.get("error_message"),
+                "via": _result.get("via", "command_router"),
+            })
+
+        _processed.sort(key=lambda _entry: int(_entry.get("index", 0)))
+        _success_count = sum(1 for _entry in _processed if _entry.get("success"))
+        _overall_success = bool(_processed) and _success_count == len(_processed)
+        _latency_ms = (_time_m.monotonic() - _t0) * 1000
+
+        return {
+            "request_id": request_id,
+            "task_id": envelope.task_id,
+            "trace_id": envelope.trace_id,
+            "command_id": command_id,
+            "device_id": "",
+            "command": envelope.tool_name,
+            "via": "command_router.parallel_fanout",
+            "success": _overall_success,
+            "result": {
+                "success": _overall_success,
+                "total": len(_processed),
+                "successful": _success_count,
+                "failed": len(_processed) - _success_count,
+                "results": _processed,
+            },
+            "error_code": None if _overall_success else "PARALLEL_SUBTASK_FAILURE",
+            "error_message": None if _overall_success else "One or more parallel commands failed",
+            "latency_ms": round(_latency_ms, 1),
+        }
 
     async def _dispatch_via_device_router(
         self,

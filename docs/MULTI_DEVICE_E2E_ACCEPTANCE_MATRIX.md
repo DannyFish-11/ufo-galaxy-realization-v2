@@ -2,7 +2,7 @@
 
 > **PR-523**: End-to-End Multi-Device Acceptance & Verification
 > **Date**: 2026-04-02
-> **Status**: Verified — 7/8 GAP-517-* gaps resolved; 1 explicitly deferred
+> **Status**: Verified — 8/8 GAP-517-* gaps resolved
 > **Authority module**: `core/multi_device_control_integrity.py`
 > **Test harness**: `tests/test_pr523_e2e_multi_device_acceptance.py`
 
@@ -20,9 +20,7 @@ The acceptance matrix answers the core product/system question:
 > **Can the system reliably accept control from a device and coherently control
 > itself and/or other devices with inspectable canonical state?**
 
-**Answer: Yes, for 7 of 8 originally identified gaps.  The remaining gap
-(GAP-517-002, parallel entry unification) is explicitly deferred and
-documented.**
+**Answer: Yes, for all 8 originally identified gaps.**
 
 ---
 
@@ -205,7 +203,7 @@ CommandRouter.route_envelope()           ← SOLE canonical cross-device dispatc
 | Gap ID | Area | Severity | Status | Closed by |
 |--------|------|----------|--------|-----------|
 | GAP-517-001 | entry_unification | HIGH | ✅ **RESOLVED** | PR-518 |
-| GAP-517-002 | entry_unification | MEDIUM | ⚠️ **OPEN (deferred)** | — |
+| GAP-517-002 | entry_unification | MEDIUM | ✅ **RESOLVED** | PR-532 |
 | GAP-517-003 | dispatch_authority | HIGH | ✅ **RESOLVED** | PR-518 |
 | GAP-517-004 | formation_truth | MEDIUM | ✅ **RESOLVED** | PR-520 |
 | GAP-517-005 | formation_truth | MEDIUM | ✅ **RESOLVED** | PR-520 |
@@ -213,20 +211,20 @@ CommandRouter.route_envelope()           ← SOLE canonical cross-device dispatc
 | GAP-517-007 | result_surface | HIGH | ✅ **RESOLVED** | PR-519 |
 | GAP-517-008 | result_surface | MEDIUM | ✅ **RESOLVED** | PR-522 |
 
-**Summary**: 7/8 gaps resolved.  No HIGH-severity gaps remain open.
+**Summary**: 8/8 gaps resolved.  No HIGH-severity gaps remain open.
 
-### GAP-517-002 Residual Details
+### GAP-517-002 Closure Details
 
 - **Description**: `/api/v1/devices/parallel` dispatches individual device
   commands in parallel without `CommandRouter` admission.
 - **Severity**: MEDIUM
-- **Deferral reason**: Opportunistically noted in PR-518 but outside the
-  high-priority scope.  The parallel endpoint is lower-frequency and
-  lower-criticality than the cross-device endpoint (GAP-517-001).
-- **Recommended follow-up**: Create a `TaskEnvelope` for the top-level
-  parallel request and fan out sub-envelopes through `CommandRouter`.
-- **Visibility**: Explicitly tracked in `_RESIDUAL_GAPS` with
-  `is_resolved=False`; appears in `snapshot.open_gaps()`.
+- **Closed by**: PR-532
+- **Resolution**: `/api/v1/devices/parallel` now creates a top-level
+  `TaskEnvelope` and routes through `CommandRouter.route_envelope()`, which
+  fans out canonical per-device sub-envelopes through
+  `_route_parallel_fanout_envelope()`.
+- **Visibility**: Tracked in `_RESIDUAL_GAPS` with `is_resolved=True`; no
+  longer appears in `snapshot.open_gaps()`.
 
 ---
 
@@ -288,7 +286,7 @@ The following sentinels confirm each gap-closing PR has been integrated:
 | I | S7 — Canonical result surface | 9 |
 | J | S8 — Projection / runtime view | 8 |
 | K | Operator / audit visibility | 9 |
-| L | GAP-517-002 explicit residual | 6 |
+| L | GAP-517-002 closure accounting | 6 |
 | M | Integrated path canonical sentinels | 10 |
 
 ---

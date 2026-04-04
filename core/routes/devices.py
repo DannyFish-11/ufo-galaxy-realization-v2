@@ -20,7 +20,6 @@ Routes:
   GET    /api/v1/devices/{device_id}/runtime-host - PR-30: 获取单个设备的 Local Runtime Host 合约
 """
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -40,6 +39,8 @@ from core.routes._shared import (
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 from core.unified.device_manager import get_unified_device_manager
 from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
+from core.command_router import get_command_router
+from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -594,8 +595,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             import uuid as _uuid
-            from core.schemas.task_envelope import TaskEnvelope
-            from core.command_router import get_command_router
 
             _ctx = req.context or {}
             _task_id = _ctx.get("task_id") or str(_uuid.uuid4())
@@ -685,43 +684,68 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     class ParallelCommandRequest(BaseModel):
         commands: List[ParallelCommandItem]
         timeout: int = Field(default=30, description="整体超时秒数")
+        context: Dict = Field(default_factory=dict, description="可选路由上下文")
+
+    # PR-532/GAP-517-002: canonical entry sentinel — this route now routes
+    # through CommandRouter.route_envelope() and uses CommandRouter fan-out
+    # instead of dispatching raw per-device messages directly.
+    PARALLEL_DEVICE_REST_INGRESS_CANONICAL = (
+        "DEVICES_ROUTE::PARALLEL_DEVICE_CANONICAL_INGRESS_V1: "
+        "/api/v1/devices/parallel normalises requests to a top-level "
+        "TaskEnvelope and routes through CommandRouter.route_envelope(), "
+        "which fans out canonical sub-envelopes per device command. "
+        "Resolves GAP-517-002."
+    )
 
     @router.post("/api/v1/devices/parallel")
     async def parallel_device_commands(req: ParallelCommandRequest):
-        """并行发送命令到多个设备"""
-        async def _send_one(item: ParallelCommandItem):
-            cmd_id = str(uuid.uuid4())[:8]
-            msg = {
-                "version": "3.0",
-                "message_id": cmd_id,
-                "type": "CONTROL_COMMAND",
-                "device_id": item.device_id,
-                "payload": {"command": item.command, "params": item.params},
-                "timestamp": datetime.now().isoformat(),
-            }
-            try:
-                sent = await connection_manager.send_to_device(item.device_id, msg)
-                return {"device_id": item.device_id, "command_id": cmd_id, "sent": sent}
-            except Exception as e:
-                return {"device_id": item.device_id, "command_id": cmd_id, "sent": False, "error": str(e)}
+        """并行发送命令到多个设备（canonical admission via CommandRouter）"""
+        try:
+            _ctx = req.context or {}
+            _task_id = str(_ctx.get("task_id") or uuid.uuid4())
+            _trace_id = str(_ctx.get("trace_id") or uuid.uuid4())
+            _targets = [item.device_id for item in req.commands if item.device_id]
+            _commands_payload = [
+                {
+                    "device_id": item.device_id,
+                    "command": item.command,
+                    "params": item.params,
+                }
+                for item in req.commands
+            ]
 
-        results = await asyncio.gather(
-            *[_send_one(cmd) for cmd in req.commands],
-            return_exceptions=True,
-        )
+            _meta: Dict = {"parallel_fanout": "true"}
+            for _k, _v in _ctx.items():
+                if _k not in ("task_id", "trace_id") and isinstance(_v, (str, int, float, bool)):
+                    _meta[_k] = str(_v)
+                elif _k not in ("task_id", "trace_id"):
+                    logger.debug(
+                        "parallel_device_commands: skipping non-scalar context metadata %s=%r",
+                        _k,
+                        type(_v).__name__,
+                    )
 
-        processed = []
-        for r in results:
-            if isinstance(r, Exception):
-                processed.append({"error": str(r), "sent": False})
-            else:
-                processed.append(r)
+            envelope = TaskEnvelope(
+                task_id=_task_id,
+                trace_id=_trace_id,
+                source="api.parallel_devices",
+                targets=_targets,
+                tool_name="parallel_device_commands",
+                args={
+                    "commands": _commands_payload,
+                    "timeout": req.timeout,
+                },
+                metadata=_meta,
+                timeout=float(req.timeout),
+            )
 
-        return JSONResponse({
-            "success": True,
-            "total": len(req.commands),
-            "results": processed,
-        })
+            result = await get_command_router().route_envelope(envelope)
+            return JSONResponse(result)
+        except Exception as e:
+            logger.error(f"并行设备命令失败: {e}")
+            return JSONResponse(
+                {"success": False, "error": str(e)}, status_code=500
+            )
 
     # ─────── 主动设备发现 ─────────
 
