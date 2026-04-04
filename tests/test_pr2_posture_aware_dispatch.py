@@ -369,7 +369,7 @@ class TestSelectDispatchModeJoinRuntime:
         )
         assert mode == SourceDispatchMode.remote_handoff
 
-    def test_none_posture_treated_as_control_only_no_target_blocked(self):
+    def test_none_posture_preserves_default_local_behavior(self):
         """None posture = no posture gate applied; default_local is preserved."""
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
@@ -821,7 +821,7 @@ class TestCoreRuntimeReExports:
 class TestBackwardsSafetyNoPosture:
     """Group S: existing callers that don't pass posture get safe defaults."""
 
-    def test_select_dispatch_mode_no_posture_no_target_becomes_blocked(self):
+    def test_select_dispatch_mode_no_posture_no_target_remains_local(self):
         """No posture arg → no posture gate → pre-PR-2 default_local behavior."""
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
