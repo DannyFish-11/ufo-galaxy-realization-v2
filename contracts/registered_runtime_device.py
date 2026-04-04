@@ -484,6 +484,30 @@ class RegisteredRuntimeDevice(BaseModel):
         description="Lightweight mesh participation hints.",
     )
 
+    # -- Runtime-host identity (PR-5 / post-533 dual-repo unification) --
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture as established by PR-533. "
+            "Canonical values: 'control_only' (device only controls/observes), "
+            "'join_runtime' (device joins as a first-class runtime host). "
+            "Defaults to 'control_only' for safety.  Populated from the "
+            "registration payload when available."
+        ),
+    )
+    is_runtime_host: bool = Field(
+        default=False,
+        description=(
+            "Whether this device is classified as a first-class runtime host "
+            "(PR-5).  True when the device's autonomy posture and "
+            "source_runtime_posture indicate it can host autonomous local "
+            "execution, not merely act as a connected control surface.  "
+            "Distinct from 'runtime_enabled' which captures whether the "
+            "runtime is currently activated; is_runtime_host captures the "
+            "structural role classification."
+        ),
+    )
+
     # -- Open metadata --
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -684,6 +708,24 @@ def from_android_registration(data: Dict[str, Any]) -> RegisteredRuntimeDevice:
         # Remove None values
         meta = {k: v for k, v in meta.items() if v is not None}
 
+        # Resolve source_runtime_posture from payload (PR-5 / post-533).
+        # Android devices joining as runtime hosts set 'join_runtime'; devices
+        # that only remote-control use 'control_only'.  Unknown/missing values
+        # fall back safely to 'control_only'.
+        _raw_posture = str(data.get("source_runtime_posture", "") or "").strip().lower()
+        if _raw_posture == "join_runtime":
+            _posture = "join_runtime"
+        else:
+            _posture = "control_only"
+
+        # Android is classified as a first-class runtime host when:
+        # - it explicitly declares join_runtime posture, OR
+        # - it declares app_version (Galaxy app installed) with remote handoff support
+        _is_runtime_host: bool = (
+            _posture == "join_runtime"
+            or bool(str(data.get("app_version", "") or "").strip())
+        )
+
         return RegisteredRuntimeDevice(
             device_id=device_id,
             device_name=str(data.get("name") or "Android Device"),
@@ -706,12 +748,16 @@ def from_android_registration(data: Dict[str, Any]) -> RegisteredRuntimeDevice:
                 supports_remote_handoff=True,
                 runtime_version=str(data.get("app_version", "") or ""),
             ),
+            source_runtime_posture=_posture,
+            is_runtime_host=_is_runtime_host,
             metadata=meta,
         )
     except Exception:
         return RegisteredRuntimeDevice(
             device_id=str(data.get("device_id") or f"android_{uuid.uuid4().hex[:8]}"),
             platform=RuntimeDevicePlatform.ANDROID,
+            source_runtime_posture="control_only",
+            is_runtime_host=False,
         )
 
 
@@ -926,6 +972,8 @@ def build_registered_runtime_device(
     endpoint: str = "",
     ip_address: str = "",
     port: int = 0,
+    source_runtime_posture: str = "control_only",
+    is_runtime_host: bool = False,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> RegisteredRuntimeDevice:
     """Generic builder for a :class:`RegisteredRuntimeDevice`.
@@ -995,6 +1043,11 @@ def build_registered_runtime_device(
         Remote port.
     metadata:
         Arbitrary extension fields.
+    source_runtime_posture:
+        Source-device runtime posture (PR-5 / post-533).  'control_only' or
+        'join_runtime'.  Defaults to 'control_only'.
+    is_runtime_host:
+        Whether this device is a first-class runtime host (PR-5).
 
     Returns
     -------
@@ -1047,5 +1100,25 @@ def build_registered_runtime_device(
             groups=list(groups or []),
             tags=list(tags or []),
         ),
+        source_runtime_posture=source_runtime_posture,
+        is_runtime_host=is_runtime_host,
         metadata=dict(metadata or {}),
     )
+
+
+# ---------------------------------------------------------------------------
+# PR-5 / post-533 policy sentinels — Android first-class runtime host
+# ---------------------------------------------------------------------------
+
+# Sentinel confirming that RegisteredRuntimeDevice carries source_runtime_posture
+# and is_runtime_host as first-class fields (PR-5, main-repo half).
+ANDROID_FIRST_CLASS_RUNTIME_HOST_REGISTRATION_PR5 = (
+    "ANDROID_FIRST_CLASS_RUNTIME_HOST_REGISTRATION_PR5"
+)
+
+# Sentinel confirming that from_android_registration() resolves posture from the
+# registration payload and classifies Android as a runtime host where appropriate.
+ANDROID_REGISTRATION_POSTURE_AWARE_PR5 = (
+    "ANDROID_REGISTRATION_POSTURE_AWARE_PR5"
+)
+
