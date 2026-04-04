@@ -618,7 +618,7 @@ class AgentBridge:
                 )
             # PR-3: propagate coordination_role from HandoffContract into v2
             # envelope source summary (NO_AUTHORITY_SILENT_DROP_POLICY).
-            _contract_role = getattr(contract, "coordination_role", "") or ""
+            _contract_role = str(getattr(contract, "coordination_role", "") or "")
             if _contract_role:
                 _source_meta = dict(envelope.source.metadata) if envelope.source.metadata else {}
                 _source_meta["coordination_role"] = _contract_role

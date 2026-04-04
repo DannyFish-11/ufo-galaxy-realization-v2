@@ -727,7 +727,11 @@ class TestFromLegacyHandoffContractAuthorityPropagation:
         assert env.source.coordination_role == ""
 
     def test_contract_without_coordination_role_defaults_to_empty(self):
-        """Contract missing coordination_role attr propagates as empty (compat)."""
+        """Contract missing coordination_role attr propagates as empty (compat).
+
+        The spec intentionally omits 'coordination_role' to simulate a legacy
+        HandoffContract that predates PR-3 and does not carry this field.
+        """
         from unittest.mock import MagicMock
 
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
@@ -735,6 +739,7 @@ class TestFromLegacyHandoffContractAuthorityPropagation:
         m = MagicMock(spec=[
             "trace_id", "task", "capability", "exec_mode", "route_mode",
             "session", "callback_channel", "source_runtime_posture",
+            # coordination_role intentionally absent — simulates pre-PR-3 contract
         ])
         m.trace_id = "t"
         m.task = {}

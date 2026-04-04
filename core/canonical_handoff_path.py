@@ -52,7 +52,10 @@ Non-goals
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # PR-3 canonical path sentinel
@@ -179,7 +182,11 @@ def build_canonical_handoff_contract(
     try:
         from contracts.source_posture_contract import normalize_posture_for_ingress
         _resolved_posture = normalize_posture_for_ingress(source_runtime_posture or "")
-    except Exception:  # noqa: BLE001
+    except Exception as _posture_err:  # noqa: BLE001
+        logger.debug(
+            "canonical_handoff_path: posture normalization via contract layer failed — %s",
+            _posture_err,
+        )
         _raw = str(source_runtime_posture or "")
         _resolved_posture = _raw if _raw in ("control_only", "join_runtime") else "control_only"
 
@@ -193,7 +200,11 @@ def build_canonical_handoff_contract(
                 formation_role=formation_role,
             )
             _resolved_role = _role_obj.value
-        except Exception:  # noqa: BLE001
+        except Exception as _role_err:  # noqa: BLE001
+            logger.debug(
+                "canonical_handoff_path: coordination_role derivation failed — %s",
+                _role_err,
+            )
             _resolved_role = ""
 
     return HandoffContract(

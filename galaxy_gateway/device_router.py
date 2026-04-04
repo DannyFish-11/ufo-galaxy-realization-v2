@@ -1022,7 +1022,11 @@ class DeviceRouter:
                                 formation_role=ctx.get("formation_role", ""),
                             )
                             _bridge_coordination_role = _derived_role.value
-                        except Exception:  # noqa: BLE001
+                        except Exception as _role_err:  # noqa: BLE001
+                            logger.debug(
+                                "DeviceRouter.route_task: coordination_role derivation skipped — %s",
+                                _role_err,
+                            )
                             _bridge_coordination_role = ctx.get("coordination_role", "") or ""
                         contract = HandoffContract(
                             trace_id=trace_ctx.trace_id,
