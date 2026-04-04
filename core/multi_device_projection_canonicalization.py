@@ -81,6 +81,7 @@ __all__ = [
     "MULTI_DEVICE_PROJECTION_CANONICALIZATION_LAYER_POSITION",
     "MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED",
     "MULTI_DEVICE_PROJECTION_GAP008_RESOLVED",
+    "MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED",
     # Enums
     "CanonicalProjectionSurfacingState",
     # Dataclasses
@@ -119,6 +120,17 @@ MULTI_DEVICE_PROJECTION_GAP008_RESOLVED: str = (
     "Multi-device runtime projection is now enriched from canonical "
     "CrossDeviceChainSingleton, TaskGraphRuntime, OperatorSurface, and "
     "formation/runtime metadata rather than raw transport/session registry data."
+)
+
+#: PR-6 integration sentinel — signals that coordination role snapshot is now
+#: surfaced in the projection enrichment output.
+MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED: str = (
+    "MULTI_DEVICE_PROJECTION_CANONICALIZATION::PR6_COORDINATION_ROLE_INTEGRATED_V1: "
+    "PR-6 (post-533 dual-repo runtime host unification, MAIN repo side) — "
+    "coordination role snapshot from MultiDeviceCoordinationAuthority is now "
+    "included in the projection enrichment output so that source_controller / "
+    "joined_runtime_participant / target_only_executor / observer_only roles "
+    "are visible in the canonical multi-device projection surface."
 )
 
 
@@ -252,6 +264,10 @@ class MultiDeviceCanonicalEnrichment:
     source_runtime_posture_snapshot: Optional[Dict[str, Any]] = None
     source_runtime_posture_available: bool = False
 
+    # PR-6: Coordination role snapshot
+    coordination_role_snapshot: Optional[Dict[str, Any]] = None
+    coordination_role_available: bool = False
+
     # Degradation flag
     transport_local_only: bool = True
 
@@ -280,6 +296,8 @@ class MultiDeviceCanonicalEnrichment:
             "integrity_available": self.integrity_available,
             "source_runtime_posture_snapshot": self.source_runtime_posture_snapshot,
             "source_runtime_posture_available": self.source_runtime_posture_available,
+            "coordination_role_snapshot": self.coordination_role_snapshot,
+            "coordination_role_available": self.coordination_role_available,
             "transport_local_only": self.transport_local_only,
             "timestamp": self.timestamp,
         }
@@ -450,6 +468,33 @@ def enrich_multi_device_projection(
         logger.debug(
             "enrich_multi_device_projection: source runtime posture unavailable: %s",
             posture_exc,
+        )
+
+    # ── Source 6: CoordinationRoleRuntime (PR-6, optional) ────────────────
+    try:
+        from core.multi_device_coordination_authority import (
+            get_coordination_role_runtime,
+            build_coordination_role_snapshot,
+        )
+
+        coord_rt = get_coordination_role_runtime()
+        recent_records = coord_rt.snapshot(max_recent=20)
+        coord_snap = build_coordination_role_snapshot(
+            recent_records,
+            task_id="",
+        )
+        enrichment.coordination_role_available = True
+        enrichment.coordination_role_snapshot = coord_snap.to_dict()
+        logger.debug(
+            "enrich_multi_device_projection: coordination role snapshot available "
+            "record_count=%d authority_clear=%s",
+            len(recent_records),
+            coord_snap.is_authority_clear,
+        )
+    except Exception as coord_exc:
+        logger.debug(
+            "enrich_multi_device_projection: coordination role runtime unavailable: %s",
+            coord_exc,
         )
 
     # ── Determine overall surfacing state ────────────────────────────────
