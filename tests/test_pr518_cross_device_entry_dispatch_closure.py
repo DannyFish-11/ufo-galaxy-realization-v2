@@ -425,15 +425,16 @@ class TestE_GapCatalogResolution(unittest.TestCase):
                     f"Resolved gap {gap.gap_id!r} has no resolution_note",
                 )
 
-    def test_E4_gap_517_002_remains_open(self):
-        """E4. GAP-517-002 remains open (deferred to follow-up PR)."""
+    def test_E4_gap_517_002_resolved_by_followup_pr(self):
+        """E4. GAP-517-002 is now resolved by a follow-up PR."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertIn("GAP-517-002", gaps)
-        self.assertFalse(
+        self.assertTrue(
             gaps["GAP-517-002"].is_resolved,
-            "GAP-517-002 is not addressed in PR-518",
+            "GAP-517-002 should now be resolved by the follow-up canonical parallel-entry PR",
         )
+        self.assertIn("PR-532", gaps["GAP-517-002"].resolution_note or "")
 
 
 # ---------------------------------------------------------------------------

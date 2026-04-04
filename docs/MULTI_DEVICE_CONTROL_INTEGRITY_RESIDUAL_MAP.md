@@ -77,8 +77,8 @@ CommandRouter.route_envelope()   ← SOLE canonical cross-device dispatcher
 | ✅ | `galaxy_gateway/orchestrator/task_orchestrator.py` | Canonical | `CANONICAL_TASK_*_FRONT_LOADED` sentinel |
 | ✅ | `core/scheduler.py` | Canonical | `SCHEDULER_ROUTES_COMMAND_ROUTER` sentinel |
 | ✅ | `core/agent/kernel.py` | Canonical | `CANONICAL_TASK_*_FRONT_LOADED` sentinel |
-| ⚠️ | `core/routes/devices.py` → `/api/v1/devices/cross-device` | **GAP** | Calls `CrossDeviceCoordinator` directly — **GAP-517-001** |
-| ⚠️ | `core/routes/devices.py` → `/api/v1/devices/parallel` | **GAP** | Parallel dispatch without `CommandRouter` admission — **GAP-517-002** |
+| ✅ | `core/routes/devices.py` → `/api/v1/devices/cross-device` | Canonical | Calls `CommandRouter.route_envelope()` — **GAP-517-001 closed (PR-518)** |
+| ✅ | `core/routes/devices.py` → `/api/v1/devices/parallel` | Canonical | Top-level `TaskEnvelope` + `CommandRouter` fan-out — **GAP-517-002 closed (PR-532)** |
 
 ### Open Gaps
 
@@ -93,13 +93,19 @@ route through `CommandRouter.route_envelope()` instead.  The coordinator
 remains valid as internal substrate invoked by `CommandRouter`; it must not be
 a primary entry target.
 
-#### GAP-517-002 · MEDIUM
+#### GAP-517-002 · MEDIUM · ✅ RESOLVED (PR-532)
 **Module**: `core/routes/devices.py`  
 **Description**: The `/api/v1/devices/parallel` endpoint dispatches individual
 device commands in parallel without `CommandRouter` admission.
 
-**Recommended action**: Create a `TaskEnvelope` for the top-level parallel
-request and use `CommandRouter` to fan out sub-envelopes.
+**Resolution (PR-532)**: `/api/v1/devices/parallel` now creates a top-level
+`TaskEnvelope` with `metadata["parallel_fanout"] == "true"` and routes through
+`CommandRouter.route_envelope()`.  `CommandRouter` then calls
+`_route_parallel_fanout_envelope()` to create canonical per-device
+sub-envelopes and admit each one through the canonical execution spine before
+it reaches the device substrate.  Sentinels:
+`PARALLEL_DEVICE_REST_INGRESS_CANONICAL` and
+`COMMAND_ROUTER_PARALLEL_FANOUT_CANONICAL_PATH`.
 
 ---
 
@@ -290,7 +296,7 @@ consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 | Gap ID | Area | Severity | Status |
 |--------|------|----------|--------|
 | GAP-517-001 | entry_unification | HIGH | ✅ **Resolved (PR-518)** |
-| GAP-517-002 | entry_unification | MEDIUM | ⚠️ **Open (deferred — see PR-523)** |
+| GAP-517-002 | entry_unification | MEDIUM | ✅ **Resolved (PR-532)** |
 | GAP-517-003 | dispatch_authority | HIGH | ✅ **Resolved (PR-518)** |
 | GAP-517-004 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
 | GAP-517-005 | formation_truth | MEDIUM | ✅ Resolved (PR-520) |
@@ -298,8 +304,8 @@ consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 | GAP-517-007 | result_surface | HIGH | ✅ Resolved (PR-519) |
 | GAP-517-008 | result_surface | MEDIUM | ✅ **Resolved (PR-522)** |
 
-**Remaining high severity gaps after PR-523 acceptance pass**: None.  
-**Open gaps after PR-523 acceptance pass**: 1 (GAP-517-002, MEDIUM severity, explicitly deferred).
+**Remaining high severity gaps after PR-532 closure pass**: None.  
+**Open gaps after PR-532 closure pass**: 0.
 
 ---
 
@@ -313,12 +319,12 @@ consume canonical chain state is deferred to a future PR per PR-519 non-goals.
 PR-523 established the end-to-end acceptance and verification layer that
 proves the post-PR-517 multi-device control architecture now behaves
 coherently as a whole.  The following closure accounting confirms the state
-of each gap after PR-518 through PR-522:
+of each gap after PR-518 through PR-532:
 
 | Gap ID | Closed by | Resolution summary |
 |--------|-----------|-------------------|
 | GAP-517-001 | **PR-518** | `/api/v1/devices/cross-device` now normalises to `TaskEnvelope` and dispatches through `CommandRouter.route_envelope()`.  Sentinel: `CROSS_DEVICE_REST_INGRESS_CANONICAL`. |
-| GAP-517-002 | **Deferred** | `/api/v1/devices/parallel` still fans out without canonical admission.  Explicitly documented as open; not hidden.  Tracked in `_RESIDUAL_GAPS` with `is_resolved=False`. |
+| GAP-517-002 | **PR-532** | `/api/v1/devices/parallel` now creates a top-level `TaskEnvelope` and routes through `CommandRouter.route_envelope()`, which fans out canonical sub-envelopes via `_route_parallel_fanout_envelope()`.  Sentinels: `PARALLEL_DEVICE_REST_INGRESS_CANONICAL` and `COMMAND_ROUTER_PARALLEL_FANOUT_CANONICAL_PATH`. |
 | GAP-517-003 | **PR-518** | `CrossDeviceCoordinator` and `DeviceRouter` are now substrate-only; `CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY` and `DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY` sentinels enforce the boundary. |
 | GAP-517-004 | **PR-520** | `DeviceFormationGroup` is now resolved and attached at cross-device execution entry.  Sentinel: `DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED`. |
 | GAP-517-005 | **PR-520** | `ConstellationRuntime._is_orchestration_ready()` now returns `False` (deny-by-default) when participation layer is unavailable.  Sentinel: `CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT`. |
@@ -352,9 +358,7 @@ of each gap after PR-518 through PR-522:
 
 6. ✅ **Close GAP-517-008** (PR-522) — projection canonicalization.
 
-7. ⚠️ **Close GAP-517-002** (future) — `/api/v1/devices/parallel` canonical admission.
-   Create a `TaskEnvelope` for the top-level parallel request and fan out
-   sub-envelopes through `CommandRouter`.
+7. ✅ **Close GAP-517-002** (PR-532) — `/api/v1/devices/parallel` canonical admission.
 
 ---
 
