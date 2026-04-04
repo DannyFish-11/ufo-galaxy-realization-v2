@@ -134,6 +134,37 @@ carry it forward — either through HandoffContract.source_runtime_posture or
 through HandoffEnvelopeV2.source_runtime_posture — without silent reset to
 the default.  Declared in PR-3 of the post-533 dual-repo unification track."""
 
+HANDOFF_CONTRACT_AUTHORITY_ROLE_ACTIVE: str = (
+    "pr3_post533_handoff_contract_authority_role_active"
+)
+"""Sentinel: HandoffContract.coordination_role carries the canonical authority
+role derived from PR-538's CoordinationRole model through the bridge handoff
+pipeline.  Empty string signals "not yet derived / legacy caller"; non-empty
+string must be a valid CoordinationRole value (source_controller,
+joined_runtime_participant, target_only_executor, observer_only, unresolved).
+Declared in PR-3 of the post-533 dual-repo unification track (MAIN repo side)."""
+
+NO_AUTHORITY_SILENT_DROP_POLICY: str = (
+    "pr3_post533_no_authority_silent_drop_policy"
+)
+"""Policy sentinel: coordination_role MUST NOT be silently dropped at any
+bridge/gateway/compat boundary.  Every handoff path that receives a non-empty
+coordination_role must carry it forward without silent reset.  Mirrors the
+NO_POSTURE_SILENT_DROP_POLICY but applies to the authority/role axis.
+Declared in PR-3 of the post-533 dual-repo unification track."""
+
+CANONICAL_HANDOFF_PATH_PR3: str = (
+    "pr3_post533_canonical_handoff_path_single_chain"
+)
+"""Sentinel: The canonical main-repo-side handoff path is the single chain:
+  DeviceRouter.route_task()
+      → AgentBridge.handoff(HandoffContract)
+          → POST /handoff (runtime endpoint)
+          → local_fallback (CrossDeviceCoordinator)
+Both posture and coordination_role are propagated without loss through this
+chain.  Parallel or compat paths that bypass HandoffContract are legacy
+bypasses and must emit structured warnings.  Declared in PR-3."""
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -206,6 +237,9 @@ class HandoffContract:
     task_id: str = ""
     # PR-3: source-device runtime participation posture (post-533 dual-repo unification)
     source_runtime_posture: str = "control_only"
+    # PR-3: canonical authority/coordination role from PR-538 CoordinationRole model.
+    # Empty string = not yet derived or legacy caller; non-empty = valid CoordinationRole value.
+    coordination_role: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -220,6 +254,8 @@ class HandoffContract:
         }
         if self.task_id:
             d["task_id"] = self.task_id
+        if self.coordination_role:
+            d["coordination_role"] = self.coordination_role
         return d
 
 
@@ -580,6 +616,18 @@ class AgentBridge:
                         ),
                     }
                 )
+            # PR-3: propagate coordination_role from HandoffContract into v2
+            # envelope source summary (NO_AUTHORITY_SILENT_DROP_POLICY).
+            _contract_role = str(getattr(contract, "coordination_role", "") or "")
+            if _contract_role:
+                _source_meta = dict(envelope.source.metadata) if envelope.source.metadata else {}
+                _source_meta["coordination_role"] = _contract_role
+                envelope = envelope.model_copy(
+                    update={
+                        "source": envelope.source.model_copy(update={"metadata": _source_meta}),
+                        "metadata": {**dict(envelope.metadata), "coordination_role": _contract_role},
+                    }
+                )
             return envelope
         except Exception:  # noqa: BLE001
             return None
@@ -759,6 +807,8 @@ def handoff_contract_from_envelope(
     # PR-3: extract source_runtime_posture from envelope metadata (preserves posture).
     _posture_raw = _meta.get("source_runtime_posture", "control_only") or "control_only"
     _posture = _posture_raw if _posture_raw in ("control_only", "join_runtime") else "control_only"
+    # PR-3: extract coordination_role from envelope metadata (NO_AUTHORITY_SILENT_DROP_POLICY).
+    _coordination_role = str(_meta.get("coordination_role", "") or "")
     task_payload: Dict[str, Any] = {
         "task_id": envelope.task_id,
         "tool_name": envelope.tool_name,
@@ -776,6 +826,7 @@ def handoff_contract_from_envelope(
         session=session or {},
         callback_channel=callback_channel,
         source_runtime_posture=_posture,
+        coordination_role=_coordination_role,
     )
 
 
@@ -792,4 +843,7 @@ __all__ = [
     "HANDOFF_CONTRACT_IS_POSTURE_AWARE",
     "HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE",
     "NO_POSTURE_SILENT_DROP_POLICY",
+    "HANDOFF_CONTRACT_AUTHORITY_ROLE_ACTIVE",
+    "NO_AUTHORITY_SILENT_DROP_POLICY",
+    "CANONICAL_HANDOFF_PATH_PR3",
 ]

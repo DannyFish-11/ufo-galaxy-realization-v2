@@ -124,6 +124,15 @@ class HandoffSourceSummary(BaseModel):
             "Mirrors the field defined in contracts.source_posture_contract."
         ),
     )
+    coordination_role: str = Field(
+        default="",
+        description=(
+            "Canonical authority/coordination role for the source device in this handoff. "
+            "Derived from PR-538 CoordinationRole model (source_controller, "
+            "joined_runtime_participant, target_only_executor, observer_only, unresolved). "
+            "Empty string signals not yet derived or legacy caller."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extra metadata from the source.",
@@ -542,6 +551,16 @@ class HandoffEnvelopeV2(BaseModel):
             "Canonical field name per SOURCE_POSTURE_CONTRACT_AUTHORITY."
         ),
     )
+    # Authority role — PR-3 / PR-538 unification field
+    coordination_role: str = Field(
+        default="",
+        description=(
+            "Canonical authority/coordination role for the source device in this handoff. "
+            "Derived from PR-538 CoordinationRole model (source_controller, "
+            "joined_runtime_participant, target_only_executor, observer_only, unresolved). "
+            "Empty string signals not yet derived or legacy caller."
+        ),
+    )
 
     # Legacy bridge fields (preserved for backward compatibility)
     capability: str = Field(
@@ -627,6 +646,7 @@ class HandoffEnvelopeV2(BaseModel):
             "source_runtime_id": self.source_runtime_id,
             "target_runtime_id": self.target_runtime_id,
             "source_runtime_posture": self.source_runtime_posture,
+            "coordination_role": self.coordination_role,
             "capability": self.capability,
             "exec_mode": self.exec_mode,
             "route_mode": self.route_mode,
@@ -681,6 +701,8 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
         # PR-3: read posture from legacy contract; fall back to 'control_only'.
         _raw_posture = str(getattr(contract, "source_runtime_posture", "control_only") or "control_only")
         _effective_posture = _normalise_posture_hint(_raw_posture)
+        # PR-3: read coordination_role from legacy contract (NO_AUTHORITY_SILENT_DROP_POLICY).
+        _coordination_role = str(getattr(contract, "coordination_role", "") or "")
 
         raw_task: Dict[str, Any] = {}
         task_obj = getattr(contract, "task", None)
@@ -710,9 +732,10 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
             raw_session=raw_session,
         )
 
-        # PR-3: propagate posture into source summary.
+        # PR-3: propagate posture and coordination_role into source summary.
         source_summary = HandoffSourceSummary(
             source_runtime_posture=_effective_posture,
+            coordination_role=_coordination_role,
         )
 
         return HandoffEnvelopeV2(
@@ -723,6 +746,7 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
             route_mode=route_mode,
             callback_channel=callback_channel,
             source_runtime_posture=_effective_posture,
+            coordination_role=_coordination_role,
             source=source_summary,
             task_spec=task_spec,
             session_context=session_context,
@@ -749,6 +773,7 @@ def from_bridge_inputs(
     source_runtime_id: Optional[str] = None,
     target_runtime_id: Optional[str] = None,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
     handoff_policy: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> HandoffEnvelopeV2:
@@ -800,6 +825,7 @@ def from_bridge_inputs(
     raw_task: Dict[str, Any] = dict(task or {})
 
     _effective_posture: str = _normalise_posture_hint(source_runtime_posture)
+    _effective_role: str = str(coordination_role or "")
 
     task_spec = HandoffTaskSpec(
         task_id=task_id or raw_task.get("task_id"),
@@ -821,6 +847,7 @@ def from_bridge_inputs(
         device_id=source_device_id,
         runtime_id=source_runtime_id,
         source_runtime_posture=_effective_posture,
+        coordination_role=_effective_role,
     )
     target_summary = HandoffTargetSummary(device_id=target_device_id, runtime_id=target_runtime_id)
 
@@ -832,6 +859,7 @@ def from_bridge_inputs(
         source_runtime_id=source_runtime_id,
         target_runtime_id=target_runtime_id,
         source_runtime_posture=_effective_posture,
+        coordination_role=_effective_role,
         source=source_summary,
         target=target_summary,
         task_spec=task_spec,
@@ -900,6 +928,7 @@ def build_handoff_envelope_v2(
     source_runtime_id: Optional[str] = None,
     target_runtime_id: Optional[str] = None,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
     agent_id: Optional[str] = None,
     agent_type: Optional[str] = None,
     agent_role: Optional[str] = None,
@@ -967,6 +996,7 @@ def build_handoff_envelope_v2(
     raw_session: Dict[str, Any] = dict(session or {})
 
     _effective_posture: str = _normalise_posture_hint(source_runtime_posture)
+    _effective_role: str = str(coordination_role or "")
 
     task_spec = HandoffTaskSpec(
         task_id=task_id or raw_task.get("task_id"),
@@ -994,6 +1024,7 @@ def build_handoff_envelope_v2(
         device_id=source_device_id,
         runtime_id=source_runtime_id,
         source_runtime_posture=_effective_posture,
+        coordination_role=_effective_role,
     )
     target_summary = HandoffTargetSummary(
         device_id=target_device_id,
@@ -1014,6 +1045,7 @@ def build_handoff_envelope_v2(
         source_runtime_id=source_runtime_id,
         target_runtime_id=target_runtime_id,
         source_runtime_posture=_effective_posture,
+        coordination_role=_effective_role,
         source=source_summary,
         target=target_summary,
         agent_spec=agent_spec,

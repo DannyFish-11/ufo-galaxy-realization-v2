@@ -176,6 +176,17 @@ DEVICE_ROUTER_POSTURE_AWARE_DISPATCH = (
     "PR-2, post-533 dual-repo runtime host unification track."
 )
 
+# PR-3 (post-533 dual-repo runtime host unification): canonical handoff path
+# authority propagation sentinel.
+DEVICE_ROUTER_HANDOFF_AUTHORITY_PROPAGATION = (
+    "DEVICE_ROUTER::HANDOFF_AUTHORITY_PROPAGATION_V1: "
+    "route_task() derives coordination_role from posture via "
+    "core.multi_device_coordination_authority.derive_coordination_role() "
+    "and passes it to HandoffContract so authority flows without loss through "
+    "the canonical bridge handoff path (NO_AUTHORITY_SILENT_DROP_POLICY). "
+    "PR-3, post-533 dual-repo runtime host unification track."
+)
+
 import asyncio
 import json
 import logging
@@ -999,6 +1010,24 @@ class DeviceRouter:
                             if source_runtime_posture is not None
                             else ctx.get("source_runtime_posture", "control_only") or "control_only"
                         )
+                        # PR-3: derive coordination_role from posture for authority propagation
+                        # (NO_AUTHORITY_SILENT_DROP_POLICY). Uses PR-538 CoordinationRole model.
+                        _bridge_coordination_role = ""
+                        try:
+                            from core.multi_device_coordination_authority import (
+                                derive_coordination_role,
+                            )
+                            _derived_role = derive_coordination_role(
+                                source_runtime_posture=_bridge_posture,
+                                formation_role=ctx.get("formation_role", ""),
+                            )
+                            _bridge_coordination_role = _derived_role.value
+                        except Exception as _role_err:  # noqa: BLE001
+                            logger.debug(
+                                "DeviceRouter.route_task: coordination_role derivation skipped — %s",
+                                _role_err,
+                            )
+                            _bridge_coordination_role = ctx.get("coordination_role", "") or ""
                         contract = HandoffContract(
                             trace_id=trace_ctx.trace_id,
                             task={
@@ -1012,6 +1041,7 @@ class DeviceRouter:
                             session=ctx.get("session", {}),
                             callback_channel=ctx.get("callback_channel", "ws"),
                             source_runtime_posture=_bridge_posture,
+                            coordination_role=_bridge_coordination_role,
                         )
 
                         emit_gateway_log(
