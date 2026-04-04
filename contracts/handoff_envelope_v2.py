@@ -114,6 +114,14 @@ class HandoffSourceSummary(BaseModel):
         default_factory=list,
         description="Flat list of capability names exposed by the source device.",
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture for this handoff. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "Mirrors the field defined in contracts.source_posture_contract."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extra metadata from the source.",
@@ -523,6 +531,16 @@ class HandoffEnvelopeV2(BaseModel):
         description="Session and context metadata forwarded to the target.",
     )
 
+    # Source posture — stable cross-repo contract field (PR-533 / PR-1 unification)
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture for this handoff. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "Canonical field name per SOURCE_POSTURE_CONTRACT_AUTHORITY."
+        ),
+    )
+
     # Legacy bridge fields (preserved for backward compatibility)
     capability: str = Field(
         default="",
@@ -606,6 +624,7 @@ class HandoffEnvelopeV2(BaseModel):
             "target_device_id": self.target_device_id,
             "source_runtime_id": self.source_runtime_id,
             "target_runtime_id": self.target_runtime_id,
+            "source_runtime_posture": self.source_runtime_posture,
             "capability": self.capability,
             "exec_mode": self.exec_mode,
             "route_mode": self.route_mode,
@@ -709,6 +728,7 @@ def from_bridge_inputs(
     target_device_id: Optional[str] = None,
     source_runtime_id: Optional[str] = None,
     target_runtime_id: Optional[str] = None,
+    source_runtime_posture: Optional[str] = None,
     handoff_policy: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> HandoffEnvelopeV2:
@@ -744,6 +764,9 @@ def from_bridge_inputs(
         Optional source runtime instance identifier.
     target_runtime_id:
         Optional target runtime instance identifier.
+    source_runtime_posture:
+        Source-device runtime participation posture: 'control_only' or
+        'join_runtime'.  Defaults to 'control_only'.
     handoff_policy:
         Serialised handoff policy dict.
     metadata:
@@ -755,6 +778,12 @@ def from_bridge_inputs(
     """
     raw_session: Dict[str, Any] = dict(session or {})
     raw_task: Dict[str, Any] = dict(task or {})
+
+    _effective_posture: str = (
+        str(source_runtime_posture).strip().lower()
+        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
+        else "control_only"
+    )
 
     task_spec = HandoffTaskSpec(
         task_id=task_id or raw_task.get("task_id"),
@@ -772,7 +801,11 @@ def from_bridge_inputs(
         raw_session=raw_session,
     )
 
-    source_summary = HandoffSourceSummary(device_id=source_device_id, runtime_id=source_runtime_id)
+    source_summary = HandoffSourceSummary(
+        device_id=source_device_id,
+        runtime_id=source_runtime_id,
+        source_runtime_posture=_effective_posture,
+    )
     target_summary = HandoffTargetSummary(device_id=target_device_id, runtime_id=target_runtime_id)
 
     return HandoffEnvelopeV2(
@@ -782,6 +815,7 @@ def from_bridge_inputs(
         target_device_id=target_device_id,
         source_runtime_id=source_runtime_id,
         target_runtime_id=target_runtime_id,
+        source_runtime_posture=_effective_posture,
         source=source_summary,
         target=target_summary,
         task_spec=task_spec,
@@ -849,6 +883,7 @@ def build_handoff_envelope_v2(
     target_device_id: Optional[str] = None,
     source_runtime_id: Optional[str] = None,
     target_runtime_id: Optional[str] = None,
+    source_runtime_posture: Optional[str] = None,
     agent_id: Optional[str] = None,
     agent_type: Optional[str] = None,
     agent_role: Optional[str] = None,
@@ -890,6 +925,9 @@ def build_handoff_envelope_v2(
         Optional source runtime instance identifier.
     target_runtime_id:
         Optional target runtime instance identifier.
+    source_runtime_posture:
+        Source-device runtime participation posture: 'control_only' or
+        'join_runtime'.  Defaults to 'control_only'.
     agent_id:
         Optional agent identifier to dispatch.
     agent_type:
@@ -911,6 +949,12 @@ def build_handoff_envelope_v2(
     """
     raw_task: Dict[str, Any] = dict(task or {})
     raw_session: Dict[str, Any] = dict(session or {})
+
+    _effective_posture: str = (
+        str(source_runtime_posture).strip().lower()
+        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
+        else "control_only"
+    )
 
     task_spec = HandoffTaskSpec(
         task_id=task_id or raw_task.get("task_id"),
@@ -937,6 +981,7 @@ def build_handoff_envelope_v2(
     source_summary = HandoffSourceSummary(
         device_id=source_device_id,
         runtime_id=source_runtime_id,
+        source_runtime_posture=_effective_posture,
     )
     target_summary = HandoffTargetSummary(
         device_id=target_device_id,
@@ -956,6 +1001,7 @@ def build_handoff_envelope_v2(
         target_device_id=target_device_id,
         source_runtime_id=source_runtime_id,
         target_runtime_id=target_runtime_id,
+        source_runtime_posture=_effective_posture,
         source=source_summary,
         target=target_summary,
         agent_spec=agent_spec,

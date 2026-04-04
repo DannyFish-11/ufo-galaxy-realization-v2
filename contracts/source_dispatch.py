@@ -291,6 +291,14 @@ class SourceDispatchDecision(BaseModel):
         default=None,
         description="Compact ref or serialised HandoffEnvelopeV2 dict, if built.",
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture at dispatch time. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "Canonical field name per SOURCE_POSTURE_CONTRACT_AUTHORITY."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix timestamp when this decision was made.",
@@ -325,6 +333,7 @@ class SourceDispatchDecision(BaseModel):
             "task_id": self.task_id,
             "session_id": self.session_id,
             "source_device_id": self.source_device_id,
+            "source_runtime_posture": self.source_runtime_posture,
             "mode": self.mode.value if isinstance(self.mode, SourceDispatchMode) else str(self.mode),
             "decision_reason": self.decision_reason,
             "has_target": self.selected_target is not None,
@@ -429,6 +438,14 @@ class SourceDispatchPlan(BaseModel):
     governance_snapshot: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Serialised governance snapshot (PR-27), if available.",
+    )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture for this planned dispatch. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "Canonical field name per SOURCE_POSTURE_CONTRACT_AUTHORITY."
+        ),
     )
     ready: bool = Field(
         default=False,
@@ -593,6 +610,14 @@ class SourceDispatchResult(BaseModel):
         default=None,
         description="Human-readable reason for the dispatch mode selected.",
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture at result time. "
+            "Must be 'control_only' or 'join_runtime'. "
+            "Canonical field name per SOURCE_POSTURE_CONTRACT_AUTHORITY."
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix timestamp when this result was produced.",
@@ -628,6 +653,7 @@ class SourceDispatchResult(BaseModel):
             "task_id": self.task_id,
             "session_id": self.session_id,
             "source_device_id": self.source_device_id,
+            "source_runtime_posture": self.source_runtime_posture,
             "mode": self.mode.value if isinstance(self.mode, SourceDispatchMode) else str(self.mode),
             "success": self.success,
             "decision_reason": self.decision_reason,
@@ -780,6 +806,7 @@ def build_source_dispatch_decision(
     session_id: Optional[str] = None,
     source_device_id: Optional[str] = None,
     source_runtime_id: Optional[str] = None,
+    source_runtime_posture: Optional[str] = None,
     mode: SourceDispatchMode = SourceDispatchMode.unknown,
     selected_target: Optional[SourceDispatchTarget] = None,
     decision_reason: Optional[str] = None,
@@ -806,6 +833,9 @@ def build_source_dispatch_decision(
         Source device identifier.
     source_runtime_id:
         Source runtime identifier.
+    source_runtime_posture:
+        Source-device runtime participation posture: 'control_only' or
+        'join_runtime'.  Defaults to 'control_only'.
     mode:
         Selected dispatch mode.
     selected_target:
@@ -823,6 +853,11 @@ def build_source_dispatch_decision(
     metadata:
         Arbitrary extension metadata.
     """
+    _posture = (
+        str(source_runtime_posture).strip().lower()
+        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
+        else "control_only"
+    )
     try:
         return SourceDispatchDecision(
             trace_id=trace_id,
@@ -830,6 +865,7 @@ def build_source_dispatch_decision(
             session_id=session_id,
             source_device_id=source_device_id,
             source_runtime_id=source_runtime_id,
+            source_runtime_posture=_posture,
             mode=mode,
             selected_target=selected_target,
             decision_reason=decision_reason,
@@ -852,6 +888,7 @@ def build_source_dispatch_plan(
     trace_id: Optional[str] = None,
     task_id: Optional[str] = None,
     session_id: Optional[str] = None,
+    source_runtime_posture: Optional[str] = None,
     mode: Optional[SourceDispatchMode] = None,
     selected_target: Optional[SourceDispatchTarget] = None,
     handoff_envelope: Optional[Dict[str, Any]] = None,
@@ -876,6 +913,9 @@ def build_source_dispatch_plan(
     readiness_notes, metadata:
         Override fields (take precedence over ``decision`` fields when
         provided).
+    source_runtime_posture:
+        Source-device runtime participation posture.  Falls back to the
+        decision's posture when not provided explicitly.
     """
     try:
         d_trace = trace_id if trace_id is not None else (decision.trace_id if decision else None)
@@ -888,11 +928,17 @@ def build_source_dispatch_plan(
         d_policy = policy_alignment if policy_alignment is not None else (decision.policy_alignment if decision else None)
         d_gov = governance_snapshot if governance_snapshot is not None else (decision.governance_snapshot if decision else None)
         d_dispatch_id = decision.dispatch_id if decision else None
+        d_posture = (
+            str(source_runtime_posture).strip().lower()
+            if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
+            else (getattr(decision, "source_runtime_posture", "control_only") if decision else "control_only")
+        )
         return SourceDispatchPlan(
             dispatch_id=d_dispatch_id,
             trace_id=d_trace,
             task_id=d_task,
             session_id=d_session,
+            source_runtime_posture=d_posture,
             mode=d_mode,
             selected_target=d_target,
             handoff_envelope=d_envelope,
@@ -918,6 +964,7 @@ def build_source_dispatch_result(
     session_id: Optional[str] = None,
     source_device_id: Optional[str] = None,
     source_runtime_id: Optional[str] = None,
+    source_runtime_posture: Optional[str] = None,
     mode: SourceDispatchMode = SourceDispatchMode.unknown,
     selected_target: Optional[SourceDispatchTarget] = None,
     success: bool = False,
@@ -936,6 +983,11 @@ def build_source_dispatch_result(
     All parameters are optional.  Never raises; construction errors produce a
     minimal failed result.
     """
+    _posture = (
+        str(source_runtime_posture).strip().lower()
+        if source_runtime_posture and str(source_runtime_posture).strip().lower() in ("control_only", "join_runtime")
+        else "control_only"
+    )
     try:
         return SourceDispatchResult(
             dispatch_id=dispatch_id,
@@ -944,6 +996,7 @@ def build_source_dispatch_result(
             session_id=session_id,
             source_device_id=source_device_id,
             source_runtime_id=source_runtime_id,
+            source_runtime_posture=_posture,
             mode=mode,
             selected_target=selected_target,
             success=success,

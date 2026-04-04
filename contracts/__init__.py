@@ -272,6 +272,22 @@ from contracts.runtime_presence_record import (
     from_registered_runtime_device as presence_record_from_rrd,
 )
 
+# PR-533 / PR-1 dual-repo unification: Source Runtime Posture Contract
+from contracts.source_posture_contract import (
+    SourcePostureValue,
+    SourcePostureContractField,
+    validate_source_posture_value,
+    resolve_source_posture_value,
+    build_source_posture_field,
+    posture_value_to_str,
+    SOURCE_POSTURE_CONTRACT_AUTHORITY,
+    SOURCE_POSTURE_CONTRACT_LAYER_POSITION,
+    SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY,
+    SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY,
+    SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL,
+    SOURCE_POSTURE_VALID_VALUES,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -478,4 +494,17 @@ __all__ = [
     "RuntimeTransport",
     "build_runtime_presence_record",
     "presence_record_from_rrd",
+    # PR-533 / PR-1 dual-repo unification: Source Runtime Posture Contract
+    "SourcePostureValue",
+    "SourcePostureContractField",
+    "validate_source_posture_value",
+    "resolve_source_posture_value",
+    "build_source_posture_field",
+    "posture_value_to_str",
+    "SOURCE_POSTURE_CONTRACT_AUTHORITY",
+    "SOURCE_POSTURE_CONTRACT_LAYER_POSITION",
+    "SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY",
+    "SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY",
+    "SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL",
+    "SOURCE_POSTURE_VALID_VALUES",
 ]
