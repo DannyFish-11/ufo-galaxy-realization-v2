@@ -88,7 +88,9 @@ class ChatRequest(BaseModel):
         normalized = str(value).strip().lower()
         allowed = {posture.value for posture in SourceRuntimePosture}
         if normalized not in allowed:
-            raise ValueError("source_runtime_posture must be one of: " + ", ".join(sorted(allowed)))
+            raise ValueError(
+                "source_runtime_posture must be one of: " + ", ".join(sorted(allowed)) + f". Got: {normalized}"
+            )
         return normalized
 
 

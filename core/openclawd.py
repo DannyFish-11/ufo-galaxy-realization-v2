@@ -2767,7 +2767,7 @@ class OpenClawd:
             from core.source_runtime_posture import SourceRuntimePosture
 
             _default_source_runtime_posture = SourceRuntimePosture.CONTROL_ONLY.value
-        except Exception:
+        except ImportError:
             _default_source_runtime_posture = "control_only"
         self._current_source_runtime_posture = source_runtime_posture or _default_source_runtime_posture
 
@@ -6960,7 +6960,7 @@ class OpenClawd:
             from core.source_runtime_posture import SourceRuntimePosture
 
             _default_source_runtime_posture = SourceRuntimePosture.CONTROL_ONLY.value
-        except Exception:
+        except ImportError:
             _default_source_runtime_posture = "control_only"
         effective_source_runtime_posture = (
             source_runtime_posture
