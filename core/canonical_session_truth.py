@@ -76,6 +76,7 @@ __all__ = [
     "CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY",
     "POSTURE_AWARE_RESULT_FILTER_POLICY",
     "JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY",
+    "OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY",
     "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
     # Data types
     "SessionTruthSource",
@@ -147,6 +148,17 @@ CANONICAL_SESSION_TRUTH_PR4_SENTINEL: str = (
 )
 """Integration sentinel confirming PR-4 canonical session truth is live."""
 
+OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY: str = (
+    "CANONICAL_SESSION_TRUTH::OBSERVER_ONLY_ROLE_EXCLUDED_POLICY_V1: "
+    "Result units whose contributing device carries coordination_role='observer_only' "
+    "MUST NOT be included in the canonical result merge as execution contributors. "
+    "observer_only coordination role devices consume runtime state but do not "
+    "contribute execution output.  Excluding them prevents incorrect attribution "
+    "of authoritative results to non-executing participants.  "
+    "PR-4 / PR-6, post-533 dual-repo runtime host unification track."
+)
+"""Policy: observer_only coordination-role result units are excluded from canonical merge."""
+
 # ---------------------------------------------------------------------------
 # Internal posture helpers
 # ---------------------------------------------------------------------------
@@ -154,6 +166,8 @@ CANONICAL_SESSION_TRUTH_PR4_SENTINEL: str = (
 _CONTROL_ONLY: str = "control_only"
 _JOIN_RUNTIME: str = "join_runtime"
 _VALID_POSTURES = frozenset({_CONTROL_ONLY, _JOIN_RUNTIME})
+
+_OBSERVER_ONLY_ROLE: str = "observer_only"
 
 
 def _normalise_posture(hint: Optional[str]) -> str:
@@ -248,6 +262,7 @@ class CanonicalSessionTruthRecord:
     task_id: Optional[str] = None
     trace_id: Optional[str] = None
     source_runtime_posture: str = _CONTROL_ONLY
+    coordination_role: str = ""
     source_eligible: bool = False
     total_units_received: int = 0
     units_after_filter: int = 0
@@ -268,6 +283,7 @@ class CanonicalSessionTruthRecord:
             "task_id": self.task_id,
             "trace_id": self.trace_id,
             "source_runtime_posture": self.source_runtime_posture,
+            "coordination_role": self.coordination_role,
             "source_eligible": self.source_eligible,
             "total_units_received": self.total_units_received,
             "units_after_filter": self.units_after_filter,
@@ -417,24 +433,32 @@ def filter_result_units_by_posture(
     *,
     source_runtime_posture: Optional[str] = None,
     allow_control_only_as_observer: bool = False,
+    exclude_observer_only_role: bool = True,
 ) -> tuple[List[Any], List[str]]:
-    """Filter a sequence of result units based on source_runtime_posture semantics.
+    """Filter a sequence of result units based on posture and coordination-role semantics.
 
     Parameters
     ----------
     result_units:
         Sequence of result unit objects (any type carrying a
-        ``result_unit_id`` attribute or dict with that key, and optionally a
-        ``metadata`` dict carrying ``source_runtime_posture``).  May be
-        ``None`` or empty — returns ``([], [])`` in that case.
+        ``result_unit_id`` attribute or dict with that key, and optionally
+        ``source_runtime_posture`` / ``coordination_role`` fields or a
+        ``metadata`` dict carrying those keys).  May be ``None`` or empty —
+        returns ``([], [])`` in that case.
     source_runtime_posture:
         The posture of the **session-level** originating source device.
-        When ``control_only``, any result unit whose own ``metadata`` marks
-        it as from the source device is excluded.  When ``join_runtime``, all
-        units pass through.  ``None`` defaults to ``control_only``.
+        When ``control_only``, any result unit whose own field or metadata
+        marks it as from the source device is excluded.  When ``join_runtime``,
+        all units pass through (unless excluded by coordination role).
+        ``None`` defaults to ``control_only``.
     allow_control_only_as_observer:
-        When ``True``, ``control_only`` units are not excluded but are instead
-        annotated (via ``metadata``) as observer-only.  Defaults to ``False``.
+        When ``True``, ``control_only`` units are not excluded but are kept
+        as observer contributions.  Defaults to ``False``.
+    exclude_observer_only_role:
+        When ``True`` (default), result units carrying
+        ``coordination_role='observer_only'`` are excluded from the merge,
+        regardless of posture.  Set to ``False`` only when caller explicitly
+        needs observer contributions in the output.
 
     Returns
     -------
@@ -445,14 +469,17 @@ def filter_result_units_by_posture(
 
     Notes
     -----
-    The filtering logic targets units that are explicitly labelled as coming
-    from a ``control_only`` source device (via
-    ``unit.metadata.get("source_runtime_posture") == "control_only"`` or the
-    corresponding dict key).  Units without explicit posture metadata are
-    **kept** by default — this preserves backward compatibility with older
-    result paths that predate the posture contract.
+    Filtering priority:
+    1. ``coordination_role='observer_only'`` — excluded unless
+       ``exclude_observer_only_role=False``.
+       Policy: :data:`OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY`
+    2. ``source_runtime_posture='control_only'`` — excluded unless
+       ``allow_control_only_as_observer=True``.
+       Policy: :data:`CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY`
 
-    Policy: :data:`CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY`
+    Units without explicit posture or role context are **kept** by default —
+    this preserves backward compatibility with older result paths that predate
+    the posture / coordination-role contracts.
     """
     if not result_units:
         return [], []
@@ -464,10 +491,22 @@ def filter_result_units_by_posture(
 
     for unit in result_units:
         unit_id = _get_unit_id(unit)
-        unit_posture = _get_unit_posture(unit)
 
-        # If the unit explicitly carries control_only source posture, exclude it
-        # unless we are running in observer-passthrough mode.
+        # Priority 1: coordination_role=observer_only excludes the unit.
+        if exclude_observer_only_role:
+            unit_role = _get_unit_coordination_role(unit)
+            if unit_role == _OBSERVER_ONLY_ROLE:
+                excluded_ids.append(unit_id)
+                _logger.debug(
+                    "canonical_session_truth: excluded unit %r "
+                    "(coordination_role=observer_only). Policy: %s",
+                    unit_id,
+                    OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY,
+                )
+                continue
+
+        # Priority 2: source_runtime_posture=control_only excludes the unit.
+        unit_posture = _get_unit_posture(unit)
         if unit_posture == _CONTROL_ONLY:
             if allow_control_only_as_observer:
                 kept.append(unit)
@@ -502,18 +541,83 @@ def _get_unit_id(unit: Any) -> str:
 
 
 def _get_unit_posture(unit: Any) -> Optional[str]:
-    """Extract ``source_runtime_posture`` from a result unit's metadata, if any."""
+    """Extract ``source_runtime_posture`` from a result unit (metadata or direct field).
+
+    Metadata takes priority for backward compatibility with units created before
+    the PR-4 direct field was added.  The direct field is consulted only when
+    metadata carries no explicit posture value and the direct field was
+    explicitly set to a non-default (non-empty) value.
+    """
     if isinstance(unit, dict):
         meta = unit.get("metadata") or {}
-        raw = meta.get("source_runtime_posture") if isinstance(meta, dict) else None
+        raw_meta = meta.get("source_runtime_posture") if isinstance(meta, dict) else None
+        if raw_meta and isinstance(raw_meta, str):
+            normalised = raw_meta.strip().lower()
+            if normalised in _VALID_POSTURES:
+                return normalised
+        # Fall back to top-level field (dict key)
+        raw_direct = unit.get("source_runtime_posture")
+        if raw_direct and isinstance(raw_direct, str):
+            normalised = raw_direct.strip().lower()
+            if normalised in _VALID_POSTURES:
+                return normalised
     else:
         meta = getattr(unit, "metadata", {}) or {}
-        raw = meta.get("source_runtime_posture") if isinstance(meta, dict) else None
+        raw_meta = meta.get("source_runtime_posture") if isinstance(meta, dict) else None
+        if raw_meta and isinstance(raw_meta, str):
+            normalised = raw_meta.strip().lower()
+            if normalised in _VALID_POSTURES:
+                return normalised
+        # Fall back to direct attribute — only when it differs from default
+        # (i.e. when explicitly set by the caller, not just the field default).
+        # We detect "explicitly set" by checking _model_fields_set when available.
+        explicitly_set = False
+        fields_set = getattr(unit, "model_fields_set", None)
+        if fields_set is not None:
+            explicitly_set = "source_runtime_posture" in fields_set
+        if explicitly_set:
+            raw_direct = getattr(unit, "source_runtime_posture", None)
+            if raw_direct and isinstance(raw_direct, str):
+                normalised = raw_direct.strip().lower()
+                if normalised in _VALID_POSTURES:
+                    return normalised
 
-    if not raw or not isinstance(raw, str):
-        return None
-    normalised = raw.strip().lower()
-    return normalised if normalised in _VALID_POSTURES else None
+    return None
+
+
+def _get_unit_coordination_role(unit: Any) -> Optional[str]:
+    """Extract ``coordination_role`` from a result unit (metadata or direct field).
+
+    Metadata takes priority for backward compatibility.  The direct field is
+    consulted only when metadata carries no coordination_role value and the
+    direct field was explicitly set by the caller (detected via
+    ``model_fields_set`` for Pydantic models).
+    """
+    if isinstance(unit, dict):
+        meta = unit.get("metadata") or {}
+        raw_meta = meta.get("coordination_role") if isinstance(meta, dict) else None
+        if raw_meta and isinstance(raw_meta, str):
+            return raw_meta.strip().lower()
+        # Fall back to top-level field (dict key)
+        raw_direct = unit.get("coordination_role")
+        if raw_direct and isinstance(raw_direct, str):
+            return raw_direct.strip().lower()
+    else:
+        meta = getattr(unit, "metadata", {}) or {}
+        raw_meta = meta.get("coordination_role") if isinstance(meta, dict) else None
+        if raw_meta and isinstance(raw_meta, str):
+            return raw_meta.strip().lower()
+        # Fall back to direct attribute when explicitly set
+        explicitly_set = False
+        fields_set = getattr(unit, "model_fields_set", None)
+        if fields_set is not None:
+            explicitly_set = "coordination_role" in fields_set
+        if explicitly_set:
+            raw_direct = getattr(unit, "coordination_role", None)
+            if raw_direct and isinstance(raw_direct, str):
+                return raw_direct.strip().lower()
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -528,10 +632,12 @@ def merge_session_truth(
     task_id: Optional[str] = None,
     trace_id: Optional[str] = None,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
     merge_policy: Optional[str] = None,
     primary_result_unit_id: Optional[str] = None,
     merge_reason: Optional[str] = None,
     allow_control_only_as_observer: bool = False,
+    exclude_observer_only_role: bool = True,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> "MergedRuntimeResult":  # type: ignore[name-defined]
     """Compute the canonical session truth by merging posture-filtered result units.
@@ -556,6 +662,11 @@ def merge_session_truth(
         Posture of the originating source device.  Controls which units are
         eligible to be considered execution contributors.
         Defaults to ``control_only`` (safe conservative default).
+    coordination_role:
+        Multi-device coordination role of the originating source device
+        (e.g. ``'source_controller'``, ``'joined_runtime_participant'``,
+        ``'observer_only'``).  Propagated to the :class:`MergedRuntimeResult`.
+        PR-4 / PR-6.
     merge_policy:
         Optional :class:`~contracts.cross_runtime_result_merge.ResultMergePolicy`
         value string.  Defaults to ``primary_wins``.
@@ -567,6 +678,10 @@ def merge_session_truth(
         When ``True``, control_only-tagged units are kept in the merge
         rather than excluded.  Use only when the caller explicitly wants
         observer contributions reflected in the output.
+    exclude_observer_only_role:
+        When ``True`` (default), units carrying
+        ``coordination_role='observer_only'`` are excluded from the merge.
+        Policy: :data:`OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY`
     metadata:
         Optional additional metadata to attach to the merge output.
 
@@ -581,6 +696,7 @@ def merge_session_truth(
     :data:`POSTURE_AWARE_RESULT_FILTER_POLICY`
     :data:`CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY`
     :data:`JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY`
+    :data:`OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY`
     """
     from contracts.cross_runtime_result_merge import (
         ResultMergePolicy,
@@ -589,12 +705,14 @@ def merge_session_truth(
     )
 
     normalised_posture = _normalise_posture(source_runtime_posture)
+    normalised_role = (coordination_role or "").strip().lower()
 
-    # Step 1: posture-aware filter
+    # Step 1: posture-aware + coordination-role filter
     kept_units, excluded_ids = filter_result_units_by_posture(
         result_units,
         source_runtime_posture=normalised_posture,
         allow_control_only_as_observer=allow_control_only_as_observer,
+        exclude_observer_only_role=exclude_observer_only_role,
     )
 
     # Step 2: coerce any dict units to RuntimeResultUnit objects so that
@@ -634,6 +752,7 @@ def merge_session_truth(
     # Step 4: delegate to canonical cross-runtime merge
     _meta = dict(metadata or {})
     _meta.setdefault("source_runtime_posture", normalised_posture)
+    _meta.setdefault("coordination_role", normalised_role)
     _meta.setdefault("canonical_session_truth_authority", CANONICAL_SESSION_TRUTH_AUTHORITY)
     _meta.setdefault("excluded_unit_ids", excluded_ids)
     _meta.setdefault("pr4_sentinel", CANONICAL_SESSION_TRUTH_PR4_SENTINEL)
@@ -646,6 +765,8 @@ def merge_session_truth(
         merge_policy=resolved_policy,
         primary_result_unit_id=primary_result_unit_id,
         merge_reason=merge_reason or "canonical_session_truth:pr4",
+        source_runtime_posture=normalised_posture,
+        coordination_role=normalised_role,
         metadata=_meta,
     )
 
@@ -663,11 +784,13 @@ def record_session_truth(
     task_id: Optional[str] = None,
     trace_id: Optional[str] = None,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
     result_units: Optional[Sequence[Any]] = None,
     merge_policy: Optional[str] = None,
     primary_result_unit_id: Optional[str] = None,
     merge_reason: Optional[str] = None,
     allow_control_only_as_observer: bool = False,
+    exclude_observer_only_role: bool = True,
     truth_source: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> "CanonicalSessionTruthRecord":
@@ -682,8 +805,11 @@ def record_session_truth(
     ----------
     session_id, task_id, trace_id, source_runtime_posture, result_units,
     merge_policy, primary_result_unit_id, merge_reason,
-    allow_control_only_as_observer, metadata:
+    allow_control_only_as_observer, exclude_observer_only_role, metadata:
         See :func:`merge_session_truth` for full parameter documentation.
+    coordination_role:
+        Multi-device coordination role of the originating source device.
+        Stored in the :class:`CanonicalSessionTruthRecord`.  PR-4 / PR-6.
     truth_source:
         Optional :class:`SessionTruthSource` value string describing the
         dominant origin of the result (``local``, ``remote_handoff``,
@@ -695,6 +821,7 @@ def record_session_truth(
         The recorded truth determination.
     """
     normalised_posture = _normalise_posture(source_runtime_posture)
+    normalised_role = (coordination_role or "").strip().lower()
     is_eligible = normalised_posture == _JOIN_RUNTIME
 
     # Pre-compute filter stats before full merge (cheap)
@@ -702,6 +829,7 @@ def record_session_truth(
         result_units,
         source_runtime_posture=normalised_posture,
         allow_control_only_as_observer=allow_control_only_as_observer,
+        exclude_observer_only_role=exclude_observer_only_role,
     )
 
     merged = merge_session_truth(
@@ -710,10 +838,12 @@ def record_session_truth(
         task_id=task_id,
         trace_id=trace_id,
         source_runtime_posture=normalised_posture,
+        coordination_role=normalised_role,
         merge_policy=merge_policy,
         primary_result_unit_id=primary_result_unit_id,
         merge_reason=merge_reason,
         allow_control_only_as_observer=allow_control_only_as_observer,
+        exclude_observer_only_role=exclude_observer_only_role,
         metadata=metadata,
     )
 
@@ -743,6 +873,7 @@ def record_session_truth(
         task_id=task_id,
         trace_id=trace_id,
         source_runtime_posture=normalised_posture,
+        coordination_role=normalised_role,
         source_eligible=is_eligible,
         total_units_received=len(list(result_units)) if result_units else 0,
         units_after_filter=len(kept_units),
@@ -753,6 +884,7 @@ def record_session_truth(
         truth_source=resolved_truth_source,
         reason=(
             f"posture={normalised_posture}, "
+            f"coordination_role={normalised_role}, "
             f"kept={len(kept_units)}, "
             f"excluded={len(excluded_ids)}, "
             f"merge_success={merged.success}"

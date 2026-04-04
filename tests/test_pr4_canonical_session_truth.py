@@ -1169,3 +1169,449 @@ class TestGroupZ_RuntimeSessionSnapshotResultState:
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
         state = RuntimeSessionSnapshotResultState(source_runtime_posture="join_runtime")
         assert state.source_runtime_posture == "join_runtime"
+
+
+# ===========================================================================
+# Group AA — RuntimeResultUnit: source_runtime_posture + coordination_role
+# ===========================================================================
+
+class TestGroupAA_RuntimeResultUnitPostureFields:
+    """RuntimeResultUnit now carries first-class source_runtime_posture and
+    coordination_role fields (PR-4 contract alignment)."""
+
+    def test_AA01_default_source_runtime_posture_is_control_only(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit
+        unit = RuntimeResultUnit()
+        assert unit.source_runtime_posture == "control_only"
+
+    def test_AA02_source_runtime_posture_can_be_set_to_join_runtime(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit
+        unit = RuntimeResultUnit(source_runtime_posture="join_runtime")
+        assert unit.source_runtime_posture == "join_runtime"
+
+    def test_AA03_default_coordination_role_is_empty(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit
+        unit = RuntimeResultUnit()
+        assert unit.coordination_role == ""
+
+    def test_AA04_coordination_role_can_be_set(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit
+        unit = RuntimeResultUnit(coordination_role="joined_runtime_participant")
+        assert unit.coordination_role == "joined_runtime_participant"
+
+    def test_AA05_to_dict_includes_posture_and_role_fields(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit
+        unit = RuntimeResultUnit(
+            source_runtime_posture="join_runtime",
+            coordination_role="source_controller",
+        )
+        d = unit.to_dict()
+        assert d["source_runtime_posture"] == "join_runtime"
+        assert d["coordination_role"] == "source_controller"
+
+    def test_AA06_from_dict_round_trip_posture_and_role(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit
+        d = {
+            "source_runtime_posture": "join_runtime",
+            "coordination_role": "target_only_executor",
+        }
+        unit = RuntimeResultUnit.from_dict(d)
+        assert unit.source_runtime_posture == "join_runtime"
+        assert unit.coordination_role == "target_only_executor"
+
+    def test_AA07_pr4_sentinel_present_and_non_empty(self):
+        from contracts.cross_runtime_result_merge import CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL
+        assert CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL
+        assert "PR4" in CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL
+
+
+# ===========================================================================
+# Group BB — MergedRuntimeResult: source_runtime_posture + coordination_role
+# ===========================================================================
+
+class TestGroupBB_MergedRuntimeResultPostureFields:
+    """MergedRuntimeResult now carries source_runtime_posture and
+    coordination_role fields propagated from the merge context (PR-4)."""
+
+    def test_BB01_default_source_runtime_posture_is_control_only(self):
+        from contracts.cross_runtime_result_merge import MergedRuntimeResult
+        result = MergedRuntimeResult()
+        assert result.source_runtime_posture == "control_only"
+
+    def test_BB02_source_runtime_posture_propagated_by_merge_runtime_results(self):
+        from contracts.cross_runtime_result_merge import merge_runtime_results, RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(status=RuntimeResultStatus.succeeded, output={"x": 1})
+        result = merge_runtime_results(
+            [unit],
+            source_runtime_posture="join_runtime",
+        )
+        assert result.source_runtime_posture == "join_runtime"
+
+    def test_BB03_coordination_role_propagated_by_merge_runtime_results(self):
+        from contracts.cross_runtime_result_merge import merge_runtime_results, RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(status=RuntimeResultStatus.succeeded)
+        result = merge_runtime_results(
+            [unit],
+            coordination_role="source_controller",
+        )
+        assert result.coordination_role == "source_controller"
+
+    def test_BB04_to_dict_includes_posture_and_role(self):
+        from contracts.cross_runtime_result_merge import MergedRuntimeResult
+        result = MergedRuntimeResult(
+            source_runtime_posture="join_runtime",
+            coordination_role="joined_runtime_participant",
+        )
+        d = result.to_dict()
+        assert d["source_runtime_posture"] == "join_runtime"
+        assert d["coordination_role"] == "joined_runtime_participant"
+
+    def test_BB05_empty_merge_preserves_posture_and_role(self):
+        from contracts.cross_runtime_result_merge import merge_runtime_results
+        result = merge_runtime_results(
+            [],
+            source_runtime_posture="join_runtime",
+            coordination_role="source_controller",
+        )
+        assert result.source_runtime_posture == "join_runtime"
+        assert result.coordination_role == "source_controller"
+
+    def test_BB06_merge_session_truth_propagates_posture_and_role_to_merged_result(self):
+        from core.canonical_session_truth import merge_session_truth
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(status=RuntimeResultStatus.succeeded, output={"r": 1})
+        result = merge_session_truth(
+            [unit],
+            source_runtime_posture="join_runtime",
+            coordination_role="joined_runtime_participant",
+        )
+        assert result.source_runtime_posture == "join_runtime"
+        assert result.coordination_role == "joined_runtime_participant"
+
+
+# ===========================================================================
+# Group CC — filter_result_units_by_posture: coordination_role semantics
+# ===========================================================================
+
+class TestGroupCC_FilterByCoordinationRole:
+    """observer_only coordination role is excluded (PR-4 / PR-6)."""
+
+    def test_CC01_observer_only_unit_excluded_via_metadata(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        unit = {
+            "result_unit_id": "u001",
+            "metadata": {"coordination_role": "observer_only"},
+        }
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert kept == []
+        assert "u001" in excluded
+
+    def test_CC02_observer_only_unit_excluded_via_direct_field(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(
+            status=RuntimeResultStatus.succeeded,
+            coordination_role="observer_only",
+        )
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 0
+        assert len(excluded) == 1
+
+    def test_CC03_joined_runtime_participant_is_kept(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        unit = {
+            "result_unit_id": "u001",
+            "metadata": {"coordination_role": "joined_runtime_participant"},
+        }
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 1
+        assert excluded == []
+
+    def test_CC04_source_controller_is_kept(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        unit = {
+            "result_unit_id": "u001",
+            "metadata": {"coordination_role": "source_controller"},
+        }
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 1
+        assert excluded == []
+
+    def test_CC05_target_only_executor_is_kept(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        unit = {
+            "result_unit_id": "u001",
+            "metadata": {"coordination_role": "target_only_executor"},
+        }
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 1
+        assert excluded == []
+
+    def test_CC06_exclude_observer_only_role_false_keeps_observer_units(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        unit = {
+            "result_unit_id": "u001",
+            "metadata": {"coordination_role": "observer_only"},
+        }
+        kept, excluded = filter_result_units_by_posture(
+            [unit], exclude_observer_only_role=False
+        )
+        assert len(kept) == 1
+        assert excluded == []
+
+    def test_CC07_both_observer_role_and_control_only_posture_excluded(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        co_unit = {
+            "result_unit_id": "u-co",
+            "metadata": {"source_runtime_posture": "control_only"},
+        }
+        obs_unit = {
+            "result_unit_id": "u-obs",
+            "metadata": {"coordination_role": "observer_only"},
+        }
+        join_unit = {"result_unit_id": "u-join"}
+        kept, excluded = filter_result_units_by_posture([co_unit, obs_unit, join_unit])
+        assert len(kept) == 1
+        assert kept[0]["result_unit_id"] == "u-join"
+        assert len(excluded) == 2
+
+    def test_CC08_observer_only_excluded_from_merge_policy_sentinel_non_empty(self):
+        from core.canonical_session_truth import OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+        assert OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+        assert "observer_only" in OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+
+
+# ===========================================================================
+# Group DD — merge_session_truth: coordination_role parameter
+# ===========================================================================
+
+class TestGroupDD_MergeSessionTruthCoordinationRole:
+
+    def test_DD01_observer_only_units_excluded_when_role_in_metadata(self):
+        from core.canonical_session_truth import merge_session_truth
+        obs_unit = {
+            "result_unit_id": "u-obs",
+            "status": "succeeded",
+            "output": {"data": "from_observer"},
+            "metadata": {"coordination_role": "observer_only"},
+        }
+        remote_unit = {
+            "result_unit_id": "u-remote",
+            "status": "succeeded",
+            "output": {"data": "from_remote"},
+        }
+        result = merge_session_truth(
+            [obs_unit, remote_unit],
+            source_runtime_posture="join_runtime",
+        )
+        assert result.success
+        assert result.merged_output == {"data": "from_remote"}
+
+    def test_DD02_coordination_role_recorded_in_canonical_session_truth_record(self):
+        from core.canonical_session_truth import record_session_truth
+        rec = record_session_truth(
+            session_id="sess-dd02",
+            source_runtime_posture="join_runtime",
+            coordination_role="source_controller",
+        )
+        assert rec.coordination_role == "source_controller"
+
+    def test_DD03_coordination_role_empty_by_default_in_record(self):
+        from core.canonical_session_truth import record_session_truth
+        rec = record_session_truth(
+            session_id="sess-dd03",
+            source_runtime_posture="join_runtime",
+        )
+        assert rec.coordination_role == ""
+
+    def test_DD04_coordination_role_in_to_dict(self):
+        from core.canonical_session_truth import record_session_truth
+        rec = record_session_truth(
+            session_id="sess-dd04",
+            coordination_role="joined_runtime_participant",
+        )
+        d = rec.to_dict()
+        assert d["coordination_role"] == "joined_runtime_participant"
+
+    def test_DD05_observer_only_role_source_has_no_units_in_merge(self):
+        """Source with observer_only role and observer-tagged units → empty merge."""
+        from core.canonical_session_truth import merge_session_truth
+        unit = {
+            "result_unit_id": "u-obs",
+            "status": "succeeded",
+            "output": {"data": "x"},
+            "metadata": {"coordination_role": "observer_only"},
+        }
+        result = merge_session_truth(
+            [unit],
+            coordination_role="observer_only",
+        )
+        # No units pass filter → merge fails
+        assert not result.success
+
+
+# ===========================================================================
+# Group EE — RuntimeSessionSnapshotIdentity: coordination_role field
+# ===========================================================================
+
+class TestGroupEE_SnapshotIdentityCoordinationRole:
+
+    def test_EE01_default_coordination_role_is_empty(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+        snap = RuntimeSessionSnapshotIdentity(session_id="s")
+        assert snap.coordination_role == ""
+
+    def test_EE02_coordination_role_can_be_set(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+        snap = RuntimeSessionSnapshotIdentity(
+            session_id="s",
+            coordination_role="source_controller",
+        )
+        assert snap.coordination_role == "source_controller"
+
+    def test_EE03_to_dict_includes_coordination_role(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+        snap = RuntimeSessionSnapshotIdentity(
+            session_id="s",
+            coordination_role="joined_runtime_participant",
+        )
+        d = snap.to_dict()
+        assert "coordination_role" in d
+        assert d["coordination_role"] == "joined_runtime_participant"
+
+    def test_EE04_from_dict_round_trip(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+        d = {
+            "session_id": "s",
+            "coordination_role": "source_controller",
+        }
+        snap = RuntimeSessionSnapshotIdentity.from_dict(d)
+        assert snap.coordination_role == "source_controller"
+
+
+# ===========================================================================
+# Group FF — RuntimeSessionSnapshotResultState: coordination_role field
+# ===========================================================================
+
+class TestGroupFF_SnapshotResultStateCoordinationRole:
+
+    def test_FF01_default_coordination_role_is_empty(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+        state = RuntimeSessionSnapshotResultState()
+        assert state.coordination_role == ""
+
+    def test_FF02_coordination_role_can_be_set(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+        state = RuntimeSessionSnapshotResultState(coordination_role="source_controller")
+        assert state.coordination_role == "source_controller"
+
+    def test_FF03_to_dict_includes_coordination_role(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+        state = RuntimeSessionSnapshotResultState(
+            source_runtime_posture="join_runtime",
+            coordination_role="joined_runtime_participant",
+        )
+        d = state.to_dict()
+        assert "coordination_role" in d
+        assert d["coordination_role"] == "joined_runtime_participant"
+
+    def test_FF04_from_dict_round_trip(self):
+        from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+        d = {
+            "source_runtime_posture": "join_runtime",
+            "coordination_role": "joined_runtime_participant",
+            "excluded_unit_ids": ["uid-x"],
+        }
+        state = RuntimeSessionSnapshotResultState.from_dict(d)
+        assert state.coordination_role == "joined_runtime_participant"
+        assert "uid-x" in state.excluded_unit_ids
+
+
+# ===========================================================================
+# Group GG — Projection route canonical session truth alignment sentinel
+# ===========================================================================
+
+class TestGroupGG_ProjectionRouteSentinel:
+
+    def test_GG01_canonical_session_truth_aligned_sentinel_importable(self):
+        from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
+    def test_GG02_aligned_sentinel_contains_pr4_marker(self):
+        from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert "PR4" in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
+    def test_GG03_aligned_sentinel_is_not_unavailable(self):
+        from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+        assert "UNAVAILABLE" not in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
+
+# ===========================================================================
+# Group HH — core.runtime re-export of OBSERVER_ONLY_ROLE_EXCLUDED policy
+# ===========================================================================
+
+class TestGroupHH_CoreRuntimeObserverPolicyExport:
+
+    def test_HH01_observer_only_policy_accessible_from_core_runtime(self):
+        from core.runtime import OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+        assert OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+
+    def test_HH02_observer_only_policy_contains_policy_marker(self):
+        from core.runtime import OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+        assert "observer_only" in OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+
+
+# ===========================================================================
+# Group II — filter_result_units_by_posture: direct field lookup (PR-4)
+# ===========================================================================
+
+class TestGroupII_DirectFieldLookup:
+    """Ensure direct field source_runtime_posture / coordination_role on
+    RuntimeResultUnit is honoured by the filter when explicitly set."""
+
+    def test_II01_explicit_control_only_direct_field_excluded(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(
+            status=RuntimeResultStatus.succeeded,
+            source_runtime_posture="control_only",
+        )
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 0
+        assert len(excluded) == 1
+
+    def test_II02_explicit_join_runtime_direct_field_kept(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(
+            status=RuntimeResultStatus.succeeded,
+            source_runtime_posture="join_runtime",
+        )
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 1
+        assert excluded == []
+
+    def test_II03_explicit_observer_only_direct_coordination_role_excluded(self):
+        from core.canonical_session_truth import filter_result_units_by_posture
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        unit = RuntimeResultUnit(
+            status=RuntimeResultStatus.succeeded,
+            coordination_role="observer_only",
+        )
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 0
+        assert len(excluded) == 1
+
+    def test_II04_metadata_posture_takes_priority_over_default_field(self):
+        """When metadata has join_runtime but field is default control_only,
+        the unit should be kept (metadata priority)."""
+        from core.canonical_session_truth import filter_result_units_by_posture
+        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        # field default = control_only; metadata overrides to join_runtime
+        unit = RuntimeResultUnit(
+            status=RuntimeResultStatus.succeeded,
+            metadata={"source_runtime_posture": "join_runtime"},
+        )
+        kept, excluded = filter_result_units_by_posture([unit])
+        assert len(kept) == 1
+        assert excluded == []
