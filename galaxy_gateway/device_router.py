@@ -938,6 +938,13 @@ class DeviceRouter:
                     bridge = get_agent_bridge()
                     # Only attempt handoff when the bridge is configured and enabled.
                     if bridge._config.enabled:
+                        # PR-3: pass source_runtime_posture to HandoffContract so posture
+                        # propagates through the entire bridge handoff pipeline (NO_POSTURE_SILENT_DROP_POLICY).
+                        _bridge_posture = (
+                            source_runtime_posture.value
+                            if source_runtime_posture is not None
+                            else ctx.get("source_runtime_posture", "control_only") or "control_only"
+                        )
                         contract = HandoffContract(
                             trace_id=trace_ctx.trace_id,
                             task={
@@ -950,6 +957,7 @@ class DeviceRouter:
                             route_mode=route_mode or "direct",
                             session=ctx.get("session", {}),
                             callback_channel=ctx.get("callback_channel", "ws"),
+                            source_runtime_posture=_bridge_posture,
                         )
 
                         emit_gateway_log(

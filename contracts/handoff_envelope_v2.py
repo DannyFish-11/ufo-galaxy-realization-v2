@@ -649,13 +649,20 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
     exist in the legacy contract are projected into the new envelope.
     Fields absent from the legacy contract are left at their defaults.
 
+    PR-3 (post-533 dual-repo unification): also reads
+    ``source_runtime_posture`` from the legacy contract (present since PR-3)
+    and propagates it into both ``HandoffEnvelopeV2.source_runtime_posture``
+    and ``HandoffSourceSummary.source_runtime_posture`` so the canonical v2
+    envelope always reflects the originating posture (NO_POSTURE_SILENT_DROP_POLICY).
+
     Parameters
     ----------
     contract:
         A ``galaxy_gateway.agent_bridge.HandoffContract`` instance (or any
         object with the same field shape: ``trace_id``, ``task``,
         ``capability``, ``exec_mode``, ``route_mode``, ``session``,
-        ``callback_channel``, and optionally ``task_id``).
+        ``callback_channel``, and optionally ``task_id`` and
+        ``source_runtime_posture``).
 
     Returns
     -------
@@ -670,6 +677,10 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
         exec_mode = str(getattr(contract, "exec_mode", "both") or "both")
         route_mode = str(getattr(contract, "route_mode", "direct") or "direct")
         callback_channel = str(getattr(contract, "callback_channel", "ws") or "ws")
+
+        # PR-3: read posture from legacy contract; fall back to 'control_only'.
+        _raw_posture = str(getattr(contract, "source_runtime_posture", "control_only") or "control_only")
+        _effective_posture = _normalise_posture_hint(_raw_posture)
 
         raw_task: Dict[str, Any] = {}
         task_obj = getattr(contract, "task", None)
@@ -699,6 +710,11 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
             raw_session=raw_session,
         )
 
+        # PR-3: propagate posture into source summary.
+        source_summary = HandoffSourceSummary(
+            source_runtime_posture=_effective_posture,
+        )
+
         return HandoffEnvelopeV2(
             trace_id=trace_id,
             task_id=task_id,
@@ -706,6 +722,8 @@ def from_legacy_handoff_contract(contract: Any) -> HandoffEnvelopeV2:
             exec_mode=exec_mode,
             route_mode=route_mode,
             callback_channel=callback_channel,
+            source_runtime_posture=_effective_posture,
+            source=source_summary,
             task_spec=task_spec,
             session_context=session_context,
             return_contract=HandoffReturnContract(callback_channel=callback_channel),
