@@ -884,7 +884,7 @@ def record_session_truth(
         truth_source=resolved_truth_source,
         reason=(
             f"posture={normalised_posture}, "
-            f"coordination_role={normalised_role!r}, "
+            f"coordination_role={normalised_role}, "
             f"kept={len(kept_units)}, "
             f"excluded={len(excluded_ids)}, "
             f"merge_success={merged.success}"
