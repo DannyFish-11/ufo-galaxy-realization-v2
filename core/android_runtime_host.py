@@ -33,7 +33,7 @@ Design principles
 - **Multi-device role compatible** — honours ``CoordinationRole`` semantics
   from PR-6 (``source_controller``, ``joined_runtime_participant``, etc.).
 - **Graceful defaults** — unknown or missing fields always yield
-  :attr:`AndroidRuntimeHostRole.CONNECTED_DEVICE_ONLY`.
+  :attr:`AndroidRuntimeHostRole.UNCLASSIFIED`.
 - **Fully serialisable** — :meth:`AndroidRuntimeHostIdentity.to_dict` and
   :meth:`AndroidRuntimeHostIdentity.to_json` produce stable, round-trippable
   JSON representations.
@@ -81,6 +81,16 @@ import json
 import uuid
 from enum import Enum
 from typing import Any, Dict, Optional
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_android_fallback_id() -> str:
+    """Generate a fallback device ID for Android records without one."""
+    return f"android_{uuid.uuid4().hex[:8]}"
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +368,7 @@ def build_android_runtime_host_identity(device: Any) -> AndroidRuntimeHostIdenti
     """
     try:
         if isinstance(device, dict):
-            device_id = str(device.get("device_id", "") or f"android_{uuid.uuid4().hex[:8]}")
+            device_id = str(device.get("device_id", "") or _make_android_fallback_id())
             device_name = str(device.get("device_name", "") or "")
             posture = str(device.get("source_runtime_posture", "control_only") or "control_only")
             is_host = bool(device.get("is_runtime_host", False))
@@ -372,7 +382,7 @@ def build_android_runtime_host_identity(device: Any) -> AndroidRuntimeHostIdenti
                 rt_handoff = bool(getattr(autonomy_raw, "supports_remote_handoff", False))
                 rt_version = getattr(autonomy_raw, "runtime_version", None)
         else:
-            device_id = str(getattr(device, "device_id", "") or f"android_{uuid.uuid4().hex[:8]}")
+            device_id = str(getattr(device, "device_id", "") or _make_android_fallback_id())
             device_name = str(getattr(device, "device_name", "") or "")
             posture = str(getattr(device, "source_runtime_posture", "control_only") or "control_only")
             is_host = bool(getattr(device, "is_runtime_host", False))
@@ -405,9 +415,9 @@ def build_android_runtime_host_identity(device: Any) -> AndroidRuntimeHostIdenti
         )
     except Exception:
         try:
-            fallback_id = str(getattr(device, "device_id", "") or f"android_{uuid.uuid4().hex[:8]}")
+            fallback_id = str(getattr(device, "device_id", "") or _make_android_fallback_id())
         except Exception:
-            fallback_id = f"android_{uuid.uuid4().hex[:8]}"
+            fallback_id = _make_android_fallback_id()
         return AndroidRuntimeHostIdentity(device_id=fallback_id)
 
 

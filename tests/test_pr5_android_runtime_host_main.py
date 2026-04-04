@@ -717,3 +717,17 @@ class TestBackwardsCompatibility:
         from core.android_runtime_host import AndroidRuntimeHostRole
         role = AndroidRuntimeHostRole.from_string("totally_unknown_value")
         assert role == AndroidRuntimeHostRole.UNCLASSIFIED
+
+    def test_android_role_enum_from_string_valid_values(self):
+        """All canonical string values map to their correct enum members."""
+        from core.android_runtime_host import AndroidRuntimeHostRole
+        cases = [
+            ("full_runtime_host", AndroidRuntimeHostRole.FULL_RUNTIME_HOST),
+            ("partial_runtime_host", AndroidRuntimeHostRole.PARTIAL_RUNTIME_HOST),
+            ("connected_device_only", AndroidRuntimeHostRole.CONNECTED_DEVICE_ONLY),
+            ("unclassified", AndroidRuntimeHostRole.UNCLASSIFIED),
+        ]
+        for raw, expected in cases:
+            assert AndroidRuntimeHostRole.from_string(raw) == expected, (
+                f"from_string({raw!r}) should return {expected!r}"
+            )

@@ -718,9 +718,14 @@ def from_android_registration(data: Dict[str, Any]) -> RegisteredRuntimeDevice:
         else:
             _posture = "control_only"
 
-        # Android is classified as a first-class runtime host when:
-        # - it explicitly declares join_runtime posture, OR
-        # - it declares app_version (Galaxy app installed) with remote handoff support
+        # Android is classified as a first-class runtime host (is_runtime_host=True)
+        # under two conditions (PR-5):
+        # 1. Explicit join_runtime posture — the device opted in via source_runtime_posture.
+        # 2. app_version present — the Galaxy Android app is installed, which means
+        #    the device registered autonomy.runtime_enabled=True and
+        #    autonomy.supports_remote_handoff=True (set below).  These flags are the
+        #    structural indicators of runtime-host capability even when the older device
+        #    hasn't yet sent an explicit 'join_runtime' posture value.
         _is_runtime_host: bool = (
             _posture == "join_runtime"
             or bool(str(data.get("app_version", "") or "").strip())
