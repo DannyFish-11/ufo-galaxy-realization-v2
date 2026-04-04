@@ -60,6 +60,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     """Run a coroutine in a new event loop."""
     loop = asyncio.new_event_loop()
@@ -72,6 +73,7 @@ def _run(coro):
 def _reset_chain():
     try:
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
     except Exception:
         pass
@@ -80,6 +82,7 @@ def _reset_chain():
 def _reset_graph():
     try:
         from core.task_graph_runtime import reset_task_graph_runtime
+
         reset_task_graph_runtime()
     except Exception:
         pass
@@ -88,6 +91,7 @@ def _reset_graph():
 def _reset_integrity_runtime():
     try:
         from core.multi_device_control_integrity import reset_multi_device_integrity_runtime
+
         reset_multi_device_integrity_runtime()
     except Exception:
         pass
@@ -103,27 +107,32 @@ def _reset_all():
 # A) PR-523 sentinels
 # ===========================================================================
 
+
 class TestA_PR523Sentinels(unittest.TestCase):
     """A) PR-523 acceptance sentinel constants are importable and correct."""
 
     def test_A1_e2e_acceptance_verified_importable(self):
         """A1. MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED is importable."""
         from core.multi_device_control_integrity import MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED
+
         self.assertIsInstance(MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED, str)
 
     def test_A2_e2e_acceptance_verified_references_pr523(self):
         """A2. E2E acceptance sentinel references PR-523."""
         from core.multi_device_control_integrity import MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED
+
         self.assertIn("PR523", MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED)
 
     def test_A3_acceptance_matrix_coverage_importable(self):
         """A3. MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE is importable."""
         from core.multi_device_control_integrity import MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE
+
         self.assertIsInstance(MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE, str)
 
     def test_A4_acceptance_matrix_coverage_lists_scenarios(self):
         """A4. Coverage sentinel lists all 8 acceptance scenarios."""
         from core.multi_device_control_integrity import MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE
+
         for scenario in [
             "local_execution",
             "cross_device_dispatch",
@@ -143,11 +152,13 @@ class TestA_PR523Sentinels(unittest.TestCase):
     def test_A5_residual_closure_accounting_importable(self):
         """A5. PR523_RESIDUAL_CLOSURE_ACCOUNTING is importable."""
         from core.multi_device_control_integrity import PR523_RESIDUAL_CLOSURE_ACCOUNTING
+
         self.assertIsInstance(PR523_RESIDUAL_CLOSURE_ACCOUNTING, str)
 
     def test_A6_residual_closure_accounting_covers_all_gaps(self):
         """A6. Closure accounting sentinel lists all 8 GAP identifiers."""
         from core.multi_device_control_integrity import PR523_RESIDUAL_CLOSURE_ACCOUNTING
+
         for gap_id in [
             "GAP-517-001",
             "GAP-517-002",
@@ -163,12 +174,14 @@ class TestA_PR523Sentinels(unittest.TestCase):
     def test_A7_residual_closure_accounting_names_prs(self):
         """A7. Closure accounting names PR-518 through PR-522."""
         from core.multi_device_control_integrity import PR523_RESIDUAL_CLOSURE_ACCOUNTING
+
         for pr in ["PR-518", "PR-519", "PR-520", "PR-521", "PR-522"]:
             self.assertIn(pr, PR523_RESIDUAL_CLOSURE_ACCOUNTING)
 
     def test_A8_sentinels_in_all(self):
         """A8. PR-523 sentinels appear in the module __all__."""
         import core.multi_device_control_integrity as mod
+
         for name in [
             "MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED",
             "MULTI_DEVICE_ACCEPTANCE_MATRIX_COVERAGE",
@@ -181,11 +194,13 @@ class TestA_PR523Sentinels(unittest.TestCase):
 # B) Residual gap closure accounting
 # ===========================================================================
 
+
 class TestB_ResidualGapClosure(unittest.TestCase):
     """B) 8/8 GAP-517-* gaps are resolved after PR-518 through PR-532."""
 
     def setUp(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         self.gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
 
     def test_B1_gap001_resolved_by_pr518(self):
@@ -251,16 +266,14 @@ class TestB_ResidualGapClosure(unittest.TestCase):
 
     def test_B10_no_high_severity_open_gaps(self):
         """B10. No HIGH-severity gaps remain open after PR-518 through PR-532."""
-        open_high = [
-            g for g in self.gaps.values()
-            if not g.is_resolved and g.severity == "HIGH"
-        ]
+        open_high = [g for g in self.gaps.values() if not g.is_resolved and g.severity == "HIGH"]
         self.assertEqual(open_high, [], f"Unexpected open HIGH gaps: {open_high}")
 
 
 # ===========================================================================
 # C) S1 — Local execution on originating device
 # ===========================================================================
+
 
 class TestC_S1_LocalExecution(unittest.TestCase):
     """C) S1: Local execution on originating device — canonical artifact checks."""
@@ -271,6 +284,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
             build_entry_unification_record,
             EntryUnificationKind,
         )
+
         record = build_entry_unification_record(
             task_id="local-task-001",
             source_device_id="device-A",
@@ -287,6 +301,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
             build_dispatch_authority_record,
             DispatchPathKind,
         )
+
         record = build_dispatch_authority_record(
             task_id="local-task-001",
             dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL,
@@ -302,6 +317,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
             build_control_semantic_record,
             ControlSemanticKind,
         )
+
         record = build_control_semantic_record(
             task_id="local-task-001",
             source_device_id="device-A",
@@ -318,6 +334,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
             build_result_surface_record,
             ResultSurfaceKind,
         )
+
         record = build_result_surface_record(
             task_id="local-task-001",
             source_device_id="device-A",
@@ -335,6 +352,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
         """C5. surface_cross_device_result processes a local-path success dict."""
         _reset_all()
         from core.cross_device_result_surface import surface_cross_device_result
+
         raw = {"success": True, "task_id": "local-task-001", "result": "done"}
         record = surface_cross_device_result(
             raw,
@@ -353,6 +371,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
             record_integrity_event,
             get_multi_device_integrity_runtime,
         )
+
         record = build_entry_unification_record(
             task_id="local-task-002",
             source_device_id="device-A",
@@ -369,6 +388,7 @@ class TestC_S1_LocalExecution(unittest.TestCase):
 # D) S2 — Cross-device dispatch to a different target device
 # ===========================================================================
 
+
 class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     """D) S2: Originating device dispatching to a different target device."""
 
@@ -378,6 +398,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
             build_entry_unification_record,
             EntryUnificationKind,
         )
+
         record = build_entry_unification_record(
             task_id="xdev-task-001",
             source_device_id="device-A",
@@ -392,6 +413,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
             build_dispatch_authority_record,
             DispatchPathKind,
         )
+
         record = build_dispatch_authority_record(
             task_id="xdev-task-001",
             dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL,
@@ -407,6 +429,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
             build_control_semantic_record,
             ControlSemanticKind,
         )
+
         record = build_control_semantic_record(
             task_id="xdev-task-001",
             source_device_id="device-A",
@@ -420,6 +443,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     def test_D4_source_and_target_are_distinct(self):
         """D4. Source and target device IDs are distinct in cross-device scenario."""
         from core.multi_device_control_integrity import build_control_semantic_record
+
         record = build_control_semantic_record(
             task_id="xdev-task-001",
             source_device_id="device-A",
@@ -433,6 +457,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
         """D5. Cross-device success result is surfaced canonically."""
         _reset_all()
         from core.cross_device_result_surface import surface_cross_device_result
+
         raw = {"success": True, "task_id": "xdev-task-001", "device_id": "device-B"}
         record = surface_cross_device_result(
             raw,
@@ -445,6 +470,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
         self.assertTrue(record.result_envelope_produced)
         # Verify the chain record has the envelope
         from core.cross_device_execution_chain import get_cross_device_chain
+
         snap = get_cross_device_chain().snapshot()
         task_ids = [r.task_id for r in snap.recent_records]
         self.assertIn("xdev-task-001", task_ids)
@@ -453,6 +479,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
         """D6. CROSS_DEVICE_REST_INGRESS_CANONICAL sentinel is present in devices.py."""
         import inspect
         import core.routes.devices as devices_mod
+
         src = inspect.getsource(devices_mod)
         self.assertIn("CROSS_DEVICE_REST_INGRESS_CANONICAL", src)
         self.assertIn("GAP-517-001", src)
@@ -460,12 +487,14 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     def test_D7_command_router_cross_device_canonical_path_sentinel(self):
         """D7. COMMAND_ROUTER_CROSS_DEVICE_CANONICAL_PATH sentinel importable."""
         from core.command_router import COMMAND_ROUTER_CROSS_DEVICE_CANONICAL_PATH
+
         self.assertIn("GAP-517-001", COMMAND_ROUTER_CROSS_DEVICE_CANONICAL_PATH)
 
 
 # ===========================================================================
 # E) S3 — Multiple candidate devices with canonical selection
 # ===========================================================================
+
 
 class TestE_S3_MultiCandidateSelection(unittest.TestCase):
     """E) S3: Multiple candidate devices with canonical formation selection."""
@@ -476,6 +505,7 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
             build_formation_truth_record,
             FormationTruthConsistency,
         )
+
         record = build_formation_truth_record(
             task_id="multi-task-001",
             source_device_id="device-A",
@@ -495,6 +525,7 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
             build_formation_truth_record,
             FormationTruthConsistency,
         )
+
         record = build_formation_truth_record(
             task_id="multi-task-001",
             source_device_id="device-A",
@@ -507,25 +538,30 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
     def test_E3_formation_resolver_importable(self):
         """E3. resolve_formation is importable from core.device_formation."""
         from core.device_formation import resolve_formation
+
         self.assertTrue(callable(resolve_formation))
 
     def test_E4_device_formation_group_has_required_fields(self):
         """E4. DeviceFormationGroup has source_device_id and members."""
         from core.device_formation.formation_group import DeviceFormationGroup
         import dataclasses
+
         field_names = {f.name for f in dataclasses.fields(DeviceFormationGroup)}
         for required in [
             "source_device_id",
+            "source_runtime_posture",
             "members",
         ]:
             self.assertIn(
-                required, field_names,
+                required,
+                field_names,
                 f"DeviceFormationGroup missing field {required!r}",
             )
 
     def test_E5_device_formation_group_to_dict(self):
         """E5. DeviceFormationGroup.to_dict() is serialisable."""
         from core.device_formation.formation_group import DeviceFormationGroup
+
         group = DeviceFormationGroup(
             formation_id="formation-001",
             source_device_id="device-A",
@@ -533,10 +569,12 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
         d = group.to_dict()
         self.assertIsInstance(d, dict)
         self.assertEqual(d["source_device_id"], "device-A")
+        self.assertEqual(d["source_runtime_posture"], "control_only")
 
     def test_E6_device_router_formation_descriptor_attached_sentinel(self):
         """E6. DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED sentinel importable."""
         from galaxy_gateway.device_router import DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED
+
         self.assertIn("GAP-517-004", DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED)
 
     def test_E7_coordinator_formation_descriptor_attached_sentinel(self):
@@ -544,6 +582,7 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
         from galaxy_gateway.cross_device_coordinator import (
             CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED,
         )
+
         self.assertIn("GAP-517-004", CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED)
 
 
@@ -551,12 +590,14 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
 # F) S4 — Explicit formation membership and role assignment
 # ===========================================================================
 
+
 class TestF_S4_FormationMembership(unittest.TestCase):
     """F) S4: Explicit formation membership and role assignment are observable."""
 
     def test_F1_formation_truth_record_records_participating_ids(self):
         """F1. FormationTruthRecord records all participating device IDs."""
         from core.multi_device_control_integrity import build_formation_truth_record
+
         record = build_formation_truth_record(
             task_id="formation-task-001",
             source_device_id="phone-A",
@@ -568,6 +609,7 @@ class TestF_S4_FormationMembership(unittest.TestCase):
     def test_F2_formation_truth_record_records_primary_and_source(self):
         """F2. FormationTruthRecord distinguishes source and primary device."""
         from core.multi_device_control_integrity import build_formation_truth_record
+
         record = build_formation_truth_record(
             task_id="formation-task-001",
             source_device_id="phone-A",
@@ -585,6 +627,7 @@ class TestF_S4_FormationMembership(unittest.TestCase):
             record_integrity_event,
             get_multi_device_integrity_runtime,
         )
+
         record = build_formation_truth_record(
             task_id="formation-task-002",
             source_device_id="phone-A",
@@ -599,6 +642,7 @@ class TestF_S4_FormationMembership(unittest.TestCase):
     def test_F4_device_formation_group_role_assignment(self):
         """F4. DeviceFormationGroup role_assignments or members attribute is accessible."""
         from core.device_formation.formation_group import DeviceFormationGroup
+
         group = DeviceFormationGroup(
             formation_id="formation-002",
             source_device_id="phone-A",
@@ -613,6 +657,7 @@ class TestF_S4_FormationMembership(unittest.TestCase):
     def test_F5_formation_truth_record_to_dict_serialisable(self):
         """F5. FormationTruthRecord.to_dict() produces a complete dict."""
         from core.multi_device_control_integrity import build_formation_truth_record
+
         record = build_formation_truth_record(
             task_id="formation-task-003",
             source_device_id="phone-A",
@@ -630,6 +675,7 @@ class TestF_S4_FormationMembership(unittest.TestCase):
 # G) S5 — Remote takeover / delegation scenario
 # ===========================================================================
 
+
 class TestG_S5_TakeoverDelegation(unittest.TestCase):
     """G) S5: Remote takeover / delegation — control semantic record marks is_takeover."""
 
@@ -639,6 +685,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
             build_control_semantic_record,
             ControlSemanticKind,
         )
+
         record = build_control_semantic_record(
             task_id="takeover-task-001",
             source_device_id="device-A",
@@ -652,6 +699,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
     def test_G2_takeover_record_is_not_local(self):
         """G2. Takeover record has is_local=False."""
         from core.multi_device_control_integrity import build_control_semantic_record
+
         record = build_control_semantic_record(
             task_id="takeover-task-001",
             source_device_id="device-A",
@@ -663,6 +711,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
     def test_G3_takeover_record_is_semantically_clear(self):
         """G3. Takeover record with explicit source+target is semantically clear."""
         from core.multi_device_control_integrity import build_control_semantic_record, ControlSemanticKind
+
         record = build_control_semantic_record(
             task_id="takeover-task-001",
             source_device_id="device-A",
@@ -681,6 +730,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
             get_multi_device_integrity_runtime,
             ControlSemanticKind,
         )
+
         record = build_control_semantic_record(
             task_id="takeover-task-002",
             source_device_id="device-A",
@@ -696,6 +746,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
     def test_G5_device_router_control_semantic_separation_sentinel(self):
         """G5. DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION sentinel importable."""
         from galaxy_gateway.device_router import DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION
+
         self.assertIn("GAP-517-006", DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION)
 
     def test_G6_control_semantic_kind_hybrid_for_multi_target(self):
@@ -704,6 +755,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
             build_control_semantic_record,
             ControlSemanticKind,
         )
+
         record = build_control_semantic_record(
             task_id="takeover-task-003",
             source_device_id="device-A",
@@ -717,22 +769,26 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
 # H) S6 — Incomplete / degraded participation / readiness behavior
 # ===========================================================================
 
+
 class TestH_S6_DegradedParticipation(unittest.TestCase):
     """H) S6: Degraded participation — deny-by-default gate and structured warning."""
 
     def test_H1_constellation_gate_deny_by_default_sentinel_importable(self):
         """H1. CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT is importable."""
         from core.constellation_runtime import CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT
+
         self.assertIsInstance(CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT, str)
 
     def test_H2_constellation_gate_sentinel_references_gap005(self):
         """H2. The deny-by-default sentinel references GAP-517-005."""
         from core.constellation_runtime import CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT
+
         self.assertIn("GAP-517-005", CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT)
 
     def test_H3_is_orchestration_ready_deny_by_default_when_participation_unavailable(self):
         """H3. _is_orchestration_ready() returns False when participation layer raises."""
         from core.constellation_runtime import ConstellationRuntime
+
         runtime = ConstellationRuntime()
         with patch(
             "core.device_participation.is_device_orchestration_ready",
@@ -747,6 +803,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
     def test_H4_is_orchestration_ready_emits_warning_on_exception(self):
         """H4. _is_orchestration_ready() emits WARNING log when gate is unreachable."""
         from core.constellation_runtime import ConstellationRuntime
+
         runtime = ConstellationRuntime()
         with self.assertLogs("Galaxy.ConstellationRuntime", level="WARNING") as log_ctx:
             with patch(
@@ -755,8 +812,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
             ):
                 runtime._is_orchestration_ready("device-X")
         self.assertTrue(
-            any("deny" in m.lower() or "gate" in m.lower() or "GAP-517-005" in m
-                for m in log_ctx.output),
+            any("deny" in m.lower() or "gate" in m.lower() or "GAP-517-005" in m for m in log_ctx.output),
             "Expected structured warning about deny-by-default gate",
         )
 
@@ -766,6 +822,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
             build_formation_truth_record,
             FormationTruthConsistency,
         )
+
         record = build_formation_truth_record(
             task_id="degraded-task-001",
             source_device_id="device-A",
@@ -781,6 +838,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
             build_result_surface_record,
             ResultSurfaceKind,
         )
+
         record = build_result_surface_record(
             task_id="degraded-task-001",
             source_device_id="device-A",
@@ -796,6 +854,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
     def test_H7_degraded_result_surface_has_gap_reasons(self):
         """H7. Partial/degraded ResultSurfaceRecord exposes gap reasons."""
         from core.multi_device_control_integrity import build_result_surface_record
+
         record = build_result_surface_record(
             task_id="degraded-task-001",
             source_device_id="device-A",
@@ -808,7 +867,8 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
         )
         self.assertIsInstance(record.surface_gap_reasons, list)
         self.assertGreater(
-            len(record.surface_gap_reasons), 0,
+            len(record.surface_gap_reasons),
+            0,
             "Partial surface record should have gap reasons",
         )
 
@@ -818,6 +878,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
             build_entry_unification_record,
             EntryUnificationKind,
         )
+
         record = build_entry_unification_record(
             task_id="legacy-task-001",
             source_device_id="device-A",
@@ -831,6 +892,7 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
 # I) S7 — Result surfacing through canonical runtime / operator / audit layers
 # ===========================================================================
 
+
 class TestI_S7_CanonicalResultSurface(unittest.TestCase):
     """I) S7: Result surfacing — ResultEnvelope, chain, graph, replay all updated."""
 
@@ -840,6 +902,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
     def test_I1_surface_cross_device_result_produces_result_envelope(self):
         """I1. surface_cross_device_result produces a ResultEnvelope."""
         from core.cross_device_result_surface import surface_cross_device_result
+
         raw = {"success": True, "task_id": "surface-task-001"}
         record = surface_cross_device_result(
             raw,
@@ -851,6 +914,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
         self.assertTrue(record.result_envelope_produced)
         # The actual ResultEnvelope is stored in the chain record
         from core.cross_device_execution_chain import get_cross_device_chain
+
         snap = get_cross_device_chain().snapshot()
         chain_task_ids = [r.task_id for r in snap.recent_records]
         self.assertIn("surface-task-001", chain_task_ids)
@@ -859,6 +923,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
         """I2. surface_cross_device_result adds a record to CrossDeviceChainSingleton."""
         from core.cross_device_result_surface import surface_cross_device_result
         from core.cross_device_execution_chain import get_cross_device_chain
+
         raw = {"success": True, "task_id": "surface-task-002"}
         surface_cross_device_result(
             raw,
@@ -874,6 +939,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
     def test_I3_surface_cross_device_result_updates_task_graph(self):
         """I3. surface_cross_device_result updates TaskGraphRuntime."""
         from core.cross_device_result_surface import surface_cross_device_result
+
         record = surface_cross_device_result(
             {"success": True, "task_id": "surface-task-003"},
             task_id="surface-task-003",
@@ -884,6 +950,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
     def test_I4_surface_cross_device_result_updates_replay_foundation(self):
         """I4. surface_cross_device_result emits to ReplayFoundation."""
         from core.cross_device_result_surface import surface_cross_device_result
+
         record = surface_cross_device_result(
             {"success": True, "task_id": "surface-task-004"},
             task_id="surface-task-004",
@@ -894,6 +961,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
     def test_I5_surface_record_is_canonically_surfaced_for_success(self):
         """I5. Successful canonical surface yields is_canonically_surfaced=True."""
         from core.cross_device_result_surface import surface_cross_device_result
+
         record = surface_cross_device_result(
             {"success": True, "task_id": "surface-task-005"},
             task_id="surface-task-005",
@@ -909,6 +977,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
         """I6. Failure raw result produces a result envelope with success=False."""
         from core.cross_device_result_surface import surface_cross_device_result
         from core.cross_device_execution_chain import get_cross_device_chain
+
         record = surface_cross_device_result(
             {"success": False, "error": "device unreachable", "task_id": "surface-task-006"},
             task_id="surface-task-006",
@@ -926,12 +995,14 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
     def test_I7_cross_device_result_surface_gap007_resolved_sentinel(self):
         """I7. CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED sentinel importable."""
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED
+
         self.assertIn("GAP_517_007_RESOLVED", CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED)
 
     def test_I8_chain_snapshot_reflects_surfaced_execution(self):
         """I8. CrossDeviceChain snapshot reflects the surfaced execution."""
         from core.cross_device_result_surface import surface_cross_device_result
         from core.cross_device_execution_chain import get_cross_device_chain
+
         surface_cross_device_result(
             {"success": True, "task_id": "surface-task-007"},
             task_id="surface-task-007",
@@ -949,6 +1020,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
             record_integrity_event,
             get_multi_device_integrity_runtime,
         )
+
         record = build_result_surface_record(
             task_id="surface-task-008",
             source_device_id="device-A",
@@ -966,6 +1038,7 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
 # J) S8 — Projection / runtime view reflecting canonical state
 # ===========================================================================
 
+
 class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
     """J) S8: Projection enrichment — canonical enrichment keys present."""
 
@@ -974,11 +1047,13 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY,
         )
+
         self.assertIn("PR522", MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY)
 
     def test_J2_enrich_multi_device_projection_is_callable(self):
         """J2. enrich_multi_device_projection() is importable and callable."""
         from core.multi_device_projection_canonicalization import enrich_multi_device_projection
+
         self.assertTrue(callable(enrich_multi_device_projection))
 
     def test_J3_enrich_multi_device_projection_returns_enrichment(self):
@@ -987,12 +1062,14 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
             enrich_multi_device_projection,
             MultiDeviceCanonicalEnrichment,
         )
+
         enrichment = enrich_multi_device_projection()
         self.assertIsInstance(enrichment, MultiDeviceCanonicalEnrichment)
 
     def test_J4_enrichment_to_dict_has_expected_keys(self):
         """J4. Enrichment.to_dict() has the canonical keys for projection."""
         from core.multi_device_projection_canonicalization import enrich_multi_device_projection
+
         d = enrich_multi_device_projection().to_dict()
         for key in [
             "surfacing_state",
@@ -1008,6 +1085,7 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
             enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
         )
+
         enrichment = enrich_multi_device_projection()
         valid_values = {s.value for s in CanonicalProjectionSurfacingState}
         self.assertIn(
@@ -1021,12 +1099,14 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_GAP008_RESOLVED,
         )
+
         self.assertIn("GAP_517_008_RESOLVED", MULTI_DEVICE_PROJECTION_GAP008_RESOLVED)
 
     def test_J7_projection_canonicalization_integrated_in_projection_routes(self):
         """J7. MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED importable from projection routes."""
         import inspect
         import core.routes.projection as proj_mod
+
         src = inspect.getsource(proj_mod)
         self.assertIn("MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED", src)
 
@@ -1056,6 +1136,7 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
 # K) Operator / audit visibility
 # ===========================================================================
 
+
 class TestK_OperatorAuditVisibility(unittest.TestCase):
     """K) Operator / audit visibility — integrity snapshot contains representative records."""
 
@@ -1068,12 +1149,14 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
             build_integrity_snapshot,
             MultiDeviceIntegritySnapshot,
         )
+
         snap = build_integrity_snapshot()
         self.assertIsInstance(snap, MultiDeviceIntegritySnapshot)
 
     def test_K2_integrity_snapshot_to_dict_serialisable(self):
         """K2. MultiDeviceIntegritySnapshot.to_dict() is serialisable."""
         from core.multi_device_control_integrity import build_integrity_snapshot
+
         d = build_integrity_snapshot().to_dict()
         self.assertIsInstance(d, dict)
         self.assertIn("authority", d)
@@ -1086,6 +1169,7 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
             record_integrity_event,
             build_integrity_snapshot,
         )
+
         record = build_entry_unification_record(
             task_id="audit-task-001",
             source_device_id="device-A",
@@ -1104,6 +1188,7 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
             record_integrity_event,
             build_integrity_snapshot,
         )
+
         record = build_dispatch_authority_record(
             task_id="audit-task-002",
             dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL,
@@ -1122,6 +1207,7 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
             record_integrity_event,
             build_integrity_snapshot,
         )
+
         record = build_control_semantic_record(
             task_id="audit-task-003",
             source_device_id="device-A",
@@ -1139,6 +1225,7 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
             record_integrity_event,
             build_integrity_snapshot,
         )
+
         record = build_result_surface_record(
             task_id="audit-task-004",
             source_device_id="device-A",
@@ -1154,12 +1241,14 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K7_snapshot_recent_records_list(self):
         """K7. Integrity snapshot recent_entry_records is a list."""
         from core.multi_device_control_integrity import build_integrity_snapshot
+
         snap = build_integrity_snapshot()
         self.assertIsInstance(snap.recent_entry_records, list)
 
     def test_K8_open_gaps_accessible_from_runtime(self):
         """K8. snapshot.open_gaps() returns only unresolved gaps."""
         from core.multi_device_control_integrity import get_multi_device_integrity_runtime
+
         rt = get_multi_device_integrity_runtime()
         open_gaps = rt.snapshot().open_gaps()
         for g in open_gaps:
@@ -1173,6 +1262,7 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
             record_integrity_event,
             get_multi_device_integrity_runtime,
         )
+
         rt = get_multi_device_integrity_runtime()
         before = rt.snapshot().canonical_entry_count + rt.snapshot().legacy_entry_count
         for i in range(3):
@@ -1191,41 +1281,48 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
 # L) GAP-517-002 closure documentation
 # ===========================================================================
 
+
 class TestL_GAP002ClosureAccounting(unittest.TestCase):
     """L) GAP-517-002 closure is reflected consistently across accounting surfaces."""
 
     def test_L1_gap002_exists_in_catalog(self):
         """L1. GAP-517-002 exists in the residual gap catalog."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertIn("GAP-517-002", gaps)
 
     def test_L2_gap002_is_resolved(self):
         """L2. GAP-517-002 is marked as resolved."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertTrue(gaps["GAP-517-002"].is_resolved)
 
     def test_L3_gap002_is_medium_severity(self):
         """L3. GAP-517-002 is MEDIUM severity (lower than the HIGH gaps closed in PR-518)."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertEqual(gaps["GAP-517-002"].severity, "MEDIUM")
 
     def test_L4_gap002_has_description(self):
         """L4. GAP-517-002 has a non-empty description."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertGreater(len(gaps["GAP-517-002"].description or ""), 0)
 
     def test_L5_closure_accounting_sentinel_marks_gap002_resolved(self):
         """L5. PR523_RESIDUAL_CLOSURE_ACCOUNTING explicitly marks GAP-517-002 as RESOLVED."""
         from core.multi_device_control_integrity import PR523_RESIDUAL_CLOSURE_ACCOUNTING
+
         self.assertIn("GAP-517-002=RESOLVED(PR-532)", PR523_RESIDUAL_CLOSURE_ACCOUNTING)
 
     def test_L6_open_gaps_list_excludes_gap002(self):
         """L6. snapshot().open_gaps() excludes GAP-517-002 once closed."""
         from core.multi_device_control_integrity import get_multi_device_integrity_runtime
+
         open_gap_ids = {g.gap_id for g in get_multi_device_integrity_runtime().snapshot().open_gaps()}
         self.assertNotIn("GAP-517-002", open_gap_ids)
 
@@ -1234,17 +1331,20 @@ class TestL_GAP002ClosureAccounting(unittest.TestCase):
 # M) Integrated path — canonical sentinels in key modules
 # ===========================================================================
 
+
 class TestM_IntegratedPathSentinels(unittest.TestCase):
     """M) Canonical sentinels confirm each integrated module has been wired correctly."""
 
     def test_M1_cross_device_result_surface_authority_importable(self):
         """M1. CROSS_DEVICE_RESULT_SURFACE_AUTHORITY importable (PR-519)."""
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_AUTHORITY
+
         self.assertIn("PR519", CROSS_DEVICE_RESULT_SURFACE_AUTHORITY)
 
     def test_M2_cross_device_result_surface_integrated_importable(self):
         """M2. CROSS_DEVICE_RESULT_SURFACE_INTEGRATED importable (PR-519)."""
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_INTEGRATED
+
         self.assertIn("INTEGRATED", CROSS_DEVICE_RESULT_SURFACE_INTEGRATED)
 
     def test_M3_cross_device_coordinator_substrate_only_importable(self):
@@ -1252,11 +1352,13 @@ class TestM_IntegratedPathSentinels(unittest.TestCase):
         from galaxy_gateway.cross_device_coordinator import (
             CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY,
         )
+
         self.assertIn("GAP-517-003", CROSS_DEVICE_COORDINATOR_SUBSTRATE_ONLY)
 
     def test_M4_device_router_cross_device_substrate_only_importable(self):
         """M4. DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY importable (PR-518)."""
         from galaxy_gateway.device_router import DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY
+
         self.assertIn("GAP-517-003", DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY)
 
     def test_M5_projection_canonicalization_authority_importable(self):
@@ -1264,26 +1366,31 @@ class TestM_IntegratedPathSentinels(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY,
         )
+
         self.assertIn("PR522", MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY)
 
     def test_M6_constellation_deny_by_default_importable(self):
         """M6. CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT importable (PR-520)."""
         from core.constellation_runtime import CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT
+
         self.assertIn("GAP-517-005", CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT)
 
     def test_M7_device_router_control_semantic_separation_importable(self):
         """M7. DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION importable (PR-521)."""
         from galaxy_gateway.device_router import DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION
+
         self.assertIn("GAP-517-006", DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION)
 
     def test_M8_multi_device_control_integrity_authority_importable(self):
         """M8. MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY importable (PR-517)."""
         from core.multi_device_control_integrity import MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY
+
         self.assertIn("MULTI_DEVICE_CONTROL_INTEGRITY", MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY)
 
     def test_M9_pr523_e2e_acceptance_verified_importable(self):
         """M9. MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED importable (PR-523)."""
         from core.multi_device_control_integrity import MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED
+
         self.assertIn("PR523", MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED)
 
     def test_M10_all_integrated_pr_sentinels_form_coherent_coverage(self):
@@ -1294,13 +1401,13 @@ class TestM_IntegratedPathSentinels(unittest.TestCase):
             ("core.cross_device_result_surface", "CROSS_DEVICE_RESULT_SURFACE_AUTHORITY"),
             ("core.constellation_runtime", "CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT"),
             ("galaxy_gateway.device_router", "DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION"),
-            ("core.multi_device_projection_canonicalization",
-             "MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY"),
+            ("core.multi_device_projection_canonicalization", "MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY"),
             ("core.multi_device_control_integrity", "MULTI_DEVICE_E2E_ACCEPTANCE_VERIFIED"),
         ]
         for mod_name, sentinel_name in sentinel_modules:
             with self.subTest(sentinel=sentinel_name):
                 import importlib
+
                 mod = importlib.import_module(mod_name)
                 self.assertTrue(
                     hasattr(mod, sentinel_name),

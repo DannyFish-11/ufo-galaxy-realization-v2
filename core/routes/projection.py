@@ -46,9 +46,8 @@ try:
     from core.projection_surface_bridge import (  # noqa: F401
         PROJECTION_SURFACE_BRIDGE_AUTHORITY as _PSB_AUTHORITY,
     )
-    PROJECTION_SURFACE_BRIDGE_INTEGRATED: str = (
-        "PROJECTION_ROUTES::PROJECTION_SURFACE_BRIDGE_INTEGRATED_V1"
-    )
+
+    PROJECTION_SURFACE_BRIDGE_INTEGRATED: str = "PROJECTION_ROUTES::PROJECTION_SURFACE_BRIDGE_INTEGRATED_V1"
 except ImportError:  # pragma: no cover
     PROJECTION_SURFACE_BRIDGE_INTEGRATED: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::PROJECTION_SURFACE_BRIDGE_INTEGRATED_UNAVAILABLE"
@@ -63,9 +62,8 @@ try:
     from core.authority_conflict_elimination import (  # noqa: F401
         AUTHORITY_CONFLICT_ELIMINATION_AUTHORITY as _ACE_AUTHORITY,
     )
-    AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED: str = (
-        "PROJECTION_ROUTES::AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED_V1"
-    )
+
+    AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED: str = "PROJECTION_ROUTES::AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED_V1"
 except ImportError:  # pragma: no cover
     AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED_UNAVAILABLE"
@@ -80,6 +78,7 @@ try:
     from core.multi_device_projection_canonicalization import (  # noqa: F401
         MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY as _MDPC_AUTHORITY,
     )
+
     MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED: str = (
         "PROJECTION_ROUTES::MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED_V1"
     )
@@ -97,9 +96,8 @@ try:
         OUTWARD_RUNTIME_TRUTH_AUTHORITY as _ORT_AUTHORITY,
         compile_outward_truth as _compile_outward_truth,
     )
-    OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = (
-        "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_V1"
-    )
+
+    OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_V1"
 except ImportError:  # pragma: no cover
     OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_UNAVAILABLE"
@@ -832,6 +830,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             registry = get_body_mesh_registry()
             memberships = registry.get_mesh_memberships(mesh_id="default_mesh")
             payload = {
@@ -883,15 +882,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             registry = get_body_mesh_registry()
             session = registry.get_mesh_session(mesh_id="default_mesh")
             if session is None:
                 from contracts.mesh_session import build_mesh_session
+
                 session = build_mesh_session(mesh_id="default_mesh")
             payload = session.to_dict()
         except Exception as exc:
             try:
                 from contracts.mesh_session import build_mesh_session, MeshSessionStatus
+
                 session = build_mesh_session(mesh_id="default_mesh")
                 payload = session.to_dict()
                 payload["error"] = str(exc)
@@ -960,6 +962,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
         try:
             from core.runtime.target_takeover import execute_local_takeover
+
             result = execute_local_takeover(
                 payload,
                 capture_governance=True,
@@ -967,11 +970,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             )
             result_dict = result.to_dict() if hasattr(result, "to_dict") else {}
         except Exception as exc:
-            logger.warning(
-                "runtime_local_takeover: execute_local_takeover raised: %s", exc
-            )
+            logger.warning("runtime_local_takeover: execute_local_takeover raised: %s", exc)
             try:
                 from contracts.local_takeover_result import failure_result, LocalTakeoverStatus
+
                 result = failure_result(
                     reason=f"internal_error:{exc}",
                     status=LocalTakeoverStatus.failed,
@@ -1035,21 +1037,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 session_id=plan.session_id,
                 mode=plan.mode,
                 success=plan.ready,
-                decision_reason=(
-                    plan.readiness_notes[0] if plan.readiness_notes else None
-                ),
-                target_device_id=(
-                    plan.selected_target.target_device_id
-                    if plan.selected_target
-                    else None
-                ),
+                decision_reason=(plan.readiness_notes[0] if plan.readiness_notes else None),
+                target_device_id=(plan.selected_target.target_device_id if plan.selected_target else None),
                 has_mesh_session=plan.mesh_session is not None,
             )
             return JSONResponse(content=summary.to_dict())
         except Exception as exc:
-            logger.warning(
-                "get_source_dispatch_summary: failed to build summary: %s", exc
-            )
+            logger.warning("get_source_dispatch_summary: failed to build summary: %s", exc)
             original_exc = exc
             try:
                 from contracts.source_dispatch import SourceDispatchSummary, SourceDispatchMode
@@ -1132,9 +1126,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             )
             return JSONResponse(content=summary.to_dict())
         except Exception as exc:
-            logger.warning(
-                "get_result_merge_summary: failed to build summary: %s", exc
-            )
+            logger.warning("get_result_merge_summary: failed to build summary: %s", exc)
             try:
                 from contracts.cross_runtime_result_merge import ResultMergeSummary, ResultMergePolicy
 
@@ -1148,9 +1140,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 import uuid as _uuid
                 import time as _time
 
-                logger.warning(
-                    "get_result_merge_summary: fallback construction failed: %s", fallback_exc
-                )
+                logger.warning("get_result_merge_summary: fallback construction failed: %s", fallback_exc)
                 return JSONResponse(
                     content={
                         "summary_id": str(_uuid.uuid4()),
@@ -1214,9 +1204,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 )
             return JSONResponse(content=summary.to_dict())
         except Exception as exc:
-            logger.warning(
-                "get_mesh_coordinator_summary: failed to build summary: %s", exc
-            )
+            logger.warning("get_mesh_coordinator_summary: failed to build summary: %s", exc)
             try:
                 from contracts.mesh_session_coordinator import (
                     MeshSessionCoordinatorSummary,
@@ -1295,9 +1283,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
                 udm = UnifiedDeviceManager.get_instance()
                 if udm is not None:
-                    for dev in (udm.get_all_devices() or []):
+                    for dev in udm.get_all_devices() or []:
                         try:
                             from contracts.registered_runtime_device import from_udm_device
+
                             runtime_devices.append(from_udm_device(dev).to_dict())
                         except Exception:
                             pass
@@ -1321,7 +1310,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             mesh_memberships: list = []
             try:
                 memberships = registry.get_mesh_memberships()
-                for m in (memberships or []):
+                for m in memberships or []:
                     try:
                         d = m.to_dict() if hasattr(m, "to_dict") else dict(m)
                         mesh_memberships.append(d)
@@ -1335,9 +1324,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             try:
                 session = registry.get_mesh_session(mesh_id="default_mesh")
                 if session is not None:
-                    mesh_sessions.append(
-                        session.to_dict() if hasattr(session, "to_dict") else dict(session)
-                    )
+                    mesh_sessions.append(session.to_dict() if hasattr(session, "to_dict") else dict(session))
             except Exception as exc:
                 logger.debug("multi-device projection: mesh session unavailable: %s", exc)
 
@@ -1347,6 +1334,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 coordinator = registry.get_mesh_session_coordinator(mesh_id="default_mesh")
                 if coordinator is not None:
                     from contracts.mesh_session_coordinator import build_coordinator_summary
+
                     summary = build_coordinator_summary(coordinator=coordinator)
                     coordinator_summaries.append(summary.to_dict())
             except Exception as exc:
@@ -1365,6 +1353,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 from core.multi_device_projection_canonicalization import (
                     enrich_multi_device_projection,
                 )
+
                 _enrichment = enrich_multi_device_projection(
                     max_chain_records=10,
                     max_graph_records=10,
@@ -1377,9 +1366,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "multi-device projection: canonical enrichment unavailable: %s",
                     _enrich_exc,
                 )
-                _canonical_surfacing_gaps = [
-                    f"GAP-517-008: canonical enrichment failed: {_enrich_exc}"
-                ]
+                _canonical_surfacing_gaps = [f"GAP-517-008: canonical enrichment failed: {_enrich_exc}"]
 
             projection = build_multi_device_runtime_projection(
                 runtime_devices=runtime_devices,
@@ -1393,21 +1380,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "canonical_surfacing_state": _canonical_surfacing_state,
                     "canonical_surfacing_gaps": _canonical_surfacing_gaps,
                     "transport_local_only": (
-                        _canonical_enrichment is None
-                        or _canonical_enrichment.get("transport_local_only", True)
+                        _canonical_enrichment is None or _canonical_enrichment.get("transport_local_only", True)
                     ),
                     # Backward-compat fields carried forward from PR-519
                     "cross_device_chain_snapshot": (
-                        _canonical_enrichment.get("chain_snapshot")
-                        if _canonical_enrichment is not None
-                        else None
+                        _canonical_enrichment.get("chain_snapshot") if _canonical_enrichment is not None else None
                     ),
                     "task_graph_snapshot": (
-                        _canonical_enrichment.get("graph_snapshot")
+                        _canonical_enrichment.get("graph_snapshot") if _canonical_enrichment is not None else None
+                    ),
+                    "result_surface_enriched": _canonical_enrichment is not None,
+                    "source_runtime_posture_snapshot": (
+                        _canonical_enrichment.get("source_runtime_posture_snapshot")
                         if _canonical_enrichment is not None
                         else None
                     ),
-                    "result_surface_enriched": _canonical_enrichment is not None,
+                    "source_runtime_posture_available": (
+                        _canonical_enrichment.get("source_runtime_posture_available", False)
+                        if _canonical_enrichment is not None
+                        else False
+                    ),
                     "pr_522_gap_008_resolved": True,
                 },
             )
@@ -1500,6 +1492,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 from contracts.multi_device_runtime_projection import (
                     build_multi_device_runtime_projection,
                 )
+
                 projection_obj = build_multi_device_runtime_projection()
                 projection_dict = projection_obj.to_dict()
             except Exception as exc:
@@ -1582,12 +1575,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 from contracts.multi_device_runtime_projection import (
                     build_multi_device_runtime_projection,
                 )
+
                 projection_obj = build_multi_device_runtime_projection()
                 projection_dict = projection_obj.to_dict()
             except Exception as exc:
-                logger.debug(
-                    "get_runtime_session_snapshot: projection unavailable: %s", exc
-                )
+                logger.debug("get_runtime_session_snapshot: projection unavailable: %s", exc)
 
             snapshot = from_multi_device_runtime_projection(projection_dict)
             summary = build_runtime_session_snapshot_summary(snapshot)
@@ -2002,6 +1994,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _assemble_runtime_truth_payload() -> Dict[str, Any]:
     """Assemble the canonical runtime truth snapshot dict.
 
@@ -2020,6 +2013,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("_assemble_runtime_truth_payload: failed: %s", exc)
         from core.projection.runtime_truth_compiler import RUNTIME_TRUTH_COMPILER_AUTHORITY
+
         return {
             "compiled_at": time.time(),
             "compiler_authority": RUNTIME_TRUTH_COMPILER_AUTHORITY,
@@ -2087,11 +2081,10 @@ def _assemble_projection() -> Dict[str, Any]:
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         payload = enrich_projection_with_runtime_authority(payload)
     except Exception as exc:
-        logger.warning(
-            "_assemble_projection: runtime enrichment failed: %s", exc
-        )
+        logger.warning("_assemble_projection: runtime enrichment failed: %s", exc)
 
     return payload
 
@@ -2101,6 +2094,7 @@ def _get_continuum_state():
     try:
         # Try the cognitive field engine first (Block-3 integration).
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
+
         engine = CognitiveFieldEngine.get_instance()
         if engine is not None and hasattr(engine, "get_continuum_state"):
             state = engine.get_continuum_state()
@@ -2112,6 +2106,7 @@ def _get_continuum_state():
     try:
         # Fallback: desktop presence runtime if available.
         from core.desktop_presence_runtime import get_presence_runtime
+
         runtime = get_presence_runtime()
         if runtime is not None and hasattr(runtime, "get_continuum_state"):
             state = runtime.get_continuum_state()
@@ -2123,6 +2118,7 @@ def _get_continuum_state():
     try:
         # Final fallback: minimal silent state so the board always renders.
         from core.continuum.types import ContinuumPhase, ContinuumState
+
         return ContinuumState(phase=ContinuumPhase.FORMLESS)
     except Exception:
         return None
@@ -2149,6 +2145,7 @@ def _get_execution_summary() -> Optional[Any]:
 
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager.get_instance()
             if udm is None:
                 return None
@@ -2196,9 +2193,7 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
         from core.projection import build_runtime_projection, ExecutionSummary
         from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
     except Exception as exc:
-        logger.warning(
-            "_assemble_canonical_routing_payload: imports unavailable: %s", exc
-        )
+        logger.warning("_assemble_canonical_routing_payload: imports unavailable: %s", exc)
         base = _minimal_fallback_payload()
         base["oneapi_summary"] = None
         base["provider_status_summary"] = None
@@ -2216,6 +2211,7 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
             extract_oneapi_source_from_route_plan,
             build_oneapi_projection_summary,
         )
+
         if route_plan is not None:
             route_plan_dict = route_plan.to_dict()
             oneapi_summary = extract_oneapi_source_from_route_plan(route_plan_dict)
@@ -2238,6 +2234,7 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
         model_supply: Optional[Any] = None
         try:
             from core.model_topology import ProviderInventory
+
             inventory = ProviderInventory.from_config()
             # Build a minimal model_supply dict from the inventory if possible.
             if hasattr(inventory, "to_dict"):
@@ -2278,17 +2275,13 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
             )
             base = projection.to_dict()
     except Exception as exc:
-        logger.warning(
-            "_assemble_canonical_routing_payload: projection assembly failed: %s", exc
-        )
+        logger.warning("_assemble_canonical_routing_payload: projection assembly failed: %s", exc)
         base = _minimal_fallback_payload()
         base["oneapi_summary"] = oneapi_summary
         base["provider_status_summary"] = provider_status_summary
 
     # --- Attach canonical routing hints ----------------------------------
-    base["canonical_routing_hints"] = _build_routing_hints(
-        base, oneapi_summary, provider_status_summary
-    )
+    base["canonical_routing_hints"] = _build_routing_hints(base, oneapi_summary, provider_status_summary)
     return base
 
 
@@ -2348,6 +2341,7 @@ def _assemble_projection_with_return() -> Dict[str, Any]:
 
         try:
             from core.continuum.return_engine import ReturnEngine
+
             engine = ReturnEngine()
             result = engine.evaluate(continuum_state)
             summary = build_return_summary(result)
@@ -2399,6 +2393,7 @@ def _assemble_projection_with_execution_policy() -> Dict[str, Any]:
         authority_role = None
         try:
             from core.orchestration_authority import AuthorityRole
+
             authority_role = AuthorityRole.AUTHORITATIVE_ENTRYPOINT
         except Exception:
             pass
@@ -2416,6 +2411,7 @@ def _assemble_projection_with_execution_policy() -> Dict[str, Any]:
     except Exception as exc:  # pragma: no cover
         logger.warning("Execution-policy assembly failed, attaching conservative default: %s", exc)
         from core.execution_policy.policy_summary import _fallback_summary
+
         base["execution_policy"] = _fallback_summary()
         return base
 
@@ -2446,6 +2442,7 @@ def _assemble_projection_with_cross_device_routing() -> Dict[str, Any]:
         authority_role = None
         try:
             from core.orchestration_authority import AuthorityRole
+
             authority_role = AuthorityRole.AUTHORITATIVE_ENTRYPOINT
         except Exception:
             pass
@@ -2458,11 +2455,10 @@ def _assemble_projection_with_cross_device_routing() -> Dict[str, Any]:
         return attach_cross_device_to_projection(base, summary)
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Cross-device routing assembly failed, attaching idle summary: %s", exc
-        )
+        logger.warning("Cross-device routing assembly failed, attaching idle summary: %s", exc)
         try:
             from core.cross_device_policy import IDLE_ASSIGNMENT_SUMMARY
+
             base["cross_device_routing"] = IDLE_ASSIGNMENT_SUMMARY.to_dict()
         except Exception:
             base["cross_device_routing"] = {"posture": "undecided", "is_cross_device": False}
@@ -2495,9 +2491,7 @@ def _assemble_projection_with_merge_summary() -> Dict[str, Any]:
         return result
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Merge-summary assembly failed, attaching empty placeholder: %s", exc
-        )
+        logger.warning("Merge-summary assembly failed, attaching empty placeholder: %s", exc)
         base["merge_summary"] = {
             "merge_status": "failed",
             "total_count": 0,
@@ -2540,9 +2534,7 @@ def _assemble_projection_with_task_semantics() -> Dict[str, Any]:
         return result
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Task-semantics assembly failed, attaching empty placeholder: %s", exc
-        )
+        logger.warning("Task-semantics assembly failed, attaching empty placeholder: %s", exc)
         base["task_semantics"] = {
             "task_id": "",
             "trace_id": "",
@@ -2595,9 +2587,7 @@ def _assemble_projection_with_device_formation() -> Dict[str, Any]:
         return result
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Device-formation assembly failed, attaching idle placeholder: %s", exc
-        )
+        logger.warning("Device-formation assembly failed, attaching idle placeholder: %s", exc)
         base["device_formation"] = {
             "schema_version": 1,
             "formation_id": "empty",
@@ -2658,16 +2648,12 @@ def _assemble_projection_with_agent_dispatch() -> Dict[str, Any]:
         runtime_domain = base.get("runtime_domain", "local")
         device_formation = base.get("device_formation", {})
         is_multi_device = (
-            device_formation.get("is_multi_device", False)
-            if isinstance(device_formation, dict)
-            else False
+            device_formation.get("is_multi_device", False) if isinstance(device_formation, dict) else False
         )
 
         # Choose dispatch role hint based on available context
         dispatch_role_str = "local_assistant" if not is_multi_device else "planner"
-        target_role_str = (
-            "remote_specialist" if is_multi_device else "executor"
-        )
+        target_role_str = "remote_specialist" if is_multi_device else "executor"
 
         summary = resolve_dispatch_summary(
             dispatch_role_str=dispatch_role_str,
@@ -2679,9 +2665,7 @@ def _assemble_projection_with_agent_dispatch() -> Dict[str, Any]:
         return result
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Agent-dispatch governance assembly failed, attaching idle placeholder: %s", exc
-        )
+        logger.warning("Agent-dispatch governance assembly failed, attaching idle placeholder: %s", exc)
         base["agent_dispatch"] = {
             "schema_version": 1,
             "dispatch_role": "unassigned",
@@ -2747,9 +2731,7 @@ def _assemble_projection_with_routing_explanation() -> Dict[str, Any]:
         return result
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Routing-explanation assembly failed, attaching idle placeholder: %s", exc
-        )
+        logger.warning("Routing-explanation assembly failed, attaching idle placeholder: %s", exc)
         base["routing_explanation"] = {
             "schema_version": 1,
             "route_target": None,
@@ -2833,9 +2815,7 @@ def _assemble_projection_with_governance() -> Dict[str, Any]:
         return base
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Governance projection assembly failed, attaching minimal placeholder: %s", exc
-        )
+        logger.warning("Governance projection assembly failed, attaching minimal placeholder: %s", exc)
         base["governance"] = {
             "governance_available": False,
             "execution": {"available": False, "action_level": "observe", "intent_mode": "advisory"},
@@ -2888,9 +2868,7 @@ def _assemble_runtime_governance_snapshot_payload() -> Dict[str, Any]:
                 state_continuum=continuum_state,
             )
         except Exception as exc:
-            logger.warning(
-                "Runtime governance snapshot: projection governance unavailable: %s", exc
-            )
+            logger.warning("Runtime governance snapshot: projection governance unavailable: %s", exc)
 
         # Resolve tri_state_phase / runtime_domain from live continuum state
         tri_state_phase: Optional[str] = None
@@ -2905,17 +2883,11 @@ def _assemble_runtime_governance_snapshot_payload() -> Dict[str, Any]:
                     phase = getattr(cs, "tri_state_phase", None)
                     domain = getattr(cs, "runtime_domain", None)
                     if phase is not None:
-                        tri_state_phase = (
-                            phase.value if hasattr(phase, "value") else str(phase)
-                        )
+                        tri_state_phase = phase.value if hasattr(phase, "value") else str(phase)
                     if domain is not None:
-                        runtime_domain = (
-                            domain.value if hasattr(domain, "value") else str(domain)
-                        )
+                        runtime_domain = domain.value if hasattr(domain, "value") else str(domain)
         except Exception as exc:
-            logger.warning(
-                "Runtime governance snapshot: failed to resolve phase/domain: %s", exc
-            )
+            logger.warning("Runtime governance snapshot: failed to resolve phase/domain: %s", exc)
 
         snapshot = assemble_runtime_governance_snapshot(
             projection_governance=proj_gov,
@@ -2925,9 +2897,7 @@ def _assemble_runtime_governance_snapshot_payload() -> Dict[str, Any]:
         return snapshot.to_dict()
 
     except Exception as exc:
-        logger.warning(
-            "Runtime governance snapshot assembly failed, returning minimal payload: %s", exc
-        )
+        logger.warning("Runtime governance snapshot assembly failed, returning minimal payload: %s", exc)
         import uuid
 
         return {
@@ -2975,9 +2945,7 @@ def _assemble_policy_alignment_payload() -> Dict[str, Any]:
                 state_continuum=continuum_state,
             )
         except Exception as exc:
-            logger.warning(
-                "Policy alignment: projection governance unavailable: %s", exc
-            )
+            logger.warning("Policy alignment: projection governance unavailable: %s", exc)
 
         # Get runtime governance snapshot (PR-27)
         runtime_snapshot = None
@@ -2988,9 +2956,7 @@ def _assemble_policy_alignment_payload() -> Dict[str, Any]:
                 projection_governance=proj_gov,
             )
         except Exception as exc:
-            logger.warning(
-                "Policy alignment: runtime governance snapshot unavailable: %s", exc
-            )
+            logger.warning("Policy alignment: runtime governance snapshot unavailable: %s", exc)
 
         # Resolve tri_state_phase / runtime_domain from live continuum state
         tri_state_phase: Optional[str] = None
@@ -3005,17 +2971,11 @@ def _assemble_policy_alignment_payload() -> Dict[str, Any]:
                     phase = getattr(cs, "tri_state_phase", None)
                     domain = getattr(cs, "runtime_domain", None)
                     if phase is not None:
-                        tri_state_phase = (
-                            phase.value if hasattr(phase, "value") else str(phase)
-                        )
+                        tri_state_phase = phase.value if hasattr(phase, "value") else str(phase)
                     if domain is not None:
-                        runtime_domain = (
-                            domain.value if hasattr(domain, "value") else str(domain)
-                        )
+                        runtime_domain = domain.value if hasattr(domain, "value") else str(domain)
         except Exception as exc:
-            logger.warning(
-                "Policy alignment: failed to resolve phase/domain: %s", exc
-            )
+            logger.warning("Policy alignment: failed to resolve phase/domain: %s", exc)
 
         alignment = build_execution_policy_alignment_surface(
             runtime_governance_snapshot=runtime_snapshot,
@@ -3026,9 +2986,7 @@ def _assemble_policy_alignment_payload() -> Dict[str, Any]:
         return alignment.to_dict()
 
     except Exception as exc:
-        logger.warning(
-            "Policy alignment assembly failed, returning minimal payload: %s", exc
-        )
+        logger.warning("Policy alignment assembly failed, returning minimal payload: %s", exc)
         import uuid
 
         return {
@@ -3090,6 +3048,7 @@ def _assemble_server_canonicalization_status() -> Dict[str, Any]:
     oneapi_integration_present = False
     try:
         from contracts.desktop_status_projection import DesktopStatusProjection
+
         _test_proj = DesktopStatusProjection()
         oneapi_integration_present = hasattr(_test_proj, "oneapi_integration")
     except Exception:
@@ -3116,9 +3075,7 @@ def _assemble_server_canonicalization_status() -> Dict[str, Any]:
             "prefer_topology_route_plan": True,
             "prefer_oneapi_integration_block": True,
             "avoid_legacy_ucp_keys": True,
-            "legacy_routing_fallback_active_field": (
-                "model_routing.legacy_routing_fallback_active"
-            ),
+            "legacy_routing_fallback_active_field": ("model_routing.legacy_routing_fallback_active"),
             "canonical_endpoint": "/api/v1/projection/canonical-routing",
             "desktop_status_endpoint": "/api/v1/projection/runtime",
         },
@@ -3141,9 +3098,7 @@ def _assemble_desktop_topology_payload() -> Dict[str, Any]:
             build_desktop_status_projection,
         )
     except Exception as exc:
-        logger.warning(
-            "_assemble_desktop_topology_payload: import failed: %s", exc
-        )
+        logger.warning("_assemble_desktop_topology_payload: import failed: %s", exc)
         return _minimal_desktop_topology_fallback()
 
     # Build a UCP dict from the live topology route plan so that the
@@ -3169,9 +3124,7 @@ def _assemble_desktop_topology_payload() -> Dict[str, Any]:
         result["_assembled_at"] = time.time()
         return result
     except Exception as exc:
-        logger.warning(
-            "_assemble_desktop_topology_payload: projection assembly failed: %s", exc
-        )
+        logger.warning("_assemble_desktop_topology_payload: projection assembly failed: %s", exc)
         return _minimal_desktop_topology_fallback()
 
 
@@ -3201,13 +3154,9 @@ def _minimal_desktop_topology_fallback() -> Dict[str, Any]:
                 "No routing data is available. Topology block cannot provide routing truth. "
                 "Consumers must not render constellation topology from this block."
             ),
-            "quality_authority": (
-                "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
-            ),
+            "quality_authority": ("contracts.desktop_status_projection.TopologyProjectionQualityBlock"),
         },
-        "contract_authority": (
-            "contracts.desktop_status_projection.DesktopTopologyProjection"
-        ),
+        "contract_authority": ("contracts.desktop_status_projection.DesktopTopologyProjection"),
         "_assembled_at": time.time(),
     }
 
@@ -3228,9 +3177,7 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
             build_desktop_status_projection,
         )
     except Exception as exc:
-        logger.warning(
-            "_assemble_desktop_status_board_payload: import failed: %s", exc
-        )
+        logger.warning("_assemble_desktop_status_board_payload: import failed: %s", exc)
         return _minimal_desktop_status_board_fallback()
 
     # Build a UCP dict from the live topology route plan so that the
@@ -3255,9 +3202,7 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
         result = payload_obj.to_dict()
         result["_assembled_at"] = time.time()
     except Exception as exc:
-        logger.warning(
-            "_assemble_desktop_status_board_payload: assembly failed: %s", exc
-        )
+        logger.warning("_assemble_desktop_status_board_payload: assembly failed: %s", exc)
         return _minimal_desktop_status_board_fallback()
 
     # PR-514: Enrich with canonical runtime authority (GAP-512-003, GAP-512-005).
@@ -3268,6 +3213,7 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         result = enrich_projection_with_runtime_authority(result)
     except Exception as exc:
         logger.warning(
@@ -3286,6 +3232,7 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
         PROJECTION_CONTRACT_AUTHORITY,
     )
+
     return {
         "payload_id": f"dsbip_fallback_{int(time.time())}",
         "integrated_at": time.time(),

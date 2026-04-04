@@ -23,6 +23,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+try:
+    from pydantic import field_validator as _field_validator
+except ImportError:  # pragma: no cover - pydantic v1 fallback
+    from pydantic import validator as _field_validator  # type: ignore
+
 from galaxy_gateway.cross_device_switch import (
     is_cross_device_enabled,
     HTTP_STATUS_CROSS_DEVICE_DISABLED,
@@ -37,8 +42,10 @@ from galaxy_gateway.webrtc_proxy import (
 try:
     from core.auth import require_auth as _require_auth
 except ImportError:
+
     async def _require_auth():  # type: ignore[misc]
         return {"authenticated": True, "dev_mode": True}
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Request model
 # ---------------------------------------------------------------------------
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -65,11 +73,31 @@ class ChatRequest(BaseModel):
     # When provided (and cross-device routing is enabled), forces cross_device
     # mode regardless of the online device count.
     target_device: Optional[str] = None
+    # Source-device runtime participation posture. Kept separate from entry_mode:
+    # "control_only" means the source device remains only the controller;
+    # "join_runtime" means the source device is also a runtime participant.
+    source_runtime_posture: Optional[str] = None
+
+    @_field_validator("source_runtime_posture")
+    @classmethod
+    def _validate_source_runtime_posture(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        from core.source_runtime_posture import SourceRuntimePosture
+
+        normalized = str(value).strip().lower()
+        allowed = {posture.value for posture in SourceRuntimePosture}
+        if normalized not in allowed:
+            raise ValueError(
+                "source_runtime_posture must be one of: " + ", ".join(sorted(allowed)) + f". Got: {normalized}"
+            )
+        return normalized
 
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _merge_parallel_result(result: dict) -> dict:
     """Promote ``parallel_result`` to the response top level when available.
@@ -103,6 +131,7 @@ def _merge_parallel_result(result: dict) -> dict:
     if group_id:
         try:
             from galaxy_gateway.orchestrator.parallel_tracker import get_tracker
+
             gs = get_tracker().get_group_status(str(group_id))
             if gs is not None:
                 return {**result, "parallel_result": gs.to_dict()}
@@ -115,6 +144,7 @@ def _merge_parallel_result(result: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Chat endpoint
 # ---------------------------------------------------------------------------
+
 
 @router.post("/api/v1/chat")
 async def chat_endpoint(
@@ -137,6 +167,7 @@ async def chat_endpoint(
     if _target_device:
         try:
             from core.target_device_validator import validate_target_device as _vtd
+
             _vr = _vtd(_target_device)
             if not _vr.valid:
                 logger.warning(
@@ -151,6 +182,7 @@ async def chat_endpoint(
     _entry_mode = "local"
     try:
         from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
+
         _entry_mode = _resolve_em(
             explicit_entry_mode=request.entry_mode or None,
             target_device=_target_device,
@@ -162,6 +194,7 @@ async def chat_endpoint(
     # ── PR-1: Route through DesktopPresenceRuntime ──
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         # Normalise context: DesktopPresenceRuntime expects Optional[List[Dict]].
         _context = [request.context] if isinstance(request.context, dict) and request.context else None
@@ -173,6 +206,7 @@ async def chat_endpoint(
             context=_context,
             multimodal_context=request.multimodal_context,
             entry_mode=_entry_mode,
+            source_runtime_posture=request.source_runtime_posture,
         )
         # Backward-compatible alias (reply = response) for legacy clients
         if isinstance(result, dict) and "reply" not in result:
@@ -187,6 +221,7 @@ async def chat_endpoint(
 # ---------------------------------------------------------------------------
 # WebRTC endpoint discovery
 # ---------------------------------------------------------------------------
+
 
 @router.get("/api/v1/webrtc/endpoint")
 async def webrtc_endpoint_info():

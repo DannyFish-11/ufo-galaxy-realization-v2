@@ -62,6 +62,7 @@ def resolve_formation(
     *,
     runtime_domain: Optional[str] = None,
     source_device_id: Optional[str] = None,
+    source_runtime_posture: str = "control_only",
     primary_device_id: Optional[str] = None,
     target_device_ids: Optional[List[str]] = None,
     fallback_device_ids: Optional[List[str]] = None,
@@ -134,6 +135,7 @@ def resolve_formation(
         return _resolve_formation_inner(
             runtime_domain=runtime_domain,
             source_device_id=source_device_id,
+            source_runtime_posture=source_runtime_posture,
             primary_device_id=primary_device_id,
             target_device_ids=target_device_ids or [],
             fallback_device_ids=fallback_device_ids or [],
@@ -149,9 +151,7 @@ def resolve_formation(
             formation_reason=formation_reason,
         )
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Formation resolution failed, returning idle defaults: %s", exc
-        )
+        logger.warning("Formation resolution failed, returning idle defaults: %s", exc)
         return EMPTY_FORMATION_GROUP, DEFAULT_LOCAL_FORMATION_POLICY
 
 
@@ -164,6 +164,7 @@ def _resolve_formation_inner(
     *,
     runtime_domain: Optional[str],
     source_device_id: Optional[str],
+    source_runtime_posture: str,
     primary_device_id: Optional[str],
     target_device_ids: List[str],
     fallback_device_ids: List[str],
@@ -330,6 +331,7 @@ def _resolve_formation_inner(
         task_id=task_id,
         trace_id=trace_id,
         source_device_id=source_device_id,
+        source_runtime_posture=source_runtime_posture,
         members=members,
         merge_owner_device_id=effective_merge_owner,
         barrier_posture=barrier_posture.value,
@@ -379,9 +381,7 @@ def _derive_policy(
     effective_merge_owner: Optional[str],
 ) -> FormationPolicy:
     """Derive a :class:`FormationPolicy` from available signals."""
-    multi_device_required = is_cross_device and len({
-        m.device_id for m in members if m.device_id
-    }) > 1
+    multi_device_required = is_cross_device and len({m.device_id for m in members if m.device_id}) > 1
 
     merge_confirmation_required = False
     fallback_intent = "promote_fallback_device"
@@ -390,13 +390,9 @@ def _derive_policy(
     if execution_policy is not None:
         try:
             if isinstance(execution_policy, dict):
-                merge_confirmation_required = bool(
-                    execution_policy.get("requires_confirmation", False)
-                )
+                merge_confirmation_required = bool(execution_policy.get("requires_confirmation", False))
             else:
-                merge_confirmation_required = bool(
-                    getattr(execution_policy, "requires_confirmation", False)
-                )
+                merge_confirmation_required = bool(getattr(execution_policy, "requires_confirmation", False))
         except Exception:
             pass
 
