@@ -69,10 +69,14 @@ from core.source_execution_eligibility import (  # noqa: E402
     JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY,
     POSTURE_GATED_LOCAL_EXECUTION_POLICY,
     POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL,
+    # PR-2 coordination-role alignment
+    OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY,
+    COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL,
     SourceExecutionEligibility,
     check_source_execution_eligibility,
     is_source_eligible_for_local_execution,
     resolve_posture_for_eligibility,
+    check_source_eligibility_with_coordination_role,
 )
 
 # PR-4 (post-533 dual-repo runtime host unification): canonical session truth
@@ -172,6 +176,10 @@ __all__ = [
     "JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",
     "POSTURE_GATED_LOCAL_EXECUTION_POLICY",
     "POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL",
+    # PR-2 coordination-role alignment
+    "OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY",
+    "COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL",
+    "check_source_eligibility_with_coordination_role",
     "SourceExecutionEligibility",
     "check_source_execution_eligibility",
     "is_source_eligible_for_local_execution",

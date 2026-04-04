@@ -946,3 +946,289 @@ class TestResultPosturePropagation:
             )
         d = result.to_dict()
         assert "source_runtime_posture" in d
+
+
+# ===========================================================================
+# Group U — coordination-role-aware eligibility (PR-2 × PR-538 alignment)
+# ===========================================================================
+
+
+class TestCheckSourceEligibilityWithCoordinationRole:
+    """Tests for check_source_eligibility_with_coordination_role()."""
+
+    def test_observer_only_is_ineligible_regardless_of_posture(self):
+        """observer_only role blocks execution even with join_runtime posture."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "observer_only"
+        )
+        assert result.eligible is False
+
+    def test_observer_only_role_overrides_join_runtime_posture(self):
+        """observer_only role is definitive: posture does not rescue eligibility."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "observer_only"
+        )
+        assert "observer_only" in result.reason
+
+    def test_observer_only_with_control_only_posture_is_ineligible(self):
+        """observer_only role + control_only posture is ineligible (doubly)."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "control_only", "observer_only"
+        )
+        assert result.eligible is False
+
+    def test_joined_runtime_participant_is_eligible(self):
+        """joined_runtime_participant role always grants eligibility."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "joined_runtime_participant"
+        )
+        assert result.eligible is True
+
+    def test_joined_runtime_participant_with_control_only_posture_is_eligible(self):
+        """joined_runtime_participant role grants eligibility over control_only posture."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "control_only", "joined_runtime_participant"
+        )
+        assert result.eligible is True
+
+    def test_source_controller_with_control_only_is_ineligible(self):
+        """source_controller defers to posture: control_only → ineligible."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "control_only", "source_controller"
+        )
+        assert result.eligible is False
+
+    def test_source_controller_with_join_runtime_is_eligible(self):
+        """source_controller defers to posture: join_runtime → eligible."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "source_controller"
+        )
+        assert result.eligible is True
+
+    def test_target_only_executor_is_eligible(self):
+        """target_only_executor role grants eligibility (pure execution device)."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "control_only", "target_only_executor"
+        )
+        assert result.eligible is True
+
+    def test_unresolved_role_defers_to_posture_control_only(self):
+        """unresolved role falls back to posture: control_only → ineligible."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "control_only", "unresolved"
+        )
+        assert result.eligible is False
+
+    def test_unresolved_role_defers_to_posture_join_runtime(self):
+        """unresolved role falls back to posture: join_runtime → eligible."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "unresolved"
+        )
+        assert result.eligible is True
+
+    def test_none_role_defers_to_posture_control_only(self):
+        """None role falls back to posture alone: control_only → ineligible."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "control_only", None
+        )
+        assert result.eligible is False
+
+    def test_none_role_defers_to_posture_join_runtime(self):
+        """None role falls back to posture alone: join_runtime → eligible."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", None
+        )
+        assert result.eligible is True
+
+    def test_result_is_source_execution_eligibility(self):
+        """Returns a SourceExecutionEligibility dataclass."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+            SourceExecutionEligibility,
+        )
+        result = check_source_eligibility_with_coordination_role("join_runtime", None)
+        assert isinstance(result, SourceExecutionEligibility)
+
+    def test_result_to_dict_includes_expected_keys(self):
+        """to_dict() from coordination-role-aware check has standard keys."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "observer_only"
+        )
+        d = result.to_dict()
+        assert "eligible" in d
+        assert "posture" in d
+        assert "reason" in d
+        assert "authority" in d
+
+    def test_posture_normalised_in_coordination_role_check(self):
+        """posture field in result is always normalised (control_only/join_runtime)."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "UNKNOWN_VALUE", "observer_only"
+        )
+        assert result.posture in ("control_only", "join_runtime")
+
+    def test_case_insensitive_role_matching(self):
+        """Role matching is case-insensitive."""
+        from core.source_execution_eligibility import (
+            check_source_eligibility_with_coordination_role,
+        )
+        result = check_source_eligibility_with_coordination_role(
+            "join_runtime", "OBSERVER_ONLY"
+        )
+        assert result.eligible is False
+
+
+class TestCoordinationRoleSentinels:
+    """Tests for PR-2 coordination-role alignment sentinels."""
+
+    def test_observer_only_blocks_execution_policy_present(self):
+        from core.source_execution_eligibility import (
+            OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY,
+        )
+        assert isinstance(OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY, str)
+        assert len(OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY) > 20
+
+    def test_observer_only_blocks_execution_policy_mentions_observer(self):
+        from core.source_execution_eligibility import (
+            OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY,
+        )
+        assert "observer_only" in OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY
+
+    def test_coordination_role_aligned_dispatch_sentinel_present(self):
+        from core.source_execution_eligibility import (
+            COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL,
+        )
+        assert isinstance(COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL, str)
+        assert "PR2" in COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL or \
+               "PR-2" in COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL
+
+    def test_sentinels_importable_from_core_runtime(self):
+        import core.runtime as rt
+        assert hasattr(rt, "OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY")
+        assert hasattr(rt, "COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL")
+
+    def test_check_source_eligibility_with_coordination_role_importable_from_core_runtime(self):
+        import core.runtime as rt
+        assert hasattr(rt, "check_source_eligibility_with_coordination_role")
+
+
+class TestSelectDispatchModeWithCoordinationRole:
+    """Test select_dispatch_mode() coordination-role gate (PR-2 × PR-538)."""
+
+    def test_observer_only_with_join_runtime_blocks_without_target(self):
+        """observer_only + join_runtime → blocked (no remote target)."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode(
+            source_runtime_posture="join_runtime",
+            coordination_role="observer_only",
+        )
+        assert mode == SourceDispatchMode.blocked
+
+    def test_observer_only_with_join_runtime_redirects_with_target(self):
+        """observer_only + join_runtime → remote_handoff (remote target available)."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode(
+            source_runtime_posture="join_runtime",
+            coordination_role="observer_only",
+            target_device_id="device-remote-001",
+        )
+        assert mode == SourceDispatchMode.remote_handoff
+
+    def test_joined_runtime_participant_allows_local_dispatch(self):
+        """joined_runtime_participant + join_runtime → local (no remote target)."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode(
+            source_runtime_posture="join_runtime",
+            coordination_role="joined_runtime_participant",
+        )
+        assert mode == SourceDispatchMode.local
+
+    def test_source_controller_control_only_blocked_without_target(self):
+        """source_controller + control_only → blocked (no remote target)."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode(
+            source_runtime_posture="control_only",
+            coordination_role="source_controller",
+        )
+        assert mode == SourceDispatchMode.blocked
+
+    def test_source_controller_join_runtime_allows_local(self):
+        """source_controller + join_runtime → local (posture-driven eligibility)."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode(
+            source_runtime_posture="join_runtime",
+            coordination_role="source_controller",
+        )
+        assert mode == SourceDispatchMode.local
+
+    def test_no_role_no_posture_backwards_safe(self):
+        """No coordination_role and no posture → pre-PR-2 behaviour (local)."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode()
+        assert mode == SourceDispatchMode.local
+
+    def test_force_local_bypasses_observer_only_gate(self):
+        """force_local bypasses even observer_only coordination role."""
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+        from contracts.source_dispatch import SourceDispatchMode
+
+        mode, reason = select_dispatch_mode(
+            source_runtime_posture="join_runtime",
+            coordination_role="observer_only",
+            force_local=True,
+        )
+        assert mode == SourceDispatchMode.local

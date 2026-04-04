@@ -257,6 +257,7 @@ def select_dispatch_mode(
     force_local: bool = False,
     force_remote: bool = False,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
 ) -> tuple[Any, str]:  # (SourceDispatchMode, reason_str)
     """Select a :class:`~contracts.source_dispatch.SourceDispatchMode`.
 
@@ -269,10 +270,10 @@ def select_dispatch_mode(
        ``target_device_id`` is available, choose ``remote_handoff``.
     5. Governance snapshot (PR-27) — if ``execution_allowed`` is False,
        choose ``blocked``.
-    6. **PR-2 posture gate** — if ``source_runtime_posture`` is
-       ``"control_only"``, the source device is ineligible for local
-       execution.  If a ``target_device_id`` is available, choose
-       ``remote_handoff``; otherwise choose ``blocked``.
+    6. **PR-2 posture/coordination-role gate** — if the combined eligibility
+       check (posture + coordination role) determines the source device is
+       ineligible for local execution: if a ``target_device_id`` is available,
+       choose ``remote_handoff``; otherwise choose ``blocked``.
     7. Mesh session (PR-33) with multiple active participants and no explicit
        target → ``staged_mesh``.
     8. Explicit target device → ``remote_handoff``.
@@ -302,6 +303,14 @@ def select_dispatch_mode(
         and the decision redirects to remote handoff or blocked.  When
         ``"join_runtime"`` (or ``None``/unknown), no additional gate is
         applied and the standard priority chain continues.
+    coordination_role:
+        PR-2 (PR-538 alignment): canonical coordination role string for the
+        source device (e.g. ``"observer_only"``, ``"joined_runtime_participant"``).
+        When provided alongside ``source_runtime_posture``, the combined
+        eligibility check uses
+        :func:`~core.source_execution_eligibility.check_source_eligibility_with_coordination_role`
+        so that ``observer_only`` blocks execution even when posture is
+        ``"join_runtime"``.  ``None`` falls back to posture alone.
 
     Returns
     -------
@@ -336,30 +345,57 @@ def select_dispatch_mode(
         if not governance_snapshot.get("execution_allowed", True):
             return SourceDispatchMode.blocked, "governance_snapshot:execution_not_allowed"
 
-    # PR-2: posture gate — control_only source is ineligible for local execution.
-    # Applied only when source_runtime_posture is explicitly provided (not None).
-    # Callers that do not supply the posture get the pre-PR-2 behaviour so that
-    # the existing dispatch paths remain unaffected (backwards safety).
-    # Evaluated after policy/governance hard blocks but before mesh/default paths
-    # so that posture actively redirects to a remote target when one exists.
-    if source_runtime_posture is not None:
-        try:
-            from core.source_execution_eligibility import (
-                is_source_eligible_for_local_execution as _posture_eligible,
-            )
-        except Exception:  # noqa: BLE001
-            _posture_eligible = lambda h: h != "control_only"  # noqa: E731
+    # PR-2: posture + coordination-role gate.
+    # Applied when source_runtime_posture OR coordination_role is explicitly
+    # provided.  Callers that supply neither get pre-PR-2 behaviour (backwards
+    # safety).  When coordination_role is available the combined check
+    # (check_source_eligibility_with_coordination_role) is used so that, e.g.,
+    # observer_only overrides a join_runtime posture.  When only posture is
+    # provided the posture-only check is used.
+    # Evaluated after policy/governance hard blocks but before mesh/default
+    # paths so that posture actively redirects to a remote target when available.
+    if source_runtime_posture is not None or coordination_role is not None:
+        _eligible: bool
+        _eligibility_reason: str
+        if coordination_role is not None:
+            try:
+                from core.source_execution_eligibility import (
+                    check_source_eligibility_with_coordination_role as _role_check,
+                )
+                _result = _role_check(source_runtime_posture, coordination_role)
+                _eligible = _result.eligible
+                _eligibility_reason = (
+                    f"posture:{_result.posture}:role:{coordination_role}"
+                )
+            except Exception:  # noqa: BLE001
+                # Fallback: treat observer_only as ineligible, others by posture.
+                _eligible = (
+                    coordination_role != "observer_only"
+                    and source_runtime_posture != "control_only"
+                )
+                _eligibility_reason = (
+                    f"posture_role_fallback:{source_runtime_posture}:{coordination_role}"
+                )
+        else:
+            try:
+                from core.source_execution_eligibility import (
+                    is_source_eligible_for_local_execution as _posture_eligible,
+                )
+                _eligible = _posture_eligible(source_runtime_posture)
+            except Exception:  # noqa: BLE001
+                _eligible = source_runtime_posture != "control_only"
+            _eligibility_reason = f"posture:{source_runtime_posture}"
 
-        if not _posture_eligible(source_runtime_posture):
-            # Source is control_only — redirect to remote or block.
+        if not _eligible:
+            # Source is ineligible — redirect to remote or block.
             if target_device_id:
                 return (
                     SourceDispatchMode.remote_handoff,
-                    "posture:control_only:source_ineligible_for_local:remote_handoff",
+                    f"{_eligibility_reason}:source_ineligible_for_local:remote_handoff",
                 )
             return (
                 SourceDispatchMode.blocked,
-                "posture:control_only:source_ineligible_for_local:no_remote_target",
+                f"{_eligibility_reason}:source_ineligible_for_local:no_remote_target",
             )
 
     # Mesh session: staged dispatch when multiple participants are active (PR-33)
@@ -474,6 +510,7 @@ def build_source_dispatch_plan(
     force_local: bool = False,
     force_remote: bool = False,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Any:  # SourceDispatchPlan
     """Build a :class:`~contracts.source_dispatch.SourceDispatchPlan`.
@@ -547,8 +584,9 @@ def build_source_dispatch_plan(
         if mesh_memberships is None:
             mesh_memberships = _try_mesh_memberships()
 
-        # Select mode — PR-2: pass source_runtime_posture so the posture gate
-        # is evaluated inside select_dispatch_mode().
+        # Select mode — PR-2: pass source_runtime_posture and coordination_role
+        # so the posture + coordination-role gate is evaluated inside
+        # select_dispatch_mode().
         mode, reason = select_dispatch_mode(
             policy_alignment=policy_alignment,
             governance_snapshot=governance_snapshot,
@@ -558,6 +596,7 @@ def build_source_dispatch_plan(
             force_local=force_local,
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
+            coordination_role=coordination_role,
         )
 
         # Select target
@@ -685,6 +724,7 @@ def orchestrate_source_runtime_dispatch(
     force_local: bool = False,
     force_remote: bool = False,
     source_runtime_posture: Optional[str] = None,
+    coordination_role: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Any:  # SourceDispatchResult
     """End-to-end source dispatch orchestration.
@@ -782,6 +822,7 @@ def orchestrate_source_runtime_dispatch(
             force_local=force_local,
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
+            coordination_role=coordination_role,
             metadata=metadata,
         )
 
@@ -1040,6 +1081,7 @@ class SourceDispatchOrchestrator:
         force_local: bool = False,
         force_remote: bool = False,
         source_runtime_posture: Optional[str] = None,
+        coordination_role: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:  # SourceDispatchResult
         """Execute the end-to-end source dispatch orchestration.
@@ -1051,7 +1093,9 @@ class SourceDispatchOrchestrator:
         See :func:`orchestrate_source_runtime_dispatch` for full parameter
         documentation.  ``source_runtime_posture`` is the PR-2 posture gate
         parameter: ``"control_only"`` blocks local execution; ``"join_runtime"``
-        allows it.
+        allows it.  ``coordination_role`` is the PR-2/PR-538 alignment
+        parameter: ``"observer_only"`` blocks local execution regardless of
+        posture; ``"joined_runtime_participant"`` grants eligibility.
 
         Returns
         -------
@@ -1074,6 +1118,7 @@ class SourceDispatchOrchestrator:
             force_local=force_local,
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
+            coordination_role=coordination_role,
             metadata=metadata,
         )
 
@@ -1095,6 +1140,7 @@ class SourceDispatchOrchestrator:
         force_local: bool = False,
         force_remote: bool = False,
         source_runtime_posture: Optional[str] = None,
+        coordination_role: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:  # SourceDispatchPlan
         """Build a dispatch plan without executing.
@@ -1122,5 +1168,6 @@ class SourceDispatchOrchestrator:
             force_local=force_local,
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
+            coordination_role=coordination_role,
             metadata=metadata,
         )
