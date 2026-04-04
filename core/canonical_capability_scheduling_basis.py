@@ -572,8 +572,6 @@ def normalize_scheduling_inputs(device: Any) -> CapabilitySchedulingInput:
     # --- capabilities ---
     capabilities_raw = _get("capabilities")
     if capabilities_raw is None:
-        # Try inner capabilities object.
-        cap_obj = _get("capabilities")
         capabilities = []
     elif isinstance(capabilities_raw, dict):
         # Might be a CapabilityRuntimeState dict or similar; extract keys.

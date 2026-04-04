@@ -457,7 +457,7 @@ class TestNormalizeSchedulingInputsFromObject:
         """Passing None should not raise; uses CapabilitySchedulingInput defaults."""
         inp = normalize_scheduling_inputs(None)
         assert inp.source_runtime_posture == "control_only"
-        assert inp.is_scheduling_eligible is False if hasattr(inp, "is_scheduling_eligible") else True
+        assert inp.runtime_present is False
 
 
 # ===========================================================================
