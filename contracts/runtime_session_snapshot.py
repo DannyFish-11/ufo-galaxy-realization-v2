@@ -190,6 +190,16 @@ class RuntimeSessionSnapshotIdentity(BaseModel):
             "PR-4, post-533 dual-repo runtime host unification track."
         ),
     )
+    coordination_role: str = Field(
+        default="",
+        description=(
+            "Multi-device coordination role of the source device "
+            "(e.g. 'source_controller', 'joined_runtime_participant', "
+            "'observer_only', 'target_only_executor').  Empty when not "
+            "applicable.  PR-4 / PR-6, post-533 dual-repo runtime host "
+            "unification track."
+        ),
+    )
     created_at: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when the snapshot was first created.",
@@ -460,12 +470,21 @@ class RuntimeSessionSnapshotResultState(BaseModel):
             "PR-4, post-533 dual-repo runtime host unification track."
         ),
     )
+    coordination_role: str = Field(
+        default="",
+        description=(
+            "Multi-device coordination role of the source device at result "
+            "merge time.  Empty when not applicable.  "
+            "PR-4 / PR-6, post-533 dual-repo runtime host unification track."
+        ),
+    )
     excluded_unit_ids: List[str] = Field(
         default_factory=list,
         description=(
-            "IDs of result units excluded by posture-aware filtering. "
-            "Units excluded because they were tagged as control_only source "
-            "contributions.  PR-4."
+            "IDs of result units excluded by posture-aware or "
+            "coordination-role-aware filtering.  "
+            "Includes units excluded because they were tagged as control_only "
+            "source contributions or observer_only coordination role.  PR-4."
         ),
     )
     metadata: Dict[str, Any] = Field(

@@ -89,6 +89,27 @@ _logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# PR-4 (post-533 dual-repo runtime host unification track): posture-aware
+# result unit contract alignment sentinel.
+#
+# RuntimeResultUnit and MergedRuntimeResult now carry first-class
+# source_runtime_posture and coordination_role fields so that canonical
+# session truth filtering can inspect provenance without having to
+# reach into arbitrary metadata dicts.
+# ---------------------------------------------------------------------------
+
+CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL: str = (
+    "CROSS_RUNTIME_RESULT_MERGE::PR4_POSTURE_FIELDS_V1: "
+    "RuntimeResultUnit and MergedRuntimeResult carry first-class "
+    "source_runtime_posture (default 'control_only') and coordination_role "
+    "(default '') fields.  Canonical session truth can inspect these fields "
+    "directly without reading metadata dicts.  "
+    "PR-4, post-533 dual-repo runtime host unification track."
+)
+"""Integration sentinel confirming PR-4 posture fields on result contracts."""
+
+
+# ---------------------------------------------------------------------------
 # RuntimeResultRole — role of a result unit within the merge
 # ---------------------------------------------------------------------------
 
@@ -397,6 +418,24 @@ class RuntimeResultUnit(BaseModel):
         default_factory=time.time,
         description="Unix timestamp when this result unit was produced.",
     )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture for this result unit. "
+            "Must be 'control_only' or 'join_runtime'.  "
+            "PR-4, post-533 dual-repo runtime host unification track."
+        ),
+    )
+    coordination_role: str = Field(
+        default="",
+        description=(
+            "Multi-device coordination role of the device that produced this "
+            "result unit (e.g. 'source_controller', 'joined_runtime_participant', "
+            "'observer_only', 'target_only_executor').  Empty string when "
+            "coordination context is not available.  "
+            "PR-4 / PR-6, post-533 dual-repo runtime host unification track."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extension metadata.",
@@ -669,6 +708,24 @@ class MergedRuntimeResult(BaseModel):
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix timestamp when this merged result was produced.",
+    )
+    source_runtime_posture: str = Field(
+        default="control_only",
+        description=(
+            "Source-device runtime participation posture that governed this "
+            "merge.  Must be 'control_only' or 'join_runtime'.  "
+            "PR-4, post-533 dual-repo runtime host unification track."
+        ),
+    )
+    coordination_role: str = Field(
+        default="",
+        description=(
+            "Multi-device coordination role of the originating source device "
+            "(e.g. 'source_controller', 'joined_runtime_participant', "
+            "'observer_only').  Empty string when coordination context is not "
+            "available.  PR-4 / PR-6, post-533 dual-repo runtime host "
+            "unification track."
+        ),
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -1225,6 +1282,8 @@ def build_merged_runtime_result(
     policy_alignment_refs: Optional[List[str]] = None,
     merge_reason: Optional[str] = None,
     errors: Optional[List[str]] = None,
+    source_runtime_posture: str = "control_only",
+    coordination_role: str = "",
     metadata: Optional[Dict[str, Any]] = None,
 ) -> MergedRuntimeResult:
     """Convenience factory for :class:`MergedRuntimeResult`.
@@ -1260,6 +1319,11 @@ def build_merged_runtime_result(
         Human-readable merge context.
     errors:
         Error/warning strings.
+    source_runtime_posture:
+        Source-device posture governing this merge ('control_only' or
+        'join_runtime').  PR-4.
+    coordination_role:
+        Multi-device coordination role of the source device.  PR-4 / PR-6.
     metadata:
         Arbitrary extension metadata.
 
@@ -1287,6 +1351,8 @@ def build_merged_runtime_result(
             policy_alignment_refs=list(policy_alignment_refs) if policy_alignment_refs else [],
             merge_reason=merge_reason,
             errors=list(errors) if errors else [],
+            source_runtime_posture=source_runtime_posture,
+            coordination_role=coordination_role,
             metadata=dict(metadata) if metadata else {},
         )
     except Exception as _e:  # noqa: BLE001
@@ -1310,6 +1376,8 @@ def merge_runtime_results(
     merge_policy: ResultMergePolicy = ResultMergePolicy.primary_wins,
     primary_result_unit_id: Optional[str] = None,
     merge_reason: Optional[str] = None,
+    source_runtime_posture: str = "control_only",
+    coordination_role: str = "",
     metadata: Optional[Dict[str, Any]] = None,
 ) -> MergedRuntimeResult:
     """Apply a merge policy to a list of result units and return a merged result.
@@ -1332,6 +1400,13 @@ def merge_runtime_results(
         Explicit primary unit override for ``primary_wins`` policy.
     merge_reason:
         Human-readable context for the merge.
+    source_runtime_posture:
+        Source-device posture governing this merge ('control_only' or
+        'join_runtime').  Propagated to the :class:`MergedRuntimeResult`.
+        PR-4.
+    coordination_role:
+        Multi-device coordination role of the source device.  Propagated to
+        the :class:`MergedRuntimeResult`.  PR-4 / PR-6.
     metadata:
         Arbitrary extension metadata.
 
@@ -1378,6 +1453,8 @@ def merge_runtime_results(
                 success=False,
                 errors=["no_result_units_provided"],
                 merge_reason=merge_reason or "empty_merge",
+                source_runtime_posture=source_runtime_posture,
+                coordination_role=coordination_role,
                 metadata=metadata,
             )
 
@@ -1555,6 +1632,8 @@ def merge_runtime_results(
             policy_alignment_refs=_policy_refs,
             merge_reason=merge_reason,
             errors=_errors,
+            source_runtime_posture=source_runtime_posture,
+            coordination_role=coordination_role,
             metadata=metadata,
         )
     except Exception as _e:  # noqa: BLE001
@@ -1665,6 +1744,8 @@ def build_result_merge_summary(
 
 
 __all__ = [
+    # PR-4 sentinel
+    "CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL",
     # Enums
     "RuntimeResultRole",
     "RuntimeResultStatus",

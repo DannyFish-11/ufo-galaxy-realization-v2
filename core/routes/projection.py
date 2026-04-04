@@ -103,6 +103,27 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_UNAVAILABLE"
     )
 
+# PR-4 (post-533 dual-repo runtime host unification): Canonical Session Truth
+# alignment sentinel.  Asserts that the canonical session truth module is
+# importable from this module's context, so projection endpoints can embed
+# canonical session truth snapshots when assembling runtime projections.
+try:
+    from core.canonical_session_truth import (  # noqa: F401
+        CANONICAL_SESSION_TRUTH_AUTHORITY as _CST_AUTHORITY,
+        build_canonical_session_truth_snapshot as _build_cst_snapshot,
+    )
+
+    CANONICAL_SESSION_TRUTH_ALIGNED_PR4: str = (
+        "PROJECTION_ROUTES::CANONICAL_SESSION_TRUTH_ALIGNED_PR4_V1: "
+        "canonical session truth (core.canonical_session_truth) is available "
+        "and aligned with projection routes.  Projection endpoints may embed "
+        "CanonicalSessionTruthSnapshot for operator/runtime surface consumers."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_SESSION_TRUTH_ALIGNED_PR4: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_SESSION_TRUTH_ALIGNED_PR4_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
