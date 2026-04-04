@@ -39,6 +39,8 @@ from core.routes._shared import (
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 from core.unified.device_manager import get_unified_device_manager
 from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
+from core.command_router import get_command_router
+from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -593,8 +595,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             import uuid as _uuid
-            from core.schemas.task_envelope import TaskEnvelope
-            from core.command_router import get_command_router
 
             _ctx = req.context or {}
             _task_id = _ctx.get("task_id") or str(_uuid.uuid4())

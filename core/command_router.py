@@ -94,10 +94,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
-if TYPE_CHECKING:
-    from core.schemas.task_envelope import TaskEnvelope
+from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.CommandRouter")
 
@@ -388,6 +387,15 @@ class _RouteResultProxy:
         self.success = success
         self.result = result_data
         self.error = error
+
+
+@dataclass
+class _ParallelSubtask:
+    """Internal helper for canonical parallel fan-out bookkeeping."""
+
+    index: int
+    info: Dict[str, Any]
+    envelope: TaskEnvelope
 
 
 class CommandStatus(str, Enum):
@@ -1541,7 +1549,6 @@ class CommandRouter:
     ) -> Dict[str, Any]:
         """PR-532/GAP-517-002: Canonical parallel fan-out via sub-envelopes."""
         import time as _time_m
-        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
         _t0 = _time_m.monotonic()
         _commands = envelope.args.get("commands")
@@ -1562,7 +1569,7 @@ class CommandRouter:
                 "latency_ms": round(_latency_ms, 1),
             }
 
-        _subtasks: List[Tuple[int, Dict[str, Any], _TaskEnvelope]] = []
+        _subtasks: List[_ParallelSubtask] = []
         _processed: List[Dict[str, Any]] = []
         _base_meta = dict(envelope.metadata or {})
         _base_meta.pop("parallel_fanout", None)
@@ -1619,13 +1626,13 @@ class CommandRouter:
                 "command_id": f"{command_id}:p{_idx}",
             })
 
-            _subtasks.append((
-                _idx,
-                {
+            _subtasks.append(_ParallelSubtask(
+                index=_idx,
+                info={
                     "device_id": _device_id,
                     "command": _command,
                 },
-                _TaskEnvelope(
+                envelope=TaskEnvelope(
                     task_id=_sub_task_id,
                     trace_id=envelope.trace_id,
                     session_id=envelope.session_id,
@@ -1643,11 +1650,14 @@ class CommandRouter:
             ))
 
         _results = await asyncio.gather(
-            *(self.route_envelope(_env) for _, _, _env in _subtasks),
+            *(self.route_envelope(_subtask.envelope) for _subtask in _subtasks),
             return_exceptions=True,
         )
 
-        for (_idx, _info, _env), _result in zip(_subtasks, _results):
+        for _subtask, _result in zip(_subtasks, _results):
+            _idx = _subtask.index
+            _info = _subtask.info
+            _env = _subtask.envelope
             if isinstance(_result, Exception):
                 _processed.append({
                     "index": _idx,
