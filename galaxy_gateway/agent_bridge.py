@@ -99,6 +99,42 @@ from galaxy_gateway.observability import (  # noqa: E402
 )
 
 # ---------------------------------------------------------------------------
+# PR-3 (post-533 dual-repo unification): canonicalization sentinels
+# ---------------------------------------------------------------------------
+
+CANONICAL_HANDOFF_POSTURE_PROPAGATION_ACTIVE: str = (
+    "pr3_post533_canonical_handoff_posture_propagation_active"
+)
+"""Sentinel: HandoffContract.source_runtime_posture is the canonical posture
+field that propagates the source-device runtime participation posture through
+the bridge handoff pipeline.  Declared in PR-3 of the post-533 dual-repo
+runtime-host unification track (MAIN repo side)."""
+
+HANDOFF_CONTRACT_IS_POSTURE_AWARE: str = (
+    "pr3_post533_handoff_contract_is_posture_aware"
+)
+"""Sentinel: HandoffContract carries source_runtime_posture and includes it in
+to_dict() so the runtime POST /handoff endpoint receives the canonical posture
+value.  Paired with HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE."""
+
+HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE: str = (
+    "pr3_post533_handoff_envelope_v2_posture_adapter_active"
+)
+"""Sentinel: from_legacy_handoff_contract() and AgentBridge.build_envelope_v2()
+now propagate source_runtime_posture from HandoffContract into HandoffEnvelopeV2
+so the canonical v2 envelope always reflects the originating posture.  This
+closes the posture-loss gap in the legacy→v2 adapter path (PR-3 main-repo side)."""
+
+NO_POSTURE_SILENT_DROP_POLICY: str = (
+    "pr3_post533_no_posture_silent_drop_policy"
+)
+"""Policy sentinel: source_runtime_posture MUST NOT be silently dropped at any
+bridge/gateway/compat boundary.  Every handoff path that receives posture must
+carry it forward — either through HandoffContract.source_runtime_posture or
+through HandoffEnvelopeV2.source_runtime_posture — without silent reset to
+the default.  Declared in PR-3 of the post-533 dual-repo unification track."""
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -152,6 +188,11 @@ class HandoffContract:
     construct a TaskEnvelope first can carry the unified identifier through
     the bridge.  Legacy payloads that only provide ``trace_id`` remain
     fully compatible.
+
+    PR-3 (post-533 dual-repo unification): ``source_runtime_posture`` carries
+    the canonical source-device participation posture through the handoff
+    pipeline so the runtime endpoint can honour posture-aware dispatch rules.
+    Valid values are ``"control_only"`` (default) and ``"join_runtime"``.
     """
 
     trace_id: str
@@ -163,6 +204,8 @@ class HandoffContract:
     callback_channel: str = "ws"
     # PR-1: optional task_id from the originating TaskEnvelope
     task_id: str = ""
+    # PR-3: source-device runtime participation posture (post-533 dual-repo unification)
+    source_runtime_posture: str = "control_only"
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -173,6 +216,7 @@ class HandoffContract:
             "route_mode": self.route_mode,
             "session": self.session,
             "callback_channel": self.callback_channel,
+            "source_runtime_posture": self.source_runtime_posture,
         }
         if self.task_id:
             d["task_id"] = self.task_id
@@ -523,6 +567,19 @@ class AgentBridge:
                 envelope = envelope.model_copy(update={"handoff_policy": handoff_policy})
             if metadata:
                 envelope = envelope.model_copy(update={"metadata": metadata})
+            # PR-3: propagate source_runtime_posture from HandoffContract into v2
+            # envelope so the canonical envelope always reflects the originating
+            # posture (NO_POSTURE_SILENT_DROP_POLICY).
+            _contract_posture = getattr(contract, "source_runtime_posture", "control_only") or "control_only"
+            if _contract_posture != envelope.source_runtime_posture:
+                envelope = envelope.model_copy(
+                    update={
+                        "source_runtime_posture": _contract_posture,
+                        "source": envelope.source.model_copy(
+                            update={"source_runtime_posture": _contract_posture}
+                        ),
+                    }
+                )
             return envelope
         except Exception:  # noqa: BLE001
             return None
@@ -680,6 +737,11 @@ def handoff_contract_from_envelope(
     don't need to unpack it manually.  Legacy callers that build
     HandoffContract directly are unaffected.
 
+    PR-3 (post-533 dual-repo unification): also extracts
+    ``source_runtime_posture`` from the envelope's ``metadata`` dict so that
+    posture flows through the entire handoff pipeline without silent reset
+    (NO_POSTURE_SILENT_DROP_POLICY).
+
     Args:
         envelope:         A :class:`~core.schemas.task_envelope.TaskEnvelope`.
         capability:       Primary capability required by the task.
@@ -690,7 +752,13 @@ def handoff_contract_from_envelope(
     Returns:
         A fully populated :class:`HandoffContract`.
     """
-    route_mode = (envelope.metadata or {}).get("route_mode", "direct") if hasattr(envelope, "metadata") else "direct"
+    _meta: Dict[str, Any] = {}
+    if hasattr(envelope, "metadata") and isinstance(envelope.metadata, dict):
+        _meta = envelope.metadata
+    route_mode = _meta.get("route_mode", "direct")
+    # PR-3: extract source_runtime_posture from envelope metadata (preserves posture).
+    _posture_raw = _meta.get("source_runtime_posture", "control_only") or "control_only"
+    _posture = _posture_raw if _posture_raw in ("control_only", "join_runtime") else "control_only"
     task_payload: Dict[str, Any] = {
         "task_id": envelope.task_id,
         "tool_name": envelope.tool_name,
@@ -707,6 +775,7 @@ def handoff_contract_from_envelope(
         route_mode=route_mode,
         session=session or {},
         callback_channel=callback_channel,
+        source_runtime_posture=_posture,
     )
 
 
@@ -718,4 +787,9 @@ __all__ = [
     "LocalFallback",
     "get_agent_bridge",
     "handoff_contract_from_envelope",
+    # PR-3 canonicalization sentinels
+    "CANONICAL_HANDOFF_POSTURE_PROPAGATION_ACTIVE",
+    "HANDOFF_CONTRACT_IS_POSTURE_AWARE",
+    "HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE",
+    "NO_POSTURE_SILENT_DROP_POLICY",
 ]
