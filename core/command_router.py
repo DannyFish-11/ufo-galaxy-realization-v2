@@ -103,31 +103,35 @@ logger = logging.getLogger("Galaxy.CommandRouter")
 # ── PR-G5: resilience defaults from env vars (safe, backward-compatible) ────
 _DEFAULT_MAX_QUEUE_DEPTH: int = int(os.environ.get("GALAXY_ROUTER_MAX_QUEUE_DEPTH", "200"))
 _DEFAULT_CB_ENABLED: bool = os.environ.get("GALAXY_ROUTER_CB_ENABLED", "true").lower() not in ("false", "0")
-_DEFAULT_ADAPTIVE_CONCURRENCY: bool = os.environ.get(
-    "GALAXY_ROUTER_ADAPTIVE_CONCURRENCY", "true"
-).lower() not in ("false", "0")
+_DEFAULT_ADAPTIVE_CONCURRENCY: bool = os.environ.get("GALAXY_ROUTER_ADAPTIVE_CONCURRENCY", "true").lower() not in (
+    "false",
+    "0",
+)
 
 
 # ============================================================================
 # 错误代码 — 结构化、可解释的网关错误（PR-C）
 # ============================================================================
 
+
 class GatewayErrorCode(str, Enum):
     """网关层可解释错误代码"""
-    INVALID_ENVELOPE = "INVALID_ENVELOPE"      # 消息体缺少必要字段
-    DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND"      # 设备未注册
-    DEVICE_OFFLINE = "DEVICE_OFFLINE"          # 设备已注册但当前离线
-    COMMAND_TIMEOUT = "COMMAND_TIMEOUT"        # 命令执行超时
-    DISCONNECT = "DISCONNECT"                  # 连接断开
-    EXECUTOR_ERROR = "EXECUTOR_ERROR"          # 执行器内部错误
-    INTERNAL_ERROR = "INTERNAL_ERROR"          # 未分类内部错误
-    HITL_TIMEOUT = "HITL_TIMEOUT"              # HITL approval window elapsed
-    HITL_DENIED = "HITL_DENIED"               # HITL approval denied by operator
+
+    INVALID_ENVELOPE = "INVALID_ENVELOPE"  # 消息体缺少必要字段
+    DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND"  # 设备未注册
+    DEVICE_OFFLINE = "DEVICE_OFFLINE"  # 设备已注册但当前离线
+    COMMAND_TIMEOUT = "COMMAND_TIMEOUT"  # 命令执行超时
+    DISCONNECT = "DISCONNECT"  # 连接断开
+    EXECUTOR_ERROR = "EXECUTOR_ERROR"  # 执行器内部错误
+    INTERNAL_ERROR = "INTERNAL_ERROR"  # 未分类内部错误
+    HITL_TIMEOUT = "HITL_TIMEOUT"  # HITL approval window elapsed
+    HITL_DENIED = "HITL_DENIED"  # HITL approval denied by operator
 
 
 @dataclass
 class GatewayError(Exception):
     """结构化网关错误，携带可解释错误代码"""
+
     code: GatewayErrorCode
     message: str
     command_id: str = ""
@@ -365,10 +369,11 @@ _CROSS_DEVICE_SUBSTRATE_CALLER_KEY: str = "_galaxy_cross_device_substrate_caller
 
 class CommandMode(str, Enum):
     """命令执行模式"""
-    SYNC = "sync"          # 同步：等待结果返回
-    ASYNC = "async"        # 异步：立即返回 request_id
+
+    SYNC = "sync"  # 同步：等待结果返回
+    ASYNC = "async"  # 异步：立即返回 request_id
     PARALLEL = "parallel"  # 并行：多目标同时执行
-    SERIAL = "serial"      # 串行：多目标顺序执行
+    SERIAL = "serial"  # 串行：多目标顺序执行
 
 
 class _RouteResultProxy:
@@ -400,11 +405,12 @@ class _ParallelSubtask:
 
 class CommandStatus(str, Enum):
     """命令状态"""
+
     PENDING = "pending"
     DISPATCHING = "dispatching"
     RUNNING = "running"
     SUCCESS = "success"
-    PARTIAL = "partial"      # 部分成功
+    PARTIAL = "partial"  # 部分成功
     FAILED = "failed"
     TIMEOUT = "timeout"
     CANCELLED = "cancelled"
@@ -413,16 +419,17 @@ class CommandStatus(str, Enum):
 @dataclass
 class CommandRequest:
     """命令请求"""
+
     request_id: str = field(default_factory=lambda: f"cmd_{uuid.uuid4().hex[:12]}")
-    source: str = ""                  # 来源: api / ws / scheduler / ai
-    targets: List[str] = field(default_factory=list)   # 目标节点 / 设备
-    command: str = ""                 # 命令名称
+    source: str = ""  # 来源: api / ws / scheduler / ai
+    targets: List[str] = field(default_factory=list)  # 目标节点 / 设备
+    command: str = ""  # 命令名称
     params: Dict[str, Any] = field(default_factory=dict)
     mode: CommandMode = CommandMode.SYNC
-    timeout: float = 30.0             # 超时秒数
-    max_retries: int = 2              # 最大重试次数
-    notify_ws: bool = True            # 是否通过 WebSocket 推送结果
-    priority: int = 5                 # 优先级 1-10（1=最高）
+    timeout: float = 30.0  # 超时秒数
+    max_retries: int = 2  # 最大重试次数
+    notify_ws: bool = True  # 是否通过 WebSocket 推送结果
+    priority: int = 5  # 优先级 1-10（1=最高）
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
@@ -430,6 +437,7 @@ class CommandRequest:
 @dataclass
 class TargetResult:
     """单个目标的执行结果"""
+
     target: str
     status: CommandStatus = CommandStatus.PENDING
     result: Any = None
@@ -443,6 +451,7 @@ class TargetResult:
 @dataclass
 class CommandResult:
     """聚合命令结果"""
+
     request_id: str
     status: CommandStatus = CommandStatus.PENDING
     targets: Dict[str, TargetResult] = field(default_factory=dict)
@@ -468,10 +477,7 @@ class CommandResult:
             },
             "total_latency_ms": round(self.total_latency_ms, 2),
             "created_at": datetime.fromtimestamp(self.created_at).isoformat(),
-            "completed_at": (
-                datetime.fromtimestamp(self.completed_at).isoformat()
-                if self.completed_at else None
-            ),
+            "completed_at": (datetime.fromtimestamp(self.completed_at).isoformat() if self.completed_at else None),
             "metadata": self.metadata,
         }
 
@@ -479,6 +485,7 @@ class CommandResult:
 # ============================================================================
 # 命令路由引擎
 # ============================================================================
+
 
 class CommandRouter:
     """
@@ -493,14 +500,29 @@ class CommandRouter:
     """
 
     # Phase 2: commands that require HITL approval before execution
-    _HIGH_RISK_COMMANDS: frozenset = frozenset({
-        "delete", "format", "shutdown", "reboot", "wipe",
-        "rm", "remove", "purge", "factory_reset",
-        "execute_shell", "run_script", "sudo",
-        "transfer_funds", "payment", "checkout",
-        "drone_takeoff", "arm_system",
-        "system_change", "registry_write",
-    })
+    _HIGH_RISK_COMMANDS: frozenset = frozenset(
+        {
+            "delete",
+            "format",
+            "shutdown",
+            "reboot",
+            "wipe",
+            "rm",
+            "remove",
+            "purge",
+            "factory_reset",
+            "execute_shell",
+            "run_script",
+            "sudo",
+            "transfer_funds",
+            "payment",
+            "checkout",
+            "drone_takeoff",
+            "arm_system",
+            "system_change",
+            "registry_write",
+        }
+    )
 
     def __init__(
         self,
@@ -540,6 +562,7 @@ class CommandRouter:
         if adaptive_concurrency:
             try:
                 from core.resilience.adaptive_semaphore import AdaptiveSemaphore
+
                 self._adaptive_sem: Optional[Any] = AdaptiveSemaphore(
                     initial_limit=max_concurrent,
                     max_limit=max(max_concurrent * 3, 50),
@@ -552,6 +575,7 @@ class CommandRouter:
         # Resilience metrics singleton
         try:
             from core.resilience.metrics import get_resilience_metrics
+
             self._resilience_metrics: Optional[Any] = get_resilience_metrics()
         except Exception:
             self._resilience_metrics = None
@@ -598,6 +622,7 @@ class CommandRouter:
         try:
             from core.control_plane._globals import get_audit_ledger
             from core.control_plane.audit_ledger import Severity
+
             return get_audit_ledger().append(
                 event_type,
                 severity=Severity.INFO,
@@ -622,6 +647,7 @@ class CommandRouter:
         if target not in self._circuit_breakers:
             try:
                 from core.resilience.circuit_breaker import CircuitBreaker
+
                 self._circuit_breakers[target] = CircuitBreaker(target=target)
             except Exception:
                 return None
@@ -630,8 +656,10 @@ class CommandRouter:
     def _count_active_requests(self) -> int:
         """Number of requests currently in PENDING / DISPATCHING / RUNNING state."""
         return sum(
-            1 for r in self._results.values()
-            if r.status in (
+            1
+            for r in self._results.values()
+            if r.status
+            in (
                 CommandStatus.PENDING,
                 CommandStatus.DISPATCHING,
                 CommandStatus.RUNNING,
@@ -643,8 +671,7 @@ class CommandRouter:
         cmd_result = CommandResult(
             request_id=request.request_id,
             status=CommandStatus.FAILED,
-            metadata={**request.metadata, "throttled": True,
-                      "error": "Queue depth limit exceeded; request rejected"},
+            metadata={**request.metadata, "throttled": True, "error": "Queue depth limit exceeded; request rejected"},
         )
         for target in request.targets:
             tr = TargetResult(target=target)
@@ -706,6 +733,7 @@ class CommandRouter:
         # PR-2: 立即将 CommandRequest 转换为 TaskEnvelope，统一内部追踪标识。
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TE
+
             _dispatch_envelope = _TE(
                 task_id=request.request_id,
                 trace_id=(request.metadata or {}).get("trace_id") or None,
@@ -713,7 +741,11 @@ class CommandRouter:
                 targets=list(request.targets),
                 tool_name=request.command,
                 args=dict(request.params or {}),
-                priority=request.priority if hasattr(request, "priority") and request.priority is not None else _DEFAULT_PRIORITY,
+                priority=(
+                    request.priority
+                    if hasattr(request, "priority") and request.priority is not None
+                    else _DEFAULT_PRIORITY
+                ),
                 timeout=request.timeout if hasattr(request, "timeout") and request.timeout else _DEFAULT_TIMEOUT,
                 metadata=dict(request.metadata or {}),
             )
@@ -734,7 +766,8 @@ class CommandRouter:
         # becoming observability black holes.
         try:
             from core.audit_event_semantics import audit_task_accepted as _audit_compat_accepted
-            _compat_meta = (request.metadata or {})
+
+            _compat_meta = request.metadata or {}
             _compat_targets = list(request.targets)
             _compat_task_id = request.request_id
             _compat_trace_id = _compat_meta.get("trace_id", "") or ""
@@ -768,7 +801,9 @@ class CommandRouter:
                     pass
             logger.warning(
                 "CommandRouter.dispatch: queue depth %d >= limit %d; rejecting %s",
-                active, self._max_queue_depth, request.request_id,
+                active,
+                self._max_queue_depth,
+                request.request_id,
             )
             rejected_result = self._make_throttled_result(request)
             self._results[request.request_id] = rejected_result
@@ -811,9 +846,7 @@ class CommandRouter:
         # 按模式调度
         if request.mode == CommandMode.ASYNC:
             # 异步：启动后台任务，立即返回
-            task = asyncio.create_task(
-                self._execute_all(request, cmd_result, start)
-            )
+            task = asyncio.create_task(self._execute_all(request, cmd_result, start))
             self._pending_futures[request.request_id] = task
             return cmd_result
 
@@ -831,11 +864,7 @@ class CommandRouter:
         await self._notify(cmd_result)
 
         # 缓存成功的单目标 SYNC 结果
-        if (
-            self._cache
-            and cmd_result.status == CommandStatus.SUCCESS
-            and len(request.targets) == 1
-        ):
+        if self._cache and cmd_result.status == CommandStatus.SUCCESS and len(request.targets) == 1:
             cache_key = f"cmd:{request.targets[0]}:{request.command}:{json.dumps(request.params, sort_keys=True)}"
             target = request.targets[0]
             await self._cache_set(cache_key, cmd_result.targets[target].result, ttl=60)
@@ -875,10 +904,7 @@ class CommandRouter:
             "adaptive_concurrency_enabled": self._adaptive_concurrency_enabled,
         }
         # Attach per-target CB summary
-        cb_summary = {
-            tgt: cb.state.value
-            for tgt, cb in self._circuit_breakers.items()
-        }
+        cb_summary = {tgt: cb.state.value for tgt, cb in self._circuit_breakers.items()}
         if cb_summary:
             base["circuit_breaker_states"] = cb_summary
         return base
@@ -924,6 +950,7 @@ class CommandRouter:
                 normalize_ingress_to_envelope,
                 record_legacy_ingress,
             )
+
             try:
                 src = ExecutionIngressSource(source)
             except ValueError:
@@ -932,6 +959,7 @@ class CommandRouter:
             # Record as legacy ingress for observability
             try:
                 from core.schemas.task_envelope import TaskEnvelope as _TE
+
                 is_canonical = isinstance(payload, _TE)
             except Exception:
                 is_canonical = False
@@ -945,8 +973,7 @@ class CommandRouter:
             return normalize_ingress_to_envelope(payload, source=src)
         except Exception as exc:
             logger.debug(
-                "normalize_legacy_ingress: execution_spine unavailable (%s); "
-                "returning payload unchanged",
+                "normalize_legacy_ingress: execution_spine unavailable (%s); " "returning payload unchanged",
                 exc,
             )
             return payload
@@ -985,6 +1012,7 @@ class CommandRouter:
                 get_mainline_convergence_registry,
                 MainlineChainStage,
             )
+
             _trace = build_mainline_trace(
                 trace_id=envelope.trace_id or "",
                 task_id=envelope.task_id,
@@ -1004,6 +1032,7 @@ class CommandRouter:
         # ── PR-5 Cap 5: ACL check before anything else ──────────────────────
         try:
             from core.acl_enforcer import get_acl_enforcer
+
             _meta = envelope.metadata or {}
             acl_result = get_acl_enforcer().check(
                 envelope=envelope,
@@ -1031,22 +1060,24 @@ class CommandRouter:
         # ── PR-5 Cap 3: inject TaskMemory context before execution ───────────
         try:
             from core.task_memory import get_task_memory
+
             _mem = get_task_memory()
             _recent = _mem.get_recent_summaries(n=3)
             if _recent:
                 logger.debug(
                     "task.memory_inject | task_id=%s injecting %d recent summaries",
-                    envelope.task_id, len(_recent),
+                    envelope.task_id,
+                    len(_recent),
                 )
                 # Store injected context in metadata for planner/executor access
-                envelope = envelope.model_copy(update={
-                    "metadata": {
-                        **envelope.metadata,
-                        "_injected_memory_summaries": [
-                            s.result_summary for s in _recent
-                        ],
+                envelope = envelope.model_copy(
+                    update={
+                        "metadata": {
+                            **envelope.metadata,
+                            "_injected_memory_summaries": [s.result_summary for s in _recent],
+                        }
                     }
-                })
+                )
         except Exception:
             pass
 
@@ -1073,13 +1104,15 @@ class CommandRouter:
                 if _caps_for_pool is not None:
                     try:
                         from core.device_pool_manager import get_device_pool_manager
+
                         _pool_selected = get_device_pool_manager().select_device(
                             required_capabilities=_caps_for_pool,
                         )
                         if _pool_selected:
                             logger.debug(
                                 "PR-3: DevicePoolManager selected %s for caps=%s",
-                                _pool_selected, _caps_for_pool,
+                                _pool_selected,
+                                _caps_for_pool,
                             )
                     except Exception as _pool_exc:
                         logger.warning(
@@ -1108,6 +1141,7 @@ class CommandRouter:
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:
             from core.task_lifecycle import get_lifecycle_manager
+
             _lcm = get_lifecycle_manager()
             envelope = _lcm.mark_running(envelope)
         except Exception as _lc_exc:
@@ -1122,6 +1156,7 @@ class CommandRouter:
                 query_routable_executors as _query_exec,
                 query_network_path as _query_path,
             )
+
             _routable = _query_exec()
             logger.debug(
                 "route_envelope: capability/network query returned %d routable executor(s)",
@@ -1139,9 +1174,7 @@ class CommandRouter:
                     _path_result.path_state,
                 )
         except Exception as _cap_exc:
-            logger.debug(
-                "route_envelope: capability/network canonical query skipped: %s", _cap_exc
-            )
+            logger.debug("route_envelope: capability/network canonical query skipped: %s", _cap_exc)
 
         # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
         try:
@@ -1150,6 +1183,7 @@ class CommandRouter:
                 WorkflowContributorKind,
                 GraphNodeState as _GNS,
             )
+
             _tgr = get_task_graph_runtime()
             _tgr.register_envelope(
                 envelope,
@@ -1170,6 +1204,7 @@ class CommandRouter:
                 audit_task_accepted,
                 audit_task_dispatched,
             )
+
             _meta_audit = envelope.metadata or {}
             audit_task_accepted(
                 envelope.task_id,
@@ -1199,14 +1234,13 @@ class CommandRouter:
                 emit_runtime_event as _emit_ev,
                 ReplayEventKind,
             )
+
             _record_route(
                 task_id=envelope.task_id,
                 trace_id=envelope.trace_id or "",
                 selected_targets=list(envelope.targets),
                 effective_path="command_router",
-                route_explanation=(
-                    "canonical dispatch via CommandRouter.route_envelope"
-                ),
+                route_explanation=("canonical dispatch via CommandRouter.route_envelope"),
             )
             _emit_ev(
                 ReplayEventKind.ROUTE_DECISION,
@@ -1229,7 +1263,8 @@ class CommandRouter:
         # required_capabilities: prefer explicit field, fall back to metadata (with explicit cast)
         _meta_caps = meta.get("required_capabilities")
         required_capabilities: Optional[List[str]] = (
-            list(envelope.required_capabilities) if envelope.required_capabilities
+            list(envelope.required_capabilities)
+            if envelope.required_capabilities
             else ([str(c) for c in _meta_caps] if isinstance(_meta_caps, list) else None)
         )
         try:
@@ -1325,12 +1360,10 @@ class CommandRouter:
                 task_id=_t_id,
                 trace_id=_tr_id,
                 source="command_router.route_envelope",
-                message=(
-                    f"task {'completed' if _is_success else 'failed'}: "
-                    f"{envelope.tool_name!r}"
-                ),
+                message=(f"task {'completed' if _is_success else 'failed'}: " f"{envelope.tool_name!r}"),
                 payload=(
-                    {} if _is_success
+                    {}
+                    if _is_success
                     else {
                         "error_code": _err_code,
                         "failure_domain": result.get("failure_domain", ""),
@@ -1363,6 +1396,7 @@ class CommandRouter:
         # ── PR-5 Cap 1: lifecycle transition running → done/failed ───────────
         try:
             from core.task_lifecycle import get_lifecycle_manager
+
             _lcm = get_lifecycle_manager()
             if result.get("success"):
                 _lcm.mark_done(
@@ -1389,10 +1423,8 @@ class CommandRouter:
         # PR-12: stamp canonical lifecycle state on substrate result (additive).
         try:
             from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS
-            _lc_state = (
-                _ELS.SUCCEEDED.value if result.get("success")
-                else _ELS.FAILED.value
-            )
+
+            _lc_state = _ELS.SUCCEEDED.value if result.get("success") else _ELS.FAILED.value
             result.setdefault("lifecycle_state", _lc_state)
             # Remote dispatch: record that we went through waiting_remote
             _is_remote = envelope.remote_execution_mode is not None
@@ -1405,6 +1437,7 @@ class CommandRouter:
         if not result.get("success"):
             try:
                 from core.failure_domains import classify_from_error_code as _cfe
+
                 _fd_cls = _cfe(result.get("error_code"))
                 result.setdefault("failure_domain", _fd_cls.domain.value)
                 result.setdefault("failure_is_retryable", _fd_cls.is_retryable)
@@ -1414,16 +1447,19 @@ class CommandRouter:
         # PR-14: stamp additive introspection hints on substrate result.
         # PR-1: execution_path="local" normalised to match the canonical local
         #        execution chain (core/local_execution_chain.py).
-        result.setdefault("introspection_snapshot", {
-            "authority_role": "execution_substrate",
-            "execution_path": "local",
-            "execution_substrate_role": result.get("execution_substrate_role", "execution_substrate"),
-            "execution_mode": result.get("remote_execution_mode"),
-            "lifecycle_state": result.get("lifecycle_state"),
-            "failure_domain": result.get("failure_domain"),
-            "failure_is_retryable": result.get("failure_is_retryable"),
-            "success": result.get("success"),
-        })
+        result.setdefault(
+            "introspection_snapshot",
+            {
+                "authority_role": "execution_substrate",
+                "execution_path": "local",
+                "execution_substrate_role": result.get("execution_substrate_role", "execution_substrate"),
+                "execution_mode": result.get("remote_execution_mode"),
+                "lifecycle_state": result.get("lifecycle_state"),
+                "failure_domain": result.get("failure_domain"),
+                "failure_is_retryable": result.get("failure_is_retryable"),
+                "success": result.get("success"),
+            },
+        )
 
         return result
 
@@ -1495,12 +1531,19 @@ class CommandRouter:
         DeviceRouter and CrossDeviceCoordinator are substrate plumbing only.
         """
         import time as _time_m
+
         _t0 = _time_m.monotonic()
         try:
             from galaxy_gateway.device_router import device_router as _dr
+
             context = dict(envelope.args or {})
+            _meta = envelope.metadata or {}
             context["task_id"] = envelope.task_id
             context["trace_id"] = envelope.trace_id
+            if _meta.get("source_device_id"):
+                context["source_device_id"] = _meta.get("source_device_id")
+            if _meta.get("source_runtime_posture"):
+                context["source_runtime_posture"] = _meta.get("source_runtime_posture")
             # Substrate-caller sentinel: signals to DeviceRouter / CrossDeviceCoordinator
             # that this invocation originates from the canonical CommandRouter path.
             context[_CROSS_DEVICE_SUBSTRATE_CALLER_KEY] = "command_router.route_envelope"
@@ -1524,7 +1567,8 @@ class CommandRouter:
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             logger.error(
                 "_route_cross_device_envelope failed | task_id=%s error=%s",
-                envelope.task_id, _exc,
+                envelope.task_id,
+                _exc,
             )
             return {
                 "request_id": request_id,
@@ -1576,18 +1620,20 @@ class CommandRouter:
 
         for _idx, _raw in enumerate(_commands):
             if not isinstance(_raw, dict):
-                _processed.append({
-                    "index": _idx,
-                    "device_id": "",
-                    "command": "",
-                    "task_id": f"{envelope.task_id}__p{_idx:02d}",
-                    "trace_id": envelope.trace_id,
-                    "success": False,
-                    "result": None,
-                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
-                    "error_message": "Parallel command entry must be an object",
-                    "via": "command_router.parallel_fanout",
-                })
+                _processed.append(
+                    {
+                        "index": _idx,
+                        "device_id": "",
+                        "command": "",
+                        "task_id": f"{envelope.task_id}__p{_idx:02d}",
+                        "trace_id": envelope.trace_id,
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                        "error_message": "Parallel command entry must be an object",
+                        "via": "command_router.parallel_fanout",
+                    }
+                )
                 continue
 
             _device_id = str(_raw.get("device_id") or "").strip()
@@ -1604,50 +1650,56 @@ class CommandRouter:
             _sub_task_id = f"{envelope.task_id}__p{_idx:02d}"
 
             if not _device_id or not _command:
-                _processed.append({
-                    "index": _idx,
-                    "device_id": _device_id,
-                    "command": _command,
-                    "task_id": _sub_task_id,
-                    "trace_id": envelope.trace_id,
-                    "success": False,
-                    "result": None,
-                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
-                    "error_message": "Parallel command entries require device_id and command",
-                    "via": "command_router.parallel_fanout",
-                })
+                _processed.append(
+                    {
+                        "index": _idx,
+                        "device_id": _device_id,
+                        "command": _command,
+                        "task_id": _sub_task_id,
+                        "trace_id": envelope.trace_id,
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                        "error_message": "Parallel command entries require device_id and command",
+                        "via": "command_router.parallel_fanout",
+                    }
+                )
                 continue
 
             _sub_meta = dict(_base_meta)
-            _sub_meta.update({
-                "parallel_parent_task_id": envelope.task_id,
-                "parallel_index": str(_idx),
-                "request_id": f"{request_id}:p{_idx}",
-                "command_id": f"{command_id}:p{_idx}",
-            })
+            _sub_meta.update(
+                {
+                    "parallel_parent_task_id": envelope.task_id,
+                    "parallel_index": str(_idx),
+                    "request_id": f"{request_id}:p{_idx}",
+                    "command_id": f"{command_id}:p{_idx}",
+                }
+            )
 
-            _subtasks.append(_ParallelSubtask(
-                index=_idx,
-                info={
-                    "device_id": _device_id,
-                    "command": _command,
-                },
-                envelope=TaskEnvelope(
-                    task_id=_sub_task_id,
-                    trace_id=envelope.trace_id,
-                    session_id=envelope.session_id,
-                    source=envelope.source or "command_router.parallel_fanout",
-                    targets=[_device_id],
-                    tool_name=_command,
-                    args=_params,
-                    priority=envelope.priority,
-                    timeout=envelope.timeout,
-                    permission_level=envelope.permission_level,
-                    required_capabilities=list(envelope.required_capabilities),
-                    metadata=_sub_meta,
-                    remote_execution_mode=envelope.remote_execution_mode,
-                ),
-            ))
+            _subtasks.append(
+                _ParallelSubtask(
+                    index=_idx,
+                    info={
+                        "device_id": _device_id,
+                        "command": _command,
+                    },
+                    envelope=TaskEnvelope(
+                        task_id=_sub_task_id,
+                        trace_id=envelope.trace_id,
+                        session_id=envelope.session_id,
+                        source=envelope.source or "command_router.parallel_fanout",
+                        targets=[_device_id],
+                        tool_name=_command,
+                        args=_params,
+                        priority=envelope.priority,
+                        timeout=envelope.timeout,
+                        permission_level=envelope.permission_level,
+                        required_capabilities=list(envelope.required_capabilities),
+                        metadata=_sub_meta,
+                        remote_execution_mode=envelope.remote_execution_mode,
+                    ),
+                )
+            )
 
         _results = await asyncio.gather(
             *(self.route_envelope(_subtask.envelope) for _subtask in _subtasks),
@@ -1659,34 +1711,38 @@ class CommandRouter:
             _info = _subtask.info
             _env = _subtask.envelope
             if isinstance(_result, Exception):
-                _processed.append({
+                _processed.append(
+                    {
+                        "index": _idx,
+                        "device_id": _info["device_id"],
+                        "command": _info["command"],
+                        "task_id": _env.task_id,
+                        "trace_id": _env.trace_id,
+                        "success": False,
+                        "result": None,
+                        "error_code": "PARALLEL_SUBTASK_EXCEPTION",
+                        "error_message": str(_result),
+                        "via": "command_router.parallel_fanout",
+                    }
+                )
+                continue
+
+            _processed.append(
+                {
                     "index": _idx,
                     "device_id": _info["device_id"],
                     "command": _info["command"],
-                    "task_id": _env.task_id,
-                    "trace_id": _env.trace_id,
-                    "success": False,
-                    "result": None,
-                    "error_code": "PARALLEL_SUBTASK_EXCEPTION",
-                    "error_message": str(_result),
-                    "via": "command_router.parallel_fanout",
-                })
-                continue
-
-            _processed.append({
-                "index": _idx,
-                "device_id": _info["device_id"],
-                "command": _info["command"],
-                "task_id": _result.get("task_id", _env.task_id),
-                "trace_id": _result.get("trace_id", _env.trace_id),
-                "request_id": _result.get("request_id"),
-                "command_id": _result.get("command_id"),
-                "success": bool(_result.get("success")),
-                "result": _result.get("result"),
-                "error_code": _result.get("error_code"),
-                "error_message": _result.get("error_message"),
-                "via": _result.get("via", "command_router"),
-            })
+                    "task_id": _result.get("task_id", _env.task_id),
+                    "trace_id": _result.get("trace_id", _env.trace_id),
+                    "request_id": _result.get("request_id"),
+                    "command_id": _result.get("command_id"),
+                    "success": bool(_result.get("success")),
+                    "result": _result.get("result"),
+                    "error_code": _result.get("error_code"),
+                    "error_message": _result.get("error_message"),
+                    "via": _result.get("via", "command_router"),
+                }
+            )
 
         _processed.sort(key=lambda _entry: int(_entry.get("index", 0)))
         _success_count = sum(1 for _entry in _processed if _entry.get("success"))
@@ -1753,6 +1809,7 @@ class CommandRouter:
         """
         try:
             from galaxy_gateway.device_router import device_router as _dr  # lazy import
+
             device = _dr.get_device(device_id)
             if device is None:
                 return None  # device not in DeviceRouter — caller will fall back
@@ -1775,8 +1832,8 @@ class CommandRouter:
             return result
         except Exception as _dr_exc:
             logger.debug(
-                "CommandRouter._dispatch_via_device_router unavailable "
-                "(will fall back): %s", _dr_exc,
+                "CommandRouter._dispatch_via_device_router unavailable " "(will fall back): %s",
+                _dr_exc,
             )
             return None
 
@@ -1836,14 +1893,18 @@ class CommandRouter:
         }
 
         logger.info(
-            "CommandRouter._execute_command | trace_id=%s task_id=%s command_id=%s "
-            "device_id=%s command=%s",
-            trace_id, task_id, command_id, device_id, command,
+            "CommandRouter._execute_command | trace_id=%s task_id=%s command_id=%s " "device_id=%s command=%s",
+            trace_id,
+            task_id,
+            command_id,
+            device_id,
+            command,
         )
 
         # ── Phase 2: emit TASK_DISPATCHED audit event ────────────────────────
         try:
             from core.control_plane.audit_ledger import EventType as _EvType
+
             self._emit_audit(
                 _EvType.TASK_DISPATCHED,
                 trace_id=trace_id,
@@ -1865,6 +1926,7 @@ class CommandRouter:
                     ApprovalDeniedError,
                 )
                 from core.control_plane.audit_ledger import EventType as _EvHITL
+
                 interceptor = get_security_interceptor()
                 try:
                     ack_token = await interceptor.require_approval(
@@ -1898,7 +1960,7 @@ class CommandRouter:
                         "result": None,
                         "error_code": GatewayErrorCode.HITL_TIMEOUT.value,
                         "error_message": f"High-risk command '{command}' requires approval (timed out after {exc.timeout_seconds}s). "
-                                         f"Use POST /api/v1/approvals/{exc.request_id} to approve.",
+                        f"Use POST /api/v1/approvals/{exc.request_id} to approve.",
                         "approval_request_id": exc.request_id,
                         "latency_ms": round(latency_ms, 1),
                     }
@@ -1929,7 +1991,8 @@ class CommandRouter:
                 # If the HITL subsystem itself fails, log and proceed (fail-open)
                 logger.warning(
                     "CommandRouter HITL gate failed (fail-open) | command=%s error=%s",
-                    command, hitl_exc,
+                    command,
+                    hitl_exc,
                 )
 
         # ── 1. 协议信封校验 ──────────────────────────────────────────────
@@ -1948,7 +2011,9 @@ class CommandRouter:
             _get_gateway_trace_store().record(result)
             logger.warning(
                 "CommandRouter._execute_command envelope invalid | trace_id=%s command_id=%s error=%s",
-                trace_id, command_id, exc.message,
+                trace_id,
+                command_id,
+                exc.message,
             )
             return result
 
@@ -1962,6 +2027,7 @@ class CommandRouter:
             _cb_eligible = True
             try:
                 from core.control_plane._globals import get_health_registry as _get_hreg
+
                 _cb_eligible = _get_hreg().is_eligible(current_device)
             except Exception:
                 pass
@@ -1969,15 +2035,15 @@ class CommandRouter:
             if not _cb_eligible:
                 # Device circuit is OPEN or quarantined – skip to next candidate
                 tried_devices.add(current_device)
-                next_dev = self._pick_retry_device(
-                    tried_devices, retry_candidates, required_capabilities
-                )
+                next_dev = self._pick_retry_device(tried_devices, retry_candidates, required_capabilities)
                 if next_dev is not None and attempt < max_retries:
                     try:
                         from core.control_plane.audit_ledger import EventType as _EvCB
+
                         self._emit_audit(
                             _EvCB.TASK_RETRY_SCHEDULED,
-                            trace_id=trace_id, task_id=task_id,
+                            trace_id=trace_id,
+                            task_id=task_id,
                             device_id=next_dev,
                             message=(
                                 f"Retry #{attempt + 1}: circuit open on '{current_device}', "
@@ -2001,6 +2067,7 @@ class CommandRouter:
                         from core.audit_event_semantics import (
                             audit_fallback_triggered as _audit_fb_cb,
                         )
+
                         _rec_fallback(
                             primary_task_id=task_id,
                             fallback_task_id=f"{task_id}:cb_fallback:{attempt + 1}",
@@ -2014,9 +2081,7 @@ class CommandRouter:
                             task_id=task_id,
                             trace_id=trace_id,
                             source="command_router._execute_command",
-                            message=(
-                                f"circuit-breaker fallback: '{current_device}' → '{next_dev}'"
-                            ),
+                            message=(f"circuit-breaker fallback: '{current_device}' → '{next_dev}'"),
                             payload={"attempt": attempt + 1, "skipped_device": current_device},
                         )
                         _audit_fb_cb(
@@ -2035,6 +2100,7 @@ class CommandRouter:
                             WorkflowContributorKind as _WCK_fb,
                             GraphNode as _GN_fb,
                         )
+
                         _fb_task_id = f"{task_id}:cb_fallback:{attempt + 1}"
                         _tgr_fb = _get_tgr_fb()
                         _fb_stub = _GN_fb(
@@ -2080,19 +2146,28 @@ class CommandRouter:
                     get_task_graph_runtime as _get_tgr_exec,
                     GraphNodeState as _GNS_exec,
                 )
+
                 _tgr_exec = _get_tgr_exec()
                 _tgr_exec.transition(task_id, _GNS_exec.DISPATCH)
                 _tgr_exec.transition(task_id, _GNS_exec.RUNNING)
             except Exception:
                 pass
             result = await self._dispatch_to_device(
-                current_device, command, payload, command_id, task_id,
-                timeout, attempt_trace, trace_id, t0,
+                current_device,
+                command,
+                payload,
+                command_id,
+                task_id,
+                timeout,
+                attempt_trace,
+                trace_id,
+                t0,
             )
 
             # ── Phase 5: record outcome in health registry ───────────────
             try:
                 from core.control_plane._globals import get_health_registry as _get_hreg2
+
                 _hreg = _get_hreg2()
                 if result["success"]:
                     _hreg.record_success(current_device)
@@ -2109,12 +2184,13 @@ class CommandRouter:
                     # Emit TASK_RETRY_SUCCEEDED
                     try:
                         from core.control_plane.audit_ledger import EventType as _EvR
+
                         self._emit_audit(
                             _EvR.TASK_RETRY_SUCCEEDED,
-                            trace_id=trace_id, task_id=task_id, device_id=current_device,
-                            message=(
-                                f"Retry #{attempt} succeeded on device '{current_device}'"
-                            ),
+                            trace_id=trace_id,
+                            task_id=task_id,
+                            device_id=current_device,
+                            message=(f"Retry #{attempt} succeeded on device '{current_device}'"),
                             payload={"attempt": attempt, "original_device": device_id},
                         )
                     except Exception:
@@ -2133,9 +2209,12 @@ class CommandRouter:
                 if attempt > 0:
                     try:
                         from core.control_plane.audit_ledger import EventType as _EvRF
+
                         self._emit_audit(
                             _EvRF.TASK_RETRY_FAILED,
-                            trace_id=trace_id, task_id=task_id, device_id=current_device,
+                            trace_id=trace_id,
+                            task_id=task_id,
+                            device_id=current_device,
                             message=f"All retries exhausted after {attempt} attempt(s)",
                             payload={
                                 "attempt": attempt,
@@ -2149,15 +2228,16 @@ class CommandRouter:
 
             # ── Pick next candidate and schedule retry ───────────────────
             tried_devices.add(current_device)
-            next_dev = self._pick_retry_device(
-                tried_devices, retry_candidates, required_capabilities
-            )
+            next_dev = self._pick_retry_device(tried_devices, retry_candidates, required_capabilities)
             if next_dev is None:
                 try:
                     from core.control_plane.audit_ledger import EventType as _EvRE
+
                     self._emit_audit(
                         _EvRE.TASK_RETRY_FAILED,
-                        trace_id=trace_id, task_id=task_id, device_id=current_device,
+                        trace_id=trace_id,
+                        task_id=task_id,
+                        device_id=current_device,
                         message="No eligible retry candidate available",
                         payload={"attempt": attempt, "original_device": device_id},
                     )
@@ -2167,13 +2247,13 @@ class CommandRouter:
 
             try:
                 from core.control_plane.audit_ledger import EventType as _EvRS
+
                 self._emit_audit(
                     _EvRS.TASK_RETRY_SCHEDULED,
-                    trace_id=trace_id, task_id=task_id, device_id=next_dev,
-                    message=(
-                        f"Retry #{attempt + 1}: rerouting from '{current_device}' "
-                        f"to '{next_dev}'"
-                    ),
+                    trace_id=trace_id,
+                    task_id=task_id,
+                    device_id=next_dev,
+                    message=(f"Retry #{attempt + 1}: rerouting from '{current_device}' " f"to '{next_dev}'"),
                     payload={
                         "attempt": attempt + 1,
                         "failed_device": current_device,
@@ -2194,6 +2274,7 @@ class CommandRouter:
                 from core.audit_event_semantics import (
                     audit_retry_triggered as _audit_retry,
                 )
+
                 _rec_retry(
                     original_task_id=task_id,
                     retry_task_id=f"{task_id}:retry:{attempt + 1}",
@@ -2235,10 +2316,12 @@ class CommandRouter:
                     get_task_graph_runtime as _get_tgr_retry,
                     WorkflowContributorKind as _WCK_retry,
                 )
+
                 _retry_task_id = f"{task_id}:retry:{attempt + 1}"
                 _tgr_retry = _get_tgr_retry()
                 # Register retry node (stub) so edge can be wired
                 from core.task_graph_runtime import GraphNode as _GN_retry, GraphNodeState as _GNS_retry
+
                 _retry_stub = _GN_retry(
                     task_id=_retry_task_id,
                     contributor=_WCK_retry.COMMAND_ROUTER,
@@ -2304,15 +2387,20 @@ class CommandRouter:
                 }
                 _get_gateway_trace_store().record(result)
                 logger.info(
-                    "CommandRouter._dispatch_to_device done | "
-                    "trace_id=%s command_id=%s device=%s latency=%.1fms",
-                    trace_id, command_id, device_id, latency_ms,
+                    "CommandRouter._dispatch_to_device done | " "trace_id=%s command_id=%s device=%s latency=%.1fms",
+                    trace_id,
+                    command_id,
+                    device_id,
+                    latency_ms,
                 )
                 try:
                     from core.control_plane.audit_ledger import EventType as _EvC
+
                     self._emit_audit(
                         _EvC.TASK_COMPLETED,
-                        trace_id=trace_id, task_id=task_id, device_id=device_id,
+                        trace_id=trace_id,
+                        task_id=task_id,
+                        device_id=device_id,
                         message=f"Command '{command}' completed on '{device_id}'",
                         payload={"latency_ms": round(latency_ms, 1)},
                     )
@@ -2333,9 +2421,10 @@ class CommandRouter:
                 self._stats["total_timeout"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.warning(
-                    "CommandRouter._dispatch_to_device timeout | "
-                    "trace_id=%s command_id=%s device=%s",
-                    trace_id, command_id, device_id,
+                    "CommandRouter._dispatch_to_device timeout | " "trace_id=%s command_id=%s device=%s",
+                    trace_id,
+                    command_id,
+                    device_id,
                 )
                 return result
 
@@ -2352,9 +2441,11 @@ class CommandRouter:
                 self._stats["total_failed"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.warning(
-                    "CommandRouter._dispatch_to_device disconnect | "
-                    "trace_id=%s command_id=%s device=%s error=%s",
-                    trace_id, command_id, device_id, exc,
+                    "CommandRouter._dispatch_to_device disconnect | " "trace_id=%s command_id=%s device=%s error=%s",
+                    trace_id,
+                    command_id,
+                    device_id,
+                    exc,
                 )
                 return result
 
@@ -2371,9 +2462,10 @@ class CommandRouter:
                 self._stats["total_failed"] += 1
                 _get_gateway_trace_store().record(result)
                 logger.error(
-                    "CommandRouter._dispatch_to_device executor error | "
-                    "trace_id=%s command_id=%s error=%s",
-                    trace_id, command_id, exc,
+                    "CommandRouter._dispatch_to_device executor error | " "trace_id=%s command_id=%s error=%s",
+                    trace_id,
+                    command_id,
+                    exc,
                 )
                 return result
 
@@ -2397,9 +2489,11 @@ class CommandRouter:
                 **trace_base,
                 "success": _dr_result.get("success", False),
                 "result": _dr_result.get("result"),
-                "error_code": GatewayErrorCode.DEVICE_OFFLINE.value
-                if not _dr_result.get("success") and "timeout" in str(_dr_result.get("error", ""))
-                else (None if _dr_result.get("success") else GatewayErrorCode.EXECUTOR_ERROR.value),
+                "error_code": (
+                    GatewayErrorCode.DEVICE_OFFLINE.value
+                    if not _dr_result.get("success") and "timeout" in str(_dr_result.get("error", ""))
+                    else (None if _dr_result.get("success") else GatewayErrorCode.EXECUTOR_ERROR.value)
+                ),
                 "error_message": _dr_result.get("error"),
                 "latency_ms": round(latency_ms, 1),
             }
@@ -2409,6 +2503,7 @@ class CommandRouter:
         # ── Fallback: use WebSocket connection manager ────────────────
         try:
             from core.routes._shared import connection_manager
+
             if device_id not in connection_manager.active_devices:
                 latency_ms = (time.monotonic() - t0) * 1000
                 result = {
@@ -2491,11 +2586,9 @@ class CommandRouter:
             return None
         try:
             from core.control_plane._globals import get_scoring_engine, get_health_registry
+
             hreg = get_health_registry()
-            remaining = [
-                c for c in candidates
-                if c.device_id not in tried and hreg.is_eligible(c.device_id)
-            ]
+            remaining = [c for c in candidates if c.device_id not in tried and hreg.is_eligible(c.device_id)]
             if not remaining:
                 return None
             best = get_scoring_engine().select_best_device(remaining, required_capabilities)
@@ -2558,17 +2651,21 @@ class CommandRouter:
         from core.routes._shared import connection_manager
 
         logger.info(
-            "CommandRouter._deploy_agent_then_execute | "
-            "device_id=%s device_type=%s trace_id=%s task_id=%s",
-            device_id, device_type, trace_id, task_id,
+            "CommandRouter._deploy_agent_then_execute | " "device_id=%s device_type=%s trace_id=%s task_id=%s",
+            device_id,
+            device_type,
+            trace_id,
+            task_id,
         )
 
         # ── Step 1: agent_deploy ─────────────────────────────────────────
         if device_id not in connection_manager.active_devices:
             logger.warning(
-                "agent_predeploy_required but device offline | "
-                "device_id=%s device_type=%s trace_id=%s task_id=%s",
-                device_id, device_type, trace_id, task_id,
+                "agent_predeploy_required but device offline | " "device_id=%s device_type=%s trace_id=%s task_id=%s",
+                device_id,
+                device_type,
+                trace_id,
+                task_id,
             )
             return {
                 "success": False,
@@ -2579,9 +2676,7 @@ class CommandRouter:
                 "device_id": device_id,
                 "result": None,
                 "error_code": "device_offline",
-                "error_message": (
-                    f"agent_deploy failed: device {device_id} is not connected"
-                ),
+                "error_message": (f"agent_deploy failed: device {device_id} is not connected"),
                 "via": "command_router",
             }
 
@@ -2604,7 +2699,9 @@ class CommandRouter:
         if not deploy_sent:
             logger.warning(
                 "agent_deploy send failed | device_id=%s trace_id=%s task_id=%s",
-                device_id, trace_id, task_id,
+                device_id,
+                trace_id,
+                task_id,
             )
             return {
                 "success": False,
@@ -2615,16 +2712,16 @@ class CommandRouter:
                 "device_id": device_id,
                 "result": None,
                 "error_code": "deploy_failed",
-                "error_message": (
-                    f"agent_deploy WebSocket send failed for device {device_id}"
-                ),
+                "error_message": (f"agent_deploy WebSocket send failed for device {device_id}"),
                 "via": "command_router",
             }
 
         logger.info(
-            "agent_deploy sent successfully | manifest_id=%s device_id=%s "
-            "trace_id=%s task_id=%s",
-            manifest.manifest_id[:8], device_id, trace_id, task_id,
+            "agent_deploy sent successfully | manifest_id=%s device_id=%s " "trace_id=%s task_id=%s",
+            manifest.manifest_id[:8],
+            device_id,
+            trace_id,
+            task_id,
         )
 
         # ── Step 2: agent_execute ────────────────────────────────────────
@@ -2673,8 +2770,11 @@ class CommandRouter:
         logger.info(
             "CommandRouter._deploy_agent_then_execute done | "
             "trace_id=%s task_id=%s agent_id=%s success=%s latency=%.1fms",
-            trace_id, task_id, agent_id,
-            cr_result.get("success"), cr_result.get("latency_ms", 0.0),
+            trace_id,
+            task_id,
+            agent_id,
+            cr_result.get("success"),
+            cr_result.get("latency_ms", 0.0),
         )
         return cr_result
 
@@ -2752,20 +2852,23 @@ class CommandRouter:
         from core.unified.device_manager import get_unified_device_manager
 
         logger.info(
-            "CommandRouter.dispatch_agent_remote | trace_id=%s task_id=%s "
-            "agent_id=%s device_id=%s template=%s",
-            trace_id, task_id, agent_id, device_id, agent_template,
+            "CommandRouter.dispatch_agent_remote | trace_id=%s task_id=%s " "agent_id=%s device_id=%s template=%s",
+            trace_id,
+            task_id,
+            agent_id,
+            device_id,
+            agent_template,
         )
 
         # ── Physical-device pre-deploy policy ───────────────────────────
-        device_type: str = (
-            get_unified_device_manager().get_device_type(device_id) or "unknown"
-        )
+        device_type: str = get_unified_device_manager().get_device_type(device_id) or "unknown"
         if requires_agent_deploy(device_type):
             logger.info(
-                "agent_predeploy_required | device_id=%s device_type=%s "
-                "trace_id=%s task_id=%s",
-                device_id, device_type, trace_id, task_id,
+                "agent_predeploy_required | device_id=%s device_type=%s " "trace_id=%s task_id=%s",
+                device_id,
+                device_type,
+                trace_id,
+                task_id,
             )
             return await self._deploy_agent_then_execute(
                 device_id=device_id,
@@ -2828,8 +2931,11 @@ class CommandRouter:
         logger.info(
             "CommandRouter.dispatch_agent_remote done | trace_id=%s task_id=%s "
             "agent_id=%s success=%s latency=%.1fms",
-            trace_id, task_id, agent_id,
-            cr_result.get("success"), cr_result.get("latency_ms", 0.0),
+            trace_id,
+            task_id,
+            agent_id,
+            cr_result.get("success"),
+            cr_result.get("latency_ms", 0.0),
         )
         return cr_result
 
@@ -2867,8 +2973,11 @@ class CommandRouter:
         for target in request.targets:
             task = asyncio.create_task(
                 self._execute_single_with_retry(
-                    target, request.command, request.params,
-                    request.timeout, request.max_retries,
+                    target,
+                    request.command,
+                    request.params,
+                    request.timeout,
+                    request.max_retries,
                     cmd_result.targets[target],
                 )
             )
@@ -2883,8 +2992,11 @@ class CommandRouter:
 
         for target in request.targets:
             await self._execute_single_with_retry(
-                target, request.command, request.params,
-                request.timeout, request.max_retries,
+                target,
+                request.command,
+                request.params,
+                request.timeout,
+                request.max_retries,
                 cmd_result.targets[target],
             )
             # 串行模式下：如果某目标失败且不是最后一个，继续执行
@@ -2917,9 +3029,7 @@ class CommandRouter:
                     target_result.status = CommandStatus.SUCCESS
                     target_result.result = fallback_result
                     target_result.completed_at = time.time()
-                    target_result.latency_ms = (
-                        (target_result.completed_at - target_result.started_at) * 1000
-                    )
+                    target_result.latency_ms = (target_result.completed_at - target_result.started_at) * 1000
                     self._stats["total_fallbacks"] += 1
                     if self._resilience_metrics is not None:
                         try:
@@ -2931,12 +3041,11 @@ class CommandRouter:
                     last_error = f"Fallback failed: {e}"
             else:
                 from core.resilience.circuit_breaker import CircuitOpenError
+
                 target_result.status = CommandStatus.FAILED
                 target_result.error = str(CircuitOpenError(target, cb.opened_at))
                 target_result.completed_at = time.time()
-                target_result.latency_ms = (
-                    (target_result.completed_at - target_result.started_at) * 1000
-                )
+                target_result.latency_ms = (target_result.completed_at - target_result.started_at) * 1000
                 self._stats["total_failed"] += 1
                 return
 
@@ -2946,10 +3055,7 @@ class CommandRouter:
             call_error = False
             try:
                 # ── PR-G5: use adaptive semaphore when available ─────────
-                sem_ctx = (
-                    self._adaptive_sem if self._adaptive_sem is not None
-                    else self._semaphore
-                )
+                sem_ctx = self._adaptive_sem if self._adaptive_sem is not None else self._semaphore
                 executor_coro = self._executor(target, command, params)
                 async with sem_ctx:
                     if cb is not None:
@@ -2957,6 +3063,7 @@ class CommandRouter:
                         # asyncio.wait_for enforces per-call timeout inside the guard.
                         async def _guarded_call(_coro=executor_coro, _t=timeout):
                             return await asyncio.wait_for(_coro, timeout=_t)
+
                         result = await cb.call(_guarded_call)
                     else:
                         result = await asyncio.wait_for(
@@ -2989,7 +3096,7 @@ class CommandRouter:
                         pass
                 if attempt < max_retries:
                     # 指数退避
-                    await asyncio.sleep(min(2 ** attempt * 0.5, 5.0))
+                    await asyncio.sleep(min(2**attempt * 0.5, 5.0))
 
             except asyncio.CancelledError:
                 target_result.status = CommandStatus.CANCELLED
@@ -3008,7 +3115,7 @@ class CommandRouter:
                     except Exception:
                         pass
                 if attempt < max_retries:
-                    await asyncio.sleep(min(2 ** attempt * 0.5, 5.0))
+                    await asyncio.sleep(min(2**attempt * 0.5, 5.0))
 
         # 所有重试耗尽
         target_result.status = CommandStatus.TIMEOUT if "Timeout" in (last_error or "") else CommandStatus.FAILED
@@ -3085,8 +3192,7 @@ class CommandRouter:
         """清理过期的命令结果"""
         now = time.time()
         expired = [
-            rid for rid, r in self._results.items()
-            if r.completed_at and (now - r.completed_at) > max_age_seconds
+            rid for rid, r in self._results.items() if r.completed_at and (now - r.completed_at) > max_age_seconds
         ]
         for rid in expired:
             del self._results[rid]
@@ -3127,6 +3233,7 @@ def get_command_router(**kwargs) -> CommandRouter:
 # NATS Executor (Phase D)
 # ============================================================================
 
+
 class NATSExecutor:
     """Wraps commands as NATS TaskDispatch messages and resolves results.
 
@@ -3155,9 +3262,10 @@ class NATSExecutor:
     ) -> None:
         self._fallback = fallback_executor
         if fallback_enabled is None:
-            self._fallback_enabled = os.environ.get(
-                "GALAXY_NATS_EXECUTOR_FALLBACK", "true"
-            ).lower() not in ("false", "0")
+            self._fallback_enabled = os.environ.get("GALAXY_NATS_EXECUTOR_FALLBACK", "true").lower() not in (
+                "false",
+                "0",
+            )
         else:
             self._fallback_enabled = fallback_enabled
         self._timeout_s = timeout_s
@@ -3284,9 +3392,7 @@ class NATSExecutor:
                 )
                 pub_result = await nats_bus.publish_task_envelope(target, _envelope)
                 if not pub_result.get("success"):
-                    raise RuntimeError(
-                        f"envelope publish returned failure: {pub_result.get('error', 'unknown')}"
-                    )
+                    raise RuntimeError(f"envelope publish returned failure: {pub_result.get('error', 'unknown')}")
             except Exception as _env_err:
                 logger.debug(
                     "NATSExecutor: TaskEnvelope publish failed (%s), falling back to TaskDispatch",
@@ -3300,9 +3406,7 @@ class NATSExecutor:
             self._stats["nats_dispatched"] += 1
 
             try:
-                result = await asyncio.wait_for(
-                    asyncio.shield(fut), timeout=self._timeout_s
-                )
+                result = await asyncio.wait_for(asyncio.shield(fut), timeout=self._timeout_s)
                 self._stats["nats_resolved"] += 1
                 return result
             except asyncio.TimeoutError:
@@ -3390,6 +3494,7 @@ def get_nats_executor(
 # ============================================================================
 # 网关 Trace 存储（PR-C 可观测性）
 # ============================================================================
+
 
 class GatewayTraceStore:
     """

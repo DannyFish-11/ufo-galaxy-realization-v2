@@ -82,9 +82,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_integrity_runtime():
     try:
         from core.multi_device_control_integrity import reset_multi_device_integrity_runtime
+
         reset_multi_device_integrity_runtime()
     except Exception:
         pass
@@ -100,6 +102,7 @@ class TestPR521Sentinels(unittest.TestCase):
 
     def test_sentinel_importable(self):
         from galaxy_gateway.device_router import DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION
+
         self.assertIn(
             "CONTROL_SEMANTIC_SEPARATION",
             DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION,
@@ -107,10 +110,12 @@ class TestPR521Sentinels(unittest.TestCase):
 
     def test_sentinel_references_gap(self):
         from galaxy_gateway.device_router import DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION
+
         self.assertIn("GAP-517-006", DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION)
 
     def test_sentinel_is_string(self):
         from galaxy_gateway.device_router import DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION
+
         self.assertIsInstance(DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION, str)
 
 
@@ -124,11 +129,13 @@ class TestControlSemanticKindDerivation(unittest.TestCase):
 
     def _build(self, **kwargs):
         from core.multi_device_control_integrity import build_control_semantic_record
+
         return build_control_semantic_record(**kwargs)
 
     # B — LOCAL_EXECUTION when source == target
     def test_local_execution_kind(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-local",
             source_device_id="phone_01",
@@ -142,6 +149,7 @@ class TestControlSemanticKindDerivation(unittest.TestCase):
     # C — REMOTE_DISPATCH when source != target
     def test_remote_dispatch_kind(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-remote",
             source_device_id="phone_01",
@@ -155,6 +163,7 @@ class TestControlSemanticKindDerivation(unittest.TestCase):
     # D — TAKEOVER
     def test_takeover_kind(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-takeover",
             source_device_id="phone_01",
@@ -168,6 +177,7 @@ class TestControlSemanticKindDerivation(unittest.TestCase):
     # E — HYBRID
     def test_hybrid_kind(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-hybrid",
             source_device_id="phone_01",
@@ -179,6 +189,7 @@ class TestControlSemanticKindDerivation(unittest.TestCase):
     # F — UNKNOWN when no target device
     def test_unknown_kind(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-unknown",
             source_device_id="phone_01",
@@ -198,6 +209,7 @@ class TestLegacyDeviceIdCompat(unittest.IsolatedAsyncioTestCase):
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         return DeviceRouter()
 
     def _make_device(self, did):
@@ -220,13 +232,17 @@ class TestLegacyDeviceIdCompat(unittest.IsolatedAsyncioTestCase):
 
         target = self._make_device("desktop_01")
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "test",
-                "exec_mode": "both",
-                "actions": ["do_thing"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "test",
+                    "exec_mode": "both",
+                    "actions": ["do_thing"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -256,13 +272,17 @@ class TestLegacyDeviceIdCompat(unittest.IsolatedAsyncioTestCase):
 
         target = self._make_device("desktop_01")
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "test",
-                "exec_mode": "both",
-                "actions": ["do_thing"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "test",
+                    "exec_mode": "both",
+                    "actions": ["do_thing"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -292,6 +312,7 @@ class TestRouteTaskPropagatesSourceDeviceId(unittest.IsolatedAsyncioTestCase):
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         return DeviceRouter()
 
     def _make_device(self, did):
@@ -312,25 +333,36 @@ class TestRouteTaskPropagatesSourceDeviceId(unittest.IsolatedAsyncioTestCase):
         target = self._make_device("pc_01")
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "screen_capture",
-                "exec_mode": "both",
-                "actions": ["capture"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "screen_capture",
+                    "exec_mode": "both",
+                    "actions": ["capture"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
                 return_value=True,
             ),
         ):
-            await router.route_task("capture", {"source_device_id": "phone_01"})
+            await router.route_task(
+                "capture",
+                {
+                    "source_device_id": "phone_01",
+                    "source_runtime_posture": "join_runtime",
+                },
+            )
 
         self.assertEqual(
             captured.get("source_device_id"),
             "phone_01",
         )
+        self.assertEqual(captured.get("source_runtime_posture"), "join_runtime")
 
     async def test_source_device_id_absent_when_empty_context(self):
         """When no source device is provided, source_device_id should not pollute task."""
@@ -345,13 +377,17 @@ class TestRouteTaskPropagatesSourceDeviceId(unittest.IsolatedAsyncioTestCase):
         target = self._make_device("pc_01")
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "query",
-                "exec_mode": "both",
-                "actions": ["query"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "query",
+                    "exec_mode": "both",
+                    "actions": ["query"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -374,10 +410,11 @@ class TestRouteTaskPropagatesSourceDeviceId(unittest.IsolatedAsyncioTestCase):
 
 
 class TestRouteTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
-    """The TaskEnvelope built in route_task() includes source_device_id in metadata."""
+    """The TaskEnvelope built in route_task() includes source semantics in metadata."""
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         return DeviceRouter()
 
     def _make_device(self, did):
@@ -392,6 +429,7 @@ class TestRouteTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
 
         # Patch TaskEnvelope to capture what was built
         import core.schemas.task_envelope as _te_mod
+
         original_te = _te_mod.TaskEnvelope
 
         class _CapturingEnvelope(original_te):
@@ -407,13 +445,17 @@ class TestRouteTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
         router.dispatch_task = _fake_dispatch
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "test",
-                "exec_mode": "both",
-                "actions": [],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "test",
+                    "exec_mode": "both",
+                    "actions": [],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -422,18 +464,28 @@ class TestRouteTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
             patch("core.schemas.task_envelope.TaskEnvelope", _CapturingEnvelope),
             patch("galaxy_gateway.device_router.TaskEnvelope", _CapturingEnvelope, create=True),
         ):
-            await router.route_task("test_cmd", {"source_device_id": "origin_phone"})
+            await router.route_task(
+                "test_cmd",
+                {
+                    "source_device_id": "origin_phone",
+                    "source_runtime_posture": "join_runtime",
+                },
+            )
 
         # At least one envelope should carry source_device_id in metadata
-        found = any(
-            getattr(e, "metadata", {}).get("source_device_id") == "origin_phone"
-            for e in envelopes_built
+        found = any(getattr(e, "metadata", {}).get("source_device_id") == "origin_phone" for e in envelopes_built)
+        posture_found = any(
+            getattr(e, "metadata", {}).get("source_runtime_posture") == "join_runtime" for e in envelopes_built
         )
         # If TaskEnvelope patching didn't capture (import path varies), skip gracefully
         if envelopes_built:
             self.assertTrue(
                 found,
                 "At least one TaskEnvelope should carry source_device_id in metadata",
+            )
+            self.assertTrue(
+                posture_found,
+                "At least one TaskEnvelope should carry source_runtime_posture in metadata",
             )
 
 
@@ -448,6 +500,7 @@ class TestDispatchTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         return DeviceRouter()
 
     def _make_device(self, did):
@@ -461,6 +514,7 @@ class TestDispatchTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
         envelopes_built = []
 
         import core.schemas.task_envelope as _te_mod
+
         original_te = _te_mod.TaskEnvelope
 
         class _CapturingEnvelope(original_te):
@@ -482,6 +536,7 @@ class TestDispatchTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
             "trace_id": "trace-j",
             "command": "click",
             "source_device_id": "phone_01",
+            "source_runtime_posture": "join_runtime",
             "payload": {"action": "click", "params": {}},
         }
 
@@ -494,10 +549,7 @@ class TestDispatchTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.get("success"), f"dispatch_task should succeed; got {result}")
 
         # Find the envelope that was built for this dispatch
-        matching = [
-            e for e in envelopes_built
-            if "desktop_01" in (getattr(e, "targets", None) or [])
-        ]
+        matching = [e for e in envelopes_built if "desktop_01" in (getattr(e, "targets", None) or [])]
         if matching:
             env = matching[0]
             meta = getattr(env, "metadata", {}) or {}
@@ -511,6 +563,11 @@ class TestDispatchTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
                 "desktop_01",
                 "dispatch_task envelope metadata must carry target_device_id",
             )
+            self.assertEqual(
+                meta.get("source_runtime_posture"),
+                "join_runtime",
+                "dispatch_task envelope metadata must carry source_runtime_posture",
+            )
 
 
 # ===========================================================================
@@ -523,6 +580,7 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         return DeviceRouter()
 
     def _make_device(self, did):
@@ -542,13 +600,17 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
         router.dispatch_task = _fake_dispatch
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "type_text",
-                "exec_mode": "both",
-                "actions": ["type"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "type_text",
+                    "exec_mode": "both",
+                    "actions": ["type"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -561,11 +623,13 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             )
 
         from core.multi_device_control_integrity import get_multi_device_integrity_runtime
+
         runtime = get_multi_device_integrity_runtime()
         records = list(runtime._control)
 
         self.assertGreater(
-            len(records), 0,
+            len(records),
+            0,
             "At least one ControlSemanticRecord must be in the runtime buffer",
         )
         last = records[-1]
@@ -584,13 +648,17 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
         router.dispatch_task = _fake_dispatch
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "remote_type",
-                "exec_mode": "both",
-                "actions": ["type"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "remote_type",
+                    "exec_mode": "both",
+                    "actions": ["type"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -606,6 +674,7 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             get_multi_device_integrity_runtime,
             ControlSemanticKind,
         )
+
         runtime = get_multi_device_integrity_runtime()
         records = list(runtime._control)
         self.assertTrue(records, "ControlSemanticRecord must be emitted")
@@ -628,13 +697,17 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
         router.dispatch_task = _fake_dispatch
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "local_cmd",
-                "exec_mode": "both",
-                "actions": ["run"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "local_cmd",
+                    "exec_mode": "both",
+                    "actions": ["run"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -650,6 +723,7 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             get_multi_device_integrity_runtime,
             ControlSemanticKind,
         )
+
         runtime = get_multi_device_integrity_runtime()
         records = list(runtime._control)
         self.assertTrue(records, "ControlSemanticRecord must be emitted")
@@ -673,13 +747,17 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
         router.dispatch_task = _fake_dispatch
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "delegation",
-                "exec_mode": "both",
-                "actions": ["delegate"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "delegation",
+                    "exec_mode": "both",
+                    "actions": ["delegate"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=[target]),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -698,6 +776,7 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             get_multi_device_integrity_runtime,
             ControlSemanticKind,
         )
+
         runtime = get_multi_device_integrity_runtime()
         records = list(runtime._control)
         self.assertTrue(records, "ControlSemanticRecord must be emitted")
@@ -728,13 +807,17 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
         router._dispatch_cross_device_task = _fake_dispatch_cross
 
         with (
-            patch.object(router, "_analyze_command", return_value={
-                "task_type": "parallel",
-                "exec_mode": "both",
-                "actions": ["broadcast"],
-                "target_device_type": MagicMock(),
-                "requires_cross_device": False,
-            }),
+            patch.object(
+                router,
+                "_analyze_command",
+                return_value={
+                    "task_type": "parallel",
+                    "exec_mode": "both",
+                    "actions": ["broadcast"],
+                    "target_device_type": MagicMock(),
+                    "requires_cross_device": False,
+                },
+            ),
             patch.object(router, "_select_devices", return_value=targets),
             patch(
                 "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
@@ -750,6 +833,7 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             get_multi_device_integrity_runtime,
             ControlSemanticKind,
         )
+
         runtime = get_multi_device_integrity_runtime()
         records = list(runtime._control)
         self.assertTrue(records, "ControlSemanticRecord must be emitted")
@@ -772,10 +856,12 @@ class TestControlSemanticRecordSemanticClarity(unittest.TestCase):
 
     def _build(self, **kwargs):
         from core.multi_device_control_integrity import build_control_semantic_record
+
         return build_control_semantic_record(**kwargs)
 
     def test_clear_when_all_fields_set(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-clear",
             source_device_id="phone_01",
@@ -789,6 +875,7 @@ class TestControlSemanticRecordSemanticClarity(unittest.TestCase):
 
     def test_not_clear_when_source_missing(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-no-source",
             source_device_id="",
@@ -802,6 +889,7 @@ class TestControlSemanticRecordSemanticClarity(unittest.TestCase):
 
     def test_not_clear_when_target_missing(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-no-target",
             source_device_id="phone_01",
@@ -815,6 +903,7 @@ class TestControlSemanticRecordSemanticClarity(unittest.TestCase):
 
     def test_not_clear_when_kind_unknown(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         rec = self._build(
             task_id="t-unknown",
             source_device_id="phone_01",
@@ -841,6 +930,7 @@ class TestControlSemanticRecordRoundTrip(unittest.TestCase):
             ControlSemanticKind,
             build_control_semantic_record,
         )
+
         rec = build_control_semantic_record(
             task_id="t-rt",
             trace_id="trace-rt",
@@ -861,6 +951,7 @@ class TestControlSemanticRecordRoundTrip(unittest.TestCase):
             ControlSemanticKind,
             build_control_semantic_record,
         )
+
         rec = build_control_semantic_record(
             task_id="t-local-rt",
             source_device_id="dev_x",
@@ -877,6 +968,7 @@ class TestControlSemanticRecordRoundTrip(unittest.TestCase):
             ControlSemanticKind,
             build_control_semantic_record,
         )
+
         rec = build_control_semantic_record(
             task_id="t-takeover-rt",
             source_device_id="src",
@@ -899,6 +991,7 @@ class TestResidualGapResolutionStatus(unittest.TestCase):
 
     def test_gap_517_006_is_resolved(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = get_residual_integrity_gaps()
         gap = next((g for g in gaps if g.gap_id == "GAP-517-006"), None)
         self.assertIsNotNone(gap, "GAP-517-006 must be present in the residual gap catalog")
@@ -914,6 +1007,7 @@ class TestResidualGapResolutionStatus(unittest.TestCase):
 
     def test_open_gaps_do_not_include_006(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         open_gaps = [g for g in get_residual_integrity_gaps() if not g.is_resolved]
         open_ids = [g.gap_id for g in open_gaps]
         self.assertNotIn(
@@ -924,10 +1018,8 @@ class TestResidualGapResolutionStatus(unittest.TestCase):
 
     def test_control_semantic_area_has_no_open_gaps(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
-        open_control = [
-            g for g in get_residual_integrity_gaps()
-            if g.area == "control_semantics" and not g.is_resolved
-        ]
+
+        open_control = [g for g in get_residual_integrity_gaps() if g.area == "control_semantics" and not g.is_resolved]
         self.assertEqual(
             len(open_control),
             0,

@@ -88,12 +88,11 @@ class DeviceFormationGroup:
         Integer schema version.  Increment when the wire format changes.
     """
 
-    formation_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
+    formation_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
     task_id: Optional[str] = None
     trace_id: Optional[str] = None
     source_device_id: Optional[str] = None
+    source_runtime_posture: str = "control_only"
     members: List[FormationMember] = dataclasses.field(default_factory=list)
     merge_owner_device_id: Optional[str] = None
     barrier_posture: str = "wait_primary"
@@ -116,38 +115,22 @@ class DeviceFormationGroup:
     @property
     def fallback_device_ids(self) -> List[str]:
         """Return device IDs of all FALLBACK members."""
-        return [
-            m.device_id
-            for m in self.members
-            if m.role == FormationRole.FALLBACK and m.device_id is not None
-        ]
+        return [m.device_id for m in self.members if m.role == FormationRole.FALLBACK and m.device_id is not None]
 
     @property
     def support_device_ids(self) -> List[str]:
         """Return device IDs of all SUPPORT members."""
-        return [
-            m.device_id
-            for m in self.members
-            if m.role == FormationRole.SUPPORT and m.device_id is not None
-        ]
+        return [m.device_id for m in self.members if m.role == FormationRole.SUPPORT and m.device_id is not None]
 
     @property
     def observer_device_ids(self) -> List[str]:
         """Return device IDs of all OBSERVER members."""
-        return [
-            m.device_id
-            for m in self.members
-            if m.role == FormationRole.OBSERVER and m.device_id is not None
-        ]
+        return [m.device_id for m in self.members if m.role == FormationRole.OBSERVER and m.device_id is not None]
 
     @property
     def relay_device_ids(self) -> List[str]:
         """Return device IDs of all RELAY members."""
-        return [
-            m.device_id
-            for m in self.members
-            if m.role == FormationRole.RELAY and m.device_id is not None
-        ]
+        return [m.device_id for m in self.members if m.role == FormationRole.RELAY and m.device_id is not None]
 
     @property
     def all_member_device_ids(self) -> List[str]:
@@ -197,6 +180,7 @@ class DeviceFormationGroup:
             "task_id": self.task_id,
             "trace_id": self.trace_id,
             "source_device_id": self.source_device_id,
+            "source_runtime_posture": self.source_runtime_posture,
             "primary_execution_device_id": self.primary_execution_device_id,
             "merge_owner_device_id": self.effective_merge_owner_device_id,
             "barrier_posture": self.barrier_posture,
@@ -232,6 +216,7 @@ class DeviceFormationGroup:
             task_id=data.get("task_id"),
             trace_id=data.get("trace_id"),
             source_device_id=data.get("source_device_id"),
+            source_runtime_posture=str(data.get("source_runtime_posture", "control_only")),
             members=members,
             merge_owner_device_id=data.get("merge_owner_device_id"),
             barrier_posture=str(data.get("barrier_posture", "wait_primary")),
@@ -255,9 +240,7 @@ class DeviceFormationGroup:
 
 #: Stable string values for :attr:`DeviceFormationGroup.barrier_posture`.
 BARRIER_POSTURES = {
-    "wait_all": (
-        "Block completion until all participating devices have reported results."
-    ),
+    "wait_all": ("Block completion until all participating devices have reported results."),
     "wait_primary": (
         "Block completion only until the PRIMARY_EXECUTION device reports a "
         "result.  Support/observer devices may lag."
@@ -267,8 +250,7 @@ BARRIER_POSTURES = {
         "Suitable for fire-and-forget or low-criticality formations."
     ),
     "wait_merge_owner": (
-        "Block completion until the MERGE_OWNER device has assembled and "
-        "reported the merged result."
+        "Block completion until the MERGE_OWNER device has assembled and " "reported the merged result."
     ),
 }
 

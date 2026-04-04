@@ -101,6 +101,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def _reset_chain():
     try:
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
     except Exception:
         pass
@@ -109,6 +110,7 @@ def _reset_chain():
 def _reset_graph():
     try:
         from core.task_graph_runtime import reset_task_graph_runtime
+
         reset_task_graph_runtime()
     except Exception:
         pass
@@ -117,9 +119,23 @@ def _reset_graph():
 def _reset_integrity_runtime():
     try:
         from core.multi_device_control_integrity import reset_multi_device_integrity_runtime
+
         reset_multi_device_integrity_runtime()
     except Exception:
         pass
+
+
+def _reset_source_runtime_posture():
+    try:
+        from core.source_runtime_posture import reset_source_runtime_posture_runtime
+
+        reset_source_runtime_posture_runtime()
+    except Exception:
+        pass
+
+
+def _run_async(coro):
+    return asyncio.run(coro)
 
 
 # ===========================================================================
@@ -134,18 +150,21 @@ class TestA_SentinelImports(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY,
         )
+
         self.assertIn("PR522", MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY)
 
     def test_A2_authority_is_string(self):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY,
         )
+
         self.assertIsInstance(MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY, str)
 
     def test_A3_integrated_importable(self):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED,
         )
+
         self.assertIn(
             "INTEGRATED",
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED,
@@ -155,24 +174,28 @@ class TestA_SentinelImports(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED,
         )
+
         self.assertIn("GAP-517-008", MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED)
 
     def test_A5_gap008_resolved_importable(self):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_GAP008_RESOLVED,
         )
+
         self.assertIn("GAP_517_008_RESOLVED", MULTI_DEVICE_PROJECTION_GAP008_RESOLVED)
 
     def test_A6_gap008_resolved_references_chain(self):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_GAP008_RESOLVED,
         )
+
         self.assertIn("CrossDeviceChainSingleton", MULTI_DEVICE_PROJECTION_GAP008_RESOLVED)
 
     def test_A7_layer_position_is_13(self):
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_LAYER_POSITION,
         )
+
         self.assertEqual(MULTI_DEVICE_PROJECTION_CANONICALIZATION_LAYER_POSITION, 13)
 
 
@@ -188,6 +211,7 @@ class TestB_SurfacingStateEnum(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             CanonicalProjectionSurfacingState,
         )
+
         return CanonicalProjectionSurfacingState
 
     def test_B1_full_value(self):
@@ -219,12 +243,14 @@ class TestC_EnrichmentDataclass(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             MultiDeviceCanonicalEnrichment,
         )
+
         return MultiDeviceCanonicalEnrichment
 
     def test_C1_default_surfacing_state_is_unavailable(self):
         from core.multi_device_projection_canonicalization import (
             CanonicalProjectionSurfacingState,
         )
+
         e = self._cls()()
         self.assertEqual(e.surfacing_state, CanonicalProjectionSurfacingState.UNAVAILABLE)
 
@@ -296,6 +322,7 @@ class TestD_ChainEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         return enrich_multi_device_projection()
 
     def test_D1_chain_available_true(self):
@@ -336,12 +363,14 @@ class TestD_ChainEnrichment(unittest.TestCase):
 
     def test_D10_chain_records_reflect_recorded_execution(self):
         from core.cross_device_execution_chain import record_chain_execution
+
         record_chain_execution(task_id="test_pr522_d10", device_id="dev_x")
         e = self._enrich()
         self.assertGreater(e.total_executions, 0)
 
     def test_D11_canonical_count_increments(self):
         from core.cross_device_execution_chain import record_chain_execution
+
         before = self._enrich().canonical_executions
         record_chain_execution(task_id="test_pr522_d11", device_id="dev_y")
         after = self._enrich().canonical_executions
@@ -351,6 +380,7 @@ class TestD_ChainEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.multi_device_projection_canonicalization.enrich_multi_device_projection",
             wraps=enrich_multi_device_projection,
@@ -385,6 +415,7 @@ class TestE_GraphEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         return enrich_multi_device_projection()
 
     def test_E1_graph_available_true(self):
@@ -415,6 +446,7 @@ class TestE_GraphEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.task_graph_runtime.get_task_graph_runtime",
             side_effect=RuntimeError("graph unavailable"),
@@ -439,6 +471,7 @@ class TestF_OperatorEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         return enrich_multi_device_projection()
 
     def test_F1_operator_available_is_bool(self):
@@ -449,6 +482,7 @@ class TestF_OperatorEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.operator_surface.get_operator_surface",
             side_effect=RuntimeError("op unavailable"),
@@ -465,6 +499,7 @@ class TestF_OperatorEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.operator_surface.get_operator_surface",
             side_effect=RuntimeError("op unavailable"),
@@ -491,6 +526,7 @@ class TestG_IntegrityEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         return enrich_multi_device_projection()
 
     def test_G1_integrity_available_is_bool(self):
@@ -501,6 +537,7 @@ class TestG_IntegrityEnrichment(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.multi_device_control_integrity.build_integrity_snapshot",
             side_effect=RuntimeError("integrity unavailable"),
@@ -517,6 +554,58 @@ class TestG_IntegrityEnrichment(unittest.TestCase):
             self.assertIn("snapshot_id", snap)
             self.assertIn("canonical_entry_count", snap)
             self.assertIn("legacy_entry_count", snap)
+
+
+# ===========================================================================
+# G2) enrich_multi_device_projection — SourceRuntimePostureRuntime
+# ===========================================================================
+
+
+class TestG2_SourceRuntimePostureEnrichment(unittest.TestCase):
+    def setUp(self):
+        _reset_source_runtime_posture()
+
+    def tearDown(self):
+        _reset_source_runtime_posture()
+
+    def test_G2_1_posture_snapshot_available_when_runtime_reachable(self):
+        from core.source_runtime_posture import (
+            SourceRuntimePosture,
+            record_source_runtime_posture,
+        )
+        from core.multi_device_projection_canonicalization import (
+            enrich_multi_device_projection,
+        )
+
+        record_source_runtime_posture(
+            task_id="posture-task",
+            trace_id="posture-trace",
+            source_device_id="phone_01",
+            posture=SourceRuntimePosture.JOIN_RUNTIME,
+            target_device_ids=["desktop_01"],
+            reason="test",
+        )
+
+        result = enrich_multi_device_projection()
+        self.assertTrue(result.source_runtime_posture_available)
+        self.assertIsInstance(result.source_runtime_posture_snapshot, dict)
+        self.assertEqual(
+            result.source_runtime_posture_snapshot["join_runtime_count"],
+            1,
+        )
+
+    def test_G2_2_posture_runtime_is_optional(self):
+        from core.multi_device_projection_canonicalization import (
+            enrich_multi_device_projection,
+        )
+
+        with patch(
+            "core.source_runtime_posture.build_source_runtime_posture_snapshot",
+            side_effect=RuntimeError("posture unavailable"),
+        ):
+            result = enrich_multi_device_projection()
+        self.assertFalse(result.source_runtime_posture_available)
+        self.assertIsNone(result.source_runtime_posture_snapshot)
 
 
 # ===========================================================================
@@ -540,6 +629,7 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
             enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
         )
+
         result = enrich_multi_device_projection()
         # Both chain and graph are available in the default test environment
         if result.chain_available and result.graph_available:
@@ -550,6 +640,7 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
             enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
         )
+
         with patch(
             "core.task_graph_runtime.get_task_graph_runtime",
             side_effect=RuntimeError("no graph"),
@@ -563,6 +654,7 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
             enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
         )
+
         with patch(
             "core.cross_device_execution_chain.build_cross_device_chain_snapshot",
             side_effect=RuntimeError("no chain"),
@@ -576,18 +668,24 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
             enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
         )
-        with patch(
-            "core.cross_device_execution_chain.build_cross_device_chain_snapshot",
-            side_effect=RuntimeError("no chain"),
-        ), patch(
-            "core.task_graph_runtime.get_task_graph_runtime",
-            side_effect=RuntimeError("no graph"),
-        ), patch(
-            "core.operator_surface.get_operator_surface",
-            side_effect=RuntimeError("no op"),
-        ), patch(
-            "core.multi_device_control_integrity.build_integrity_snapshot",
-            side_effect=RuntimeError("no integrity"),
+
+        with (
+            patch(
+                "core.cross_device_execution_chain.build_cross_device_chain_snapshot",
+                side_effect=RuntimeError("no chain"),
+            ),
+            patch(
+                "core.task_graph_runtime.get_task_graph_runtime",
+                side_effect=RuntimeError("no graph"),
+            ),
+            patch(
+                "core.operator_surface.get_operator_surface",
+                side_effect=RuntimeError("no op"),
+            ),
+            patch(
+                "core.multi_device_control_integrity.build_integrity_snapshot",
+                side_effect=RuntimeError("no integrity"),
+            ),
         ):
             result = enrich_multi_device_projection()
         self.assertEqual(result.surfacing_state, CanonicalProjectionSurfacingState.UNAVAILABLE)
@@ -596,12 +694,16 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
-        with patch(
-            "core.cross_device_execution_chain.build_cross_device_chain_snapshot",
-            side_effect=RuntimeError("no chain"),
-        ), patch(
-            "core.task_graph_runtime.get_task_graph_runtime",
-            side_effect=RuntimeError("no graph"),
+
+        with (
+            patch(
+                "core.cross_device_execution_chain.build_cross_device_chain_snapshot",
+                side_effect=RuntimeError("no chain"),
+            ),
+            patch(
+                "core.task_graph_runtime.get_task_graph_runtime",
+                side_effect=RuntimeError("no graph"),
+            ),
         ):
             result = enrich_multi_device_projection()
         self.assertTrue(result.transport_local_only)
@@ -610,6 +712,7 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         if result.chain_available:
             self.assertFalse(result.transport_local_only)
@@ -618,6 +721,7 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         self.assertEqual(result.to_dict()["surfacing_state"], result.surfacing_state.value)
 
@@ -634,38 +738,36 @@ class TestI_DegradedSurfacingExplicit(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.cross_device_execution_chain.build_cross_device_chain_snapshot",
             side_effect=RuntimeError("chain gone"),
         ):
             result = enrich_multi_device_projection()
-        self.assertTrue(
-            any("GAP-517-008" in r for r in result.surfacing_gap_reasons)
-        )
+        self.assertTrue(any("GAP-517-008" in r for r in result.surfacing_gap_reasons))
 
     def test_I2_gap_reason_references_gap_id_when_graph_missing(self):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         with patch(
             "core.task_graph_runtime.get_task_graph_runtime",
             side_effect=RuntimeError("graph gone"),
         ):
             result = enrich_multi_device_projection()
-        self.assertTrue(
-            any("GAP-517-008" in r for r in result.surfacing_gap_reasons)
-        )
+        self.assertTrue(any("GAP-517-008" in r for r in result.surfacing_gap_reasons))
 
     def test_I3_no_gap_reasons_when_fully_available(self):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         if result.chain_available and result.graph_available:
             # Required sources available => no required gap reasons
             chain_graph_gaps = [
-                r for r in result.surfacing_gap_reasons
-                if "CrossDeviceChainSingleton" in r or "TaskGraphRuntime" in r
+                r for r in result.surfacing_gap_reasons if "CrossDeviceChainSingleton" in r or "TaskGraphRuntime" in r
             ]
             self.assertEqual(chain_graph_gaps, [])
 
@@ -673,6 +775,7 @@ class TestI_DegradedSurfacingExplicit(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         self.assertIsInstance(result.surfacing_gap_reasons, list)
 
@@ -680,6 +783,7 @@ class TestI_DegradedSurfacingExplicit(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         self.assertIsInstance(result.enrichment_id, str)
         self.assertTrue(len(result.enrichment_id) > 0)
@@ -688,6 +792,7 @@ class TestI_DegradedSurfacingExplicit(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         self.assertIsInstance(result.timestamp, float)
         self.assertGreater(result.timestamp, 0)
@@ -697,6 +802,7 @@ class TestI_DegradedSurfacingExplicit(unittest.TestCase):
         from core.multi_device_projection_canonicalization import (
             enrich_multi_device_projection,
         )
+
         result = enrich_multi_device_projection()
         if result.chain_available or result.graph_available:
             self.assertFalse(
@@ -726,6 +832,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
             from core.routes.projection import (
                 MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED,
             )
+
             self.assertIn("V1", MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED)
         except ImportError:
             self.skipTest("fastapi not installed; sentinel import skipped")
@@ -734,6 +841,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
         """Projection endpoint metadata contains 'canonical_enrichment' key."""
         try:
             from core.routes.projection import create_router
+
             router = create_router()
 
             # Find the multi-device endpoint handler
@@ -745,9 +853,10 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
             if handler is None:
                 self.skipTest("multi-device endpoint not found")
 
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             body = response.body
             import json
+
             data = json.loads(body)
             metadata = data.get("metadata", {})
             self.assertIn(
@@ -762,6 +871,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
         """Projection endpoint metadata contains 'canonical_surfacing_state' key."""
         try:
             from core.routes.projection import create_router
+
             router = create_router()
             handler = None
             for route in router.routes:
@@ -770,8 +880,9 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
                     break
             if handler is None:
                 self.skipTest("multi-device endpoint not found")
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             import json
+
             data = json.loads(response.body)
             metadata = data.get("metadata", {})
             self.assertIn("canonical_surfacing_state", metadata)
@@ -781,6 +892,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
     def test_J4_canonical_surfacing_gaps_key_in_endpoint_metadata(self):
         try:
             from core.routes.projection import create_router
+
             router = create_router()
             handler = None
             for route in router.routes:
@@ -789,8 +901,9 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
                     break
             if handler is None:
                 self.skipTest("multi-device endpoint not found")
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             import json
+
             data = json.loads(response.body)
             metadata = data.get("metadata", {})
             self.assertIn("canonical_surfacing_gaps", metadata)
@@ -800,6 +913,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
     def test_J5_transport_local_only_key_in_endpoint_metadata(self):
         try:
             from core.routes.projection import create_router
+
             router = create_router()
             handler = None
             for route in router.routes:
@@ -808,8 +922,9 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
                     break
             if handler is None:
                 self.skipTest("multi-device endpoint not found")
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             import json
+
             data = json.loads(response.body)
             metadata = data.get("metadata", {})
             self.assertIn("transport_local_only", metadata)
@@ -819,6 +934,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
     def test_J6_pr_522_gap_008_resolved_is_true_in_metadata(self):
         try:
             from core.routes.projection import create_router
+
             router = create_router()
             handler = None
             for route in router.routes:
@@ -827,8 +943,9 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
                     break
             if handler is None:
                 self.skipTest("multi-device endpoint not found")
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             import json
+
             data = json.loads(response.body)
             metadata = data.get("metadata", {})
             self.assertTrue(
@@ -844,6 +961,7 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
             from core.multi_device_projection_canonicalization import (
                 CanonicalProjectionSurfacingState,
             )
+
             router = create_router()
             handler = None
             for route in router.routes:
@@ -852,8 +970,9 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
                     break
             if handler is None:
                 self.skipTest("multi-device endpoint not found")
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             import json
+
             data = json.loads(response.body)
             metadata = data.get("metadata", {})
             state_val = metadata.get("canonical_surfacing_state")
@@ -863,6 +982,28 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
                 valid_values,
                 f"canonical_surfacing_state '{state_val}' must be a valid enum value",
             )
+        except ImportError:
+            self.skipTest("fastapi not installed")
+
+    def test_J8_source_runtime_posture_keys_present_in_metadata(self):
+        try:
+            from core.routes.projection import create_router
+
+            router = create_router()
+            handler = None
+            for route in router.routes:
+                if "/multi-device" in str(getattr(route, "path", "")):
+                    handler = route.endpoint
+                    break
+            if handler is None:
+                self.skipTest("multi-device endpoint not found")
+            response = _run_async(handler())
+            import json
+
+            data = json.loads(response.body)
+            metadata = data.get("metadata", {})
+            self.assertIn("source_runtime_posture_snapshot", metadata)
+            self.assertIn("source_runtime_posture_available", metadata)
         except ImportError:
             self.skipTest("fastapi not installed")
 
@@ -886,6 +1027,7 @@ class TestK_BackwardCompatKeys(unittest.TestCase):
     def _get_metadata(self):
         try:
             from core.routes.projection import create_router
+
             router = create_router()
             handler = None
             for route in router.routes:
@@ -894,8 +1036,9 @@ class TestK_BackwardCompatKeys(unittest.TestCase):
                     break
             if handler is None:
                 return None
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = _run_async(handler())
             import json
+
             data = json.loads(response.body)
             return data.get("metadata", {})
         except ImportError:
@@ -938,6 +1081,7 @@ class TestL_GapCatalogResolved(unittest.TestCase):
 
     def test_L1_gap_008_is_resolved(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertIn("GAP-517-008", gaps)
         self.assertTrue(
@@ -947,39 +1091,49 @@ class TestL_GapCatalogResolved(unittest.TestCase):
 
     def test_L2_resolution_note_references_pr522(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         note = gaps["GAP-517-008"].resolution_note
         self.assertIn("PR-522", note)
 
     def test_L3_resolution_note_references_enrich_function(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         note = gaps["GAP-517-008"].resolution_note
         self.assertIn("enrich_multi_device_projection", note)
 
     def test_L4_resolution_note_references_canonicalization_module(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         note = gaps["GAP-517-008"].resolution_note
         self.assertIn("multi_device_projection_canonicalization", note)
 
     def test_L5_gap_008_resolution_note_is_non_empty(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertTrue(len(gaps["GAP-517-008"].resolution_note) > 50)
 
     def test_L6_gap_008_area_is_result_surface(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         self.assertEqual(gaps["GAP-517-008"].area, "result_surface")
 
     def test_L7_all_other_gaps_unaffected(self):
         """Marking GAP-517-008 resolved must not change resolution status of others."""
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         # These were resolved by prior PRs
         previously_resolved = {
-            "GAP-517-001", "GAP-517-003", "GAP-517-004",
-            "GAP-517-005", "GAP-517-006", "GAP-517-007",
+            "GAP-517-001",
+            "GAP-517-003",
+            "GAP-517-004",
+            "GAP-517-005",
+            "GAP-517-006",
+            "GAP-517-007",
         }
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         for gid in previously_resolved:
@@ -991,6 +1145,7 @@ class TestL_GapCatalogResolved(unittest.TestCase):
 
     def test_L8_gap_008_resolution_note_references_canonical_surfacing_state(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = {g.gap_id: g for g in get_residual_integrity_gaps()}
         note = gaps["GAP-517-008"].resolution_note
         self.assertIn("canonical_surfacing_state", note)

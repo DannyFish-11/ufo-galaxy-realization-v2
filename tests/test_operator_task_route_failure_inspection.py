@@ -71,10 +71,10 @@ from core.audit_event_semantics import (
     audit_task_failed,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def reset_all():
@@ -82,12 +82,16 @@ def reset_all():
     reset_replay_foundation()
     reset_audit_event_semantics()
     from core.canonical_task import reset_canonical_task_runtime
+    from core.source_runtime_posture import reset_source_runtime_posture_runtime
+
     reset_canonical_task_runtime()
+    reset_source_runtime_posture_runtime()
     yield
     reset_operator_surface()
     reset_replay_foundation()
     reset_audit_event_semantics()
     reset_canonical_task_runtime()
+    reset_source_runtime_posture_runtime()
 
 
 def _make_completed_task(goal: str = "do work", targets=None):
@@ -97,6 +101,7 @@ def _make_completed_task(goal: str = "do work", targets=None):
         TaskLifecycle,
         TaskOrigin,
     )
+
     task = build_canonical_task(
         goal=goal,
         origin=TaskOrigin.API_REQUEST,
@@ -118,6 +123,7 @@ def _make_failed_task(goal: str = "failed task", failure_domain: str = "routing"
         TaskOrigin,
         FailureDomain,
     )
+
     task = build_canonical_task(
         goal=goal,
         origin=TaskOrigin.AI_INTENT,
@@ -135,6 +141,7 @@ def _make_failed_task(goal: str = "failed task", failure_domain: str = "routing"
 # ===========================================================================
 # 1-4: Task inspection
 # ===========================================================================
+
 
 class TestTaskInspection:
     def test_01_completed_task_success_true(self):
@@ -170,6 +177,7 @@ class TestTaskInspection:
 # 5-6: Route inspection
 # ===========================================================================
 
+
 class TestRouteInspection:
     def test_05_route_inspection_has_targets(self):
         task = _make_completed_task(targets=["dev_X", "dev_Y"])
@@ -185,6 +193,7 @@ class TestRouteInspection:
             TaskLifecycle,
             TaskOrigin,
         )
+
         task = build_canonical_task(goal="route test", origin=TaskOrigin.API_REQUEST)
         task.routing.effective_path = "relay_path_01"
         task.lifecycle = TaskLifecycle.ROUTED
@@ -198,6 +207,7 @@ class TestRouteInspection:
 # ===========================================================================
 # 7-8: Failure domain inspection
 # ===========================================================================
+
 
 class TestFailureDomainInspection:
     def test_07_failed_task_correct_failure_domain(self):
@@ -219,6 +229,7 @@ class TestFailureDomainInspection:
 # 9-10: Lineage inspection
 # ===========================================================================
 
+
 class TestLineageInspection:
     def test_09_lineage_includes_children(self):
         from core.canonical_task import (
@@ -227,6 +238,7 @@ class TestLineageInspection:
             TaskLifecycle,
             TaskOrigin,
         )
+
         parent = build_canonical_task(goal="parent", origin=TaskOrigin.API_REQUEST)
         child = build_canonical_task(goal="child", origin=TaskOrigin.ORCHESTRATOR_TASK)
         parent.graph.children.append(child.identity.task_id)
@@ -252,6 +264,7 @@ class TestLineageInspection:
 # 11-12: Operator snapshot
 # ===========================================================================
 
+
 class TestOperatorSnapshot:
     def test_11_snapshot_active_count_reflects_registered(self):
         _make_completed_task("task_one")
@@ -259,6 +272,26 @@ class TestOperatorSnapshot:
         surface = get_operator_surface()
         snap = surface.operator_snapshot()
         assert snap.active_task_count == 2
+
+    def test_11b_snapshot_includes_source_runtime_posture_summary(self):
+        from core.source_runtime_posture import (
+            SourceRuntimePosture,
+            record_source_runtime_posture,
+        )
+
+        record_source_runtime_posture(
+            task_id="task-posture",
+            trace_id="trace-posture",
+            source_device_id="phone_01",
+            posture=SourceRuntimePosture.JOIN_RUNTIME,
+            target_device_ids=["desktop_01"],
+            reason="test",
+        )
+
+        surface = get_operator_surface()
+        snap = surface.operator_snapshot().to_dict()
+        assert snap["source_runtime_posture_counts"]["join_runtime"] >= 1
+        assert snap["recent_source_runtime_postures"]
 
     def test_12_snapshot_recent_tasks_non_empty(self):
         _make_completed_task("snap_task")
@@ -270,6 +303,7 @@ class TestOperatorSnapshot:
 # ===========================================================================
 # 13-16: Serialisation
 # ===========================================================================
+
 
 class TestSerialisation:
     def test_13_inspect_task_json_serialisable(self):
@@ -305,6 +339,7 @@ class TestSerialisation:
 # 17-22: Replay and audit integration
 # ===========================================================================
 
+
 class TestReplayAuditIntegration:
     def test_17_two_tasks_same_trace_share_trace_id(self):
         from core.canonical_task import (
@@ -313,6 +348,7 @@ class TestReplayAuditIntegration:
             TaskOrigin,
             TaskLifecycle,
         )
+
         trace = "trace_shared_001"
         t1 = build_canonical_task(goal="t1", origin=TaskOrigin.API_REQUEST)
         t1.identity.trace_id = trace
@@ -340,7 +376,8 @@ class TestReplayAuditIntegration:
     def test_19_route_decision_stored_and_queryable(self):
         task = _make_completed_task("route task")
         record_route_decision(
-            task.identity.task_id, task.identity.trace_id,
+            task.identity.task_id,
+            task.identity.trace_id,
             selected_targets=["device_A"],
             effective_path="direct",
             transport_strategy="websocket",
@@ -376,9 +413,11 @@ class TestReplayAuditIntegration:
 # 23-25: Field alignment
 # ===========================================================================
 
+
 class TestFieldAlignment:
     def test_23_inspect_task_origin_is_known(self):
         from core.canonical_task import TaskOrigin
+
         task = _make_completed_task()
         surface = get_operator_surface()
         insp = surface.inspect_task(task.identity.task_id)

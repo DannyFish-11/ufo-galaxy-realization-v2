@@ -218,12 +218,8 @@ class MultiDeviceCanonicalEnrichment:
         UNIX timestamp when this enrichment was assembled.
     """
 
-    enrichment_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
-    surfacing_state: CanonicalProjectionSurfacingState = (
-        CanonicalProjectionSurfacingState.UNAVAILABLE
-    )
+    enrichment_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
+    surfacing_state: CanonicalProjectionSurfacingState = CanonicalProjectionSurfacingState.UNAVAILABLE
     surfacing_gap_reasons: List[str] = dataclasses.field(default_factory=list)
 
     # Cross-device chain (CrossDeviceChainSingleton)
@@ -232,17 +228,13 @@ class MultiDeviceCanonicalEnrichment:
     canonical_executions: int = 0
     legacy_executions: int = 0
     total_executions: int = 0
-    recent_chain_records: List[Dict[str, Any]] = dataclasses.field(
-        default_factory=list
-    )
+    recent_chain_records: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
 
     # Task graph runtime (TaskGraphRuntime)
     graph_snapshot: Optional[Dict[str, Any]] = None
     graph_available: bool = False
     graph_node_count: int = 0
-    recent_graph_records: List[Dict[str, Any]] = dataclasses.field(
-        default_factory=list
-    )
+    recent_graph_records: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
 
     # Operator surface (OperatorSurface)
     operator_snapshot: Optional[Dict[str, Any]] = None
@@ -255,6 +247,10 @@ class MultiDeviceCanonicalEnrichment:
     # Integrity audit snapshot
     integrity_snapshot: Optional[Dict[str, Any]] = None
     integrity_available: bool = False
+
+    # Source-runtime posture snapshot
+    source_runtime_posture_snapshot: Optional[Dict[str, Any]] = None
+    source_runtime_posture_available: bool = False
 
     # Degradation flag
     transport_local_only: bool = True
@@ -282,6 +278,8 @@ class MultiDeviceCanonicalEnrichment:
             "formation_available": self.formation_available,
             "integrity_snapshot": self.integrity_snapshot,
             "integrity_available": self.integrity_available,
+            "source_runtime_posture_snapshot": self.source_runtime_posture_snapshot,
+            "source_runtime_posture_available": self.source_runtime_posture_available,
             "transport_local_only": self.transport_local_only,
             "timestamp": self.timestamp,
         }
@@ -339,14 +337,13 @@ def enrich_multi_device_projection(
     # ── Source 1: CrossDeviceChainSingleton ──────────────────────────────
     try:
         from core.cross_device_execution_chain import build_cross_device_chain_snapshot
+
         chain_snap = build_cross_device_chain_snapshot(max_recent=max_chain_records)
         enrichment.chain_available = True
         enrichment.canonical_executions = chain_snap.canonical_executions
         enrichment.legacy_executions = chain_snap.legacy_executions
         enrichment.total_executions = chain_snap.total_executions
-        enrichment.recent_chain_records = [
-            r.to_dict() for r in chain_snap.recent_records
-        ]
+        enrichment.recent_chain_records = [r.to_dict() for r in chain_snap.recent_records]
         enrichment.chain_snapshot = {
             "snapshot_id": chain_snap.snapshot_id,
             "total_executions": chain_snap.total_executions,
@@ -358,16 +355,13 @@ def enrich_multi_device_projection(
         }
         canonical_sources_available += 1
         logger.debug(
-            "enrich_multi_device_projection: chain available "
-            "total=%d canonical=%d legacy=%d",
+            "enrich_multi_device_projection: chain available " "total=%d canonical=%d legacy=%d",
             enrichment.total_executions,
             enrichment.canonical_executions,
             enrichment.legacy_executions,
         )
     except Exception as chain_exc:
-        surfacing_gap_reasons.append(
-            f"GAP-517-008: CrossDeviceChainSingleton unavailable: {chain_exc}"
-        )
+        surfacing_gap_reasons.append(f"GAP-517-008: CrossDeviceChainSingleton unavailable: {chain_exc}")
         logger.debug(
             "enrich_multi_device_projection: chain snapshot unavailable: %s",
             chain_exc,
@@ -376,13 +370,12 @@ def enrich_multi_device_projection(
     # ── Source 2: TaskGraphRuntime ────────────────────────────────────────
     try:
         from core.task_graph_runtime import get_task_graph_runtime
+
         tgr = get_task_graph_runtime()
         tgr_snap = tgr.snapshot(max_records=max_graph_records)
         enrichment.graph_available = True
         enrichment.graph_node_count = len(tgr_snap.nodes)
-        enrichment.recent_graph_records = [
-            r.to_dict() for r in tgr_snap.recent_records
-        ]
+        enrichment.recent_graph_records = [r.to_dict() for r in tgr_snap.recent_records]
         enrichment.graph_snapshot = {
             "node_count": enrichment.graph_node_count,
             "recent_record_count": len(tgr_snap.recent_records),
@@ -393,9 +386,7 @@ def enrich_multi_device_projection(
             enrichment.graph_node_count,
         )
     except Exception as tgr_exc:
-        surfacing_gap_reasons.append(
-            f"GAP-517-008: TaskGraphRuntime unavailable: {tgr_exc}"
-        )
+        surfacing_gap_reasons.append(f"GAP-517-008: TaskGraphRuntime unavailable: {tgr_exc}")
         logger.debug(
             "enrich_multi_device_projection: graph snapshot unavailable: %s",
             tgr_exc,
@@ -404,6 +395,7 @@ def enrich_multi_device_projection(
     # ── Source 3: OperatorSurface (optional) ─────────────────────────────
     try:
         from core.operator_surface import get_operator_surface
+
         op_surface = get_operator_surface()
         op_snap = op_surface.operator_snapshot()
         enrichment.operator_available = True
@@ -427,6 +419,7 @@ def enrich_multi_device_projection(
         from core.multi_device_control_integrity import (
             build_integrity_snapshot,
         )
+
         integrity_snap = build_integrity_snapshot()
         enrichment.integrity_available = True
         enrichment.integrity_snapshot = {
@@ -445,13 +438,25 @@ def enrich_multi_device_projection(
             integrity_exc,
         )
 
+    # ── Source 5: SourceRuntimePostureRuntime (optional) ──────────────────
+    try:
+        from core.source_runtime_posture import build_source_runtime_posture_snapshot
+
+        posture_snap = build_source_runtime_posture_snapshot()
+        enrichment.source_runtime_posture_available = True
+        enrichment.source_runtime_posture_snapshot = posture_snap.to_dict()
+        logger.debug("enrich_multi_device_projection: source runtime posture available")
+    except Exception as posture_exc:
+        logger.debug(
+            "enrich_multi_device_projection: source runtime posture unavailable: %s",
+            posture_exc,
+        )
+
     # ── Determine overall surfacing state ────────────────────────────────
     enrichment.surfacing_gap_reasons = surfacing_gap_reasons
 
     # transport_local_only: True only when *neither* chain nor graph was available
-    enrichment.transport_local_only = (
-        not enrichment.chain_available and not enrichment.graph_available
-    )
+    enrichment.transport_local_only = not enrichment.chain_available and not enrichment.graph_available
 
     # Chain and graph are the two *required* canonical sources.  Operator and
     # integrity are supplementary.
@@ -469,8 +474,7 @@ def enrich_multi_device_projection(
 
     if surfacing_gap_reasons:
         logger.warning(
-            "enrich_multi_device_projection: incomplete canonical coverage "
-            "state=%s gaps=%s",
+            "enrich_multi_device_projection: incomplete canonical coverage " "state=%s gaps=%s",
             enrichment.surfacing_state.value,
             surfacing_gap_reasons,
         )

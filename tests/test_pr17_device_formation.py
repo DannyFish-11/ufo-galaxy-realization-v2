@@ -31,7 +31,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. FormationRole enum
 # ---------------------------------------------------------------------------
@@ -202,6 +201,7 @@ class TestDeviceFormationGroup:
             task_id="task-001",
             trace_id="trace-001",
             source_device_id="phone_001",
+            source_runtime_posture="join_runtime",
             members=[
                 FormationMember(
                     device_id="phone_001",
@@ -294,6 +294,7 @@ class TestDeviceFormationGroup:
         assert recovered.task_id == group.task_id
         assert recovered.trace_id == group.trace_id
         assert recovered.source_device_id == group.source_device_id
+        assert recovered.source_runtime_posture == group.source_runtime_posture
         assert recovered.barrier_posture == group.barrier_posture
         assert len(recovered.members) == len(group.members)
 
@@ -481,9 +482,7 @@ class TestResolveFormation:
 
         assert group.effective_merge_owner_device_id == "special_merge_001"
         # MERGE_OWNER role member should be present
-        merge_owner_members = [
-            m for m in group.members if m.role == FormationRole.MERGE_OWNER
-        ]
+        merge_owner_members = [m for m in group.members if m.role == FormationRole.MERGE_OWNER]
         assert len(merge_owner_members) >= 1
 
     def test_resolve_barrier_posture_split_execution(self) -> None:

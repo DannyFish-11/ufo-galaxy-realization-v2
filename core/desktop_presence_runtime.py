@@ -193,9 +193,10 @@ class RuntimeSession:
         # PR-8: emit phase transition on the unified state event bus.
         try:
             from core.state_event_bus import emit as _seb_emit, StateEventType
+
             _phase_map = {
-                TriState.SILENT:   StateEventType.PHASE_SILENT,
-                TriState.LIMINAL:  StateEventType.PHASE_LIMINAL,
+                TriState.SILENT: StateEventType.PHASE_SILENT,
+                TriState.LIMINAL: StateEventType.PHASE_LIMINAL,
                 TriState.MANIFEST: StateEventType.PHASE_MANIFEST,
             }
             et = _phase_map.get(new_state)
@@ -292,6 +293,7 @@ class DesktopPresenceRuntime:
         # local camera, WebRTC sessions, external streams) and governs primary
         # source selection, health, and diagnostics.
         from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
         self._source_registry: PerceptionSourceRegistry = PerceptionSourceRegistry()
 
         # Shell responsibility: own and start the native multimodal ingress bus.
@@ -390,6 +392,7 @@ class DesktopPresenceRuntime:
         # Best-effort — failures must never block the request path.
         try:
             from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+
             get_cognitive_field_engine().notify_request(
                 trace_id=rsession.runtime_session_id,
             )
@@ -407,9 +410,8 @@ class DesktopPresenceRuntime:
         _policy_hint: Optional[Dict[str, Any]] = None
         try:
             from core.execution_policy import resolve_policy, get_policy_hints
-            _policy_hint = get_policy_hints(
-                resolve_policy(phase=rsession.tristate.value)
-            )
+
+            _policy_hint = get_policy_hints(resolve_policy(phase=rsession.tristate.value))
         except Exception as _ph_err:
             logger.debug("policy hint resolution failed (non-fatal): %s", _ph_err)
 
@@ -455,6 +457,7 @@ class DesktopPresenceRuntime:
             # cognitive field begins its manifest→liminal→passive reabsorption.
             try:
                 from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+
                 get_cognitive_field_engine().notify_task_complete(
                     trace_id=rsession.runtime_session_id,
                 )
@@ -465,6 +468,7 @@ class DesktopPresenceRuntime:
             # This is additive — the existing ``rsession.tristate`` is unchanged.
             try:
                 from core.cognitive.state_interpreter import get_state_interpreter
+
                 _interp = get_state_interpreter().interpret()
                 _cognitive_snap = _interp.to_dict()
             except Exception as _interp_err:
@@ -482,20 +486,26 @@ class DesktopPresenceRuntime:
         if _policy_hint is not None:
             result["policy_hint"] = _policy_hint
         # PR-9: stamp runtime shell authority metadata (additive, non-breaking).
-        result.setdefault("authority_metadata", {
-            "layer_role": "runtime_shell_authority",
-            "canonical_module": "core.desktop_presence_runtime",
-            "canonical_class": "DesktopPresenceRuntime",
-            "pr_introduced": "PR-1",
-        })
+        result.setdefault(
+            "authority_metadata",
+            {
+                "layer_role": "runtime_shell_authority",
+                "canonical_module": "core.desktop_presence_runtime",
+                "canonical_class": "DesktopPresenceRuntime",
+                "pr_introduced": "PR-1",
+            },
+        )
         # PR-10: stamp architecture diagnostics layer identifier (additive).
         result.setdefault("arch_layer_id", "runtime_shell")
         # PR-14: stamp additive introspection hints on runtime-shell result.
-        result.setdefault("introspection_snapshot", {
-            "authority_role": "runtime_shell_authority",
-            "entry_source": source,
-            "trace_id": result.get("trace_id") or result.get("runtime_session_id"),
-        })
+        result.setdefault(
+            "introspection_snapshot",
+            {
+                "authority_role": "runtime_shell_authority",
+                "entry_source": source,
+                "trace_id": result.get("trace_id") or result.get("runtime_session_id"),
+            },
+        )
         # PR-22: assemble the desktop status projection and attach as an
         # additive, non-breaking field.  The shell combines the control-core's
         # unified_control_plan with its own source registry snapshot.
@@ -557,6 +567,7 @@ class DesktopPresenceRuntime:
                 required_capabilities=required_capabilities,
                 multimodal_context=multimodal_context,
                 entry_mode=entry_mode,
+                **kwargs,
             )
 
         if source == "e2e":
@@ -573,8 +584,7 @@ class DesktopPresenceRuntime:
         # Unknown source — log a warning and fall back to OpenClawd so requests
         # are never silently dropped.
         logger.warning(
-            "DesktopPresenceRuntime: unknown source=%r — falling back to OpenClawd handler. "
-            "runtime_session_id=%s",
+            "DesktopPresenceRuntime: unknown source=%r — falling back to OpenClawd handler. " "runtime_session_id=%s",
             source,
             rsession.runtime_session_id,
         )
@@ -587,6 +597,7 @@ class DesktopPresenceRuntime:
             required_capabilities=required_capabilities,
             multimodal_context=multimodal_context,
             entry_mode=entry_mode,
+            **kwargs,
         )
 
     # ------------------------------------------------------------------
@@ -603,6 +614,7 @@ class DesktopPresenceRuntime:
         required_capabilities: Optional[List[str]],
         multimodal_context: Optional[Any],
         entry_mode: Optional[str] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Invoke the subject core (OpenClawd) inside the liminal phase.
 
@@ -622,6 +634,7 @@ class DesktopPresenceRuntime:
             multimodal_context=multimodal_context,
             runtime_session_id=rsession.runtime_session_id,
             entry_mode=entry_mode,
+            **kwargs,
         )
         # Normalise the result to always contain "response" (OpenClawd uses it)
         result.setdefault("response", result.get("reply", ""))
@@ -669,9 +682,7 @@ class DesktopPresenceRuntime:
                 result.setdefault("response", result.get("reply", ""))
                 return result
             except Exception as exc:
-                logger.warning(
-                    "ConstellationRuntime failed in E2E handler, falling back to pipeline: %s", exc
-                )
+                logger.warning("ConstellationRuntime failed in E2E handler, falling back to pipeline: %s", exc)
 
         # Fallback: EndToEndPipeline
         from core.e2e_pipeline import get_pipeline
@@ -708,13 +719,12 @@ class DesktopPresenceRuntime:
         """
         try:
             from core.multimodal.ingest_runtime import start_ingest_bus
+
             started = start_ingest_bus(runtime_session_id=None)
             if started:
                 logger.info("DesktopPresenceRuntime: multimodal ingest bus started")
         except Exception as _err:
-            logger.debug(
-                "DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err
-            )
+            logger.debug("DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err)
 
     def snapshot_continuous_perception(self) -> Optional[Dict[str, Any]]:
         """PR-16: Return the latest continuous host perception snapshot.
@@ -732,6 +742,7 @@ class DesktopPresenceRuntime:
         """
         try:
             from core.multimodal.ingest_runtime import get_ingest_bus as _get_ib
+
             _bus = _get_ib()
             if _bus is not None:
                 frame = _bus.build_frame()
@@ -1248,8 +1259,7 @@ class DesktopPresenceRuntime:
         当前实现：日志记录（可扩展为 Future Continuum 集成）
         """
         logger.info(
-            "GoalExecutionResult received | task_id=%s device_id=%s status=%s "
-            "result=%r trace_id=%s",
+            "GoalExecutionResult received | task_id=%s device_id=%s status=%s " "result=%r trace_id=%s",
             task_id,
             device_id,
             status,
@@ -1270,7 +1280,8 @@ class DesktopPresenceRuntime:
                         # 将结果注入 session 上下文（Future: Continuum 集成点）
                         logger.debug(
                             "GoalExecutionResult injected into session %s | task_id=%s",
-                            trace_id, task_id,
+                            trace_id,
+                            task_id,
                         )
                         break
         except Exception as inject_err:

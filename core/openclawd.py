@@ -109,13 +109,10 @@ from core.orchestration.lifecycle import (  # noqa: E402
     LifecycleManager,
 )
 
-
 # 当能力总线和直接加载路径均无法提供 Skill 参数 schema 时使用的默认值
 _DEFAULT_SKILL_SCHEMA: Dict = {
     "type": "object",
-    "properties": {
-        "input": {"type": "string", "description": "输入参数"}
-    },
+    "properties": {"input": {"type": "string", "description": "输入参数"}},
 }
 
 # GitHub 插件内置工具定义（供 LLM function calling 使用）
@@ -490,8 +487,7 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
         "function": {
             "name": "engineer__status",
             "description": (
-                "获取受管工程循环（SelfHealingLoop）的当前状态快照，"
-                "包括待处理的提案列表及最近完成的修复记录。"
+                "获取受管工程循环（SelfHealingLoop）的当前状态快照，" "包括待处理的提案列表及最近完成的修复记录。"
             ),
             "parameters": {
                 "type": "object",
@@ -519,8 +515,16 @@ _RESOURCE_BUILTIN_TOOLS: List[Dict] = [
                     "resource_type": {
                         "type": "string",
                         "enum": [
-                            "github", "academic", "device", "local_tool",
-                            "engineering", "mcp", "skill", "node", "builtin", "unknown",
+                            "github",
+                            "academic",
+                            "device",
+                            "local_tool",
+                            "engineering",
+                            "mcp",
+                            "skill",
+                            "node",
+                            "builtin",
+                            "unknown",
                         ],
                         "description": "按资源类型过滤（可选，不填则返回全部类型）",
                     },
@@ -533,8 +537,7 @@ _RESOURCE_BUILTIN_TOOLS: List[Dict] = [
         "function": {
             "name": "resource__status",
             "description": (
-                "获取受治理系统资源注册表的状态快照，"
-                "包括已注册资源总数、健康资源数量、不可用资源数量。"
+                "获取受治理系统资源注册表的状态快照，" "包括已注册资源总数、健康资源数量、不可用资源数量。"
             ),
             "parameters": {
                 "type": "object",
@@ -546,10 +549,7 @@ _RESOURCE_BUILTIN_TOOLS: List[Dict] = [
         "type": "function",
         "function": {
             "name": "resource__health",
-            "description": (
-                "更新指定资源的健康状态和可用性。"
-                "用于运行时健康监测路径将最新状态同步到受治理资源层。"
-            ),
+            "description": ("更新指定资源的健康状态和可用性。" "用于运行时健康监测路径将最新状态同步到受治理资源层。"),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -835,6 +835,7 @@ class OpenClawd:
         self._tool_permission_checker = None
         try:
             from core.tool_permissions import get_tool_permission_checker
+
             self._tool_permission_checker = get_tool_permission_checker()
         except Exception as e:
             logger.warning(f"工具权限检查器不可用，所有工具将无限制: {e}")
@@ -844,6 +845,7 @@ class OpenClawd:
         # the same node_id_to_key cache and permission checker as this instance.
         try:
             from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
             self._capability_dispatcher: Optional["CanonicalDispatcher"] = CanonicalDispatcher(
                 node_id_to_key=self._node_id_to_key,
                 tool_permission_checker=self._tool_permission_checker,
@@ -855,6 +857,7 @@ class OpenClawd:
         # PR-7: orchestration submodule composition
         from core.orchestration.lifecycle import LifecycleManager
         from core.orchestration.state import SessionMemoryManager
+
         self._lifecycle_manager = LifecycleManager()
         self._session_manager = SessionMemoryManager()
 
@@ -884,6 +887,7 @@ class OpenClawd:
         try:
             from core.control_plane._globals import get_audit_ledger
             from core.control_plane.audit_ledger import Severity
+
             return get_audit_ledger().append(
                 event_type,
                 severity=Severity.INFO,
@@ -952,14 +956,13 @@ class OpenClawd:
                 if required_mode:
                     try:
                         _profile = build_profile_from_device_info(info, device_id=did)
-                        if (
-                            _profile.profile_class != "unknown"
-                            and not _profile.supports_mode(required_mode)
-                        ):
+                        if _profile.profile_class != "unknown" and not _profile.supports_mode(required_mode):
                             logger.debug(
                                 "_select_device_via_scheduler: skipping device=%s "
                                 "(profile_class=%s does not support mode=%s)",
-                                did, _profile.profile_class, required_mode,
+                                did,
+                                _profile.profile_class,
+                                required_mode,
                             )
                             continue
                     except Exception:
@@ -1013,6 +1016,7 @@ class OpenClawd:
         if self._router is None:
             try:
                 from core.multi_llm_router import get_llm_router
+
                 self._router = get_llm_router()
             except Exception as e:
                 logger.warning(f"LLM 路由器加载失败: {e}")
@@ -1032,6 +1036,7 @@ class OpenClawd:
         if self._kernel is None:
             try:
                 from core.agent.kernel import AgentKernel
+
                 self._kernel = AgentKernel()
                 # 将 OpenClawd 持有的 router 注入到 Kernel
                 router = self._get_router()
@@ -1108,6 +1113,7 @@ class OpenClawd:
         if self._continuum_orchestrator is None:
             try:
                 from core.unified_config import config as _cfg
+
                 extra_flags = {
                     "enable_continuum": _cfg.get("enable_continuum", True),
                     "debug_continuum": _cfg.get("debug_continuum", False),
@@ -1122,6 +1128,7 @@ class OpenClawd:
                 extra_flags = {}
             try:
                 from core.continuum.orchestrator import ContinuumOrchestrator
+
                 self._continuum_orchestrator = ContinuumOrchestrator(extra_flags=extra_flags)
             except Exception as e:
                 logger.debug("ContinuumOrchestrator unavailable: %s", e)
@@ -1165,11 +1172,13 @@ class OpenClawd:
             frame = None
             try:
                 from core.multimodal.ingest_runtime import get_ingest_bus as _get_ingest_bus
+
                 _running_bus = _get_ingest_bus()
                 if _running_bus is not None:
                     frame = _running_bus.build_frame()
                 else:
                     from core.multimodal.ingress_bus import MultimodalIngressBus
+
                     frame = MultimodalIngressBus().build_frame()
             except Exception:
                 pass  # orchestrator will construct a minimal default
@@ -1194,6 +1203,7 @@ class OpenClawd:
         if self._decision_executor is None:
             try:
                 from core.execution.decision_executor import DecisionExecutor
+
                 self._decision_executor = DecisionExecutor()
             except Exception as exc:
                 logger.debug("DecisionExecutor unavailable: %s", exc)
@@ -1251,9 +1261,7 @@ class OpenClawd:
                 "readiness": _readiness.governance_summary(),
             }
             # PR-24: Emit a fallback decision trace for the blocked path.
-            _blocked_result["fallback_trace"] = self._build_fallback_trace(
-                _intent_profile, _readiness, _blocked_result
-            )
+            _blocked_result["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _blocked_result)
             # PR-25: Emit a canonical execution trace envelope for the blocked lifecycle.
             _blocked_result["execution_trace"] = self._build_execution_trace(
                 _intent_profile, _readiness, _blocked_result
@@ -1294,7 +1302,9 @@ class OpenClawd:
             if result.action_taken not in ("noop", "none"):
                 logger.debug(
                     "_run_execution: action=%s target=%r success=%s intent_id=%s",
-                    result.action_taken, result.target, result.success,
+                    result.action_taken,
+                    result.target,
+                    result.success,
                     _intent_profile.intent_id,
                 )
             _exec_dict: Dict[str, Any] = {
@@ -1307,13 +1317,9 @@ class OpenClawd:
                 "readiness": _readiness.governance_summary() if _readiness else None,
             }
             # PR-24: Emit a fallback decision trace for every execution result.
-            _exec_dict["fallback_trace"] = self._build_fallback_trace(
-                _intent_profile, _readiness, _exec_dict
-            )
+            _exec_dict["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _exec_dict)
             # PR-25: Emit a canonical execution trace envelope.
-            _exec_dict["execution_trace"] = self._build_execution_trace(
-                _intent_profile, _readiness, _exec_dict
-            )
+            _exec_dict["execution_trace"] = self._build_execution_trace(_intent_profile, _readiness, _exec_dict)
             return _exec_dict
         except Exception as _ee:
             logger.debug("_run_execution failed (swallowed): %s", _ee)
@@ -1325,13 +1331,9 @@ class OpenClawd:
                 "readiness": _readiness.governance_summary() if _readiness else None,
             }
             # PR-24: Trace the internal-error fallback.
-            _err_result["fallback_trace"] = self._build_fallback_trace(
-                _intent_profile, _readiness, _err_result
-            )
+            _err_result["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _err_result)
             # PR-25: Emit a canonical execution trace envelope.
-            _err_result["execution_trace"] = self._build_execution_trace(
-                _intent_profile, _readiness, _err_result
-            )
+            _err_result["execution_trace"] = self._build_execution_trace(_intent_profile, _readiness, _err_result)
             return _err_result
 
     def _build_intent_profile(
@@ -1345,6 +1347,7 @@ class OpenClawd:
         """
         try:
             from core.execution.intent_profile import build_execution_intent_profile  # noqa: PLC0415
+
             _session_id: Optional[str] = None
             if state_continuum and isinstance(state_continuum, dict):
                 _meta = state_continuum.get("metadata") or {}
@@ -1360,6 +1363,7 @@ class OpenClawd:
             logger.debug("_build_intent_profile failed (swallowed): %s", _exc)
             try:
                 from core.execution.intent_profile import ExecutionIntentProfile  # noqa: PLC0415
+
                 return ExecutionIntentProfile(source="openclawd")
             except Exception:
                 # Absolute last resort — return a minimal stub that matches the
@@ -1404,6 +1408,7 @@ class OpenClawd:
         """
         try:
             from core.execution.readiness_gate import evaluate_readiness  # noqa: PLC0415
+
             return evaluate_readiness(
                 intent_profile,
                 state_continuum=state_continuum,
@@ -1442,6 +1447,7 @@ class OpenClawd:
                 build_fallback_trace,
                 summarize_fallback_trace,
             )
+
             _trace = build_fallback_trace(
                 intent_profile=intent_profile,
                 readiness_result=readiness_result,
@@ -2069,6 +2075,7 @@ class OpenClawd:
             _frame = None
             try:
                 from core.multimodal.ingest_runtime import get_ingest_bus as _get_ib
+
                 _running_bus = _get_ib()
                 if _running_bus is not None:
                     _frame = _running_bus.build_frame()
@@ -2118,9 +2125,7 @@ class OpenClawd:
             _cmss = _build_cmss(_router)
             return _cmss.to_dict()
         except Exception as _cmss_err:
-            logger.debug(
-                "_build_canonical_model_supply_state failed (swallowed): %s", _cmss_err
-            )
+            logger.debug("_build_canonical_model_supply_state failed (swallowed): %s", _cmss_err)
             return None
 
     def _build_execution_plan(
@@ -2150,6 +2155,7 @@ class OpenClawd:
         """
         try:
             from core.schemas.execution_plan import build_execution_plan as _bep
+
             return _bep(
                 execution_path=execution_path,
                 delegation_point=delegation_point,
@@ -2190,6 +2196,7 @@ class OpenClawd:
                 LifecycleTransition as _LT,
                 advance_lifecycle,
             )
+
             terminal = advance_lifecycle(
                 _ELS(plan.lifecycle_state) if plan.lifecycle_state else _ELS.PLANNED,
                 success=success,
@@ -2206,7 +2213,7 @@ class OpenClawd:
                 plan.lifecycle_trail = [plan_t]
 
             # Advance each step as well
-            for step in (plan.steps or []):
+            for step in plan.steps or []:
                 step_terminal = advance_lifecycle(
                     _ELS(step.lifecycle_state) if step.lifecycle_state else _ELS.CREATED,
                     success=success,
@@ -2237,6 +2244,7 @@ class OpenClawd:
             return None
         try:
             from core.schemas.execution_plan import plan_summary as _ps
+
             return _ps(plan)
         except Exception as _sum_err:
             logger.debug("_summarise_execution_plan failed (swallowed): %s", _sum_err)
@@ -2315,20 +2323,15 @@ class OpenClawd:
             from core.multimodal.modality_confidence_policy import (
                 build_perception_routing_readiness as _build_readiness,
             )
+
             _readiness_obj = _build_readiness(
                 canonical_perception=canonical_perception,
                 source_registry_snapshot=source_registry_snapshot,
             )
             _readiness = _readiness_obj.to_dict()
-            _eligibility_eligible: bool = (
-                _readiness_obj.eligibility.is_native_multimodal_eligible
-            )
-            _eligibility_summary: str = (
-                _readiness_obj.eligibility.eligibility_summary
-            )
-            _eligibility_reason: str = (
-                _readiness_obj.eligibility.primary_reason.value
-            )
+            _eligibility_eligible: bool = _readiness_obj.eligibility.is_native_multimodal_eligible
+            _eligibility_summary: str = _readiness_obj.eligibility.eligibility_summary
+            _eligibility_reason: str = _readiness_obj.eligibility.primary_reason.value
         except Exception as _pr27_err:
             logger.debug("build_perception_routing_readiness failed (swallowed): %s", _pr27_err)
             _readiness = None
@@ -2340,12 +2343,8 @@ class OpenClawd:
         requires_native_mm: bool = False
         active_modalities: List[str] = []
         if canonical_perception:
-            requires_native_mm = bool(
-                canonical_perception.get("requires_native_multimodal", False)
-            )
-            active_modalities = list(
-                canonical_perception.get("active_modalities") or []
-            )
+            requires_native_mm = bool(canonical_perception.get("requires_native_multimodal", False))
+            active_modalities = list(canonical_perception.get("active_modalities") or [])
 
         # ── Text-only short-circuit ──────────────────────────────────────────
         if not requires_native_mm:
@@ -2374,9 +2373,7 @@ class OpenClawd:
                     f"reason={_eligibility_reason} "
                     f"summary={_eligibility_summary}"
                 ),
-                "fallback_reason": (
-                    f"confidence_below_threshold reason={_eligibility_reason}"
-                ),
+                "fallback_reason": (f"confidence_below_threshold reason={_eligibility_reason}"),
                 "active_modalities": active_modalities,
                 "perception_routing_readiness": _readiness,
             }
@@ -2470,7 +2467,6 @@ class OpenClawd:
         if _readiness is not None:
             result["perception_routing_readiness"] = _readiness
         return result
-
 
     def _build_unified_control_plan(
         self,
@@ -2662,6 +2658,7 @@ class OpenClawd:
         multimodal_context: Optional[Any] = None,
         runtime_session_id: Optional[str] = None,
         entry_mode: Optional[str] = None,
+        source_runtime_posture: Optional[str] = None,
     ) -> dict:
         """Subject core entry point — invoked by DesktopPresenceRuntime during the LIMINAL phase.
 
@@ -2749,13 +2746,16 @@ class OpenClawd:
         # This is a best-effort, non-blocking call; failures never affect the request.
         try:
             from core.unified.entrypoint_router import get_entrypoint_router as _get_er
-            _get_er()._emit_routing_event({
-                "entry_path": "canonical",
-                "via_legacy_adapter": False,
-                "source": "openclawd.process",
-                "trace_id": trace_id,
-                "routed_at": t0,
-            })
+
+            _get_er()._emit_routing_event(
+                {
+                    "entry_path": "canonical",
+                    "via_legacy_adapter": False,
+                    "source": "openclawd.process",
+                    "trace_id": trace_id,
+                    "routed_at": t0,
+                }
+            )
         except Exception:
             pass
 
@@ -2763,6 +2763,7 @@ class OpenClawd:
         self._current_trace_id = trace_id
         self._current_session_id = session_id
         self._current_device_id = device_id or ""
+        self._current_source_runtime_posture = source_runtime_posture or "control_only"
 
         # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
         # the current request's device/session/trace without needing explicit kwargs.
@@ -2841,6 +2842,7 @@ class OpenClawd:
                 record_route_selection as _harness_record_route,
                 record_provider_switch as _harness_record_switch,
             )
+
             _harness_record_route(
                 trace_id=trace_id or "",
                 route_type=_multimodal_route.get("route_type", ""),
@@ -2865,9 +2867,7 @@ class OpenClawd:
                     source="OpenClawd._select_multimodal_route",
                 )
         except Exception as _hp_exc:
-            logger.debug(
-                "PR-515 harness route-selection record skipped: %s", _hp_exc
-            )
+            logger.debug("PR-515 harness route-selection record skipped: %s", _hp_exc)
 
         # ── PR-41: Routing Observability ──────────────────────────────────────
         # Emit a structured RoutingDecisionEvent from the canonical routing
@@ -2886,12 +2886,10 @@ class OpenClawd:
         # degradation into an explicit, serialisable artifact so that
         # projection and diagnostics layers consume it without inventing their
         # own degradation semantics.
-        _degraded_operation_envelope: Optional[Dict[str, Any]] = (
-            self._build_degraded_operation_envelope(
-                route_dict=_multimodal_route,
-                supply_snapshot=_canonical_model_supply,
-                trace_id=trace_id,
-            )
+        _degraded_operation_envelope: Optional[Dict[str, Any]] = self._build_degraded_operation_envelope(
+            route_dict=_multimodal_route,
+            supply_snapshot=_canonical_model_supply,
+            trace_id=trace_id,
         )
 
         # ── PR-30: Control-Loop Latency Budget ────────────────────────────────
@@ -2920,16 +2918,14 @@ class OpenClawd:
         # is shell-owned (DesktopPresenceRuntime) and is not directly accessible
         # from OpenClawd.  The shell's permission_safety_summary() method builds
         # a supplementary snapshot with full registry data when needed.
-        _permission_safety_state: Optional[Dict[str, Any]] = (
-            self._build_permission_safety_state(
-                source_registry_snapshot=None,  # registry is shell-owned; shell embeds it
-                multimodal_route=_multimodal_route,
-                execution_plan=None,  # plan not yet built at this stage
-                degraded_operation_envelope=_degraded_operation_envelope,
-                canonical_perception=_canonical_perception,
-                trace_id=trace_id,
-                runtime_session_id=runtime_session_id or "",
-            )
+        _permission_safety_state: Optional[Dict[str, Any]] = self._build_permission_safety_state(
+            source_registry_snapshot=None,  # registry is shell-owned; shell embeds it
+            multimodal_route=_multimodal_route,
+            execution_plan=None,  # plan not yet built at this stage
+            degraded_operation_envelope=_degraded_operation_envelope,
+            canonical_perception=_canonical_perception,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id or "",
         )
 
         # ── PR-33: Operator Override Panel ────────────────────────────────────
@@ -2942,12 +2938,10 @@ class OpenClawd:
         # Note: _multimodal_route may be mutated in-place by this call when a
         # multimodal_mode override is active.  Downstream consumers should read
         # the route dict *after* this call to observe override effects.
-        _operator_override_state: Optional[Dict[str, Any]] = (
-            self._apply_operator_overrides(
-                multimodal_route=_multimodal_route,
-                trace_id=trace_id,
-                runtime_session_id=runtime_session_id or "",
-            )
+        _operator_override_state: Optional[Dict[str, Any]] = self._apply_operator_overrides(
+            multimodal_route=_multimodal_route,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id or "",
         )
         # Re-read is_native_multimodal after potential override mutation
         _is_native_multimodal = _multimodal_route.get("is_native_multimodal", False)
@@ -2957,15 +2951,13 @@ class OpenClawd:
         # safety state produced above into the process-wide timeline singleton,
         # then capture an ExplainabilitySnapshot for this iteration.  All
         # explanations derive from canonical artifacts — not from log text.
-        _decision_timeline_snapshot: Optional[Dict[str, Any]] = (
-            self._build_decision_timeline_snapshot(
-                route_dict=_multimodal_route,
-                degraded_operation_envelope=_degraded_operation_envelope,
-                permission_safety_state=_permission_safety_state,
-                operator_override_state=_operator_override_state,
-                trace_id=trace_id,
-                runtime_session_id=runtime_session_id or "",
-            )
+        _decision_timeline_snapshot: Optional[Dict[str, Any]] = self._build_decision_timeline_snapshot(
+            route_dict=_multimodal_route,
+            degraded_operation_envelope=_degraded_operation_envelope,
+            permission_safety_state=_permission_safety_state,
+            operator_override_state=_operator_override_state,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id or "",
         )
 
         # ── Scene Interpreter (PR 2) ──────────────────────────────────────
@@ -2999,6 +2991,7 @@ class OpenClawd:
         _persona_state_dict: Optional[Dict[str, Any]] = None
         try:
             from core.persona.state_store import get_state_store as _get_store
+
             _persona_store = _get_store()
             _pre_persona = _persona_store.get_state(session_id)
             _persona_state_dict = _pre_persona.to_dict()
@@ -3007,6 +3000,7 @@ class OpenClawd:
 
         try:
             from core.task_logger import emit_task_log
+
             emit_task_log(
                 "task_received",
                 trace_id=trace_id,
@@ -3021,6 +3015,7 @@ class OpenClawd:
         task_id_for_trace = f"task_{uuid.uuid4().hex[:12]}"
         try:
             from core.control_plane.audit_ledger import EventType as _EvType
+
             self._emit_audit(
                 _EvType.TASK_CREATED,
                 trace_id=trace_id,
@@ -3043,6 +3038,7 @@ class OpenClawd:
             # ── Audit ledger: TASK_STARTED ────────────────────────────────────
             try:
                 from core.control_plane.audit_ledger import EventType as _EvType2
+
                 self._emit_audit(
                     _EvType2.TASK_STARTED,
                     trace_id=trace_id,
@@ -3076,15 +3072,12 @@ class OpenClawd:
                             provider_info = {
                                 "provider": getattr(router, "_last_provider", ""),
                                 "model": kernel_result.model or router.get_default_model(),
-                                "available_providers": [
-                                    p for p in getattr(router, "providers", {}).keys()
-                                ],
+                                "available_providers": [p for p in getattr(router, "providers", {}).keys()],
                             }
                         except Exception:
                             pass
                     logger.info(
-                        "OpenClawd request | request_id=%s session=%s mode=%s "
-                        "provider=%s model=%s",
+                        "OpenClawd request | request_id=%s session=%s mode=%s " "provider=%s model=%s",
                         request_id,
                         session_id,
                         mode,
@@ -3094,6 +3087,7 @@ class OpenClawd:
                     # PR-2: Log primary decision authority (kernel path).
                     try:
                         from core.model_role_policy import get_policy as _get_policy_k
+
                         _get_policy_k().log_primary_authority(
                             "openclawd",
                             trace_id=trace_id,
@@ -3108,6 +3102,7 @@ class OpenClawd:
                     # ── Audit ledger: TASK_COMPLETED ──────────────────────────
                     try:
                         from core.control_plane.audit_ledger import EventType as _EvType3
+
                         _ev = _EvType3.TASK_COMPLETED if kernel_result.success else _EvType3.TASK_FAILED
                         self._emit_audit(
                             _ev,
@@ -3123,6 +3118,7 @@ class OpenClawd:
                     # ── Persona / Spirit Engine update (PR-3) ─────────────────
                     try:
                         from core.persona.state_store import get_state_store as _get_store2
+
                         _ps, _delta = _get_store2().update_state(
                             session_id,
                             message=message,
@@ -3136,6 +3132,7 @@ class OpenClawd:
                     _interaction_envelope_dict: Optional[Dict[str, Any]] = None
                     try:
                         from core.interaction.interaction_builder import InteractionBuilder as _IBuilder
+
                         _envelope = _IBuilder().build(
                             trace_id=trace_id,
                             session_id=session_id,
@@ -3150,6 +3147,7 @@ class OpenClawd:
                     _output_plan_dict: Optional[Dict[str, Any]] = None
                     try:
                         from core.output.orchestrator import OutputOrchestrator as _OOrch
+
                         _output_plan_dict = _OOrch().orchestrate(
                             interaction_envelope=_interaction_envelope_dict,
                             persona_state=_persona_state_dict,
@@ -3172,7 +3170,9 @@ class OpenClawd:
                     # PR-4: structured observability log whenever execution_path is set.
                     logger.info(
                         "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s",
-                        trace_id, _entry_mode, _exec_path_k,
+                        trace_id,
+                        _entry_mode,
+                        _exec_path_k,
                     )
                     if _exec_path_k == "none":
                         _exec_result_k.setdefault("skipped_reason", "no_execution")
@@ -3199,8 +3199,7 @@ class OpenClawd:
                         )
                     else:
                         logger.debug(
-                            "OpenClawd delegation_hint advisory | trace_id=%s "
-                            "hint=None decision=advisory_none",
+                            "OpenClawd delegation_hint advisory | trace_id=%s " "hint=None decision=advisory_none",
                             trace_id,
                         )
                     # PR-19: build canonical unified control plan (additive, non-breaking)
@@ -3273,9 +3272,7 @@ class OpenClawd:
                             # "advisory_noted" — hint was present and logged (advisory only).
                             # "advisory_none"  — no hint was provided by the kernel.
                             "delegation_hint_decision": (
-                                "advisory_noted"
-                                if kernel_result.delegation_hint is not None
-                                else "advisory_none"
+                                "advisory_noted" if kernel_result.delegation_hint is not None else "advisory_none"
                             ),
                             # PR-006: soul_injection_phase from KernelResponse confirms
                             # which execution phase (if any) loaded SOUL policy.
@@ -3395,7 +3392,8 @@ class OpenClawd:
                 if selected:
                     logger.info(
                         "process: scheduler auto-selected device=%s for caps=%s",
-                        selected, required_capabilities,
+                        selected,
+                        required_capabilities,
                     )
                     effective_device_id = selected
 
@@ -3419,8 +3417,7 @@ class OpenClawd:
                 except Exception:
                     pass
             logger.info(
-                "OpenClawd request | request_id=%s session=%s intent=%s "
-                "provider=%s model=%s",
+                "OpenClawd request | request_id=%s session=%s intent=%s " "provider=%s model=%s",
                 request_id,
                 session_id,
                 intent_type,
@@ -3432,6 +3429,7 @@ class OpenClawd:
             # that OpenClawd is the sole decision maker for this request.
             try:
                 from core.model_role_policy import get_policy as _get_policy
+
                 _get_policy().log_primary_authority(
                     "openclawd",
                     trace_id=trace_id,
@@ -3450,6 +3448,7 @@ class OpenClawd:
             # ── Audit ledger: TASK_COMPLETED ──────────────────────────────────
             try:
                 from core.control_plane.audit_ledger import EventType as _EvType4
+
                 _success_flag = result.get("success", True)
                 self._emit_audit(
                     _EvType4.TASK_COMPLETED if _success_flag else _EvType4.TASK_FAILED,
@@ -3466,6 +3465,7 @@ class OpenClawd:
             # ── Persona / Spirit Engine update (PR-3) ─────────────────────────
             try:
                 from core.persona.state_store import get_state_store as _get_store3
+
                 _success_flag2 = result.get("success", True)
                 _ps2, _delta2 = _get_store3().update_state(
                     session_id,
@@ -3481,6 +3481,7 @@ class OpenClawd:
             _interaction_envelope_dict2: Optional[Dict[str, Any]] = None
             try:
                 from core.interaction.interaction_builder import InteractionBuilder as _IBuilder2
+
                 _envelope2 = _IBuilder2().build(
                     trace_id=trace_id,
                     session_id=session_id,
@@ -3496,6 +3497,7 @@ class OpenClawd:
             _output_plan_dict2: Optional[Dict[str, Any]] = None
             try:
                 from core.output.orchestrator import OutputOrchestrator as _OOrch2
+
                 _output_plan_dict2 = _OOrch2().orchestrate(
                     interaction_envelope=_interaction_envelope_dict2,
                     persona_state=_persona_state_dict,
@@ -3522,7 +3524,9 @@ class OpenClawd:
             # PR-4: structured observability log whenever execution_path is set.
             logger.info(
                 "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s",
-                trace_id, _entry_mode, _exec_path2,
+                trace_id,
+                _entry_mode,
+                _exec_path2,
             )
             if _exec_path2 == "none":
                 _exec_result2.setdefault("skipped_reason", "no_execution")
@@ -3685,6 +3689,7 @@ class OpenClawd:
             try:
                 from core.control_plane.audit_ledger import EventType as _EvType5, Severity as _Sev5
                 from core.control_plane._globals import get_audit_ledger
+
                 get_audit_ledger().append(
                     _EvType5.TASK_FAILED,
                     severity=_Sev5.ERROR,
@@ -3779,9 +3784,7 @@ class OpenClawd:
             required_caps = getattr(intent, "required_capabilities", None) if intent else None
             selected = self._select_device_via_scheduler(required_caps)
             if selected:
-                logger.info(
-                    "_dispatch_device: no device_id provided; scheduler selected %s", selected
-                )
+                logger.info("_dispatch_device: no device_id provided; scheduler selected %s", selected)
                 device_id = selected
             else:
                 return {
@@ -3841,7 +3844,8 @@ class OpenClawd:
             ``metadata``.
         """
         result = await self.handle_agent_task(
-            message, intent,
+            message,
+            intent,
             device_id=device_id,
             session_id=session_id,
             trace_id=trace_id,
@@ -4022,9 +4026,7 @@ class OpenClawd:
         task_id = f"task_{uuid.uuid4().hex[:12]}"
         trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
         agent_id = f"remote_agent_{uuid.uuid4().hex[:8]}"
-        agent_template = (
-            getattr(intent, "intent", None) or "coordinator"
-        )
+        agent_template = getattr(intent, "intent", None) or "coordinator"
 
         # PR-2: construct TaskEnvelope immediately at entry for unified internal routing.
         # PR-6: resolve execution mode via DeviceExecutionProfile + RemoteExecutionModeResolver
@@ -4048,6 +4050,7 @@ class OpenClawd:
                 _device_info: dict = {}
                 try:
                     from core.routes._shared import connection_manager as _cm
+
                     _all_devices = _cm.get_all_devices()
                     _device_info = _all_devices.get(device_id, {}) if device_id else {}
                 except Exception:
@@ -4073,8 +4076,7 @@ class OpenClawd:
                 )
             except Exception as _pr6_err:
                 logger.debug(
-                    "_dispatch_remote_agent: PR-6 mode resolution non-fatal: %s — "
-                    "defaulting to agent_runtime",
+                    "_dispatch_remote_agent: PR-6 mode resolution non-fatal: %s — " "defaulting to agent_runtime",
                     _pr6_err,
                 )
 
@@ -4113,13 +4115,17 @@ class OpenClawd:
             logger.debug("_dispatch_remote_agent: TaskEnvelope construction skipped — %s", _env_err)
 
         logger.info(
-            "OpenClawd._dispatch_remote_agent | trace_id=%s task_id=%s "
-            "agent_id=%s device_id=%s template=%s",
-            trace_id, task_id, agent_id, device_id, agent_template,
+            "OpenClawd._dispatch_remote_agent | trace_id=%s task_id=%s " "agent_id=%s device_id=%s template=%s",
+            trace_id,
+            task_id,
+            agent_id,
+            device_id,
+            agent_template,
         )
 
         try:
             from core.command_router import get_command_router
+
             cr = get_command_router()
             cr_result = await cr.dispatch_agent_remote(
                 device_id=device_id,
@@ -4136,13 +4142,14 @@ class OpenClawd:
             )
         except Exception as cr_exc:
             logger.warning(
-                "OpenClawd._dispatch_remote_agent: CommandRouter 不可用，降级本地 | "
-                "trace_id=%s error=%s",
-                trace_id, cr_exc,
+                "OpenClawd._dispatch_remote_agent: CommandRouter 不可用，降级本地 | " "trace_id=%s error=%s",
+                trace_id,
+                cr_exc,
             )
             # Fallback: local execution
             local_result = await self.handle_agent_task(
-                message, intent,
+                message,
+                intent,
                 device_id=device_id,
                 session_id=session_id,
                 trace_id=trace_id,
@@ -4163,12 +4170,14 @@ class OpenClawd:
             "DISCONNECT",
         ):
             logger.warning(
-                "OpenClawd._dispatch_remote_agent: 远程失败(%s)，降级本地执行 | "
-                "trace_id=%s device_id=%s",
-                remote_error_code, trace_id, device_id,
+                "OpenClawd._dispatch_remote_agent: 远程失败(%s)，降级本地执行 | " "trace_id=%s device_id=%s",
+                remote_error_code,
+                trace_id,
+                device_id,
             )
             local_result = await self.handle_agent_task(
-                message, intent,
+                message,
+                intent,
                 device_id=device_id,
                 session_id=session_id,
                 trace_id=trace_id,
@@ -4191,6 +4200,7 @@ class OpenClawd:
         # PR155: 结果回流到 TaskMemory
         try:
             from core.openclawd_memory_backflow import store_task_result
+
             await store_task_result(
                 task_id=task_id,
                 device_id=device_id or "remote",
@@ -4206,15 +4216,11 @@ class OpenClawd:
                 session_id=session_id,
             )
         except Exception as _bf_err:
-            logger.warning(
-                "_dispatch_remote_agent: memory backflow 失败（非致命）: %s", _bf_err
-            )
+            logger.warning("_dispatch_remote_agent: memory backflow 失败（非致命）: %s", _bf_err)
 
         return {
             "success": remote_success,
-            "response": response_text if remote_success else (
-                cr_result.get("error_message") or "远程 Agent 执行失败"
-            ),
+            "response": response_text if remote_success else (cr_result.get("error_message") or "远程 Agent 执行失败"),
             "metadata": {
                 "agent_id": agent_id,
                 "agent_template": agent_template,
@@ -4298,24 +4304,25 @@ class OpenClawd:
         # 1. Caller-supplied device_id takes highest priority
         if device_id:
             logger.debug(
-                "_pick_autonomous_device_id: using caller-supplied device_id=%s", device_id,
+                "_pick_autonomous_device_id: using caller-supplied device_id=%s",
+                device_id,
             )
             return device_id
 
         # 2. Try CapabilityRegistry (autonomous__* prefix = Phase-3 SSOT)
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             reg = CapabilityRegistry.get_instance()
             items = [
-                item for item in reg.list_tools(source="autonomous")
-                if item.available
-                and capability_key in item.name
+                item for item in reg.list_tools(source="autonomous") if item.available and capability_key in item.name
             ]
             if items:
                 selected_id = items[0].metadata.get("device_id") or items[0].source_id
                 logger.info(
                     "_pick_autonomous_device_id: CapabilityRegistry selected device=%s (cap=%s)",
-                    selected_id, capability_key,
+                    selected_id,
+                    capability_key,
                 )
                 return selected_id
         except Exception as exc:
@@ -4324,11 +4331,13 @@ class OpenClawd:
         # 3. Fallback to UDM
         try:
             from core.unified.device_manager import get_unified_device_manager
+
             auto_devices = get_unified_device_manager().get_autonomous_devices()
             if auto_devices:
                 selected_id = auto_devices[0].device_id
                 logger.info(
-                    "_pick_autonomous_device_id: UDM selected device=%s", selected_id,
+                    "_pick_autonomous_device_id: UDM selected device=%s",
+                    selected_id,
                 )
                 return selected_id
         except Exception as exc:
@@ -4361,9 +4370,7 @@ class OpenClawd:
             params = getattr(intent, "params", {}) or {}
 
         # 确定目标设备（自治能力感知）
-        target_device_id = self._pick_autonomous_device_id(
-            device_id, capability_key="goal_execution_enabled"
-        )
+        target_device_id = self._pick_autonomous_device_id(device_id, capability_key="goal_execution_enabled")
 
         if not target_device_id:
             logger.info(
@@ -4426,7 +4433,9 @@ class OpenClawd:
             latency_ms = (time.monotonic() - t_dispatch) * 1000
             logger.warning(
                 "goal_execution timed out after %.1fs | device=%s task_id=%s",
-                self.GOAL_EXECUTION_TIMEOUT, target_device_id, task_id,
+                self.GOAL_EXECUTION_TIMEOUT,
+                target_device_id,
+                task_id,
             )
             emit_task_log(
                 "task_timeout",
@@ -4451,10 +4460,7 @@ class OpenClawd:
 
         latency_ms = (time.monotonic() - t_dispatch) * 1000
         if "response" not in result:
-            result["response"] = (
-                result.get("result")
-                or f"目标任务 '{goal}' 已提交至设备 {target_device_id}"
-            )
+            result["response"] = result.get("result") or f"目标任务 '{goal}' 已提交至设备 {target_device_id}"
         result["intent"] = "goal_execution"
         result.setdefault("task_id", task_id)
         result.setdefault("trace_id", trace_id)
@@ -4505,10 +4511,12 @@ class OpenClawd:
         parallel_devices = []
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             reg = CapabilityRegistry.get_instance()
             # devices with parallel_execution_enabled in autonomous__* items
             auto_items = [
-                item for item in reg.list_tools(source="autonomous")
+                item
+                for item in reg.list_tools(source="autonomous")
                 if item.available and "parallel_execution_enabled" in item.name
             ]
             seen_ids: set = set()
@@ -4524,6 +4532,7 @@ class OpenClawd:
         if not parallel_devices:
             try:
                 from core.unified.device_manager import get_unified_device_manager
+
                 udm = get_unified_device_manager()
                 devs = udm.get_devices_with_capability("parallel_execution_enabled")
                 if not devs:
@@ -4534,14 +4543,12 @@ class OpenClawd:
 
         if not parallel_devices:
             logger.info(
-                "parallel_goal: 无支持并行执行的自治设备（autonomous__* 和 UDM 均无结果），"
-                "降级：无法执行并行任务"
+                "parallel_goal: 无支持并行执行的自治设备（autonomous__* 和 UDM 均无结果），" "降级：无法执行并行任务"
             )
             return {
                 "success": False,
                 "response": (
-                    "当前无支持并行执行的自治设备。"
-                    "请确保至少一台设备注册了 parallel_execution_enabled 能力后重试。"
+                    "当前无支持并行执行的自治设备。" "请确保至少一台设备注册了 parallel_execution_enabled 能力后重试。"
                 ),
                 "intent": "parallel_goal",
                 "metadata": {"parallel_group": None, "device_count": 0},
@@ -4555,13 +4562,15 @@ class OpenClawd:
         entries: List[_SubtaskEntry] = []
         for idx, dev_id in enumerate(parallel_devices):
             sub_task_id = f"{task_id_base}_sub{idx}"
-            entries.append(_SubtaskEntry(
-                task_id=sub_task_id,
-                group_id=task_id_base,
-                subtask_index=idx,
-                device_id=dev_id,
-                subtask=subtasks[idx % len(subtasks)],
-            ))
+            entries.append(
+                _SubtaskEntry(
+                    task_id=sub_task_id,
+                    group_id=task_id_base,
+                    subtask_index=idx,
+                    device_id=dev_id,
+                    subtask=subtasks[idx % len(subtasks)],
+                )
+            )
         tracker.register_group(task_id_base, entries)
 
         t_parallel_start = time.monotonic()
@@ -4573,7 +4582,8 @@ class OpenClawd:
                 if self._is_cancelled(entry.task_id, entry.group_id):
                     logger.info(
                         "parallel_goal: subtask %d on device %s cancelled",
-                        entry.subtask_index, entry.device_id,
+                        entry.subtask_index,
+                        entry.device_id,
                     )
                     tracker.mark_cancelled(entry.group_id, entry.task_id)
                     emit_task_log(
@@ -4638,10 +4648,12 @@ class OpenClawd:
                     if not success and tracker.needs_retry(entry.group_id, entry.task_id):
                         delay = tracker.backoff_delay(entry.group_id, entry.task_id)
                         logger.warning(
-                            "parallel_goal: subtask %d on device %s failed, "
-                            "retry in %.1fs (attempt %d/%d)",
-                            entry.subtask_index, entry.device_id,
-                            delay, entry.retry_count + 1, ParallelGroupTracker._MAX_RETRIES,
+                            "parallel_goal: subtask %d on device %s failed, " "retry in %.1fs (attempt %d/%d)",
+                            entry.subtask_index,
+                            entry.device_id,
+                            delay,
+                            entry.retry_count + 1,
+                            ParallelGroupTracker._MAX_RETRIES,
                         )
                         tracker.increment_retry(entry.group_id, entry.task_id)
                         await _asyncio_module.sleep(delay)
@@ -4651,7 +4663,9 @@ class OpenClawd:
                     sub_latency_ms = (time.monotonic() - t_sub) * 1000
                     logger.warning(
                         "parallel_goal: subtask %d on device %s timed out after %.1fs",
-                        entry.subtask_index, entry.device_id, self.PARALLEL_SUBTASK_TIMEOUT,
+                        entry.subtask_index,
+                        entry.device_id,
+                        self.PARALLEL_SUBTASK_TIMEOUT,
                     )
                     tracker.mark_timeout(entry.group_id, entry.task_id)
                     emit_task_log(
@@ -4696,16 +4710,20 @@ class OpenClawd:
                     if tracker.needs_retry(entry.group_id, entry.task_id):
                         delay = tracker.backoff_delay(entry.group_id, entry.task_id)
                         logger.warning(
-                            "parallel_goal: subtask %d on device %s raised %s, "
-                            "retry in %.1fs",
-                            entry.subtask_index, entry.device_id, exc, delay,
+                            "parallel_goal: subtask %d on device %s raised %s, " "retry in %.1fs",
+                            entry.subtask_index,
+                            entry.device_id,
+                            exc,
+                            delay,
                         )
                         tracker.increment_retry(entry.group_id, entry.task_id)
                         await _asyncio_module.sleep(delay)
                         continue
                     logger.warning(
                         "parallel_goal: subtask %d on device %s permanently failed: %s",
-                        entry.subtask_index, entry.device_id, exc,
+                        entry.subtask_index,
+                        entry.device_id,
+                        exc,
                     )
                     return
 
@@ -4799,6 +4817,7 @@ class OpenClawd:
         try:
             from core.unified.capability_resolver import get_capability_resolver
             from core.unified.capability_contract import CapabilitySource
+
             resolver = get_capability_resolver()
             catalog_tools = resolver.collect_tool_schemas(
                 sources=[CapabilitySource.MCP, CapabilitySource.SKILL, CapabilitySource.NODE]
@@ -4807,8 +4826,7 @@ class OpenClawd:
                 tools.extend(catalog_tools)
                 _catalog_loaded = True
                 logger.debug(
-                    "_collect_tools: CapabilityResolver (canonical) returned %d tools "
-                    "(MCP + Skill + Node)",
+                    "_collect_tools: CapabilityResolver (canonical) returned %d tools " "(MCP + Skill + Node)",
                     len(catalog_tools),
                 )
         except Exception as e:
@@ -4840,15 +4858,10 @@ class OpenClawd:
                 # New capabilities were just written; invalidate the cache so the
                 # resolver picks them up on the next read.
                 _node_resolver.invalidate_cache()
-            _node_catalog_schemas = _node_resolver.collect_tool_schemas(
-                sources=[CapabilitySource.NODE]
-            )
+            _node_catalog_schemas = _node_resolver.collect_tool_schemas(sources=[CapabilitySource.NODE])
             if _node_catalog_schemas:
                 _existing_names = {t["function"]["name"] for t in tools}
-                _new_node_tools = [
-                    t for t in _node_catalog_schemas
-                    if t["function"]["name"] not in _existing_names
-                ]
+                _new_node_tools = [t for t in _node_catalog_schemas if t["function"]["name"] not in _existing_names]
                 for _t in _new_node_tools:
                     _node_catalog_tool_names.add(_t["function"]["name"])
                 tools.extend(_new_node_tools)
@@ -4868,12 +4881,9 @@ class OpenClawd:
             # Prefer the resolver path above for all normal operation.
             try:
                 from core.agent.capability_registry import CapabilityRegistry
+
                 reg = CapabilityRegistry.get_instance()
-                bus_tools = [
-                    item.to_tool_schema()
-                    for item in reg.list_tools()
-                    if item.source in ("mcp", "skill")
-                ]
+                bus_tools = [item.to_tool_schema() for item in reg.list_tools() if item.source in ("mcp", "skill")]
                 if bus_tools:
                     tools.extend(bus_tools)
                     _catalog_loaded = True
@@ -4904,16 +4914,18 @@ class OpenClawd:
                         tool_name = tool.get("name", "")
                         if not tool_name:
                             continue
-                        tools.append({
-                            "type": "function",
-                            "function": {
-                                "name": f"mcp__{server_id}__{tool_name}",
-                                "description": tool.get("description", f"MCP tool: {tool_name}"),
-                                "parameters": tool.get("inputSchema", tool.get("parameters", {
-                                    "type": "object", "properties": {}
-                                })),
-                            },
-                        })
+                        tools.append(
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": f"mcp__{server_id}__{tool_name}",
+                                    "description": tool.get("description", f"MCP tool: {tool_name}"),
+                                    "parameters": tool.get(
+                                        "inputSchema", tool.get("parameters", {"type": "object", "properties": {}})
+                                    ),
+                                },
+                            }
+                        )
             except Exception as e:
                 logger.debug(f"收集 MCP 工具失败: {e}")
 
@@ -4931,36 +4943,41 @@ class OpenClawd:
                         continue
                     # 使用 to_mcp_tool_schema 获取正确的 JSON Schema
                     mcp_schema = skill_loader.to_mcp_tool_schema(skill_id)
-                    params = mcp_schema.get("inputSchema", _DEFAULT_SKILL_SCHEMA) if mcp_schema else _DEFAULT_SKILL_SCHEMA
-                    tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": f"skill__{skill_id}",
-                            "description": skill_info.get("description", f"Skill: {skill_id}"),
-                            "parameters": params,
-                        },
-                    })
+                    params = (
+                        mcp_schema.get("inputSchema", _DEFAULT_SKILL_SCHEMA) if mcp_schema else _DEFAULT_SKILL_SCHEMA
+                    )
+                    tools.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": f"skill__{skill_id}",
+                                "description": skill_info.get("description", f"Skill: {skill_id}"),
+                                "parameters": params,
+                            },
+                        }
+                    )
             except Exception as e:
                 logger.debug(f"收集 Skill 工具失败: {e}")
 
         # ── 层 1.5: MCP Gateway 自造工具 (始终收集，不在能力总线) ──
         try:
             from core.mcp_gateway import get_mcp_gateway
+
             gateway = get_mcp_gateway()
             for tool in gateway.list_generated_tools():
                 tool_name = tool.get("name", "")
                 if not tool_name:
                     continue
-                tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": f"mcp__gateway__{tool_name}",
-                        "description": tool.get("description", f"Generated tool: {tool_name}"),
-                        "parameters": tool.get("parameters", {
-                            "type": "object", "properties": {}
-                        }),
-                    },
-                })
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": f"mcp__gateway__{tool_name}",
+                            "description": tool.get("description", f"Generated tool: {tool_name}"),
+                            "parameters": tool.get("parameters", {"type": "object", "properties": {}}),
+                        },
+                    }
+                )
         except Exception as e:
             logger.debug(f"收集 MCP Gateway 工具失败: {e}")
 
@@ -4968,9 +4985,8 @@ class OpenClawd:
         try:
             import json as _json
             import os as _os
-            registry_path = _os.path.join(
-                _os.path.dirname(_os.path.dirname(__file__)), "config", "node_registry.json"
-            )
+
+            registry_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "config", "node_registry.json")
             # 加载注册表获取节点名称和 node_key 映射
             registry_names: Dict[str, str] = {}  # node_id → node_name
             if _os.path.exists(registry_path):
@@ -4993,19 +5009,19 @@ class OpenClawd:
                     tool_name_key = f"node__{node_id}__{action_name}"
                     if tool_name_key not in _registered_tool_names:
                         _registered_tool_names.add(tool_name_key)
-                        tools.append({
-                            "type": "function",
-                            "function": {
-                                "name": tool_name_key,
-                                "description": f"Node {node_name}: {action_desc}",
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {
-                                        "params": {"type": "object", "description": "操作参数"}
+                        tools.append(
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name_key,
+                                    "description": f"Node {node_name}: {action_desc}",
+                                    "parameters": {
+                                        "type": "object",
+                                        "properties": {"params": {"type": "object", "description": "操作参数"}},
                                     },
                                 },
-                            },
-                        })
+                            }
+                        )
 
             # 动态发现：遍历注册表中所有节点，尝试从 fusion_entry.py 获取 actions
             # 已在 _CORE_NODE_ACTIONS 中覆盖的节点仍可通过动态发现补充额外 action
@@ -5032,19 +5048,19 @@ class OpenClawd:
                     if tool_name_key not in _registered_tool_names:
                         _registered_tool_names.add(tool_name_key)
                         _dynamic_added += 1
-                        tools.append({
-                            "type": "function",
-                            "function": {
-                                "name": tool_name_key,
-                                "description": f"Node {node_name}: {action_desc}",
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {
-                                        "params": {"type": "object", "description": "操作参数"}
+                        tools.append(
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name_key,
+                                    "description": f"Node {node_name}: {action_desc}",
+                                    "parameters": {
+                                        "type": "object",
+                                        "properties": {"params": {"type": "object", "description": "操作参数"}},
                                     },
                                 },
-                            },
-                        })
+                            }
+                        )
 
             logger.debug(
                 "Node 工具收集: 静态 %d + 动态发现 %d，注册表节点 %d 个",
@@ -5116,6 +5132,7 @@ class OpenClawd:
         _pr8_session_id = getattr(self, "_current_session_id", None)
         try:
             from core.state_event_bus import emit as _seb_emit, StateEventType
+
             _seb_emit(
                 StateEventType.SKILL_INVOKED,
                 source="openclawd",
@@ -5178,6 +5195,7 @@ class OpenClawd:
                 if server_id == "gateway":
                     try:
                         from core.mcp_gateway import get_mcp_gateway
+
                         gateway = get_mcp_gateway()
                         result = await gateway.execute_tool(mcp_tool_name, arguments)
                         _mcp_metrics.finish()
@@ -5190,11 +5208,18 @@ class OpenClawd:
                         _mcp_metrics.finish()
                         _get_registry()._emit_log(
                             _mcp_req,
-                            _SkillResponse.failure(tool_name, _mcp_req.trace_id, _SkillErrorCode.EXECUTION_ERROR, str(e), metrics=_mcp_metrics),
+                            _SkillResponse.failure(
+                                tool_name,
+                                _mcp_req.trace_id,
+                                _SkillErrorCode.EXECUTION_ERROR,
+                                str(e),
+                                metrics=_mcp_metrics,
+                            ),
                         )
                         return {"success": False, "error": f"Gateway 工具执行失败: {e}"}
 
                 from core.mcp_loader import mcp_loader
+
                 try:
                     result = await mcp_loader.call_tool(server_id, mcp_tool_name, arguments)
                     _mcp_metrics.finish()
@@ -5207,7 +5232,9 @@ class OpenClawd:
                     _mcp_metrics.finish()
                     _get_registry()._emit_log(
                         _mcp_req,
-                        _SkillResponse.failure(tool_name, _mcp_req.trace_id, _SkillErrorCode.EXECUTION_ERROR, str(e), metrics=_mcp_metrics),
+                        _SkillResponse.failure(
+                            tool_name, _mcp_req.trace_id, _SkillErrorCode.EXECUTION_ERROR, str(e), metrics=_mcp_metrics
+                        ),
                     )
                     raise
 
@@ -5223,10 +5250,13 @@ class OpenClawd:
 
                 # Lazily register an adapter for this skill if needed.
                 if not _registry.has_skill(tool_name):
+
                     def _make_skill_adapter(_sid: str):
                         async def _adapter(**kwargs):
                             return await _skill_loader.execute(_sid, **kwargs)
+
                         return _adapter
+
                     _registry.register_skill(
                         name=tool_name,
                         handler=_make_skill_adapter(skill_id),
@@ -5273,9 +5303,7 @@ class OpenClawd:
                     return {"success": False, "error": f"节点 {node_id} 加载失败"}
 
                 params = arguments.get("params", arguments)
-                result = await _execute_node(
-                    node_info, action_name, params if isinstance(params, dict) else {}
-                )
+                result = await _execute_node(node_info, action_name, params if isinstance(params, dict) else {})
                 return {"success": True, "result": result}
 
             elif tool_name.startswith("github__"):
@@ -5306,6 +5334,7 @@ class OpenClawd:
             # PR-8: emit SKILL_FAILED on unhandled exception.
             try:
                 from core.state_event_bus import emit as _seb_emit, StateEventType
+
                 _seb_emit(
                     StateEventType.SKILL_FAILED,
                     source="openclawd",
@@ -5350,6 +5379,7 @@ class OpenClawd:
         """
         try:
             from core.github_installer import get_github_installer
+
             installer = get_github_installer()
 
             if action == "install":
@@ -5381,6 +5411,7 @@ class OpenClawd:
                 if not url:
                     return {"success": False, "error": "github__ingest requires 'url' argument"}
                 from core.github_installer import get_github_ingester
+
                 ingester = get_github_ingester()
                 return await ingester.ingest_repo(
                     url=url,
@@ -5393,6 +5424,7 @@ class OpenClawd:
                 if not url:
                     return {"success": False, "error": "github__context requires 'url' argument"}
                 from core.github_installer import get_github_ingester
+
                 ingester = get_github_ingester()
                 return ingester.get_repo_context(
                     url=url,
@@ -5442,6 +5474,7 @@ class OpenClawd:
         """
         try:
             from core.academic_retrieval import get_academic_retriever
+
             retriever = get_academic_retriever()
 
             if action == "search":
@@ -5490,10 +5523,7 @@ class OpenClawd:
             else:
                 return {
                     "success": False,
-                    "error": (
-                        f"Unknown academic action: '{action}'. "
-                        "Valid actions: search, ingest, recall."
-                    ),
+                    "error": (f"Unknown academic action: '{action}'. " "Valid actions: search, ingest, recall."),
                 }
         except Exception as exc:
             logger.warning("_dispatch_academic_tool '%s' failed: %s", action, exc)
@@ -5726,9 +5756,7 @@ class OpenClawd:
                 else:
                     return {
                         "success": False,
-                        "error": (
-                            "resource__lookup requires either 'resource_id' or 'source' argument"
-                        ),
+                        "error": ("resource__lookup requires either 'resource_id' or 'source' argument"),
                     }
                 if record is None:
                     return {"success": False, "error": "Resource not found"}
@@ -5737,10 +5765,7 @@ class OpenClawd:
             else:
                 return {
                     "success": False,
-                    "error": (
-                        f"Unknown resource action: '{action}'. "
-                        "Valid actions: list, status, health, lookup."
-                    ),
+                    "error": (f"Unknown resource action: '{action}'. " "Valid actions: list, status, health, lookup."),
                 }
         except Exception as exc:
             logger.warning("_dispatch_resource_tool '%s' failed: %s", action, exc)
@@ -5758,9 +5783,8 @@ class OpenClawd:
         # 回退到文件读取
         try:
             import json, os
-            registry_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "config", "node_registry.json"
-            )
+
+            registry_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "node_registry.json")
             with open(registry_path, "r", encoding="utf-8") as f:
                 registry = json.load(f)
             for key, info in registry.get("nodes", {}).items():
@@ -5840,8 +5864,7 @@ class OpenClawd:
                     if isinstance(actions, dict):
                         return {k: str(v) for k, v in actions.items() if k not in _skip}
                     if isinstance(actions, list):
-                        return {a: f"Execute {a}" for a in actions
-                                if isinstance(a, str) and a not in _skip}
+                        return {a: f"Execute {a}" for a in actions if isinstance(a, str) and a not in _skip}
             except Exception:
                 pass
 
@@ -5904,7 +5927,7 @@ class OpenClawd:
                     max_tokens=4096,
                 )
                 last_response = response
-                total_tokens += (response.input_tokens + response.output_tokens)
+                total_tokens += response.input_tokens + response.output_tokens
 
                 if not response.tool_calls:
                     # 无工具调用 → 最终回复
@@ -5927,6 +5950,7 @@ class OpenClawd:
                     # 解析参数
                     try:
                         import json as _json
+
                         tc_args = _json.loads(tc_func.get("arguments", "{}"))
                     except (ValueError, TypeError):
                         tc_args = {}
@@ -5936,28 +5960,28 @@ class OpenClawd:
                     # Phase 9: 频率限制检查
                     _total_tool_calls += 1
                     if _total_tool_calls > _MAX_TOOL_CALLS:
-                        logger.warning(
-                            f"ReAct 工具调用总次数超限 ({_MAX_TOOL_CALLS})，强制终止"
+                        logger.warning(f"ReAct 工具调用总次数超限 ({_MAX_TOOL_CALLS})，强制终止")
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc_id,
+                                "content": f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答",
+                            }
                         )
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答",
-                        })
                         break
 
                     # 连续同一工具检查
                     if tc_name == _last_tool_name:
                         _consecutive_same[tc_name] = _consecutive_same.get(tc_name, 1) + 1
                         if _consecutive_same[tc_name] >= 3:
-                            logger.warning(
-                                f"连续调用同一工具 {tc_name} 达 3 次，疑似幻觉循环，终止"
+                            logger.warning(f"连续调用同一工具 {tc_name} 达 3 次，疑似幻觉循环，终止")
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc_id,
+                                    "content": f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答",
+                                }
                             )
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc_id,
-                                "content": f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答",
-                            })
                             break
                     else:
                         _consecutive_same.clear()
@@ -5967,8 +5991,7 @@ class OpenClawd:
                     t0 = _time.time()
                     try:
                         result = await _asyncio.wait_for(
-                            self._dispatch_tool_call(tc_name, tc_args),
-                            timeout=30.0  # 单个工具调用最多 30 秒
+                            self._dispatch_tool_call(tc_name, tc_args), timeout=30.0  # 单个工具调用最多 30 秒
                         )
                     except _asyncio.TimeoutError:
                         result = {"success": False, "error": f"工具 {tc_name} 执行超时 (30s)"}
@@ -5978,23 +6001,27 @@ class OpenClawd:
                     layer = ToolCallRecord.classify_layer(tc_name)
                     status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
                     result_str = str(result.get("result", result.get("error", "")))
-                    tool_records.append(ToolCallRecord(
-                        tool_name=tc_name,
-                        layer=layer,
-                        arguments=tc_args,
-                        result=result_str[:2000],
-                        status=status,
-                        error=result.get("error") if not result.get("success", True) else None,
-                        latency_ms=round(elapsed_ms, 1),
-                        iteration=iteration,
-                    ))
+                    tool_records.append(
+                        ToolCallRecord(
+                            tool_name=tc_name,
+                            layer=layer,
+                            arguments=tc_args,
+                            result=result_str[:2000],
+                            status=status,
+                            error=result.get("error") if not result.get("success", True) else None,
+                            latency_ms=round(elapsed_ms, 1),
+                            iteration=iteration,
+                        )
+                    )
 
                     # 追加 tool result 到 messages
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": result_str[:4000],
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": result_str[:4000],
+                        }
+                    )
 
         try:
             await _asyncio.wait_for(_inner_loop(), timeout=timeout)
@@ -6042,8 +6069,7 @@ class OpenClawd:
                 return {
                     "success": False,
                     "response": (
-                        "LLM 服务未配置。请设置 API Key "
-                        "(OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)。"
+                        "LLM 服务未配置。请设置 API Key " "(OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)。"
                     ),
                 }
 
@@ -6064,19 +6090,17 @@ class OpenClawd:
             # context message.  Best-effort — failures must not block the chat path.
             try:
                 from core.cognitive.long_term_memory import get_long_term_memory
+
                 _ltm = get_long_term_memory()
                 _prefs = _ltm.retrieve_all(namespace="preferences")
                 if _prefs:
-                    _pref_lines = [
-                        f"- {e['key']}: {e['value']}" for e in _prefs[:10]
-                    ]
-                    messages.append({
-                        "role": "system",
-                        "content": (
-                            "[Long-term memory — user preferences]\n"
-                            + "\n".join(_pref_lines)
-                        ),
-                    })
+                    _pref_lines = [f"- {e['key']}: {e['value']}" for e in _prefs[:10]]
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": ("[Long-term memory — user preferences]\n" + "\n".join(_pref_lines)),
+                        }
+                    )
             except Exception as _ltm_err:
                 logger.debug("LongTermMemory inject failed (non-fatal): %s", _ltm_err)
 
@@ -6085,9 +6109,8 @@ class OpenClawd:
             _wm_entries = []
             try:
                 from core.cognitive.working_memory import get_working_memory
-                _wm_entries = get_working_memory().get(
-                    session_id=session_id, last_n=10
-                )
+
+                _wm_entries = get_working_memory().get(session_id=session_id, last_n=10)
             except Exception as _wm_err:
                 logger.debug("WorkingMemory.get failed (non-fatal): %s", _wm_err)
 
@@ -6171,11 +6194,7 @@ class OpenClawd:
             )
 
             success = result.get("success", False) if isinstance(result, dict) else bool(result)
-            response_text = (
-                result.get("message", "设备命令已执行")
-                if isinstance(result, dict)
-                else str(result)
-            )
+            response_text = result.get("message", "设备命令已执行") if isinstance(result, dict) else str(result)
 
             return {
                 "success": success,
@@ -6260,6 +6279,7 @@ class OpenClawd:
             _envelope_trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
             try:
                 from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+
                 _agent_envelope = _TaskEnvelope(
                     task_id=task_id,
                     trace_id=_envelope_trace_id,
@@ -6347,6 +6367,7 @@ class OpenClawd:
             # PR154: 将任务结果写入 TaskMemory（记忆回流）
             try:
                 from core.openclawd_memory_backflow import store_task_result
+
                 await store_task_result(
                     task_id=task_id,
                     device_id=device_id or "openclawd",
@@ -6414,7 +6435,8 @@ class OpenClawd:
 
             # 创建团队 (传复杂度)
             team = await manager.create_team(
-                strategy=strategy, task_hint=message,
+                strategy=strategy,
+                task_hint=message,
                 complexity_score=cv.weighted_score,
             )
 
@@ -6454,9 +6476,7 @@ class OpenClawd:
             logger.warning(f"团队协作失败，降级到单 Agent: {e}")
             try:
                 agent = factory.create_from_template("coordinator")
-                result = await factory.execute_agent_task(
-                    agent.id, {"task": message}
-                )
+                result = await factory.execute_agent_task(agent.id, {"task": message})
                 outputs = []
                 for r in result.get("results", []):
                     if isinstance(r, dict) and "output" in r:
@@ -6521,8 +6541,7 @@ class OpenClawd:
         return {
             "success": False,
             "response": (
-                f"未找到匹配的 MCP 工具或 Skill 来处理命令 '{command}'。"
-                "请确认工具已加载或使用其他方式处理。"
+                f"未找到匹配的 MCP 工具或 Skill 来处理命令 '{command}'。" "请确认工具已加载或使用其他方式处理。"
             ),
             "metadata": {"command": command, "params": params},
         }
@@ -6553,9 +6572,7 @@ class OpenClawd:
                 tools = await mcp_loader.list_tools(server_id)
                 for tool in tools:
                     if tool.get("name") == tool_name:
-                        result = await mcp_loader.call_tool(
-                            server_id, tool_name, arguments
-                        )
+                        result = await mcp_loader.call_tool(server_id, tool_name, arguments)
                         return {
                             "success": result.get("success", False),
                             "response": str(result.get("result", result.get("error", "MCP 工具调用完成"))),
@@ -6594,10 +6611,7 @@ class OpenClawd:
             # 查找匹配的技能
             target_skill = None
             for skill_info in skills:
-                if (
-                    skill_info.get("name") == skill_name
-                    or skill_info.get("id") == skill_name
-                ):
+                if skill_info.get("name") == skill_name or skill_info.get("id") == skill_name:
                     target_skill = skill_info
                     break
 
@@ -6611,9 +6625,7 @@ class OpenClawd:
                 skill_id = target_skill.get("id", "")
                 # 过滤掉非技能参数
                 exec_params = {
-                    k: v
-                    for k, v in params.items()
-                    if k not in ("tool_name", "arguments", "instruction", "message")
+                    k: v for k, v in params.items() if k not in ("tool_name", "arguments", "instruction", "message")
                 }
                 result = await skill_loader.execute(skill_id, **exec_params)
                 return {
@@ -6736,10 +6748,12 @@ class OpenClawd:
         if session_id not in self._session_memory:
             self._session_memory[session_id] = []
 
-        self._session_memory[session_id].append({
-            "role": role,
-            "content": content,
-        })
+        self._session_memory[session_id].append(
+            {
+                "role": role,
+                "content": content,
+            }
+        )
 
         # 限制会话长度
         if len(self._session_memory[session_id]) > 40:
@@ -6757,6 +6771,7 @@ class OpenClawd:
         # Block-3: mirror the turn into working memory for continuous cognition.
         try:
             from core.cognitive.working_memory import get_working_memory
+
             trace_id = getattr(self, "_current_trace_id", "") or ""
             get_working_memory().add(
                 session_id=session_id,
@@ -6787,11 +6802,13 @@ class OpenClawd:
         """列出所有活跃会话"""
         sessions = []
         for sid, turns in self._session_memory.items():
-            sessions.append({
-                "session_id": sid,
-                "turn_count": len(turns),
-                "last_message": turns[-1]["content"][:100] if turns else "",
-            })
+            sessions.append(
+                {
+                    "session_id": sid,
+                    "turn_count": len(turns),
+                    "last_message": turns[-1]["content"][:100] if turns else "",
+                }
+            )
         return sessions
 
     # ========================================================================
@@ -6825,6 +6842,7 @@ class OpenClawd:
             devices = []
             try:
                 from core.unified.device_manager import get_unified_device_manager
+
                 udm = get_unified_device_manager()
                 devices = udm.list_devices() or []
             except (ImportError, AttributeError, RuntimeError) as _udm_err:
@@ -6834,6 +6852,7 @@ class OpenClawd:
             if not devices:
                 try:
                     from core.device_registry import DeviceRegistry
+
                     dr = DeviceRegistry.get_instance()
                     raw = dr.list_devices()
                     # list_devices may return a dict {id: obj} or a list
@@ -6866,33 +6885,37 @@ class OpenClawd:
                 for cap in caps:
                     cap_name = cap if isinstance(cap, str) else str(cap)
                     key = f"gateway__{device_id}__{cap_name}"
-                    reg.register(CapabilityItem(
-                        name=key,
-                        description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
-                        source="gateway",
-                        source_id=device_id,
-                        available=True,
-                        metadata={"device_name": d_name, "device_type": d_type},
-                    ))
+                    reg.register(
+                        CapabilityItem(
+                            name=key,
+                            description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
+                            source="gateway",
+                            source_id=device_id,
+                            available=True,
+                            metadata={"device_name": d_name, "device_type": d_type},
+                        )
+                    )
                     count += 1
 
                 # Priority C: 高层自治能力（从 metadata 声明）
                 for cap_key in _AUTONOMOUS_CAPABILITY_KEYS:
                     if meta.get(cap_key):
                         key = f"autonomous__{device_id}__{cap_key}"
-                        reg.register(CapabilityItem(
-                            name=key,
-                            description=f"[Autonomous:{d_name}] {cap_key}",
-                            source="autonomous",
-                            source_id=device_id,
-                            available=True,
-                            metadata={
-                                "device_id": device_id,
-                                "device_name": d_name,
-                                "device_type": d_type,
-                                "capability_key": cap_key,
-                            },
-                        ))
+                        reg.register(
+                            CapabilityItem(
+                                name=key,
+                                description=f"[Autonomous:{d_name}] {cap_key}",
+                                source="autonomous",
+                                source_id=device_id,
+                                available=True,
+                                metadata={
+                                    "device_id": device_id,
+                                    "device_name": d_name,
+                                    "device_type": d_type,
+                                    "capability_key": cap_key,
+                                },
+                            )
+                        )
                         count += 1
 
             if count:
@@ -6915,6 +6938,7 @@ class OpenClawd:
         payload: Optional[Dict] = None,
         task_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        source_runtime_posture: Optional[str] = None,
     ) -> Dict:
         """统一网关命令路径（带 trace ID）。
 
@@ -6926,11 +6950,20 @@ class OpenClawd:
         command_id = uuid.uuid4().hex
         task_id = task_id or uuid.uuid4().hex
         trace_id = f"trace_{uuid.uuid4().hex[:12]}"
+        effective_source_runtime_posture = (
+            source_runtime_posture or getattr(self, "_current_source_runtime_posture", None) or "control_only"
+        )
+        source_device_id = getattr(self, "_current_device_id", "") or ""
         t0 = time.monotonic()
         logger.info(
             "OpenClawd.send_gateway_command | command_id=%s task_id=%s trace_id=%s "
             "session_id=%s device_id=%s command=%s",
-            command_id, task_id, trace_id, session_id, device_id, command,
+            command_id,
+            task_id,
+            trace_id,
+            session_id,
+            device_id,
+            command,
         )
 
         result: Dict = {
@@ -6962,19 +6995,25 @@ class OpenClawd:
                     "command_id": command_id,
                     "session_id": session_id,
                     "source": "openclawd",
+                    "source_device_id": source_device_id,
+                    "source_runtime_posture": effective_source_runtime_posture,
                 },
             )
             cr_result = await cr.route_envelope(envelope)
             latency_ms = (time.monotonic() - t0) * 1000
-            result.update({
-                "success": cr_result.get("success", False),
-                "response": cr_result.get("response") or cr_result.get("result"),
-                "latency_ms": round(latency_ms, 1),
-                "via": "command_router",
-            })
+            result.update(
+                {
+                    "success": cr_result.get("success", False),
+                    "response": cr_result.get("response") or cr_result.get("result"),
+                    "latency_ms": round(latency_ms, 1),
+                    "via": "command_router",
+                }
+            )
             logger.info(
                 "OpenClawd.send_gateway_command done | command_id=%s success=%s latency=%.1fms",
-                command_id, result["success"], latency_ms,
+                command_id,
+                result["success"],
+                latency_ms,
             )
             return result
         except Exception as e:
@@ -6983,6 +7022,7 @@ class OpenClawd:
         # 降级：DeviceOrchestrator
         try:
             from core.device_orchestrator import get_device_orchestrator
+
             orch = get_device_orchestrator()
             orch_result = await orch.execute_command(
                 device_id=device_id,
@@ -6990,12 +7030,16 @@ class OpenClawd:
                 params=payload or {},
             )
             latency_ms = (time.monotonic() - t0) * 1000
-            result.update({
-                "success": orch_result.get("success", False) if isinstance(orch_result, dict) else bool(orch_result),
-                "response": orch_result.get("message", "") if isinstance(orch_result, dict) else str(orch_result),
-                "latency_ms": round(latency_ms, 1),
-                "via": "device_orchestrator",
-            })
+            result.update(
+                {
+                    "success": (
+                        orch_result.get("success", False) if isinstance(orch_result, dict) else bool(orch_result)
+                    ),
+                    "response": orch_result.get("message", "") if isinstance(orch_result, dict) else str(orch_result),
+                    "latency_ms": round(latency_ms, 1),
+                    "via": "device_orchestrator",
+                }
+            )
             return result
         except Exception as e:
             logger.debug("DeviceOrchestrator 不可用，尝试 WebSocket: %s", e)
@@ -7003,6 +7047,7 @@ class OpenClawd:
         # 最终降级：WebSocket
         try:
             from core.routes._shared import connection_manager
+
             sent = await connection_manager.send_to_device(
                 device_id,
                 {
@@ -7014,24 +7059,30 @@ class OpenClawd:
                 },
             )
             latency_ms = (time.monotonic() - t0) * 1000
-            result.update({
-                "success": sent,
-                "response": f"命令已通过 WebSocket 发送到 {device_id}" if sent else f"设备 {device_id} 未连接",
-                "latency_ms": round(latency_ms, 1),
-                "via": "websocket",
-            })
+            result.update(
+                {
+                    "success": sent,
+                    "response": f"命令已通过 WebSocket 发送到 {device_id}" if sent else f"设备 {device_id} 未连接",
+                    "latency_ms": round(latency_ms, 1),
+                    "via": "websocket",
+                }
+            )
         except Exception as e:
             latency_ms = (time.monotonic() - t0) * 1000
-            result.update({
-                "success": False,
-                "response": f"无法向设备 {device_id} 发送命令: {e}",
-                "latency_ms": round(latency_ms, 1),
-                "error": str(e),
-            })
+            result.update(
+                {
+                    "success": False,
+                    "response": f"无法向设备 {device_id} 发送命令: {e}",
+                    "latency_ms": round(latency_ms, 1),
+                    "error": str(e),
+                }
+            )
 
         logger.info(
             "OpenClawd.send_gateway_command done | command_id=%s success=%s via=%s latency=%.1fms",
-            command_id, result.get("success"), result.get("via", "none"),
+            command_id,
+            result.get("success"),
+            result.get("via", "none"),
             result.get("latency_ms", 0),
         )
         return result
