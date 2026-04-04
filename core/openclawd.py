@@ -2763,7 +2763,13 @@ class OpenClawd:
         self._current_trace_id = trace_id
         self._current_session_id = session_id
         self._current_device_id = device_id or ""
-        self._current_source_runtime_posture = source_runtime_posture or "control_only"
+        try:
+            from core.source_runtime_posture import SourceRuntimePosture
+
+            _default_source_runtime_posture = SourceRuntimePosture.CONTROL_ONLY.value
+        except Exception:
+            _default_source_runtime_posture = "control_only"
+        self._current_source_runtime_posture = source_runtime_posture or _default_source_runtime_posture
 
         # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
         # the current request's device/session/trace without needing explicit kwargs.
@@ -6950,8 +6956,16 @@ class OpenClawd:
         command_id = uuid.uuid4().hex
         task_id = task_id or uuid.uuid4().hex
         trace_id = f"trace_{uuid.uuid4().hex[:12]}"
+        try:
+            from core.source_runtime_posture import SourceRuntimePosture
+
+            _default_source_runtime_posture = SourceRuntimePosture.CONTROL_ONLY.value
+        except Exception:
+            _default_source_runtime_posture = "control_only"
         effective_source_runtime_posture = (
-            source_runtime_posture or getattr(self, "_current_source_runtime_posture", None) or "control_only"
+            source_runtime_posture
+            or getattr(self, "_current_source_runtime_posture", None)
+            or _default_source_runtime_posture
         )
         source_device_id = getattr(self, "_current_device_id", "") or ""
         t0 = time.monotonic()

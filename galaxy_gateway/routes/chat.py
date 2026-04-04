@@ -23,6 +23,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+try:
+    from pydantic import field_validator as _field_validator
+except ImportError:  # pragma: no cover - pydantic v1 fallback
+    from pydantic import validator as _field_validator  # type: ignore
+
 from galaxy_gateway.cross_device_switch import (
     is_cross_device_enabled,
     HTTP_STATUS_CROSS_DEVICE_DISABLED,
@@ -72,6 +77,19 @@ class ChatRequest(BaseModel):
     # "control_only" means the source device remains only the controller;
     # "join_runtime" means the source device is also a runtime participant.
     source_runtime_posture: Optional[str] = None
+
+    @_field_validator("source_runtime_posture")
+    @classmethod
+    def _validate_source_runtime_posture(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        from core.source_runtime_posture import SourceRuntimePosture
+
+        normalized = str(value).strip().lower()
+        allowed = {posture.value for posture in SourceRuntimePosture}
+        if normalized not in allowed:
+            raise ValueError("source_runtime_posture must be one of: " + ", ".join(sorted(allowed)))
+        return normalized
 
 
 # ---------------------------------------------------------------------------
