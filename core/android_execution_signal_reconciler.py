@@ -635,10 +635,13 @@ def extract_signal_envelope(
     )
 
     # ---- payload snapshot — merge top-level extras + payload dict ----
+    # Keys harvested from the payload sub-dict into the envelope snapshot.
+    _PAYLOAD_CONTENT_KEYS = (
+        "result", "details", "error", "error_message", "latency_ms",
+        "step_count", "partial_result",
+    )
     payload_snapshot: Dict[str, Any] = {}
-    # Include task_id / device_id / status in payload snapshot for result forwarding
-    for key in ("result", "details", "error", "error_message", "latency_ms",
-                "step_count", "partial_result"):
+    for key in _PAYLOAD_CONTENT_KEYS:
         if payload.get(key) is not None:
             payload_snapshot[key] = payload[key]
     if status:
