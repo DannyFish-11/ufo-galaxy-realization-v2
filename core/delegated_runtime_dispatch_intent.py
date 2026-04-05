@@ -438,6 +438,10 @@ class DispatchEligibilityOutcome:
         empty string when ``is_eligible`` is True.
     applied_policy
         The policy sentinel string that caused the block, or empty string.
+    note
+        Informational message for non-blocking outcomes (e.g. downgrade
+        explanations).  Empty string when no additional info is present.
+        Never non-empty when ``blocking_reason`` is also non-empty.
     device_id
         The device id that was evaluated.
     session_id
@@ -454,6 +458,7 @@ class DispatchEligibilityOutcome:
     resolved_intent: DelegationIntent = DelegationIntent.none
     blocking_reason: str = ""
     applied_policy: str = ""
+    note: str = ""
     device_id: str = ""
     session_id: str = ""
     source_runtime_posture: str = _POSTURE_CONTROL_ONLY
@@ -466,6 +471,7 @@ class DispatchEligibilityOutcome:
             "resolved_intent": self.resolved_intent.value,
             "blocking_reason": self.blocking_reason,
             "applied_policy": self.applied_policy,
+            "note": self.note,
             "device_id": self.device_id,
             "session_id": self.session_id,
             "source_runtime_posture": self.source_runtime_posture,
@@ -599,6 +605,7 @@ class DelegatedRuntimeDispatchRecord:
                 resolved_intent=DelegationIntent.from_string(str(raw_ei)),
                 blocking_reason=str(eligibility_raw.get("blocking_reason", "")),
                 applied_policy=str(eligibility_raw.get("applied_policy", "")),
+                note=str(eligibility_raw.get("note", "")),
                 device_id=str(eligibility_raw.get("device_id", "")),
                 session_id=str(eligibility_raw.get("session_id", "")),
                 source_runtime_posture=str(
@@ -865,11 +872,12 @@ def evaluate_dispatch_eligibility(
             return DispatchEligibilityOutcome(
                 is_eligible=True,
                 resolved_intent=max_intent,
-                blocking_reason=(
+                blocking_reason="",
+                applied_policy=COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY,
+                note=(
                     f"Full delegation downgraded to relay: capability_tier={tier!r}.  "
                     f"Policy: {COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY}"
                 ),
-                applied_policy=COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY,
                 device_id=device_id,
                 session_id=sid,
                 source_runtime_posture=posture,
@@ -884,6 +892,7 @@ def evaluate_dispatch_eligibility(
         resolved_intent=max_intent,
         blocking_reason="",
         applied_policy="",
+        note="",
         device_id=device_id,
         session_id=sid,
         source_runtime_posture=posture,

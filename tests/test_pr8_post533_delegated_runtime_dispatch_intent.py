@@ -354,7 +354,7 @@ class TestGroupD:
         d = o.to_dict()
         for key in (
             "is_eligible", "resolved_intent", "blocking_reason",
-            "applied_policy", "device_id", "session_id",
+            "applied_policy", "note", "device_id", "session_id",
             "source_runtime_posture", "coordination_role", "capability_tier",
         ):
             assert key in d, f"Missing key: {key}"
@@ -715,6 +715,8 @@ class TestGroupI_Q:
         )
         assert out.is_eligible is True
         assert out.resolved_intent == DelegationIntent.relay
+        assert out.blocking_reason == ""  # blocking_reason is empty for eligible outcomes
+        assert len(out.note) > 0  # note contains the downgrade explanation
 
     def test_O1_full_runtime_tier_delegate_permitted(self):
         out = evaluate_dispatch_eligibility(
