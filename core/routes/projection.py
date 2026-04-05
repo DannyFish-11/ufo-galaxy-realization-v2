@@ -359,6 +359,37 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR package 14 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical persistent attached-runtime reuse binding.
+# Importing the authority sentinel and the PR-14 sentinel from the new module
+# ties the projection route layer to the reuse binding model, enabling
+# projection endpoints to surface reuse eligibility status, invalidation
+# reason, and reuse binding policy sentinels alongside dispatch-binding and
+# signal-reconciliation projections.
+try:
+    from core.attached_runtime_reuse_binding import (  # noqa: F401
+        ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY as _ARRB_AUTHORITY,
+        ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL as _ARRB_PR14,
+        ReuseEligibilityStatus as _ReuseEligibilityStatus,
+        evaluate_reuse_eligibility as _evaluate_reuse_eligibility,
+        list_eligible_reuse_bindings as _list_eligible_reuse_bindings,
+    )
+
+    ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14: str = (
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14_V1: "
+        "canonical persistent attached-runtime reuse binding "
+        "(core.attached_runtime_reuse_binding) is available and aligned "
+        "with projection routes.  Projection endpoints can surface "
+        "ReuseEligibilityStatus, invalidation reasons, and reuse binding "
+        "policy sentinels alongside dispatch-binding and signal-reconciliation "
+        "projections."
+    )
+except ImportError:  # pragma: no cover
+    ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
