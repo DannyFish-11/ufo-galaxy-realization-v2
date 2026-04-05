@@ -422,6 +422,30 @@ from core.attached_runtime_reuse_binding import (  # noqa: E402
     reset_reuse_binding_runtime,
 )
 
+# PR package 16 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical ingress path for Android delegated execution signals.
+# Re-exported here so callers can reach the ingress API from core.runtime
+# without importing the module directly.
+from core.android_delegated_signal_ingress import (  # noqa: E402
+    ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY,
+    INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY,
+    INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY,
+    INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY,
+    INGRESS_SIGNAL_ID_IS_PRESERVED_POLICY,
+    INGRESS_EMISSION_SEQ_IS_PRESERVED_POLICY,
+    INGRESS_IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
+    INGRESS_REQUIRES_LOOKUP_KEY_POLICY,
+    INGRESS_DELEGATES_TO_RECONCILER_POLICY,
+    INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY,
+    INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY,
+    ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL,
+    DelegatedSignalKind,
+    ResultKind,
+    DelegatedExecutionSignalEnvelope,
+    extract_delegated_signal_envelope,
+    ingest_delegated_execution_signal,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -725,4 +749,22 @@ __all__ = [
     "build_reuse_binding_snapshot",
     "get_reuse_binding_runtime",
     "reset_reuse_binding_runtime",
+    # PR package 16: Canonical Ingress Path for Android Delegated Execution Signals (MAIN repo side)
+    "ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY",
+    "INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY",
+    "INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY",
+    "INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY",
+    "INGRESS_SIGNAL_ID_IS_PRESERVED_POLICY",
+    "INGRESS_EMISSION_SEQ_IS_PRESERVED_POLICY",
+    "INGRESS_IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
+    "INGRESS_REQUIRES_LOOKUP_KEY_POLICY",
+    "INGRESS_DELEGATES_TO_RECONCILER_POLICY",
+    "INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY",
+    "INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY",
+    "ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL",
+    "DelegatedSignalKind",
+    "ResultKind",
+    "DelegatedExecutionSignalEnvelope",
+    "extract_delegated_signal_envelope",
+    "ingest_delegated_execution_signal",
 ]

@@ -256,6 +256,9 @@ class MessageType(str, Enum):
     PEER_EXCHANGE = "peer_exchange"
     MESH_TOPOLOGY = "mesh_topology"
 
+    # === Android Delegated Execution Signals (PR-16) ===
+    DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""
