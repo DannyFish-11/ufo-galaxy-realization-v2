@@ -1095,10 +1095,10 @@ def test_AK01_envelope_id_is_uuid():
 
 
 def test_AL01_received_at_is_float():
-    import time as _time
-    before = _time.time()
+    import time
+    before = time.time()
     env = DelegatedExecutionSignalEnvelope()
-    after = _time.time()
+    after = time.time()
     assert isinstance(env.received_at, float)
     assert before <= env.received_at <= after
 

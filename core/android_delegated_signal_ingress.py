@@ -324,6 +324,14 @@ class ResultKind(str, Enum):
 # Mapping: (DelegatedSignalKind, ResultKind) → AndroidSignalKind
 # ---------------------------------------------------------------------------
 
+# Payload content keys harvested from the payload sub-dict into the envelope
+# snapshot during extraction.
+_DELEGATED_PAYLOAD_CONTENT_KEYS: tuple = (
+    "result", "details", "error", "error_message", "latency_ms",
+    "step_count", "partial_result",
+)
+
+
 def _resolve_android_signal_kind(
     signal_kind: DelegatedSignalKind,
     result_kind: ResultKind,
@@ -584,12 +592,8 @@ def extract_delegated_signal_envelope(
         emission_seq = 0
 
     # ---- payload snapshot ----
-    _PAYLOAD_CONTENT_KEYS = (
-        "result", "details", "error", "error_message", "latency_ms",
-        "step_count", "partial_result",
-    )
     payload_snapshot: Dict[str, Any] = {}
-    for key in _PAYLOAD_CONTENT_KEYS:
+    for key in _DELEGATED_PAYLOAD_CONTENT_KEYS:
         if payload.get(key) is not None:
             payload_snapshot[key] = payload[key]
     if task_id:

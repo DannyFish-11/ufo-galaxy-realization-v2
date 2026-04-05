@@ -75,11 +75,11 @@ async def handle_delegated_execution_signal(
                     "PR-16 delegated signal ingested: signal_kind=%s "
                     "contract_id=%r session_id=%r signal_id=%r emission_seq=%s "
                     "→ phase=%s",
-                    env.signal_kind.value if env else "?",
-                    env.contract_id if env else "",
-                    env.session_id if env else "",
-                    env.signal_id if env else "",
-                    env.emission_seq if env else 0,
+                    env.signal_kind.value,
+                    env.contract_id,
+                    env.session_id,
+                    env.signal_id,
+                    env.emission_seq,
                     outcome.record.phase.value if outcome.record else "?",
                 )
             elif outcome.reject_reason:
