@@ -18,6 +18,11 @@ side): exports posture contract canonicalization enforcement helpers from
 PR-5 (post-533 dual-repo runtime unification, MAIN repo side): exports
 Android first-class runtime host classification and identity helpers from
 ``core.android_runtime_host``.
+
+PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
+side): exports canonical device/host capability representation and
+scheduling-basis normalization helpers from
+``core.canonical_capability_scheduling_basis``.
 """
 
 from core.runtime.target_takeover import (
@@ -158,6 +163,30 @@ from core.android_runtime_host import (  # noqa: E402
     build_android_runtime_host_identity,
 )
 
+# PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical device/host capability representation and scheduling-basis
+# normalization.  Re-exported here so callers can reach the capability/
+# scheduling API from core.runtime without importing the module directly.
+from core.canonical_capability_scheduling_basis import (  # noqa: E402
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
+    FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY,
+    CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY,
+    OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY,
+    ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY,
+    SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY,
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL,
+    CapabilityTier,
+    ExecutionSurface,
+    RuntimeCapabilityProfile,
+    SchedulingBasisInputs,
+    ExecutionSurfaceEligibility,
+    build_runtime_capability_profile,
+    build_scheduling_basis_inputs,
+    evaluate_execution_surface_eligibility,
+    normalize_scheduling_inputs,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -257,4 +286,22 @@ __all__ = [
     "AndroidRuntimeHostIdentity",
     "classify_android_runtime_host",
     "build_android_runtime_host_identity",
+    # PR package 6: Canonical Capability & Scheduling Basis (MAIN repo side)
+    "CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY",
+    "FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+    "COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY",
+    "CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY",
+    "OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY",
+    "ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY",
+    "SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY",
+    "CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL",
+    "CapabilityTier",
+    "ExecutionSurface",
+    "RuntimeCapabilityProfile",
+    "SchedulingBasisInputs",
+    "ExecutionSurfaceEligibility",
+    "build_runtime_capability_profile",
+    "build_scheduling_basis_inputs",
+    "evaluate_execution_surface_eligibility",
+    "normalize_scheduling_inputs",
 ]
