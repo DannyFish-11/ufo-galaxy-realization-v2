@@ -113,7 +113,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 import pytest
@@ -196,11 +196,7 @@ class _StubContractIdentity:
 
 @dataclass
 class _StubContract:
-    identity: _StubContractIdentity = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.identity is None:
-            self.identity = _StubContractIdentity()
+    identity: _StubContractIdentity = field(default_factory=_StubContractIdentity)
 
 
 @dataclass
@@ -210,11 +206,7 @@ class _StubTrackerIdentity:
 
 @dataclass
 class _StubTracker:
-    identity: _StubTrackerIdentity = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.identity is None:
-            self.identity = _StubTrackerIdentity()
+    identity: _StubTrackerIdentity = field(default_factory=_StubTrackerIdentity)
 
 
 # ---------------------------------------------------------------------------

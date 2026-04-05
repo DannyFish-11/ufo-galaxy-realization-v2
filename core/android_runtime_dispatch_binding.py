@@ -1174,9 +1174,7 @@ def resolve_dispatch_binding(
     contract_id: str = (
         getattr(contract_identity, "contract_id", None) or ""
     )
-    trace_id: str = (
-        getattr(contract_identity, "trace_id", None) or ""
-    ) or None
+    trace_id: Optional[str] = getattr(contract_identity, "trace_id", None) or None
 
     # --- extract tracker fields ---
     tracker_identity = getattr(execution_tracker, "identity", None)
