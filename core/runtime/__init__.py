@@ -422,6 +422,40 @@ from core.attached_runtime_reuse_binding import (  # noqa: E402
     reset_reuse_binding_runtime,
 )
 
+# PR package 15 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical host-side recovery readiness / resilience foundations for
+# attached Android runtime reuse.
+# Re-exported here so callers can reach the recovery readiness guard API from
+# core.runtime without importing the module directly.
+from core.attached_runtime_recovery_readiness import (  # noqa: E402
+    ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY,
+    RECOVERY_READINESS_IDEMPOTENCY_KEY_IS_CANONICAL_POLICY,
+    RECOVERY_READINESS_DUPLICATE_SIGNAL_IS_SILENTLY_DROPPED_POLICY,
+    RECOVERY_READINESS_OUT_OF_ORDER_SIGNAL_IS_GUARDED_POLICY,
+    RECOVERY_READINESS_REPLAY_SIGNAL_IS_GUARDED_POLICY,
+    RECOVERY_READINESS_IDENTITY_CONTINUITY_IS_PRESERVED_POLICY,
+    RECOVERY_READINESS_STALE_SIGNAL_DOES_NOT_ADVANCE_PHASE_POLICY,
+    RECOVERY_READINESS_FRESH_SIGNAL_IS_ACCEPTED_POLICY,
+    RECOVERY_READINESS_GUARD_IS_ADDITIVE_ONLY_POLICY,
+    RECOVERY_READINESS_SEQ_NUM_DRIVES_ORDER_GUARD_POLICY,
+    RECOVERY_READINESS_TERMINAL_RECORD_DEDUPE_IS_SAFE_POLICY,
+    ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL,
+    SignalGuardDecision,
+    RecoveryReadinessStatus,
+    IdempotencyKey,
+    SeenSignalRecord,
+    SignalGuardOutcome,
+    RecoveryReadinessSnapshot,
+    RecoveryReadinessRuntime,
+    build_idempotency_key,
+    check_signal_guard,
+    record_seen_signal,
+    guard_inbound_signal,
+    build_recovery_readiness_snapshot,
+    get_recovery_readiness_runtime,
+    reset_recovery_readiness_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -725,4 +759,31 @@ __all__ = [
     "build_reuse_binding_snapshot",
     "get_reuse_binding_runtime",
     "reset_reuse_binding_runtime",
+    # PR package 15: Canonical Host-Side Recovery Readiness / Resilience Foundations (MAIN repo side)
+    "ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY",
+    "RECOVERY_READINESS_IDEMPOTENCY_KEY_IS_CANONICAL_POLICY",
+    "RECOVERY_READINESS_DUPLICATE_SIGNAL_IS_SILENTLY_DROPPED_POLICY",
+    "RECOVERY_READINESS_OUT_OF_ORDER_SIGNAL_IS_GUARDED_POLICY",
+    "RECOVERY_READINESS_REPLAY_SIGNAL_IS_GUARDED_POLICY",
+    "RECOVERY_READINESS_IDENTITY_CONTINUITY_IS_PRESERVED_POLICY",
+    "RECOVERY_READINESS_STALE_SIGNAL_DOES_NOT_ADVANCE_PHASE_POLICY",
+    "RECOVERY_READINESS_FRESH_SIGNAL_IS_ACCEPTED_POLICY",
+    "RECOVERY_READINESS_GUARD_IS_ADDITIVE_ONLY_POLICY",
+    "RECOVERY_READINESS_SEQ_NUM_DRIVES_ORDER_GUARD_POLICY",
+    "RECOVERY_READINESS_TERMINAL_RECORD_DEDUPE_IS_SAFE_POLICY",
+    "ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL",
+    "SignalGuardDecision",
+    "RecoveryReadinessStatus",
+    "IdempotencyKey",
+    "SeenSignalRecord",
+    "SignalGuardOutcome",
+    "RecoveryReadinessSnapshot",
+    "RecoveryReadinessRuntime",
+    "build_idempotency_key",
+    "check_signal_guard",
+    "record_seen_signal",
+    "guard_inbound_signal",
+    "build_recovery_readiness_snapshot",
+    "get_recovery_readiness_runtime",
+    "reset_recovery_readiness_runtime",
 ]

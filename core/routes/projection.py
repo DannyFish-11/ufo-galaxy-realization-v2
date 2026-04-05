@@ -390,6 +390,38 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR package 15 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical host-side recovery readiness / resilience foundations for
+# attached Android runtime reuse.
+# Importing the authority sentinel and the PR-15 sentinel from the new module
+# ties the projection route layer to the recovery readiness guard model,
+# enabling projection endpoints to surface guard decisions, idempotency key
+# counts, and recovery readiness status alongside reuse binding projections.
+try:
+    from core.attached_runtime_recovery_readiness import (  # noqa: F401
+        ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY as _ARRR_AUTHORITY,
+        ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL as _ARRR_PR15,
+        SignalGuardDecision as _SignalGuardDecision,
+        RecoveryReadinessStatus as _RecoveryReadinessStatus,
+        build_recovery_readiness_snapshot as _build_recovery_readiness_snapshot,
+        guard_inbound_signal as _guard_inbound_signal,
+    )
+
+    ATTACHED_RUNTIME_RECOVERY_READINESS_ALIGNED_PR15: str = (
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_RECOVERY_READINESS_ALIGNED_PR15_V1: "
+        "canonical host-side recovery readiness / resilience foundations "
+        "(core.attached_runtime_recovery_readiness) are available and aligned "
+        "with projection routes.  Projection endpoints can surface "
+        "SignalGuardDecision verdicts, RecoveryReadinessStatus, idempotency key "
+        "counts, and replay / duplicate / out-of-order guard metrics alongside "
+        "reuse binding and signal-reconciliation projections."
+    )
+except ImportError:  # pragma: no cover
+    ATTACHED_RUNTIME_RECOVERY_READINESS_ALIGNED_PR15: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_RECOVERY_READINESS_ALIGNED_PR15_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
