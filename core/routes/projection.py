@@ -329,6 +329,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11_UNAVAILABLE"
     )
 
+# PR package 13 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical host-side Android execution signal reconciliation binding.
+# Importing the authority sentinel and the PR-13 sentinel from the new module
+# ties the projection route layer to the reconciliation model, enabling
+# projection endpoints to surface AndroidSignalKind, reconciliation outcomes,
+# and reconciler policy sentinels alongside execution-tracking and dispatch-
+# binding projections.
+try:
+    from core.android_execution_signal_reconciler import (  # noqa: F401
+        ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY as _AESR_AUTHORITY,
+        ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL as _AESR_PR13,
+        AndroidSignalKind as _AndroidSignalKind,
+        normalize_android_message_to_signal_kind as _normalize_android_message_to_signal_kind,
+        reconcile_inbound_message as _reconcile_inbound_message,
+    )
+
+    ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13: str = (
+        "PROJECTION_ROUTES::ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13_V1: "
+        "canonical host-side Android execution signal reconciliation binding "
+        "(core.android_execution_signal_reconciler) is available and aligned "
+        "with projection routes.  Projection endpoints can surface "
+        "AndroidSignalKind, reconcile outcomes, and reconciler policy sentinels "
+        "alongside execution-tracking and dispatch-binding projections."
+    )
+except ImportError:  # pragma: no cover
+    ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
