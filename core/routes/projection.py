@@ -234,6 +234,37 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8_UNAVAILABLE"
     )
 
+# PR package 9 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical delegated-runtime handoff contract foundations.  Importing
+# the authority sentinel and the PR-9 sentinel from the new module ties the
+# projection route layer to the handoff-contract model, enabling projection
+# endpoints to surface handoff contract state alongside dispatch intent,
+# attached-runtime session, posture, coordination-role, and capability data.
+try:
+    from core.delegated_runtime_handoff_contract import (  # noqa: F401
+        DELEGATED_RUNTIME_HANDOFF_CONTRACT_AUTHORITY as _DRHC_AUTHORITY,
+        DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL as _DRHC_PR9,
+        HandoffContractVersion as _HandoffContractVersion,
+        HandoffContractStatus as _HandoffContractStatus,
+        build_delegated_handoff_contract as _build_delegated_handoff_contract,
+        list_pending_handoff_contracts as _list_pending_handoff_contracts,
+        build_handoff_contract_snapshot as _build_handoff_contract_snapshot,
+    )
+
+    DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9: str = (
+        "PROJECTION_ROUTES::DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9_V1: "
+        "canonical delegated-runtime handoff contract foundations "
+        "(core.delegated_runtime_handoff_contract) is available and aligned "
+        "with projection routes.  Projection endpoints can surface "
+        "HandoffContractVersion, HandoffContractStatus, and pending handoff "
+        "contracts alongside dispatch intent and attached-runtime session "
+        "projections."
+    )
+except ImportError:  # pragma: no cover
+    DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

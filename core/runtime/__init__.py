@@ -27,6 +27,10 @@ scheduling-basis normalization helpers from
 PR package 7 (post-533 dual-repo runtime unification master plan, MAIN repo
 side): exports canonical persistent attached-runtime session semantics from
 ``core.attached_runtime_session``.
+
+PR package 9 (post-533 dual-repo runtime unification master plan, MAIN repo
+side): exports canonical delegated-runtime handoff contract foundations from
+``core.delegated_runtime_handoff_contract``.
 """
 
 from core.runtime.target_takeover import (
@@ -254,6 +258,40 @@ from core.delegated_runtime_dispatch_intent import (  # noqa: E402
     reset_delegated_runtime_dispatch_runtime,
 )
 
+# PR package 9 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical delegated-runtime handoff contract foundations.  Re-exported
+# here so callers can reach the handoff-contract API from core.runtime without
+# importing the module directly.
+from core.delegated_runtime_handoff_contract import (  # noqa: E402
+    DELEGATED_RUNTIME_HANDOFF_CONTRACT_AUTHORITY,
+    HANDOFF_CONTRACT_REQUIRES_DISPATCH_RECORD_POLICY,
+    HANDOFF_CONTRACT_REQUIRES_ATTACHED_SESSION_POLICY,
+    HANDOFF_CONTRACT_VERSION_MUST_BE_EXPLICIT_POLICY,
+    HANDOFF_CONTRACT_IDENTITY_IS_IMMUTABLE_POLICY,
+    HANDOFF_CONTRACT_STATUS_IS_MONOTONIC_POLICY,
+    HANDOFF_CONTRACT_POSTURE_IS_PRESERVED_POLICY,
+    SEALED_CONTRACT_IS_DISPATCH_READY_POLICY,
+    HANDOFF_CONTRACT_PAYLOAD_MUST_BE_NON_EMPTY_POLICY,
+    HANDOFF_CONTRACT_TRACE_ID_IS_PROPAGATED_POLICY,
+    DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL,
+    HandoffContractVersion,
+    HandoffContractStatus,
+    DelegatedHandoffContractIdentity,
+    DelegatedHandoffContractMeta,
+    DelegatedHandoffContractPayload,
+    DelegatedHandoffContractRecord,
+    DelegatedHandoffContractSnapshot,
+    DelegatedHandoffContractRuntime,
+    build_delegated_handoff_contract,
+    seal_handoff_contract,
+    record_handoff_contract,
+    get_handoff_contract,
+    list_pending_handoff_contracts,
+    build_handoff_contract_snapshot,
+    get_handoff_contract_runtime,
+    reset_handoff_contract_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -423,4 +461,32 @@ __all__ = [
     "build_delegated_dispatch_snapshot",
     "get_delegated_runtime_dispatch_runtime",
     "reset_delegated_runtime_dispatch_runtime",
+    # PR package 9: Canonical Delegated-Runtime Handoff Contract Foundations (MAIN repo side)
+    "DELEGATED_RUNTIME_HANDOFF_CONTRACT_AUTHORITY",
+    "HANDOFF_CONTRACT_REQUIRES_DISPATCH_RECORD_POLICY",
+    "HANDOFF_CONTRACT_REQUIRES_ATTACHED_SESSION_POLICY",
+    "HANDOFF_CONTRACT_VERSION_MUST_BE_EXPLICIT_POLICY",
+    "HANDOFF_CONTRACT_IDENTITY_IS_IMMUTABLE_POLICY",
+    "HANDOFF_CONTRACT_STATUS_IS_MONOTONIC_POLICY",
+    "HANDOFF_CONTRACT_POSTURE_IS_PRESERVED_POLICY",
+    "SEALED_CONTRACT_IS_DISPATCH_READY_POLICY",
+    "HANDOFF_CONTRACT_PAYLOAD_MUST_BE_NON_EMPTY_POLICY",
+    "HANDOFF_CONTRACT_TRACE_ID_IS_PROPAGATED_POLICY",
+    "DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL",
+    "HandoffContractVersion",
+    "HandoffContractStatus",
+    "DelegatedHandoffContractIdentity",
+    "DelegatedHandoffContractMeta",
+    "DelegatedHandoffContractPayload",
+    "DelegatedHandoffContractRecord",
+    "DelegatedHandoffContractSnapshot",
+    "DelegatedHandoffContractRuntime",
+    "build_delegated_handoff_contract",
+    "seal_handoff_contract",
+    "record_handoff_contract",
+    "get_handoff_contract",
+    "list_pending_handoff_contracts",
+    "build_handoff_contract_snapshot",
+    "get_handoff_contract_runtime",
+    "reset_handoff_contract_runtime",
 ]
