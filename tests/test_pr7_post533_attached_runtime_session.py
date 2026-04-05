@@ -1019,7 +1019,7 @@ class TestMultipleDevicesAJ:
         r1 = _attach(rt, "dev_m1")
         r2 = _attach(rt, "dev_m2")
         r3 = _attach(rt, "dev_m3")
-        assert r1.session_id != r2.session_id != r3.session_id
+        assert len({r1.session_id, r2.session_id, r3.session_id}) == 3
         assert rt.total() == 3
 
     def test_lifecycle_on_one_does_not_affect_others(self):
@@ -1235,6 +1235,11 @@ class TestLifecycleSignalFromStringAT:
     def test_unknown_signal_returns_none(self):
         assert AttachmentLifecycleSignal.from_string("bogus_signal") is None
         assert AttachmentLifecycleSignal.from_string("ATTACH") is None  # case-sensitive
+
+    def test_lowercase_attach_returns_signal(self):
+        assert AttachmentLifecycleSignal.from_string("attach") == AttachmentLifecycleSignal.attach
+        assert AttachmentLifecycleSignal.from_string("detach") == AttachmentLifecycleSignal.detach
+        assert AttachmentLifecycleSignal.from_string("disconnect") == AttachmentLifecycleSignal.disconnect
 
 
 # ---------------------------------------------------------------------------
