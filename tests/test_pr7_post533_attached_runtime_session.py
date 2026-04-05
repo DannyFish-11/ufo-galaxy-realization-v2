@@ -96,7 +96,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock  # noqa: F401  # reserved for future mock-based tests
 
 import pytest
 
@@ -724,7 +724,6 @@ def test_v1_invalidated_signal_no_change():
     rt = _fresh_runtime()
     r = _attach(runtime=rt)
     r = apply_lifecycle_signal(r, AttachmentLifecycleSignal.invalidate, runtime=rt)
-    original_id = r.record_id
     for sig in [AttachmentLifecycleSignal.detach, AttachmentLifecycleSignal.disconnect,
                 AttachmentLifecycleSignal.disable, AttachmentLifecycleSignal.reconnect]:
         result = apply_lifecycle_signal(r, sig, runtime=rt)
