@@ -23,6 +23,10 @@ PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
 side): exports canonical device/host capability representation and
 scheduling-basis normalization helpers from
 ``core.canonical_capability_scheduling_basis``.
+
+PR package 7 (post-533 dual-repo runtime unification master plan, MAIN repo
+side): exports persistent attached-runtime session semantics helpers from
+``core.attached_runtime_session``.
 """
 
 from core.runtime.target_takeover import (
@@ -187,6 +191,35 @@ from core.canonical_capability_scheduling_basis import (  # noqa: E402
     normalize_scheduling_inputs,
 )
 
+# PR package 7 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): persistent attached-runtime session semantics.  Re-exported here so
+# callers can reach the attachment lifecycle API from core.runtime without
+# importing the module directly.
+from core.attached_runtime_session import (  # noqa: E402
+    ATTACHED_RUNTIME_SESSION_AUTHORITY,
+    ATTACHED_SESSION_PERSISTS_UNTIL_EXPLICIT_SIGNAL_POLICY,
+    TRANSIENT_PRESENCE_NOT_AN_ATTACHED_SESSION_POLICY,
+    ATTACH_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    DETACH_SIGNAL_ENDS_PARTICIPATION_POLICY,
+    DISCONNECT_PRESERVES_SESSION_RECORD_POLICY,
+    DISABLE_BLOCKS_REATTACH_UNTIL_ENABLED_POLICY,
+    INVALIDATION_IS_TERMINAL_POLICY,
+    LIFECYCLE_SIGNAL_DRIVES_STATE_TRANSITION_POLICY,
+    ATTACHED_RUNTIME_SESSION_PR7_SENTINEL,
+    AttachmentState,
+    AttachmentLifecycleSignal,
+    AttachedRuntimeSessionRecord,
+    AttachedRuntimeSessionSnapshot,
+    AttachedRuntimeSessionRuntime,
+    attach_runtime_session,
+    apply_lifecycle_signal,
+    get_attached_runtime_session,
+    list_active_attached_sessions,
+    build_attached_runtime_session_snapshot,
+    get_attached_runtime_session_runtime,
+    reset_attached_runtime_session_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -304,4 +337,27 @@ __all__ = [
     "build_scheduling_basis_inputs",
     "evaluate_execution_surface_eligibility",
     "normalize_scheduling_inputs",
+    # PR package 7: Persistent Attached-Runtime Session Semantics (MAIN repo side)
+    "ATTACHED_RUNTIME_SESSION_AUTHORITY",
+    "ATTACHED_SESSION_PERSISTS_UNTIL_EXPLICIT_SIGNAL_POLICY",
+    "TRANSIENT_PRESENCE_NOT_AN_ATTACHED_SESSION_POLICY",
+    "ATTACH_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+    "DETACH_SIGNAL_ENDS_PARTICIPATION_POLICY",
+    "DISCONNECT_PRESERVES_SESSION_RECORD_POLICY",
+    "DISABLE_BLOCKS_REATTACH_UNTIL_ENABLED_POLICY",
+    "INVALIDATION_IS_TERMINAL_POLICY",
+    "LIFECYCLE_SIGNAL_DRIVES_STATE_TRANSITION_POLICY",
+    "ATTACHED_RUNTIME_SESSION_PR7_SENTINEL",
+    "AttachmentState",
+    "AttachmentLifecycleSignal",
+    "AttachedRuntimeSessionRecord",
+    "AttachedRuntimeSessionSnapshot",
+    "AttachedRuntimeSessionRuntime",
+    "attach_runtime_session",
+    "apply_lifecycle_signal",
+    "get_attached_runtime_session",
+    "list_active_attached_sessions",
+    "build_attached_runtime_session_snapshot",
+    "get_attached_runtime_session_runtime",
+    "reset_attached_runtime_session_runtime",
 ]
