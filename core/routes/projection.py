@@ -265,6 +265,38 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9_UNAVAILABLE"
     )
 
+# PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical delegated-runtime execution-tracking and acknowledgment
+# basis.  Importing the authority sentinel and the PR-10 sentinel from the new
+# module ties the projection route layer to the execution-tracking model,
+# enabling projection endpoints to surface execution phase, acknowledgment
+# history, and result reconciliation state alongside the handoff contract and
+# dispatch intent projections.
+try:
+    from core.delegated_runtime_execution_tracker import (  # noqa: F401
+        DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY as _DRET_AUTHORITY,
+        DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL as _DRET_PR10,
+        DelegatedExecutionPhase as _DelegatedExecutionPhase,
+        AcknowledgmentSignal as _AcknowledgmentSignal,
+        create_execution_tracking_record as _create_execution_tracking_record,
+        list_active_execution_tracking_records as _list_active_execution_tracking_records,
+        build_execution_tracking_snapshot as _build_execution_tracking_snapshot,
+    )
+
+    DELEGATED_RUNTIME_EXECUTION_TRACKER_ALIGNED_PR10: str = (
+        "PROJECTION_ROUTES::DELEGATED_RUNTIME_EXECUTION_TRACKER_ALIGNED_PR10_V1: "
+        "canonical delegated-runtime execution-tracking and acknowledgment basis "
+        "(core.delegated_runtime_execution_tracker) is available and aligned "
+        "with projection routes.  Projection endpoints can surface "
+        "DelegatedExecutionPhase, AcknowledgmentSignal, and active execution "
+        "tracking records alongside handoff contract and dispatch intent "
+        "projections."
+    )
+except ImportError:  # pragma: no cover
+    DELEGATED_RUNTIME_EXECUTION_TRACKER_ALIGNED_PR10: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::DELEGATED_RUNTIME_EXECUTION_TRACKER_ALIGNED_PR10_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

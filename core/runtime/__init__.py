@@ -292,6 +292,41 @@ from core.delegated_runtime_handoff_contract import (  # noqa: E402
     reset_handoff_contract_runtime,
 )
 
+# PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical delegated-runtime execution-tracking and acknowledgment
+# basis.  Re-exported here so callers can reach the execution-tracking API
+# from core.runtime without importing the module directly.
+from core.delegated_runtime_execution_tracker import (  # noqa: E402
+    DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY,
+    EXECUTION_TRACKING_REQUIRES_CONTRACT_ID_POLICY,
+    EXECUTION_TRACKING_REQUIRES_SESSION_ID_POLICY,
+    EXECUTION_PHASE_IS_MONOTONIC_POLICY,
+    ACK_SEQUENCE_IS_MONOTONICALLY_INCREASING_POLICY,
+    RESULT_IS_IMMUTABLE_ONCE_RECORDED_POLICY,
+    EXECUTION_TRACKING_POSTURE_IS_PROPAGATED_POLICY,
+    TERMINAL_PHASE_BLOCKS_FURTHER_SIGNALS_POLICY,
+    TRACKING_RECORD_IS_CONTRACT_ANCHORED_POLICY,
+    PARTIAL_RESULT_DOES_NOT_CLOSE_TRACKING_POLICY,
+    DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL,
+    DelegatedExecutionPhase,
+    AcknowledgmentSignal,
+    DelegatedExecutionIdentity,
+    DelegatedExecutionAcknowledgment,
+    DelegatedExecutionResult,
+    DelegatedExecutionTrackingRecord,
+    DelegatedExecutionTrackingSnapshot,
+    DelegatedExecutionTrackingRuntime,
+    create_execution_tracking_record,
+    apply_acknowledgment_signal,
+    apply_result,
+    record_execution_tracking,
+    get_execution_tracking_record,
+    list_active_execution_tracking_records,
+    build_execution_tracking_snapshot,
+    get_execution_tracking_runtime,
+    reset_execution_tracking_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -489,4 +524,33 @@ __all__ = [
     "build_handoff_contract_snapshot",
     "get_handoff_contract_runtime",
     "reset_handoff_contract_runtime",
+    # PR package 10: Canonical Delegated-Runtime Execution-Tracking and Acknowledgment Basis (MAIN repo side)
+    "DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY",
+    "EXECUTION_TRACKING_REQUIRES_CONTRACT_ID_POLICY",
+    "EXECUTION_TRACKING_REQUIRES_SESSION_ID_POLICY",
+    "EXECUTION_PHASE_IS_MONOTONIC_POLICY",
+    "ACK_SEQUENCE_IS_MONOTONICALLY_INCREASING_POLICY",
+    "RESULT_IS_IMMUTABLE_ONCE_RECORDED_POLICY",
+    "EXECUTION_TRACKING_POSTURE_IS_PROPAGATED_POLICY",
+    "TERMINAL_PHASE_BLOCKS_FURTHER_SIGNALS_POLICY",
+    "TRACKING_RECORD_IS_CONTRACT_ANCHORED_POLICY",
+    "PARTIAL_RESULT_DOES_NOT_CLOSE_TRACKING_POLICY",
+    "DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL",
+    "DelegatedExecutionPhase",
+    "AcknowledgmentSignal",
+    "DelegatedExecutionIdentity",
+    "DelegatedExecutionAcknowledgment",
+    "DelegatedExecutionResult",
+    "DelegatedExecutionTrackingRecord",
+    "DelegatedExecutionTrackingSnapshot",
+    "DelegatedExecutionTrackingRuntime",
+    "create_execution_tracking_record",
+    "apply_acknowledgment_signal",
+    "apply_result",
+    "record_execution_tracking",
+    "get_execution_tracking_record",
+    "list_active_execution_tracking_records",
+    "build_execution_tracking_snapshot",
+    "get_execution_tracking_runtime",
+    "reset_execution_tracking_runtime",
 ]
