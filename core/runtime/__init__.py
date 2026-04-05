@@ -187,6 +187,34 @@ from core.canonical_capability_scheduling_basis import (  # noqa: E402
     normalize_scheduling_inputs,
 )
 
+# PR package 7 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical attached-runtime session semantics.  Re-exported here so
+# callers can reach the attached-runtime session API from core.runtime without
+# importing the module directly.
+from core.attached_runtime_session import (  # noqa: E402
+    ATTACHED_RUNTIME_SESSION_AUTHORITY,
+    ATTACHED_RUNTIME_SESSION_PERSISTS_UNTIL_EXPLICIT_SIGNAL_POLICY,
+    TRANSIENT_PRESENCE_IS_NOT_ATTACHED_SESSION_POLICY,
+    ATTACH_SIGNAL_IS_IDEMPOTENT_POLICY,
+    DETACH_CLOSES_SESSION_GRACEFULLY_POLICY,
+    DISCONNECT_MARKS_SESSION_DISCONNECTED_POLICY,
+    DISABLE_PREVENTS_REATTACH_POLICY,
+    INVALIDATE_TERMINATES_SESSION_PERMANENTLY_POLICY,
+    RECONNECT_RESTORES_ATTACHED_STATE_POLICY,
+    OBSERVER_ONLY_SESSION_CANNOT_BE_PROMOTED_POLICY,
+    ATTACHED_RUNTIME_SESSION_ALIGNED_PR7,
+    AttachmentState,
+    AttachmentLifecycleSignal,
+    AttachedRuntimeSessionRecord,
+    AttachedRuntimeSessionSnapshot,
+    AttachedRuntimeSessionRuntime,
+    attach_runtime_session,
+    apply_lifecycle_signal,
+    get_attached_runtime_session,
+    list_active_attached_sessions,
+    build_attached_runtime_session_snapshot,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -304,4 +332,26 @@ __all__ = [
     "build_scheduling_basis_inputs",
     "evaluate_execution_surface_eligibility",
     "normalize_scheduling_inputs",
+    # PR package 7: Attached-Runtime Session Semantics (MAIN repo side)
+    "ATTACHED_RUNTIME_SESSION_AUTHORITY",
+    "ATTACHED_RUNTIME_SESSION_PERSISTS_UNTIL_EXPLICIT_SIGNAL_POLICY",
+    "TRANSIENT_PRESENCE_IS_NOT_ATTACHED_SESSION_POLICY",
+    "ATTACH_SIGNAL_IS_IDEMPOTENT_POLICY",
+    "DETACH_CLOSES_SESSION_GRACEFULLY_POLICY",
+    "DISCONNECT_MARKS_SESSION_DISCONNECTED_POLICY",
+    "DISABLE_PREVENTS_REATTACH_POLICY",
+    "INVALIDATE_TERMINATES_SESSION_PERMANENTLY_POLICY",
+    "RECONNECT_RESTORES_ATTACHED_STATE_POLICY",
+    "OBSERVER_ONLY_SESSION_CANNOT_BE_PROMOTED_POLICY",
+    "ATTACHED_RUNTIME_SESSION_ALIGNED_PR7",
+    "AttachmentState",
+    "AttachmentLifecycleSignal",
+    "AttachedRuntimeSessionRecord",
+    "AttachedRuntimeSessionSnapshot",
+    "AttachedRuntimeSessionRuntime",
+    "attach_runtime_session",
+    "apply_lifecycle_signal",
+    "get_attached_runtime_session",
+    "list_active_attached_sessions",
+    "build_attached_runtime_session_snapshot",
 ]

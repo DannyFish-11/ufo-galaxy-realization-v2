@@ -176,6 +176,33 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6_UNAVAILABLE"
     )
 
+# PR package 7 (post-533 dual-repo runtime unification, MAIN repo side):
+# Attached-Runtime Session alignment sentinel.  Asserts that the attached
+# runtime session module is importable from this module's context, enabling
+# projection endpoints to expose persistent attached-runtime session state
+# and lifecycle information alongside existing posture and capability projections.
+try:
+    from core.attached_runtime_session import (  # noqa: F401
+        ATTACHED_RUNTIME_SESSION_AUTHORITY as _ARS_AUTHORITY,
+        ATTACHED_RUNTIME_SESSION_ALIGNED_PR7 as _ARS_PR7,
+        AttachmentState as _AttachmentState,
+        AttachmentLifecycleSignal as _AttachmentLifecycleSignal,
+        build_attached_runtime_session_snapshot as _build_ars_snapshot,
+    )
+
+    ATTACHED_RUNTIME_SESSION_ALIGNED_PR7: str = (
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_ALIGNED_PR7_V1: "
+        "attached-runtime session semantics (core.attached_runtime_session) "
+        "are available and aligned with projection routes.  Projection endpoints "
+        "can expose persistent attached-runtime session state and lifecycle "
+        "information alongside existing posture, coordination-role, and "
+        "capability-tier projections."
+    )
+except ImportError:  # pragma: no cover
+    ATTACHED_RUNTIME_SESSION_ALIGNED_PR7: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_ALIGNED_PR7_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
