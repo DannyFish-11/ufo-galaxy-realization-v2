@@ -23,6 +23,13 @@ try:
 except ImportError:
     store_task_result = None  # type: ignore[assignment]
 
+# PR-13: canonical host-side reconciliation binding — top-level import so
+# tests can patch() it and so the import failure is handled gracefully.
+try:
+    from core.android_execution_signal_reconciler import reconcile_inbound_message as _reconcile_goal_result
+except ImportError:
+    _reconcile_goal_result = None  # type: ignore[assignment]
+
 
 async def handle_goal_execution(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
@@ -338,6 +345,20 @@ async def handle_goal_execution_result(
             "GOAL_EXECUTION_RESULT: OpenClawd 反馈失败（非致命）task_id=%s error=%s",
             task_id, feedback_err,
         )
+
+    # PR-13: reconcile inbound signal against host-side execution tracker
+    if _reconcile_goal_result is not None:
+        try:
+            outcome = _reconcile_goal_result(message)
+            if outcome.was_updated:
+                logger.debug(
+                    "PR-13 reconcile goal_execution_result: signal=%s contract_id=%r → phase=%s",
+                    outcome.envelope.signal_kind.value if outcome.envelope else "?",
+                    outcome.envelope.contract_id if outcome.envelope else "",
+                    outcome.record.phase.value if outcome.record else "?",
+                )
+        except Exception as rec_err:
+            logger.debug("PR-13 reconcile goal_execution_result failed (non-fatal): %s", rec_err)
 
     # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
     return None

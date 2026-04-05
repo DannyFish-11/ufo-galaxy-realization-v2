@@ -361,6 +361,32 @@ from core.android_runtime_dispatch_binding import (  # noqa: E402
     reset_dispatch_binding_runtime,
 )
 
+# PR package 13 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical host-side Android execution signal reconciliation binding.
+# Re-exported here so callers can reach the reconciler API from core.runtime
+# without importing the module directly.
+from core.android_execution_signal_reconciler import (  # noqa: E402
+    ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY,
+    RECONCILER_REQUIRES_CONTRACT_ID_OR_SESSION_ID_POLICY,
+    RECONCILER_SIGNAL_MAPPING_IS_CANONICAL_POLICY,
+    RECONCILER_TERMINAL_RECORD_BLOCKS_FURTHER_SIGNALS_POLICY,
+    RECONCILER_IDENTITY_IS_PRESERVED_ACROSS_RECONCILE_POLICY,
+    RECONCILER_UNKNOWN_SIGNAL_DEFAULTS_TO_PROGRESS_POLICY,
+    RECONCILER_TASK_STATUS_MAPS_TO_ACK_SIGNAL_CANONICALLY_POLICY,
+    RECONCILER_ERROR_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
+    RECONCILER_TIMEOUT_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
+    RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
+    RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY,
+    ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL,
+    AndroidSignalKind,
+    AndroidExecutionSignalEnvelope,
+    AndroidSignalReconcileOutcome,
+    normalize_android_message_to_signal_kind,
+    extract_signal_envelope,
+    reconcile_android_execution_signal,
+    reconcile_inbound_message,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -615,4 +641,24 @@ __all__ = [
     "build_dispatch_binding_snapshot",
     "get_dispatch_binding_runtime",
     "reset_dispatch_binding_runtime",
+    # PR package 13: Canonical Host-Side Android Execution Signal Reconciliation Binding (MAIN repo side)
+    "ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY",
+    "RECONCILER_REQUIRES_CONTRACT_ID_OR_SESSION_ID_POLICY",
+    "RECONCILER_SIGNAL_MAPPING_IS_CANONICAL_POLICY",
+    "RECONCILER_TERMINAL_RECORD_BLOCKS_FURTHER_SIGNALS_POLICY",
+    "RECONCILER_IDENTITY_IS_PRESERVED_ACROSS_RECONCILE_POLICY",
+    "RECONCILER_UNKNOWN_SIGNAL_DEFAULTS_TO_PROGRESS_POLICY",
+    "RECONCILER_TASK_STATUS_MAPS_TO_ACK_SIGNAL_CANONICALLY_POLICY",
+    "RECONCILER_ERROR_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
+    "RECONCILER_TIMEOUT_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
+    "RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
+    "RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY",
+    "ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL",
+    "AndroidSignalKind",
+    "AndroidExecutionSignalEnvelope",
+    "AndroidSignalReconcileOutcome",
+    "normalize_android_message_to_signal_kind",
+    "extract_signal_envelope",
+    "reconcile_android_execution_signal",
+    "reconcile_inbound_message",
 ]
