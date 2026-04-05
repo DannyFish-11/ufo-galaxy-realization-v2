@@ -204,6 +204,36 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_ALIGNED_PR7_UNAVAILABLE"
     )
 
+# PR package 8 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical delegated-runtime dispatch intent and handoff-preparation
+# foundations.  Importing the authority sentinel and the PR-8 sentinel from
+# the new module ties the projection route layer to the dispatch-intent model,
+# enabling projection endpoints to surface delegated dispatch state alongside
+# attached-runtime session, posture, coordination-role, and capability data.
+try:
+    from core.delegated_runtime_dispatch_intent import (  # noqa: F401
+        DELEGATED_RUNTIME_DISPATCH_INTENT_AUTHORITY as _DRDDI_AUTHORITY,
+        DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL as _DRDDI_PR8,
+        DelegationIntent as _DelegationIntent,
+        HandoffPreparationState as _HandoffPreparationState,
+        evaluate_dispatch_eligibility as _evaluate_dispatch_eligibility,
+        list_pending_delegated_dispatch_records as _list_pending_dispatch,
+        build_delegated_dispatch_snapshot as _build_dispatch_snapshot,
+    )
+
+    DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8: str = (
+        "PROJECTION_ROUTES::DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8_V1: "
+        "canonical delegated-runtime dispatch intent and handoff-preparation "
+        "foundations (core.delegated_runtime_dispatch_intent) is available and "
+        "aligned with projection routes.  Projection endpoints can surface "
+        "DelegationIntent, HandoffPreparationState, and dispatch eligibility "
+        "alongside attached-runtime session and capability projections."
+    )
+except ImportError:  # pragma: no cover
+    DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

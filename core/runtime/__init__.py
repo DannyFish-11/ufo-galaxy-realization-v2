@@ -221,6 +221,39 @@ from core.attached_runtime_session import (  # noqa: E402
     reset_attached_runtime_session_runtime,
 )
 
+# PR package 8 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical delegated-runtime dispatch intent and handoff-preparation
+# foundations.
+from core.delegated_runtime_dispatch_intent import (  # noqa: E402
+    DELEGATED_RUNTIME_DISPATCH_INTENT_AUTHORITY,
+    DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY,
+    DELEGATION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    OBSERVER_ONLY_ROLE_BLOCKS_DELEGATION_POLICY,
+    TARGET_ONLY_EXECUTOR_CANNOT_DELEGATE_POLICY,
+    COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY,
+    HANDOFF_INPUTS_MUST_BE_SESSION_ANCHORED_POLICY,
+    DELEGATION_INTENT_IS_ADDITIVE_TO_SESSION_POLICY,
+    DISPATCH_RECORD_IS_IMMUTABLE_POLICY,
+    PREPARATION_STATE_IS_MONOTONICALLY_ADVANCING_POLICY,
+    DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL,
+    DelegationIntent,
+    HandoffPreparationState,
+    DelegatedRuntimeDispatchRecord,
+    HandoffInputBundle,
+    DispatchEligibilityOutcome,
+    DelegatedRuntimeDispatchSnapshot,
+    DelegatedRuntimeDispatchRuntime,
+    build_delegated_dispatch_record,
+    evaluate_dispatch_eligibility,
+    prepare_handoff_inputs,
+    record_delegated_dispatch_intent,
+    get_delegated_dispatch_record,
+    list_pending_delegated_dispatch_records,
+    build_delegated_dispatch_snapshot,
+    get_delegated_runtime_dispatch_runtime,
+    reset_delegated_runtime_dispatch_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -362,4 +395,32 @@ __all__ = [
     "build_attached_runtime_session_snapshot",
     "get_attached_runtime_session_runtime",
     "reset_attached_runtime_session_runtime",
+    # PR package 8: Canonical Delegated-Runtime Dispatch Intent and Handoff-Preparation (MAIN repo side)
+    "DELEGATED_RUNTIME_DISPATCH_INTENT_AUTHORITY",
+    "DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY",
+    "DELEGATION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+    "OBSERVER_ONLY_ROLE_BLOCKS_DELEGATION_POLICY",
+    "TARGET_ONLY_EXECUTOR_CANNOT_DELEGATE_POLICY",
+    "COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY",
+    "HANDOFF_INPUTS_MUST_BE_SESSION_ANCHORED_POLICY",
+    "DELEGATION_INTENT_IS_ADDITIVE_TO_SESSION_POLICY",
+    "DISPATCH_RECORD_IS_IMMUTABLE_POLICY",
+    "PREPARATION_STATE_IS_MONOTONICALLY_ADVANCING_POLICY",
+    "DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL",
+    "DelegationIntent",
+    "HandoffPreparationState",
+    "DelegatedRuntimeDispatchRecord",
+    "HandoffInputBundle",
+    "DispatchEligibilityOutcome",
+    "DelegatedRuntimeDispatchSnapshot",
+    "DelegatedRuntimeDispatchRuntime",
+    "build_delegated_dispatch_record",
+    "evaluate_dispatch_eligibility",
+    "prepare_handoff_inputs",
+    "record_delegated_dispatch_intent",
+    "get_delegated_dispatch_record",
+    "list_pending_delegated_dispatch_records",
+    "build_delegated_dispatch_snapshot",
+    "get_delegated_runtime_dispatch_runtime",
+    "reset_delegated_runtime_dispatch_runtime",
 ]
