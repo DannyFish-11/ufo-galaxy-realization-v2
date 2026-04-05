@@ -297,6 +297,38 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::DELEGATED_RUNTIME_EXECUTION_TRACKER_ALIGNED_PR10_UNAVAILABLE"
     )
 
+# PR package 11 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical MAIN-side attached-Android-runtime dispatch binding basis.
+# Importing the authority sentinel and the PR-11 sentinel from the new module
+# ties the projection route layer to the dispatch-binding model, enabling
+# projection endpoints to surface AndroidRuntimeBindingState, targeting
+# identity (session/device/contract/tracker), and active binding records
+# alongside execution-tracking and handoff contract projections.
+try:
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
+        ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY as _ARDB_AUTHORITY,
+        ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL as _ARDB_PR11,
+        AndroidRuntimeBindingState as _AndroidRuntimeBindingState,
+        AndroidRuntimeBindingSignal as _AndroidRuntimeBindingSignal,
+        create_android_dispatch_binding as _create_android_dispatch_binding,
+        list_bound_dispatch_bindings as _list_bound_dispatch_bindings,
+        build_dispatch_binding_snapshot as _build_dispatch_binding_snapshot,
+    )
+
+    ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11: str = (
+        "PROJECTION_ROUTES::ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11_V1: "
+        "canonical MAIN-side attached-Android-runtime dispatch binding basis "
+        "(core.android_runtime_dispatch_binding) is available and aligned "
+        "with projection routes.  Projection endpoints can surface "
+        "AndroidRuntimeBindingState, dispatch targeting identity "
+        "(session/device/contract/tracker), and active binding records "
+        "alongside execution-tracking and handoff contract projections."
+    )
+except ImportError:  # pragma: no cover
+    ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

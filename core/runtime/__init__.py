@@ -327,6 +327,40 @@ from core.delegated_runtime_execution_tracker import (  # noqa: E402
     reset_execution_tracking_runtime,
 )
 
+# PR package 11 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical MAIN-side attached-Android-runtime dispatch binding basis.
+# Re-exported here so callers can reach the dispatch-binding API from
+# core.runtime without importing the module directly.
+from core.android_runtime_dispatch_binding import (  # noqa: E402
+    ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY,
+    BINDING_REQUIRES_ATTACHED_SESSION_POLICY,
+    BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY,
+    BINDING_SESSION_ID_MUST_MATCH_CONTRACT_POLICY,
+    BINDING_STATE_IS_MONOTONIC_POLICY,
+    RELEASED_BINDING_IS_TERMINAL_POLICY,
+    BINDING_CONTRACT_ID_IS_IMMUTABLE_POLICY,
+    DISPATCH_BINDING_REQUIRES_CONTRACT_ID_POLICY,
+    BINDING_TRACKER_ID_IS_PROPAGATED_POLICY,
+    ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL,
+    AndroidRuntimeBindingState,
+    AndroidRuntimeBindingSignal,
+    AndroidRuntimeDispatchBindingIdentity,
+    AndroidRuntimeDispatchBindingRecord,
+    AndroidRuntimeDispatchBindingSnapshot,
+    AndroidRuntimeDispatchBindingRuntime,
+    create_android_dispatch_binding,
+    advance_binding_state,
+    resolve_dispatch_binding,
+    record_dispatch_binding,
+    get_dispatch_binding,
+    get_dispatch_binding_by_contract,
+    list_bound_dispatch_bindings,
+    build_dispatch_binding_snapshot,
+    get_dispatch_binding_runtime,
+    reset_dispatch_binding_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -553,4 +587,32 @@ __all__ = [
     "build_execution_tracking_snapshot",
     "get_execution_tracking_runtime",
     "reset_execution_tracking_runtime",
+    # PR package 11: Canonical MAIN-Side Attached-Android-Runtime Dispatch Binding Basis (MAIN repo side)
+    "ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY",
+    "BINDING_REQUIRES_ATTACHED_SESSION_POLICY",
+    "BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+    "BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY",
+    "BINDING_SESSION_ID_MUST_MATCH_CONTRACT_POLICY",
+    "BINDING_STATE_IS_MONOTONIC_POLICY",
+    "RELEASED_BINDING_IS_TERMINAL_POLICY",
+    "BINDING_CONTRACT_ID_IS_IMMUTABLE_POLICY",
+    "DISPATCH_BINDING_REQUIRES_CONTRACT_ID_POLICY",
+    "BINDING_TRACKER_ID_IS_PROPAGATED_POLICY",
+    "ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL",
+    "AndroidRuntimeBindingState",
+    "AndroidRuntimeBindingSignal",
+    "AndroidRuntimeDispatchBindingIdentity",
+    "AndroidRuntimeDispatchBindingRecord",
+    "AndroidRuntimeDispatchBindingSnapshot",
+    "AndroidRuntimeDispatchBindingRuntime",
+    "create_android_dispatch_binding",
+    "advance_binding_state",
+    "resolve_dispatch_binding",
+    "record_dispatch_binding",
+    "get_dispatch_binding",
+    "get_dispatch_binding_by_contract",
+    "list_bound_dispatch_bindings",
+    "build_dispatch_binding_snapshot",
+    "get_dispatch_binding_runtime",
+    "reset_dispatch_binding_runtime",
 ]
