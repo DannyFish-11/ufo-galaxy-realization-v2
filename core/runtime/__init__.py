@@ -387,6 +387,41 @@ from core.android_execution_signal_reconciler import (  # noqa: E402
     reconcile_inbound_message,
 )
 
+# PR package 14 (post-533 dual-repo runtime unification master plan, MAIN
+# side): canonical persistent attached-runtime reuse binding.
+# Re-exported here so callers can reach the reuse binding API from core.runtime
+# without importing the module directly.
+from core.attached_runtime_reuse_binding import (  # noqa: E402
+    ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY,
+    REUSE_BINDING_REQUIRES_ATTACHED_SESSION_POLICY,
+    REUSE_BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    REUSE_BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY,
+    REUSE_ELIGIBILITY_REQUIRES_ACTIVE_SESSION_POLICY,
+    REUSE_BINDING_INVALIDATED_ON_DETACH_POLICY,
+    REUSE_BINDING_INVALIDATED_ON_DISCONNECT_POLICY,
+    REUSE_BINDING_INVALIDATED_ON_DISABLE_POLICY,
+    REUSE_BINDING_DISPATCH_BINDING_ID_IS_LATEST_POLICY,
+    REUSE_BINDING_IS_STABLE_TARGETING_SURFACE_POLICY,
+    ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL,
+    ReuseEligibilityStatus,
+    ReuseInvalidationReason,
+    AttachedRuntimeReuseBindingIdentity,
+    AttachedRuntimeReuseBindingRecord,
+    AttachedRuntimeReuseBindingSnapshot,
+    AttachedRuntimeReuseBindingRuntime,
+    establish_reuse_binding,
+    evaluate_reuse_eligibility,
+    invalidate_reuse_binding,
+    register_dispatch_binding_id,
+    record_reuse_binding,
+    get_reuse_binding,
+    get_reuse_binding_by_device,
+    list_eligible_reuse_bindings,
+    build_reuse_binding_snapshot,
+    get_reuse_binding_runtime,
+    reset_reuse_binding_runtime,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -661,4 +696,33 @@ __all__ = [
     "extract_signal_envelope",
     "reconcile_android_execution_signal",
     "reconcile_inbound_message",
+    # PR package 14: Canonical Persistent Attached-Runtime Reuse Binding (MAIN repo side)
+    "ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY",
+    "REUSE_BINDING_REQUIRES_ATTACHED_SESSION_POLICY",
+    "REUSE_BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+    "REUSE_BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY",
+    "REUSE_ELIGIBILITY_REQUIRES_ACTIVE_SESSION_POLICY",
+    "REUSE_BINDING_INVALIDATED_ON_DETACH_POLICY",
+    "REUSE_BINDING_INVALIDATED_ON_DISCONNECT_POLICY",
+    "REUSE_BINDING_INVALIDATED_ON_DISABLE_POLICY",
+    "REUSE_BINDING_DISPATCH_BINDING_ID_IS_LATEST_POLICY",
+    "REUSE_BINDING_IS_STABLE_TARGETING_SURFACE_POLICY",
+    "ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL",
+    "ReuseEligibilityStatus",
+    "ReuseInvalidationReason",
+    "AttachedRuntimeReuseBindingIdentity",
+    "AttachedRuntimeReuseBindingRecord",
+    "AttachedRuntimeReuseBindingSnapshot",
+    "AttachedRuntimeReuseBindingRuntime",
+    "establish_reuse_binding",
+    "evaluate_reuse_eligibility",
+    "invalidate_reuse_binding",
+    "register_dispatch_binding_id",
+    "record_reuse_binding",
+    "get_reuse_binding",
+    "get_reuse_binding_by_device",
+    "list_eligible_reuse_bindings",
+    "build_reuse_binding_snapshot",
+    "get_reuse_binding_runtime",
+    "reset_reuse_binding_runtime",
 ]
