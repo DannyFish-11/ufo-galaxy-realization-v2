@@ -34,7 +34,7 @@ work by providing:
    basis inputs into an :class:`ExecutionSurfaceEligibility` result.
 8. :func:`normalize_scheduling_inputs` — convenience wrapper for dict-shaped
    raw payloads.
-9. Seven policy sentinels documenting canonical scheduling-basis rules.
+9. Eight policy sentinels documenting canonical scheduling-basis rules.
 
 Design principles
 -----------------
