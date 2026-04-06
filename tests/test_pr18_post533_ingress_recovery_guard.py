@@ -1671,7 +1671,8 @@ def test_AT01_guard_snapshot_counts_match_decisions():
     assert snap.total_accepted == 2
     assert snap.total_rejected == 2
     assert snap.reject_counts.get("duplicate") == 1
-    assert snap.reject_counts.get("out_of_order") == 1 or snap.reject_counts.get("replay") == 1
+    # sig-at-new at seq=0 is behind max_seen=1 by 1 position → out_of_order
+    assert snap.reject_counts.get("out_of_order") == 1
 
 
 # ===========================================================================
