@@ -187,7 +187,7 @@ class TestGroupA_Sentinels:
     def test_A04_pr17_sentinel_contains_package17(self):
         assert "package=17" in ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL
 
-    def test_AF_all_10_policy_sentinels_non_empty(self):
+    def test_A05_all_10_policy_sentinels_non_empty(self):
         for sentinel in (
             REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
             REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY,
@@ -203,7 +203,7 @@ class TestGroupA_Sentinels:
             assert sentinel, f"Policy sentinel is empty: {sentinel!r}"
             assert isinstance(sentinel, str)
 
-    def test_AG_detach_policy_non_empty(self):
+    def test_A06_detach_policy_non_empty(self):
         assert REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY
         assert isinstance(REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY, str)
 

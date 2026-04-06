@@ -448,8 +448,9 @@ from core.android_delegated_signal_ingress import (  # noqa: E402
 
 # PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical dispatch consumption of attached-runtime reuse bindings.
-# Re-exported here so callers can reach the reuse dispatch API from core.runtime
-# without importing the module directly.
+# Re-exported here to provide a stable public API surface for reuse dispatch
+# functionality so callers can import from core.runtime without depending on
+# the module path directly.
 from core.attached_runtime_reuse_dispatch import (  # noqa: E402
     ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
     REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
