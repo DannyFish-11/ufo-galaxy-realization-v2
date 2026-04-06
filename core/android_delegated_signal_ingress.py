@@ -92,11 +92,14 @@ path.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Imports from prior PR packages
@@ -109,6 +112,24 @@ from core.android_execution_signal_reconciler import (
     reconcile_android_execution_signal,
 )
 from core.delegated_runtime_execution_tracker import DelegatedExecutionTrackingRuntime
+
+# PR-18: Recovery guard — imported lazily via try/except so that the ingress
+# module remains loadable even when the recovery-readiness module is absent.
+try:
+    from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision as _SignalGuardDecision,
+        SignalGuardOutcome as _SignalGuardOutcome,
+        RecoveryReadinessRuntime as _RecoveryReadinessRuntime,
+        guard_inbound_signal as _guard_inbound_signal,
+    )
+
+    _RECOVERY_GUARD_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _RECOVERY_GUARD_AVAILABLE = False
+    _guard_inbound_signal = None  # type: ignore[assignment]
+    _RecoveryReadinessRuntime = None  # type: ignore[assignment]
+    _SignalGuardDecision = None  # type: ignore[assignment]
+    _SignalGuardOutcome = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Module authority marker
@@ -202,6 +223,25 @@ INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY: str = (
     "without creating a phantom record or raising an exception."
 )
 
+# PR-18: Recovery guard policy — guard_inbound_signal() MUST precede reconcile.
+INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_RECOVERY_GUARD_IS_MANDATORY: "
+    "ingest_delegated_execution_signal() MUST call guard_inbound_signal() "
+    "(PR-15 recovery guard) before forwarding any signal to "
+    "reconcile_android_execution_signal().  Signals classified as duplicate, "
+    "replay, stale, or out_of_order MUST NOT reach the reconciler."
+)
+
+# PR-18: Rejected signals do not mutate the tracker.
+INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED: "
+    "A signal rejected by guard_inbound_signal() with any decision other than "
+    "'accept' MUST cause ingest_delegated_execution_signal() to return an "
+    "AndroidSignalReconcileOutcome(was_updated=False) whose reject_reason "
+    "encodes the guard decision.  The delegated-runtime tracker record MUST "
+    "NOT be updated for rejected signals."
+)
+
 _ALL_INGRESS_POLICIES = (
     INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY,
     INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY,
@@ -213,6 +253,8 @@ _ALL_INGRESS_POLICIES = (
     INGRESS_DELEGATES_TO_RECONCILER_POLICY,
     INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY,
     INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY,
+    INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY,
+    INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY,
 )
 
 # ---------------------------------------------------------------------------
@@ -623,6 +665,7 @@ def ingest_delegated_execution_signal(
     message: Dict[str, Any],
     *,
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
+    guard_runtime: Optional[Any] = None,
 ) -> AndroidSignalReconcileOutcome:
     """Canonical ingress entry-point for Android delegated execution signals.
 
@@ -631,12 +674,18 @@ def ingest_delegated_execution_signal(
 
     1. Extracts a :class:`DelegatedExecutionSignalEnvelope` via
        :func:`extract_delegated_signal_envelope`.
-    2. Converts the delegated envelope to an
+    2. **PR-18 guard gate**: Calls
+       :func:`~core.attached_runtime_recovery_readiness.guard_inbound_signal`
+       to determine whether the signal is ``accept``, ``duplicate``,
+       ``replay``, ``stale``, or ``out_of_order``.  Rejected signals are
+       logged and returned immediately as a no-update outcome — they MUST NOT
+       reach the reconciler.
+    3. Converts the accepted delegated envelope to an
        :class:`~core.android_execution_signal_reconciler.AndroidExecutionSignalEnvelope`
        understood by the PR-13 reconciler.
-    3. Calls :func:`~core.android_execution_signal_reconciler.reconcile_android_execution_signal`
+    4. Calls :func:`~core.android_execution_signal_reconciler.reconcile_android_execution_signal`
        as the canonical reconcile entry-point.
-    4. Returns the :class:`~core.android_execution_signal_reconciler.AndroidSignalReconcileOutcome`
+    5. Returns the :class:`~core.android_execution_signal_reconciler.AndroidSignalReconcileOutcome`
        unchanged.
 
     Parameters
@@ -645,22 +694,66 @@ def ingest_delegated_execution_signal(
         Raw inbound ``delegated_execution_signal`` message dict from the
         WebSocket gateway layer.
     runtime:
-        Optional ring-buffer instance for test isolation.  Uses process
-        singleton if None.
+        Optional execution-tracking ring-buffer instance for test isolation.
+        Uses process singleton if None.
+    guard_runtime:
+        Optional :class:`~core.attached_runtime_recovery_readiness.RecoveryReadinessRuntime`
+        for test isolation.  Uses process singleton if None.  Ignored when
+        the recovery-readiness module is unavailable.
 
     Returns
     -------
     AndroidSignalReconcileOutcome
         Reconciliation result (``was_updated=False`` when no matching record
-        is found or when the inbound message cannot be correlated).
+        is found, when the inbound message cannot be correlated, or when the
+        signal is rejected by the recovery guard).
 
     Raises
     ------
-    Does not raise.  All errors during extraction or reconciliation are
-    handled gracefully: extraction yields safe defaults for missing fields;
+    Does not raise.  All errors during extraction, guard evaluation, or
+    reconciliation are handled gracefully: extraction yields safe defaults
+    for missing fields; guard evaluation defaults to ``accept`` on error;
     reconciliation returns ``was_updated=False`` with a ``reject_reason``
     rather than raising.
     """
     delegated_envelope = extract_delegated_signal_envelope(message)
+
+    # ------------------------------------------------------------------ #
+    # PR-18: Recovery guard — MUST precede reconciliation.                #
+    # Signals classified as duplicate / replay / stale / out_of_order are #
+    # dropped here and NEVER forwarded to the execution tracker.          #
+    # ------------------------------------------------------------------ #
+    if _RECOVERY_GUARD_AVAILABLE and _guard_inbound_signal is not None:
+        try:
+            guard_outcome = _guard_inbound_signal(
+                delegated_envelope, runtime=guard_runtime
+            )
+            if not guard_outcome.is_accepted():
+                logger.debug(
+                    "PR-18 recovery guard rejected inbound signal: "
+                    "decision=%s signal_id=%r emission_seq=%s "
+                    "contract_id=%r session_id=%r reason=%s",
+                    guard_outcome.decision.value,
+                    guard_outcome.idempotency_key.signal_id,
+                    guard_outcome.emission_seq,
+                    guard_outcome.idempotency_key.contract_id,
+                    guard_outcome.idempotency_key.session_id,
+                    guard_outcome.reject_reason,
+                )
+                android_envelope = delegated_envelope.to_android_execution_signal_envelope()
+                return AndroidSignalReconcileOutcome(
+                    was_updated=False,
+                    reject_reason=guard_outcome.reject_reason,
+                    envelope=android_envelope,
+                )
+        except Exception as exc:  # pragma: no cover
+            # Guard evaluation failure is non-fatal; log and continue to
+            # reconcile so that a buggy guard never silently drops valid signals.
+            logger.debug(
+                "PR-18 recovery guard evaluation failed (non-fatal); "
+                "proceeding to reconcile: exc=%s",
+                exc,
+            )
+
     android_envelope = delegated_envelope.to_android_execution_signal_envelope()
     return reconcile_android_execution_signal(android_envelope, runtime=runtime)
