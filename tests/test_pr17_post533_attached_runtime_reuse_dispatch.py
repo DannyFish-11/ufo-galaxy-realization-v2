@@ -776,7 +776,7 @@ class TestGroupAA_MultiDispatchReuse:
 # ---------------------------------------------------------------------------
 
 
-class TestGroupABCD_InvalidatedRejection:
+class TestGroupABACAD_InvalidatedRejection:
     def test_AB01_detach_then_dispatch_is_rejected(self):
         rec, rt = _eligible_session("s-detach", "d-detach")
         drt = _fresh_dispatch_rt()
