@@ -510,6 +510,33 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19_UNAVAILABLE"
     )
 
+# Importing the authority sentinel and PR-20 sentinel from the delegated target
+# selection policy module ties the projection route layer to the canonical
+# selection policy, enabling projection endpoints to confirm that
+# select_delegated_target() is available as the authoritative pre-dispatch
+# gate for multi-candidate attached runtime selection.
+try:
+    from core.delegated_target_selection_policy import (  # noqa: F401
+        DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY as _DTSP_AUTHORITY,
+        DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL as _DTSP_PR20,
+        SelectionOutcome as _SelectionOutcome,
+        select_delegated_target as _select_delegated_target,
+        build_selection_explanation as _build_selection_explanation,
+    )
+
+    DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20: str = (
+        "PROJECTION_ROUTES::DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20_V1: "
+        "canonical delegated target selection policy "
+        "(core.delegated_target_selection_policy) provides the pre-dispatch "
+        "selection gate for multi-candidate attached runtime dispatch.  "
+        "select_delegated_target() and build_selection_explanation() are "
+        "available for downstream consumers."
+    )
+except ImportError:  # pragma: no cover
+    DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
