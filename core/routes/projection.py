@@ -419,6 +419,37 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical dispatch consumption of attached-runtime reuse bindings.
+# Importing the authority sentinel and PR-17 sentinel from the new module ties
+# the projection route layer to the canonical reuse dispatch integration,
+# enabling projection endpoints to confirm that reuse binding lookup and
+# eligibility gate are active in the delegated dispatch path alongside the
+# PR-14 reuse binding model.
+try:
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY as _ARRD_AUTHORITY,
+        ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL as _ARRD_PR17,
+        ReuseDispatchResolutionKind as _ReuseDispatchResolutionKind,
+        resolve_reuse_dispatch_surface as _resolve_reuse_dispatch_surface,
+        dispatch_with_reuse_binding as _dispatch_with_reuse_binding,
+    )
+
+    ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17: str = (
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17_V1: "
+        "canonical dispatch consumption of attached-runtime reuse bindings "
+        "(core.attached_runtime_reuse_dispatch) is available and aligned "
+        "with projection routes.  Projection endpoints can confirm that "
+        "ReuseDispatchResolutionKind, resolve_reuse_dispatch_surface, and "
+        "dispatch_with_reuse_binding are active alongside the PR-14 reuse "
+        "binding model."
+    )
+except ImportError:  # pragma: no cover
+    ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
