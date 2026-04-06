@@ -66,3 +66,19 @@ def _reset_recovery_guard_runtime():
     except ImportError:
         pass
     yield
+
+
+# PR-19: Reset the attached runtime session registry before every test so that
+# tests using the global singleton always start with a clean registry.  Tests
+# that need cross-call registry state use an explicit AttachedSessionRegistry()
+# instance via the registry parameter and are unaffected by this reset.
+@pytest.fixture(autouse=True)
+def _reset_session_registry():
+    """Auto-use: reset the global attached runtime session registry before each test."""
+    try:
+        from core.attached_runtime_session_registry import reset_session_registry
+
+        reset_session_registry()
+    except ImportError:
+        pass
+    yield
