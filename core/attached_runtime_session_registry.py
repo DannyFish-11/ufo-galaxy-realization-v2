@@ -730,7 +730,7 @@ class AttachedSessionRegistry:
             runtime_session_id=entry.runtime_session_id,
             attachment_state=next_state,
             invalidation_reason=new_reason,
-            posture=posture if posture else entry.posture,
+            posture=(posture.lower().strip() if posture else entry.posture),
             host_role=host_role if host_role else entry.host_role,
             coordination_role=coordination_role if coordination_role else entry.coordination_role,
             capability_tier=capability_tier if capability_tier else entry.capability_tier,
