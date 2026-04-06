@@ -36,6 +36,7 @@ from galaxy_gateway.android.handlers.capability_report import handle_capability_
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
+from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 
 __all__ = [
     "handle_device_register",
@@ -57,4 +58,5 @@ __all__ = [
     "handle_diagnostics_payload",
     "handle_vision_request",
     "handle_generic_forward",
+    "handle_delegated_execution_signal",
 ]

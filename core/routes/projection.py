@@ -390,6 +390,35 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR package 16 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical ingress path for Android delegated execution signals.
+# Importing the authority sentinel and PR-16 sentinel from the new module ties
+# the projection route layer to the canonical delegated signal ingress,
+# enabling projection endpoints to confirm that the dedicated ingress path is
+# active alongside the PR-13 reconciliation binding.
+try:
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY as _ADSI_AUTHORITY,
+        ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL as _ADSI_PR16,
+        DelegatedSignalKind as _DelegatedSignalKind,
+        ResultKind as _ResultKind,
+        ingest_delegated_execution_signal as _ingest_delegated_execution_signal,
+    )
+
+    ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16: str = (
+        "PROJECTION_ROUTES::ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16_V1: "
+        "canonical ingress path for Android delegated execution signals "
+        "(core.android_delegated_signal_ingress) is available and aligned "
+        "with projection routes.  Projection endpoints can confirm that "
+        "DelegatedSignalKind, ResultKind, and the dedicated ingress function "
+        "are active alongside the PR-13 reconciliation binding."
+    )
+except ImportError:  # pragma: no cover
+    ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 

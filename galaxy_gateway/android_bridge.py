@@ -88,6 +88,7 @@ from galaxy_gateway.android.handlers.capability_report import handle_capability_
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
+from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 
 # =============================================================================
 # OpenClawd 记忆回流 — 顶层导入使测试可以通过 patch() 注入 mock
@@ -476,6 +477,11 @@ class AndroidBridge:
 
         # 视觉请求
         self._message_handlers[MessageType.VISION_REQUEST] = _wrap(handle_vision_request)
+
+        # PR-16: Android delegated execution signal canonical ingress
+        self._message_handlers[MessageType.DELEGATED_EXECUTION_SIGNAL] = _wrap(
+            handle_delegated_execution_signal
+        )
 
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
         for msg_type in MessageType:

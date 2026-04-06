@@ -312,6 +312,9 @@ class AndroidExecutionSignalEnvelope:
     * The canonical identity fields used to look up the host-side
       tracking record: ``contract_id``, ``session_id``, ``device_id``,
       ``trace_id``, ``task_id``.
+    * Recovery-readiness metadata: ``signal_id`` (Android-assigned UUID),
+      ``emission_seq`` (emission sequence counter), ``result_kind``
+      (result discriminator for ``final_result`` / ``error`` signals).
     * An opaque ``payload`` snapshot forwarded to the tracker as signal
       payload or result payload.
     * An ``envelope_id`` for tracing / audit purposes (auto-generated UUID).
@@ -331,6 +334,17 @@ class AndroidExecutionSignalEnvelope:
         Distributed trace identifier propagated from the delegated unit.
     task_id
         Task identifier from the inbound message.
+    signal_id
+        UUID assigned by the Android runtime to uniquely identify this
+        specific signal emission.  Empty string when not present (legacy
+        messages that pre-date Android PR-16 outbound transport).
+    emission_seq
+        Monotonically increasing emission sequence counter within the
+        delegated execution lifetime.  0 when not present (legacy messages).
+    result_kind
+        String discriminator for ``final_result`` / ``error`` signal kinds
+        that carries the original ``result_kind`` value (``"success"`` /
+        ``"failure"`` / ``"unknown"``).  Empty string for non-result signals.
     payload
         Opaque payload snapshot from the inbound message.
     envelope_id
@@ -346,6 +360,9 @@ class AndroidExecutionSignalEnvelope:
     device_id: str = ""
     trace_id: str = ""
     task_id: str = ""
+    signal_id: str = ""
+    emission_seq: int = 0
+    result_kind: str = ""
     payload: Dict[str, Any] = field(default_factory=dict)
     envelope_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     received_at: float = field(default_factory=time.time)
@@ -363,6 +380,9 @@ class AndroidExecutionSignalEnvelope:
             "device_id": self.device_id,
             "trace_id": self.trace_id,
             "task_id": self.task_id,
+            "signal_id": self.signal_id,
+            "emission_seq": self.emission_seq,
+            "result_kind": self.result_kind,
             "payload": dict(self.payload),
             "envelope_id": self.envelope_id,
             "received_at": self.received_at,
@@ -492,21 +512,37 @@ _TYPE_STATUS_MAP: Dict[Tuple[str, str], AndroidSignalKind] = {
     ("parallel_result", "success"):   AndroidSignalKind.final_result,
     ("parallel_result", "failed"):    AndroidSignalKind.error,
     ("parallel_result", ""):          AndroidSignalKind.final_result,
+
+    # delegated_execution_signal (PR-16 canonical ingress message type)
+    # signal_kind is read directly from the payload field in this case;
+    # these fallbacks handle the compat path via normalize_android_message_to_signal_kind.
+    ("delegated_execution_signal", "ack"):        AndroidSignalKind.ack,
+    ("delegated_execution_signal", "progress"):   AndroidSignalKind.progress,
+    ("delegated_execution_signal", "result"):     AndroidSignalKind.final_result,
+    ("delegated_execution_signal", "timeout"):    AndroidSignalKind.timeout,
+    ("delegated_execution_signal", "cancelled"):  AndroidSignalKind.cancelled,
+    ("delegated_execution_signal", "success"):    AndroidSignalKind.final_result,
+    ("delegated_execution_signal", "failure"):    AndroidSignalKind.error,
+    ("delegated_execution_signal", "completed"):  AndroidSignalKind.final_result,
+    ("delegated_execution_signal", "failed"):     AndroidSignalKind.error,
+    ("delegated_execution_signal", ""):           AndroidSignalKind.progress,
 }
 
 # Fallback: message_type only (status ignored / absent)
 _TYPE_ONLY_MAP: Dict[str, AndroidSignalKind] = {
-    "task_result":            AndroidSignalKind.final_result,
-    "task_end":               AndroidSignalKind.final_result,
-    "goal_execution_result":  AndroidSignalKind.final_result,
-    "agent_result":           AndroidSignalKind.final_result,
-    "error":                  AndroidSignalKind.error,
-    "task_progress":          AndroidSignalKind.progress,
-    "agent_status":           AndroidSignalKind.progress,
-    "parallel_result":        AndroidSignalKind.final_result,
-    "task_assign":            AndroidSignalKind.ack,
-    "device_register_ack":    AndroidSignalKind.ack,
-    "heartbeat_ack":          AndroidSignalKind.ack,
+    "task_result":                  AndroidSignalKind.final_result,
+    "task_end":                     AndroidSignalKind.final_result,
+    "goal_execution_result":        AndroidSignalKind.final_result,
+    "agent_result":                 AndroidSignalKind.final_result,
+    "error":                        AndroidSignalKind.error,
+    "task_progress":                AndroidSignalKind.progress,
+    "agent_status":                 AndroidSignalKind.progress,
+    "parallel_result":              AndroidSignalKind.final_result,
+    "task_assign":                  AndroidSignalKind.ack,
+    "device_register_ack":          AndroidSignalKind.ack,
+    "heartbeat_ack":                AndroidSignalKind.ack,
+    # PR-16 canonical ingress: bare delegated_execution_signal → progress (keep alive)
+    "delegated_execution_signal":   AndroidSignalKind.progress,
 }
 
 
@@ -634,6 +670,25 @@ def extract_signal_envelope(
         or str(message.get("trace_id") or "")
     )
 
+    # ---- signal_id, emission_seq, result_kind (PR-16 fields) — payload first ----
+    signal_id: str = (
+        str(payload.get("signal_id") or "")
+        or str(message.get("signal_id") or "")
+    )
+    raw_emission_seq = (
+        payload.get("emission_seq")
+        if payload.get("emission_seq") is not None
+        else message.get("emission_seq")
+    )
+    try:
+        emission_seq: int = int(raw_emission_seq) if raw_emission_seq is not None else 0
+    except (TypeError, ValueError):
+        emission_seq = 0
+    result_kind: str = (
+        str(payload.get("result_kind") or "")
+        or str(message.get("result_kind") or "")
+    )
+
     # ---- payload snapshot — merge top-level extras + payload dict ----
     # Keys harvested from the payload sub-dict into the envelope snapshot.
     _PAYLOAD_CONTENT_KEYS = (
@@ -662,6 +717,9 @@ def extract_signal_envelope(
         device_id=device_id,
         trace_id=trace_id,
         task_id=task_id,
+        signal_id=signal_id,
+        emission_seq=emission_seq,
+        result_kind=result_kind,
         payload=payload_snapshot,
     )
 
