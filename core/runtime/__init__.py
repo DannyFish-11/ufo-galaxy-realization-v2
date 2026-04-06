@@ -446,6 +446,31 @@ from core.android_delegated_signal_ingress import (  # noqa: E402
     ingest_delegated_execution_signal,
 )
 
+# PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical dispatch consumption of attached-runtime reuse bindings.
+# Re-exported here so callers can reach the reuse dispatch API from core.runtime
+# without importing the module directly.
+from core.attached_runtime_reuse_dispatch import (  # noqa: E402
+    ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
+    REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
+    REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY,
+    REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY,
+    REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY,
+    REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY,
+    REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY,
+    REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY,
+    REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY,
+    REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY,
+    REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY,
+    REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY,
+    ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
+    ReuseDispatchResolutionKind,
+    ReuseDispatchResolution,
+    resolve_reuse_dispatch_surface,
+    write_back_dispatch_binding_id,
+    dispatch_with_reuse_binding,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -767,4 +792,23 @@ __all__ = [
     "DelegatedExecutionSignalEnvelope",
     "extract_delegated_signal_envelope",
     "ingest_delegated_execution_signal",
+    # PR-17: Canonical Dispatch Consumption of Attached-Runtime Reuse Bindings
+    "ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY",
+    "REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY",
+    "REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY",
+    "REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY",
+    "REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY",
+    "REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY",
+    "REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY",
+    "REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY",
+    "REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY",
+    "REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY",
+    "REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY",
+    "REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY",
+    "ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL",
+    "ReuseDispatchResolutionKind",
+    "ReuseDispatchResolution",
+    "resolve_reuse_dispatch_surface",
+    "write_back_dispatch_binding_id",
+    "dispatch_with_reuse_binding",
 ]
