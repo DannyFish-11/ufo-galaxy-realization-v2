@@ -482,6 +482,34 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::INGRESS_RECOVERY_GUARD_ALIGNED_PR18_UNAVAILABLE"
     )
 
+# Importing the authority sentinel and PR-19 sentinel from the session registry
+# module ties the projection route layer to the canonical session truth source,
+# enabling projection endpoints to confirm that lookup_active_session() /
+# lookup_session_by_device() are available as the authoritative registry gate
+# for dispatch, reuse, and reconciliation.
+try:
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY as _ARSR_AUTHORITY,
+        ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL as _ARSR_PR19,
+        RegistryEntryState as _RegistryEntryState,
+        lookup_active_session as _lookup_active_session,
+        lookup_session_by_device as _lookup_session_by_device,
+        build_registry_snapshot as _build_registry_snapshot,
+    )
+
+    ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19: str = (
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19_V1: "
+        "authoritative attached runtime session registry "
+        "(core.attached_runtime_session_registry) is the single truth source "
+        "for dispatch / reuse / reconciliation session identity lookup.  "
+        "lookup_active_session(), lookup_session_by_device(), and "
+        "build_registry_snapshot() are available for downstream consumers."
+    )
+except ImportError:  # pragma: no cover
+    ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
