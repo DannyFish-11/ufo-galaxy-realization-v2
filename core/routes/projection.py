@@ -450,6 +450,39 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR package 18 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): ingress recovery guard wired before Android signal reconciliation.
+# Importing the authority sentinel and PR-15 sentinel from the recovery-
+# readiness module ties the projection route layer to the canonical guard gate,
+# enabling projection endpoints to confirm that guard_inbound_signal() is
+# active as the mandatory ingress gate before reconcile_android_execution_signal().
+try:
+    from core.attached_runtime_recovery_readiness import (  # noqa: F401
+        ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY as _ARRR_AUTHORITY,
+        ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL as _ARRR_PR15,
+        SignalGuardDecision as _SignalGuardDecision,
+        guard_inbound_signal as _guard_inbound_signal,
+        build_recovery_readiness_snapshot as _build_recovery_readiness_snapshot,
+    )
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY as _INGRESS_GUARD_POLICY,
+        INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY as _INGRESS_DROP_POLICY,
+    )
+
+    INGRESS_RECOVERY_GUARD_ALIGNED_PR18: str = (
+        "PROJECTION_ROUTES::INGRESS_RECOVERY_GUARD_ALIGNED_PR18_V1: "
+        "recovery guard (core.attached_runtime_recovery_readiness) is wired "
+        "before Android delegated signal reconciliation.  "
+        "guard_inbound_signal() is active as the mandatory gate; "
+        "SignalGuardDecision and build_recovery_readiness_snapshot() are "
+        "available for operator/debug surfaces."
+    )
+except ImportError:  # pragma: no cover
+    INGRESS_RECOVERY_GUARD_ALIGNED_PR18: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::INGRESS_RECOVERY_GUARD_ALIGNED_PR18_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 

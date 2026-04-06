@@ -47,3 +47,22 @@ def nodes_dir():
 def config_dir():
     """Return the config directory."""
     return PROJECT_ROOT / "config"
+
+
+# PR-18: Reset the recovery-readiness guard runtime before every test so that
+# tests using the global singleton (ingest_delegated_execution_signal without
+# guard_runtime) always start with a clean ring buffer.  Tests that need
+# cross-call guard state (i.e. the PR-18 integration tests) use an explicit
+# RecoveryReadinessRuntime() instance via the guard_runtime parameter and are
+# unaffected by this reset.
+@pytest.fixture(autouse=True)
+def _reset_recovery_guard_runtime():
+    """Auto-use: reset the global recovery-readiness runtime before each test."""
+    try:
+        from core.attached_runtime_recovery_readiness import (
+            reset_recovery_readiness_runtime,
+        )
+        reset_recovery_readiness_runtime()
+    except ImportError:
+        pass
+    yield
