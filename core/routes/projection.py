@@ -418,6 +418,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16_UNAVAILABLE"
     )
 
+# PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical dispatch consumption of attached-runtime reuse bindings.
+# Importing the authority sentinel and PR-17 sentinel from the new module ties
+# the projection route layer to the canonical reuse-aware dispatch path,
+# enabling projection endpoints to confirm that reuse binding lookup and
+# eligibility evaluation are active in the real delegated dispatch path.
+try:
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY as _ARRD_AUTHORITY,
+        ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL as _ARRD_PR17,
+        DispatchReuseDecision as _DispatchReuseDecision,
+        resolve_reuse_surface as _resolve_reuse_surface,
+        execute_reuse_dispatch as _execute_reuse_dispatch,
+    )
+
+    ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17: str = (
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17_V1: "
+        "canonical dispatch consumption of attached-runtime reuse bindings "
+        "(core.attached_runtime_reuse_dispatch) is available and aligned with "
+        "projection routes.  Projection endpoints can confirm that "
+        "DispatchReuseDecision, resolve_reuse_surface, and execute_reuse_dispatch "
+        "are active and that reuse binding lookup and eligibility evaluation "
+        "precede every delegated dispatch to an attached Android runtime."
+    )
+except ImportError:  # pragma: no cover
+    ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

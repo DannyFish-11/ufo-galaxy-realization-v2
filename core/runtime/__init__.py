@@ -446,6 +446,29 @@ from core.android_delegated_signal_ingress import (  # noqa: E402
     ingest_delegated_execution_signal,
 )
 
+# PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
+# side): canonical dispatch consumption of attached-runtime reuse bindings.
+# Re-exported here so callers can reach the reuse-dispatch API from core.runtime
+# without importing the module directly.
+from core.attached_runtime_reuse_dispatch import (  # noqa: E402
+    ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
+    REUSE_DISPATCH_LOOKUP_BEFORE_DISPATCH_POLICY,
+    REUSE_DISPATCH_ELIGIBILITY_GATE_IS_UNCONDITIONAL_POLICY,
+    REUSE_DISPATCH_ELIGIBLE_REUSES_SURFACE_POLICY,
+    REUSE_DISPATCH_INELIGIBLE_DOES_NOT_DISPATCH_POLICY,
+    REUSE_DISPATCH_WRITE_BACK_DISPATCH_BINDING_ID_POLICY,
+    REUSE_DISPATCH_FALLBACK_ON_MISSING_BINDING_POLICY,
+    REUSE_DISPATCH_INVALIDATED_BINDING_NOT_CONSUMED_POLICY,
+    REUSE_DISPATCH_SESSION_LOOKUP_PRIORITY_POLICY,
+    REUSE_DISPATCH_DISPATCH_BINDING_USES_REUSE_IDENTITY_POLICY,
+    ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
+    DispatchReuseDecision,
+    ReuseSurfaceResolution,
+    ReuseDispatchOutcome,
+    resolve_reuse_surface,
+    execute_reuse_dispatch,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -767,4 +790,21 @@ __all__ = [
     "DelegatedExecutionSignalEnvelope",
     "extract_delegated_signal_envelope",
     "ingest_delegated_execution_signal",
+    # PR package 17: Canonical Dispatch Consumption of Attached-Runtime Reuse Bindings (MAIN repo side)
+    "ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY",
+    "REUSE_DISPATCH_LOOKUP_BEFORE_DISPATCH_POLICY",
+    "REUSE_DISPATCH_ELIGIBILITY_GATE_IS_UNCONDITIONAL_POLICY",
+    "REUSE_DISPATCH_ELIGIBLE_REUSES_SURFACE_POLICY",
+    "REUSE_DISPATCH_INELIGIBLE_DOES_NOT_DISPATCH_POLICY",
+    "REUSE_DISPATCH_WRITE_BACK_DISPATCH_BINDING_ID_POLICY",
+    "REUSE_DISPATCH_FALLBACK_ON_MISSING_BINDING_POLICY",
+    "REUSE_DISPATCH_INVALIDATED_BINDING_NOT_CONSUMED_POLICY",
+    "REUSE_DISPATCH_SESSION_LOOKUP_PRIORITY_POLICY",
+    "REUSE_DISPATCH_DISPATCH_BINDING_USES_REUSE_IDENTITY_POLICY",
+    "ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL",
+    "DispatchReuseDecision",
+    "ReuseSurfaceResolution",
+    "ReuseDispatchOutcome",
+    "resolve_reuse_surface",
+    "execute_reuse_dispatch",
 ]
