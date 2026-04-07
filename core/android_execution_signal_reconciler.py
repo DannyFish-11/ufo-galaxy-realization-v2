@@ -272,6 +272,35 @@ RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-23: Canonical takeover dispatch / delegated fallback reconciler sentinels
+# ---------------------------------------------------------------------------
+
+RECONCILER_PR23_SENTINEL: str = (
+    "android_execution_signal_reconciler::package=23::post-533-main-repo::"
+    "canonical-takeover-dispatch-and-delegated-fallback-canonicalization::"
+    "stale-context-is-deterministic"
+)
+
+RECONCILER_FALLBACK_CONTEXT_IS_DETERMINISTIC_PR23_POLICY: str = (
+    "RECONCILER_POLICY::RECONCILER_FALLBACK_CONTEXT_IS_DETERMINISTIC_PR23: "
+    "Stale or replayed execution context signals arriving via the delegated "
+    "fallback path MUST produce a deterministic, stable reconciliation outcome.  "
+    "The registry gate (PR-22) blocks stale sessions before reconciliation; "
+    "the PR-18 recovery guard rejects duplicate / replay / stale / out-of-order "
+    "signals.  A stale or replayed context MUST NOT produce an inconsistent "
+    "route selection or mutate the execution tracker in an unexpected direction."
+)
+
+RECONCILER_STALE_SESSION_IS_BLOCKED_BEFORE_TRACKER_MUTATION_PR23_POLICY: str = (
+    "RECONCILER_POLICY::RECONCILER_STALE_SESSION_IS_BLOCKED_BEFORE_TRACKER_MUTATION_PR23: "
+    "The ordered gate chain (registry gate → recovery guard → reconciler) ensures "
+    "that signals from stale, replaced, or replayed sessions cannot reach "
+    "apply_acknowledgment_signal() or apply_result().  Each gate is a hard stop: "
+    "once a signal is rejected at any gate it MUST NOT be forwarded to the next "
+    "stage.  This order is fixed and MUST NOT be rearranged."
+)
+
+# ---------------------------------------------------------------------------
 # AndroidSignalKind enum
 # ---------------------------------------------------------------------------
 

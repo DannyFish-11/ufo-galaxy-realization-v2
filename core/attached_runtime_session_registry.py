@@ -239,6 +239,41 @@ REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-23 canonical takeover dispatch / delegated fallback authority sentinels
+# ---------------------------------------------------------------------------
+
+ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL: str = (
+    "ATTACHED_RUNTIME_SESSION_REGISTRY_PR23::canonical-takeover-dispatch-authority::"
+    "package=23::post-533-dual-repo-runtime-unification::"
+    "registry-is-single-authoritative-truth-for-takeover-vs-fallback-routing"
+)
+
+REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY: str = (
+    "POLICY::REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23: "
+    "The attached runtime session registry is the single canonical authority for the "
+    "takeover dispatch routing decision.  resolve_takeover_or_fallback_route() MUST "
+    "consult this registry as the first and only session-state truth before determining "
+    "whether the attached runtime takes over or the delegated fallback path is used.  "
+    "No other session-state source may substitute for or override the registry."
+)
+
+REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY: str = (
+    "POLICY::REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23: "
+    "Only a session in 'active' state in the registry is eligible to win the takeover "
+    "dispatch decision.  Sessions in 'replaced', 'detached', or 'invalidated' state "
+    "MUST NOT be selected as the takeover target; they MUST produce "
+    "TakeoverRouteOutcome.delegated_fallback unconditionally."
+)
+
+REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY: str = (
+    "POLICY::REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23: "
+    "When a new session is registered for the same device the old session moves to "
+    "'replaced' state and is permanently ineligible for takeover dispatch.  The "
+    "registry gate MUST block the replaced session before any reuse-binding "
+    "evaluation occurs, ensuring the stale entry can never win takeover selection."
+)
+
+# ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
 
