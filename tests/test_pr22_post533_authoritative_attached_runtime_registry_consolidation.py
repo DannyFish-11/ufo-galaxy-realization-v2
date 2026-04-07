@@ -611,8 +611,12 @@ class TestGroupK_DispatchWithReuseBinding_ActiveSession:
         )
         # Should not be rejected (either new_binding or errors from downstream are ok;
         # the key is it must not be rejected due to registry gate)
-        assert result.resolution_kind != ReuseDispatchResolutionKind.rejected or \
-               "registry" not in result.reject_reason.lower()
+        if result.resolution_kind == ReuseDispatchResolutionKind.rejected:
+            # Rejection must not be from the registry gate (no registry entry exists)
+            assert "registry" not in result.reject_reason.lower(), (
+                f"Unregistered session should not be rejected by registry gate, "
+                f"but got: {result.reject_reason!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -648,7 +652,11 @@ class TestGroupL_Reconciler_ReplacedSession:
 
         assert outcome.was_updated is False
         assert "registry" in outcome.reject_reason.lower()
-        assert "non-active" in outcome.reject_reason.lower() or "not active" in outcome.reject_reason.lower() or "replaced" in outcome.reject_reason.lower()
+        # The reject reason must indicate that the session is non-active
+        assert any(
+            marker in outcome.reject_reason.lower()
+            for marker in ("non-active", "not active", "replaced")
+        ), f"Expected non-active marker in reject_reason, got: {outcome.reject_reason!r}"
 
     def test_L02_replaced_session_tracker_record_not_mutated(self):
         """The tracker record must NOT be updated when the registry rejects the session."""
@@ -893,7 +901,11 @@ class TestGroupR_Ingress_ReplacedSession:
             msg, runtime=_make_fresh_tracker_runtime(), registry=registry
         )
         assert outcome.was_updated is False
-        assert "non-active" in outcome.reject_reason.lower() or "not active" in outcome.reject_reason.lower() or "replaced" in outcome.reject_reason.lower() or "registry" in outcome.reject_reason.lower()
+        # The reject reason must include a registry-related or non-active marker
+        assert any(
+            marker in outcome.reject_reason.lower()
+            for marker in ("non-active", "not active", "replaced", "registry")
+        ), f"Expected registry/non-active marker in reject_reason, got: {outcome.reject_reason!r}"
 
 
 class TestGroupS_Ingress_DetachedSession:
