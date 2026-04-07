@@ -316,6 +316,7 @@ class TestGroupE_ProjectionSentinel:
         except ImportError:
             pytest.skip("fastapi/projection unavailable")
         assert "UNAVAILABLE" not in CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23
+        assert "PR-23" in CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23
 
     def test_projection_sentinel_contains_pr23(self):
         try:
@@ -324,7 +325,7 @@ class TestGroupE_ProjectionSentinel:
             )
         except ImportError:
             pytest.skip("fastapi/projection unavailable")
-        assert "PR23" in CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23 or "PR-23" in CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23
+        assert "PR-23" in CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23
 
 
 # ===========================================================================
