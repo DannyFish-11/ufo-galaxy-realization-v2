@@ -522,13 +522,18 @@ class TestGroupL_DispatchAbsentEntryPasses:
             execution_tracker=None,
             registry=reg,
         )
-        # No reuse binding found → new_binding path attempted; but since
+        # No reuse binding found → new_binding path attempted; since
         # attached_session/handoff_contract/execution_tracker are None the
-        # downstream resolve_dispatch_binding may raise. We expect the gate
-        # itself not to block (kind != rejected due to registry).
-        assert result.resolution_kind != ReuseDispatchResolutionKind.rejected or (
-            "registry gate" not in (result.reject_reason or "")
-        )
+        # downstream resolve_dispatch_binding may raise or produce an error
+        # result, but the registry gate itself must NOT be the reason for
+        # any rejection.
+        if result.resolution_kind == ReuseDispatchResolutionKind.rejected:
+            # If rejected, it must not be because of the registry gate
+            assert "registry gate" not in (result.reject_reason or "").lower(), (
+                f"Registry gate should not have blocked absent session, "
+                f"but got: {result.reject_reason!r}"
+            )
+        # Gate passed through — either no_binding or new_binding or non-registry rejected
 
 
 # ===========================================================================
