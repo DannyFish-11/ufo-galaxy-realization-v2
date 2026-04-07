@@ -605,6 +605,52 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22_UNAVAILABLE"
     )
 
+# Importing the PR-23 canonical takeover/fallback sentinels from the registry,
+# reuse-dispatch, ingress, and reconciler modules confirms that the attached
+# runtime takeover dispatch and delegated fallback selection are deterministic
+# and canonical, with the registry as the single authority.
+try:
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL as _PR23_REG,
+        REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY as _PR23_AUTH,
+        REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY as _PR23_ACTIVE,
+        REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY as _PR23_REPLACED,
+    )
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        REUSE_DISPATCH_PR23_SENTINEL as _PR23_RD,
+        TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY as _PR23_RD_FIRST,
+        DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY as _PR23_RD_FB,
+        TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY as _PR23_RD_DET,
+        REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY as _PR23_RD_REP,
+        TakeoverRouteOutcome as _TakeoverRouteOutcome,
+        TakeoverDispatchDecision as _TakeoverDispatchDecision,
+        resolve_takeover_or_fallback_route as _resolve_takeover_or_fallback_route,
+    )
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        INGRESS_DELEGATED_FALLBACK_PR23_SENTINEL as _PR23_ING,
+        INGRESS_FALLBACK_IS_LAST_RESORT_PR23_POLICY as _PR23_ING_FB,
+    )
+    from core.android_execution_signal_reconciler import (  # noqa: F401
+        RECONCILER_PR23_SENTINEL as _PR23_REC,
+        RECONCILER_FALLBACK_CONTEXT_IS_DETERMINISTIC_PR23_POLICY as _PR23_REC_DET,
+    )
+
+    CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23: str = (
+        "PROJECTION_ROUTES::CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23_V1: "
+        "PR-23 canonical attached-runtime takeover dispatch and delegated fallback "
+        "canonicalization is confirmed.  The attached runtime session registry is "
+        "the single first authoritative truth for takeover vs delegated-fallback "
+        "routing decisions.  resolve_takeover_or_fallback_route() makes the decision "
+        "deterministic: active sessions with eligible reuse bindings produce "
+        "active_attached_takeover; all other cases produce delegated_fallback.  "
+        "Replaced / invalidated / stale sessions cannot win takeover selection.  "
+        "No new dispatch authority or side-channel router is introduced."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

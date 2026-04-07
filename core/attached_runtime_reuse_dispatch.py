@@ -268,6 +268,59 @@ REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-23 canonical takeover dispatch / delegated fallback sentinels
+# ---------------------------------------------------------------------------
+
+REUSE_DISPATCH_PR23_SENTINEL: str = (
+    "ATTACHED_RUNTIME_REUSE_DISPATCH::package=23::post-533-main-repo::"
+    "canonical-takeover-dispatch-and-delegated-fallback-canonicalization"
+)
+
+TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23: "
+    "resolve_takeover_or_fallback_route() MUST consult the attached runtime session "
+    "registry as the single first authoritative truth before evaluating the reuse "
+    "binding or deciding between takeover and delegated-fallback routes.  No other "
+    "session-state source may substitute for or override the registry check."
+)
+
+DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23: "
+    "The Android delegated fallback route MUST only be selected when the canonical "
+    "attached-runtime path is unavailable or ineligible.  Specifically: when the "
+    "registry blocks the session (non-active), when the reuse binding is ineligible, "
+    "or when no reuse binding exists.  An active, eligible attached-runtime session "
+    "MUST always win the takeover dispatch decision."
+)
+
+TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23: "
+    "The outcome of resolve_takeover_or_fallback_route() is fully determined by "
+    "(1) the registry's authoritative session state and (2) the reuse binding's "
+    "current eligibility.  The same inputs always produce the same TakeoverRouteOutcome. "
+    "No ambient state, side-channel caches, or partial session views may influence "
+    "the decision."
+)
+
+REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23: "
+    "A session in 'replaced', 'invalidated', 'detached', or any other non-active "
+    "registry state MUST NOT produce a TakeoverRouteOutcome of "
+    "'active_attached_takeover'.  The registry gate (PR-22) catches these sessions "
+    "before reuse-binding evaluation; resolve_takeover_or_fallback_route() MUST "
+    "return 'delegated_fallback' for all such sessions regardless of the reuse "
+    "binding's stored eligibility flag."
+)
+
+STALE_EXECUTION_CONTEXT_CANNOT_ALTER_TAKEOVER_DECISION_PR23_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::STALE_EXECUTION_CONTEXT_CANNOT_ALTER_TAKEOVER_DECISION_PR23: "
+    "Stale or replayed execution contexts (e.g. old reuse binding ids, outdated "
+    "dispatch binding ids, superseded contract ids) MUST NOT alter the takeover "
+    "vs delegated-fallback routing decision.  The registry state is always the "
+    "most recent truth; stale context is discarded, not promoted."
+)
+
+# ---------------------------------------------------------------------------
 # ReuseDispatchResolutionKind enum
 # ---------------------------------------------------------------------------
 
@@ -777,5 +830,234 @@ def dispatch_with_reuse_binding(
         reject_reason="",
         resolved_at=resolution.resolved_at,
         resolution_id=resolution.resolution_id,
+        metadata=_meta,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PR-23: Canonical takeover/fallback route decision
+# ---------------------------------------------------------------------------
+
+
+class TakeoverRouteOutcome(str, Enum):
+    """Outcome of :func:`resolve_takeover_or_fallback_route`.
+
+    Values
+    ------
+    active_attached_takeover
+        The canonical attached-runtime path is active and eligible.  The
+        caller MUST route the task to the attached Android runtime session
+        and MUST NOT engage the Android delegated fallback path.
+
+    delegated_fallback
+        The canonical attached-runtime path is unavailable or ineligible
+        (session non-active in the registry, reuse binding ineligible, or
+        no reuse binding present).  The caller MUST engage the Android
+        delegated fallback path.
+    """
+
+    active_attached_takeover = "active_attached_takeover"
+    delegated_fallback = "delegated_fallback"
+
+    @classmethod
+    def from_string(cls, value: str) -> "TakeoverRouteOutcome":
+        """Coerce *value* to a ``TakeoverRouteOutcome``; unknown → ``delegated_fallback``."""
+        try:
+            return cls(str(value).lower().strip())
+        except ValueError:
+            return cls.delegated_fallback
+
+    def is_takeover(self) -> bool:
+        """Return ``True`` when the outcome is ``active_attached_takeover``."""
+        return self == TakeoverRouteOutcome.active_attached_takeover
+
+    def is_fallback(self) -> bool:
+        """Return ``True`` when the outcome is ``delegated_fallback``."""
+        return self == TakeoverRouteOutcome.delegated_fallback
+
+
+@dataclass
+class TakeoverDispatchDecision:
+    """Result of :func:`resolve_takeover_or_fallback_route`.
+
+    Attributes
+    ----------
+    outcome
+        Whether the attached runtime takes over or the delegated fallback
+        path is selected.
+    session_id
+        Session id supplied by the caller.
+    device_id
+        Device id supplied by the caller.
+    reuse_resolution
+        The :class:`ReuseDispatchResolution` produced by the internal
+        :func:`resolve_reuse_dispatch_surface` call, or ``None`` when the
+        registry gate blocked the session before reaching reuse resolution.
+    reject_reason
+        Non-empty when ``outcome == delegated_fallback``, describing why the
+        canonical attached-runtime path was ineligible.
+    decided_at
+        Epoch timestamp of the decision.
+    decision_id
+        Auto-generated UUID for this decision (for traceability).
+    metadata
+        Caller-supplied freeform dict forwarded through the decision.
+    """
+
+    outcome: TakeoverRouteOutcome
+    session_id: str
+    device_id: str
+    reuse_resolution: Optional[ReuseDispatchResolution] = None
+    reject_reason: str = ""
+    decided_at: float = field(default_factory=time.time)
+    decision_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def is_takeover(self) -> bool:
+        """Return ``True`` when the attached runtime takes over."""
+        return self.outcome == TakeoverRouteOutcome.active_attached_takeover
+
+    def is_fallback(self) -> bool:
+        """Return ``True`` when the delegated fallback path is selected."""
+        return self.outcome == TakeoverRouteOutcome.delegated_fallback
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialise to a plain dict."""
+        return {
+            "outcome": self.outcome.value,
+            "session_id": self.session_id,
+            "device_id": self.device_id,
+            "reuse_resolution_kind": (
+                self.reuse_resolution.resolution_kind.value
+                if self.reuse_resolution is not None
+                else None
+            ),
+            "reject_reason": self.reject_reason,
+            "decided_at": self.decided_at,
+            "decision_id": self.decision_id,
+            "metadata": dict(self.metadata),
+        }
+
+
+def resolve_takeover_or_fallback_route(
+    session_id: str,
+    device_id: str,
+    *,
+    attached_session: Any = None,
+    reuse_runtime: Optional[AttachedRuntimeReuseBindingRuntime] = None,
+    registry: "Optional[AttachedSessionRegistry]" = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> TakeoverDispatchDecision:
+    """Determine whether the attached runtime takes over or the delegated fallback is used.
+
+    This is the **canonical PR-23 takeover/fallback routing gate**.  It makes
+    the routing decision explicit and deterministic by:
+
+    1. Consulting the attached runtime session registry as the **sole first
+       authority** for session eligibility (via the PR-22 registry gate).
+    2. Attempting reuse-surface resolution only when the registry does not
+       block the session.
+    3. Returning ``active_attached_takeover`` only when a valid, eligible
+       reuse surface exists for an active session.
+    4. Returning ``delegated_fallback`` for all other cases (non-active
+       session, ineligible reuse binding, absent reuse binding).
+
+    The same ``(session_id, device_id, registry_state, reuse_binding_state)``
+    inputs always produce the same :class:`TakeoverRouteOutcome` — the
+    decision is fully deterministic and does not drift across partial state
+    sources.
+
+    Per :data:`REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY`,
+    replaced / invalidated / detached sessions MUST NOT produce
+    ``active_attached_takeover``.  The registry gate enforces this
+    unconditionally.
+
+    Parameters
+    ----------
+    session_id
+        Attached-runtime session id.  Used as the primary registry/reuse
+        lookup key.
+    device_id
+        Target Android device id.  Used as the fallback reuse lookup key
+        when *session_id* is absent or yields no reuse binding.
+    attached_session
+        Optional live
+        :class:`~core.attached_runtime_session.AttachedRuntimeSessionRecord`
+        for eligibility cross-checking inside
+        :func:`resolve_reuse_dispatch_surface`.
+    reuse_runtime
+        Override for the process-level reuse-binding ring-buffer singleton
+        (test isolation).
+    registry
+        Optional
+        :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for the PR-22 registry gate (test isolation).
+    metadata
+        Caller-supplied freeform dict forwarded into the returned decision.
+
+    Returns
+    -------
+    TakeoverDispatchDecision
+        Decision with ``outcome=active_attached_takeover`` when an active,
+        eligible attached-runtime session exists; ``outcome=delegated_fallback``
+        otherwise.
+    """
+    _meta = metadata if metadata is not None else {}
+
+    # ------------------------------------------------------------------ #
+    # Step 1: Registry gate — the single authoritative first check.       #
+    # Non-active sessions (replaced / detached / invalidated) MUST NOT    #
+    # produce active_attached_takeover.                                    #
+    # ------------------------------------------------------------------ #
+    _gate_reason = _check_registry_gate(session_id, device_id, registry=registry)
+    if _gate_reason:
+        return TakeoverDispatchDecision(
+            outcome=TakeoverRouteOutcome.delegated_fallback,
+            session_id=session_id,
+            device_id=device_id,
+            reuse_resolution=None,
+            reject_reason=_gate_reason,
+            metadata=_meta,
+        )
+
+    # ------------------------------------------------------------------ #
+    # Step 2: Reuse-surface resolution — determines attached-runtime      #
+    # eligibility using the PR-17 / PR-22 reuse-dispatch gate.            #
+    # ------------------------------------------------------------------ #
+    resolution = resolve_reuse_dispatch_surface(
+        session_id,
+        device_id,
+        attached_session=attached_session,
+        reuse_runtime=reuse_runtime,
+        registry=registry,
+        metadata=_meta,
+    )
+
+    # ------------------------------------------------------------------ #
+    # Step 3: Determine outcome from the reuse resolution.                #
+    # Only a 'reused' resolution produces active_attached_takeover.       #
+    # All other outcomes ('rejected', 'no_binding') → delegated_fallback. #
+    # ------------------------------------------------------------------ #
+    if resolution.resolution_kind == ReuseDispatchResolutionKind.reused:
+        return TakeoverDispatchDecision(
+            outcome=TakeoverRouteOutcome.active_attached_takeover,
+            session_id=session_id,
+            device_id=device_id,
+            reuse_resolution=resolution,
+            reject_reason="",
+            metadata=_meta,
+        )
+
+    # Rejected or no_binding → delegated fallback.
+    _fallback_reason = resolution.reject_reason or (
+        f"no eligible attached-runtime reuse surface "
+        f"(resolution_kind={resolution.resolution_kind.value!r})"
+    )
+    return TakeoverDispatchDecision(
+        outcome=TakeoverRouteOutcome.delegated_fallback,
+        session_id=session_id,
+        device_id=device_id,
+        reuse_resolution=resolution,
+        reject_reason=_fallback_reason,
         metadata=_meta,
     )

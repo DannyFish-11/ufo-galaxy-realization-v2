@@ -364,6 +364,36 @@ INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-23: Canonical delegated fallback ingress sentinels
+# ---------------------------------------------------------------------------
+
+INGRESS_DELEGATED_FALLBACK_PR23_SENTINEL: str = (
+    "android_delegated_signal_ingress::package=23::post-533-main-repo::"
+    "canonical-takeover-dispatch-and-delegated-fallback-canonicalization::"
+    "fallback-ingress-is-last-resort"
+)
+
+INGRESS_FALLBACK_IS_LAST_RESORT_PR23_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_FALLBACK_IS_LAST_RESORT_PR23: "
+    "The Android delegated execution signal ingress path is the fallback route "
+    "and MUST only be exercised when the canonical attached-runtime takeover path "
+    "(resolve_takeover_or_fallback_route() → delegated_fallback) has determined "
+    "that the attached-runtime path is unavailable or ineligible.  Signals that "
+    "arrive on behalf of a session that is active in the registry and has an "
+    "eligible reuse surface indicate a routing anomaly and MUST be handled by "
+    "the recovery guard layer."
+)
+
+INGRESS_STALE_CONTEXT_DOES_NOT_ALTER_FALLBACK_SELECTION_PR23_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_STALE_CONTEXT_DOES_NOT_ALTER_FALLBACK_SELECTION_PR23: "
+    "Stale or replayed delegated execution signals (rejected by the PR-18 guard as "
+    "duplicate / replay / stale / out_of_order) MUST NOT influence the takeover vs "
+    "delegated-fallback routing decision made by resolve_takeover_or_fallback_route(). "
+    "The ingress path processes signals only after the routing decision is finalised; "
+    "a stale signal cannot retroactively change the route selection."
+)
+
+# ---------------------------------------------------------------------------
 # DelegatedSignalKind enum
 # ---------------------------------------------------------------------------
 
