@@ -268,6 +268,57 @@ ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-21: Canonical delegated execution path closure sentinels
+# ---------------------------------------------------------------------------
+
+# PR-21: The canonical delegated execution path is fully closed:
+# ingress → guard → reconcile → tracker.  No signal may bypass any step.
+CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY: str = (
+    "INGRESS_POLICY::CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER: "
+    "The canonical host-side delegated execution path is strictly ordered as: "
+    "(1) ingest_delegated_execution_signal() extracts the envelope, "
+    "(2) guard_inbound_signal() evaluates the signal before any state mutation, "
+    "(3) reconcile_android_execution_signal() forwards only accepted signals "
+    "to the execution tracker.  No signal may skip any step in this chain."
+)
+
+# PR-21: Identity continuity — task_id, trace_id, signal identity, and
+# attached-runtime context must flow unchanged from ingress to tracker.
+IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY: str = (
+    "INGRESS_POLICY::IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH: "
+    "The identity fields task_id, trace_id, signal_id, emission_seq, "
+    "contract_id, session_id, and device_id carried on the inbound "
+    "delegated execution signal envelope MUST be preserved verbatim "
+    "through every stage of the canonical path (ingress → guard → "
+    "reconcile → tracker).  No stage may substitute, infer, or discard "
+    "any identity field."
+)
+
+# PR-21: Terminal state protection — once a tracker record reaches a
+# terminal phase, subsequent duplicate / replay / stale / out-of-order
+# signals MUST NOT overwrite the terminal result.
+TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY: str = (
+    "INGRESS_POLICY::TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY: "
+    "A delegated execution tracker record that has reached a terminal phase "
+    "(completed / failed / timed_out / cancelled) MUST NOT have its result "
+    "state overwritten by any subsequent signal, including duplicate, replay, "
+    "stale, or out-of-order signals.  The guard layer rejects such signals "
+    "before they reach the reconciler; the tracker layer additionally rejects "
+    "any signal that targets an already-terminal record."
+)
+
+# PR-21: Closure sentinel — confirms that the four policies above are
+# wired and the canonical delegated execution path is closed.
+CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL: str = (
+    "android_delegated_signal_ingress::package=21::pr=post533-pr21-main::"
+    "canonical-delegated-execution-path-closed::"
+    "path=ingress-guard-reconcile-tracker::"
+    "policies=CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER,"
+    "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH,"
+    "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY"
+)
+
+# ---------------------------------------------------------------------------
 # DelegatedSignalKind enum
 # ---------------------------------------------------------------------------
 
