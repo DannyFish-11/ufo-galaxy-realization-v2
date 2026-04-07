@@ -100,6 +100,82 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# PR-24: Dispatch selection truth consolidation — policy sentinels
+# ---------------------------------------------------------------------------
+
+DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL: str = (
+    "DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24::"
+    "select_dispatch_target() now consumes readiness, participation, registry, "
+    "and reuse as consolidated truth inputs.  Target selection is the unified "
+    "output of these existing truth sources rather than ad-hoc temporary "
+    "judgment.  No new selector entity or alternate dispatch authority is "
+    "introduced.  All existing truth sources and dispatch selection modules "
+    "are reused (PR packages 3/4/6/17/19/20)."
+)
+
+SELECTION_CONSULTS_READINESS_PR24_POLICY: str = (
+    "POLICY::SELECTION_CONSULTS_READINESS_PR24: when readiness_inputs are "
+    "provided to select_dispatch_target(), each registry candidate MUST be "
+    "gated on device-level readiness (registered + routable) before being "
+    "considered for selection.  A candidate whose device is not registered or "
+    "not routable MUST be rejected with reason 'readiness:not_eligible'."
+)
+
+SELECTION_CONSULTS_PARTICIPATION_PR24_POLICY: str = (
+    "POLICY::SELECTION_CONSULTS_PARTICIPATION_PR24: when participation_inputs "
+    "are provided to select_dispatch_target(), each registry candidate MUST be "
+    "gated on orchestration eligibility (orchestration_eligible=True) before "
+    "being considered for selection.  A candidate that is not orchestration- "
+    "eligible MUST be rejected with reason 'participation:not_orchestration_eligible'."
+)
+
+SELECTION_CONSULTS_REGISTRY_PR24_POLICY: str = (
+    "POLICY::SELECTION_CONSULTS_REGISTRY_PR24: when registry_entries are "
+    "provided to select_dispatch_target(), only entries whose attachment_state "
+    "is 'active' are candidates for selection.  Non-active registry entries "
+    "MUST be rejected with reason 'registry:not_active_state'.  This preserves "
+    "the PR-19/22 registry authority contract."
+)
+
+SELECTION_CONSULTS_REUSE_PR24_POLICY: str = (
+    "POLICY::SELECTION_CONSULTS_REUSE_PR24: when reuse_bindings are provided "
+    "to select_dispatch_target(), reuse validity is used as a scoring signal "
+    "to prefer candidates with an established reuse binding over candidates "
+    "without one.  Reuse validity alone does not gate out a candidate; it "
+    "influences ranking only."
+)
+
+SELECTION_OUTCOME_HAS_STABLE_REASON_PR24_POLICY: str = (
+    "POLICY::SELECTION_OUTCOME_HAS_STABLE_REASON_PR24: every SourceDispatchTarget "
+    "returned by select_dispatch_target() MUST carry a stable, deterministic "
+    "selection_reason string.  The set of defined reasons is: "
+    "'explicit_target_device_id', "
+    "'registry_readiness_participation_reuse:selected_with_reuse', "
+    "'registry_readiness_participation_reuse:selected_no_reuse', "
+    "'mesh_session:first_active_participant'.  "
+    "Fallback and rejection outcomes are captured in the metadata dict under "
+    "'rejected_candidates' and 'fallback_reason'."
+)
+
+SELECTION_MULTI_TARGET_NOT_FIRST_ACTIVE_PR24_POLICY: str = (
+    "POLICY::SELECTION_MULTI_TARGET_NOT_FIRST_ACTIVE_PR24: when registry_entries "
+    "are provided and multiple candidates are eligible, target selection MUST "
+    "use consolidated truth scoring (readiness + participation + reuse) rather "
+    "than relying on list order or first-active shortcut.  The candidate with "
+    "the highest truth-consolidated score wins."
+)
+
+SELECTION_NO_NEW_SELECTOR_ENTITY_PR24_POLICY: str = (
+    "POLICY::SELECTION_NO_NEW_SELECTOR_ENTITY_PR24: PR-24 MUST NOT introduce "
+    "a new selector entity, alternate dispatch authority, or duplicate truth "
+    "path.  All selection logic is consolidated into the existing "
+    "select_dispatch_target() function using the existing truth modules "
+    "(device_readiness, device_participation, attached_runtime_session_registry, "
+    "attached_runtime_reuse_dispatch)."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -240,6 +316,179 @@ def _try_remote_handoff(
             "success": False,
             "skipped_reason": f"bridge_error:{exc}",
         }
+
+
+# ---------------------------------------------------------------------------
+# PR-24: Internal helpers for readiness / participation / registry / reuse
+# ---------------------------------------------------------------------------
+
+
+def _try_registry_entries() -> Optional[List[Dict[str, Any]]]:
+    """Attempt to fetch all active attached runtime session registry entries.
+
+    Returns a list of serialised entry dicts, or ``None`` when unavailable.
+    """
+    try:
+        from core.attached_runtime_session_registry import list_active_sessions
+
+        entries = list_active_sessions()
+        if not entries:
+            return []
+        result = []
+        for entry in entries:
+            if hasattr(entry, "to_dict"):
+                result.append(entry.to_dict())
+            elif hasattr(entry, "__dict__"):
+                result.append(dict(vars(entry)))
+            elif isinstance(entry, dict):
+                result.append(entry)
+        return result
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _try_reuse_bindings() -> Optional[List[Dict[str, Any]]]:
+    """Attempt to fetch all eligible reuse binding records.
+
+    Returns a list of serialised binding dicts, or ``None`` when unavailable.
+    """
+    try:
+        from core.attached_runtime_reuse_binding import list_eligible_reuse_bindings
+
+        bindings = list_eligible_reuse_bindings()
+        if not bindings:
+            return []
+        result = []
+        for binding in bindings:
+            if hasattr(binding, "to_dict"):
+                result.append(binding.to_dict())
+            elif hasattr(binding, "__dict__"):
+                result.append(dict(vars(binding)))
+            elif isinstance(binding, dict):
+                result.append(binding)
+        return result
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _evaluate_registry_candidates(
+    registry_entries: List[Dict[str, Any]],
+    readiness_map: Optional[Dict[str, Dict[str, Any]]],
+    participation_map: Optional[Dict[str, Dict[str, Any]]],
+    reuse_map: Optional[Dict[str, bool]],
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Evaluate registry candidates using consolidated truth inputs.
+
+    Parameters
+    ----------
+    registry_entries:
+        List of attached session registry entry dicts.  Only ``active`` state
+        entries are eligible candidates.
+    readiness_map:
+        Dict keyed by ``device_id`` mapping to serialised
+        :class:`~core.device_readiness.DeviceReadinessSummary` dicts.
+        When provided, candidates not registered or not routable are rejected.
+    participation_map:
+        Dict keyed by ``device_id`` mapping to serialised
+        :class:`~core.device_participation.ParticipationSummary` dicts.
+        When provided, candidates with ``orchestration_eligible=False`` are
+        rejected.
+    reuse_map:
+        Dict keyed by ``session_id`` (or ``device_id``) mapping to ``bool``
+        indicating whether a valid reuse binding exists for that session.
+        Used for scoring only — does not gate out candidates.
+
+    Returns
+    -------
+    (accepted, rejected)
+        ``accepted``: list of ``{"entry": dict, "score": int, "reason": str}``
+        sorted by ``score`` descending.
+        ``rejected``: list of ``{"device_id": str, "reason": str}``.
+    """
+    # Base score constants (mirrors delegated_target_selection_policy PR-20)
+    _BASE_SCORE = 100
+    _REUSE_BONUS = 30
+
+    accepted: List[Dict[str, Any]] = []
+    rejected: List[Dict[str, Any]] = []
+
+    for entry in registry_entries:
+        if not isinstance(entry, dict):
+            continue
+        device_id: Optional[str] = entry.get("device_id")
+        session_id: Optional[str] = entry.get("session_id") or entry.get("runtime_session_id")
+        attachment_state: str = str(entry.get("attachment_state") or "")
+
+        if not device_id:
+            continue
+
+        # Gate 1 (PR-24 / PR-22): registry entry must be in 'active' state.
+        if attachment_state.lower() != "active":
+            rejected.append({
+                "device_id": device_id,
+                "session_id": session_id,
+                "reason": "registry:not_active_state",
+            })
+            continue
+
+        # Gate 2 (PR-24): readiness gate — device must be registered + routable.
+        if readiness_map is not None:
+            readiness = readiness_map.get(device_id) or {}
+            registered = readiness.get("registered", True)
+            routable = (
+                readiness.get("routable")
+                or readiness.get("effective_routable")
+                or readiness.get("device_routable")
+                or readiness.get("transport_usable")
+            )
+            if not registered or not routable:
+                rejected.append({
+                    "device_id": device_id,
+                    "session_id": session_id,
+                    "reason": "readiness:not_eligible",
+                })
+                continue
+
+        # Gate 3 (PR-24): participation gate — must be orchestration-eligible.
+        if participation_map is not None:
+            participation = participation_map.get(device_id) or {}
+            orch_eligible = participation.get("orchestration_eligible", True)
+            if not orch_eligible:
+                rejected.append({
+                    "device_id": device_id,
+                    "session_id": session_id,
+                    "reason": "participation:not_orchestration_eligible",
+                })
+                continue
+
+        # Scoring (PR-24): reuse validity as a tie-breaker bonus.
+        score = _BASE_SCORE
+        has_reuse = False
+        if reuse_map is not None:
+            # Check by session_id first, then by device_id.
+            key = session_id or device_id
+            has_reuse = bool(reuse_map.get(key) or reuse_map.get(device_id))
+            if has_reuse:
+                score += _REUSE_BONUS
+
+        selection_reason = (
+            "registry_readiness_participation_reuse:selected_with_reuse"
+            if has_reuse
+            else "registry_readiness_participation_reuse:selected_no_reuse"
+        )
+
+        accepted.append({
+            "entry": entry,
+            "device_id": device_id,
+            "session_id": session_id,
+            "runtime_id": entry.get("runtime_session_id") or entry.get("target_runtime_id"),
+            "score": score,
+            "selection_reason": selection_reason,
+        })
+
+    # Sort accepted candidates by score descending (deterministic ranking).
+    accepted.sort(key=lambda x: x["score"], reverse=True)
+    return accepted, rejected
 
 
 # ---------------------------------------------------------------------------
@@ -431,10 +680,28 @@ def select_dispatch_target(
     mesh_memberships: Optional[List[Dict[str, Any]]] = None,
     handoff_envelope_id: Optional[str] = None,
     mesh_session_id: Optional[str] = None,
+    # PR-24: consolidated truth inputs for multi-candidate selection
+    readiness_inputs: Optional[List[Dict[str, Any]]] = None,
+    participation_inputs: Optional[List[Dict[str, Any]]] = None,
+    registry_entries: Optional[List[Dict[str, Any]]] = None,
+    reuse_bindings: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Any]:  # Optional[SourceDispatchTarget]
     """Select a :class:`~contracts.source_dispatch.SourceDispatchTarget`.
 
     Returns ``None`` when no remote/mesh target is applicable (local mode).
+
+    Decision priority
+    -----------------
+    1. Explicit ``target_device_id`` — always wins (reason:
+       ``"explicit_target_device_id"``).
+    2. **PR-24: registry + readiness + participation + reuse** — when
+       ``registry_entries`` is provided, candidates are evaluated using all
+       available truth inputs.  The highest-scoring eligible candidate is
+       returned.  Multi-candidate scenarios are ranked by the consolidated
+       truth score rather than list order or first-active shortcut.
+    3. Mesh session first active participant (PR-33) — used when no registry
+       candidates are provided (``registry_entries`` is ``None``).
+    4. ``None`` — no remote/mesh target applicable.
 
     Parameters
     ----------
@@ -450,9 +717,35 @@ def select_dispatch_target(
         Pre-built HandoffEnvelopeV2 ID, if available.
     mesh_session_id:
         Mesh session ID to record on the target.
+    readiness_inputs:
+        PR-24: list of serialised
+        :class:`~core.device_readiness.DeviceReadinessSummary` dicts.
+        When provided, candidates are gated on ``registered`` and
+        ``routable`` (or equivalent) fields.
+    participation_inputs:
+        PR-24: list of serialised
+        :class:`~core.device_participation.ParticipationSummary` dicts.
+        When provided, candidates are gated on
+        ``orchestration_eligible=True``.
+    registry_entries:
+        PR-24: list of serialised attached runtime session registry entry
+        dicts (from :func:`~core.attached_runtime_session_registry.list_active_sessions`).
+        When provided, candidates are evaluated and ranked using the
+        consolidated truth inputs instead of the mesh-session first-active
+        shortcut.
+    reuse_bindings:
+        PR-24: list of serialised
+        :class:`~core.attached_runtime_reuse_binding.AttachedRuntimeReuseBindingRecord`
+        dicts (from
+        :func:`~core.attached_runtime_reuse_binding.list_eligible_reuse_bindings`).
+        Used as a scoring signal: candidates with a valid reuse binding
+        receive a bonus score and rank above candidates without one.
     """
     from contracts.source_dispatch import SourceDispatchTarget
 
+    # ------------------------------------------------------------------
+    # Stage 1: Explicit target device (highest priority — unchanged).
+    # ------------------------------------------------------------------
     if target_device_id:
         return SourceDispatchTarget(
             target_device_id=target_device_id,
@@ -464,7 +757,93 @@ def select_dispatch_target(
             selection_reason="explicit_target_device_id",
         )
 
-    # Attempt to extract the first active participant from mesh session (PR-33)
+    # ------------------------------------------------------------------
+    # Stage 2 (PR-24): Consolidated truth — registry + readiness +
+    # participation + reuse.
+    # Active only when registry_entries is explicitly provided (not None).
+    # ------------------------------------------------------------------
+    if registry_entries is not None:
+        # Build lookup maps from truth inputs.
+        readiness_map: Optional[Dict[str, Dict[str, Any]]] = None
+        if readiness_inputs:
+            readiness_map = {
+                r["device_id"]: r
+                for r in readiness_inputs
+                if isinstance(r, dict) and r.get("device_id")
+            }
+
+        participation_map: Optional[Dict[str, Dict[str, Any]]] = None
+        if participation_inputs:
+            participation_map = {
+                p["device_id"]: p
+                for p in participation_inputs
+                if isinstance(p, dict) and p.get("device_id")
+            }
+
+        reuse_map: Optional[Dict[str, bool]] = None
+        if reuse_bindings:
+            reuse_map = {}
+            for b in reuse_bindings:
+                if not isinstance(b, dict):
+                    continue
+                # An eligible binding is considered valid for reuse.
+                sid = b.get("session_id") or b.get("reuse_binding_id")
+                did = b.get("device_id")
+                status = str(b.get("eligibility_status") or b.get("status") or "").lower()
+                is_valid = status in ("eligible", "valid", "active", "") or status == ""
+                if sid:
+                    reuse_map[sid] = is_valid
+                if did:
+                    reuse_map[did] = is_valid
+
+        accepted, rejected = _evaluate_registry_candidates(
+            registry_entries=registry_entries,
+            readiness_map=readiness_map,
+            participation_map=participation_map,
+            reuse_map=reuse_map,
+        )
+
+        if accepted:
+            best = accepted[0]
+            meta: Dict[str, Any] = {
+                "selection_truth_inputs": {
+                    "readiness_provided": readiness_inputs is not None,
+                    "participation_provided": participation_inputs is not None,
+                    "registry_count": len(registry_entries),
+                    "reuse_provided": reuse_bindings is not None,
+                },
+                "accepted_count": len(accepted),
+                "rejected_candidates": rejected,
+                "candidate_score": best["score"],
+            }
+            return SourceDispatchTarget(
+                target_device_id=best["device_id"],
+                target_runtime_id=best.get("runtime_id"),
+                target_session_id=best.get("session_id"),
+                handoff_envelope_id=handoff_envelope_id,
+                mesh_session_id=mesh_session_id or (
+                    mesh_session.get("session_id")
+                    if (mesh_session and isinstance(mesh_session, dict))
+                    else None
+                ),
+                selection_reason=best["selection_reason"],
+                metadata=meta,
+            )
+
+        # All candidates rejected or no entries — stable fallback reason.
+        logger.debug(
+            "select_dispatch_target: all %d registry candidates rejected; "
+            "fallback_reason=no_eligible_candidate_after_truth_consolidation; "
+            "rejected=%s",
+            len(registry_entries),
+            rejected,
+        )
+        return None
+
+    # ------------------------------------------------------------------
+    # Stage 3: Mesh session first active participant (PR-33).
+    # Used only when registry_entries is not provided (backwards compat).
+    # ------------------------------------------------------------------
     if mesh_session and isinstance(mesh_session, dict):
         participants = mesh_session.get("participants") or []
         for p in participants:
@@ -512,6 +891,11 @@ def build_source_dispatch_plan(
     source_runtime_posture: Optional[str] = None,
     coordination_role: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    # PR-24: consolidated truth inputs for dispatch target selection
+    readiness_inputs: Optional[List[Dict[str, Any]]] = None,
+    participation_inputs: Optional[List[Dict[str, Any]]] = None,
+    registry_entries: Optional[List[Dict[str, Any]]] = None,
+    reuse_bindings: Optional[List[Dict[str, Any]]] = None,
 ) -> Any:  # SourceDispatchPlan
     """Build a :class:`~contracts.source_dispatch.SourceDispatchPlan`.
 
@@ -560,6 +944,25 @@ def build_source_dispatch_plan(
         ``"control_only"`` (conservative safe default) when ``None``.
     metadata:
         Arbitrary extension metadata.
+    readiness_inputs:
+        PR-24: list of serialised
+        :class:`~core.device_readiness.DeviceReadinessSummary` dicts.
+        When ``None``, auto-fetched via
+        :func:`_try_registry_entries` is NOT called — callers that want
+        auto-fetch should pass the result of
+        :func:`~core.device_readiness.get_cross_device_ready_devices`
+        themselves.
+    participation_inputs:
+        PR-24: list of serialised
+        :class:`~core.device_participation.ParticipationSummary` dicts.
+    registry_entries:
+        PR-24: list of serialised attached runtime session registry entries.
+        When ``None``, auto-fetched from
+        :func:`~core.attached_runtime_session_registry.list_active_sessions`.
+    reuse_bindings:
+        PR-24: list of serialised eligible reuse binding records.
+        When ``None``, auto-fetched from
+        :func:`~core.attached_runtime_reuse_binding.list_eligible_reuse_bindings`.
 
     Returns
     -------
@@ -584,6 +987,12 @@ def build_source_dispatch_plan(
         if mesh_memberships is None:
             mesh_memberships = _try_mesh_memberships()
 
+        # PR-24: auto-fetch registry and reuse truth inputs when not provided.
+        if registry_entries is None:
+            registry_entries = _try_registry_entries()
+        if reuse_bindings is None:
+            reuse_bindings = _try_reuse_bindings()
+
         # Select mode — PR-2: pass source_runtime_posture and coordination_role
         # so the posture + coordination-role gate is evaluated inside
         # select_dispatch_mode().
@@ -598,6 +1007,7 @@ def build_source_dispatch_plan(
             source_runtime_posture=source_runtime_posture,
             coordination_role=coordination_role,
         )
+
 
         # Select target
         selected_target = None
