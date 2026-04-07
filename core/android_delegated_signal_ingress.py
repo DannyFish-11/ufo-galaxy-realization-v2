@@ -242,6 +242,39 @@ INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY: str = (
     "NOT be updated for rejected signals."
 )
 
+# PR-21: Canonical ordering policy — the single authoritative execution path.
+CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY: str = (
+    "INGRESS_POLICY::CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER: "
+    "The one unambiguous canonical path for Android delegated execution signals "
+    "is: ingest_delegated_execution_signal() [ingress] → guard_inbound_signal() "
+    "[guard] → reconcile_android_execution_signal() [reconcile] → "
+    "apply_acknowledgment_signal() / apply_result() [tracker mutation].  "
+    "No signal MAY bypass ingress, skip the guard, or directly mutate the "
+    "execution tracker without passing through the reconciler."
+)
+
+# PR-21: Identity continuity policy — all identity fields flow verbatim.
+IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY: str = (
+    "INGRESS_POLICY::IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH: "
+    "The five identity fields (contract_id, session_id, device_id, trace_id, "
+    "task_id) and the three delegated-signal fields (signal_id, emission_seq, "
+    "result_kind) MUST flow verbatim from the raw inbound message through the "
+    "DelegatedExecutionSignalEnvelope, the AndroidExecutionSignalEnvelope, "
+    "and into the DelegatedExecutionTrackingRecord without synthesis, "
+    "coercion, or replacement at any stage of the canonical path."
+)
+
+# PR-21: Terminal state protection policy.
+TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY: str = (
+    "INGRESS_POLICY::TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY: "
+    "Once a DelegatedExecutionTrackingRecord reaches a terminal phase "
+    "(completed / failed / timed_out / cancelled), duplicate, replay, stale, "
+    "and out-of-order signals arriving via the canonical ingress path MUST NOT "
+    "overwrite or corrupt the terminal execution truth.  Both the guard layer "
+    "(PR-15) and the reconciler terminal-block (PR-13 / PR-10) together ensure "
+    "this invariant without requiring additional execution-truth systems."
+)
+
 _ALL_INGRESS_POLICIES = (
     INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY,
     INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY,
@@ -255,15 +288,26 @@ _ALL_INGRESS_POLICIES = (
     INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY,
     INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY,
     INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY,
+    CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY,
+    IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY,
+    TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY,
 )
 
 # ---------------------------------------------------------------------------
-# PR sentinel
+# PR sentinels
 # ---------------------------------------------------------------------------
 
 ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL: str = (
     "android_delegated_signal_ingress::package=16::pr=post533-pr16-main::"
     "canonical-ingress-for-android-delegated-execution-signals::"
+    "authority=ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY"
+)
+
+# PR-21: Canonical delegated execution ingress-reconciliation closure sentinel.
+CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL: str = (
+    "android_delegated_signal_ingress::package=21::"
+    "pr=post533-pr21-main::"
+    "canonical-delegated-execution-ingress-reconciliation-closure::"
     "authority=ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY"
 )
 

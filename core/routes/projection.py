@@ -537,6 +537,32 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20_UNAVAILABLE"
     )
 
+# PR-21: Canonical delegated execution ingress-reconciliation closure.
+# Confirms that the single host-side path (ingress → guard → reconcile →
+# tracker) is fully closed and that the required sentinels and policies
+# are available.
+try:
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL as _CDEP_PR21,
+        CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY as _CANONICAL_PATH_POLICY,
+        IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY as _IDENTITY_POLICY,
+        TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY as _TERMINAL_POLICY,
+        ingest_delegated_execution_signal as _ingest_delegated_execution_signal,
+    )
+
+    CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21: str = (
+        "PROJECTION_ROUTES::CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21_V1: "
+        "canonical delegated execution ingress-reconciliation closure "
+        "(PR-21) is active.  The single host-side path "
+        "ingress → guard → reconcile → tracker is fully closed.  "
+        "ingest_delegated_execution_signal() is the authoritative entry-point "
+        "and the PR-21 closure sentinel is reachable from projection routes."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
