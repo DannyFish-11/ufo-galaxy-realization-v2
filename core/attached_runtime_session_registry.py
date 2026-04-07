@@ -184,6 +184,61 @@ ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-22 consolidation sentinels
+# ---------------------------------------------------------------------------
+
+ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL: str = (
+    "ATTACHED_RUNTIME_SESSION_REGISTRY_PR22::authoritative-attached-runtime-registry-"
+    "consolidation::package=22::post-533-dual-repo-runtime-unification::"
+    "registry-is-single-authoritative-truth-for-dispatch-reuse-reconciliation"
+)
+
+REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY: str = (
+    "POLICY::REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22: "
+    "The attached runtime session registry is the authoritative gate for all delegated "
+    "dispatch decisions.  Before any delegated dispatch binding is created the registry "
+    "MUST be consulted via lookup_active_session() or lookup_session_by_device().  A "
+    "session known to the registry as non-active (replaced / detached / invalidated) "
+    "MUST NOT be the target of new delegated dispatch."
+)
+
+REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY: str = (
+    "POLICY::REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22: "
+    "The attached runtime session registry is the authoritative gate for reuse-binding "
+    "resolution.  resolve_reuse_dispatch_surface() and dispatch_with_reuse_binding() "
+    "MUST consult the registry before accepting a reuse binding as an eligible dispatch "
+    "surface.  A reuse binding whose session_id maps to a non-active registry entry "
+    "MUST be treated as rejected regardless of the reuse binding's own eligibility flag."
+)
+
+REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY: str = (
+    "POLICY::REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22: "
+    "The attached runtime session registry is the authoritative gate for signal "
+    "reconciliation.  reconcile_android_execution_signal() and "
+    "ingest_delegated_execution_signal() MUST consult the registry before applying "
+    "a signal to the host-side execution tracker.  A signal whose session_id maps to "
+    "a non-active registry entry MUST NOT mutate the tracker."
+)
+
+REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY: str = (
+    "POLICY::REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22: "
+    "When the registry contains an entry for a given session_id and that entry is in "
+    "state 'replaced', 'detached', or 'invalidated', that session MUST NOT drive any "
+    "new dispatch, reuse, or reconciliation action.  The registry's knowledge of "
+    "non-active state is the definitive block signal; no side-channel truth may "
+    "override this block."
+)
+
+REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY: str = (
+    "POLICY::REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22: "
+    "When the registry has no entry for a given session_id the dispatch, reuse, and "
+    "reconciliation gates MUST allow the operation to proceed.  Absence of a registry "
+    "entry is not evidence of invalidity; it means the registry cannot assert non-active "
+    "state and the downstream layer (reuse binding, execution tracker) determines the "
+    "outcome using its own truth."
+)
+
+# ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
 

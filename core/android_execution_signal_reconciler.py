@@ -113,6 +113,24 @@ from core.delegated_runtime_execution_tracker import (
     get_execution_tracking_runtime,
 )
 
+# PR-22: Registry gate — imported lazily so the module remains loadable when
+# the session registry is unavailable.
+try:
+    from core.attached_runtime_session_registry import (
+        AttachedSessionRegistry as _AttachedSessionRegistry,
+        RegistryEntryState as _ReconcilerRegistryEntryState,
+        get_session_registry as _reconciler_get_session_registry,
+        lookup_active_session as _reconciler_lookup_active_session,
+    )
+
+    _RECONCILER_REGISTRY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _RECONCILER_REGISTRY_AVAILABLE = False
+    _AttachedSessionRegistry = None  # type: ignore[assignment,misc]
+    _ReconcilerRegistryEntryState = None  # type: ignore[assignment]
+    _reconciler_get_session_registry = None  # type: ignore[assignment]
+    _reconciler_lookup_active_session = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -222,6 +240,35 @@ ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL: str = (
     "android_execution_signal_reconciler::package=13::pr=post533-pr13-main::"
     "canonical-host-side-android-execution-signal-reconciliation-binding::"
     "authority=ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY"
+)
+
+# ---------------------------------------------------------------------------
+# PR-22 registry consolidation sentinels
+# ---------------------------------------------------------------------------
+
+RECONCILER_PR22_SENTINEL: str = (
+    "android_execution_signal_reconciler::package=22::post-533-main-repo::"
+    "authoritative-registry-consolidation::registry-gates-reconciliation"
+)
+
+RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY: str = (
+    "RECONCILER_POLICY::RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22: "
+    "reconcile_android_execution_signal() and reconcile_inbound_message() MUST "
+    "consult the attached runtime session registry as an authoritative check "
+    "before applying any signal to the host-side execution tracker.  The "
+    "registry's knowledge of session state is the definitive authority; a "
+    "session that is known non-active in the registry MUST NOT have its "
+    "tracker mutated by further signals."
+)
+
+RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY: str = (
+    "RECONCILER_POLICY::RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22: "
+    "When the session registry contains an entry for the envelope's session_id "
+    "and that entry's state is 'replaced', 'detached', or 'invalidated', "
+    "reconcile_android_execution_signal() MUST return "
+    "AndroidSignalReconcileOutcome(was_updated=False) with a reject_reason "
+    "describing the registry block.  Absent registry entries pass through "
+    "to the execution-tracker lookup step as before."
 )
 
 # ---------------------------------------------------------------------------
@@ -728,6 +775,7 @@ def reconcile_android_execution_signal(
     envelope: AndroidExecutionSignalEnvelope,
     *,
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
+    registry: "Optional[_AttachedSessionRegistry]" = None,
 ) -> AndroidSignalReconcileOutcome:
     """Canonical reconciliation entry-point.
 
@@ -740,6 +788,10 @@ def reconcile_android_execution_signal(
     --------------------
     1. Reject immediately if ``envelope.has_lookup_key()`` is False (both
        ``contract_id`` and ``session_id`` are empty).
+    1a. **PR-22 registry gate**: If the registry contains an entry for
+        ``envelope.session_id`` in a non-active state (replaced / detached /
+        invalidated), reject immediately with ``was_updated=False``.  Absent
+        registry entries pass through.
     2. Look up the tracking record:
        a. By ``contract_id`` if non-empty (uses
           ``DelegatedExecutionTrackingRuntime.get_latest_for_contract``).
@@ -764,6 +816,10 @@ def reconcile_android_execution_signal(
     runtime:
         Optional ring-buffer instance for test isolation.  Uses process
         singleton if None.
+    registry:
+        Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for the PR-22 registry gate (test isolation).  Uses the
+        process singleton when ``None``.
 
     Returns
     -------
@@ -783,6 +839,24 @@ def reconcile_android_execution_signal(
             ),
             envelope=envelope,
         )
+
+    # Step 1a — PR-22 registry gate
+    if _RECONCILER_REGISTRY_AVAILABLE and _reconciler_lookup_active_session is not None and envelope.session_id:
+        _reg = registry if registry is not None else _reconciler_get_session_registry()
+        _entry = _reconciler_lookup_active_session(
+            envelope.session_id, active_only=False, registry=_reg
+        )
+        if _entry is not None and not _entry.is_active():
+            return AndroidSignalReconcileOutcome(
+                record=None,
+                was_updated=False,
+                reject_reason=(
+                    f"registry gate (PR-22): session {envelope.session_id!r} is known "
+                    f"non-active (state={_entry.attachment_state.value!r}); "
+                    "reconciliation blocked"
+                ),
+                envelope=envelope,
+            )
 
     # Step 2 — look up tracking record
     record: Optional[DelegatedExecutionTrackingRecord] = None
@@ -868,6 +942,7 @@ def reconcile_inbound_message(
     message: Dict[str, Any],
     *,
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
+    registry: "Optional[_AttachedSessionRegistry]" = None,
 ) -> AndroidSignalReconcileOutcome:
     """Convenience wrapper: extract envelope from *message* and reconcile.
 
@@ -882,12 +957,17 @@ def reconcile_inbound_message(
     runtime:
         Optional ring-buffer instance for test isolation.  Uses process
         singleton if None.
+    registry:
+        Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for the PR-22 registry gate (test isolation).  Uses the
+        process singleton when ``None``.
 
     Returns
     -------
     AndroidSignalReconcileOutcome
         Reconciliation result (``was_updated=False`` when no matching record is
-        found or when the inbound message cannot be correlated).
+        found, when the inbound message cannot be correlated, or when the
+        PR-22 registry gate blocks the non-active session).
     """
     envelope = extract_signal_envelope(message)
-    return reconcile_android_execution_signal(envelope, runtime=runtime)
+    return reconcile_android_execution_signal(envelope, runtime=runtime, registry=registry)

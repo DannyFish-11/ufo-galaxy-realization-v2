@@ -378,6 +378,9 @@ from core.android_execution_signal_reconciler import (  # noqa: E402
     RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
     RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY,
     ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL,
+    RECONCILER_PR22_SENTINEL,
+    RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
+    RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
     AndroidSignalKind,
     AndroidExecutionSignalEnvelope,
     AndroidSignalReconcileOutcome,
@@ -446,6 +449,10 @@ from core.android_delegated_signal_ingress import (  # noqa: E402
     IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY,
     TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY,
     CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL,
+    # PR-22: ingress registry consolidation sentinels
+    INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
+    INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
+    INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
     DelegatedSignalKind,
     ResultKind,
     DelegatedExecutionSignalEnvelope,
@@ -513,6 +520,9 @@ from core.attached_runtime_reuse_dispatch import (  # noqa: E402
     resolve_reuse_dispatch_surface,
     write_back_dispatch_binding_id,
     dispatch_with_reuse_binding,
+    REUSE_DISPATCH_PR22_SENTINEL,
+    REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
+    REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
 )
 from core.attached_runtime_session_registry import (  # noqa: E402
     ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY,
@@ -544,6 +554,12 @@ from core.attached_runtime_session_registry import (  # noqa: E402
     build_registry_snapshot,
     get_session_registry,
     reset_session_registry,
+    ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
+    REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY,
+    REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY,
+    REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY,
+    REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY,
+    REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY,
 )
 # PR package 20 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated target selection policy layer.
@@ -848,6 +864,10 @@ __all__ = [
     "RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
     "RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY",
     "ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL",
+    # PR-22: reconciler registry consolidation sentinels
+    "RECONCILER_PR22_SENTINEL",
+    "RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY",
+    "RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY",
     "AndroidSignalKind",
     "AndroidExecutionSignalEnvelope",
     "AndroidSignalReconcileOutcome",
@@ -904,6 +924,10 @@ __all__ = [
     "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY",
     "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY",
     "CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL",
+    # PR-22: ingress registry consolidation sentinels
+    "INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL",
+    "INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY",
+    "INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY",
     "DelegatedSignalKind",
     "ResultKind",
     "DelegatedExecutionSignalEnvelope",
@@ -958,6 +982,10 @@ __all__ = [
     "resolve_reuse_dispatch_surface",
     "write_back_dispatch_binding_id",
     "dispatch_with_reuse_binding",
+    # PR-22: reuse dispatch registry consolidation sentinels
+    "REUSE_DISPATCH_PR22_SENTINEL",
+    "REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY",
+    "REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY",
     # PR package 19: Authoritative Attached Runtime Session Registry (MAIN repo side)
     "ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY",
     "REGISTRY_IS_SINGLE_TRUTH_SOURCE_POLICY",
@@ -988,6 +1016,13 @@ __all__ = [
     "build_registry_snapshot",
     "get_session_registry",
     "reset_session_registry",
+    # PR-22: registry consolidation sentinels
+    "ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL",
+    "REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY",
+    "REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY",
+    "REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY",
+    "REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY",
+    "REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY",
     # PR package 20: Canonical Delegated Target Selection Policy (MAIN repo side)
     "DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY",
     "SELECTION_MUST_CONSULT_REGISTRY_POLICY",
