@@ -131,6 +131,22 @@ except ImportError:  # pragma: no cover
     _SignalGuardDecision = None  # type: ignore[assignment]
     _SignalGuardOutcome = None  # type: ignore[assignment]
 
+# PR-22: Session registry — imported lazily so the ingress module remains
+# loadable even when the session registry module is absent (defensive).
+try:
+    from core.attached_runtime_session_registry import (
+        AttachedSessionRegistry as _IngressAttachedSessionRegistry,
+        get_session_registry as _ingress_get_session_registry,
+        lookup_active_session as _ingress_lookup_active_session,
+    )
+
+    _INGRESS_REGISTRY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _INGRESS_REGISTRY_AVAILABLE = False
+    _IngressAttachedSessionRegistry = None  # type: ignore[assignment,misc]
+    _ingress_get_session_registry = None  # type: ignore[assignment]
+    _ingress_lookup_active_session = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -316,6 +332,37 @@ CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL: str = (
     "policies=CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER,"
     "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH,"
     "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY"
+)
+
+# ---------------------------------------------------------------------------
+# PR-22: Registry-backed ingress consolidation sentinels
+# ---------------------------------------------------------------------------
+
+# PR-22: The ingress path must consult the session registry (PR-19) before
+# forwarding signals to the reconciler.  Non-active sessions are blocked.
+INGRESS_REGISTRY_GATE_PRECEDES_RECONCILE_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_REGISTRY_GATE_PRECEDES_RECONCILE: "
+    "ingest_delegated_execution_signal() MUST consult the attached runtime session "
+    "registry (PR-19) when session_id is non-empty, BEFORE forwarding the signal "
+    "to reconcile_android_execution_signal().  A non-active registry entry "
+    "(replaced / detached / invalidated) causes an immediate no-update outcome "
+    "without reaching the reconciler."
+)
+
+# PR-22: Signals for non-active sessions must be dropped at the ingress gate.
+INGRESS_NON_ACTIVE_SESSION_IS_DROPPED_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_NON_ACTIVE_SESSION_IS_DROPPED: "
+    "When session_id is non-empty and the registry reports no active session, "
+    "ingest_delegated_execution_signal() MUST return AndroidSignalReconcileOutcome "
+    "(was_updated=False) with a reject_reason that identifies the registry gate "
+    "as the authority.  The signal MUST NOT reach the reconciler or tracker."
+)
+
+# PR-22: Ingress closure sentinel for the registry-backed path.
+INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL: str = (
+    "android_delegated_signal_ingress::package=22::post-533-main-repo::"
+    "authoritative-registry-consolidation::"
+    "registry-gates-ingress-before-reconcile"
 )
 
 # ---------------------------------------------------------------------------
@@ -717,6 +764,7 @@ def ingest_delegated_execution_signal(
     *,
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
     guard_runtime: Optional[Any] = None,
+    registry: Optional[Any] = None,
 ) -> AndroidSignalReconcileOutcome:
     """Canonical ingress entry-point for Android delegated execution signals.
 
@@ -731,12 +779,16 @@ def ingest_delegated_execution_signal(
        ``replay``, ``stale``, or ``out_of_order``.  Rejected signals are
        logged and returned immediately as a no-update outcome — they MUST NOT
        reach the reconciler.
-    3. Converts the accepted delegated envelope to an
+    3. **PR-22 registry gate**: When ``session_id`` is non-empty, consults the
+       attached runtime session registry (PR-19) to verify the session is
+       active.  Non-active sessions (replaced / detached / invalidated) are
+       dropped here and NEVER forwarded to the reconciler.
+    4. Converts the accepted delegated envelope to an
        :class:`~core.android_execution_signal_reconciler.AndroidExecutionSignalEnvelope`
        understood by the PR-13 reconciler.
-    4. Calls :func:`~core.android_execution_signal_reconciler.reconcile_android_execution_signal`
-       as the canonical reconcile entry-point.
-    5. Returns the :class:`~core.android_execution_signal_reconciler.AndroidSignalReconcileOutcome`
+    5. Calls :func:`~core.android_execution_signal_reconciler.reconcile_android_execution_signal`
+       as the canonical reconcile entry-point (with the registry forwarded).
+    6. Returns the :class:`~core.android_execution_signal_reconciler.AndroidSignalReconcileOutcome`
        unchanged.
 
     Parameters
@@ -751,13 +803,17 @@ def ingest_delegated_execution_signal(
         Optional :class:`~core.attached_runtime_recovery_readiness.RecoveryReadinessRuntime`
         for test isolation.  Uses process singleton if None.  Ignored when
         the recovery-readiness module is unavailable.
+    registry:
+        Optional attached runtime session registry instance for test
+        isolation (PR-22).  Uses process singleton when ``None``.
 
     Returns
     -------
     AndroidSignalReconcileOutcome
         Reconciliation result (``was_updated=False`` when no matching record
-        is found, when the inbound message cannot be correlated, or when the
-        signal is rejected by the recovery guard).
+        is found, when the inbound message cannot be correlated, when the
+        signal is rejected by the recovery guard, or when the registry reports
+        the session is not active).
 
     Raises
     ------
@@ -806,5 +862,51 @@ def ingest_delegated_execution_signal(
                 exc,
             )
 
+    # ------------------------------------------------------------------ #
+    # PR-22: Registry gate — MUST precede reconciliation.                 #
+    # We only drop signals if the session IS in the registry but is NOT   #
+    # active.  If there is no registry entry, we let the signal through.  #
+    # ------------------------------------------------------------------ #
+    if (
+        delegated_envelope.session_id
+        and _INGRESS_REGISTRY_AVAILABLE
+        and _ingress_lookup_active_session is not None
+    ):
+        try:
+            _reg = registry if registry is not None else _ingress_get_session_registry()
+            # Use active_only=False to get the entry regardless of state.
+            any_entry = _ingress_lookup_active_session(
+                delegated_envelope.session_id, active_only=False, registry=_reg
+            )
+            if any_entry is not None and any_entry.attachment_state.value != "active":
+                android_envelope = delegated_envelope.to_android_execution_signal_envelope()
+                logger.debug(
+                    "PR-22 registry gate blocked inbound signal: "
+                    "session_id=%r is in '%s' state (not active)",
+                    delegated_envelope.session_id,
+                    any_entry.attachment_state.value,
+                )
+                return AndroidSignalReconcileOutcome(
+                    was_updated=False,
+                    reject_reason=(
+                        f"registry:non-active-session: session_id="
+                        f"{delegated_envelope.session_id!r} is in "
+                        f"'{any_entry.attachment_state.value}' state in the attached "
+                        "runtime session registry; signal dropped per "
+                        "INGRESS_NON_ACTIVE_SESSION_IS_DROPPED_POLICY"
+                    ),
+                    envelope=android_envelope,
+                )
+        except Exception as exc:  # pragma: no cover
+            # Registry gate failure is non-fatal; log and proceed to reconcile
+            # so that a buggy registry never silently drops valid signals.
+            logger.debug(
+                "PR-22 registry gate evaluation failed (non-fatal); "
+                "proceeding to reconcile: exc=%s",
+                exc,
+            )
+
     android_envelope = delegated_envelope.to_android_execution_signal_envelope()
-    return reconcile_android_execution_signal(android_envelope, runtime=runtime)
+    return reconcile_android_execution_signal(
+        android_envelope, runtime=runtime, registry=registry
+    )

@@ -63,6 +63,12 @@ Sentinels::
     REGISTRY_RECONCILIATION_MUST_CONSULT_REGISTRY_POLICY
     REGISTRY_LOOKUP_RETURNS_ACTIVE_ONLY_BY_DEFAULT_POLICY
     ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL
+    REGISTRY_DISPATCH_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY
+    REGISTRY_REUSE_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY
+    REGISTRY_RECONCILIATION_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY
+    REGISTRY_REPLACED_SESSION_IS_NOT_ELIGIBLE_POLICY
+    REGISTRY_SIDE_CHANNEL_TRUTH_IS_BLOCKED_POLICY
+    ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL
 
 Enums::
 
@@ -181,6 +187,53 @@ REGISTRY_LOOKUP_RETURNS_ACTIVE_ONLY_BY_DEFAULT_POLICY: str = (
 ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL: str = (
     "ATTACHED_RUNTIME_SESSION_REGISTRY_PR19::canonical-authoritative-attached-runtime-"
     "session-registry::package=19::post-533-dual-repo-runtime-unification"
+)
+
+# ---------------------------------------------------------------------------
+# PR-22: Authoritative registry consolidation sentinels
+# ---------------------------------------------------------------------------
+
+REGISTRY_DISPATCH_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY: str = (
+    "POLICY::REGISTRY_DISPATCH_GATE_IS_HARD_STOP_FOR_NON_ACTIVE: dispatch paths MUST "
+    "reject any attempt to target a session that is not in the 'active' state in the "
+    "registry.  Sessions in 'replaced', 'detached', or 'invalidated' state MUST NOT "
+    "receive new dispatch work.  This is a hard stop; no caller override is permitted."
+)
+
+REGISTRY_REUSE_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY: str = (
+    "POLICY::REGISTRY_REUSE_GATE_IS_HARD_STOP_FOR_NON_ACTIVE: reuse-binding resolution "
+    "MUST reject any reuse surface whose backing registry session is not in 'active' "
+    "state.  An eligible reuse binding whose session was subsequently detached, replaced, "
+    "or invalidated MUST be treated as ineligible at the registry gate level before the "
+    "reuse-binding eligibility check is even consulted."
+)
+
+REGISTRY_RECONCILIATION_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY: str = (
+    "POLICY::REGISTRY_RECONCILIATION_GATE_IS_HARD_STOP_FOR_NON_ACTIVE: signal "
+    "reconciliation MUST reject inbound signals whose session_id resolves to a "
+    "non-active registry entry.  Signals for replaced, detached, or invalidated "
+    "sessions MUST NOT mutate the host-side execution tracker."
+)
+
+REGISTRY_REPLACED_SESSION_IS_NOT_ELIGIBLE_POLICY: str = (
+    "POLICY::REGISTRY_REPLACED_SESSION_IS_NOT_ELIGIBLE: a session in 'replaced' state "
+    "has been superseded by a newer session for the same device.  It MUST NOT be "
+    "eligible for dispatch, reuse, or reconciliation even if a residual reuse-binding "
+    "or execution-tracker record still references its session_id."
+)
+
+REGISTRY_SIDE_CHANNEL_TRUTH_IS_BLOCKED_POLICY: str = (
+    "POLICY::REGISTRY_SIDE_CHANNEL_TRUTH_IS_BLOCKED: no partial or side-channel session "
+    "truth source (e.g. a residual reuse binding, a live attached_session object, or "
+    "an in-flight tracking record) may drive dispatch, reuse, or reconciliation "
+    "decisions independently of the registry.  The registry is the single gate; "
+    "all downstream decisions are subordinate to its authoritative view."
+)
+
+ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL: str = (
+    "ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22::authoritative-attached-runtime-"
+    "registry-consolidation::package=22::post-533-dual-repo-runtime-unification::"
+    "dispatch-reuse-reconciliation-consult-registry-as-single-truth-source"
 )
 
 # ---------------------------------------------------------------------------

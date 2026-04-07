@@ -560,6 +560,43 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21_UNAVAILABLE"
     )
 
+# Importing the PR-22 closure sentinel from the session registry and the
+# reuse-dispatch / reconciler / ingress modules confirms that the authoritative
+# attached-runtime registry is now the single gate for dispatch, reuse, and
+# delegated-signal reconciliation decisions.
+try:
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL as _PR22_REGISTRY_SENTINEL,
+        REGISTRY_DISPATCH_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY as _PR22_DISPATCH_GATE,
+        REGISTRY_REUSE_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY as _PR22_REUSE_GATE,
+        REGISTRY_RECONCILIATION_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY as _PR22_RECONCILE_GATE,
+        REGISTRY_SIDE_CHANNEL_TRUTH_IS_BLOCKED_POLICY as _PR22_SIDE_CHANNEL_BLOCKED,
+    )
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        REUSE_DISPATCH_PR22_SENTINEL as _PR22_DISPATCH_SENTINEL,
+    )
+    from core.android_execution_signal_reconciler import (  # noqa: F401
+        RECONCILER_PR22_SENTINEL as _PR22_RECONCILER_SENTINEL,
+    )
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL as _PR22_INGRESS_SENTINEL,
+    )
+
+    AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22: str = (
+        "PROJECTION_ROUTES::AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22_V1: "
+        "PR-22 authoritative attached-runtime registry consolidation is confirmed.  "
+        "The registry (core.attached_runtime_session_registry) is the single gate for "
+        "dispatch (resolve_reuse_dispatch_surface / dispatch_with_reuse_binding), "
+        "reuse (registry gate precedes binding check), and delegated-signal "
+        "reconciliation (reconcile_android_execution_signal / "
+        "ingest_delegated_execution_signal).  Non-active sessions are hard-rejected "
+        "at each gate.  No side-channel session truth may drive execution decisions."
+    )
+except ImportError:  # pragma: no cover
+    AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

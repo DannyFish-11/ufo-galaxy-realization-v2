@@ -109,6 +109,13 @@ from core.android_runtime_dispatch_binding import (
     AndroidRuntimeDispatchBindingRuntime,
     resolve_dispatch_binding,
 )
+from core.attached_runtime_session_registry import (
+    AttachedSessionRegistry,
+    AttachedSessionRegistryEntry,
+    get_session_registry,
+    lookup_active_session,
+    lookup_session_by_device,
+)
 
 # ---------------------------------------------------------------------------
 # Module authority marker
@@ -219,6 +226,31 @@ REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY: str = (
 ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL: str = (
     "ATTACHED_RUNTIME_REUSE_DISPATCH::package=17::post-533-main-repo::"
     "canonical-dispatch-consumption-of-attached-runtime-reuse-bindings"
+)
+
+# ---------------------------------------------------------------------------
+# PR-22: Registry-backed dispatch consolidation sentinels
+# ---------------------------------------------------------------------------
+
+REUSE_DISPATCH_REGISTRY_GATE_PRECEDES_BINDING_CHECK_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::REUSE_DISPATCH_REGISTRY_GATE_PRECEDES_BINDING_CHECK: "
+    "resolve_reuse_dispatch_surface() MUST consult the attached runtime session "
+    "registry (PR-19) to verify that the target session is in 'active' state "
+    "BEFORE evaluating reuse-binding eligibility.  A non-active registry entry "
+    "(replaced / detached / invalidated) causes an immediate 'rejected' resolution "
+    "without consulting the reuse-binding layer."
+)
+
+REUSE_DISPATCH_NON_ACTIVE_REGISTRY_SESSION_IS_HARD_REJECTED_POLICY: str = (
+    "REUSE_DISPATCH_POLICY::REUSE_DISPATCH_NON_ACTIVE_REGISTRY_SESSION_IS_HARD_REJECTED: "
+    "When the registry returns no active entry for the given session_id or device_id, "
+    "resolve_reuse_dispatch_surface() MUST return ReuseDispatchResolutionKind.rejected. "
+    "The reject_reason MUST identify the registry as the authority that blocked dispatch."
+)
+
+REUSE_DISPATCH_PR22_SENTINEL: str = (
+    "ATTACHED_RUNTIME_REUSE_DISPATCH::package=22::post-533-main-repo::"
+    "authoritative-registry-consolidation::registry-gates-dispatch-and-reuse"
 )
 
 # ---------------------------------------------------------------------------
@@ -367,6 +399,7 @@ def resolve_reuse_dispatch_surface(
     *,
     attached_session: Any = None,
     reuse_runtime: Optional[AttachedRuntimeReuseBindingRuntime] = None,
+    registry: Optional[AttachedSessionRegistry] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> ReuseDispatchResolution:
     """Determine whether an eligible reuse surface exists for the given target.
@@ -377,6 +410,11 @@ def resolve_reuse_dispatch_surface(
 
     Lookup strategy
     ---------------
+    0. **PR-22 registry gate** — if *session_id* or *device_id* is non-empty,
+       the attached runtime session registry (PR-19) is consulted first.
+       Only sessions in ``active`` state are eligible.  A missing or
+       non-active registry entry causes an immediate ``rejected`` resolution
+       without evaluating the reuse binding.
     1. If *session_id* is non-empty, look up via
        :func:`~core.attached_runtime_reuse_binding.get_reuse_binding`.
     2. If that returns ``None`` and *device_id* is non-empty, fall back to
@@ -387,9 +425,10 @@ def resolve_reuse_dispatch_surface(
 
     Resolution rules
     ----------------
-    * **no_binding** — no record found for (session_id, device_id).
-    * **rejected**   — a record was found but is currently ``ineligible``.
-    * **reused**     — a record was found and is currently ``eligible``.
+    * **rejected**   — registry has no active session for the given identity.
+    * **no_binding** — active registry session found but no reuse binding exists.
+    * **rejected**   — a reuse binding was found but is currently ``ineligible``.
+    * **reused**     — a reuse binding was found and is currently ``eligible``.
 
     Parameters
     ----------
@@ -406,6 +445,10 @@ def resolve_reuse_dispatch_surface(
     reuse_runtime
         Override the process-level reuse-binding ring-buffer singleton
         (test isolation).
+    registry
+        Override the process-level session registry singleton (test isolation).
+        Uses :func:`~core.attached_runtime_session_registry.get_session_registry`
+        when ``None``.
     metadata
         Caller-supplied freeform dict forwarded into the returned resolution.
 
@@ -417,6 +460,42 @@ def resolve_reuse_dispatch_surface(
         :func:`dispatch_with_reuse_binding`.
     """
     _meta = metadata if metadata is not None else {}
+    _registry = registry if registry is not None else get_session_registry()
+
+    # --- PR-22 registry gate: verify session is active before any reuse lookup ---
+    # We only hard-reject if the session IS in the registry but is NOT active.
+    # If there is no registry entry at all (e.g., legacy session not yet registered)
+    # we let the call proceed rather than blocking all unregistered sessions.
+    registry_entry: Optional[AttachedSessionRegistryEntry] = None
+    registry_has_entry: bool = False
+    if session_id:
+        _entry = lookup_active_session(session_id, active_only=False, registry=_registry)
+        if _entry is not None:
+            registry_has_entry = True
+            if _entry.attachment_state.value == "active":
+                registry_entry = _entry
+    if not registry_has_entry and device_id:
+        _dev_entry = lookup_session_by_device(device_id, registry=_registry)
+        if _dev_entry is not None:
+            registry_entry = _dev_entry
+            registry_has_entry = True
+
+    # If there is a known registry entry but it is NOT active, hard-reject.
+    # Side-channel / residual session truth MUST NOT drive dispatch forward.
+    if registry_has_entry and registry_entry is None:
+        return ReuseDispatchResolution(
+            resolution_kind=ReuseDispatchResolutionKind.rejected,
+            session_id=session_id,
+            device_id=device_id,
+            reuse_binding=None,
+            reject_reason=(
+                "registry:non-active-session: the attached runtime session registry "
+                "has an entry for the given session_id/device_id but it is not in "
+                "'active' state; dispatch is blocked per "
+                "REGISTRY_REUSE_GATE_IS_HARD_STOP_FOR_NON_ACTIVE_POLICY"
+            ),
+            metadata=_meta,
+        )
 
     # --- Lookup step ---
     record: Optional[AttachedRuntimeReuseBindingRecord] = None
@@ -539,6 +618,7 @@ def dispatch_with_reuse_binding(
     binding_id: Optional[str] = None,
     reuse_runtime: Optional[AttachedRuntimeReuseBindingRuntime] = None,
     dispatch_runtime: Optional[AndroidRuntimeDispatchBindingRuntime] = None,
+    registry: Optional[AttachedSessionRegistry] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> ReuseDispatchResolution:
     """Full dispatch flow that consumes the reuse binding before creating a new binding.
@@ -549,7 +629,9 @@ def dispatch_with_reuse_binding(
     Flow
     ----
     1. Call :func:`resolve_reuse_dispatch_surface` to determine whether an
-       eligible reuse surface already exists.
+       eligible reuse surface already exists.  The registry gate (PR-22) runs
+       first inside that function: non-active sessions are hard-rejected before
+       the reuse binding is consulted.
 
        * **reused** → return the resolution immediately without creating a
          new dispatch binding (the caller reuses the existing surface).
@@ -598,6 +680,10 @@ def dispatch_with_reuse_binding(
     dispatch_runtime
         Override the process-level dispatch-binding ring-buffer singleton
         (test isolation).
+    registry
+        Override the process-level session registry singleton (test isolation).
+        Uses :func:`~core.attached_runtime_session_registry.get_session_registry`
+        when ``None``.
     metadata
         Caller-supplied freeform dict forwarded into the returned resolution.
 
@@ -605,18 +691,20 @@ def dispatch_with_reuse_binding(
     -------
     ReuseDispatchResolution
         * ``reused``      — eligible binding found; caller reuses surface.
-        * ``rejected``    — binding found but ineligible; caller MUST NOT dispatch.
+        * ``rejected``    — binding found but ineligible (or session not active
+                           in registry); caller MUST NOT dispatch.
         * ``new_binding`` — no prior binding; new dispatch binding created and
                            written back.
     """
     _meta = metadata if metadata is not None else {}
 
-    # --- Step 1: resolve reuse surface ---
+    # --- Step 1: resolve reuse surface (includes PR-22 registry gate) ---
     resolution = resolve_reuse_dispatch_surface(
         session_id,
         device_id,
         attached_session=attached_session,
         reuse_runtime=reuse_runtime,
+        registry=registry,
         metadata=_meta,
     )
 
