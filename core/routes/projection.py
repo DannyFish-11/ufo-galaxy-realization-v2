@@ -560,6 +560,51 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21_UNAVAILABLE"
     )
 
+# Importing the PR-22 consolidation sentinels from the registry, reuse-dispatch,
+# reconciler, and ingress modules confirms that the attached runtime session
+# registry is the single authoritative truth source for dispatch, reuse, and
+# reconciliation decisions.
+try:
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL as _PR22_REG,
+        REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY as _PR22_DISPATCH,
+        REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY as _PR22_REUSE,
+        REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY as _PR22_RECONCILE,
+        REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY as _PR22_BLOCK,
+        REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY as _PR22_PASS,
+    )
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        REUSE_DISPATCH_PR22_SENTINEL as _PR22_REUSE_DISPATCH,
+        REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY as _PR22_RD_GATE,
+        REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY as _PR22_RD_BLOCK,
+    )
+    from core.android_execution_signal_reconciler import (  # noqa: F401
+        RECONCILER_PR22_SENTINEL as _PR22_RECONCILER,
+        RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY as _PR22_REC_GATE,
+        RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY as _PR22_REC_BLOCK,
+    )
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL as _PR22_INGRESS,
+        INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY as _PR22_ING_GATE,
+        INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY as _PR22_ING_BLOCK,
+    )
+
+    AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22: str = (
+        "PROJECTION_ROUTES::AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22_V1: "
+        "PR-22 authoritative attached runtime registry consolidation is confirmed.  "
+        "The attached runtime session registry (core.attached_runtime_session_registry) "
+        "is the single authoritative truth source for dispatch, reuse, and "
+        "reconciliation.  Registry gates are wired in resolve_reuse_dispatch_surface(), "
+        "dispatch_with_reuse_binding(), reconcile_android_execution_signal(), "
+        "reconcile_inbound_message(), and ingest_delegated_execution_signal().  "
+        "Known non-active sessions (replaced / detached / invalidated) are blocked "
+        "at every entry-point; absent registry entries pass through."
+    )
+except ImportError:  # pragma: no cover
+    AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::AUTHORITATIVE_ATTACHED_RUNTIME_REGISTRY_CONSOLIDATED_PR22_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

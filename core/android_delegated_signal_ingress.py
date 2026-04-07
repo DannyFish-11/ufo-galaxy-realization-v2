@@ -131,6 +131,22 @@ except ImportError:  # pragma: no cover
     _SignalGuardDecision = None  # type: ignore[assignment]
     _SignalGuardOutcome = None  # type: ignore[assignment]
 
+# PR-22: Registry gate — imported lazily so the module remains loadable when
+# the session registry is unavailable.
+try:
+    from core.attached_runtime_session_registry import (
+        AttachedSessionRegistry as _IngressAttachedSessionRegistry,
+        get_session_registry as _ingress_get_session_registry,
+        lookup_active_session as _ingress_lookup_active_session,
+    )
+
+    _INGRESS_REGISTRY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _INGRESS_REGISTRY_AVAILABLE = False
+    _IngressAttachedSessionRegistry = None  # type: ignore[assignment,misc]
+    _ingress_get_session_registry = None  # type: ignore[assignment]
+    _ingress_lookup_active_session = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -316,6 +332,35 @@ CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL: str = (
     "policies=CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER,"
     "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH,"
     "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY"
+)
+
+# ---------------------------------------------------------------------------
+# PR-22: Authoritative registry consolidation sentinels
+# ---------------------------------------------------------------------------
+
+INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL: str = (
+    "android_delegated_signal_ingress::package=22::post-533-main-repo::"
+    "authoritative-registry-consolidation::registry-gates-ingress"
+)
+
+INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22: "
+    "ingest_delegated_execution_signal() MUST consult the attached runtime "
+    "session registry as the authoritative check before forwarding any signal "
+    "to the reconciler.  The registry's knowledge of session state supersedes "
+    "any side-channel session truth.  A session that is known non-active in "
+    "the registry MUST NOT have its tracker mutated by further signals."
+)
+
+INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY: str = (
+    "INGRESS_POLICY::INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22: "
+    "When the session registry contains an entry for the delegated signal "
+    "envelope's session_id and that entry's state is 'replaced', 'detached', "
+    "or 'invalidated', ingest_delegated_execution_signal() MUST return "
+    "AndroidSignalReconcileOutcome(was_updated=False) with a reject_reason "
+    "describing the registry block without forwarding the signal to the "
+    "reconciler.  Absent registry entries pass through to the guard and "
+    "reconcile steps as before."
 )
 
 # ---------------------------------------------------------------------------
@@ -717,6 +762,7 @@ def ingest_delegated_execution_signal(
     *,
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
     guard_runtime: Optional[Any] = None,
+    registry: "Optional[_IngressAttachedSessionRegistry]" = None,
 ) -> AndroidSignalReconcileOutcome:
     """Canonical ingress entry-point for Android delegated execution signals.
 
@@ -725,6 +771,10 @@ def ingest_delegated_execution_signal(
 
     1. Extracts a :class:`DelegatedExecutionSignalEnvelope` via
        :func:`extract_delegated_signal_envelope`.
+    1a. **PR-22 registry gate**: Consults the attached runtime session registry.
+        If the registry contains an entry for the envelope's ``session_id`` in a
+        non-active state (replaced / detached / invalidated), returns
+        ``was_updated=False`` immediately.  Absent registry entries pass through.
     2. **PR-18 guard gate**: Calls
        :func:`~core.attached_runtime_recovery_readiness.guard_inbound_signal`
        to determine whether the signal is ``accept``, ``duplicate``,
@@ -751,13 +801,18 @@ def ingest_delegated_execution_signal(
         Optional :class:`~core.attached_runtime_recovery_readiness.RecoveryReadinessRuntime`
         for test isolation.  Uses process singleton if None.  Ignored when
         the recovery-readiness module is unavailable.
+    registry:
+        Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for the PR-22 registry gate (test isolation).  Uses the
+        process singleton when ``None``.
 
     Returns
     -------
     AndroidSignalReconcileOutcome
         Reconciliation result (``was_updated=False`` when no matching record
-        is found, when the inbound message cannot be correlated, or when the
-        signal is rejected by the recovery guard).
+        is found, when the inbound message cannot be correlated, when the
+        signal is rejected by the recovery guard, or when the PR-22 registry
+        gate blocks the non-active session).
 
     Raises
     ------
@@ -768,6 +823,28 @@ def ingest_delegated_execution_signal(
     rather than raising.
     """
     delegated_envelope = extract_delegated_signal_envelope(message)
+
+    # ------------------------------------------------------------------ #
+    # PR-22: Registry gate — MUST precede the recovery guard and          #
+    # reconciliation.  Non-active sessions known to the registry are      #
+    # blocked here; their signals MUST NOT reach the execution tracker.   #
+    # ------------------------------------------------------------------ #
+    if _INGRESS_REGISTRY_AVAILABLE and _ingress_lookup_active_session is not None and delegated_envelope.session_id:
+        _reg = registry if registry is not None else _ingress_get_session_registry()
+        _entry = _ingress_lookup_active_session(
+            delegated_envelope.session_id, active_only=False, registry=_reg
+        )
+        if _entry is not None and not _entry.is_active():
+            android_envelope = delegated_envelope.to_android_execution_signal_envelope()
+            return AndroidSignalReconcileOutcome(
+                was_updated=False,
+                reject_reason=(
+                    f"registry gate (PR-22): session {delegated_envelope.session_id!r} "
+                    f"is known non-active (state={_entry.attachment_state.value!r}); "
+                    "ingress blocked"
+                ),
+                envelope=android_envelope,
+            )
 
     # ------------------------------------------------------------------ #
     # PR-18: Recovery guard — MUST precede reconciliation.                #
