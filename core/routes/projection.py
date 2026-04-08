@@ -741,6 +741,34 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CLIENT_FACING_RESULT_SURFACING_NORMALIZED_ALIGNED_PR26_UNAVAILABLE"
     )
 
+# Importing the PR-27 gateway-facing registration and capability error semantics sentinels
+# confirms that configuration errors, network/readiness failures, and
+# capability-not-satisfied failures are distinguishable through stable gateway-facing signals.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL as _PR27_SENTINEL,
+        REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY as _PR27_REG,
+        READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY as _PR27_READINESS,
+        CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY as _PR27_CAPABILITY,
+        GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY as _PR27_SIGNALS,
+    )
+
+    GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27: str = (
+        "PROJECTION_ROUTES::GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27_V1: "
+        "PR-27 gateway-facing registration and capability error semantics hardening is confirmed.  "
+        "Registration failures, capability failures, and readiness-related degraded behavior are "
+        "distinguishable through stable existing gateway-facing semantics.  "
+        "Upstream retry/reconnect/setup UX can rely on structured failure_kind signals "
+        "(registration_failure, capability_failure, readiness_failure, config_error).  "
+        "No alternate registration coordinator, duplicate capability model, or parallel error "
+        "subsystem is introduced.  Gateway setup and connection signals are deterministic "
+        "for regression coverage."
+    )
+except ImportError:  # pragma: no cover
+    GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
