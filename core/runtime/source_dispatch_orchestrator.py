@@ -148,6 +148,69 @@ SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY: str = (
     "reading source code."
 )
 
+# ---------------------------------------------------------------------------
+# PR-25 sentinels — mainline abnormal-path matrix + Phase A acceptance
+# ---------------------------------------------------------------------------
+
+MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL: str = (
+    "MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25::source-dispatch-orchestrator::"
+    "delegated-execution+session-truth+fallback+selection-abnormal-paths-are-covered::"
+    "package=25::post-533-dual-repo-runtime-unification"
+)
+
+REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY: str = (
+    "POLICY::REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25: "
+    "When dispatch mode is remote_handoff and a target has been selected, the local "
+    "execution loop MUST NOT run concurrently.  Local execution is only permitted after "
+    "the remote handoff path has been fully resolved (success or failure).  This prevents "
+    "duplicate execution and session-truth divergence between source and target runtimes."
+)
+
+LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY: str = (
+    "POLICY::LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25: "
+    "When a remote handoff attempt fails (remote_handoff_failed or remote_handoff_error), "
+    "the dispatch path MUST fall back to local execution with effective_mode=fallback_local "
+    "and MUST record a stable decision_reason that identifies the failure origin.  The "
+    "fallback MUST NOT silently swallow the remote failure — it MUST be recorded in the "
+    "errors list so that the caller can distinguish a clean local dispatch from a "
+    "fallback-after-remote-failure outcome."
+)
+
+DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25: "
+    "Under delegated execution failure transitions (remote_handoff_failed, "
+    "remote_handoff_error, no_target_or_envelope), the attached runtime session registry "
+    "remains the single authoritative truth source for session state.  The dispatch layer "
+    "MUST NOT alter registry state as a side-effect of a failed remote dispatch.  Session "
+    "truth is preserved by only allowing registry mutations through the canonical registry "
+    "API (register/reconnect/reattach/detach/invalidate)."
+)
+
+SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY: str = (
+    "POLICY::SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25: "
+    "Dispatch target selection under degraded conditions (no active registry sessions, "
+    "all candidates failing readiness or participation gates, readiness/participation "
+    "subsystems unavailable) MUST produce a stable, deterministic fallback outcome. "
+    "The fallback MUST carry a non-empty selection_reason so that observers can "
+    "distinguish a degraded-condition fallback from a normal local dispatch.  No "
+    "new selection authority or coordinator is introduced — the existing registry, "
+    "readiness, participation, and reuse subsystems are the only truth sources."
+)
+
+PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY: str = (
+    "POLICY::PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25: "
+    "Phase A acceptance for PR-25 requires that all of the following abnormal dispatch "
+    "paths are exercised by stable regression tests and produce deterministic, "
+    "explainable outcomes: "
+    "(1) remote task blocks local loop (remote_handoff mode blocks concurrent local execution); "
+    "(2) local fallback after remote failure (fallback_local with recorded error); "
+    "(3) delegated execution failure preserves session truth (registry unchanged); "
+    "(4) selection fallback under degraded conditions is stable and carries a reason; "
+    "(5) session truth consistency under failure transitions (registry remains authoritative). "
+    "Tests MUST import these sentinels to assert Phase A coverage and MUST NOT introduce "
+    "a new abnormal-path coordinator or alternate dispatch authority."
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
