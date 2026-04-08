@@ -267,6 +267,65 @@ NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY: str = (
     "The SourceDispatchResult.to_dict() contract is the single stable client surface."
 )
 
+# ---------------------------------------------------------------------------
+# PR-27 sentinels — gateway-facing registration and capability error semantics
+# ---------------------------------------------------------------------------
+
+GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL: str = (
+    "GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27::"
+    "source-dispatch-orchestrator::registration+capability+readiness-failure-modes-are-"
+    "distinguishable-through-stable-gateway-facing-semantics::"
+    "package=27::post-533-dual-repo-runtime-unification"
+)
+
+REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY: str = (
+    "POLICY::REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27: "
+    "Gateway-facing registration failures MUST be distinguishable from capability "
+    "failures through stable error semantics.  Registration failures (device not "
+    "registered, session absent, identity mismatch) MUST carry a failure_kind of "
+    "'registration_failure' and expose a structured reason code.  Capability failures "
+    "(required action unsupported, exec_mode mismatch, capability_not_satisfied) MUST "
+    "carry failure_kind='capability_failure'.  Upstream Android product flows MUST be "
+    "able to distinguish these failure modes without inspecting raw error strings.  "
+    "No parallel error authority or registration coordinator is introduced."
+)
+
+READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY: str = (
+    "POLICY::READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27: "
+    "Readiness-related degraded behavior MUST be reported through existing stable "
+    "gateway-facing signals.  Specifically: (1) network/transport failures MUST set "
+    "failure_kind='readiness_failure' with a routable=False or transport_unavailable "
+    "reason; (2) configuration errors (missing credentials, bad config) MUST set "
+    "failure_kind='config_error'; (3) readiness gate blocking MUST propagate the "
+    "canonical BlockedBy reason code to the gateway-facing surface; (4) degraded "
+    "readiness (recovering/degraded status) MUST be surfaced as a distinct signal "
+    "that upstream retry/reconnect UX can consume.  Existing readiness and device "
+    "readiness surfaces are the canonical source — no parallel readiness authority."
+)
+
+CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY: str = (
+    "POLICY::CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27: "
+    "Capability-not-satisfied failures MUST produce actionable gateway-facing signals. "
+    "When a required capability is absent or does not match the required exec_mode, "
+    "the gateway response MUST identify: (1) which capability or action is missing; "
+    "(2) why it failed (not_registered, exec_mode_mismatch, capability_absent); "
+    "(3) whether the failure is transient (device temporarily offline) or permanent "
+    "(capability structurally absent).  This enables upstream Android product UX to "
+    "present a specific setup or retry prompt rather than a generic error."
+)
+
+GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY: str = (
+    "POLICY::GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27: "
+    "Gateway-facing setup and connection signals MUST be deterministic for regression "
+    "coverage.  The signal surface includes: device registration ack (success/failure "
+    "with structured reason), capability report ack (accepted/rejected with reason), "
+    "readiness gate outcome (ready/blocked/degraded with BlockedBy code).  Each signal "
+    "MUST carry a stable failure_kind that upstream product flows can branch on.  "
+    "Signal shape MUST NOT vary between paths — the same top-level fields are always "
+    "present.  Retry and reconnect UX MUST be able to rely on these fields as a "
+    "stable contract without defensive inspection of raw message payloads."
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
