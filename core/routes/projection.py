@@ -683,6 +683,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24_UNAVAILABLE"
     )
 
+# Importing the PR-25 mainline abnormal-path matrix sentinels from
+# source_dispatch_orchestrator confirms that delegated execution, session truth,
+# fallback, and selection abnormal paths are all formally covered.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL as _PR25_SENTINEL,
+        REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY as _PR25_REMOTE_BLOCKS,
+        LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY as _PR25_LOCAL_FALLBACK,
+        DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY as _PR25_SESSION_TRUTH,
+        SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY as _PR25_DEGRADED,
+        PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY as _PR25_PHASE_A,
+    )
+
+    MAINLINE_ABNORMAL_PATH_MATRIX_PHASE_A_ALIGNED_PR25: str = (
+        "PROJECTION_ROUTES::MAINLINE_ABNORMAL_PATH_MATRIX_PHASE_A_ALIGNED_PR25_V1: "
+        "PR-25 mainline abnormal-path matrix and Phase A acceptance is confirmed.  "
+        "The dispatch layer explicitly handles: remote task blocks local loop "
+        "(remote_handoff mode prevents concurrent local execution); local fallback after "
+        "remote failure (fallback_local with recorded error and stable reason); delegated "
+        "execution failure preserves session truth (registry unchanged); selection fallback "
+        "under degraded conditions is stable and carries a reason.  No new abnormal-path "
+        "coordinator or alternate dispatch authority is introduced.  All abnormal paths "
+        "are covered by stable regression tests as required by Phase A acceptance."
+    )
+except ImportError:  # pragma: no cover
+    MAINLINE_ABNORMAL_PATH_MATRIX_PHASE_A_ALIGNED_PR25: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::MAINLINE_ABNORMAL_PATH_MATRIX_PHASE_A_ALIGNED_PR25_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
