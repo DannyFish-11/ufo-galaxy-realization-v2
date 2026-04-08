@@ -391,6 +391,69 @@ REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-29: Post-Release Follow-Up Tightening Across Dispatch and Client Semantics
+# ---------------------------------------------------------------------------
+
+POST_RELEASE_FOLLOW_UP_TIGHTENING_PR29_SENTINEL: str = (
+    "POST_RELEASE_FOLLOW_UP_TIGHTENING_PR29::"
+    "source-dispatch-orchestrator::dispatch-selection-registration-readiness-"
+    "capability-delegated-fallback-client-semantics-cohesion-stability-tightening::"
+    "package=29::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_SELECTION_COHESION_STABILITY_PR29_POLICY: str = (
+    "POLICY::DISPATCH_SELECTION_COHESION_STABILITY_PR29: "
+    "Post-release tightening MUST close any remaining cohesion and stability gaps "
+    "in dispatch selection discovered after PR-28.  Selection decisions MUST be "
+    "deterministic for the same registry/readiness/participation/reuse input state.  "
+    "Any edge-case where selection outcome differs from the documented policy "
+    "(PR-24) under degraded or partially-populated inputs MUST be addressed "
+    "within the existing selection architecture.  No new selection authority "
+    "or parallel planning subsystem is introduced."
+)
+
+REGISTRATION_READINESS_CAPABILITY_TIGHTENING_PR29_POLICY: str = (
+    "POLICY::REGISTRATION_READINESS_CAPABILITY_TIGHTENING_PR29: "
+    "Registration, readiness, and capability surfaces MUST remain self-consistent "
+    "across all gateway-facing paths after the post-release tightening pass.  "
+    "A device transitioning through registration states (register → detach → "
+    "reattach) MUST produce readiness and capability signals that are coherent "
+    "with the authoritative registry state (PR-19/PR-22) at every point.  "
+    "Failure signals MUST use the stable failure_kind vocabulary established in "
+    "PR-27 (registration_failure / capability_failure / readiness_failure / "
+    "config_error) without deviation or extension that breaks the existing "
+    "client contract."
+)
+
+DELEGATED_EXECUTION_FALLBACK_INTEGRATION_PR29_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_FALLBACK_INTEGRATION_PR29: "
+    "Delegated execution and fallback paths MUST be fully coherent after "
+    "post-release tightening.  When a delegated execution target becomes "
+    "unavailable mid-dispatch, the fallback route (PR-23) MUST be invoked "
+    "with a result envelope that preserves the originating identity fields "
+    "(trace_id / task_id / session_id).  The terminal signal reconciliation "
+    "path (PR-13/PR-16/PR-21) MUST handle all four terminal kinds "
+    "(final_result / error / timeout / cancelled) without leaking "
+    "implementation-specific fields into the client-facing result.  "
+    "No new fallback coordinator or parallel fallback authority is introduced."
+)
+
+CLIENT_GATEWAY_SEMANTIC_CONSISTENCY_PR29_POLICY: str = (
+    "POLICY::CLIENT_GATEWAY_SEMANTIC_CONSISTENCY_PR29: "
+    "Client-facing and gateway-facing semantic consistency MUST be maintained "
+    "across all dispatch-path changes introduced by post-release tightening.  "
+    "Result envelopes delivered to the client surface (PR-26) MUST remain "
+    "structurally identical regardless of which internal path produced them: "
+    "local execution, delegated execution, fallback, or degraded-mode execution.  "
+    "The gateway-facing error semantics (PR-27) MUST not regress when readiness "
+    "degradation occurs mid-dispatch or when capability checks fail after "
+    "initial registration succeeds.  Single-system model semantics MUST be "
+    "preserved: the client MUST always observe exactly one authoritative result "
+    "per dispatch request, with no duplicates and no silent drops."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

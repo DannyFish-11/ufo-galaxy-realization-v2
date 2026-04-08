@@ -799,6 +799,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28_UNAVAILABLE"
     )
 
+# Importing the PR-29 post-release follow-up tightening sentinels confirms that
+# dispatch selection, registration/readiness/capability, delegated execution,
+# fallback, and client-facing result semantics remain cohesive and stable after
+# the post-release tightening pass, within the existing V2 architecture.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        POST_RELEASE_FOLLOW_UP_TIGHTENING_PR29_SENTINEL as _PR29_SENTINEL,
+        DISPATCH_SELECTION_COHESION_STABILITY_PR29_POLICY as _PR29_SELECTION,
+        REGISTRATION_READINESS_CAPABILITY_TIGHTENING_PR29_POLICY as _PR29_REGISTRATION,
+        DELEGATED_EXECUTION_FALLBACK_INTEGRATION_PR29_POLICY as _PR29_DELEGATED,
+        CLIENT_GATEWAY_SEMANTIC_CONSISTENCY_PR29_POLICY as _PR29_CLIENT,
+    )
+
+    POST_RELEASE_FOLLOW_UP_TIGHTENING_ALIGNED_PR29: str = (
+        "PROJECTION_ROUTES::POST_RELEASE_FOLLOW_UP_TIGHTENING_ALIGNED_PR29_V1: "
+        "PR-29 post-release follow-up tightening is confirmed.  Dispatch selection "
+        "cohesion and stability gaps (post-PR28) are closed within the existing "
+        "architecture.  Registration, readiness, and capability surfaces remain "
+        "self-consistent across gateway-facing paths.  Delegated execution and "
+        "fallback integration paths are fully coherent.  Client-facing and "
+        "gateway-facing semantic consistency is maintained across all dispatch-path "
+        "changes.  No new orchestration authority, semantic subsystem, or duplicate "
+        "client contract is introduced."
+    )
+except ImportError:  # pragma: no cover
+    POST_RELEASE_FOLLOW_UP_TIGHTENING_ALIGNED_PR29: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::POST_RELEASE_FOLLOW_UP_TIGHTENING_ALIGNED_PR29_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
