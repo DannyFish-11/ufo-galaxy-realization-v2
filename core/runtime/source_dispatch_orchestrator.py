@@ -326,6 +326,69 @@ GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY: str = (
     "stable contract without defensive inspection of raw message payloads."
 )
 
+# ---------------------------------------------------------------------------
+# PR-28: Integrated Regression Closure and Release-Readiness Tightening
+# ---------------------------------------------------------------------------
+
+INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL: str = (
+    "INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28::"
+    "source-dispatch-orchestrator::end-to-end-dispatch-execution-result-coherence-"
+    "integrated-selection-registry-reuse-fallback-registration-capability-readiness::"
+    "package=28::post-533-dual-repo-runtime-unification"
+)
+
+END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY: str = (
+    "POLICY::END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28: "
+    "The full client-facing and dispatch-facing chain MUST behave coherently across "
+    "selection, delegated execution, session truth, fallback, and result surfacing.  "
+    "A dispatch request MUST produce a result whose identity (trace_id, task_id, "
+    "session_id) matches the originating request at every stage: selection, "
+    "execution handoff, delegated signal ingress, reconciliation, and final "
+    "result surface.  No stage may drop or rewrite identity fields.  Fallback "
+    "results MUST carry the same identity as the primary path.  This policy is the "
+    "authoritative statement of V2 end-to-end coherence for regression closure."
+)
+
+INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY: str = (
+    "POLICY::INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28: "
+    "Integrated selection/registry/reuse/fallback behavior MUST be regression-closed "
+    "across all combinations.  Selection (PR-24) MUST consult the authoritative "
+    "registry (PR-19/PR-22), gate through readiness and participation, and prefer "
+    "reuse-eligible sessions.  When no candidate passes the gates, the canonical "
+    "fallback (PR-23 takeover/fallback route) MUST be invoked deterministically.  "
+    "Reuse-binding state (PR-14/PR-17) MUST remain coherent after fallback.  "
+    "Registry entries MUST not be silently mutated as a side-effect of selection "
+    "or fallback.  The chain select → reuse-check → fallback route MUST be "
+    "idempotent for the same input state."
+)
+
+REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY: str = (
+    "POLICY::REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28: "
+    "Registration, capability, and readiness semantics (PR-27) MUST remain coherent "
+    "when exercised through integrated scenarios that cross selection, delegated "
+    "execution, and fallback.  A device that fails the readiness gate during "
+    "selection MUST produce the same failure_kind signal as a device that fails "
+    "the readiness gate during capability report.  A capability-not-satisfied "
+    "failure encountered during delegated dispatch MUST surface the same actionable "
+    "fields as a pre-dispatch capability check.  Registration state MUST be "
+    "consistent across the registry, readiness, and gateway-facing ack surfaces "
+    "throughout the lifecycle of a dispatch request."
+)
+
+REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY: str = (
+    "POLICY::REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28: "
+    "Release-readiness tightening MUST address cross-feature interaction regressions "
+    "discovered during integrated passes.  Specifically: (1) result surfacing (PR-26) "
+    "MUST be stable when combined with selection fallback (PR-24/PR-23); "
+    "(2) gateway-facing error semantics (PR-27) MUST be stable when readiness "
+    "degradation occurs mid-dispatch; (3) session registry truth (PR-19/PR-22) "
+    "MUST not diverge from reuse-binding state (PR-14) under concurrent "
+    "register/replace/detach transitions; (4) delegated execution tracking (PR-10) "
+    "MUST be consistent with ingress reconciliation (PR-13/PR-16/PR-21) across "
+    "all terminal signal kinds.  No new release coordinator, orchestration "
+    "authority, or parallel architecture is introduced by this tightening pass."
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers

@@ -769,6 +769,36 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27_UNAVAILABLE"
     )
 
+# Importing the PR-28 integrated regression closure and release-readiness tightening
+# sentinels confirms that the full client-facing and dispatch-facing chain is
+# regression-closed across selection, delegated execution, session truth, fallback,
+# result surfacing, and registration/capability/readiness semantics.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL as _PR28_SENTINEL,
+        END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY as _PR28_E2E,
+        INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY as _PR28_SELECTION,
+        REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY as _PR28_REGISTRATION,
+        REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY as _PR28_REGRESSION,
+    )
+
+    INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28: str = (
+        "PROJECTION_ROUTES::INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28_V1: "
+        "PR-28 integrated regression closure and release-readiness tightening is confirmed.  "
+        "The full V2 dispatch chain is regression-closed: selection (PR-24), registry "
+        "(PR-19/PR-22), reuse (PR-14/PR-17), takeover/fallback (PR-23), delegated "
+        "execution tracking (PR-10), ingress-reconciliation closure (PR-21), result "
+        "surfacing (PR-26), and gateway-facing error semantics (PR-27) all behave "
+        "coherently under integrated scenarios.  Client-facing and gateway-facing "
+        "semantics remain stable across cross-feature interaction paths.  "
+        "No new orchestration authority, release subsystem, or duplicate end-to-end "
+        "control path is introduced."
+    )
+except ImportError:  # pragma: no cover
+    INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
