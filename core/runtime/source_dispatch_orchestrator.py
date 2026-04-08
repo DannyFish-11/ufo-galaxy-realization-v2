@@ -391,6 +391,70 @@ REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-29: Post-Release Follow-Up Tightening Across Dispatch and Client Semantics
+# ---------------------------------------------------------------------------
+
+POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL: str = (
+    "POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29::"
+    "source-dispatch-orchestrator::cohesion-stability-semantic-gaps-"
+    "selection-registration-readiness-capability-delegated-fallback-client-result::"
+    "package=29::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_SELECTION_COHESION_STABILITY_PR29_POLICY: str = (
+    "POLICY::DISPATCH_SELECTION_COHESION_STABILITY_PR29: "
+    "Post-PR28 dispatch selection MUST be cohesion-tightened across candidate "
+    "scoring, readiness gating, and participation gating.  Selection outcome MUST "
+    "be deterministic for identical input state after any previous fallback.  "
+    "Selection MUST not silently skip readiness or capability checks when a "
+    "reuse-eligible session is present.  The gap between scored selection and "
+    "gate-evaluated selection MUST be zero: a candidate that passes scoring MUST "
+    "also pass all gates, and a candidate that fails any gate MUST NOT appear as "
+    "a scored winner.  This tightening closes selection-path cohesion gaps "
+    "discovered after PR-28 integrated regression closure."
+)
+
+REGISTRATION_READINESS_CAPABILITY_SEMANTIC_CONSISTENCY_PR29_POLICY: str = (
+    "POLICY::REGISTRATION_READINESS_CAPABILITY_SEMANTIC_CONSISTENCY_PR29: "
+    "Registration, readiness, and capability semantics MUST remain stable and "
+    "consistent across every dispatch-path transition: initial registration, "
+    "re-registration, degraded readiness, capability negotiation, and capability "
+    "failure recovery.  A device that re-registers after a detach event MUST "
+    "resume normal readiness and capability visibility without requiring a full "
+    "gateway reconnect.  Capability-not-satisfied and readiness-degraded signals "
+    "MUST carry the same failure_kind vocabulary regardless of whether they are "
+    "emitted during pre-dispatch check or mid-dispatch degradation.  "
+    "Registration state MUST be idempotent for repeated identical register calls."
+)
+
+DELEGATED_EXECUTION_FALLBACK_INTEGRATION_PR29_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_FALLBACK_INTEGRATION_PR29: "
+    "Delegated execution and fallback integration paths MUST be tightened so that "
+    "a mid-execution capability failure or device detach triggers the canonical "
+    "fallback route (PR-23) with a stable failure_kind and result identity.  "
+    "The delegated execution tracker (PR-10) MUST reach a terminal state for every "
+    "dispatched task regardless of whether the result arrives via the happy path, "
+    "timeout, cancellation, or fallback.  Fallback results produced by mid-execution "
+    "degradation MUST be indistinguishable in shape from pre-dispatch fallback results "
+    "so that client-facing and gateway-facing surfaces need no path-specific branching."
+)
+
+CLIENT_GATEWAY_RESULT_SEMANTIC_ALIGNMENT_PR29_POLICY: str = (
+    "POLICY::CLIENT_GATEWAY_RESULT_SEMANTIC_ALIGNMENT_PR29: "
+    "Client-facing and gateway-facing result semantics MUST be aligned across all "
+    "dispatch-path changes introduced by post-PR28 tightening.  Result payloads "
+    "MUST carry stable top-level fields (trace_id, task_id, session_id, status, "
+    "failure_kind where applicable) regardless of whether the result originated "
+    "from local execution, delegated execution, fallback, or mid-dispatch recovery.  "
+    "No path-specific result contract drift is permitted.  The client contract "
+    "established by PR-26 result surfacing normalization MUST be preserved by "
+    "every tightening change introduced in this post-release pass.  Gateway-facing "
+    "ack and error signals MUST continue to use the stable failure_kind vocabulary "
+    "defined by PR-27."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

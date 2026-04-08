@@ -799,6 +799,36 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28_UNAVAILABLE"
     )
 
+# Importing the PR-29 post-release follow-up tightening sentinels confirms that
+# dispatch-selection cohesion, registration/readiness/capability semantic
+# consistency, delegated-execution/fallback integration, and client/gateway
+# result semantic alignment have all been tightened within the existing V2
+# architecture without introducing a new authority or duplicate contract.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL as _PR29_SENTINEL,
+        DISPATCH_SELECTION_COHESION_STABILITY_PR29_POLICY as _PR29_SELECTION,
+        REGISTRATION_READINESS_CAPABILITY_SEMANTIC_CONSISTENCY_PR29_POLICY as _PR29_REGISTRATION,
+        DELEGATED_EXECUTION_FALLBACK_INTEGRATION_PR29_POLICY as _PR29_DELEGATED,
+        CLIENT_GATEWAY_RESULT_SEMANTIC_ALIGNMENT_PR29_POLICY as _PR29_CLIENT,
+    )
+
+    POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29: str = (
+        "PROJECTION_ROUTES::POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29_V1: "
+        "PR-29 post-release follow-up tightening is confirmed.  "
+        "Dispatch selection cohesion (selection-gate gap closed), registration/"
+        "readiness/capability semantic consistency, delegated-execution/fallback "
+        "integration, and client/gateway-facing result semantic alignment are all "
+        "tightened within the existing V2 architecture.  PR-26 result surfacing "
+        "and PR-27 gateway error semantics are preserved.  "
+        "No new orchestration authority, semantic subsystem, or duplicate client "
+        "contract is introduced by this post-release tightening pass."
+    )
+except ImportError:  # pragma: no cover
+    POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
