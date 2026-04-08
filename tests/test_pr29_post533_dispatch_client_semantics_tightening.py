@@ -756,10 +756,27 @@ class TestRegisteredRuntimeDeviceContractConsistency:
         assert RegisteredRuntimeDevice is not None
 
     def test_contract_to_dict_includes_status_field(self) -> None:
-        from contracts.registered_runtime_device import RegisteredRuntimeDevice
-        d = RegisteredRuntimeDevice(device_id="dev-contract-002")
-        data = d.to_dict()
-        assert "status" in data
+        from contracts.registered_runtime_device import (
+            RegisteredRuntimeDevice,
+            RuntimeDeviceStatus,
+        )
+        d_online = RegisteredRuntimeDevice(
+            device_id="dev-contract-002",
+            status=RuntimeDeviceStatus.ONLINE,
+            online=True,
+        )
+        d_offline = RegisteredRuntimeDevice(
+            device_id="dev-contract-002b",
+            status=RuntimeDeviceStatus.OFFLINE,
+            online=False,
+        )
+        data_online = d_online.to_dict()
+        data_offline = d_offline.to_dict()
+        assert "status" in data_online
+        assert "status" in data_offline
+        # Status value MUST reflect the device's online/offline state
+        assert data_online["status"] == RuntimeDeviceStatus.ONLINE.value
+        assert data_offline["status"] == RuntimeDeviceStatus.OFFLINE.value
 
     def test_contract_device_id_preserved_in_serialisation(self) -> None:
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
