@@ -440,11 +440,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if not os.path.exists(fusion_entry):
             return {"error": f"Target {target} has no fusion_entry.py"}
 
-        node_instance = _load_node(target, target_node_dir, fusion_entry)
-        if not node_instance:
-            return {"error": f"Failed to load target {target}"}
-
-        return await _execute_node(node_instance, command, params)
+        from core.nodes.unified_node_executor import (
+            build_envelope,
+            invoke_node,
+            InvocationSource,
+        )
+        _envelope = build_envelope(
+            node_id=target,
+            action=command,
+            params=params,
+            invocation_source=InvocationSource.COMMAND_ROUTER,
+        )
+        _inv_result = await invoke_node(
+            _envelope,
+            node_dir=target_node_dir,
+            fusion_path=fusion_entry,
+        )
+        return _inv_result.to_legacy_dict()
 
     command_router.set_executor(_command_node_executor)
 

@@ -438,18 +438,43 @@ class CapabilityOrchestrator:
         return await skill_loader.execute(skill_id, **params)
     
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
-        """执行节点 — 优先走 NodeRegistry in-process 调用，降级到 HTTP"""
-        import httpx
-        from core.port_config import get_node_port
+        """执行节点 — 优先走 fusion_entry in-process (统一执行器 PR-35)，降级到 HTTP"""
+        import os as _os
+        from core.nodes.unified_node_executor import (
+            build_envelope,
+            invoke_node,
+            InvocationSource,
+            RouteMode,
+        )
+        from core.routes._helpers import nodes_root as _nodes_root
 
         node_name = cap.source  # e.g. "Node_50_Transformer"
+        action = params.get("action", "execute")
+        node_params = {k: v for k, v in params.items() if k != "action"}
 
-        # 1. 尝试通过 NodeRegistry in-process 调用
+        # 1. 尝试 in-process fusion_entry 路径（统一执行器）
+        node_dir = _os.path.join(_nodes_root, node_name)
+        fusion_path = _os.path.join(node_dir, "fusion_entry.py")
+        if _os.path.isdir(node_dir) and _os.path.exists(fusion_path):
+            _envelope = build_envelope(
+                node_id=node_name,
+                action=action,
+                params=node_params,
+                invocation_source=InvocationSource.CAPABILITY_ORCHESTRATOR,
+                route_mode=RouteMode.FUSION_ENTRY,
+            )
+            _inv_result = await invoke_node(
+                _envelope,
+                node_dir=node_dir,
+                fusion_path=fusion_path,
+            )
+            if _inv_result.success:
+                return _inv_result.result
+
+        # 2. NodeRegistry in-process fallback
         try:
             from core.node_registry import get_registry
             registry = get_registry()
-            action = params.get("action", "execute")
-            node_params = {k: v for k, v in params.items() if k != "action"}
             result = await registry.call_node(node_name, action, node_params,
                                               allow_failover=False)
             if result.get("success") is not False or "error" not in result:
@@ -457,11 +482,20 @@ class CapabilityOrchestrator:
         except Exception:
             pass  # fall through to HTTP
 
-        # 2. Resolve port from canonical port config (not 8000+id)
+        # 3. Resolve port from canonical port config (not 8000+id) — HTTP fallback
+        import httpx
+        from core.port_config import get_node_port
+
+        _envelope_http = build_envelope(
+            node_id=node_name,
+            action=action,
+            params=node_params,
+            invocation_source=InvocationSource.CAPABILITY_ORCHESTRATOR,
+            route_mode=RouteMode.HTTP_FALLBACK,
+        )
         try:
             port = get_node_port(node_name)
         except Exception:
-            # Last-resort fallback: parse numeric id from node name
             try:
                 node_num = int(node_name.replace("Node_", "").split("_")[0])
                 port = 8000 + node_num

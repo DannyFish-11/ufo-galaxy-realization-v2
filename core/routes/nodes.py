@@ -301,17 +301,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         try:
             if os.path.exists(fusion_entry):
-                node_info = _load_node(req.node_id, node_dir, fusion_entry)
-
-                if node_info:
-                    task_queue[task_id]["status"] = "running"
-                    result = await _execute_node(node_info, req.action, req.params or {})
+                from core.nodes.unified_node_executor import (
+                    build_envelope,
+                    invoke_node,
+                    InvocationSource,
+                )
+                _envelope = build_envelope(
+                    node_id=req.node_id,
+                    action=req.action,
+                    params=req.params or {},
+                    invocation_source=InvocationSource.API_NODES_CALL,
+                    task_id=task_id,
+                )
+                task_queue[task_id]["status"] = "running"
+                _inv_result = await invoke_node(
+                    _envelope,
+                    node_dir=node_dir,
+                    fusion_path=fusion_entry,
+                )
+                if _inv_result.success:
                     task_queue[task_id]["status"] = "completed"
-                    task_queue[task_id]["result"] = result
+                    task_queue[task_id]["result"] = _inv_result.result
                     return JSONResponse({
                         "success": True,
                         "task_id": task_id,
-                        "result": result
+                        "result": _inv_result.result,
                     })
                 else:
                     logger.warning(f"节点 {req.node_id} 的 fusion_entry.py 没有可调用的 execute 方法")

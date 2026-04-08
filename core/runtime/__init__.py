@@ -120,6 +120,22 @@ from core.runtime.source_dispatch_orchestrator import (
     DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY,
 )
 
+# PR-35: Unified Node Invocation Executor
+from core.nodes.unified_node_executor import (
+    UNIFIED_NODE_INVOCATION_EXECUTOR_AUTHORITY,
+    UNIFIED_NODE_INVOCATION_EXECUTOR_PR35_SENTINEL,
+    ALL_NODE_INVOCATION_PATHS_MUST_USE_UNIFIED_EXECUTOR_PR35_POLICY,
+    INVOCATION_ENVELOPE_IS_CANONICAL_TRACE_CARRIER_PR35_POLICY,
+    RESULT_ENVELOPE_SHAPE_IS_STABLE_PR35_POLICY,
+    NO_PARALLEL_NODE_EXECUTION_AUTHORITY_PR35_POLICY,
+    NodeInvocationEnvelope,
+    NodeInvocationResult,
+    InvocationSource,
+    RouteMode,
+    invoke_node,
+    build_envelope,
+)
+
 # PR-36: Cross-Runtime Result Merge Contract helpers
 from contracts.cross_runtime_result_merge import (
     RuntimeResultRole,
@@ -764,6 +780,19 @@ __all__ = [
     "MULTI_TARGET_RANKING_MATURITY_PR34_POLICY",
     "STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY",
     "DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY",
+    # PR-35: unified node invocation executor
+    "UNIFIED_NODE_INVOCATION_EXECUTOR_AUTHORITY",
+    "UNIFIED_NODE_INVOCATION_EXECUTOR_PR35_SENTINEL",
+    "ALL_NODE_INVOCATION_PATHS_MUST_USE_UNIFIED_EXECUTOR_PR35_POLICY",
+    "INVOCATION_ENVELOPE_IS_CANONICAL_TRACE_CARRIER_PR35_POLICY",
+    "RESULT_ENVELOPE_SHAPE_IS_STABLE_PR35_POLICY",
+    "NO_PARALLEL_NODE_EXECUTION_AUTHORITY_PR35_POLICY",
+    "NodeInvocationEnvelope",
+    "NodeInvocationResult",
+    "InvocationSource",
+    "RouteMode",
+    "invoke_node",
+    "build_envelope",
     # PR-36: Cross-Runtime Result Merge Contract
     "RuntimeResultRole",
     "RuntimeResultStatus",

@@ -5291,26 +5291,37 @@ class OpenClawd:
                 if len(parts) < 3:
                     return {"success": False, "error": f"无效 Node 工具名: {tool_name}"}
                 node_id, action_name = parts[1], parts[2]
-                # 通过已验证的 fusion_entry 执行路径
-                from core.routes._helpers import _load_node, _execute_node, nodes_root
+                # Unified node executor path (PR-35)
+                from core.nodes.unified_node_executor import (
+                    build_envelope,
+                    invoke_node,
+                    InvocationSource,
+                )
+                from core.routes._helpers import nodes_root as _nodes_root
                 import os as _os
 
                 node_key = self._find_node_key(node_id)
                 if not node_key:
                     return {"success": False, "error": f"节点 {node_id} 未在注册表中"}
 
-                node_dir = _os.path.join(nodes_root, node_key)
+                node_dir = _os.path.join(_nodes_root, node_key)
                 fusion_path = _os.path.join(node_dir, "fusion_entry.py")
-                if not _os.path.exists(fusion_path):
-                    return {"success": False, "error": f"节点 {node_id} 无 fusion_entry.py"}
-
-                node_info = _load_node(node_id, node_dir, fusion_path)
-                if not node_info:
-                    return {"success": False, "error": f"节点 {node_id} 加载失败"}
 
                 params = arguments.get("params", arguments)
-                result = await _execute_node(node_info, action_name, params if isinstance(params, dict) else {})
-                return {"success": True, "result": result}
+                _envelope = build_envelope(
+                    node_id=node_id,
+                    action=action_name,
+                    params=params if isinstance(params, dict) else {},
+                    invocation_source=InvocationSource.OPENCLAWD_TOOL,
+                    trace_id=getattr(self, "_current_trace_id", None),
+                    session_id=getattr(self, "_current_runtime_session_id", None),
+                )
+                _inv_result = await invoke_node(
+                    _envelope,
+                    node_dir=node_dir,
+                    fusion_path=fusion_path,
+                )
+                return _inv_result.to_legacy_dict()
 
             elif tool_name.startswith("github__"):
                 # GitHub addon tools: github__install, github__uninstall, github__list

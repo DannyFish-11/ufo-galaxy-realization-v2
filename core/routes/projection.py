@@ -995,6 +995,42 @@ except ImportError:  # pragma: no cover
     )
 
 
+# Confirms that all node invocation paths converge on the unified node executor
+# (core.nodes.unified_node_executor / invoke_node) and that the canonical
+# NodeInvocationEnvelope and NodeInvocationResult shapes are the only
+# authoritative node execution contracts.
+try:
+    from core.nodes.unified_node_executor import (  # noqa: F401
+        UNIFIED_NODE_INVOCATION_EXECUTOR_AUTHORITY as _UNIE_AUTHORITY,
+        UNIFIED_NODE_INVOCATION_EXECUTOR_PR35_SENTINEL as _UNIE_SENTINEL,
+        ALL_NODE_INVOCATION_PATHS_MUST_USE_UNIFIED_EXECUTOR_PR35_POLICY as _UNIE_PATHS_POLICY,
+        INVOCATION_ENVELOPE_IS_CANONICAL_TRACE_CARRIER_PR35_POLICY as _UNIE_ENVELOPE_POLICY,
+        RESULT_ENVELOPE_SHAPE_IS_STABLE_PR35_POLICY as _UNIE_RESULT_POLICY,
+        NO_PARALLEL_NODE_EXECUTION_AUTHORITY_PR35_POLICY as _UNIE_NO_PARALLEL_POLICY,
+        NodeInvocationEnvelope as _NodeInvocationEnvelope,
+        NodeInvocationResult as _NodeInvocationResult,
+        InvocationSource as _InvocationSource,
+        RouteMode as _RouteMode,
+        invoke_node as _invoke_node,
+        build_envelope as _build_envelope,
+    )
+
+    UNIFIED_NODE_INVOCATION_ALIGNED_PR35: str = (
+        "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR35_V1: "
+        "core.nodes.unified_node_executor (invoke_node) is confirmed as the single "
+        "canonical node execution authority.  All node invocation entry points — "
+        "OpenClawd tool dispatch, POST /api/v1/nodes/call, command-router bridge, "
+        "CapabilityOrchestrator, and SystemIntegration — construct a "
+        "NodeInvocationEnvelope and call invoke_node().  "
+        "NodeInvocationResult is the stable result contract.  "
+        "No parallel node execution path is introduced."
+    )
+except ImportError:  # pragma: no cover
+    UNIFIED_NODE_INVOCATION_ALIGNED_PR35: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR35_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
