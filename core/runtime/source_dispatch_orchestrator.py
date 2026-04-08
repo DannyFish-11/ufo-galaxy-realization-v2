@@ -454,6 +454,84 @@ CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-30: Post-Rollout Observability, Diagnostics, and Rollout Safety Hardening
+# ---------------------------------------------------------------------------
+
+POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_PR30_SENTINEL: str = (
+    "POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_PR30::"
+    "source-dispatch-orchestrator::dispatch-selection-observability-registration-"
+    "readiness-capability-fallback-diagnostics-rollout-safety-signals::"
+    "package=30::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_SELECTION_OBSERVABILITY_PR30_POLICY: str = (
+    "POLICY::DISPATCH_SELECTION_OBSERVABILITY_PR30: "
+    "Post-rollout dispatch-path decisions and failures MUST emit deterministic "
+    "diagnostic signals that allow operators and developers to identify which "
+    "selection path was taken (local/delegated/fallback/mesh), the scoring "
+    "inputs that led to that decision, and the reason any candidate was rejected "
+    "or demoted.  Diagnostic signals MUST be emitted from the existing PR-24 "
+    "selection truth layer (scoring, gating, fallback) without introducing a "
+    "parallel diagnostic authority or new selection coordinator.  "
+    "No new dispatch selection coordinator or alternate scoring model is introduced."
+)
+
+REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY: str = (
+    "POLICY::REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30: "
+    "Registration failure, readiness degradation, capability mismatch, and "
+    "fallback transition events MUST surface actionable diagnostic signals "
+    "through the existing PR-19/PR-22 registry, PR-15/PR-18 readiness, "
+    "PR-27 gateway-facing error semantics, and PR-23 fallback surfaces.  "
+    "Each diagnostic signal MUST include a stable failure_kind drawn from the "
+    "PR-27 exhaustive vocabulary (registration_failure/capability_failure/"
+    "readiness_failure/config_error) and a traceable event context.  "
+    "No new registration coordinator, readiness subsystem, or fallback authority "
+    "is introduced by this observability hardening pass."
+)
+
+DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_OBSERVABILITY_PR30: "
+    "Delegated execution paths (PR-10/PR-16/PR-21/PR-23) MUST expose "
+    "observable state transitions — pending_ack, acknowledged, in_progress, "
+    "completed, failed, timed_out, cancelled — as diagnostic signals aligned "
+    "with the existing DelegatedExecutionPhase enum.  Fallback transitions "
+    "triggered by terminal delegated signals MUST be traceable end-to-end "
+    "from ingress (PR-16/PR-21) through reconciliation (PR-13) to the fallback "
+    "route (PR-23).  No new delegated execution tracker or parallel ingress "
+    "path is introduced."
+)
+
+CLIENT_RESULT_OBSERVABILITY_ROLLOUT_SAFETY_PR30_POLICY: str = (
+    "POLICY::CLIENT_RESULT_OBSERVABILITY_ROLLOUT_SAFETY_PR30: "
+    "Client-facing and gateway-facing result contracts (PR-26/PR-27/PR-29) "
+    "MUST include rollout-safety signals that allow rapid triage of degraded "
+    "outcomes during incremental rollout.  Specifically: (1) result envelopes "
+    "MUST carry a traceable dispatch_path field (local/delegated/fallback) so "
+    "operators can correlate client-visible failures with internal dispatch "
+    "decisions; (2) degraded readiness and capability-mismatch outcomes MUST "
+    "expose a stable diagnostic_context that includes the failure_kind, "
+    "rejection_reason, and selection_path; (3) rollout safety signals MUST "
+    "be observable without requiring changes to the existing authority model.  "
+    "No new client contract surface, parallel result pipeline, or duplicate "
+    "diagnostics subsystem is introduced."
+)
+
+OPERATOR_DEVELOPER_DEBUG_CLARITY_PR30_POLICY: str = (
+    "POLICY::OPERATOR_DEVELOPER_DEBUG_CLARITY_PR30: "
+    "Operator-facing and developer-facing debug clarity MUST be improved "
+    "across all rollout-critical paths: selection, registration, readiness, "
+    "capability, delegated execution, fallback, and result surfacing.  "
+    "Debug signals MUST be emitted through the existing V2 logging and "
+    "projection surfaces (core/routes/projection.py) so that troubleshooting "
+    "can be performed without a separate diagnostics coordinator.  "
+    "Regression coverage MUST be added for any new observable state or "
+    "diagnostic signal to ensure deterministic behavior under all "
+    "failure conditions.  No alternate control authority, duplicate "
+    "diagnostics subsystem, or parallel troubleshooting path is introduced."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

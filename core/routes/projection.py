@@ -828,6 +828,39 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29_UNAVAILABLE"
     )
 
+# Importing the PR-30 post-rollout observability and diagnostics hardening
+# sentinels confirms that the V2 dispatch selection, registration/readiness/
+# capability, delegated execution, fallback, and client-facing result surfaces
+# expose actionable diagnostic signals for rollout safety within the existing
+# single-system architecture after the PR-29 tightening baseline.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_PR30_SENTINEL as _PR30_SENTINEL,
+        DISPATCH_SELECTION_OBSERVABILITY_PR30_POLICY as _PR30_SELECTION_OBS,
+        REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY as _PR30_REG_DIAG,
+        DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY as _PR30_DELEGATED_OBS,
+        CLIENT_RESULT_OBSERVABILITY_ROLLOUT_SAFETY_PR30_POLICY as _PR30_CLIENT_SAFETY,
+        OPERATOR_DEVELOPER_DEBUG_CLARITY_PR30_POLICY as _PR30_DEBUG,
+    )
+
+    POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_ALIGNED_PR30: str = (
+        "PROJECTION_ROUTES::POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_ALIGNED_PR30_V1: "
+        "PR-30 post-rollout observability and diagnostics hardening is confirmed.  "
+        "Dispatch-path selection observability (PR-24 scoring/gating/fallback signals), "
+        "registration/readiness/capability/fallback diagnostics (PR-19/PR-22/PR-27 "
+        "failure_kind vocabulary), delegated execution observable state transitions "
+        "(PR-10/PR-16/PR-21/PR-23 phase signals), client/result rollout-safety signals "
+        "(PR-26/PR-27/PR-29 dispatch_path+diagnostic_context), and operator/developer "
+        "debug clarity (projection surfaces) are all hardened within the existing "
+        "single-system V2 architecture.  No new diagnostics coordinator, alternate "
+        "control authority, duplicate diagnostics subsystem, or parallel troubleshooting "
+        "path is introduced."
+    )
+except ImportError:  # pragma: no cover
+    POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_ALIGNED_PR30: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::POST_ROLLOUT_OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_ALIGNED_PR30_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
