@@ -485,8 +485,11 @@ def _score_candidate(
 
     Scoring (higher is better, baseline 100):
       +20  reuse_eligible == True  (established reuse surface)
-      -40  not routable (readiness gate fail)
-      -40  not orchestration_eligible (participation gate fail)
+
+    Gate failures (readiness / participation) immediately return score=0 and
+    a stable rejection reason string; they are not treated as score deductions.
+    A rejected candidate (score=0 with a non-empty reason) must NOT be
+    selected as a dispatch target.
 
     Returns ``(score, rejection_reason)`` where *rejection_reason* is an
     empty string when the candidate passes all required gates, or a stable

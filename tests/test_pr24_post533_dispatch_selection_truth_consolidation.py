@@ -1,7 +1,7 @@
 """tests/test_pr24_post533_dispatch_selection_truth_consolidation.py
 ======================================================================
 Tests for PR package 24 (post-533 dual-repo runtime unification master plan,
-MAIN repo side): Dispatch Selection Truth Consolidation.
+main repo side): Dispatch Selection Truth Consolidation.
 
 This test suite verifies that:
 
@@ -1021,20 +1021,20 @@ class TestScoreCandidateReuseEffect:
         assert score_yes > score_no
 
     def test_both_have_zero_rejection_reason_when_passing(self):
-        _, r_no = _score_candidate(
+        _, reason_without_reuse = _score_candidate(
             "s", "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
         )
-        _, r_yes = _score_candidate(
+        _, reason_with_reuse = _score_candidate(
             "s", "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=True,
         )
-        assert r_no == ""
-        assert r_yes == ""
+        assert reason_without_reuse == ""
+        assert reason_with_reuse == ""
 
     def test_score_is_positive_when_passing(self):
         score, reason = _score_candidate(
