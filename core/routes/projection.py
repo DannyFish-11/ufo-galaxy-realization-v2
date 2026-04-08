@@ -966,6 +966,34 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34_UNAVAILABLE"
     )
 
+# Canonical runtime node registry consolidation sentinel.
+# Confirms that NodeFabricRegistry (core.nodes.node_fabric_registry) is the
+# single canonical runtime node registry, that system status endpoints derive
+# node runtime truth from it, and that core.node_registry.NodeRegistry is
+# retained only as a backward-compatibility facade.
+try:
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY as _CRNR_AUTHORITY,
+        NODE_FABRIC_IS_CANONICAL_RUNTIME_REGISTRY_SENTINEL as _CRNR_SENTINEL,
+        STATUS_ENDPOINTS_READ_FROM_CANONICAL_REGISTRY_POLICY as _CRNR_STATUS_POLICY,
+        LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_ONLY_POLICY as _CRNR_FACADE_POLICY,
+        get_node_fabric_registry as _get_node_fabric_registry,
+    )
+
+    CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED: str = (
+        "PROJECTION_ROUTES::CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED_V1: "
+        "NodeFabricRegistry (core.nodes.node_fabric_registry) is confirmed as the "
+        "single canonical runtime node registry.  System status endpoints derive "
+        "node runtime truth from NodeFabricRegistry.  "
+        "core.node_registry.NodeRegistry is retained as a backward-compatibility "
+        "facade only.  get_node_fabric_registry() is available for downstream "
+        "consumers that need canonical node presence and status reads."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

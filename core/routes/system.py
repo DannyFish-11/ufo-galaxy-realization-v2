@@ -138,17 +138,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             subsystems["llm_router"] = {"status": "error", "error": str(e)}
 
-        # Node Registry
+        # Node Registry — read from canonical NodeFabricRegistry first,
+        # fall back to legacy NodeRegistry for registered_nodes count.
         try:
-            from core.node_registry import get_node_registry
-            registry = get_node_registry()
-            meta = registry.metadata if hasattr(registry, 'metadata') else {}
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
+            fab = get_node_fabric_registry()
+            canonical_count = fab.count()
             subsystems["node_registry"] = {
                 "status": "running",
-                "registered_nodes": len(meta),
+                "registered_nodes": canonical_count,
+                "registry_authority": "canonical:NodeFabricRegistry",
             }
-        except Exception as e:
-            subsystems["node_registry"] = {"status": "error", "error": str(e)}
+        except Exception:
+            try:
+                from core.node_registry import get_node_registry
+                registry = get_node_registry()
+                meta = registry.metadata if hasattr(registry, 'metadata') else {}
+                subsystems["node_registry"] = {
+                    "status": "running",
+                    "registered_nodes": len(meta),
+                    "registry_authority": "legacy:NodeRegistry",
+                }
+            except Exception as e:
+                subsystems["node_registry"] = {"status": "error", "error": str(e)}
 
         # Monitoring
         try:
@@ -214,25 +226,56 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def nodes_status():
         """获取所有节点注册状态"""
         try:
-            from core.node_registry import get_node_registry
-            registry = get_node_registry()
-            meta = registry.metadata if hasattr(registry, 'metadata') else {}
             node_list = []
-            for node_id, m in meta.items():
-                node_list.append({
-                    "node_id": node_id,
-                    "name": getattr(m, 'name', node_id),
-                    "status": m.status.value if hasattr(m.status, 'value') else str(getattr(m, 'status', 'unknown')),
-                    "error_message": getattr(m, 'error_message', None),
-                    "version": getattr(m, 'version', None),
-                })
-            # Sort: ERROR nodes first, then READY
-            node_list.sort(key=lambda n: (0 if n["status"] == "error" else 1, n["node_id"]))
+
+            # Primary: read from canonical NodeFabricRegistry
+            try:
+                from core.nodes.node_fabric_registry import get_node_fabric_registry
+                fab = get_node_fabric_registry()
+                canonical_ids: set = set()
+                for n in fab.list_nodes():
+                    canonical_ids.add(n.node_id)
+                    node_list.append({
+                        "node_id": n.node_id,
+                        "name": n.metadata.get("name", n.node_id) if isinstance(n.metadata, dict) else n.node_id,
+                        "status": n.status.value if hasattr(n.status, "value") else str(n.status),
+                        "error_message": None,
+                        "version": n.metadata.get("version") if isinstance(n.metadata, dict) else None,
+                        "role": n.role.value if hasattr(n.role, "value") else str(n.role),
+                        "health_score": round(n.health_score(), 4),
+                        "source": "canonical",
+                    })
+            except Exception:
+                canonical_ids = set()
+
+            # Supplement: legacy NodeRegistry metadata for nodes not in canonical registry
+            try:
+                from core.node_registry import get_node_registry
+                legacy_registry = get_node_registry()
+                meta = legacy_registry.metadata if hasattr(legacy_registry, 'metadata') else {}
+                for node_id, m in meta.items():
+                    if node_id not in canonical_ids:
+                        node_list.append({
+                            "node_id": node_id,
+                            "name": getattr(m, 'name', node_id),
+                            "status": m.status.value if hasattr(m.status, 'value') else str(getattr(m, 'status', 'unknown')),
+                            "error_message": getattr(m, 'error_message', None),
+                            "version": getattr(m, 'version', None),
+                            "role": None,
+                            "health_score": None,
+                            "source": "legacy",
+                        })
+            except Exception:
+                pass
+
+            # Sort: ERROR nodes first, then by node_id
+            node_list.sort(key=lambda n: (0 if n["status"] in ("error", "ERROR") else 1, n["node_id"]))
             return JSONResponse({
                 "timestamp": datetime.now().isoformat(),
                 "total": len(node_list),
                 "by_status": _count_by_status(node_list),
                 "nodes": node_list,
+                "registry_authority": "canonical:NodeFabricRegistry",
             })
         except Exception as e:
             return JSONResponse({

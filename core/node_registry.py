@@ -698,6 +698,22 @@ class NodeRegistry:
 
 
 # ============================================================================
+# 兼容层标记 — Compatibility facade notice
+# ============================================================================
+
+#: Sentinel documenting that NodeRegistry is a backward-compatibility facade.
+#: The canonical runtime node registry is NodeFabricRegistry.
+#: See core.nodes.node_fabric_registry.CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY.
+LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_SENTINEL: str = (
+    "NODE_REGISTRY::LEGACY_COMPAT_FACADE_V1: "
+    "core.node_registry.NodeRegistry is a backward-compatibility facade. "
+    "The canonical runtime node registry is NodeFabricRegistry "
+    "(core.nodes.node_fabric_registry). "
+    "Import core.nodes.node_fabric_registry for new runtime-authority code."
+)
+
+
+# ============================================================================
 # 全局实例
 # ============================================================================
 
@@ -710,6 +726,17 @@ def get_registry() -> NodeRegistry:
     if _registry is None:
         _registry = NodeRegistry()
     return _registry
+
+
+def get_node_registry() -> NodeRegistry:
+    """Compatibility alias for get_registry().
+
+    .. deprecated::
+        Use ``core.nodes.node_fabric_registry.get_node_fabric_registry()`` for
+        canonical runtime node registry access.  This function returns the legacy
+        NodeRegistry instance which is retained for backward-compat only.
+    """
+    return get_registry()
 
 
 # ============================================================================

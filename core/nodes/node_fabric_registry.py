@@ -641,6 +641,48 @@ class NodeFabricRegistry:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 权威标记 / 哨兵 — 规范运行时节点注册表
+# Authority sentinels — canonical runtime node registry
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Declares NodeFabricRegistry as the single canonical runtime node registry.
+#: All runtime-facing node presence and status reads must converge on this
+#: registry.  core.node_registry.NodeRegistry is a legacy compatibility facade.
+CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY: str = (
+    "core.nodes.node_fabric_registry.NodeFabricRegistry is the single canonical "
+    "runtime node registry for the Galaxy system.  All runtime-facing node presence "
+    "and status reads must converge on this registry.  "
+    "core.node_registry.NodeRegistry is a legacy compatibility facade only."
+)
+
+#: Machine-checkable sentinel confirming NodeFabricRegistry is the canonical
+#: runtime node registry.  Import this symbol from test and integration code
+#: to assert the canonical registry is available.
+NODE_FABRIC_IS_CANONICAL_RUNTIME_REGISTRY_SENTINEL: str = (
+    "NODE_FABRIC_REGISTRY::CANONICAL_RUNTIME_REGISTRY_AUTHORITY_V1"
+)
+
+#: Policy: system status endpoints must derive node runtime truth from
+#: NodeFabricRegistry, not from legacy NodeRegistry.metadata dicts.
+STATUS_ENDPOINTS_READ_FROM_CANONICAL_REGISTRY_POLICY: str = (
+    "NODE_FABRIC_REGISTRY::STATUS_ENDPOINTS_READ_FROM_CANONICAL_REGISTRY_POLICY: "
+    "system status endpoints must derive node runtime truth from NodeFabricRegistry, "
+    "not from legacy NodeRegistry.metadata dicts.  The /api/v1/nodes/status endpoint "
+    "reads from NodeFabricRegistry as the primary source and supplements with legacy "
+    "metadata only for nodes not present in the canonical registry."
+)
+
+#: Policy: NodeRegistry (core.node_registry) is retained only as a backward-compat
+#: facade.  No new runtime-authority logic should be added to NodeRegistry.
+LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_ONLY_POLICY: str = (
+    "NODE_FABRIC_REGISTRY::LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_ONLY_POLICY: "
+    "core.node_registry.NodeRegistry is retained as a backward-compat facade. "
+    "No new runtime-authority logic should be added to NodeRegistry.  "
+    "New code must use NodeFabricRegistry for node runtime presence and status."
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 模块级便捷函数
 # ─────────────────────────────────────────────────────────────────────────────
 
