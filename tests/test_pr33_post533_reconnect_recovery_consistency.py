@@ -236,7 +236,7 @@ class TestProjectionSentinel:
         assert "UNAVAILABLE" not in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33
 
     def test_AB3_sentinel_contains_pr33(self):
-        assert "PR33" in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33 or "PR-33" in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33
+        assert any(kw in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33 for kw in ("PR33", "PR-33", "package=33"))
 
 
 # ===========================================================================

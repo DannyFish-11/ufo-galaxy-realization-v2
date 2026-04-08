@@ -653,7 +653,7 @@ class AttachedSessionRegistryEntry:
             last_transition_at=float(data.get("last_transition_at", time.time())),
             metadata=data.get("metadata", {}),
             reconnect_count=int(data.get("reconnect_count", 0)),
-            last_reconnect_at=float(data["last_reconnect_at"]) if data.get("last_reconnect_at") is not None else None,
+            last_reconnect_at=float(val) if (val := data.get("last_reconnect_at")) is not None else None,
         )
 
 
