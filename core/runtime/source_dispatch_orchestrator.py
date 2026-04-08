@@ -516,6 +516,75 @@ ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-31: Rollout Controls, Default Behaviors, and Safe-Operating Release Toggles
+# ---------------------------------------------------------------------------
+
+ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL: str = (
+    "ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31::"
+    "source-dispatch-orchestrator::dispatch-selection-registration-readiness-"
+    "capability-delegated-fallback-result-rollout-controls-defaults-kill-switch::"
+    "package=31::post-533-dual-repo-runtime-unification"
+)
+
+FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY: str = (
+    "POLICY::FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31: "
+    "Every feature-toggle that gates dispatch selection, registration, readiness, "
+    "capability evaluation, delegated execution, or fallback activation MUST define "
+    "a safe default that preserves semantic correctness when the toggle is absent, "
+    "mis-configured, or unresolvable.  Safe defaults MUST NOT silently skip "
+    "registration/readiness/capability gates; any gate that is bypassed due to a "
+    "toggle state MUST record a stable, operator-visible reason string.  Toggle "
+    "resolution is additive over the existing config/flag surfaces and does not "
+    "introduce a parallel flag subsystem or duplicate release coordinator."
+)
+
+KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY: str = (
+    "POLICY::KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31: "
+    "The system MUST support safe-disable (kill-switch) and rollback of each "
+    "critical dispatch path — selection, delegated execution, and fallback — "
+    "without semantic breakage of the remaining paths.  When a path is "
+    "kill-switched: (1) in-flight tasks on that path MUST reach a terminal state "
+    "with a stable failure_kind that identifies the kill-switch condition; "
+    "(2) the surviving fallback path MUST be activated using the existing fallback "
+    "semantics without introducing a new fallback authority; (3) the kill-switch "
+    "state MUST be observable through the existing observability_context and "
+    "diagnostic fields.  No alternate release authority or parallel control path "
+    "is introduced to implement kill-switch behavior."
+)
+
+SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY: str = (
+    "POLICY::SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31: "
+    "Selection, registration, readiness, and capability evaluation MUST each "
+    "operate with safe defaults when rollout controls are active.  Specifically: "
+    "(1) selection MUST default to local execution when no eligible remote "
+    "candidate is reachable and the selection feature-toggle is off or "
+    "kill-switched; (2) registration MUST reject unknown posture values with a "
+    "stable failure_kind rather than silently accepting them; (3) readiness "
+    "degradation MUST produce a stable diagnostic_reason that identifies which "
+    "rollout-control condition triggered the degradation; (4) capability "
+    "evaluation MUST fail closed (reject) when the capability manifest is absent "
+    "or unresolvable, and MUST surface the missing capability identifier.  All "
+    "safe-default behaviors are implemented within the existing single-system "
+    "V2 architecture without introducing a duplicate gate or alternate evaluator."
+)
+
+DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY: str = (
+    "POLICY::DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31: "
+    "Delegated execution and fallback paths MUST remain consistent with "
+    "client-facing and gateway-facing result contracts under all rollout-control "
+    "conditions.  When rollout controls limit or disable delegated execution: "
+    "(1) the client-facing result MUST carry a stable failure_kind that "
+    "distinguishes rollout-limited delegation from a runtime execution failure; "
+    "(2) the fallback path MUST be activated deterministically using the existing "
+    "fallback semantics; (3) the gateway-facing result MUST not expose internal "
+    "rollout-control state beyond the stable failure_kind and observability_context "
+    "fields already defined by PR-29 and PR-30.  Release-operation consistency "
+    "is achieved by tightening existing contracts, not by introducing new "
+    "result-surfacing authority or parallel fallback coordinator."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

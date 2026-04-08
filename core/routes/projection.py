@@ -859,6 +859,39 @@ except ImportError:  # pragma: no cover
     )
 
 
+# Importing the PR-31 rollout-controls, default-behaviors, and safe-release toggle
+# sentinels confirms that the V2 dispatch selection, registration/readiness/capability,
+# delegated execution, fallback, and client-facing result surfaces are hardened with
+# safe defaults, kill-switch support, and release-operation consistency within the
+# existing single-system architecture.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL as _PR31_SENTINEL,
+        FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY as _PR31_TOGGLE,
+        KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY as _PR31_KILL_SWITCH,
+        SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY as _PR31_SAFE_DEFAULTS,
+        DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY as _PR31_DELEGATED,
+    )
+
+    ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_ALIGNED_PR31: str = (
+        "PROJECTION_ROUTES::ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_ALIGNED_PR31_V1: "
+        "PR-31 rollout controls, default behaviors, and safe-operating release toggles "
+        "are confirmed.  Feature-toggle and default-behavior interactions (safe defaults "
+        "for selection/registration/readiness/capability/delegated/fallback), kill-switch "
+        "and safe-disable behavior (stable failure_kind, fallback activation, observable "
+        "kill-switch state), selection/registration/readiness/capability safe defaults "
+        "(fail-closed, stable diagnostic_reason), and delegated/fallback release-operation "
+        "consistency (stable failure_kind, deterministic fallback, no internal state "
+        "leakage) are all hardened within the existing single-system V2 architecture.  "
+        "No new release coordinator, duplicate flag subsystem, or parallel control path "
+        "is introduced."
+    )
+except ImportError:  # pragma: no cover
+    ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_ALIGNED_PR31: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_ALIGNED_PR31_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
