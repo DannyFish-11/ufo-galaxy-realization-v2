@@ -100,32 +100,27 @@ class NodeSystemLauncher:
     def _load_node_configs(self) -> Dict[str, Any]:
         """加载节点配置
 
-        优先从 node_dependencies.json 的 "nodes" 键读取；
-        若文件不存在则回退到 config/node_registry.json。
-        两个文件都不存在时记录可观测诊断日志并返回空字典。
+        从 node_dependencies.json 的 "nodes" 键读取（唯一权威来源）。
+        config/node_registry.json 是生成的兼容性制品，不作为回退源。
         """
         primary = PROJECT_ROOT / "node_dependencies.json"
-        fallback = PROJECT_ROOT / "config" / "node_registry.json"
 
-        for cfg_path in (primary, fallback):
-            if cfg_path.exists():
-                try:
-                    with open(cfg_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    nodes = data.get("nodes", data) if isinstance(data, dict) else {}
-                    if nodes:
-                        logger.info("节点配置已加载: %s (%d 个节点)", cfg_path, len(nodes))
-                        return nodes
-                    logger.warning("节点配置文件为空或格式异常: %s", cfg_path)
-                except Exception as exc:
-                    logger.warning("读取节点配置失败 %s: %s", cfg_path, exc)
+        if primary.exists():
+            try:
+                with open(primary, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                nodes = data.get("nodes", data) if isinstance(data, dict) else {}
+                if nodes:
+                    logger.info("节点配置已加载: %s (%d 个节点)", primary, len(nodes))
+                    return nodes
+                logger.warning("节点配置文件为空或格式异常: %s", primary)
+            except Exception as exc:
+                logger.warning("读取节点配置失败 %s: %s", primary, exc)
 
         logger.error(
-            "未找到节点配置文件。已检查路径: %s, %s。"
-            "请确保 node_dependencies.json 存在于项目根目录，"
-            "或在 config/node_registry.json 中提供备用配置。",
+            "未找到节点配置文件。已检查路径: %s。"
+            "请确保 node_dependencies.json 存在于项目根目录。",
             primary,
-            fallback,
         )
         return {}
 
@@ -139,8 +134,7 @@ class NodeSystemLauncher:
         """Return the startup_policy for *node_name* from the loaded config.
 
         Falls back to ``"active"`` when the node is absent from config or
-        the field is not set, preserving backward-compatibility with legacy
-        ``node_registry.json`` entries that pre-date the PR-7 policy field.
+        the field is not set, for nodes that pre-date the PR-7 policy field.
         """
         cfg = self.node_configs.get(node_name)
         if isinstance(cfg, dict):
