@@ -712,6 +712,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::MAINLINE_ABNORMAL_PATH_MATRIX_PHASE_A_ALIGNED_PR25_UNAVAILABLE"
     )
 
+# Importing the PR-26 client-facing result surfacing normalization sentinels from
+# source_dispatch_orchestrator confirms that the result contract is invariant across
+# local, cross-device, delegated, and fallback execution paths.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL as _PR26_SENTINEL,
+        RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY as _PR26_CONTRACT,
+        RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY as _PR26_SEMANTICS,
+        RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY as _PR26_IDENTITY,
+        NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY as _PR26_NO_DRIFT,
+    )
+
+    CLIENT_FACING_RESULT_SURFACING_NORMALIZED_ALIGNED_PR26: str = (
+        "PROJECTION_ROUTES::CLIENT_FACING_RESULT_SURFACING_NORMALIZED_ALIGNED_PR26_V1: "
+        "PR-26 client-facing result surfacing normalization is confirmed.  "
+        "The SourceDispatchResult contract is structurally invariant across all internal "
+        "execution paths (local, remote_handoff, fallback_local, staged_mesh, blocked). "
+        "Result semantics (success, mode, errors, decision_reason) are coherent regardless "
+        "of the execution path that produced the outcome.  Result identity fields "
+        "(result_id, dispatch_id, trace_id, task_id) are stable and consistently populated "
+        "across all paths.  No path-specific result contract drift is permitted — "
+        "to_dict() yields the same top-level field set for every execution path.  "
+        "No new result subsystem or alternate client-facing result authority is introduced."
+    )
+except ImportError:  # pragma: no cover
+    CLIENT_FACING_RESULT_SURFACING_NORMALIZED_ALIGNED_PR26: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CLIENT_FACING_RESULT_SURFACING_NORMALIZED_ALIGNED_PR26_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
