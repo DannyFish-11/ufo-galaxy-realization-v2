@@ -391,6 +391,69 @@ REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-29: Post-Release Follow-Up Tightening Across Dispatch and Client Semantics
+# ---------------------------------------------------------------------------
+
+POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL: str = (
+    "POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29::"
+    "source-dispatch-orchestrator::dispatch-selection-cohesion-registration-readiness-"
+    "capability-stability-delegated-execution-fallback-client-gateway-result-alignment::"
+    "package=29::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY: str = (
+    "POLICY::DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29: "
+    "Post-release dispatch selection MUST remain cohesive across the PR-24 selection "
+    "truth, PR-19/PR-22 registry authority, PR-14/PR-17 reuse-binding, and PR-23 "
+    "takeover/fallback route.  Any remaining gaps in selection scoring, candidate "
+    "gating, or fallback triggering discovered after PR-28 regression closure MUST "
+    "be addressed within the existing architecture.  Selection output MUST be "
+    "deterministic for any given input registry state, readiness state, and "
+    "participation state.  No new selection authority or parallel scoring model is "
+    "introduced by this follow-up tightening pass."
+)
+
+REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY: str = (
+    "POLICY::REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29: "
+    "Registration, readiness, and capability surfaces (PR-27) MUST remain stable "
+    "across post-release edge cases discovered after PR-28.  Specifically: "
+    "(1) registration state transitions MUST be idempotent under repeated "
+    "register/reconnect/reattach sequences; (2) readiness degradation signals MUST "
+    "carry a stable failure_kind across all degradation paths; "
+    "(3) capability-not-satisfied failures encountered after partial delegated "
+    "execution MUST be surfaced with the same actionable fields as pre-dispatch "
+    "capability failures.  No new registration coordinator or capability model "
+    "is introduced."
+)
+
+DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29: "
+    "Delegated execution (PR-10/PR-16/PR-21) and fallback (PR-23) paths MUST "
+    "remain semantically consistent after post-release tightening.  Fallback "
+    "triggered by a delegated execution timeout, cancellation, or error MUST "
+    "produce the same client-visible outcome shape as a pre-dispatch fallback.  "
+    "Terminal signals (timeout/cancelled/error) received through the ingress-"
+    "reconciliation path MUST update the execution tracker to a consistent "
+    "terminal phase before fallback is invoked.  No new fallback coordinator or "
+    "parallel delegated execution path is introduced."
+)
+
+CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY: str = (
+    "POLICY::CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29: "
+    "Client-facing and gateway-facing result contracts (PR-26/PR-27) MUST remain "
+    "aligned after post-release edge-case tightening.  Specifically: "
+    "(1) the result identity fields (trace_id, task_id, session_id) MUST be "
+    "preserved end-to-end regardless of whether the result originates from a "
+    "primary dispatch path, a delegated execution path, or a fallback path; "
+    "(2) failure_kind vocabulary MUST be exhaustive and stable — no unclassified "
+    "failure kind MUST reach the client or gateway surface; "
+    "(3) the registered runtime device contract (PR-29/PR-5) surfaces MUST be "
+    "consistent with the dispatch registry state at all times.  No duplicate "
+    "result contract or parallel client surface is introduced."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
