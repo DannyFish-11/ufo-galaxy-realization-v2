@@ -454,6 +454,68 @@ CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-30: Observability and Diagnostics Hardening for Rollout Safety
+# ---------------------------------------------------------------------------
+
+OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL: str = (
+    "OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30::"
+    "source-dispatch-orchestrator::dispatch-selection-registration-readiness-"
+    "capability-fallback-delegated-result-observability-diagnostics-rollout-safety::"
+    "package=30::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY: str = (
+    "POLICY::DISPATCH_PATH_DECISION_OBSERVABILITY_PR30: "
+    "All dispatch-path decisions and failures MUST emit actionable diagnostic "
+    "signals sufficient to identify the root cause without access to internal "
+    "state.  Selection scoring outcomes, candidate gate rejections, and fallback "
+    "triggers MUST be observable through stable, structured diagnostic fields "
+    "within the existing V2 dispatch architecture.  No new diagnostics coordinator "
+    "or alternate control authority is introduced.  Observability is additive and "
+    "reuses the existing dispatch selection, registry, and orchestrator surfaces."
+)
+
+REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY: str = (
+    "POLICY::REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30: "
+    "Registration failures, readiness degradation, capability mismatches, and "
+    "fallback transitions MUST surface operator-facing diagnostic signals that "
+    "are actionable without requiring internal state inspection.  Specifically: "
+    "(1) degraded readiness MUST carry a stable failure_kind and a human-readable "
+    "diagnostic_reason; (2) capability mismatch failures MUST include the "
+    "unsatisfied capability identifier; (3) registration failures MUST indicate "
+    "the rejection stage (e.g., validation, deduplication, capacity); "
+    "(4) fallback transitions MUST include the triggering condition and the "
+    "selected fallback path.  No duplicate diagnostics subsystem is introduced."
+)
+
+DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_OBSERVABILITY_PR30: "
+    "Delegated execution paths (PR-10/PR-16/PR-21/PR-23) MUST expose "
+    "observability signals at each phase transition: dispatch binding creation, "
+    "acknowledgment receipt, progress tracking, terminal signal processing, and "
+    "fallback invocation.  Each transition MUST be diagnosable from structured "
+    "output fields (trace_id, task_id, session_id, phase, signal_kind) without "
+    "requiring log scraping.  Degraded delegated execution paths MUST surface "
+    "the degradation reason as a structured diagnostic field.  No parallel "
+    "delegated execution path or separate observability subsystem is introduced."
+)
+
+ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY: str = (
+    "POLICY::ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30: "
+    "Client-facing and operator-facing result contracts MUST include rollout "
+    "safety signals sufficient to triage and mitigate rollout issues without "
+    "changing the existing semantic authority model.  Specifically: "
+    "(1) result envelopes MUST carry a stable observability_context field that "
+    "identifies the dispatch path, selection decision, and any active fallback "
+    "or degradation condition; (2) failure results MUST distinguish between "
+    "transient and persistent failure conditions via a stable is_transient field; "
+    "(3) rollout readiness checks MUST be expressible as deterministic assertions "
+    "over existing diagnostic fields.  No alternate control plane or separate "
+    "rollout authority is introduced by this observability hardening pass."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
