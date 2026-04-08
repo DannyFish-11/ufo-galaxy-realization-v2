@@ -274,6 +274,34 @@ REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-33: Reconnect and Recovery Consistency sentinels
+# ---------------------------------------------------------------------------
+
+REGISTRY_RECONNECT_CONSISTENCY_PR33_SENTINEL: str = (
+    "ATTACHED_RUNTIME_SESSION_REGISTRY_PR33::reconnect-recovery-consistency-hardening::"
+    "package=33::post-533-dual-repo-runtime-unification::"
+    "reconnect-count-and-last-reconnect-at-tracked-per-entry"
+)
+
+REGISTRY_RECONNECT_COUNT_IS_MONOTONIC_PR33_POLICY: str = (
+    "POLICY::REGISTRY_RECONNECT_COUNT_IS_MONOTONIC_PR33: "
+    "The reconnect_count field on AttachedSessionRegistryEntry MUST be incremented "
+    "by exactly 1 each time a RegistryTransition.reconnect is applied to the entry.  "
+    "It must never decrease.  This counter is the host-side observable evidence that "
+    "a session has recovered from one or more disconnects without creating a new "
+    "registration."
+)
+
+REGISTRY_LAST_RECONNECT_AT_TRACKS_MOST_RECENT_RECONNECT_PR33_POLICY: str = (
+    "POLICY::REGISTRY_LAST_RECONNECT_AT_TRACKS_MOST_RECENT_RECONNECT_PR33: "
+    "last_reconnect_at MUST be set to the transition timestamp every time "
+    "RegistryTransition.reconnect is applied.  It is None when the entry has "
+    "never been reconnected (i.e. has been registered but not yet detached and "
+    "reconnected).  Callers MAY use this field to detect stale reconnect states "
+    "or to surface recovery latency to operators."
+)
+
+# ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
 
@@ -539,6 +567,8 @@ class AttachedSessionRegistryEntry:
     last_transition_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
     entry_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    reconnect_count: int = 0
+    last_reconnect_at: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Convenience helpers
@@ -578,6 +608,8 @@ class AttachedSessionRegistryEntry:
             "registered_at": self.registered_at,
             "last_transition_at": self.last_transition_at,
             "metadata": self.metadata,
+            "reconnect_count": self.reconnect_count,
+            "last_reconnect_at": self.last_reconnect_at,
         }
 
     def to_json(self) -> str:
@@ -620,6 +652,8 @@ class AttachedSessionRegistryEntry:
             registered_at=float(data.get("registered_at", time.time())),
             last_transition_at=float(data.get("last_transition_at", time.time())),
             metadata=data.get("metadata", {}),
+            reconnect_count=int(data.get("reconnect_count", 0)),
+            last_reconnect_at=float(data["last_reconnect_at"]) if data.get("last_reconnect_at") is not None else None,
         )
 
 
@@ -829,6 +863,16 @@ class AttachedSessionRegistry:
             registered_at=entry.registered_at,
             last_transition_at=now,
             metadata={**entry.metadata, **(metadata or {})},
+            reconnect_count=(
+                entry.reconnect_count + 1
+                if transition == RegistryTransition.reconnect
+                else entry.reconnect_count
+            ),
+            last_reconnect_at=(
+                now
+                if transition == RegistryTransition.reconnect
+                else entry.last_reconnect_at
+            ),
         )
 
         replaced = self._replace_in_buffer(updated)
