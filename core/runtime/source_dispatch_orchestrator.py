@@ -585,6 +585,56 @@ DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-32: Staged Mesh Minimal Executable Closure
+# ---------------------------------------------------------------------------
+
+STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL: str = (
+    "STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32::"
+    "source-dispatch-orchestrator::staged-mesh-coordination-closure::"
+    "mesh-session-coordinator::body-mesh-registry::existing-mesh-session-result-contracts::"
+    "package=32::post-533-dual-repo-runtime-unification"
+)
+
+STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY: str = (
+    "POLICY::STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32: "
+    "staged_mesh dispatch MUST progress beyond returning 'plan prepared'. "
+    "When the dispatch plan has mode=staged_mesh, the orchestrator MUST invoke "
+    "the MeshSessionCoordinator to advance the coordination state from 'pending' "
+    "to 'active', and the result MUST carry action_taken='staged_mesh_coordinated' "
+    "with a populated coordinator_status field.  Plan-only return is no longer "
+    "acceptable as a terminal state."
+)
+
+STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY: str = (
+    "POLICY::STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32: "
+    "staged_mesh execution MUST use coordinate_mesh_session() from "
+    "core.mesh.mesh_session_coordinator, passing the plan's mesh_session dict. "
+    "The coordinator state MUST be derived from the existing body_mesh_registry "
+    "and mesh_session_coordinator contracts.  No new coordination authority, "
+    "duplicate session registry, or parallel result architecture is introduced."
+)
+
+STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY: str = (
+    "POLICY::STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32: "
+    "The SourceDispatchResult produced by staged_mesh execution MUST include "
+    "coordinator_status and coordinator_summary fields in the 'result' dict. "
+    "The decision_reason MUST be 'staged_mesh:coordinated' on success, "
+    "'staged_mesh:coordinator_error' on failure.  The result shape is additive "
+    "over the existing SourceDispatchResult contract and introduces no new "
+    "result surfacing authority."
+)
+
+STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY: str = (
+    "POLICY::STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32: "
+    "When MeshSessionCoordinator raises or returns None during staged_mesh "
+    "execution, the dispatch MUST gracefully degrade: errors are recorded in "
+    "the result's errors list, success=False, and decision_reason identifies "
+    "the coordinator failure.  The existing SourceDispatchResult contract "
+    "MUST remain stable; no new error-surfacing mechanism is introduced."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -1697,20 +1747,69 @@ def orchestrate_source_runtime_dispatch(
                 decision_reason = "remote_handoff:no_target_or_envelope:fallback_local"
 
         elif mode == SourceDispatchMode.staged_mesh:
-            # Staged mesh: return the plan summary; full coordinator deferred to PR-37
-            success = True
+            # PR-32: Execute the minimal coordination closure via MeshSessionCoordinator.
+            # staged_mesh must no longer stop at returning "plan prepared".
+            coordinator_state = None
+            coordinator_summary = None
+            try:
+                from core.mesh.mesh_session_coordinator import (
+                    coordinate_mesh_session,
+                    get_coordinator_summary,
+                )
+
+                mesh_session_dict = plan.mesh_session
+                coordinator_state = coordinate_mesh_session(
+                    mesh_session=mesh_session_dict,
+                    trace_id=trace_id,
+                    task_id=task_id,
+                    session_id=session_id,
+                    mesh_id=(
+                        mesh_session_dict.get("mesh_id")
+                        if isinstance(mesh_session_dict, dict)
+                        else None
+                    ),
+                )
+                coordinator_summary = get_coordinator_summary(coordinator_state)
+            except Exception as exc:  # noqa: BLE001 — coordinator errors must not surface as crashes; PR-32 graceful degradation policy
+                errors.append(f"staged_mesh_coordinator_error:{exc}")
+                logger.warning(
+                    "orchestrate_source_runtime_dispatch: staged_mesh coordinator error: %s",
+                    exc,
+                )
+
+            # Determine success and extract coordinator status for the result
+            success = coordinator_state is not None
+            coordinator_status_val: Optional[str] = None
+            if coordinator_state is not None:
+                _cs = getattr(coordinator_state, "status", None)
+                if hasattr(_cs, "value"):
+                    coordinator_status_val = _cs.value
+                elif _cs is not None:
+                    coordinator_status_val = str(_cs)
+
+            coordinator_summary_dict: Optional[Dict[str, Any]] = None
+            if coordinator_summary is not None:
+                if hasattr(coordinator_summary, "to_dict"):
+                    coordinator_summary_dict = coordinator_summary.to_dict()
+                elif isinstance(coordinator_summary, dict):
+                    coordinator_summary_dict = coordinator_summary
+
             exec_result = {
-                "action_taken": "staged_mesh_plan_prepared",
-                "success": True,
+                "action_taken": "staged_mesh_coordinated",
+                "success": success,
                 "mesh_session_id": (
-                    plan.mesh_session.get("session_id") if plan.mesh_session else None
+                    plan.mesh_session.get("session_id")
+                    if isinstance(plan.mesh_session, dict)
+                    else None
                 ),
-                "note": (
-                    "Staged mesh dispatch plan prepared. "
-                    "Full Mesh Session Coordinator execution deferred to PR-37."
-                ),
+                "coordinator_status": coordinator_status_val,
+                "coordinator_summary": coordinator_summary_dict,
             }
-            decision_reason = decision_reason or "staged_mesh:plan_prepared"
+            decision_reason = decision_reason or (
+                "staged_mesh:coordinated"
+                if success
+                else "staged_mesh:coordinator_error"
+            )
             return build_source_dispatch_result(
                 dispatch_id=plan.dispatch_id,
                 trace_id=trace_id,

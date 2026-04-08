@@ -879,7 +879,7 @@ class TestOrchestrateSourceRuntimeDispatch:
         assert result.mode == SourceDispatchMode.staged_mesh
         assert result.success is True
         assert result.result is not None
-        assert result.result.get("action_taken") == "staged_mesh_plan_prepared"
+        assert result.result.get("action_taken") == "staged_mesh_coordinated"
 
     def test_remote_handoff_no_bridge_fallback_local(self):
         """Remote handoff without a real bridge falls back to local."""
