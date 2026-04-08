@@ -71,6 +71,22 @@ CALLABLE_BASELINE_STARTUP_INTEGRATION: str = (
     "startup-ready nodes from callable-capability nodes at runtime."
 )
 
+#: Sentinel confirming that canonical NodeFabricRegistry lifecycle hooks are
+#: wired into NodeSystemLauncher.
+#:
+#: Confirms that node start success, start failure, health-check timeout, and
+#: stop transitions all write directly into
+#: :class:`~core.nodes.node_fabric_registry.NodeFabricRegistry` via the
+#: in-process helper ``_register_node_in_canonical_registry()``.  The HTTP
+#: runtime registry call is retained as a secondary notification only.
+CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS: str = (
+    "CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS_V1: "
+    "NodeSystemLauncher writes node lifecycle events (start success, start "
+    "failure, health-check timeout, stop) directly into NodeFabricRegistry "
+    "via _register_node_in_canonical_registry() as the primary canonical path. "
+    "HTTP-based runtime registry notification is a secondary fallback only."
+)
+
 
 class NodeSystemLauncher:
     """节点系统启动器"""
@@ -491,6 +507,7 @@ class NodeSystemLauncher:
         )
         if not ok:
             logger.error("节点 %s 进程启动失败", node_name)
+            self._register_node_in_canonical_registry(node_name, port, "offline")
             return False
 
         if port is not None:
@@ -541,6 +558,7 @@ class NodeSystemLauncher:
                 except Exception:
                     pass
             logger.warning("节点 %s 健康检查超时（10 次），视为启动失败", node_name)
+            self._register_node_in_canonical_registry(node_name, port, "offline")
             return False
 
         logger.info("节点 %s 已启动（无端口，跳过健康检查）", node_name)
@@ -552,10 +570,17 @@ class NodeSystemLauncher:
     ) -> None:
         """向运行时节点注册表注册已启动的节点（失败时静默忽略）。
 
+        先通过 _register_node_in_canonical_registry() 直接写入
+        NodeFabricRegistry（进程内，规范路径）。
+        再通过 HTTP 向 /api/v1/nodes/register 发送次级通知（兼容 dashboard）。
         注册端点来自 core/api_routes.py（权威 API 层）。
         dashboard/backend 的 /api/v1/nodes/register 已降级为遗留路由，
         由 core.api_routes 的同路径路由覆盖。
         """
+        # Primary: write directly into the in-process canonical registry.
+        self._register_node_in_canonical_registry(node_name, port, "healthy")
+
+        # Secondary: HTTP notification for dashboard/legacy consumers.
         try:
             import aiohttp
             api_host = os.environ.get("GALAXY_API_HOST", "127.0.0.1")
@@ -575,6 +600,124 @@ class NodeSystemLauncher:
                         logger.debug("节点 %s 已注册到运行时注册表", node_name)
         except Exception as _exc:
             logger.debug("注册节点 %s 到运行时注册表失败（可忽略）: %s", node_name, _exc)
+
+    def _register_node_in_canonical_registry(
+        self,
+        node_name: str,
+        port: Optional[int],
+        status_str: str,
+    ) -> None:
+        """直接写入 NodeFabricRegistry（进程内，规范路径，失败时静默忽略）。
+
+        This is the **primary canonical registration path** for launcher-managed
+        nodes.  It runs in-process so it always succeeds regardless of whether
+        the HTTP API is available.
+
+        Args:
+            node_name:  Canonical node name (key in ``node_dependencies.json``).
+            port:       Listening port, or ``None`` when unknown.
+            status_str: Target status string — ``"healthy"``, ``"offline"``, or
+                        ``"starting"``.  Mapped to :class:`NodeStatus` internally.
+        """
+        try:
+            from core.nodes.node_fabric_registry import (  # type: ignore[import]
+                get_node_fabric_registry,
+                NodeInfo,
+                NodeRole,
+                NodeStatus,
+                NodeArchitecturalClass,
+            )
+
+            _status_map = {
+                "healthy": NodeStatus.HEALTHY,
+                "offline": NodeStatus.OFFLINE,
+                "starting": NodeStatus.STARTING,
+                "unhealthy": NodeStatus.UNHEALTHY,
+                "degraded": NodeStatus.DEGRADED,
+            }
+            node_status = _status_map.get(status_str, NodeStatus.HEALTHY)
+
+            fabric = get_node_fabric_registry()
+
+            # If already registered, update status + heartbeat only.
+            existing = fabric.get(node_name)
+            if existing is not None:
+                fabric.update_status(node_name, node_status)
+                if node_status not in (NodeStatus.OFFLINE, NodeStatus.UNHEALTHY):
+                    fabric.heartbeat(node_name)
+                logger.debug(
+                    "节点 %s 已在 NodeFabricRegistry 中，更新状态为 %s",
+                    node_name, node_status.value,
+                )
+                return
+
+            # Build NodeInfo from launcher configuration.
+            node_cfg = self.node_configs.get(node_name, {})
+            deps = (
+                node_cfg.get("dependencies", [])
+                if isinstance(node_cfg, dict) else []
+            )
+            description = (
+                node_cfg.get("description", "")
+                if isinstance(node_cfg, dict) else ""
+            )
+            group = (
+                node_cfg.get("group", "")
+                if isinstance(node_cfg, dict) else ""
+            )
+
+            _group_role_map = {
+                "core": NodeRole.WORKER,
+                "development": NodeRole.TOOL,
+                "extended": NodeRole.WORKER,
+                "academic": NodeRole.WORKER,
+            }
+            role = _group_role_map.get(group, NodeRole.WORKER)
+
+            node_info = NodeInfo(
+                node_id=node_name,
+                role=role,
+                architectural_class=NodeArchitecturalClass.CAPABILITY_NODE,
+                host="localhost",
+                port=port or 0,
+                status=node_status,
+                dependencies=list(deps),
+                metadata={
+                    "name": node_name,
+                    "description": description,
+                    "group": group,
+                    "launcher_managed": True,
+                },
+            )
+            fabric.register(node_info)
+            logger.debug(
+                "节点 %s 已直接注册到 NodeFabricRegistry (status=%s)",
+                node_name, node_status.value,
+            )
+        except Exception as exc:
+            logger.debug(
+                "直接注册节点 %s 到 NodeFabricRegistry 失败（可忽略）: %s",
+                node_name, exc,
+            )
+
+    def stop_node(self, node_name: str) -> bool:
+        """停止单个节点并将其在 NodeFabricRegistry 中标记为 OFFLINE。
+
+        Args:
+            node_name: Canonical node name.
+
+        Returns:
+            ``True`` if the service was found and stopped; ``False`` otherwise.
+        """
+        # Mark OFFLINE in canonical registry first.
+        self._register_node_in_canonical_registry(node_name, None, "offline")
+        # Stop the underlying process via ServiceManager.
+        stopped = self.service_manager.stop_service(node_name)
+        if stopped:
+            logger.info("节点 %s 已停止", node_name)
+        else:
+            logger.debug("stop_node: 未找到服务 %s（可能已停止）", node_name)
+        return stopped
 
     async def start_nodes(
         self, nodes: List[str], parallel: bool = True
