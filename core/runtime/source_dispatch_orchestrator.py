@@ -211,6 +211,62 @@ PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY: str = (
     "a new abnormal-path coordinator or alternate dispatch authority."
 )
 
+# ---------------------------------------------------------------------------
+# PR-26 sentinels — client-facing result surfacing normalization
+# ---------------------------------------------------------------------------
+
+CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL: str = (
+    "CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26::source-dispatch-orchestrator::"
+    "local+cross-device+delegated+fallback-result-surface-is-coherent-and-uniform::"
+    "package=26::post-533-dual-repo-runtime-unification"
+)
+
+RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY: str = (
+    "POLICY::RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26: "
+    "The client-facing result contract (SourceDispatchResult) MUST be structurally "
+    "identical regardless of which internal execution path produced the outcome — "
+    "local, remote_handoff, fallback_local, staged_mesh, or blocked.  Every result "
+    "MUST carry: result_id, dispatch_id, trace_id, task_id, mode, success, errors, "
+    "and decision_reason.  No path-specific surface variant or alternate result "
+    "authority is permitted.  Downstream clients MUST be able to consume any result "
+    "through the same contract without inspecting the internal execution path."
+)
+
+RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY: str = (
+    "POLICY::RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26: "
+    "Result semantics MUST remain coherent regardless of internal execution path. "
+    "Specifically: (1) success=True implies the task was executed and an exec_result "
+    "was produced; (2) success=False implies either execution failed or the path was "
+    "blocked, and errors list MUST be non-empty explaining why; (3) decision_reason "
+    "MUST identify the execution path and outcome ('local_execution:success', "
+    "'remote_handoff:success', 'remote_handoff_failed:fallback_local', "
+    "'dispatch_blocked_by_policy', etc.); (4) mode MUST reflect the effective "
+    "execution path — fallback_local is distinct from local; (5) to_dict() MUST "
+    "always return a JSON-serialisable dict with all required fields present."
+)
+
+RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY: str = (
+    "POLICY::RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26: "
+    "Result identity fields (result_id, dispatch_id, trace_id, task_id) MUST be "
+    "populated consistently across all execution paths.  result_id is always a new "
+    "UUID4 unique to this result.  dispatch_id traces back to the SourceDispatchPlan. "
+    "trace_id propagates the distributed trace through every path.  task_id identifies "
+    "the task being dispatched.  No path MUST omit or reset these identity fields "
+    "as a side-effect of its internal execution logic."
+)
+
+NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY: str = (
+    "POLICY::NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26: "
+    "Path-specific result contract drift is explicitly prohibited.  This means: "
+    "(1) remote_handoff results MUST NOT add fields not present in local results; "
+    "(2) fallback_local results MUST NOT omit fields that local results carry; "
+    "(3) blocked results MUST carry the same top-level field set as success results; "
+    "(4) delegated execution results MUST surface through SourceDispatchResult, "
+    "not through a separate client contract; "
+    "(5) the to_dict() output MUST have the same top-level keys regardless of path. "
+    "The SourceDispatchResult.to_dict() contract is the single stable client surface."
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
