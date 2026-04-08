@@ -684,6 +684,65 @@ RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-34: Final Product-Grade Cross-Device and Runtime Acceptance Pack
+# ---------------------------------------------------------------------------
+
+CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL: str = (
+    "CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34::"
+    "source-dispatch-orchestrator::android-attached-runtime-orchestration::"
+    "multi-target-ranking::staged-mesh-closure::diagnostics-readiness-participation-formation::"
+    "package=34::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY: str = (
+    "POLICY::DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34: "
+    "Source dispatch, fallback transition, and result merge MUST be stable at "
+    "product-grade.  The existing dispatch selection truth, fallback reason "
+    "vocabulary, and result merge contract remain authoritative.  No alternate "
+    "dispatch authority or parallel result merge path is introduced as part of "
+    "the PR-34 acceptance pack."
+)
+
+ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY: str = (
+    "POLICY::ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34: "
+    "Android attached runtime orchestration — including ingress, reconciliation, "
+    "registry, recovery readiness, and reuse dispatch — MUST demonstrate "
+    "product-grade stability.  The canonical ingress-guard-reconcile-tracker path "
+    "closed in PR-21 and the authoritative registry consolidated in PR-22 remain "
+    "the sole orchestration authority.  No new Android runtime control system is "
+    "introduced."
+)
+
+MULTI_TARGET_RANKING_MATURITY_PR34_POLICY: str = (
+    "POLICY::MULTI_TARGET_RANKING_MATURITY_PR34: "
+    "Multi-target ranking through delegated target selection policy MUST be "
+    "demonstrably mature: evaluate_candidate(), rank_candidates(), and "
+    "select_delegated_target() MUST produce deterministic, explainable decisions "
+    "across all CandidateRejectionReason and SelectionOutcome values.  "
+    "No alternate ranking authority is introduced."
+)
+
+STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY: str = (
+    "POLICY::STAGED_MESH_CLOSURE_RUNNABLE_PR34: "
+    "The staged-mesh minimal executable closure established in PR-32 MUST remain "
+    "runnable end-to-end: coordinate_mesh_session() MUST be reachable, and "
+    "staged_mesh dispatch MUST produce a SourceDispatchResult with "
+    "action_taken='staged_mesh_coordinated' when a valid mesh_session with "
+    "2+ active participants is supplied.  No new mesh coordination authority "
+    "is introduced."
+)
+
+DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY: str = (
+    "POLICY::DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34: "
+    "Diagnostics, readiness, participation, and formation surfaces MUST be "
+    "usable within the existing architecture.  The observability and diagnostics "
+    "hardening of PR-30, rollout controls of PR-31, and readiness/capability "
+    "safe defaults remain authoritative.  No duplicate diagnostics subsystem "
+    "or parallel formation authority is introduced."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
