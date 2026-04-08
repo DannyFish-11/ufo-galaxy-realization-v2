@@ -105,7 +105,7 @@ try:
         build_source_dispatch_plan,
     )
     # Dispatch execution requires contracts which needs pydantic
-    import pydantic as _pydantic_check  # noqa: F401
+    import pydantic  # noqa: F401 — availability check only
 
     _DISPATCH_AVAILABLE = True
 except ImportError:
@@ -688,8 +688,7 @@ class TestRegistryStability:
 class TestRecoveryReadinessStability:
     def test_AK1_guard_accepts_first_signal(self):
         rt = _make_recovery()
-        from unittest.mock import MagicMock as _MagicMock
-        envelope = _MagicMock()
+        envelope = MagicMock()
         envelope.signal_id = "sig-k1"
         envelope.contract_id = "cid-k1"
         envelope.session_id = "sess-k1"
@@ -700,8 +699,7 @@ class TestRecoveryReadinessStability:
 
     def test_AK2_guard_rejects_duplicate(self):
         rt = _make_recovery()
-        from unittest.mock import MagicMock as _MagicMock
-        envelope = _MagicMock()
+        envelope = MagicMock()
         envelope.signal_id = "sig-k2"
         envelope.contract_id = "cid-k2"
         envelope.session_id = "sess-k2"
