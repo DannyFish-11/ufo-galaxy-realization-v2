@@ -49,6 +49,13 @@ from core.runtime.source_dispatch_orchestrator import (
     select_dispatch_target,
     build_source_dispatch_plan,
     orchestrate_source_runtime_dispatch,
+    # PR-24: dispatch selection truth consolidation
+    DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL,
+    SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY,
+    SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY,
+    SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY,
+    SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY,
+    SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY,
 )
 
 # PR-36: Cross-Runtime Result Merge Contract helpers
@@ -626,6 +633,13 @@ __all__ = [
     "select_dispatch_target",
     "build_source_dispatch_plan",
     "orchestrate_source_runtime_dispatch",
+    # PR-24: Dispatch Selection Truth Consolidation
+    "DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL",
+    "SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY",
+    "SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY",
+    "SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY",
+    "SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY",
+    "SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY",
     # PR-36: Cross-Runtime Result Merge Contract
     "RuntimeResultRole",
     "RuntimeResultStatus",
