@@ -5291,26 +5291,22 @@ class OpenClawd:
                 if len(parts) < 3:
                     return {"success": False, "error": f"无效 Node 工具名: {tool_name}"}
                 node_id, action_name = parts[1], parts[2]
-                # 通过已验证的 fusion_entry 执行路径
-                from core.routes._helpers import _load_node, _execute_node, nodes_root
-                import os as _os
+                from core.node_invocation import InvocationSource, invoke_node
 
                 node_key = self._find_node_key(node_id)
                 if not node_key:
                     return {"success": False, "error": f"节点 {node_id} 未在注册表中"}
 
-                node_dir = _os.path.join(nodes_root, node_key)
-                fusion_path = _os.path.join(node_dir, "fusion_entry.py")
-                if not _os.path.exists(fusion_path):
-                    return {"success": False, "error": f"节点 {node_id} 无 fusion_entry.py"}
-
-                node_info = _load_node(node_id, node_dir, fusion_path)
-                if not node_info:
-                    return {"success": False, "error": f"节点 {node_id} 加载失败"}
-
                 params = arguments.get("params", arguments)
-                result = await _execute_node(node_info, action_name, params if isinstance(params, dict) else {})
-                return {"success": True, "result": result}
+                inv_result = await invoke_node(
+                    node_key,
+                    action_name,
+                    params if isinstance(params, dict) else {},
+                    invocation_source=InvocationSource.OPENCLAWD,
+                )
+                if inv_result.success:
+                    return {"success": True, "result": inv_result.result}
+                return {"success": False, "error": inv_result.error}
 
             elif tool_name.startswith("github__"):
                 # GitHub addon tools: github__install, github__uninstall, github__list

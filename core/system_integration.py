@@ -542,17 +542,29 @@ class SystemIntegration:
             raise
     
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
-        """执行节点能力"""
+        """执行节点能力 (unified executor with HTTP fallback)"""
+        node_name = cap.source
+
+        # Primary path: invoke via unified node executor (fusion_entry)
+        try:
+            from core.node_invocation import InvocationSource, invoke_node
+            inv_result = await invoke_node(
+                node_name,
+                params.get("action", "execute"),
+                params,
+                invocation_source=InvocationSource.SYSTEM,
+            )
+            if inv_result.success:
+                return inv_result.result
+        except Exception as e:
+            logger.debug(f"unified executor failed for {node_name}, trying HTTP fallback: {e}")
+
+        # HTTP fallback: call node's HTTP /execute endpoint
         try:
             import httpx
-            
-            node_name = cap.source
-            # 从节点 ID 提取端口号
             node_id = node_name.replace("Node_", "").split("_")[0]
             port = 8000 + int(node_id)
-            
             url = f"http://localhost:{port}/execute"
-            
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(url, json=params)
                 return response.json()

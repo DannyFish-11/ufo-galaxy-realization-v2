@@ -31,6 +31,7 @@ from core.routes._shared import (
 )
 from core.routes._helpers import nodes_root, _load_node, _execute_node
 from core.routes._models import NodeCallRequest
+from core.node_invocation import invoke_node, InvocationSource
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -283,13 +284,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """调用节点执行操作"""
         task_id = str(uuid.uuid4())
 
-        nodes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "nodes")
-        node_dir = os.path.join(nodes_dir, req.node_id)
-        fusion_entry = os.path.join(node_dir, "fusion_entry.py")
-
-        if not os.path.isdir(node_dir):
-            raise HTTPException(status_code=404, detail=f"节点 {req.node_id} 未找到")
-
         task_queue[task_id] = {
             "task_id": task_id,
             "node_id": req.node_id,
@@ -299,38 +293,37 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "created_at": datetime.now().isoformat()
         }
 
-        try:
-            if os.path.exists(fusion_entry):
-                node_info = _load_node(req.node_id, node_dir, fusion_entry)
+        task_queue[task_id]["status"] = "running"
+        invocation_result = await invoke_node(
+            req.node_id,
+            req.action,
+            req.params or {},
+            invocation_source=InvocationSource.REST,
+            task_id=task_id,
+        )
 
-                if node_info:
-                    task_queue[task_id]["status"] = "running"
-                    result = await _execute_node(node_info, req.action, req.params or {})
-                    task_queue[task_id]["status"] = "completed"
-                    task_queue[task_id]["result"] = result
-                    return JSONResponse({
-                        "success": True,
-                        "task_id": task_id,
-                        "result": result
-                    })
-                else:
-                    logger.warning(f"节点 {req.node_id} 的 fusion_entry.py 没有可调用的 execute 方法")
-
+        if invocation_result.success:
+            task_queue[task_id]["status"] = "completed"
+            task_queue[task_id]["result"] = invocation_result.result
             return JSONResponse({
                 "success": True,
                 "task_id": task_id,
-                "status": "queued",
-                "message": f"任务已排队，节点 {req.node_id} 将异步处理"
+                "request_id": invocation_result.request_id,
+                "trace_id": invocation_result.trace_id,
+                "result": invocation_result.result,
+                "duration_ms": invocation_result.duration_ms,
             })
-
-        except Exception as e:
+        else:
             task_queue[task_id]["status"] = "failed"
-            task_queue[task_id]["error"] = str(e)
-            logger.error(f"节点调用失败: {req.node_id}.{req.action}: {e}")
+            task_queue[task_id]["error"] = invocation_result.error
+            logger.error(f"节点调用失败: {req.node_id}.{req.action}: {invocation_result.error}")
+            status_code = 404 if "目录未找到" in (invocation_result.error or "") else 500
             return JSONResponse({
                 "success": False,
                 "task_id": task_id,
-                "error": str(e)
-            }, status_code=500)
+                "request_id": invocation_result.request_id,
+                "trace_id": invocation_result.trace_id,
+                "error": invocation_result.error,
+            }, status_code=status_code)
 
     return router
