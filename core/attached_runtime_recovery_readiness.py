@@ -240,6 +240,26 @@ ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-33: Reconnect and Recovery Consistency sentinel
+# ---------------------------------------------------------------------------
+
+RECOVERY_READINESS_RECONNECT_CONSISTENCY_PR33_SENTINEL: str = (
+    "attached_runtime_recovery_readiness::package=33::pr=post533-pr33-main::"
+    "reconnect-recovery-consistency-hardening::"
+    "clear-seq-context-for-reconnect::post-reconnect-signals-accepted"
+)
+
+RECOVERY_GUARD_CLEARS_SEQ_ON_RECONNECT_PR33_POLICY: str = (
+    "RECOVERY_READINESS_POLICY::RECOVERY_GUARD_CLEARS_SEQ_ON_RECONNECT_PR33: "
+    "When a session or contract context reconnects, the seq_index entry for that "
+    "context MUST be cleared via clear_seq_context_for_reconnect() before the first "
+    "post-reconnect signal is processed.  This prevents post-reconnect signals from "
+    "being misclassified as stale or out-of-order relative to pre-disconnect signals.  "
+    "The ring buffer of seen signal_ids is NOT cleared; duplicate protection remains "
+    "active across reconnects."
+)
+
+# ---------------------------------------------------------------------------
 # Configuration constants
 # ---------------------------------------------------------------------------
 
@@ -589,6 +609,22 @@ class RecoveryReadinessRuntime:
             self._reject_counts.get(decision.value, 0) + 1
         )
 
+    def clear_seq_context(self, context_key: str) -> None:
+        """Remove the seq_index entry for *context_key*.
+
+        MUST be called after a session reconnect so that the first
+        post-reconnect signal is not misclassified as stale or out-of-order
+        relative to pre-disconnect signals.  The ``signal_id`` ring buffer
+        is intentionally preserved to maintain duplicate protection.
+
+        Parameters
+        ----------
+        context_key:
+            The context key whose maximum-sequence entry should be cleared.
+            Typically derived from ``contract_id`` or ``session_id``.
+        """
+        self._seq_index.pop(context_key, None)
+
     # ------------------------------------------------------------------
     # Snapshot
     # ------------------------------------------------------------------
@@ -910,3 +946,32 @@ def build_recovery_readiness_snapshot(
     """
     rt = runtime if runtime is not None else get_recovery_readiness_runtime()
     return rt.build_snapshot()
+
+
+def clear_seq_context_for_reconnect(
+    context_key: str,
+    *,
+    runtime: Optional[RecoveryReadinessRuntime] = None,
+) -> None:
+    """Clear the sequence-index entry for *context_key* after a reconnect.
+
+    This MUST be called when a session or contract context reconnects so
+    that the first post-reconnect signal is accepted rather than being
+    misclassified as ``stale`` or ``out_of_order`` relative to signals
+    that were seen before the disconnect.
+
+    The ``signal_id`` ring buffer is intentionally preserved so that
+    duplicate-signal protection remains active across the reconnect.
+
+    Parameters
+    ----------
+    context_key:
+        The context key whose maximum-sequence entry should be cleared.
+        Use ``contract_id`` when available, otherwise ``session_id``.
+        Typically derived from :attr:`IdempotencyKey.context_key`.
+    runtime:
+        Optional :class:`RecoveryReadinessRuntime` for test isolation.
+        Uses the process singleton when None.
+    """
+    rt = runtime if runtime is not None else get_recovery_readiness_runtime()
+    rt.clear_seq_context(context_key)

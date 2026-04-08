@@ -252,6 +252,25 @@ DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL: str = (
     "module=core.delegated_runtime_execution_tracker"
 )
 
+# ---------------------------------------------------------------------------
+# PR-33: Reconnect and Recovery Consistency sentinel
+# ---------------------------------------------------------------------------
+
+EXECUTION_TRACKER_RECONNECT_CONSISTENCY_PR33_SENTINEL: str = (
+    "DELEGATED_RUNTIME_EXECUTION_TRACKER_PR33_SENTINEL::package=33::"
+    "reconnect-recovery-consistency-hardening::"
+    "get-active-execution-tracking-for-session::tracker-survives-reconnect"
+)
+
+TRACKER_ACTIVE_RECORDS_SURVIVE_RECONNECT_PR33_POLICY: str = (
+    "POLICY::TRACKER_ACTIVE_RECORDS_SURVIVE_RECONNECT_PR33: "
+    "The DelegatedRuntimeExecutionTracker ring-buffer MUST NOT be cleared on "
+    "session reconnect.  In-flight execution tracking records (phase not terminal) "
+    "remain retrievable via get_active_execution_tracking_for_session() after a "
+    "session reconnect.  This ensures the host can observe and resume tracking of "
+    "delegated work that was in-flight during a short disconnect."
+)
+
 # Convenience tuple for iteration / projection
 _ALL_POLICY_SENTINELS = (
     DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY,
@@ -1108,3 +1127,40 @@ def build_execution_tracking_snapshot(
         total_count=len(all_records),
         policy_sentinels=list(_ALL_POLICY_SENTINELS),
     )
+
+
+def get_active_execution_tracking_for_session(
+    session_id: str,
+    *,
+    runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
+) -> Optional[DelegatedExecutionTrackingRecord]:
+    """Return the most recent non-terminal tracking record for *session_id*.
+
+    This function is the canonical post-reconnect check: callers can use it
+    after a session reconnect to determine whether there is in-flight delegated
+    work that must be tracked or resumed.
+
+    Returns ``None`` when the session has no active (non-terminal) tracking
+    records.  If the most recent record for the session is terminal, ``None``
+    is returned even if older non-terminal records exist in the ring buffer,
+    because the terminal record supersedes them.
+
+    Parameters
+    ----------
+    session_id:
+        The attached-runtime session identifier to query.
+    runtime:
+        Optional :class:`DelegatedExecutionTrackingRuntime` for test
+        isolation.  Uses the process singleton when ``None``.
+
+    Returns
+    -------
+    DelegatedExecutionTrackingRecord | None
+        The most recent active (non-terminal) record for the session, or
+        ``None`` if no such record exists.
+    """
+    _runtime = runtime if runtime is not None else get_execution_tracking_runtime()
+    latest = _runtime.get_latest_for_session(session_id)
+    if latest is None:
+        return None
+    return latest if latest.phase.is_active() else None

@@ -916,6 +916,31 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_ALIGNED_PR32_UNAVAILABLE"
     )
 
+try:
+    from core.runtime.source_dispatch_orchestrator import (
+        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _PR33_SENTINEL,
+        RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY as _PR33_HOST_TRUTH,
+        REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY as _PR33_OBSERVABLE,
+        EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY as _PR33_TRACKER,
+        RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY as _PR33_MERGE,
+    )
+
+    RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33: str = (
+        "PROJECTION_ROUTES::RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33_V1: "
+        "PR-33 product-grade reconnect and recovery consistency hardening is confirmed.  "
+        "Short disconnect/reconnect events do not break host-side truth: "
+        "AttachedSessionRegistryEntry tracks reconnect_count and last_reconnect_at; "
+        "RecoveryReadinessRuntime exposes clear_seq_context_for_reconnect() to prevent "
+        "post-reconnect signals from being misclassified as stale/out-of-order; "
+        "DelegatedRuntimeExecutionTracker exposes get_active_execution_tracking_for_session() "
+        "so in-flight work is observable after reconnect.  No new truth authority, "
+        "duplicate recovery subsystem, or parallel reconciliation path is introduced."
+    )
+except ImportError:  # pragma: no cover
+    RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

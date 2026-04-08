@@ -635,6 +635,55 @@ STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-33: Reconnect and Recovery Consistency Hardening
+# ---------------------------------------------------------------------------
+
+RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL: str = (
+    "RECONNECT_RECOVERY_CONSISTENCY_PR33::"
+    "source-dispatch-orchestrator::attached-runtime-session-registry::"
+    "attached-runtime-recovery-readiness::delegated-runtime-execution-tracker::"
+    "result-merge-consistency::package=33::post-533-dual-repo-runtime-unification"
+)
+
+RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY: str = (
+    "POLICY::RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33: "
+    "A short disconnect followed by reconnect MUST NOT corrupt host-side truth. "
+    "The attached runtime session registry MUST preserve runtime_session_id across "
+    "reconnect transitions and MUST track reconnect_count and last_reconnect_at so "
+    "that operators and product surfaces can observe that a session recovered.  "
+    "No new session truth authority is introduced; the existing registry remains "
+    "the single canonical source."
+)
+
+REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY: str = (
+    "POLICY::REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33: "
+    "Every reconnect transition applied to an AttachedSessionRegistryEntry MUST "
+    "increment the entry's reconnect_count and update last_reconnect_at to the "
+    "transition timestamp.  This makes reconnect events auditable from a registry "
+    "snapshot without introducing a separate reconnect event log or parallel "
+    "truth authority."
+)
+
+EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY: str = (
+    "POLICY::EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33: "
+    "Delegated execution tracking records MUST survive a session reconnect intact. "
+    "The execution tracker ring-buffer is not cleared on reconnect; in-flight records "
+    "remain retrievable via get_active_execution_tracking_for_session().  "
+    "No parallel tracking authority is introduced."
+)
+
+RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY: str = (
+    "POLICY::RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33: "
+    "Result merge consistency MUST be preserved through recovery-related registry "
+    "transitions.  The recovery readiness signal guard MUST clear stale sequence "
+    "context for a session/contract after reconnect via "
+    "clear_seq_context_for_reconnect(), so that the first post-reconnect signal "
+    "is accepted rather than misclassified as stale or out-of-order.  "
+    "No alternate merge authority or duplicate result reconciler is introduced."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
