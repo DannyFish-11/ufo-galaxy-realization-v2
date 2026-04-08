@@ -124,6 +124,14 @@ _REQUIRED_RESULT_FIELDS = {
     "metadata",
 }
 
+# Minimum non-trivial length for a policy sentinel string.
+_MIN_SENTINEL_LENGTH = 10
+
+# Common test fixture values reused across test classes.
+_TEST_TRACE_ID = "trace-pr26"
+_TEST_TASK_ID = "task-pr26"
+_TEST_SESSION_ID = "sess-pr26"
+
 
 # ---------------------------------------------------------------------------
 # A — Orchestrator module: all PR-26 sentinels present
@@ -131,7 +139,7 @@ _REQUIRED_RESULT_FIELDS = {
 
 
 @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator module unavailable")
-class TestOrchestatorPR26Sentinels:
+class TestOrchestratorPR26Sentinels:
     def test_main_sentinel_present(self):
         assert CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL
         assert "PR26" in CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL
@@ -163,7 +171,7 @@ class TestOrchestatorPR26Sentinels:
         ]
         for s in sentinels:
             assert isinstance(s, str)
-            assert len(s) > 10
+            assert len(s) > _MIN_SENTINEL_LENGTH
 
 
 # ---------------------------------------------------------------------------
@@ -237,9 +245,9 @@ class TestResultContractInvariance:
     def _build(self, mode: "SourceDispatchMode", **kwargs: Any) -> Dict[str, Any]:
         r = build_source_dispatch_result(
             dispatch_id=str(uuid.uuid4()),
-            trace_id="trace-pr26",
-            task_id="task-pr26",
-            session_id="sess-pr26",
+            trace_id=_TEST_TRACE_ID,
+            task_id=_TEST_TASK_ID,
+            session_id=_TEST_SESSION_ID,
             mode=mode,
             success=kwargs.pop("success", True),
             errors=kwargs.pop("errors", []),
