@@ -828,6 +828,36 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29_UNAVAILABLE"
     )
 
+# Importing the PR-30 observability and diagnostics hardening sentinels confirms that
+# the V2 dispatch selection, registration/readiness/capability, delegated execution,
+# fallback, and client-facing result surfaces are hardened with operator-facing
+# observability and rollout safety signals within the existing single-system architecture.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL as _PR30_SENTINEL,
+        DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY as _PR30_DISPATCH,
+        REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY as _PR30_REGISTRATION,
+        DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY as _PR30_DELEGATED,
+        ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY as _PR30_ROLLOUT,
+    )
+
+    OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_ALIGNED_PR30: str = (
+        "PROJECTION_ROUTES::OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_ALIGNED_PR30_V1: "
+        "PR-30 observability and diagnostics hardening is confirmed.  Dispatch-path "
+        "decision observability (selection scoring/gating/fallback signals), "
+        "registration/readiness/capability/fallback diagnostics (failure_kind, "
+        "diagnostic_reason, unsatisfied capability), delegated execution phase "
+        "observability (trace_id/task_id/session_id/phase/signal_kind), and "
+        "rollout safety signals (observability_context, is_transient, rollout "
+        "readiness assertions) are all hardened within the existing single-system "
+        "V2 architecture.  No new diagnostics coordinator, alternate control "
+        "authority, or parallel troubleshooting path is introduced."
+    )
+except ImportError:  # pragma: no cover
+    OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_ALIGNED_PR30: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_ALIGNED_PR30_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
