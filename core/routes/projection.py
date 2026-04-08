@@ -651,6 +651,38 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_TAKEOVER_DISPATCH_DELEGATED_FALLBACK_ALIGNED_PR23_UNAVAILABLE"
     )
 
+# Importing the PR-24 dispatch selection truth consolidation sentinels from
+# source_dispatch_orchestrator confirms that readiness, participation, registry,
+# and reuse are the canonical truth inputs for dispatch target selection.
+try:
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL as _PR24_SENTINEL,
+        SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY as _PR24_READINESS,
+        SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY as _PR24_PARTICIPATION,
+        SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY as _PR24_REGISTRY,
+        SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY as _PR24_REUSE,
+        SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY as _PR24_FALLBACK,
+        _select_target_from_candidates as _pr24_select_from_candidates,
+    )
+
+    DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24: str = (
+        "PROJECTION_ROUTES::DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24_V1: "
+        "PR-24 dispatch selection truth consolidation is confirmed.  "
+        "select_dispatch_target() consults the attached runtime session registry as the "
+        "authoritative active-session source, gates each candidate through device "
+        "readiness (registered, routable) and device participation "
+        "(orchestration_eligible), and uses reuse eligibility as a preference signal.  "
+        "Every selection outcome (selected, rejected, fallback) carries a stable, "
+        "human-readable reason.  Multi-target situations are resolved by scoring all "
+        "registry-active candidates rather than relying on explicit-target or "
+        "first-active shortcuts.  No new selector entity or alternate dispatch "
+        "authority is introduced."
+    )
+except ImportError:  # pragma: no cover
+    DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

@@ -94,9 +94,59 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# PR-24 sentinels — dispatch selection truth consolidation
+# ---------------------------------------------------------------------------
+
+DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL: str = (
+    "DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24::source-dispatch-orchestrator::"
+    "readiness+participation+registry+reuse-are-canonical-truth-for-target-selection::"
+    "package=24::post-533-dual-repo-runtime-unification"
+)
+
+SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY: str = (
+    "POLICY::SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24: "
+    "Dispatch target selection MUST consult device readiness (registered, routable) as a "
+    "prerequisite truth gate.  A candidate that fails readiness MUST be rejected with a "
+    "stable reason and MUST NOT be selected as a dispatch target."
+)
+
+SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY: str = (
+    "POLICY::SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24: "
+    "Dispatch target selection MUST consult device participation (orchestration_eligible) "
+    "as a prerequisite truth gate.  A candidate that fails participation MUST be rejected "
+    "with a stable reason and MUST NOT be selected as a dispatch target."
+)
+
+SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY: str = (
+    "POLICY::SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24: "
+    "The attached runtime session registry is the authoritative source for active session "
+    "identity during target selection.  Only sessions in 'active' state from the registry "
+    "are eligible as dispatch targets.  Non-active (replaced/detached/invalidated) sessions "
+    "MUST be rejected.  This is consistent with the registry authority established in PR-19 "
+    "through PR-23."
+)
+
+SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY: str = (
+    "POLICY::SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24: "
+    "Reuse eligibility contributes to candidate scoring and preference ordering during "
+    "multi-target selection.  A candidate with an eligible reuse binding is preferred over "
+    "an otherwise equal candidate without one.  Reuse eligibility does NOT gate selection "
+    "on its own — a candidate can still be selected without an eligible reuse binding if "
+    "readiness and participation are satisfied."
+)
+
+SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY: str = (
+    "POLICY::SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24: "
+    "Every dispatch target selection outcome (selected, rejected, fallback) MUST carry a "
+    "stable, human-readable reason string.  The reason MUST identify the specific truth "
+    "source that drove the outcome so that selection results are explainable without "
+    "reading source code."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +473,233 @@ def select_dispatch_mode(
 # ---------------------------------------------------------------------------
 
 
+def _score_candidate(
+    session_id: str,
+    device_id: str,
+    *,
+    readiness: Any,
+    participation: Any,
+    reuse_eligible: bool,
+) -> Tuple[int, str]:
+    """Score a single dispatch candidate using consolidated truth inputs.
+
+    Scoring (higher is better, baseline 100):
+      +20  reuse_eligible == True  (established reuse surface)
+      -40  not routable (readiness gate fail)
+      -40  not orchestration_eligible (participation gate fail)
+
+    Returns ``(score, rejection_reason)`` where *rejection_reason* is an
+    empty string when the candidate passes all required gates, or a stable
+    reason string when the candidate must be rejected.
+    """
+    score = 100
+    rejection: str = ""
+
+    # --- Readiness gate (required) ---
+    routable = getattr(readiness, "routable", None)
+    registered = getattr(readiness, "registered", None)
+    if readiness is None:
+        rejection = "readiness:unavailable"
+        return 0, rejection
+    if not registered:
+        rejection = "readiness:not_registered"
+        return 0, rejection
+    if not routable:
+        rejection = "readiness:not_routable"
+        return 0, rejection
+
+    # --- Participation gate (required) ---
+    if participation is None:
+        rejection = "participation:unavailable"
+        return 0, rejection
+    if not getattr(participation, "orchestration_eligible", False):
+        rejection = "participation:not_orchestration_eligible"
+        return 0, rejection
+
+    # --- Reuse preference (optional, contributes to score) ---
+    if reuse_eligible:
+        score += 20
+
+    return score, rejection
+
+
+def _select_target_from_candidates(
+    *,
+    registry: Any = None,
+    readiness_inputs: Optional[Dict[str, Any]] = None,
+    participation_inputs: Optional[Dict[str, Any]] = None,
+    reuse_inputs: Optional[Dict[str, Any]] = None,
+    mesh_session_id: Optional[str] = None,
+) -> Optional[Any]:  # Optional[SourceDispatchTarget]
+    """Select the best dispatch target from consolidated truth inputs.
+
+    Implements PR-24 selection-truth consolidation: consults the attached
+    runtime session registry as the authoritative active-session source, then
+    gates each candidate through device readiness and device participation,
+    and uses reuse eligibility as a preference signal for ranking.
+
+    Per :data:`SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY` only
+    sessions in ``active`` state from the registry are evaluated.
+
+    Per :data:`SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY` and
+    :data:`SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY` a candidate
+    that fails either gate is rejected with a stable reason and is never
+    returned as the selected target.
+
+    Per :data:`SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY` reuse
+    eligibility only contributes to scoring; it does not gate selection.
+
+    Parameters
+    ----------
+    registry:
+        Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for test isolation.  Uses the process singleton when ``None``.
+    readiness_inputs:
+        Optional ``{device_id: DeviceReadinessSummary}`` dict for test
+        isolation.  When ``None`` or a device is absent, the live
+        :func:`~core.device_readiness.get_device_readiness` is called.
+    participation_inputs:
+        Optional ``{device_id: ParticipationSummary}`` dict for test
+        isolation.  When ``None`` or a device is absent, the live
+        :func:`~core.device_participation.get_device_participation` is called.
+    reuse_inputs:
+        Optional ``{device_id: bool}`` dict mapping device_id → reuse
+        eligibility flag for test isolation.  When ``None`` or a device is
+        absent, :func:`~core.attached_runtime_reuse_dispatch.resolve_reuse_dispatch_surface`
+        is called.
+    mesh_session_id:
+        Mesh session ID to propagate onto the returned target, if available.
+
+    Returns
+    -------
+    Optional[SourceDispatchTarget]
+        The selected target with ``selection_reason`` set; ``None`` when no
+        active sessions are found or all candidates are rejected.
+    """
+    from contracts.source_dispatch import SourceDispatchTarget
+
+    # --- Step 1: Enumerate active sessions from the registry ---
+    active_sessions: List[Any] = []
+    try:
+        from core.attached_runtime_session_registry import list_active_sessions
+
+        active_sessions = list_active_sessions(registry=registry) or []
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("_select_target_from_candidates: registry unavailable: %s", exc)
+        return None
+
+    if not active_sessions:
+        logger.debug("_select_target_from_candidates: no active sessions in registry")
+        return None
+
+    # --- Step 2: Evaluate each candidate ---
+    best_score: int = -1
+    best_target: Optional[SourceDispatchTarget] = None
+
+    for entry in active_sessions:
+        device_id: str = str(getattr(entry, "device_id", "") or "")
+        session_id: str = str(getattr(entry, "session_id", "") or "")
+        runtime_id: Optional[str] = getattr(entry, "runtime_session_id", None)
+
+        if not device_id:
+            continue
+
+        # Readiness — from inputs map or live lookup
+        readiness: Any = None
+        if readiness_inputs is not None:
+            readiness = readiness_inputs.get(device_id)
+        if readiness is None:
+            try:
+                from core.device_readiness import get_device_readiness
+
+                readiness = get_device_readiness(device_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "_select_target_from_candidates: readiness unavailable for %s: %s",
+                    device_id,
+                    exc,
+                )
+
+        # Participation — from inputs map or live lookup
+        participation: Any = None
+        if participation_inputs is not None:
+            participation = participation_inputs.get(device_id)
+        if participation is None:
+            try:
+                from core.device_participation import get_device_participation
+
+                participation = get_device_participation(device_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "_select_target_from_candidates: participation unavailable for %s: %s",
+                    device_id,
+                    exc,
+                )
+
+        # Reuse eligibility — from inputs map or live resolution
+        reuse_eligible: bool = False
+        if reuse_inputs is not None:
+            reuse_eligible = bool(reuse_inputs.get(device_id, False))
+        elif session_id or device_id:
+            try:
+                from core.attached_runtime_reuse_dispatch import (
+                    ReuseDispatchResolutionKind,
+                    resolve_reuse_dispatch_surface,
+                )
+
+                resolution = resolve_reuse_dispatch_surface(
+                    session_id or "",
+                    device_id,
+                    registry=registry,
+                )
+                reuse_eligible = (
+                    resolution.resolution_kind == ReuseDispatchResolutionKind.reused
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "_select_target_from_candidates: reuse unavailable for %s: %s",
+                    device_id,
+                    exc,
+                )
+
+        # Score the candidate
+        score, rejection_reason = _score_candidate(
+            session_id,
+            device_id,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=reuse_eligible,
+        )
+
+        if rejection_reason:
+            logger.debug(
+                "_select_target_from_candidates: rejected device=%s reason=%s",
+                device_id,
+                rejection_reason,
+            )
+            continue
+
+        if score > best_score:
+            best_score = score
+            reuse_tag = ":reuse_eligible" if reuse_eligible else ""
+            best_target = SourceDispatchTarget(
+                target_device_id=device_id,
+                target_runtime_id=str(runtime_id) if runtime_id else None,
+                target_session_id=session_id or None,
+                mesh_session_id=mesh_session_id,
+                selection_reason=(
+                    f"registry:readiness:participation{reuse_tag}:score={score}"
+                ),
+                metadata={
+                    "pr24_selection": True,
+                    "score": score,
+                    "reuse_eligible": reuse_eligible,
+                },
+            )
+
+    return best_target
+
+
 def select_dispatch_target(
     *,
     target_device_id: Optional[str] = None,
@@ -431,10 +708,37 @@ def select_dispatch_target(
     mesh_memberships: Optional[List[Dict[str, Any]]] = None,
     handoff_envelope_id: Optional[str] = None,
     mesh_session_id: Optional[str] = None,
+    # PR-24: consolidated truth inputs
+    registry: Any = None,
+    readiness_inputs: Optional[Dict[str, Any]] = None,
+    participation_inputs: Optional[Dict[str, Any]] = None,
+    reuse_inputs: Optional[Dict[str, Any]] = None,
 ) -> Optional[Any]:  # Optional[SourceDispatchTarget]
     """Select a :class:`~contracts.source_dispatch.SourceDispatchTarget`.
 
     Returns ``None`` when no remote/mesh target is applicable (local mode).
+
+    PR-24 consolidation
+    -------------------
+    When no explicit ``target_device_id`` is supplied this function now
+    consults the consolidated truth inputs — readiness, participation,
+    registry, and reuse — instead of relying on ad-hoc first-active
+    behaviour.  The selection priority is:
+
+    1. Explicit ``target_device_id`` → ``selection_reason="explicit_target_device_id"``
+    2. Registry + readiness + participation + reuse candidate selection
+       (PR-24) → ``selection_reason="registry:readiness:participation[:reuse_eligible]:score=<N>"``
+    3. Mesh session first-active participant (legacy fallback when registry /
+       readiness / participation subsystems are unavailable)
+       → ``selection_reason="mesh_session:first_active_participant:fallback"``
+
+    Per :data:`SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY`, only
+    registry-active sessions are eligible in path 2.
+    Per :data:`SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY` and
+    :data:`SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY`, a
+    candidate failing either gate is rejected with a stable reason.
+    Per :data:`SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY`, reuse
+    eligibility contributes to the score but does not gate selection.
 
     Parameters
     ----------
@@ -450,6 +754,18 @@ def select_dispatch_target(
         Pre-built HandoffEnvelopeV2 ID, if available.
     mesh_session_id:
         Mesh session ID to record on the target.
+    registry:
+        PR-24: Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for test isolation.
+    readiness_inputs:
+        PR-24: Optional ``{device_id: DeviceReadinessSummary}`` map for test
+        isolation.
+    participation_inputs:
+        PR-24: Optional ``{device_id: ParticipationSummary}`` map for test
+        isolation.
+    reuse_inputs:
+        PR-24: Optional ``{device_id: bool}`` reuse-eligibility map for test
+        isolation.
     """
     from contracts.source_dispatch import SourceDispatchTarget
 
@@ -464,7 +780,25 @@ def select_dispatch_target(
             selection_reason="explicit_target_device_id",
         )
 
-    # Attempt to extract the first active participant from mesh session (PR-33)
+    # PR-24: consolidated truth-driven selection
+    _effective_mesh_session_id = mesh_session_id or (
+        mesh_session.get("session_id")
+        if (mesh_session and isinstance(mesh_session, dict))
+        else None
+    )
+    candidate_target = _select_target_from_candidates(
+        registry=registry,
+        readiness_inputs=readiness_inputs,
+        participation_inputs=participation_inputs,
+        reuse_inputs=reuse_inputs,
+        mesh_session_id=_effective_mesh_session_id,
+    )
+    if candidate_target is not None:
+        return candidate_target
+
+    # Legacy fallback: extract first active participant from mesh session (PR-33)
+    # Used when registry / readiness / participation subsystems are unavailable
+    # and no candidate was selected by the consolidated truth path.
     if mesh_session and isinstance(mesh_session, dict):
         participants = mesh_session.get("participants") or []
         for p in participants:
@@ -477,12 +811,8 @@ def select_dispatch_target(
                     return SourceDispatchTarget(
                         target_device_id=device_id,
                         target_runtime_id=runtime_id,
-                        mesh_session_id=(
-                            mesh_session.get("session_id")
-                            if mesh_session
-                            else None
-                        ),
-                        selection_reason="mesh_session:first_active_participant",
+                        mesh_session_id=_effective_mesh_session_id,
+                        selection_reason="mesh_session:first_active_participant:fallback",
                     )
 
     return None
@@ -511,6 +841,11 @@ def build_source_dispatch_plan(
     force_remote: bool = False,
     source_runtime_posture: Optional[str] = None,
     coordination_role: Optional[str] = None,
+    # PR-24: consolidated truth inputs for target selection
+    registry: Any = None,
+    readiness_inputs: Optional[Dict[str, Any]] = None,
+    participation_inputs: Optional[Dict[str, Any]] = None,
+    reuse_inputs: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Any:  # SourceDispatchPlan
     """Build a :class:`~contracts.source_dispatch.SourceDispatchPlan`.
@@ -558,6 +893,18 @@ def build_source_dispatch_plan(
         ``"join_runtime"``).  ``control_only`` gates local execution off on
         the source device; ``join_runtime`` allows it.  Defaults to
         ``"control_only"`` (conservative safe default) when ``None``.
+    registry:
+        PR-24: Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        override for test isolation.  Forwarded to :func:`select_dispatch_target`.
+    readiness_inputs:
+        PR-24: Optional ``{device_id: DeviceReadinessSummary}`` map for test
+        isolation.  Forwarded to :func:`select_dispatch_target`.
+    participation_inputs:
+        PR-24: Optional ``{device_id: ParticipationSummary}`` map for test
+        isolation.  Forwarded to :func:`select_dispatch_target`.
+    reuse_inputs:
+        PR-24: Optional ``{device_id: bool}`` reuse-eligibility map for test
+        isolation.  Forwarded to :func:`select_dispatch_target`.
     metadata:
         Arbitrary extension metadata.
 
@@ -599,7 +946,7 @@ def build_source_dispatch_plan(
             coordination_role=coordination_role,
         )
 
-        # Select target
+        # Select target — PR-24: pass consolidated truth inputs
         selected_target = None
         if mode in (SourceDispatchMode.remote_handoff, SourceDispatchMode.staged_mesh):
             selected_target = select_dispatch_target(
@@ -607,6 +954,10 @@ def build_source_dispatch_plan(
                 target_runtime_id=target_runtime_id,
                 mesh_session=mesh_session,
                 mesh_memberships=mesh_memberships,
+                registry=registry,
+                readiness_inputs=readiness_inputs,
+                participation_inputs=participation_inputs,
+                reuse_inputs=reuse_inputs,
             )
 
         # Pre-build HandoffEnvelopeV2 for remote handoff
