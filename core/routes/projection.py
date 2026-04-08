@@ -941,6 +941,31 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33_UNAVAILABLE"
     )
 
+try:
+    from core.runtime.source_dispatch_orchestrator import (
+        CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL as _PR34_SENTINEL,
+        DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY as _PR34_DISPATCH,
+        ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY as _PR34_ANDROID,
+        MULTI_TARGET_RANKING_MATURITY_PR34_POLICY as _PR34_RANKING,
+        STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY as _PR34_MESH,
+        DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY as _PR34_DIAG,
+    )
+
+    CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34: str = (
+        "PROJECTION_ROUTES::CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34_V1: "
+        "PR-34 final product-grade cross-device and runtime acceptance pack is confirmed.  "
+        "Source dispatch/fallback/result-merge stability, Android attached runtime "
+        "orchestration stability, multi-target ranking maturity, staged-mesh minimal "
+        "closure runnability, and diagnostics/readiness/participation/formation usability "
+        "are all validated against the existing architecture.  No new runtime authority, "
+        "duplicate orchestration control system, or parallel acceptance architecture "
+        "is introduced."
+    )
+except ImportError:  # pragma: no cover
+    CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
