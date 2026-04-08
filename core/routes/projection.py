@@ -891,6 +891,31 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_ALIGNED_PR31_UNAVAILABLE"
     )
 
+try:
+    from core.runtime.source_dispatch_orchestrator import (
+        STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL as _PR32_SENTINEL,
+        STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY as _PR32_PLAN_EXEC,
+        STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY as _PR32_COORD,
+        STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY as _PR32_RESULT,
+        STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY as _PR32_DEGRADE,
+    )
+
+    STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_ALIGNED_PR32: str = (
+        "PROJECTION_ROUTES::STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_ALIGNED_PR32_V1: "
+        "PR-32 staged-mesh minimal executable coordination closure is confirmed.  "
+        "staged_mesh dispatch no longer returns 'plan prepared' as a terminal state; "
+        "it invokes MeshSessionCoordinator (coordinate_mesh_session) and the result "
+        "carries action_taken='staged_mesh_coordinated' with coordinator_status and "
+        "coordinator_summary.  The implementation reuses the existing body_mesh_registry, "
+        "mesh_session_coordinator, and SourceDispatchResult contracts without "
+        "introducing a new coordination authority, duplicate session registry, or "
+        "parallel result surfacing mechanism."
+    )
+except ImportError:  # pragma: no cover
+    STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_ALIGNED_PR32: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_ALIGNED_PR32_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
