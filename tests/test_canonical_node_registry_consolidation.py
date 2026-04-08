@@ -74,6 +74,11 @@ class TestNodeRegistryCompatFacade:
         from core.node_registry import get_node_registry
         assert callable(get_node_registry)
 
+    def test_reset_node_registry_exists(self):
+        """reset_node_registry() must exist (needed by tests to clean up the singleton)."""
+        from core.node_registry import reset_node_registry
+        assert callable(reset_node_registry)
+
     def test_get_node_registry_returns_node_registry_instance(self):
         from core.node_registry import get_node_registry, NodeRegistry
         r = get_node_registry()
@@ -170,11 +175,9 @@ class TestNodesStatusEndpointLogic:
     def setup_method(self):
         from core.nodes.node_fabric_registry import reset_node_fabric_registry
         reset_node_fabric_registry()
-        # Reset legacy NodeRegistry singleton
-        import core.node_registry as _nr
-        _nr._registry = None
-        if hasattr(_nr.NodeRegistry, '_instance'):
-            _nr.NodeRegistry._instance = None
+        # Reset legacy NodeRegistry singleton via the dedicated reset helper
+        from core.node_registry import reset_node_registry
+        reset_node_registry()
 
     def test_canonical_nodes_appear_with_source_canonical(self):
         from core.nodes.node_fabric_registry import (
@@ -230,17 +233,25 @@ class TestNodesStatusEndpointLogic:
         assert result.get("registry_authority") == "canonical:NodeFabricRegistry"
 
     def test_error_nodes_sorted_first(self):
-        from core.nodes.node_fabric_registry import (
-            get_node_fabric_registry, NodeInfo, NodeRole, NodeStatus,
-        )
-        fab = get_node_fabric_registry()
-        fab.register(NodeInfo(node_id="z-node", role=NodeRole.WORKER, status=NodeStatus.HEALTHY))
-        fab.register(NodeInfo(node_id="a-node-err", role=NodeRole.WORKER, status=NodeStatus.UNHEALTHY))
+        """Nodes with status 'error' must appear before healthy nodes in the response."""
+        import core.node_registry as _nr
+        from core.node_registry import NodeMetadata, NodeStatus as LegacyStatus
+
+        # Add a legacy node with ERROR status and one with READY status
+        registry = _nr.get_node_registry()
+        m_err = NodeMetadata(node_id="z-node-error", name="ErrorNode")
+        m_err.status = LegacyStatus.ERROR
+        registry.metadata["z-node-error"] = m_err
+
+        m_ok = NodeMetadata(node_id="a-node-ready", name="ReadyNode")
+        m_ok.status = LegacyStatus.READY
+        registry.metadata["a-node-ready"] = m_ok
 
         node_list = _build_nodes_status_list()
-        # The UNHEALTHY node status is not "error"/"ERROR" so it won't sort first,
-        # but a node with status "error" would. Verify sort key doesn't crash.
-        assert isinstance(node_list, list)
+        ids = [n["node_id"] for n in node_list]
+        # "z-node-error" must appear before "a-node-ready" despite being
+        # lexicographically after it, because error nodes sort first.
+        assert ids.index("z-node-error") < ids.index("a-node-ready")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -337,7 +348,11 @@ def _build_nodes_status_response():
                 node_list.append({
                     "node_id": node_id,
                     "name": getattr(m, 'name', node_id),
-                    "status": m.status.value if hasattr(m.status, 'value') else str(getattr(m, 'status', 'unknown')),
+                    "status": (
+                        m.status.name.lower()
+                        if hasattr(m.status, 'name')
+                        else str(getattr(m, 'status', 'unknown'))
+                    ),
                     "error_message": getattr(m, 'error_message', None),
                     "version": getattr(m, 'version', None),
                     "role": None,
@@ -347,7 +362,7 @@ def _build_nodes_status_response():
     except Exception:
         pass
 
-    node_list.sort(key=lambda n: (0 if n["status"] in ("error", "ERROR") else 1, n["node_id"]))
+    node_list.sort(key=lambda n: (0 if str(n["status"]).lower() == "error" else 1, n["node_id"]))
     return {
         "nodes": node_list,
         "total": len(node_list),

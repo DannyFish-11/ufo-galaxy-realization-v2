@@ -739,6 +739,13 @@ def get_node_registry() -> NodeRegistry:
     return get_registry()
 
 
+def reset_node_registry() -> None:
+    """Reset the legacy NodeRegistry singleton (for tests only)."""
+    global _registry
+    _registry = None
+    NodeRegistry._instance = None
+
+
 # ============================================================================
 # 便捷函数
 # ============================================================================

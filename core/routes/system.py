@@ -258,7 +258,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         node_list.append({
                             "node_id": node_id,
                             "name": getattr(m, 'name', node_id),
-                            "status": m.status.value if hasattr(m.status, 'value') else str(getattr(m, 'status', 'unknown')),
+                            "status": (
+                                m.status.name.lower()
+                                if hasattr(m.status, 'name')
+                                else str(getattr(m, 'status', 'unknown'))
+                            ),
                             "error_message": getattr(m, 'error_message', None),
                             "version": getattr(m, 'version', None),
                             "role": None,
@@ -269,7 +273,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 pass
 
             # Sort: ERROR nodes first, then by node_id
-            node_list.sort(key=lambda n: (0 if n["status"] in ("error", "ERROR") else 1, n["node_id"]))
+            node_list.sort(key=lambda n: (0 if str(n["status"]).lower() == "error" else 1, n["node_id"]))
             return JSONResponse({
                 "timestamp": datetime.now().isoformat(),
                 "total": len(node_list),
