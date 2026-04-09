@@ -95,7 +95,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # NodeFabricRegistry rather than the legacy node_status_cache
         # compat store.  The response includes a node_count_source key
         # so operators can see which authority was used.
-        if _CANONICAL_NODE_COUNT_AVAILABLE and _get_node_count_from_canonical_source is not None:
+        if _CANONICAL_NODE_COUNT_AVAILABLE:
             _node_counts = _get_node_count_from_canonical_source()
         else:
             _node_counts = {

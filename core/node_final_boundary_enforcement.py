@@ -509,6 +509,20 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
 # ===========================================================================
 
 
+def _get_node_status_value(node: Any) -> str:
+    """Extract a normalised status string from a NodeInfo-like object.
+
+    Handles both Enum-valued ``status`` attributes (with a ``.value``
+    accessor) and plain string-valued ones.
+    """
+    raw_status = getattr(node, "status", None)
+    if raw_status is None:
+        return ""
+    if hasattr(raw_status, "value"):
+        return str(raw_status.value).lower()
+    return str(raw_status).lower()
+
+
 def build_node_surface_classification_registry() -> List[NodeSurfaceBoundaryEntry]:
     """Return the complete list of classified node-related surfaces.
 
@@ -583,8 +597,7 @@ def get_node_count_from_canonical_source(
             except Exception:
                 active = sum(
                     1 for n in all_nodes
-                    if getattr(getattr(n, "status", None), "value", str(getattr(n, "status", ""))).lower()
-                    in ("running", "ready", "active")
+                    if _get_node_status_value(n) in ("running", "ready", "active")
                 )
             return {
                 "total": total,
