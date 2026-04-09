@@ -388,6 +388,12 @@ class DesktopPresenceRuntime:
         # try/finally block) so it's accessible in both the success and error paths.
         _cognitive_snap: Optional[Dict[str, Any]] = None
 
+        # PR-18: _cognitive_exec_hint holds the cognitive execution-policy hint derived
+        # from live cognitive signals.  Declared before the try/finally block so it is
+        # accessible in both success and error paths.  The hint is advisory only; the
+        # runtime shell never enforces it as a binding directive.
+        _cognitive_exec_hint: Optional[Dict[str, Any]] = None
+
         # Notify the continuous cognitive field engine that a request has arrived.
         # Best-effort — failures must never block the request path.
         try:
@@ -398,6 +404,35 @@ class DesktopPresenceRuntime:
             )
         except Exception as _cfe_err:
             logger.debug("cognitive_field_engine.notify_request failed (non-fatal): %s", _cfe_err)
+
+        # PR-18: Derive the cognitive execution-policy hint from live signals.
+        # This is done BEFORE dispatch so the hint can be forwarded to OpenClawd
+        # as an advisory signal for execution-path and delegation biasing.
+        # Best-effort — failures must never block the request path.
+        _cog_hint_obj = None
+        try:
+            from core.cognitive.cognitive_execution_policy import (
+                derive_cognitive_execution_hint,
+                build_cognitive_hint_metadata,
+            )
+
+            _cog_hint_obj = derive_cognitive_execution_hint(
+                trace_id=rsession.runtime_session_id,
+            )
+            _cognitive_exec_hint = build_cognitive_hint_metadata(
+                _cog_hint_obj,
+                trace_id=rsession.runtime_session_id,
+            )
+            logger.debug(
+                "PR-18 cognitive exec hint | region=%s exec_pref=%s plan=%s budget=%.3f trace_id=%s",
+                _cog_hint_obj.cognitive_region,
+                _cog_hint_obj.execution_path_preference,
+                _cog_hint_obj.planning_intensity,
+                _cog_hint_obj.activation_budget,
+                rsession.runtime_session_id,
+            )
+        except Exception as _ceh_err:
+            logger.debug("cognitive_execution_hint derivation failed (non-fatal): %s", _ceh_err)
 
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
@@ -431,6 +466,10 @@ class DesktopPresenceRuntime:
                 multimodal_context=multimodal_context,
                 use_constellation=use_constellation,
                 entry_mode=entry_mode,
+                # PR-18: forward the cognitive execution hint so OpenClawd can
+                # use it as an advisory signal for execution-path / delegation
+                # biasing.  Never mandatory; OpenClawd retains final authority.
+                cognitive_execution_hint=_cog_hint_obj,
                 **kwargs,
             )
 
@@ -482,6 +521,12 @@ class DesktopPresenceRuntime:
         # Block-3: attach the continuous cognitive state snapshot (additive, optional).
         if _cognitive_snap is not None:
             result["cognitive_state"] = _cognitive_snap
+        # PR-18: attach the cognitive execution hint (additive, advisory only).
+        # This makes the hint visible in diagnostics / projection surfaces so
+        # operators can see when cognitive-state wiring influenced execution-path
+        # decisions.  The hint is never a mandatory enforcement directive.
+        if _cognitive_exec_hint is not None:
+            result["cognitive_execution_hint"] = _cognitive_exec_hint
         # PR-12: attach policy hint (additive, non-blocking).
         if _policy_hint is not None:
             result["policy_hint"] = _policy_hint
@@ -624,6 +669,11 @@ class DesktopPresenceRuntime:
         """
         from core.openclawd import get_openclawd
 
+        # PR-18: extract the cognitive execution hint from kwargs so it can be
+        # passed to OpenClawd as a named parameter.  The hint is advisory only;
+        # OpenClawd retains full execution-path authority.
+        cognitive_execution_hint = kwargs.pop("cognitive_execution_hint", None)
+
         clawd = get_openclawd()
         result = await clawd.process(
             message=message,
@@ -634,6 +684,7 @@ class DesktopPresenceRuntime:
             multimodal_context=multimodal_context,
             runtime_session_id=rsession.runtime_session_id,
             entry_mode=entry_mode,
+            cognitive_execution_hint=cognitive_execution_hint,
             **kwargs,
         )
         # Normalise the result to always contain "response" (OpenClawd uses it)

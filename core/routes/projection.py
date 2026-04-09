@@ -1447,6 +1447,41 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR-18: Cognitive Execution-Policy Wiring alignment sentinel.
+# Asserts that the cognitive execution-policy mapping layer is available and
+# wired into the projection routes module, enabling projection endpoints to
+# surface cognitive execution-hint data (region, execution_path_preference,
+# activation_budget) derived from live StateInterpreter / ContinuumOrchestrator
+# signals alongside existing posture and execution-policy projections.
+try:
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
+        COGNITIVE_EXECUTION_POLICY_IS_AUTHORITY as _CEP_AUTHORITY,
+        COGNITIVE_EXECUTION_POLICY_PR18_SENTINEL as _CEP_PR18,
+        COGNITIVE_STATE_DRIVES_EXECUTION_HINT_POLICY as _CEP_POLICY1,
+        COGNITIVE_HINT_IS_ADVISORY_NOT_MANDATORY_POLICY as _CEP_POLICY2,
+        COGNITIVE_HINT_CONSUMES_EXISTING_SIGNALS_POLICY as _CEP_POLICY3,
+        ACTIVATION_BUDGET_IS_NORMALIZED_POLICY as _CEP_POLICY4,
+        derive_cognitive_execution_hint as _derive_cognitive_execution_hint,
+        CognitiveExecutionHint as _CognitiveExecutionHint,
+    )
+
+    COGNITIVE_EXECUTION_POLICY_ALIGNED_PR18: str = (
+        "PROJECTION_ROUTES::COGNITIVE_EXECUTION_POLICY_ALIGNED_PR18_V1: "
+        "core.cognitive.cognitive_execution_policy is confirmed as the canonical "
+        "authority for the cognitive execution-policy mapping layer (PR-18).  "
+        "CognitiveExecutionHint derives bounded execution-policy hints "
+        "(execution_path_preference, delegation_bias, planning_intensity, "
+        "activation_budget) from already-live CognitiveRegion signals without "
+        "introducing a second cognitive pipeline.  "
+        "DesktopPresenceRuntime and OpenClawd receive the hint as an advisory "
+        "signal that influences execution-path log entries and response metadata."
+    )
+except ImportError:  # pragma: no cover
+    COGNITIVE_EXECUTION_POLICY_ALIGNED_PR18: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::COGNITIVE_EXECUTION_POLICY_ALIGNED_PR18_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 

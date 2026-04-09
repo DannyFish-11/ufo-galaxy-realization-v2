@@ -2659,6 +2659,7 @@ class OpenClawd:
         runtime_session_id: Optional[str] = None,
         entry_mode: Optional[str] = None,
         source_runtime_posture: Optional[str] = None,
+        cognitive_execution_hint: Optional[Any] = None,
     ) -> dict:
         """Subject core entry point — invoked by DesktopPresenceRuntime during the LIMINAL phase.
 
@@ -2770,6 +2771,26 @@ class OpenClawd:
         except ImportError:
             _default_source_runtime_posture = "control_only"
         self._current_source_runtime_posture = source_runtime_posture or _default_source_runtime_posture
+
+        # PR-18: store the cognitive execution hint forwarded by DesktopPresenceRuntime.
+        # The hint is advisory only — OpenClawd retains full execution-path authority.
+        # It is logged here so that the cognitive-wiring influence is observable in
+        # the execution-path log entry (see manifest observability blocks below).
+        self._current_cognitive_execution_hint = cognitive_execution_hint
+        if cognitive_execution_hint is not None:
+            try:
+                _ceh_region = getattr(cognitive_execution_hint, "cognitive_region", "unknown")
+                _ceh_pref = getattr(cognitive_execution_hint, "execution_path_preference", "unknown")
+                _ceh_budget = getattr(cognitive_execution_hint, "activation_budget", 0.0)
+                logger.debug(
+                    "PR-18 OpenClawd cognitive hint received | region=%s exec_pref=%s budget=%.3f trace_id=%s",
+                    _ceh_region,
+                    _ceh_pref,
+                    _ceh_budget,
+                    trace_id,
+                )
+            except Exception:
+                pass
 
         # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
         # the current request's device/session/trace without needing explicit kwargs.
@@ -3174,11 +3195,19 @@ class OpenClawd:
                         execution_result=_exec_result_k,
                     )
                     # PR-4: structured observability log whenever execution_path is set.
+                    # PR-18: include cognitive hint region in the manifest log entry so
+                    # cognitive-state wiring influence is visible in execution-path logs.
+                    _cog_hint_k = getattr(self, "_current_cognitive_execution_hint", None)
+                    _cog_region_k = getattr(_cog_hint_k, "cognitive_region", None) if _cog_hint_k else None
+                    _cog_pref_k = getattr(_cog_hint_k, "execution_path_preference", None) if _cog_hint_k else None
                     logger.info(
-                        "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s",
+                        "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s"
+                        " cognitive_region=%s cognitive_exec_pref=%s",
                         trace_id,
                         _entry_mode,
                         _exec_path_k,
+                        _cog_region_k,
+                        _cog_pref_k,
                     )
                     if _exec_path_k == "none":
                         _exec_result_k.setdefault("skipped_reason", "no_execution")
@@ -3334,6 +3363,14 @@ class OpenClawd:
                             # (route selection, fallback transitions, operator override
                             # influence, trust/safety gating — all correlated and replayable).
                             "decision_timeline_snapshot": _decision_timeline_snapshot,
+                            # PR-18: cognitive execution hint forwarded from the runtime shell.
+                            # Advisory only — documents what cognitive-state wiring advised.
+                            # cognitive_region / execution_path_preference / activation_budget
+                            # influence the execution-path log entry but never override
+                            # OpenClawd's final authority.
+                            "cognitive_execution_hint": (
+                                _cog_hint_k.to_dict() if _cog_hint_k is not None and hasattr(_cog_hint_k, "to_dict") else None
+                            ),
                             # PR-36: production baseline status — confirms that the unified
                             # canonical control loop is active as the production baseline
                             # and reports coverage of canonical primary artifacts.
@@ -3528,11 +3565,19 @@ class OpenClawd:
                 cross_device_dispatched=_cross_device2,
             )
             # PR-4: structured observability log whenever execution_path is set.
+            # PR-18: include cognitive hint region/preference in the manifest log
+            # entry so cognitive-state wiring influence is visible in execution logs.
+            _cog_hint_d = getattr(self, "_current_cognitive_execution_hint", None)
+            _cog_region_d = getattr(_cog_hint_d, "cognitive_region", None) if _cog_hint_d else None
+            _cog_pref_d = getattr(_cog_hint_d, "execution_path_preference", None) if _cog_hint_d else None
             logger.info(
-                "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s",
+                "OpenClawd manifest | trace_id=%s entry_mode=%s execution_path=%s"
+                " cognitive_region=%s cognitive_exec_pref=%s",
                 trace_id,
                 _entry_mode,
                 _exec_path2,
+                _cog_region_d,
+                _cog_pref_d,
             )
             if _exec_path2 == "none":
                 _exec_result2.setdefault("skipped_reason", "no_execution")
@@ -3648,6 +3693,11 @@ class OpenClawd:
                     # (route selection, fallback transitions, operator override
                     # influence, trust/safety gating — all correlated and replayable).
                     "decision_timeline_snapshot": _decision_timeline_snapshot,
+                    # PR-18: cognitive execution hint forwarded from the runtime shell.
+                    # Advisory only — documents what cognitive-state wiring advised.
+                    "cognitive_execution_hint": (
+                        _cog_hint_d.to_dict() if _cog_hint_d is not None and hasattr(_cog_hint_d, "to_dict") else None
+                    ),
                     # PR-36: production baseline status — confirms that the unified
                     # canonical control loop is active as the production baseline
                     # and reports coverage of canonical primary artifacts.
