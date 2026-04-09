@@ -109,9 +109,13 @@ class NodeArchitecturalClass(str, Enum):
 #: Set of architectural classes whose capabilities are eligible for injection
 #: into the CapabilityRegistry (OpenClawd capability bus).
 #: Only CAPABILITY_NODE nodes are surfaced as capabilities.
-_CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset({
+#: Public alias: ``CAPABILITY_SYNC_ELIGIBLE`` (preferred for external consumers).
+CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset({
     NodeArchitecturalClass.CAPABILITY_NODE,
 })
+
+# Backward-compatible private alias (retained for code that already imports it).
+_CAPABILITY_SYNC_ELIGIBLE: frozenset = CAPABILITY_SYNC_ELIGIBLE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -538,7 +542,12 @@ class NodeFabricRegistry:
                         heartbeat_ttl=self._heartbeat_ttl,
                     )
                     if not decision.eligible:
-                        # Classify for metrics
+                        # Classify for metrics.
+                        # Note: reason-code strings are compared as literals here
+                        # rather than being imported from node_governance_runtime,
+                        # because this module (node_fabric_registry) is imported
+                        # by node_governance_runtime — a circular import would
+                        # result if we imported back.
                         if any(
                             r in decision.exclusion_reasons
                             for r in ("non_capability_architectural_class", "archived_node")

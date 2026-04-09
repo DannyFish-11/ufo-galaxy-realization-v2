@@ -288,7 +288,7 @@ def evaluate_node_governance_eligibility(
     # Rule 1: Architectural class must be CAPABILITY_NODE
     # ------------------------------------------------------------------
     try:
-        from core.nodes.node_fabric_registry import NodeArchitecturalClass, _CAPABILITY_SYNC_ELIGIBLE  # noqa: PLC0415
+        from core.nodes.node_fabric_registry import NodeArchitecturalClass, CAPABILITY_SYNC_ELIGIBLE  # noqa: PLC0415
         arch = getattr(node_info, "architectural_class", None)
         arch_value = arch.value if hasattr(arch, "value") else str(arch) if arch is not None else "unknown"
         diagnostic["architectural_class"] = arch_value
@@ -296,7 +296,7 @@ def evaluate_node_governance_eligibility(
         if arch == NodeArchitecturalClass.ARCHIVED_NODE:
             exclusion_reasons.append(REASON_ARCHIVED)
             diagnostic["architectural_class_rule"] = "excluded: ARCHIVED_NODE"
-        elif arch not in _CAPABILITY_SYNC_ELIGIBLE:
+        elif arch not in CAPABILITY_SYNC_ELIGIBLE:
             exclusion_reasons.append(REASON_NON_CAPABILITY_CLASS)
             diagnostic["architectural_class_rule"] = (
                 f"excluded: {arch_value} not in CAPABILITY_SYNC_ELIGIBLE"
@@ -328,34 +328,46 @@ def evaluate_node_governance_eligibility(
     # ------------------------------------------------------------------
     # Rules 3 & 4: Lifecycle stage (when governor record available)
     # ------------------------------------------------------------------
-    governor_consulted = governor_record is not None
+    # Import NodeLifecycleStage once, outside of the record-checking block, so
+    # that import failures are handled explicitly and separately from record-
+    # evaluation failures.
+    _NodeLifecycleStage = None
+    _lifecycle_stage_import_error: Optional[str] = None
+    try:
+        from core.node_lifecycle_governor import NodeLifecycleStage as _NodeLifecycleStage  # noqa: PLC0415
+    except ImportError as _imp_err:
+        _lifecycle_stage_import_error = str(_imp_err)
+
+    governor_consulted = governor_record is not None and _NodeLifecycleStage is not None
     if governor_record is not None:
-        try:
-            stage = getattr(governor_record, "lifecycle_stage", None)
-            stage_value = stage.value if hasattr(stage, "value") else str(stage)
-            diagnostic["lifecycle_stage"] = stage_value
+        if _NodeLifecycleStage is None:
+            # Import failed: cannot enforce lifecycle rules; log and skip.
+            diagnostic["lifecycle_rule"] = (
+                f"skipped: NodeLifecycleStage unavailable ({_lifecycle_stage_import_error})"
+            )
+        else:
+            try:
+                stage = getattr(governor_record, "lifecycle_stage", None)
+                stage_value = stage.value if hasattr(stage, "value") else str(stage)
+                diagnostic["lifecycle_stage"] = stage_value
 
-            # Rule 3: DEPRECATED stage → excluded
-            from core.node_lifecycle_governor import NodeLifecycleStage  # noqa: PLC0415
-            if stage == NodeLifecycleStage.DEPRECATED:
-                exclusion_reasons.append(REASON_DEPRECATED)
-                diagnostic["lifecycle_rule"] = "excluded: lifecycle_stage=DEPRECATED"
+                # Rule 3: DEPRECATED stage → excluded
+                if stage == _NodeLifecycleStage.DEPRECATED:
+                    exclusion_reasons.append(REASON_DEPRECATED)
+                    diagnostic["lifecycle_rule"] = "excluded: lifecycle_stage=DEPRECATED"
 
-            # Rule 4: REGISTERED stage only → readiness gap
-            elif stage == NodeLifecycleStage.REGISTERED:
-                exclusion_reasons.append(REASON_READINESS_GAP)
-                diagnostic["lifecycle_rule"] = (
-                    "excluded: lifecycle_stage=REGISTERED (readiness gap; "
-                    "node has not passed readiness checks)"
-                )
-            else:
-                diagnostic["lifecycle_rule"] = f"passed: lifecycle_stage={stage_value}"
-        except ImportError:
-            diagnostic["lifecycle_rule"] = "skipped: NodeLifecycleStage unavailable"
-            governor_consulted = False
-        except Exception as exc:
-            diagnostic["lifecycle_rule"] = f"error: {exc}"
-            governor_consulted = False
+                # Rule 4: REGISTERED stage only → readiness gap
+                elif stage == _NodeLifecycleStage.REGISTERED:
+                    exclusion_reasons.append(REASON_READINESS_GAP)
+                    diagnostic["lifecycle_rule"] = (
+                        "excluded: lifecycle_stage=REGISTERED (readiness gap; "
+                        "node has not passed readiness checks)"
+                    )
+                else:
+                    diagnostic["lifecycle_rule"] = f"passed: lifecycle_stage={stage_value}"
+            except Exception as exc:
+                diagnostic["lifecycle_rule"] = f"error evaluating lifecycle_stage: {exc}"
+                governor_consulted = False
     else:
         diagnostic["lifecycle_rule"] = (
             "skipped: no governor record (fallback mode — arch class + health only)"
