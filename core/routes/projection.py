@@ -1307,6 +1307,47 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11_UNAVAILABLE"
     )
 
+# PR-12 (node discovery startup/health closure): Confirms that the discovery
+# integration gaps from PR-7 are closed.  NodeSystemLauncher.start_all() now
+# calls initialize_discovery_after_startup() after the node batch completes.
+# UnifiedHealthManager health surfaces expose get_discovery_participation_summary()
+# data including undiscovered_active count, fabric_healthy count, and
+# discovery_participation classification.  The system can distinguish running,
+# registered, discovered, healthy, and undiscovered nodes in real diagnostics.
+try:
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
+        NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY as _NDSHC_AUTHORITY,
+        NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL as _NDSHC_PR12,
+        STARTUP_SEEDING_IS_INVOKED_BY_REAL_ORCHESTRATION_POLICY as _NDSHC_SEED_POLICY,
+        HEALTH_SURFACES_REFLECT_DISCOVERY_PARTICIPATION_POLICY as _NDSHC_HEALTH_POLICY,
+        UNDISCOVERED_ACTIVE_COUNT_IS_EXPOSED_IN_HEALTH_POLICY as _NDSHC_UNDISCOV_POLICY,
+        DISCOVERY_DIAGNOSTICS_ALIGN_WITH_LAUNCHER_AND_FABRIC_POLICY as _NDSHC_DIAG_POLICY,
+        build_discovery_health_surface as _build_discovery_health_surface,
+        build_startup_seeding_status as _build_startup_seeding_status,
+        build_discovery_diagnostic_context as _build_discovery_diagnostic_context,
+    )
+    from launcher.node_startup import (  # noqa: F401
+        NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12 as _NDSHC_LAUNCHER_PR12,
+    )
+
+    NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12: str = (
+        "PROJECTION_ROUTES::NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12_V1: "
+        "core.node_discovery_startup_health_closure is confirmed as the canonical "
+        "authority for closing NodeDiscoveryService startup seeding and health surface "
+        "wiring gaps (PR-12).  NodeSystemLauncher.start_all() calls "
+        "initialize_discovery_after_startup() after the node batch completes.  "
+        "UnifiedHealthManager health surfaces expose get_discovery_participation_summary() "
+        "data including undiscovered_active count, fabric_healthy count, and "
+        "discovery_participation classification.  The system can distinguish running, "
+        "registered, discovered, healthy, and undiscovered nodes in real diagnostics "
+        "via build_discovery_diagnostic_context().  Discovery is a fully wired "
+        "runtime observability participant."
+    )
+except ImportError:  # pragma: no cover
+    NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

@@ -101,6 +101,20 @@ NODE_DISCOVERY_STARTUP_WIRED_PR7: str = (
     "healthy fabric-registry nodes into discovery after the initial batch completes."
 )
 
+#: PR-12 discovery startup seeding closure sentinel.
+#:
+#: Confirms that NodeSystemLauncher.start_all() calls
+#: initialize_discovery_after_startup() after the node batch completes.
+#: This closes the gap where the bulk seeding path was defined but never
+#: invoked by real startup orchestration.
+NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12: str = (
+    "NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12_V1: "
+    "NodeSystemLauncher.start_all() calls self.initialize_discovery_after_startup() "
+    "after the node startup batch has completed.  This guarantees that "
+    "NodeDiscoveryService is bulk-seeded from NodeFabricRegistry state at the "
+    "end of every startup run, closing the integration gap from PR-7."
+)
+
 
 class NodeSystemLauncher:
     """节点系统启动器"""
@@ -874,4 +888,11 @@ class NodeSystemLauncher:
             len(failed_nodes),
             f"  失败节点: {failed_nodes}" if failed_nodes else "",
         )
+
+        # PR-12: Bulk-seed all healthy fabric-registry nodes into
+        # NodeDiscoveryService now that the startup batch has completed.
+        # This closes the gap where initialize_discovery_after_startup() was
+        # defined but never invoked by the real startup orchestration.
+        await self.initialize_discovery_after_startup()
+
         return results
