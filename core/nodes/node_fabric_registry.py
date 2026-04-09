@@ -182,6 +182,24 @@ class NodeInfo:
     metadata: Dict[str, Any] = field(default_factory=dict)
     """附加元数据（版本、标签等）"""
 
+    activation_policy: Optional[str] = None
+    """Node activation policy kind (PR-15 node track).
+
+    When set, this field carries the
+    :class:`~core.node_activation_context.NodeActivationPolicyKind` value
+    (as a string) for this node.  Valid values: ``"always_active"``,
+    ``"topology_conditional"``, ``"demand_activated"``, ``"dormant"``.
+
+    When ``None`` (the default), the activation-context layer defaults to
+    ``ALWAYS_ACTIVE`` — the node is unconditionally ready for canonical
+    invocation subject to governance eligibility.
+
+    This field is evaluated by
+    :func:`~core.node_activation_context.evaluate_node_activation_context`
+    inside :func:`~core.node_invocation_governance.evaluate_invocation_governance`.
+    It does NOT affect governance eligibility rules (lifecycle/health/class).
+    """
+
     # 运行时字段（不由注册者填写）
     registered_at: float = field(default_factory=time.monotonic)
     last_heartbeat: float = field(default_factory=time.monotonic)
@@ -231,6 +249,7 @@ class NodeInfo:
             "capabilities": [c.name for c in self.capabilities],
             "dependencies": list(self.dependencies),
             "metadata": dict(self.metadata),
+            "activation_policy": self.activation_policy,
             "registered_at": self.registered_at,
             "last_heartbeat": self.last_heartbeat,
             "heartbeat_age_secs": round(self.heartbeat_age_secs(), 2),
@@ -785,6 +804,19 @@ NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY: str = (
     "surfaces must read node runtime status from NodeFabricRegistry (node.status, "
     "node.health_score()).  node_status_cache may be retained for legacy/compat "
     "consumers only, and must not be consulted on canonical surfaces."
+)
+
+#: Sentinel: NodeInfo.activation_policy field was added by PR-15 (node track).
+#: This field stores the NodeActivationPolicyKind value (as a string) for each
+#: registered node.  It is consumed by evaluate_node_activation_context() inside
+#: evaluate_invocation_governance() as a secondary enrichment layer.
+NODE_INFO_ACTIVATION_POLICY_FIELD_PR15_SENTINEL: str = (
+    "NODE_FABRIC_REGISTRY::NODE_INFO_ACTIVATION_POLICY_FIELD_PR15_V1: "
+    "NodeInfo.activation_policy is the canonical field for storing a node's "
+    "NodeActivationPolicyKind (always_active / topology_conditional / "
+    "demand_activated / dormant).  It is read by core.node_activation_context."
+    "get_activation_policy_kind_for_node() and evaluated inside "
+    "evaluate_invocation_governance() as the activation-context enrichment layer."
 )
 
 
