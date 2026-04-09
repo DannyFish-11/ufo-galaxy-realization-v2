@@ -109,9 +109,13 @@ class NodeArchitecturalClass(str, Enum):
 #: Set of architectural classes whose capabilities are eligible for injection
 #: into the CapabilityRegistry (OpenClawd capability bus).
 #: Only CAPABILITY_NODE nodes are surfaced as capabilities.
-_CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset({
+#: Public alias: ``CAPABILITY_SYNC_ELIGIBLE`` (preferred for external consumers).
+CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset({
     NodeArchitecturalClass.CAPABILITY_NODE,
 })
+
+# Backward-compatible private alias (retained for code that already imports it).
+_CAPABILITY_SYNC_ELIGIBLE: frozenset = CAPABILITY_SYNC_ELIGIBLE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -489,6 +493,11 @@ class NodeFabricRegistry:
           new capability entries should be created for them.
         - EXPERIMENTAL_NODE / ARCHIVED_NODE → not ready / not active.
 
+        PR-6: Governance eligibility is now evaluated via
+        :mod:`core.node_governance_runtime`.  When the module is available,
+        lifecycle-stage rules (DEPRECATED, readiness-gap) are also enforced and
+        every exclusion decision is logged diagnostically.
+
         Returns:
             注入的能力条目数量。
         """
@@ -498,26 +507,79 @@ class NodeFabricRegistry:
             logger.warning("CapabilityRegistry not available; skipping capability sync")
             return 0
 
+        # PR-6: Attempt to load governance runtime eligibility checker.
+        _governance_evaluate = None
+        _governor = None
+        try:
+            from core.node_governance_runtime import evaluate_node_governance_eligibility  # noqa: PLC0415
+            _governance_evaluate = evaluate_node_governance_eligibility
+            try:
+                from core.node_lifecycle_governor import get_node_lifecycle_governor  # noqa: PLC0415
+                _governor = get_node_lifecycle_governor()
+            except Exception:
+                pass
+        except ImportError:
+            pass  # Fallback: arch-class + health filtering only (non-canonical path)
+
         registry = CapabilityRegistry.get_instance()
         injected = 0
         skipped_non_capability = 0
+        skipped_governance = 0
 
         with self._rw_lock:
             for node in self._nodes.values():
-                # Only CAPABILITY_NODE nodes are surfaced to OpenClawd.
-                if node.architectural_class not in _CAPABILITY_SYNC_ELIGIBLE:
-                    skipped_non_capability += 1
-                    logger.debug(
-                        "Skipping capability sync for node %s "
-                        "(architectural_class=%s; not a CAPABILITY_NODE)",
-                        node.node_id,
-                        node.architectural_class.value
-                        if isinstance(node.architectural_class, NodeArchitecturalClass)
-                        else node.architectural_class,
+                if _governance_evaluate is not None:
+                    # PR-6 canonical governance path: full eligibility check.
+                    gov_record = None
+                    if _governor is not None:
+                        try:
+                            gov_record = _governor.get_record(node.node_id)
+                        except Exception:
+                            pass
+                    decision = _governance_evaluate(
+                        node,
+                        governor_record=gov_record,
+                        heartbeat_ttl=self._heartbeat_ttl,
                     )
-                    continue
-                if not node.is_healthy(self._heartbeat_ttl):
-                    continue
+                    if not decision.eligible:
+                        # Classify for metrics.
+                        # Note: reason-code strings are compared as literals here
+                        # rather than being imported from node_governance_runtime,
+                        # because this module (node_fabric_registry) is imported
+                        # by node_governance_runtime — a circular import would
+                        # result if we imported back.
+                        if any(
+                            r in decision.exclusion_reasons
+                            for r in ("non_capability_architectural_class", "archived_node")
+                        ):
+                            skipped_non_capability += 1
+                        else:
+                            skipped_governance += 1
+                        logger.debug(
+                            "Governance-excluded node %s from capability sync: "
+                            "reasons=%s (governor_consulted=%s)",
+                            node.node_id,
+                            decision.exclusion_reasons,
+                            decision.governor_consulted,
+                        )
+                        continue
+                else:
+                    # Non-canonical fallback: arch-class + health only.
+                    if node.architectural_class not in _CAPABILITY_SYNC_ELIGIBLE:
+                        skipped_non_capability += 1
+                        logger.debug(
+                            "Skipping capability sync for node %s "
+                            "(architectural_class=%s; not a CAPABILITY_NODE)",
+                            node.node_id,
+                            node.architectural_class.value
+                            if isinstance(node.architectural_class, NodeArchitecturalClass)
+                            else node.architectural_class,
+                        )
+                        continue
+                    if not node.is_healthy(self._heartbeat_ttl):
+                        skipped_governance += 1
+                        continue
+
                 for cap in node.capabilities:
                     key = f"node__{node.node_id}__{cap.name}"
                     item = CapabilityItem(
@@ -541,21 +603,26 @@ class NodeFabricRegistry:
                             "host": node.host,
                             "port": node.port,
                             "registered_at": cap.registered_at,
+                            "governance_eligible": True,
                         },
                     )
                     registry.inject_item(item)
                     injected += 1
 
-        if injected:
+        if injected or skipped_non_capability or skipped_governance:
             logger.info(
-                "Node capability sync: injected %d items into CapabilityRegistry "
-                "(skipped %d non-capability nodes)",
+                "Node capability sync: injected=%d skipped_non_capability=%d "
+                "skipped_governance=%d (governance_runtime=%s)",
                 injected,
                 skipped_non_capability,
+                skipped_governance,
+                "active" if _governance_evaluate is not None else "fallback",
                 extra={
                     "event": "node_capability_sync",
                     "injected": injected,
                     "skipped_non_capability": skipped_non_capability,
+                    "skipped_governance": skipped_governance,
+                    "governance_runtime": "active" if _governance_evaluate is not None else "fallback",
                 },
             )
         return injected

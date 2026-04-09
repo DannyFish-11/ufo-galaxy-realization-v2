@@ -1065,6 +1065,42 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::FUSION_ENTRY_ADAPTER_ALIGNED_PR5_UNAVAILABLE"
     )
 
+# PR-6 (node governance runtime constraint): Confirms that governance metadata
+# is a real runtime constraint for canonical node tool-surface exposure.
+# Archived/deprecated/unhealthy/readiness-gap nodes are filtered from the
+# canonical path.  Every exclusion decision is diagnostically observable.
+try:
+    from core.node_governance_runtime import (  # noqa: F401
+        NODE_GOVERNANCE_IS_RUNTIME_CONSTRAINT_AUTHORITY as _NGR_AUTHORITY,
+        NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL as _NGR_PR6,
+        ARCHIVED_AND_DEPRECATED_NODES_EXCLUDED_POLICY as _NGR_ARCHIVED_POLICY,
+        UNHEALTHY_NODES_EXCLUDED_FROM_CANONICAL_PATH_POLICY as _NGR_UNHEALTHY_POLICY,
+        READINESS_GAP_NODES_EXCLUDED_POLICY as _NGR_READINESS_POLICY,
+        GOVERNANCE_EXCLUSION_IS_DIAGNOSABLE_POLICY as _NGR_DIAGNOSABLE_POLICY,
+        COMPATIBILITY_FALLBACK_IS_NON_CANONICAL_POLICY as _NGR_FALLBACK_POLICY,
+        NodeGovernanceEligibilityDecision as _NodeGovernanceEligibilityDecision,
+        evaluate_node_governance_eligibility as _evaluate_node_governance_eligibility,
+        get_governance_eligible_nodes as _get_governance_eligible_nodes,
+        build_governance_exclusion_report as _build_governance_exclusion_report,
+    )
+
+    NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6: str = (
+        "PROJECTION_ROUTES::NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6_V1: "
+        "core.node_governance_runtime is confirmed as the canonical authority for "
+        "node governance runtime eligibility.  Governance metadata (architectural "
+        "class, health, lifecycle stage, deprecated/archived semantics) is a real "
+        "runtime constraint for canonical node tool-surface exposure.  "
+        "Archived/deprecated/unhealthy/readiness-gap nodes are filtered from the "
+        "canonical path.  NodeGovernanceEligibilityDecision carries eligible, "
+        "exclusion_reasons, and diagnostic_context for every node evaluated.  "
+        "sync_capabilities_to_registry() in NodeFabricRegistry uses governance "
+        "eligibility checks and emits structured exclusion diagnostics."
+    )
+except ImportError:  # pragma: no cover
+    NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
