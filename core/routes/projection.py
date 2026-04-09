@@ -1349,6 +1349,58 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR-13 (node boundary enforcement finalization): Confirms that every
+# remaining node-related surface has been given an explicit boundary
+# classification (CANONICAL / COMPAT_ONLY / INTERNAL_ONLY / DEPRECATED).
+# Compatibility-only surfaces are no longer ambiguous peer authorities —
+# each NodeSurfaceBoundaryRecord carries is_peer_authority=False and
+# is_dashboard_trusted=False for non-canonical surfaces.  Dashboard and
+# status-endpoint surfaces are directed exclusively to canonical sources via
+# get_dashboard_trusted_surfaces() and is_dashboard_trusted_surface().
+# The full surface catalogue and diagnostic report are queryable through
+# build_boundary_enforcement_summary() and build_node_surface_diagnostic_report().
+try:
+    from core.node_boundary_enforcement_finalization import (  # noqa: F401
+        NODE_BOUNDARY_ENFORCEMENT_FINALIZATION_IS_AUTHORITY as _NBEF_AUTHORITY,
+        NODE_BOUNDARY_ENFORCEMENT_FINALIZATION_PR13_SENTINEL as _NBEF_PR13,
+        ALL_NODE_SURFACES_HAVE_EXPLICIT_CLASSIFICATION_POLICY as _NBEF_CLASS_POLICY,
+        COMPAT_SURFACES_MUST_NOT_APPEAR_AS_PEER_AUTHORITIES_POLICY as _NBEF_PEER_POLICY,
+        DASHBOARD_MUST_NOT_DEPEND_ON_COMPAT_STORES_POLICY as _NBEF_DASH_POLICY,
+        INTERNAL_SURFACES_ARE_NOT_CALLABLE_FROM_CANONICAL_PATH_POLICY as _NBEF_INT_POLICY,
+        DEPRECATED_SURFACES_ARE_OPERATOR_VISIBLE_POLICY as _NBEF_DEP_POLICY,
+        NodeSurfaceBoundaryKind as _NodeSurfaceBoundaryKind,
+        NodeSurfaceBoundaryRecord as _NodeSurfaceBoundaryRecord,
+        get_surface_boundary_catalogue as _get_surface_boundary_catalogue,
+        classify_node_surface as _classify_node_surface,
+        is_dashboard_trusted_surface as _is_dashboard_trusted_surface,
+        get_dashboard_trusted_surfaces as _get_dashboard_trusted_surfaces,
+        build_boundary_enforcement_summary as _build_boundary_enforcement_summary,
+        build_node_surface_diagnostic_report as _build_node_surface_diagnostic_report,
+    )
+
+    NODE_BOUNDARY_ENFORCEMENT_FINALIZATION_ALIGNED_PR13: str = (
+        "PROJECTION_ROUTES::NODE_BOUNDARY_ENFORCEMENT_FINALIZATION_ALIGNED_PR13_V1: "
+        "core.node_boundary_enforcement_finalization is confirmed as the canonical "
+        "authority for finalizing explicit boundary classifications on all remaining "
+        "node-related surfaces (PR-13).  Every known surface carries an explicit "
+        "NodeSurfaceBoundaryKind: CANONICAL, COMPAT_ONLY, INTERNAL_ONLY, or DEPRECATED.  "
+        "Compatibility-only surfaces (NodeRegistry compat facade, POST /api/v1/nodes/call "
+        "compat endpoint, GET /api/v1/nodes legacy fs-scan, OpenClawd legacy Layer 3 scan) "
+        "carry is_peer_authority=False and is_dashboard_trusted=False, preventing silent "
+        "promotion to canonical status.  Internal-only surfaces (fusion_entry adapter, "
+        "NodeInvocationEnvelope, node_audit internals) are not callable from outside "
+        "their designated integration points.  Deprecated surfaces (direct dir scan, "
+        "node_registry.json direct read, LEGACY_ORCHESTRATOR_NODE on canonical path) "
+        "are enumerated in build_node_surface_diagnostic_report() for operator visibility.  "
+        "Dashboard and status-board surfaces must use get_dashboard_trusted_surfaces() "
+        "or is_dashboard_trusted_surface() to verify their data sources are canonical."
+    )
+except ImportError:  # pragma: no cover
+    NODE_BOUNDARY_ENFORCEMENT_FINALIZATION_ALIGNED_PR13: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_BOUNDARY_ENFORCEMENT_FINALIZATION_ALIGNED_PR13_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
