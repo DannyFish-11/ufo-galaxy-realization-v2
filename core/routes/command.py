@@ -43,6 +43,7 @@ from core.routes._shared import (
     command_results,
 )
 from core.routes._helpers import nodes_root, _load_node, _execute_node
+from core.node_invocation import invoke_node, InvocationSource
 from core.routes._models import (
     CommandDispatchRequest,
     CommandStatus,
@@ -417,34 +418,35 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     command_router = get_command_router(on_status_change=_on_command_status_change)
 
     async def _command_node_executor(target: str, command: str, params: dict):
-        """命令路由 → 节点执行桥接"""
+        """命令路由 → 节点执行桥接 (unified executor)"""
+        # Check if target is a connected device (not a node directory)
         target_node_dir = os.path.join(nodes_root, target)
         if not os.path.isdir(target_node_dir):
+            # Check for fuzzy node match before falling back to device
+            found_as_node = False
             for name in os.listdir(nodes_root):
                 if name.startswith(target) or target in name:
-                    target_node_dir = os.path.join(nodes_root, name)
-                    target = name
+                    found_as_node = True
                     break
+            if not found_as_node:
+                if target in connection_manager.active_devices:
+                    sent = await connection_manager.send_to_device(target, {
+                        "type": "command",
+                        "command": command,
+                        "params": params,
+                    })
+                    return {"sent_to_device": target, "success": sent}
+                return {"error": f"Target {target} not found"}
 
-        if not os.path.isdir(target_node_dir):
-            if target in connection_manager.active_devices:
-                sent = await connection_manager.send_to_device(target, {
-                    "type": "command",
-                    "command": command,
-                    "params": params,
-                })
-                return {"sent_to_device": target, "success": sent}
-            return {"error": f"Target {target} not found"}
-
-        fusion_entry = os.path.join(target_node_dir, "fusion_entry.py")
-        if not os.path.exists(fusion_entry):
-            return {"error": f"Target {target} has no fusion_entry.py"}
-
-        node_instance = _load_node(target, target_node_dir, fusion_entry)
-        if not node_instance:
-            return {"error": f"Failed to load target {target}"}
-
-        return await _execute_node(node_instance, command, params)
+        result = await invoke_node(
+            target,
+            command,
+            params,
+            invocation_source=InvocationSource.COMMAND,
+        )
+        if result.success:
+            return result.result if result.result is not None else {"success": True}
+        return {"error": result.error, "success": False}
 
     command_router.set_executor(_command_node_executor)
 

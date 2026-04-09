@@ -496,7 +496,7 @@ class CanonicalDispatcher:
         tool_name: str,
         arguments: Dict[str, Any],
     ) -> DispatchResult:
-        """Route a ``node__*`` invocation through the node fabric."""
+        """Route a ``node__*`` invocation through the unified node executor."""
         parts = tool_name.split("__", 2)
         if len(parts) < 3:
             return DispatchResult(success=False, error=f"无效 Node 工具名: {tool_name}")
@@ -506,26 +506,18 @@ class CanonicalDispatcher:
         if not node_key:
             return DispatchResult(success=False, error=f"节点 {node_id} 未在注册表中")
 
-        import os
-
-        from core.routes._helpers import _execute_node, _load_node, nodes_root
-
-        node_dir = os.path.join(nodes_root, node_key)
-        fusion_path = os.path.join(node_dir, "fusion_entry.py")
-        if not os.path.exists(fusion_path):
-            return DispatchResult(
-                success=False, error=f"节点 {node_id} 无 fusion_entry.py"
-            )
-
-        node_info = _load_node(node_id, node_dir, fusion_path)
-        if not node_info:
-            return DispatchResult(success=False, error=f"节点 {node_id} 加载失败")
+        from core.node_invocation import InvocationSource, invoke_node
 
         params = arguments.get("params", arguments)
-        raw = await _execute_node(
-            node_info, action_name, params if isinstance(params, dict) else {}
+        inv_result = await invoke_node(
+            node_key,
+            action_name,
+            params if isinstance(params, dict) else {},
+            invocation_source=InvocationSource.CAPABILITY,
         )
-        return DispatchResult(success=True, result=raw)
+        if inv_result.success:
+            return DispatchResult(success=True, result=inv_result.result)
+        return DispatchResult(success=False, error=inv_result.error)
 
     def _find_node_key(self, node_id: str) -> Optional[str]:
         """Look up *node_id* in the in-memory cache then the registry file."""

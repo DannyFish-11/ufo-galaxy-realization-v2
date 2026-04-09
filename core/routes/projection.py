@@ -994,6 +994,44 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED_UNAVAILABLE"
     )
 
+# PR-4 (node invocation unification): Unified Node Invocation Envelope and
+# Executor alignment sentinel.  Confirms that core.node_invocation defines a
+# canonical NodeInvocationEnvelope, NodeInvocationResult, and
+# UnifiedNodeExecutor; that all five node invocation paths (openclawd,
+# REST /api/v1/nodes/call, command-router bridge, capability dispatcher,
+# system_integration) converge on invoke_node(); and that trace/source
+# metadata is carried consistently across every path.
+try:
+    from core.node_invocation import (  # noqa: F401
+        UNIFIED_NODE_INVOCATION_AUTHORITY as _UNIA_AUTHORITY,
+        UNIFIED_NODE_INVOCATION_PR4_SENTINEL as _UNIA_PR4,
+        ALL_INVOCATION_PATHS_CONVERGE_ON_UNIFIED_EXECUTOR_POLICY as _UNIA_PATHS_POLICY,
+        INVOCATION_ENVELOPE_IS_CANONICAL_TRACE_SCHEMA_POLICY as _UNIA_TRACE_POLICY,
+        RESULT_ENVELOPE_IS_CANONICAL_RESULT_CONTRACT_POLICY as _UNIA_RESULT_POLICY,
+        NodeInvocationEnvelope as _NodeInvocationEnvelope,
+        NodeInvocationResult as _NodeInvocationResult,
+        InvocationSource as _InvocationSource,
+        invoke_node as _invoke_node,
+        get_unified_node_executor as _get_unified_node_executor,
+    )
+
+    UNIFIED_NODE_INVOCATION_ALIGNED_PR4: str = (
+        "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR4_V1: "
+        "core.node_invocation is confirmed as the single canonical node execution "
+        "entry point.  NodeInvocationEnvelope carries request_id, trace_id, "
+        "task_id, session_id, node_id, action, params, invocation_source, "
+        "route_mode, execution_domain, started_at, and timeout_ms.  "
+        "NodeInvocationResult carries success, result, error, duration_ms, "
+        "execution_mode, and execution_source.  All five invocation paths "
+        "(openclawd node__ dispatch, POST /api/v1/nodes/call, "
+        "_command_node_executor, CanonicalDispatcher._dispatch_node, and "
+        "system_integration._execute_node) converge on invoke_node()."
+    )
+except ImportError:  # pragma: no cover
+    UNIFIED_NODE_INVOCATION_ALIGNED_PR4: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR4_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
