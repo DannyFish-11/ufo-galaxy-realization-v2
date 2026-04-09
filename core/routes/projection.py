@@ -1262,6 +1262,51 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_ALIGNED_PR10_UNAVAILABLE"
     )
 
+# PR-11 (node invocation governance): Confirms that governance eligibility is
+# enforced at invocation time, not only at capability/tool-surface exposure
+# time.  UnifiedNodeExecutor.execute() consults NodeFabricRegistry and
+# evaluate_node_governance_eligibility() before loading or running any node on
+# the canonical path.  Governance-ineligible nodes (archived, deprecated,
+# unhealthy, readiness-gap) are denied canonical invocation with a structured
+# eligibility_denial diagnostic payload.  The only permitted bypass is the
+# explicitly-scoped COMPAT_INTERNAL override, which is non-canonical and
+# fully auditable.
+try:
+    from core.node_invocation_governance import (  # noqa: F401
+        NODE_INVOCATION_GOVERNANCE_IS_AUTHORITY as _NIGG_AUTHORITY,
+        NODE_INVOCATION_GOVERNANCE_PR11_SENTINEL as _NIGG_PR11,
+        GOVERNANCE_GATE_ENFORCED_AT_INVOCATION_TIME_POLICY as _NIGG_GATE_POLICY,
+        INELIGIBLE_NODES_CANNOT_BE_CANONICALLY_INVOKED_POLICY as _NIGG_INELIGIBLE_POLICY,
+        INVOCATION_DENIAL_CARRIES_STRUCTURED_DIAGNOSTICS_POLICY as _NIGG_DIAG_POLICY,
+        OVERRIDE_PATH_IS_EXPLICIT_AUDITABLE_NON_CANONICAL_POLICY as _NIGG_OVERRIDE_POLICY,
+        UNREGISTERED_NODES_PROCEED_WITH_UNMANAGED_WARNING_POLICY as _NIGG_UNREGD_POLICY,
+        NodeInvocationGovernanceOverride as _NodeInvocationGovernanceOverride,
+        NodeInvocationGovernanceDecision as _NodeInvocationGovernanceDecision,
+        evaluate_invocation_governance as _evaluate_invocation_governance,
+        build_invocation_denial_diagnostics as _build_invocation_denial_diagnostics,
+    )
+    from core.node_invocation import (  # noqa: F401
+        GOVERNANCE_ELIGIBILITY_ENFORCED_AT_INVOCATION_TIME_PR11_SENTINEL as _NI_PR11,
+        CANONICAL_INVOCATION_DENIES_INELIGIBLE_NODES_PR11_POLICY as _NI_PR11_POLICY,
+    )
+
+    NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11: str = (
+        "PROJECTION_ROUTES::NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11_V1: "
+        "core.node_invocation_governance is confirmed as the authority for "
+        "governance eligibility enforcement at node invocation time (PR-11).  "
+        "UnifiedNodeExecutor.execute() consults NodeFabricRegistry and "
+        "evaluate_node_governance_eligibility() before loading or executing any "
+        "node.  Governance-ineligible nodes (archived, deprecated, unhealthy, "
+        "readiness-gap) are denied with a structured eligibility_denial diagnostic "
+        "payload.  Exposure-time and invocation-time governance are now aligned on "
+        "the canonical path.  The COMPAT_INTERNAL override is non-canonical and "
+        "fully auditable."
+    )
+except ImportError:  # pragma: no cover
+    NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

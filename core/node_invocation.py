@@ -19,6 +19,9 @@ Ingress path  ->  build NodeInvocationEnvelope  ->  invoke_node()
                                                      v
                                            UnifiedNodeExecutor.execute()
                                                      |
+                                           governance eligibility gate
+                                           (core.node_invocation_governance)
+                                                     |
                                            _load_node / _execute_node
                                            (core.routes._helpers)
                                                      |
@@ -37,6 +40,16 @@ Non-goals
 - This module does NOT change discovery or registry architecture.
 - This module does NOT modify governance eligibility rules beyond what is
   strictly required for unified invocation plumbing.
+
+PR-11 additions
+~~~~~~~~~~~~~~~
+- :attr:`NodeInvocationEnvelope.governance_override` — set to
+  :attr:`~core.node_invocation_governance.NodeInvocationGovernanceOverride.COMPAT_INTERNAL`
+  to bypass the governance gate on tightly-scoped non-canonical paths.
+- :class:`UnifiedNodeExecutor` now calls
+  :func:`~core.node_invocation_governance.evaluate_invocation_governance`
+  before loading or executing any node.  Governance-ineligible nodes are
+  denied with a structured ``eligibility_denial`` diagnostic payload.
 """
 
 from __future__ import annotations
@@ -91,6 +104,22 @@ RESULT_ENVELOPE_IS_CANONICAL_RESULT_CONTRACT_POLICY: str = (
     "bridge dict derived from NodeInvocationResult."
 )
 
+GOVERNANCE_ELIGIBILITY_ENFORCED_AT_INVOCATION_TIME_PR11_SENTINEL: str = (
+    "UNIFIED_NODE_INVOCATION::GOVERNANCE_GATE_PR11_SENTINEL_V1: "
+    "UnifiedNodeExecutor.execute() consults core.node_invocation_governance "
+    "before loading or executing any node.  Governance-ineligible nodes are "
+    "denied canonical invocation with a structured eligibility_denial payload."
+)
+
+CANONICAL_INVOCATION_DENIES_INELIGIBLE_NODES_PR11_POLICY: str = (
+    "UNIFIED_NODE_INVOCATION::INELIGIBLE_DENIED_PR11_POLICY_V1: "
+    "Nodes that are governance-ineligible (archived, deprecated, unhealthy, "
+    "or readiness-gap) cannot be executed through canonical invoke_node() / "
+    "UnifiedNodeExecutor.execute() regardless of whether the caller knows the "
+    "node_id.  The COMPAT_INTERNAL override bypasses this gate but is "
+    "non-canonical, auditable, and must not be used by canonical callsites."
+)
+
 
 # ---------------------------------------------------------------------------
 # InvocationSource enum
@@ -136,6 +165,12 @@ class NodeInvocationEnvelope:
     route_mode: str = "local"
     execution_domain: str = "local"
 
+    # Governance override — set to COMPAT_INTERNAL to bypass the invocation-time
+    # governance gate on tightly-scoped non-canonical paths.  This field is
+    # intentionally Optional so callers that do not supply it default to NONE
+    # (full governance enforcement).
+    governance_override: Optional[str] = None
+
     # Timing
     started_at: float = field(default_factory=time.time)
     timeout_ms: float = 30_000.0
@@ -166,6 +201,10 @@ class NodeInvocationResult:
     execution_mode: str = "local"
     execution_source: str = InvocationSource.UNKNOWN.value
 
+    # PR-11: governance denial diagnostics — populated when invocation is
+    # refused due to governance ineligibility.
+    eligibility_denial: Optional[Dict[str, Any]] = None
+
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Return a backward-compatible dict shaped like the old execution result.
 
@@ -192,6 +231,8 @@ class NodeInvocationResult:
                 d["data"] = self.result
         else:
             d["error"] = self.error
+        if self.eligibility_denial is not None:
+            d["eligibility_denial"] = self.eligibility_denial
         return d
 
 
@@ -245,6 +286,57 @@ class UnifiedNodeExecutor:
             envelope.request_id,
             envelope.trace_id,
         )
+
+        # -- governance eligibility gate (PR-11) ----------------------------
+        try:
+            from core.node_invocation_governance import (  # noqa: PLC0415
+                NodeInvocationGovernanceOverride,
+                evaluate_invocation_governance,
+                build_invocation_denial_diagnostics,
+            )
+
+            gov_override_raw = envelope.governance_override
+            gov_override = NodeInvocationGovernanceOverride.NONE
+            if gov_override_raw == NodeInvocationGovernanceOverride.COMPAT_INTERNAL.value:
+                gov_override = NodeInvocationGovernanceOverride.COMPAT_INTERNAL
+
+            gov_decision = evaluate_invocation_governance(
+                node_id,
+                override=gov_override,
+            )
+
+            if not gov_decision.invocation_allowed:
+                denial_payload = build_invocation_denial_diagnostics(gov_decision)
+                logger.warning(
+                    "invoke node DENIED by governance gate | node_id=%s reasons=%s "
+                    "request_id=%s",
+                    node_id,
+                    gov_decision.denial_reasons,
+                    envelope.request_id,
+                )
+                return NodeInvocationResult(
+                    success=False,
+                    node_id=node_id,
+                    action=action,
+                    request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
+                    error=(
+                        f"节点 {node_id} 因治理资格检查未通过，拒绝调用: "
+                        f"{gov_decision.denial_reasons}"
+                    ),
+                    duration_ms=(time.time() - started) * 1000.0,
+                    execution_mode=envelope.execution_domain,
+                    execution_source=envelope.invocation_source.value,
+                    eligibility_denial=denial_payload,
+                )
+        except Exception as _gov_exc:  # noqa: BLE001
+            # If governance module itself is unavailable, log and proceed
+            # (graceful degradation — do not block invocation on import errors).
+            logger.warning(
+                "invoke node: governance gate unavailable for node_id=%s: %s; proceeding",
+                node_id,
+                _gov_exc,
+            )
 
         nodes_root = self._get_nodes_root()
         node_dir = os.path.join(nodes_root, node_id)
@@ -353,6 +445,7 @@ class UnifiedNodeExecutor:
         started: float,
         *,
         node_id: Optional[str] = None,
+        eligibility_denial: Optional[Dict[str, Any]] = None,
     ) -> NodeInvocationResult:
         return NodeInvocationResult(
             success=False,
@@ -364,6 +457,7 @@ class UnifiedNodeExecutor:
             duration_ms=(time.time() - started) * 1000.0,
             execution_mode=envelope.execution_domain,
             execution_source=envelope.invocation_source.value,
+            eligibility_denial=eligibility_denial,
         )
 
 
