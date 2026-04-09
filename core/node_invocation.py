@@ -321,8 +321,8 @@ class UnifiedNodeExecutor:
                     request_id=envelope.request_id,
                     trace_id=envelope.trace_id,
                     error=(
-                        f"节点 {node_id} 因治理资格检查未通过，拒绝调用: "
-                        f"{gov_decision.denial_reasons}"
+                        f"Node {node_id} denied invocation due to governance "
+                        f"eligibility check failure: {gov_decision.denial_reasons}"
                     ),
                     duration_ms=(time.time() - started) * 1000.0,
                     execution_mode=envelope.execution_domain,
