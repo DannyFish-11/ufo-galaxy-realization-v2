@@ -727,8 +727,6 @@ class TestNodeStartupLauncherIntegration:
         """_register_node_with_runtime_registry delegates to _announce_node_to_discovery."""
         import inspect
         from launcher.node_startup import NodeSystemLauncher
-        import ast
-        import textwrap
 
         src = inspect.getsource(NodeSystemLauncher._register_node_with_runtime_registry)
         assert "_announce_node_to_discovery" in src, (
@@ -763,9 +761,7 @@ class TestProjectionSentinel:
             pytest.skip("fastapi not available")
         text = NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7.lower()
         assert "discovery" in text
-        # Should not be the unavailable fallback string
-        assert "UNAVAILABLE" not in NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7 or \
-               "V1" in NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7
+        assert "UNAVAILABLE" not in NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7
 
     def test_sentinel_not_unavailable(self):
         try:
