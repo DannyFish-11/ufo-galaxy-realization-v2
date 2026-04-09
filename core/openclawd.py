@@ -5113,7 +5113,7 @@ class OpenClawd:
                             )
 
                 logger.debug(
-                    "[compat] Node 工具收集(compat): 静态 %d + 动态发现 %d，注册表节点 %d 个",
+                    "[compat] Node 工具收集: 静态 %d + 动态发现 %d，注册表节点 %d 个",
                     len(self._CORE_NODE_ACTIONS),
                     _dynamic_added,
                     len(self._node_id_to_key),

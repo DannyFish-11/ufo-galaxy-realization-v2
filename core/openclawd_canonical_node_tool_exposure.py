@@ -198,9 +198,12 @@ def is_legacy_node_scan_compat_enabled() -> bool:
     opted-in via the environment.
 
     Default is ``False`` — legacy scan is **disabled** by default after PR-10.
-    Set ``OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED=true`` to re-enable the
-    compat path (not recommended; compat path is non-canonical and will be
-    removed in a future cleanup pass).
+    Set ``OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED`` to any of the following
+    truthy values to re-enable the compat path:
+    ``"true"``, ``"1"``, ``"yes"``, ``"on"``.
+
+    Re-enabling the compat path is not recommended; it is non-canonical and
+    will be removed in a future cleanup pass.
     """
     val = os.environ.get(OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENV_VAR, "").strip().lower()
     return val in ("1", "true", "yes", "on")

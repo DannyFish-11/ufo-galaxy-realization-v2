@@ -335,7 +335,7 @@ class TestCollectToolsNoRegistryJsonByDefault:
     """_collect_tools() must not open config/node_registry.json when compat is off."""
 
     def test_open_not_called_for_node_registry_json(self) -> None:
-        """open() is not called with a path containing 'node_registry.json' when compat disabled."""
+        """The real _collect_tools() does not open node_registry.json when compat disabled."""
         with patch.dict(os.environ, {"OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED": "false"}):
             try:
                 from core.openclawd import OpenClawd
@@ -352,35 +352,72 @@ class TestCollectToolsNoRegistryJsonByDefault:
 
             opened_paths: List[str] = []
 
-            _real_open = open
-
-            def _mock_open(path, *args, **kwargs):
+            def _spy_open(path, *args, **kwargs):
                 opened_paths.append(str(path))
-                raise FileNotFoundError(f"mock: {path}")
+                # Raise so no real I/O happens; the test only cares about
+                # which paths were attempted.
+                raise FileNotFoundError(f"spy_open blocked: {path}")
 
-            # Patch the canonical paths so _collect_tools() returns quickly.
+            # Stub all sub-calls that would do heavy work so _collect_tools()
+            # can run end-to-end without external dependencies.
             with (
-                patch("core.openclawd.open", _mock_open, create=True),
-                patch.object(cwd, "_collect_tools", wraps=lambda: []),
+                patch("builtins.open", side_effect=_spy_open),
+                patch(
+                    "core.openclawd_canonical_node_tool_exposure.is_legacy_node_scan_compat_enabled",
+                    return_value=False,
+                ),
+                patch("core.openclawd.OpenClawd._GITHUB_BUILTIN_TOOLS", new=[], create=True),
+                patch("core.openclawd.OpenClawd._ACADEMIC_BUILTIN_TOOLS", new=[], create=True),
+                patch("core.openclawd.OpenClawd._ENGINEER_BUILTIN_TOOLS", new=[], create=True),
+                patch("core.openclawd.OpenClawd._RESOURCE_BUILTIN_TOOLS", new=[], create=True),
+                patch.dict("sys.modules", {
+                    "core.unified.capability_resolver": MagicMock(
+                        get_capability_resolver=MagicMock(return_value=MagicMock(
+                            collect_tool_schemas=MagicMock(return_value=[])
+                        ))
+                    ),
+                    "core.nodes.node_fabric_registry": MagicMock(
+                        get_node_fabric_registry=MagicMock(return_value=MagicMock(
+                            sync_capabilities_to_registry=MagicMock(return_value=0)
+                        ))
+                    ),
+                    "core.unified.capability_contract": MagicMock(),
+                    "core.mcp_gateway": MagicMock(
+                        get_mcp_gateway=MagicMock(return_value=MagicMock(
+                            list_generated_tools=MagicMock(return_value=[])
+                        ))
+                    ),
+                }),
             ):
-                pass  # Structural check — real assertion below
-
-            # Call the actual method but stub out all heavy sub-calls.
-            with (
-                patch("core.openclawd.open", _mock_open, create=True),
-                patch("core.openclawd.OpenClawd._collect_tools", return_value=[]),
-            ):
-                # Just verify the compat flag is parsed correctly.
-                from core.openclawd_canonical_node_tool_exposure import (
-                    is_legacy_node_scan_compat_enabled,
-                )
-                assert is_legacy_node_scan_compat_enabled() is False
+                try:
+                    cwd._collect_tools()
+                except Exception:
+                    # Exceptions from missing modules are acceptable; what
+                    # matters is that node_registry.json was not opened.
+                    pass
 
             # No file with "node_registry.json" should have been opened.
             registry_opens = [p for p in opened_paths if "node_registry.json" in p]
             assert registry_opens == [], (
-                f"node_registry.json was opened unexpectedly: {registry_opens}"
+                f"node_registry.json was opened unexpectedly when compat is "
+                f"disabled: {registry_opens}"
             )
+
+    def test_compat_flag_controls_legacy_scan_execution(self) -> None:
+        """is_legacy_node_scan_compat_enabled() returns False when compat is off."""
+        from core.openclawd_canonical_node_tool_exposure import (
+            is_legacy_node_scan_compat_enabled,
+        )
+        with patch.dict(os.environ, {"OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED": "false"}):
+            assert is_legacy_node_scan_compat_enabled() is False
+
+    def test_compat_flag_true_enables_legacy_scan(self) -> None:
+        """is_legacy_node_scan_compat_enabled() returns True when compat is on."""
+        from core.openclawd_canonical_node_tool_exposure import (
+            is_legacy_node_scan_compat_enabled,
+        )
+        with patch.dict(os.environ, {"OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED": "true"}):
+            assert is_legacy_node_scan_compat_enabled() is True
 
 
 # ===========================================================================
