@@ -262,17 +262,25 @@ class TestBuildDiscoveryHealthSurface:
         assert surface["authority"] == NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY
 
     def test_healthy_when_partial_no_undiscovered(self):
-        """When participation is partial but undiscovered_active is 0 -> healthy."""
+        """When participation is partial but undiscovered_active is 0 -> healthy.
+
+        This can happen when, for example, fabric has 2 nodes (1 healthy, 1 offline)
+        and discovery only contains the healthy node.  Discovery is "partial" because
+        not all fabric nodes are discoverable, but undiscovered_active is 0 because
+        the only healthy fabric node IS in discovery.
+        """
         from core.node_discovery_startup_health_closure import build_discovery_health_surface
         from unittest.mock import patch as _patch
 
-        # Fake a summary response with partial participation but 0 undiscovered.
+        # A scenario where participation is "partial" but no healthy fabric node
+        # is missing from discovery: 2 fabric nodes (1 healthy, 1 offline), 1 in
+        # discovery — all healthy nodes are covered, so undiscovered_active == 0.
         fake_summary = {
-            "discovery_total": 2,
-            "discovery_healthy": 2,
+            "discovery_total": 1,
+            "discovery_healthy": 1,
             "fabric_total": 2,
-            "fabric_healthy": 2,
-            "undiscovered_active": 0,
+            "fabric_healthy": 1,
+            "undiscovered_active": 0,  # The 1 healthy node IS in discovery.
             "discovery_participation": "partial",
         }
         with _patch(

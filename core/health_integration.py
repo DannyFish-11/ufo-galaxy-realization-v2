@@ -251,8 +251,13 @@ class UnifiedHealthManager:
                 "undiscovered_active": surface.get("undiscovered_active", 0),
                 "discovery_participation": surface.get("discovery_participation", "none"),
             }
-        except Exception as e:
+        except Exception as outer_exc:
             # Graceful fallback: use basic discovery service status.
+            logger.debug(
+                "UnifiedHealthManager._check_discovery: canonical surface failed, "
+                "falling back to basic get_status(): %s",
+                outer_exc,
+            )
             try:
                 status = self._discovery.get_status()
                 healthy = status.get("healthy_nodes", 0)
@@ -262,8 +267,8 @@ class UnifiedHealthManager:
                     "total_nodes": total,
                     "healthy_nodes": healthy,
                 }
-            except Exception:
-                return {"status": "unhealthy", "error": str(e)}
+            except Exception as inner_exc:
+                return {"status": "unhealthy", "error": str(inner_exc)}
 
     def _check_channel_plugins(self) -> Dict:
         """渠道插件检查"""
@@ -322,7 +327,12 @@ class UnifiedHealthManager:
                 dashboard["node_discovery"] = build_discovery_health_surface(
                     self._discovery, fabric
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug(
+                    "UnifiedHealthManager.get_dashboard: discovery health surface "
+                    "failed, falling back to basic get_status(): %s",
+                    exc,
+                )
                 try:
                     dashboard["node_discovery"] = self._discovery.get_status()
                 except Exception:
