@@ -1032,6 +1032,38 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR4_UNAVAILABLE"
     )
 
+# PR-5: Reposition fusion_entry as the Canonical Execution Adapter.
+# Asserts that core.fusion_entry_adapter is present and that fusion_entry.py
+# is documented and treated as an execution adapter only — not as a node
+# registry, discovery authority, or governance eligibility check.
+try:
+    from core.fusion_entry_adapter import (  # noqa: F401
+        FUSION_ENTRY_ADAPTER_AUTHORITY as _FEA_AUTHORITY,
+        FUSION_ENTRY_ADAPTER_PR5_SENTINEL as _FEA_PR5,
+        ADAPTER_IS_EXECUTION_ONLY_POLICY as _FEA_EXEC_POLICY,
+        ADAPTER_MUST_NOT_MUTATE_SYS_PATH_POLICY as _FEA_PATH_POLICY,
+        ADAPTER_CONTRACT_IS_EXECUTE_AND_FACTORY_POLICY as _FEA_CONTRACT_POLICY,
+        UNIFIED_EXECUTOR_IS_CANONICAL_CALLER_POLICY as _FEA_CALLER_POLICY,
+        FUSION_ENTRY_ADAPTER_CONTRACT_VERSION as _FEA_CONTRACT_VERSION,
+        validate_adapter_module as _validate_adapter_module,
+        check_adapter_module as _check_adapter_module,
+    )
+
+    FUSION_ENTRY_ADAPTER_ALIGNED_PR5: str = (
+        "PROJECTION_ROUTES::FUSION_ENTRY_ADAPTER_ALIGNED_PR5_V1: "
+        "core.fusion_entry_adapter is confirmed as the canonical adapter "
+        "contract specification for fusion_entry.py.  fusion_entry.py is "
+        "the local execution adapter ONLY — it is not a node registry, "
+        "discovery authority, or governance eligibility check.  "
+        "NodeFabricRegistry remains the canonical runtime node registry.  "
+        "All callers must use invoke_node() / UnifiedNodeExecutor rather "
+        "than calling _load_node / _execute_node directly."
+    )
+except ImportError:  # pragma: no cover
+    FUSION_ENTRY_ADAPTER_ALIGNED_PR5: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::FUSION_ENTRY_ADAPTER_ALIGNED_PR5_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

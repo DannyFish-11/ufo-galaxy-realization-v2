@@ -53,7 +53,25 @@ Active nodes must additionally satisfy:
 | `/status` endpoint | `GET /status` returns at minimum `{"node": "...", "port": ..., "ready": bool}` |
 | Registry entry | Listed in `node_dependencies.json` with `port`, `startup_policy`, and `dependencies` |
 
-### `fusion_entry.py` contract
+### `fusion_entry.py` — Execution Adapter Contract
+
+`fusion_entry.py` is the **canonical local execution adapter** for a node.
+It is loaded and called exclusively by
+`core.node_invocation.UnifiedNodeExecutor` (via `invoke_node()`).
+
+**What `fusion_entry.py` is:**
+- A local execution adapter that loads `main.py` in isolation and exposes a
+  uniform `execute()` interface.
+
+**What `fusion_entry.py` is NOT:**
+- It is **not** a node existence definition.  A node having a
+  `fusion_entry.py` on disk does **not** imply active system membership.
+- It is **not** a registry or discovery authority.  The canonical runtime
+  node registry is `NodeFabricRegistry` (`core/nodes/node_fabric_registry.py`).
+- It is **not** a governance eligibility check.  Governance metadata lives in
+  `node_dependencies.json` and is evaluated by the governance layer.
+
+**Adapter contract (`FUSION_ENTRY_ADAPTER_CONTRACT_V1`):**
 
 Every `fusion_entry.py` must:
 
@@ -63,6 +81,10 @@ Every `fusion_entry.py` must:
    method that returns `{"success": bool, ...}`.
 3. Expose a module-level `get_node_instance()` function that returns a
    `FusionNode`.
+
+The full contract specification is in `core/fusion_entry_adapter.py`.
+Callers must use `invoke_node()` from `core.node_invocation` rather than
+calling `_load_node` / `_execute_node` from `core.routes._helpers` directly.
 
 ### Port and registry fields
 
